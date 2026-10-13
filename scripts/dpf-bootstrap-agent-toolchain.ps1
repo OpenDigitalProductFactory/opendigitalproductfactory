@@ -404,7 +404,7 @@ if ($ReconcileStaleEntries.IsPresent) { $nodeArgs += "--reconcile-stale-entries"
 $planJson = & pnpm @nodeArgs 2>$null
 if ($LASTEXITCODE -ne 0 -or -not $planJson) {
     Write-Warn2 "compute-plan failed; using standalone skill-pack updater fallback."
-    & $PluginUpdater -SkillPackPath (Join-Path $RepoRoot "packages\dpf-skill-pack") -McpUrl $McpEndpointNamed -DryRun:$DryRun
+    & $PluginUpdater -SkillPackPath (Join-Path $RepoRoot "packages\dpf-skill-pack") -McpUrl $McpEndpointNamed -ProjectRoot $RepoRoot -DryRun:$DryRun
     exit $LASTEXITCODE
 }
 

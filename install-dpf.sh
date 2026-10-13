@@ -55,6 +55,8 @@ LIB_DIR="$REPO_ROOT/scripts/installer/lib"
 . "$LIB_DIR/doctor.sh"
 # shellcheck source=scripts/installer/lib/docker.sh
 . "$LIB_DIR/docker.sh"
+# shellcheck source=scripts/installer/lib/pnpm.sh
+. "$LIB_DIR/pnpm.sh"
 # shellcheck source=scripts/installer/lib/autostart.sh
 . "$LIB_DIR/autostart.sh"
 # shellcheck source=scripts/installer/lib/canonical-origin.sh
@@ -448,10 +450,7 @@ if [ "$NODE_MAJOR" -lt 20 ] 2>/dev/null; then
 fi
 ok "Node.js $(node -v)"
 
-if ! command -v pnpm >/dev/null 2>&1; then
-  info "pnpm not found; installing via npm..."
-  npm install -g pnpm
-fi
+dpf_ensure_pnpm "$REPO_ROOT" || fail "The pinned pnpm prerequisite is not ready."
 ok "pnpm $(pnpm -v)"
 
 # 7. Install workspace dependencies (so scripts/detect-hardware-host.ts
@@ -1018,6 +1017,9 @@ fi
 # 12): Claude refuses OAuth over plain http, and one origin keeps OAuth token
 # audiences, cookies and the MCP address whole. A member install gets its
 # certificate from the organization join; a standalone install is its own CA.
+step "Private runtime state"
+node "$REPO_ROOT/scripts/installer/prepare-runtime-state.mjs" "${DPF_COMPOSE_FILES[@]}"
+
 DPF_PORTAL_URL="http://localhost:3000"
 if [ -n "$DPF_ORGANIZATION_JOIN_PACKAGE" ]; then
   step "Organization trust"
