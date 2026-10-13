@@ -11,6 +11,7 @@ import {
   type InitiativeGateKey,
 } from "./receipt-schema";
 import type { ReadinessProfile } from "./types";
+import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import { resolveReviewerIdentity } from "./reviewer-identity";
 import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
 
@@ -45,6 +46,8 @@ export async function recordInitiativeGateReceipt(args: {
   gate: InitiativeGateKey;
   decision: "pass" | "fail" | "not-applicable";
   artifactRef: InitiativeArtifactRef;
+  /** Trusted TaskRun context passed only by the governed tool handler. */
+  workroomRef?: InitiativeReviewBinding["workroomRef"];
   reason: string;
   findings: Array<{ issue: string; severity: "critical" | "important" }>;
   resolvedFindingRefs: string[];
@@ -118,6 +121,7 @@ export async function recordInitiativeGateReceipt(args: {
   const authorPolicy = rationale.authorResearchBinding != null;
   const artifact = await resolveInitiativeArtifact({
     locator: args.artifactRef,
+    workroomRef: args.workroomRef,
     subject: { kind: "backlog-item", id: item.itemId },
     organizationId: authority.organizationId ?? item.organizationId,
     allowHumanResearchAuthor: authorPolicy && args.gate === "research" && args.requiresIndependentReviewer === false,
@@ -153,6 +157,23 @@ export async function recordInitiativeGateReceipt(args: {
       },
     });
     if (!lockedItem) return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "The governed initiative no longer exists." };
+    if (args.workroomRef && args.artifactRef.kind === "repo-blob-at-commit") {
+      const ref = args.workroomRef;
+      // Provider verification happens outside the transaction. Lock the exact
+      // room before append so ownership/head cannot change underneath its proof.
+      await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "capsuleId" = ${ref.workroomId} FOR SHARE`;
+      const room = await tx.workroom.findUnique({ where: { capsuleId: ref.workroomId }, select: {
+        backlogItemId: true, repositoryFullName: true, headBranch: true, headSha: true,
+        archivedAt: true, status: true, createdByPrincipalId: true,
+      } });
+      if (!room || room.archivedAt || ["abandoned", "cancelled"].includes(room.status)
+        || room.backlogItemId !== item.itemId || room.repositoryFullName !== ref.repositoryFullName
+        || room.headBranch !== ref.branchName || room.headSha?.toLocaleLowerCase("en-US") !== ref.headSha.toLocaleLowerCase("en-US")
+        || room.createdByPrincipalId !== artifact.artifact.authorPrincipalId) {
+        return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
+          error: "The accepted review's workroom or accountable owner changed before receipt publication. Reconcile the actual workroom and review packet." };
+      }
+    }
     if (authorPolicy) {
       if ((lockedItem.organizationId ?? null) !== (authority.organizationId ?? null)) {
         return { ok: false, code: "AUTHORIZATION_DENIED", error: "The initiative authority scope changed before publication." };

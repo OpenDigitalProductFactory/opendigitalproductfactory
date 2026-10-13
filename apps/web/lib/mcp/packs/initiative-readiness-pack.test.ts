@@ -42,6 +42,38 @@ const expected = {
 } as const;
 
 describe("initiative readiness reviewer tools", () => {
+  it("refuses malformed trusted workroom context and never accepts a caller-selected replacement", async () => {
+    const artifactRef = { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "a".repeat(40),
+      providerBlobId: "b".repeat(40), path: "plan.md" };
+    mocks.findTaskRun.mockResolvedValue({ a2aMetadata: { trigger: "external-mcp", initiativeReviewBinding: {
+      writerToolName: "record_initiative_design_review", itemId: "BI-TEST", gate: "plan-review", artifactRef,
+      workroomRef: { kind: "workroom-head", workroomId: "WC-TEST" },
+    } } });
+    const handler = initiativeReadinessPack.handlers.record_initiative_design_review!;
+    expect(await handler({ itemId: "BI-OTHER", gate: "plan-review", artifactRef, decision: "pass", reason: "Reviewed.",
+      findings: [], resolvedFindingRefs: [], workroomRef: { kind: "workroom-head", workroomId: "WC-OTHER" } },
+      "user", { taskRunId: "TR-BOUND" } as never)).toMatchObject({ success: false, error: "CANONICAL_DESIGN_AMBIGUOUS" });
+    expect(mocks.recordGateReceipt).not.toHaveBeenCalled();
+    mocks.findTaskRun.mockResolvedValue(null);
+    mocks.recordGateReceipt.mockResolvedValue({ ok: true, receiptId: "legacy-receipt" });
+    await handler({ itemId: "BI-TEST", gate: "plan-review", artifactRef, decision: "pass", reason: "Reviewed.",
+      findings: [], resolvedFindingRefs: [], workroomRef: { kind: "workroom-head", workroomId: "WC-OTHER" } }, "user", {} as never);
+    expect(mocks.recordGateReceipt).toHaveBeenCalledWith(expect.objectContaining({ workroomRef: undefined }));
+  });
+  it("carries only the trusted TaskRun workroom identity to the writer alongside the historical plan", async () => {
+    const artifactRef = { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo",
+      commitSha: "99986af2a1fb1ff8d041ca7d9080ea6d02a4f963", providerBlobId: "b".repeat(40), path: "plan.md" };
+    const workroomRef = { kind: "workroom-head", workroomId: "WC-DF238BD5", repositoryFullName: "owner/repo",
+      branchName: "feat/provider-accounts-ux", headSha: "45eb029a53ffd593f08be48eb4a061488aaa735f" };
+    mocks.findTaskRun.mockResolvedValue({ a2aMetadata: { trigger: "external-mcp", initiativeReviewBinding: {
+      writerToolName: "record_initiative_design_review", itemId: "BI-7AA4EB6B", gate: "plan-review", artifactRef, workroomRef,
+    } } });
+    mocks.recordGateReceipt.mockResolvedValue({ ok: true, receiptId: "plan-receipt" });
+    expect(await initiativeReadinessPack.handlers.record_initiative_design_review!({ decision: "pass", reason: "Reviewed.",
+      findings: [], resolvedFindingRefs: [], workroomRef: { ...workroomRef, headSha: artifactRef.commitSha } },
+      "user", { taskRunId: "TR-E084", agentId: "AGT-WS-REVIEW" } as never)).toMatchObject({ success: true });
+    expect(mocks.recordGateReceipt).toHaveBeenCalledWith(expect.objectContaining({ artifactRef, workroomRef }));
+  });
   it("validates a real failure citation after metrics-only source auditing without retaining source in the audit", async () => {
     const artifactRef = { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "a".repeat(40), providerBlobId: "b".repeat(40), path: "design.md" };
     mocks.findTaskRun.mockResolvedValue({ a2aMetadata: { trigger: "external-mcp", initiativeReviewBinding: {

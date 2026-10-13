@@ -12,6 +12,7 @@ import {
 import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 import type { InitiativeArtifactRef } from "./receipt-schema";
 import type { InitiativeSubject } from "./types";
+import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 
 type RepositoryLocator = Extract<InitiativeArtifactRef, { kind: "repo-blob-at-commit" }>;
 
@@ -298,6 +299,8 @@ function describeCapsuleHead(capsule: { capsuleId: string; headBranch: string | 
 export async function resolveRepositoryArtifact(args: {
   locator: RepositoryLocator;
   subject: InitiativeSubject;
+  /** Internal context from the accepted TaskRun; never a caller-selected head. */
+  workroomRef?: InitiativeReviewBinding["workroomRef"];
   db?: RepositoryArtifactDb;
   fetchImpl?: typeof fetch;
   transportFactory?: () => GithubReadTransport;
@@ -353,9 +356,16 @@ export async function resolveRepositoryArtifact(args: {
       },
     },
   });
-  const capsules = candidates.filter(
-    (candidate) => (candidate.headSha ?? "").toLocaleLowerCase("en-US") === args.locator.commitSha.toLocaleLowerCase("en-US"),
-  );
+  const boundRoom = args.workroomRef;
+  if (boundRoom && (boundRoom.kind !== "workroom-head"
+    || boundRoom.repositoryFullName !== args.locator.repositoryFullName
+    || !/^[a-f0-9]{40}$/i.test(boundRoom.headSha))) {
+    return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "The accepted review's workroom binding is invalid for this repository artifact." };
+  }
+  const capsules = candidates.filter((candidate) => boundRoom
+    ? candidate.capsuleId === boundRoom.workroomId && candidate.headBranch === boundRoom.branchName
+      && candidate.headSha?.toLocaleLowerCase("en-US") === boundRoom.headSha.toLocaleLowerCase("en-US")
+    : (candidate.headSha ?? "").toLocaleLowerCase("en-US") === args.locator.commitSha.toLocaleLowerCase("en-US"));
   if (capsules.length > 1) {
     return {
       ok: false,
@@ -366,6 +376,10 @@ export async function resolveRepositoryArtifact(args: {
     };
   }
   if (capsules.length === 0) {
+    if (boundRoom) {
+      return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
+        error: "The accepted review's exact live workroom, subject, branch or head changed. Reconcile the review packet with the actual workroom; do not rewrite the head to the historical artifact commit." };
+    }
     return {
       ok: false,
       code: "CANONICAL_DESIGN_AMBIGUOUS",
@@ -398,6 +412,17 @@ export async function resolveRepositoryArtifact(args: {
   }
   const fetchImpl = args.fetchImpl ?? transport!.fetch;
   try {
+    if (boundRoom && boundRoom.headSha.toLocaleLowerCase("en-US") !== args.locator.commitSha.toLocaleLowerCase("en-US")) {
+      // The review retains the immutable original locator. A later branch head
+      // may own it only when the provider proves the same path/blob is present.
+      const currentBlob = await fetchRepositoryProviderBlob({
+        owner: expectedRepo.owner, repo: expectedRepo.name, token, commitSha: boundRoom.headSha,
+        path: args.locator.path, expectedBlobId: args.locator.providerBlobId, fetchImpl,
+      });
+      if (!currentBlob.ok) return { ok: false,
+        code: currentBlob.code === "IMMUTABLE_BLOB_MISMATCH" ? "CANONICAL_DESIGN_AMBIGUOUS" : "CANONICAL_DESIGN_REQUIRED",
+        error: currentBlob.error };
+    }
     const commitResult = await fetchGithubJson({
       url: `https://api.github.com/repos/${encodeURIComponent(expectedRepo.owner)}/${encodeURIComponent(expectedRepo.name)}/commits/${encodeURIComponent(args.locator.commitSha)}`,
       token,

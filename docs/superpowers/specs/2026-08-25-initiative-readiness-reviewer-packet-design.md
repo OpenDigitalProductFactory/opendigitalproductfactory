@@ -244,6 +244,24 @@ dropped.
 
 ## 8. Security and separation of duties
 
+### Historical artifact and current Workroom — BI-CAP-EF2B04BB
+
+An issued review may bind an unchanged plan at its original commit while the
+Workroom has advanced. The governed handler carries `workroomRef` from the
+accepted TaskRun alongside `artifactRef`; callers cannot select that context.
+The resolver requires the exact live subject, repository, room, branch and
+current head, then verifies the plan's same path and provider blob at that head.
+The receipt retains the original commit, blob, bytes, digest and DCO evidence.
+Without a trusted binding, the existing unique exact-artifact-head rule remains.
+
+Missing or malformed context, stale heads, foreign subjects, changed blobs and
+ambiguous ownership refuse publication. The receipt transaction locks and
+revalidates the room and accountable owner after provider verification. Existing
+reviewer independence, grant intersection, immutable reader evidence and receipt
+validation still apply. Do not adopt a historical plan commit as the current
+branch head or churn the request key to avoid a writer rejection. Deploy the
+source repair and use the original TaskRun's supported recovery.
+
 - No grant expansion. `authorityScope` is per-dispatch and names exactly the
   bound writer plus one immutable reader.
 - No self-approval. The existing `independent` exclusion of `currentAgentId` is
