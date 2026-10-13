@@ -6218,6 +6218,7 @@
       "publishedPortal": false,
       "anchors": [
         "local-ci-sandbox-slots",
+        "owned-development-lease-cleanup",
         "host-wide-heavyweight-resource-admission",
         "current-operating-mode",
         "peer-slot-host-fencing",
