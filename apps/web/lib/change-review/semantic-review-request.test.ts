@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { createSemanticReviewRequest, parseSemanticReviewRequest } from "./semantic-review-request";
 import type { SemanticChangeReviewOperationInput } from "./semantic-change-review-operation";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
 const now = new Date("2026-09-07T04:00:00Z");
 const artifact = "diff --git a/a.ts b/a.ts\n+exact content\n";
@@ -15,6 +16,33 @@ const input: SemanticChangeReviewOperationInput = {
 const actor = { userId: "user-1", agentId: null, apiTokenId: "token-1", authSource: "pat" };
 
 describe("durable semantic review request", () => {
+  it("keeps production writers legacy during the compatibility deployment", () => {
+    const packet = createSemanticReviewRequest(input, actor, now);
+    expect(packet.schemaVersion).toBe(1);
+    expect(packet.input.identity.artifactType).toBeUndefined();
+    expect(packet.input.identity.reviewerVersion).toBe("change-reviewer.v1");
+  });
+
+  it("reads role-bound packets and separates same-content roles without changing deadlines", () => {
+    const spec = createSemanticReviewRequest({ ...input, artifactType: "spec", risk: "high" }, actor, now, 2);
+    const plan = createSemanticReviewRequest({ ...input, artifactType: "plan", risk: "high" }, actor, now, 2);
+    expect(spec.schemaVersion).toBe(2);
+    expect(spec.input.identity.artifactType).toBe("spec");
+    expect(plan.gateKey).not.toBe(spec.gateKey);
+    expect(plan.deadlineAt).toBe(spec.deadlineAt);
+    expect(parseSemanticReviewRequest(spec)).toEqual(spec);
+  });
+
+  it("rejects a correctly rehashed packet with conflicting role or a downgraded envelope", () => {
+    const packet = createSemanticReviewRequest(input, actor, now, 2);
+    const rehash = (value: typeof packet) => {
+      const { digest: _digest, ...body } = value;
+      return { ...body, digest: createHash("sha256").update(canonicalJson(body)).digest("hex") };
+    };
+    expect(parseSemanticReviewRequest(rehash({ ...packet, input: { ...packet.input, artifactType: "spec" } }))).toBeNull();
+    expect(parseSemanticReviewRequest(rehash({ ...packet, schemaVersion: 1 }))).toBeNull();
+  });
+
   it("round-trips the exact artifact, identity and actor with a fixed deadline", () => {
     const packet = createSemanticReviewRequest(input, actor, now);
     expect(packet.input.artifact).toBe(artifact);

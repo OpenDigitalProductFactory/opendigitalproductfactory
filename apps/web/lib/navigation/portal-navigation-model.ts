@@ -106,7 +106,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     capabilityKey: null,
   },
   { key: "workspace-work-cases", label: "Work Cases", path: "/workspace/my-queue", parentPath: "/workspace", domain: "workspace", audienceModes: ["worker", "operator"], destinationKind: "section-page", capabilityKey: null },
-  { key: "workspace-case-detail", label: "Work Case Detail", path: "/workspace/cases/[caseKey]", parentPath: "/workspace", domain: "workspace", audienceModes: ["worker", "operator"], destinationKind: "detail", capabilityKey: null },
+  { key: "workspace-case-detail", label: "Work Case Detail", path: "/workspace/cases/[caseKey]", parentPath: "/workspace/my-queue", domain: "workspace", audienceModes: ["worker", "operator"], destinationKind: "detail", capabilityKey: null },
   {
     key: "documents",
     label: "Documents",
@@ -936,14 +936,10 @@ export function getAreaSetupEntries(area: PortalShellSectionKey): PortalNavEntry
 const ROUTES_BY_PATH = new Map(
   PORTAL_NAV_ROUTES.map((route) => [normalizePath(route.path), route] as const),
 );
-
+const PARAMETERIZED_ROUTES = PORTAL_NAV_ROUTES.filter((route) => route.path.includes("["));
 function normalizePath(path: string): string {
-  if (path.length > 1 && path.endsWith("/")) {
-    return path.slice(0, -1);
-  }
-  return path;
+  return path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
 }
-
 function toEntry(route: PortalNavRecord): PortalNavEntry {
   return {
     key: route.key,
@@ -957,7 +953,6 @@ function toEntry(route: PortalNavRecord): PortalNavEntry {
     orgCapabilityKey: route.orgCapabilityKey ?? null,
   };
 }
-
 function toSectionEntry(route: PortalNavRecord): PortalNavEntry {
   return {
     ...toEntry(route),
@@ -966,7 +961,12 @@ function toSectionEntry(route: PortalNavRecord): PortalNavEntry {
 }
 
 export function getRouteNavRecord(path: string): PortalNavRecord | undefined {
-  return ROUTES_BY_PATH.get(normalizePath(path));
+  const normalized = normalizePath(path), segments = normalized.split("/");
+  return ROUTES_BY_PATH.get(normalized) ?? PARAMETERIZED_ROUTES.find((route) => {
+    const pattern = route.path.split("/");
+    return pattern.length === segments.length && pattern.every((part, index) =>
+      part === segments[index] || (/^\[\w+\]$/.test(part) && segments[index] !== ""));
+  });
 }
 
 export function getPrimaryNavEntries(audienceMode: PortalAudienceMode): PortalNavEntry[] {

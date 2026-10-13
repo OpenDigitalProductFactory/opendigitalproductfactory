@@ -16,6 +16,7 @@ import type { LocalCiHostPressure } from "@/lib/nonprod/local-ci-pool-policy";
 import type { HostResourceLeaseEvidence } from "@/lib/nonprod/environment-lease-pool-policy";
 import { HEAVY_RESOURCE_CLASSES, isHeavyResourceClass } from "@/lib/nonprod/host-resource-policy";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { isRecord } from "@/lib/shared/coerce";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 // Per-key trimmed string coercer — a copy of the inline helper the former switch
@@ -25,11 +26,7 @@ function stringValueFor(params: Record<string, unknown>) {
   return (key: string) => (typeof params[key] === "string" ? String(params[key]).trim() : "");
 }
 
-function objectValue(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : undefined;
-}
+const objectValue = (value: unknown) => isRecord(value) ? value : undefined;
 
 function positivePorts(value: unknown): number[] {
   return Array.isArray(value)
@@ -271,6 +268,8 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
     // changes identity or authority → consult-gated (TAK §8.4.1).
     consequence: "authority",
+    consequenceForCall: async (call) =>
+      (await import("@/lib/nonprod/lease-cleanup-consequence")).leaseCleanupConsequenceForCall(call),
     buildPhases: ["ideate", "plan", "build", "review", "ship"],
   },
   {

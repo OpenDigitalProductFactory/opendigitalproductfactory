@@ -621,7 +621,7 @@ trap 'rm -f "$PLAN_TMP"' EXIT
 if ! pnpm "${bridge_args[@]}" > "$PLAN_TMP" 2>&1; then
   warn "compute-plan failed; using standalone skill-pack updater fallback."
   cat "$PLAN_TMP" >&2
-  fallback_args=()
+  fallback_args=(--project-root "$REPO_ROOT")
   [ -n "$MCP_ENDPOINT_NAMED" ] && fallback_args+=(--mcp-url "$MCP_ENDPOINT_NAMED")
   [ "$DRY_RUN" -eq 1 ] && fallback_args+=(--dry-run)
   if ! bash "$PLUGIN_UPDATER" "${fallback_args[@]}"; then

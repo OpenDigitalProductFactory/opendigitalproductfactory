@@ -2155,7 +2155,8 @@
         "diagnosing-an-empty-loadtools-result",
         "task-specific-operating-rules",
         "disclosure-measurement-and-recovery",
-        "recovering-an-interrupted-independent-review"
+        "recovering-an-interrupted-independent-review",
+        "parent-bounded-local-review-execution-bi-03ac2fd9"
       ]
     },
     "docs/architecture/mcp-tool-packs.md": {
@@ -5697,6 +5698,7 @@
         "platform-support-watch-list-living-document",
         "windows-host-guard-interpreters-bi-ba5f777a",
         "macos-docker-memory-allocation-bi-dc4352e8",
+        "repository-local-codex-endpoint-overrides-bi-9f258707",
         "target-environments",
         "how-to-use-this-file",
         "1-monitoring-telemetry",
@@ -6219,6 +6221,7 @@
       "publishedPortal": false,
       "anchors": [
         "local-ci-sandbox-slots",
+        "owned-development-lease-cleanup",
         "host-wide-heavyweight-resource-admission",
         "current-operating-mode",
         "peer-slot-host-fencing",
