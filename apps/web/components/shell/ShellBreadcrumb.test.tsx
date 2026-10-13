@@ -24,6 +24,7 @@ vi.mock("next/link", () => ({
 }));
 
 import { getGrantedCapabilities } from "@/lib/permissions";
+import { getRouteNavRecord } from "@/lib/navigation/portal-navigation-model";
 import { ShellBreadcrumb, buildBreadcrumbTrail } from "./ShellBreadcrumb";
 
 // The real registry, not a second list — the whole point of the fix.
@@ -33,6 +34,13 @@ const granted = (platformRole: string | null, isSuperuser = false) =>
 const ADMIN = new Set(granted(null, true));
 const OPERATIONS_MANAGER = new Set(granted("HR-500"));
 const WORKFORCE_MEMBER = new Set(granted("HR-600"));
+
+it("matches one concrete case segment without swallowing missing or nested routes", () => {
+  expect(getRouteNavRecord("/workspace/cases/backlog-item%3ABI-TEST/")?.key).toBe("workspace-case-detail");
+  expect(getRouteNavRecord("/workspace/cases/")).toBeUndefined();
+  expect(getRouteNavRecord("/workspace/cases/backlog-item%3ABI-TEST/extra")).toBeUndefined();
+  expect(getRouteNavRecord("/workspace/my-queue")?.key).toBe("workspace-work-cases");
+});
 
 function render(path: string, capabilities: ReadonlySet<string> = ADMIN) {
   pathname = path;
@@ -87,15 +95,22 @@ describe("buildBreadcrumbTrail", () => {
     ]);
   });
 
-  it("decodes an encoded case key before presenting its fallback label", () => {
+  it("takes an encoded work case back to the existing queue", () => {
     expect(buildBreadcrumbTrail("/workspace/cases/backlog-item%3ABI-CCE939AF", ADMIN)).toEqual([
       { label: "Operations", href: "/workspace" },
-      { label: "Cases", href: "/workspace/cases" },
+      { label: "Work Cases", href: "/workspace/my-queue" },
       {
-        label: "Backlog Item:BI CCE939AF",
+        label: "Work Case Detail",
         href: "/workspace/cases/backlog-item%3ABI-CCE939AF",
       },
     ]);
+  });
+
+  it("renders the real case queue ancestor and never a route template", () => {
+    const html = render("/workspace/cases/work-capsule%3AWC-TEST", WORKFORCE_MEMBER);
+    expect(html).toContain('href="/workspace/my-queue"');
+    expect(html).not.toContain('href="/workspace/cases"');
+    expect(html).not.toContain("[caseKey]");
   });
 });
 
