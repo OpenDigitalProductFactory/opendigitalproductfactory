@@ -207,7 +207,7 @@ Coverage receipt cmv4bk2gqht0601pee3tfbxrn was recorded against d51569ff08c2e9a2
 It maps permissions to BI-9FA87F90 and preview to BI-10AC904B with the dependency above.
 Implementation admission IRD-4745C55FA2D0 was allowed at effective medium sensitivity.
 
-## Current verified state (2026-10-11)
+## Initial verification record (2026-10-11)
 
 The preserved feature is still exactly `7cba454af18d0d25f0d96c8a06ac6d0fed1cf488`.
 Its dry inventory recomputes to **331 affected routes: 261 static, 70 dynamic**.
@@ -253,3 +253,29 @@ schemas; credential fields remain forbidden. The install-state validator's
 existing inline schema subset is reused. Custom/read-only/OAuth authority and
 durable grant-revocation tombstones are preserved by existing authorization and
 platform seed reconciliation.
+
+## Delivery continuation (2026-10-13)
+
+The other feature executor advanced `codex/session-identity` by merging main.
+Do not reset or amend that branch. WWMD supported a separate read-only source
+pin; WC-E5F4957F records `codex/session-identity-verification-pin` at exactly
+`7cba454af18d0d25f0d96c8a06ac6d0fed1cf488`. Use that clean sibling checkout for
+the original 331-route acceptance inventory, under WC-1916B51E's verifier lease.
+
+Scope-transfer approval cmv4c4c4vilts01petn6hxx4n is now executed. Native review
+requests from the initial delivery attempt expired without verdicts; neither is
+a passing receipt. Current upstream uses the documented shadow publication
+policy. Apply its bounded recovery contract and retain review provenance; do
+not widen grants, change policy, or relabel uncertain execution as a pass.
+
+The assembled repair integrates current upstream and preserves the new isolated
+verification-user and retirement flows. Preview requests cannot create or
+retire a fixture in the canonical installation. Two mixed-request regressions
+and the existing preview-issuer tests pass (13 tests). Production and test
+typechecks passed in the merge hook; fresh shared-gate evidence is still needed.
+
+The current install lacks the packaged bounded-clone module. Startup must refuse
+before runtime mutation until canonical delivery installs this repair. Preview
+initialization, passwordless browser consumption, all dynamic fixtures and the
+full served UX matrix remain unrun. Missing actor grants and live upgrade
+authority remain separate boundaries; the source repair never self-grants.
