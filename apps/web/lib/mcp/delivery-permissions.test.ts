@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import registry from "../../../../packages/db/data/agent_registry.json";
-import { DELIVERY_WORKFLOW_TOOLS } from "../../../../packages/dpf-bootstrap/src/agent-toolchain/delivery-readiness-contract";
+import { DELIVERY_WORKFLOW_TOOLS } from "@dpf/integration-shared/delivery-readiness-contract";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { getMcpTokenTemplate } from "@/lib/mcp-token-scopes";
 describe("approved development profiles", () => {

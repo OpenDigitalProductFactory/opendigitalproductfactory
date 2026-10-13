@@ -1,4 +1,4 @@
-import { DELIVERY_WORKFLOW_TOOLS, deliveryReadinessFromDiscovery, type DeliveryReadinessReport } from "../../../../packages/dpf-bootstrap/src/agent-toolchain/delivery-readiness-contract";
+import { DELIVERY_WORKFLOW_TOOLS, deliveryReadinessFromDiscovery, type DeliveryReadinessReport } from "@dpf/integration-shared/delivery-readiness-contract";
 import { getAgentToolGrantsAsync, isToolAllowedByGrants, TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
 import {
   copyMcpApiTokenPlaintext,

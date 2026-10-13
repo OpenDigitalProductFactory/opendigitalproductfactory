@@ -40,3 +40,9 @@ test("automation sign-in cannot import a production session into preview", () =>
   assert.throws(() => assertPreviewAuthenticationContext({ E2E_BASE_URL: "http://localhost:3000", DPF_DEV_PORTAL_LEASE_ID: "lease", DPF_DEV_PORTAL_OWNER_SESSION_ID: "owner" }), /admitted preview/);
   assert.equal(assertPreviewAuthenticationContext({ E2E_BASE_URL: "http://localhost:3000", E2E_USER_PASSWORD: "explicit-test" }), false);
 });
+
+test("disposable CI login consumes configured test credentials without borrowing install files", () => {
+  assert.equal(resolveE2eLoginConfig({ CI: "true", E2E_BASE_URL: "http://localhost:3000", ADMIN_PASSWORD: "ephemeral-ci" }).password, "ephemeral-ci");
+  assert.equal(resolveE2eLoginConfig({ CI: "true", E2E_BASE_URL: "https://production.example", ADMIN_PASSWORD: "install" }).password, "");
+  assert.equal(resolveE2eLoginConfig({ CI: "true", E2E_BASE_URL: "http://localhost:3001", ADMIN_PASSWORD: "install" }).password, "");
+});

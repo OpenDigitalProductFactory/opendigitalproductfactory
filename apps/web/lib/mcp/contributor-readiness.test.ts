@@ -5,7 +5,7 @@ vi.mock("@/lib/tak/agent-grants", async importOriginal => {
   return { ...actual, getAgentToolGrantsAsync: vi.fn() };
 });
 import { getAgentToolGrantsAsync } from "@/lib/tak/agent-grants";
-import { DELIVERY_WORKFLOW_TOOLS } from "../../../../packages/dpf-bootstrap/src/agent-toolchain/delivery-readiness-contract";
+import { DELIVERY_WORKFLOW_TOOLS } from "@dpf/integration-shared/delivery-readiness-contract";
 vi.mock("@/lib/auth/mcp-api-token", () => ({
   copyMcpApiTokenPlaintext: vi.fn(),
   listMcpApiTokens: vi.fn(),

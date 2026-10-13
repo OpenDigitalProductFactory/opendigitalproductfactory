@@ -301,3 +301,19 @@ Status reasons now consistently require observation/resume for unfinished work
 and terminal reconciliation before a new authorized attempt. This assessment is
 client evidence, not a native certified review. The repaired commit requires
 re-review and fresh shared CI; served acceptance remains unrun.
+
+
+PR #6275 exposed a CI boundary defect absent on dependency-provisioned hosts:
+the dependency-free pull-request policy suite imported preview runtime tests,
+which require tsx. A source-only fixture reproduces that failure. Keep claim-key
+policy checks dependency-free and register the unchanged preview behavior tests
+in the workspace profile, which installs dependencies. The shared registry's
+scoped co-claim awaits DPF approval; do not edit it before approval executes.
+Current source gate evidence remains tied to the previous commit and cannot
+qualify the changed test boundary. Re-review and gate the corrected commit.
+
+PR readiness also requires an explicit qualified evidence reference despite the
+old local-CI skill calling it an unnecessary fallback. Align that instruction
+with the real readiness contract: use the existing qualified reference, retain
+private lease/session/path detail on the install, and do not re-run a full gate
+for a body metadata omission.

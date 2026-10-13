@@ -70,10 +70,15 @@ export function resolveE2eLoginConfig(env: NodeJS.ProcessEnv = process.env): {
   password: string;
 } {
   const baseUrl = (env.E2E_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+  const url = new URL(baseUrl);
+  // CI explicitly provisions a disposable local administrator. Never read an
+  // install environment file or select this credential for an admitted preview.
+  const ciPassword = env.CI === "true" && url.protocol === "http:" && url.port === "3000"
+    && ["localhost", "127.0.0.1"].includes(url.hostname) ? env.ADMIN_PASSWORD || "" : "";
   return {
     baseUrl,
     email: env.E2E_USER_EMAIL || "admin@dpf.local",
-    password: new URL(baseUrl).port === "3001" || env.DPF_DEV_PORTAL_LEASE_ID ? "" : env.E2E_USER_PASSWORD || "",
+    password: new URL(baseUrl).port === "3001" || env.DPF_DEV_PORTAL_LEASE_ID ? "" : env.E2E_USER_PASSWORD || ciPassword,
   };
 }
 

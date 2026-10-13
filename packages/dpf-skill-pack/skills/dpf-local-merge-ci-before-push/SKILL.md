@@ -102,12 +102,12 @@ and to whom?" before a lease is taken. An unresolvable **thread** does not stop
 the run; it records `unattributed-<pid>` so the gap is visible rather than
 invented.
 
-**Keep the PR body clean.** The `Local-CI-Evidence:` / `Local-CI-Override:`
-trailers are a fallback a normally-gated branch does not need, so do not paste
-lease ids, evidence record ids, candidate/base SHAs, session ids, or worktree
-paths into a PR — it is public and none of it is contract. One non-identifying
-verification line is enough. The detail stays queryable on the install, keyed off
-the number a human actually uses:
+**Carry qualified publication evidence.** `pr:ready` requires the PR body's
+`Local-CI-Evidence:` reference to match a current qualified gate record, or an
+existing authorized and truthful `Local-CI-Override:`. Carry the existing record
+identifier; a missing trailer does not require another full gate. Keep lease and
+session identifiers, worktree paths and detailed source/base identities in the
+install's audit record. The detail remains queryable by PR number:
 
 ```bash
 pnpm pr:origin 3748

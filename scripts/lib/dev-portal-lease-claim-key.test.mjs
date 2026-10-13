@@ -2,7 +2,10 @@
 // Node built-in test runner: node --test
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, cpSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, dirname } from "node:path";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const script = readFileSync(
@@ -148,3 +151,20 @@ for (const interruption of ['compose-error-after-start', 'lease-fence-before-ins
     assert.ok(stopped.every(id => id === 'mine'), 'cleanup must preserve foreign projects, leases and live services');
   });
 }
+
+
+test('the policy claim-key suite runs without installed workspace dependencies', () => {
+  const fixture = mkdtempSync(join(tmpdir(), 'dpf-claim-key-no-deps-'));
+  try {
+    const source = dirname(fileURLToPath(import.meta.url));
+    mkdirSync(join(fixture, 'scripts'), { recursive: true });
+    cpSync(source, join(fixture, 'scripts/lib'), { recursive: true });
+    cpSync(join(source, '../dev-portal-lease.sh'), join(fixture, 'scripts/dev-portal-lease.sh'));
+    const shared = join(fixture, 'packages/integration-shared/src');
+    mkdirSync(shared, { recursive: true });
+    cpSync(join(source, '../../packages/integration-shared/src/delivery-readiness-contract.cjs'), join(shared, 'delivery-readiness-contract.cjs'));
+    const { NODE_TEST_CONTEXT: inheritedTestContext, ...env } = process.env;
+    const result = spawnSync(process.execPath, ['--test', '--test-name-pattern=^the contributor-preview', join(fixture, 'scripts/lib/dev-portal-lease-claim-key.test.mjs')], { encoding: 'utf8', cwd: fixture, env });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  } finally { rmSync(fixture, { recursive: true, force: true }); }
+});

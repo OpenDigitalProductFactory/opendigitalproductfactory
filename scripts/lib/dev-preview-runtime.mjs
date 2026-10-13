@@ -1,7 +1,4 @@
-import { tsImport } from "tsx/esm/api";
-const { DELIVERY_WORKFLOW_TOOLS, deliveryReadinessFromDiscovery } = await tsImport(
-  new URL("../../packages/dpf-bootstrap/src/agent-toolchain/delivery-readiness-contract.ts", import.meta.url).href, import.meta.url,
-);
+import { DELIVERY_WORKFLOW_TOOLS, deliveryReadinessFromDiscovery } from '../../packages/integration-shared/src/delivery-readiness-contract.cjs';
 export const REQUIRED_PREVIEW_DELIVERY_TOOLS = DELIVERY_WORKFLOW_TOOLS;
 import { gitText } from './git.mjs';
 import { spawn } from 'node:child_process';
