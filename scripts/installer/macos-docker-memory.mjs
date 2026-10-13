@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Docker Desktop's settings remain the single source of VM allocation.
-import { constants, lstatSync, readFileSync, writeFileSync, renameSync, unlinkSync, accessSync } from 'node:fs';
+import { constants, lstatSync, openSync, fstatSync, readFileSync, closeSync, writeFileSync, renameSync, unlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,10 +18,20 @@ export function targetMemory(hostMiB) {
 function readSettings(path, adminPath) {
   try { lstatSync(adminPath); throw new Error('Docker Desktop is administrator-managed; ask its administrator to configure memory.'); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
-  const stat = lstatSync(path);
-  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Docker settings must be a regular, non-symlink file.');
-  accessSync(path, constants.R_OK | constants.W_OK);
-  const raw = readFileSync(path, 'utf8');
+  // Check and read through one descriptor so the file cannot be swapped in between.
+  let fd;
+  try { fd = openSync(path, constants.O_RDWR | constants.O_NOFOLLOW); }
+  catch (error) {
+    if (error.code === 'ELOOP') throw new Error('Docker settings must be a regular, non-symlink file.');
+    throw error;
+  }
+  let stat;
+  let raw;
+  try {
+    stat = fstatSync(fd);
+    if (!stat.isFile()) throw new Error('Docker settings must be a regular, non-symlink file.');
+    raw = readFileSync(fd, 'utf8');
+  } finally { closeSync(fd); }
   let settings;
   try { settings = JSON.parse(raw); } catch { throw new Error('Docker settings contain invalid JSON.'); }
   if (!settings || Array.isArray(settings) || typeof settings !== 'object' || !Number.isSafeInteger(settings.MemoryMiB) || settings.MemoryMiB <= 0) {
