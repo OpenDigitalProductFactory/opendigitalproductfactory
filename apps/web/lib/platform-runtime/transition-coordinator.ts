@@ -52,17 +52,22 @@ export type RuntimeCapabilityCoordinatorDeps = {
 
 type TransitionModel = {
   findFirst(args: unknown): Promise<{ transitionId: string; status: string } | null>;
-  findUnique(args: unknown): Promise<{ status: string; catalogHash: string; previousStateHash: string; desiredStateHash: string; previousKeys: string[]; desiredKeys: string[]; previousProfiles: string[]; desiredProfiles: string[]; previousServices: string[]; desiredServices: string[]; envelope: RuntimeTransitionEnvelope | null; envelopeSignature: string | null } | null>;
+  findUnique(args: unknown): Promise<{ status: string; requestedById: string; previousStates: Readonly<Record<string, string>>; desiredStates: Readonly<Record<string, string>>; catalogHash: string; previousStateHash: string; desiredStateHash: string; previousKeys: string[]; desiredKeys: string[]; previousProfiles: string[]; desiredProfiles: string[]; previousServices: string[]; desiredServices: string[]; envelope: RuntimeTransitionEnvelope | null; envelopeSignature: string | null } | null>;
   create(args: unknown): Promise<unknown>;
   updateMany(args: unknown): Promise<{ count: number }>;
 };
-type CapabilityModel = { updateMany(args: unknown): Promise<{ count: number }> };
+type CapabilityModel = { findMany(args: unknown): Promise<Array<{ capabilityId: string; state: string }>>; updateMany(args: unknown): Promise<{ count: number }> };
 type EventModel = { create(args: unknown): Promise<unknown> };
 type TransitionTx = { $executeRaw(strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>; runtimeCapabilityTransition: TransitionModel; platformCapability: CapabilityModel; runtimeCapabilityTransitionEvent: EventModel };
 type TransitionPrisma = {
   runtimeCapabilityTransition: TransitionModel;
   $transaction<T>(operation: (tx: TransitionTx) => Promise<T>, options: { isolationLevel: "Serializable" }): Promise<T>;
 };
+
+function sameStateMap(left: Readonly<Record<string, string>>, right: Readonly<Record<string, string>>): boolean {
+  const keys = Object.keys(left);
+  return keys.length === Object.keys(right).length && keys.every((key) => Object.hasOwn(right, key) && left[key] === right[key]);
+}
 
 export function createPrismaRuntimeTransitionReceipts(prisma: TransitionPrisma): RuntimeCapabilityTransitionReceipts {
   return {
@@ -72,10 +77,10 @@ export function createPrismaRuntimeTransitionReceipts(prisma: TransitionPrisma):
       // BI-8BA6AC56: $executeRaw not $queryRaw — pg_advisory_xact_lock returns void,
       // which Prisma 7.8's driver adapter can't deserialize from $queryRaw (P2010).
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('runtime-capability-transition'))`;
-      const replay = await tx.runtimeCapabilityTransition.findUnique({ where: { transitionId: input.transitionId }, select: { status: true, catalogHash: true, previousStateHash: true, desiredStateHash: true, previousKeys: true, desiredKeys: true, previousProfiles: true, desiredProfiles: true, previousServices: true, desiredServices: true, envelope: true, envelopeSignature: true } });
+      const replay = await tx.runtimeCapabilityTransition.findUnique({ where: { transitionId: input.transitionId }, select: { status: true, requestedById: true, previousStates: true, desiredStates: true, catalogHash: true, previousStateHash: true, desiredStateHash: true, previousKeys: true, desiredKeys: true, previousProfiles: true, desiredProfiles: true, previousServices: true, desiredServices: true, envelope: true, envelopeSignature: true } });
       if (replay) {
         const same = replay.catalogHash === input.catalogHash && replay.previousStateHash === input.previousStateHash && replay.desiredStateHash === input.desiredStateHash && JSON.stringify(replay.previousKeys) === JSON.stringify([...input.previousKeys].sort()) && JSON.stringify(replay.desiredKeys) === JSON.stringify([...input.desiredKeys].sort()) && JSON.stringify(replay.previousProfiles) === JSON.stringify(input.previousProfiles) && JSON.stringify(replay.desiredProfiles) === JSON.stringify(input.desiredProfiles) && JSON.stringify(replay.previousServices) === JSON.stringify(input.previousServices ?? []) && JSON.stringify(replay.desiredServices) === JSON.stringify(input.desiredServices ?? []);
-        if (!same) throw new Error("transition_id_conflict");
+        if (!same || replay.requestedById !== input.requestedById || !sameStateMap(replay.previousStates, input.previousStates) || !sameStateMap(replay.desiredStates, input.desiredStates)) throw new Error("transition_id_conflict");
         if (!replay.envelope || !replay.envelopeSignature) throw new Error("transition_envelope_identity_missing");
         return { created: false, kind: "replay", status: replay.status, envelope: replay.envelope, envelopeSignature: replay.envelopeSignature };
       }
@@ -84,6 +89,8 @@ export function createPrismaRuntimeTransitionReceipts(prisma: TransitionPrisma):
       const blockingCounts = input.recheckAttributedWork ? await input.recheckAttributedWork() : {};
       const positive = Object.fromEntries(Object.entries(blockingCounts).filter(([, count]) => count > 0));
       if (Object.keys(positive).length) return { created: false, kind: "drain_required", blockingCounts: positive };
+      const baseline = await tx.platformCapability.findMany({ where: { capabilityId: { startsWith: "runtime:" } }, select: { capabilityId: true, state: true } });
+      if (!sameStateMap(Object.fromEntries(baseline.map((row) => [row.capabilityId, row.state])), input.previousStates)) throw new Error("runtime_transition_database_baseline_changed");
       await tx.runtimeCapabilityTransition.create({ data: {
         transitionId: input.transitionId,
         previousKeys: [...input.previousKeys].sort(),
@@ -234,6 +241,8 @@ export async function coordinateRuntimeCapabilityTransition(
   request: RuntimeCapabilityTransitionRequest,
   deps: RuntimeCapabilityCoordinatorDeps,
 ) {
+  // Capture caller-owned maps and arrays before the first asynchronous boundary.
+  request = { ...request, previousKeys: [...request.previousKeys], desiredKeys: [...request.desiredKeys], previousStates: { ...request.previousStates }, desiredStates: { ...request.desiredStates } };
   validateRequest(request);
   const normalized = {
     ...request,

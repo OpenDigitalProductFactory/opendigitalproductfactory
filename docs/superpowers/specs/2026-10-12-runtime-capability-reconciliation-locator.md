@@ -50,4 +50,10 @@ All steps belong to the same capability-reconciliation fix. Internal signing, pr
 
 Risks are stale baseline adoption, incomplete DB maps, mutable caller identity across awaits, legacy health promoted to verified evidence, unowned rollback and transport/version disagreement. Refuse those cases before mutation or report recovery-required without forcing restoration. Source rollback is one PR revert; any live compensation follows the existing saga's owned comparison and keeps volumes.
 
-Declare delivery-medium@1.0.0. Native research and atomic plan coverage against this immutable locator are pending. Map CAP-RECON only to existing BI-5ACBAC50; no native implementation admission or parent completion is claimed until those records and verification exist. Workroom ownership transfer alone is not a research, plan or verification receipt.
+Declare delivery-medium@1.0.0. Existing native research receipt `initiative-25c7fd99-2ccd-4ab2-be31-fda3075d4e85`, atomic coverage `cmv5x77yo0cli01mr7dwpx9i8` against immutable locator commit `7465b88eac84a5184bb69ee34c5af8002f1b0039` / blob `4f9515a57e147c8a35f1cbe754d3481328c62647`, and implementation admission `IRD-963A57D5F5B5` were verified on continuation. CAP-RECON remains mapped only to existing BI-5ACBAC50. Workroom custody and these planning records do not establish delivery or parent completion.
+
+The first continued coordinator prerequisite reproduced seven failing identity,
+baseline and replay tests, then passed 114 affected tests across three executed
+files and both official web TypeScript programs. Independent assessment is
+pending. Dual-baseline reconciliation, owned compensation, bootstrap sync,
+real PostgreSQL, the full governed gate and live acceptance remain unrun.

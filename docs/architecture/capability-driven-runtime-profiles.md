@@ -334,6 +334,16 @@ ordinary-transition hash and consistent-baseline requirement. The existing hash,
 signing, host crash/recovery and promoter closure suites pass 45 source tests;
 this refactor supplies no live capability or reconciliation evidence.
 
+The coordinator now snapshots caller identity and complete state maps before
+asynchronous projection. Durable admission compares the complete observed
+database baseline inside its serializable transaction; replay also compares the
+original requester and both complete state maps. Seven preserved regressions
+failed before this repair, then all 114 tests across three executed affected
+files passed. Both official web TypeScript programs passed. These are source
+prerequisite checks: the packaged reconciliation mode, owned compensation,
+bootstrap synchronization, real PostgreSQL qualification and live agreement
+remain unverified. No capability was activated by these checks.
+
 ## Safe operating rules
 
 - Change physical service facts in the substrate manifest and regenerate the catalog; do not hand-edit the generated catalog.

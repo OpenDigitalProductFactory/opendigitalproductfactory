@@ -43,6 +43,51 @@ function deps(overrides: Partial<RuntimeCapabilityCoordinatorDeps> = {}): Runtim
 }
 
 describe("runtime capability transition coordinator", () => {
+  it("captures request identity before asynchronous projection work", async () => {
+    const mutable = structuredClone(request);
+    const d = deps();
+    const resolve = d.resolveProjection!;
+    d.resolveProjection = vi.fn(async (keys) => {
+      mutable.transitionId = "RCT-MUTATED";
+      mutable.requestedById = "another-user";
+      mutable.desiredStates["runtime:build"] = "active";
+      return resolve(keys);
+    });
+    await coordinateRuntimeCapabilityTransition(mutable, d);
+    expect(d.receipts.createPending).toHaveBeenCalledWith(expect.objectContaining({
+      transitionId: request.transitionId, requestedById: request.requestedById,
+      desiredStates: request.desiredStates,
+      envelope: expect.objectContaining({ transitionId: request.transitionId }),
+    }));
+    expect(d.readHostReceipt).toHaveBeenCalledWith(request.transitionId);
+  });
+
+  it.each([
+    { ...request.previousStates, "runtime:build": "disabled" },
+    { ...request.previousStates, "runtime:local-speech": "disabled" },
+    { "runtime:core": "active" },
+  ])("rejects a changed complete database baseline before creating a receipt", async (states) => {
+    const model = { findFirst: vi.fn(async () => null), findUnique: vi.fn(async () => null), create: vi.fn(), updateMany: vi.fn() };
+    const tx = { $executeRaw: vi.fn(), runtimeCapabilityTransition: model,
+      platformCapability: { findMany: vi.fn(async () => Object.entries(states).map(([capabilityId, state]) => ({ capabilityId, state }))) } };
+    const receipts = createPrismaRuntimeTransitionReceipts({ $transaction: vi.fn(async (fn) => fn(tx)) } as never);
+    await expect(receipts.createPending({ ...request, previousProfiles: ["build"], desiredProfiles: [], previousStateHash: "before", desiredStateHash: "after", envelope: persistedEnvelope, envelopeSignature: "a".repeat(64) })).rejects.toThrow("runtime_transition_database_baseline_changed");
+    expect(model.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { requestedById: "another-user" },
+    { previousStates: { ...request.previousStates, "runtime:local-speech": "disabled" } },
+    { desiredStates: { ...request.desiredStates, "runtime:local-speech": "disabled" } },
+  ])("rejects replay with a different owner or complete state map", async (change) => {
+    const row = { ...request, ...persistedEnvelope, status: "pending", envelope: persistedEnvelope, envelopeSignature: "a".repeat(64), ...change };
+    const model = { findUnique: vi.fn(async () => row), findFirst: vi.fn(), create: vi.fn() };
+    const tx = { $executeRaw: vi.fn(), runtimeCapabilityTransition: model };
+    const receipts = createPrismaRuntimeTransitionReceipts({ $transaction: vi.fn(async (fn) => fn(tx)) } as never);
+    await expect(receipts.createPending({ ...request, previousProfiles: ["build"], desiredProfiles: [], previousStateHash: "before", desiredStateHash: "after", envelope: persistedEnvelope, envelopeSignature: "a".repeat(64) })).rejects.toThrow("transition_id_conflict");
+    expect(model.create).not.toHaveBeenCalled();
+  });
+
   it("classifies the persisted state by schema identity and hashes, never journal phase", () => {
     const row = { ...request, ...persistedEnvelope, previousStateHash: "before", desiredStateHash: "after", previousStates: request.previousStates, desiredStates: request.desiredStates, createdAt: new Date(), status: "pending", envelope: persistedEnvelope, envelopeSignature: "x" };
     const base = { schemaVersion: 1, installerVersion: "test", platform: "linux", arch: "amd64", capabilityCatalogHash: row.catalogHash };
@@ -143,7 +188,7 @@ describe("runtime capability transition coordinator", () => {
 
   it("creates sorted durable receipts under an advisory lock and serializable transaction", async () => {
     const model = { findFirst: vi.fn(async () => null), findUnique: vi.fn(async () => null), create: vi.fn(async () => ({})), updateMany: vi.fn(async () => ({ count: 1 })) };
-    const tx = { $executeRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
+    const tx = { $executeRaw: vi.fn(async () => []), runtimeCapabilityTransition: model, platformCapability: { findMany: vi.fn(async () => Object.entries(request.previousStates).map(([capabilityId, state]) => ({ capabilityId, state }))) } };
     const prisma = { runtimeCapabilityTransition: model, $transaction: vi.fn(async (fn) => fn(tx)) };
     const receipts = createPrismaRuntimeTransitionReceipts(prisma as never);
     const envelope = { ...persistedEnvelope, previousKeys: ["z", "a"], desiredKeys: ["z", "b"], previousProfiles: [], desiredProfiles: [] };
@@ -155,7 +200,7 @@ describe("runtime capability transition coordinator", () => {
 
   it("reconciles an idempotent transition-id retry without creating another row", async () => {
     const identity = persistedEnvelope;
-    const model = { findFirst: vi.fn(), findUnique: vi.fn(async () => ({ status: "host_applied", ...identity, envelope: identity, envelopeSignature: "a".repeat(64) })), create: vi.fn(), updateMany: vi.fn() };
+    const model = { findFirst: vi.fn(), findUnique: vi.fn(async () => ({ ...request, status: "host_applied", ...identity, envelope: identity, envelopeSignature: "a".repeat(64) })), create: vi.fn(), updateMany: vi.fn() };
     const tx = { $executeRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
     const prisma = { runtimeCapabilityTransition: model, $transaction: vi.fn(async (fn) => fn(tx)) };
     const receipts = createPrismaRuntimeTransitionReceipts(prisma as never);
