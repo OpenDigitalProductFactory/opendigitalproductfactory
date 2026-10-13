@@ -277,7 +277,11 @@ DPF relies on local guardrails — the pre-commit secret scan + typecheck hook (
 Setup keeps your selected connection address for later sessions, including loopback HTTP. An explicit `DPF_MCP_URL` overrides it; otherwise setup uses the saved Codex address, then the saved user preference, then the installation's HTTPS default. A saved address does not grant access or prove sign-in works. HTTP setup preserves certificate and credential settings. If the client still uses an older address, verify its saved connection before starting another sign-in.
 
 The approval page names the assistant role this connection will act as and
-has one **Connect** button; you do not pick the role. The server chooses it
+has one **Connect {client} as {account}** button. Check the named account and
+press it once to confirm and connect; there is no separate account checkbox.
+**Use a different account** lets you switch before connecting. If your session
+changes while the page is open, nothing connects until you confirm the current
+account on the refreshed page. You do not normally pick the role. The server chooses it
 from the roles you are allowed to authorize, after checking that they carry
 the same permissions, and reuses the role you approved last time for the same
 client. A client's self-chosen name only labels the connection; it cannot

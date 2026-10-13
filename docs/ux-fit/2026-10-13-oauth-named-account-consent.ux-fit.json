@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "named-account-submit",
+  "decisionInteractionId": "DI-50FF7AFF805C",
+  "scope": { "files": ["apps/web/lib/auth/oauth-consent-page.ts"] },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["named-account-submit", "retain-separate-account-checkbox"]
+  },
+  "notes": {
+    "decision": "Fits with guardrails under DI-50FF7AFF805C, recorded in the named-account amendment of the existing OAuth external build authority design. The chosen native Connect action confirms the named account instead of retaining the separate required checkbox and second action.",
+    "owningArea": "Platform authorization interstitial at /api/oauth/authorize; no navigation changes.",
+    "persona": "A signed-in person connecting an AI client who needs to recognize the account receiving the connection and approvals.",
+    "reuse": "Existing server-rendered native form, system colors, explicit approve/deny buttons and optional switch-account link. No new component or route.",
+    "sourceTruth": "The authenticated session supplies account identity. The unchanged POST compares confirm_account to the current session user ID and intersects scopes and coworker eligibility.",
+    "states": "Missing or stale identity issues no code and renders a fresh account choice. Cancel and a submission without an explicit approval remain refusals. Labels are escaped and the full account wraps.",
+    "aiBoundary": "No prompt send or automatic submission. The named native button is the explicit consent action.",
+    "verification": "256 OAuth unit tests and web typecheck passed locally. Served narrow-viewport, keyboard, light/dark checks and canonical first-connect/reconnect measurements remain required; this recorded decision is not browser acceptance."
+  }
+}

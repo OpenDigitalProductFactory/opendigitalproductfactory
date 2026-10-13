@@ -43,7 +43,7 @@ The item's acceptance criteria are retained verbatim:
    are untrusted: this is an explicit UI action, never additional authority.
    Legacy checkbox submissions retain the same field/value contract. Cancel
    remains decision=deny and is processed before account confirmation.
-5. Update renderer comments, authorization documentation and user guide; preserve
+5. Update renderer comments and user guide; preserve
    scope intersection, CSRF, PKCE, redirect and coworker eligibility checks.
    No schema, seed, grant or account-identity migration is needed.
 6. Run the affected renderer and authorize suites plus OAuth regression tests,
@@ -72,7 +72,13 @@ forms remain valid throughout rollout.
 
 Atomic under BI-05E0EA33: UI, server compatibility, tests, documentation and live
 measurement establish one consent behavior and cannot independently satisfy it.
-Coverage receipt pending; this draft is not implementation admission or approval.
+Coverage accepted for plan commit 0cb03b16792865a5bb662c1f45d8f287b721b7bb:
+cmv6928jh0r9c01lagexei5sy. Independent design assessment recorded in
+cmv697jd1120u01la4rcf9srf; no blocking findings. Implementation admission
+accepted for WC-D32E1140. Refresh coverage for subsequent plan revisions.
+
+The authorization runbook is actively claimed by another recovery Workroom;
+this change updates the user guide and leaves that claimed file to its owner.
 
 Traceability: requirement AC-OC-1/3/7; contract current-account-equality;
 flow named-account-submit; verification first-connect-and-reconnect.

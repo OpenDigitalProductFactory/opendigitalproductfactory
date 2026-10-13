@@ -47,7 +47,7 @@ const STYLE = `
 :root{color-scheme:light dark}
 *{box-sizing:border-box}
 body{margin:0;background:Canvas;color:CanvasText;font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;justify-content:center;padding:24px}
-main{width:100%;max-width:560px;background:Canvas;border:1px solid GrayText;border-radius:10px;padding:28px}
+main{width:100%;min-width:0;max-width:560px;overflow-wrap:anywhere;background:Canvas;border:1px solid GrayText;border-radius:10px;padding:28px}
 h1{font-size:20px;margin:.2em 0 .4em}
 .eyebrow{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:GrayText;margin:0}
 p{color:GrayText;margin:.5em 0}
@@ -63,7 +63,8 @@ dl div{display:flex;gap:8px;margin:3px 0}
 dt{font-weight:600;flex:0 0 92px}
 dd{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
 .actions{display:flex;gap:10px;margin-top:22px}
-button{flex:1;padding:10px 16px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer}
+button{flex:1;min-width:0;overflow-wrap:anywhere;padding:10px 16px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer}
+@media(max-width:480px){.actions{flex-direction:column}}
 select{width:100%;padding:10px;border:1px solid GrayText;border-radius:6px;background:Field;color:FieldText;font:inherit}
 button.primary{background:Highlight;color:HighlightText;border:1px solid Highlight}
 button.secondary{background:ButtonFace;color:ButtonText;border:1px solid GrayText}
@@ -183,7 +184,7 @@ ${scopeRows}
 <div><dt>Returns to</dt><dd>${esc(view.redirectUri)}</dd></div>
 </dl>
 <div class="actions">
-<button class="primary" type="submit" name="decision" value="approve">Connect ${esc(truncate(view.clientName, 40))}</button>
+<button class="primary" type="submit" name="decision" value="approve">Connect ${esc(view.clientName)} as ${esc(view.actingUser)}</button>
 <button class="secondary" type="submit" name="decision" value="deny" formnovalidate>Cancel</button>
 </div>
 </form>
@@ -196,20 +197,16 @@ ${scopeRows}
  * (BI-07D21B4A). A browser can hold a session the person forgot about — a
  * setup account, a colleague's, a test persona — and consent used to take it
  * silently, so every approval the assistant later asked for went to an inbox
- * nobody reads. The person ticks the account by name; the checkbox carries the
- * session's user id, and the POST binds only if it still matches.
+ * nobody reads. The named Connect action confirms the account; its hidden
+ * field carries the session's user id, and the POST binds only if it still matches.
  */
 function renderAccount(view: ConsentView): string {
   return `<fieldset><legend>Connect as</legend>
-<label class="scope"><input type="checkbox" name="confirm_account" value="${esc(view.actingUserId)}" required>
-<span><span class="scope-title">${esc(view.actingUser)}</span>
-<span class="scope-detail">It acts under this account, and its approval requests will come to this account's inbox.</span></span></label>
+<input type="hidden" name="confirm_account" value="${esc(view.actingUserId)}">
+<p><span class="scope-title">${esc(view.actingUser)}</span>
+<span class="scope-detail">It acts under this account, and its approval requests will come to this account's inbox.</span></p>
 <p class="choice">Not the account you meant? <a href="${esc(view.switchAccountUrl)}">Use a different account</a></p>
 </fieldset>`;
-}
-
-function truncate(value: string, max: number): string {
-  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
 }
 
 /**

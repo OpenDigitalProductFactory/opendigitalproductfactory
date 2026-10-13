@@ -74,7 +74,7 @@ describe("consent rendering", () => {
   });
   it("renders one primary Connect button named for the client and no Approve button", () => {
     const html = renderConsentPage(base);
-    expect(html).toContain('value="approve">Connect Claude Code</button>');
+    expect(html).toContain('value="approve">Connect Claude Code as owner@example.com</button>');
     expect(html).not.toContain(">Approve<");
   });
   it("binds a single eligible assistant as a hidden field with no disclosure", () => {
@@ -193,11 +193,17 @@ describe("consent rendering", () => {
 // connection on one install went to a bootstrap account nobody signs in with,
 // and every approval the assistant asked for landed in that account's inbox.
 describe("consent names the account and makes the person confirm it", () => {
-  it("asks the person to confirm the account with a required control bound to that user id", () => {
+  it("confirms the named account with one explicit Connect action", () => {
     const html = renderConsentPage(base);
-    expect(html).toMatch(/<input type="checkbox" name="confirm_account" value="user-owner" required>/);
+    expect(html).toContain('<input type="hidden" name="confirm_account" value="user-owner">');
+    expect(html).not.toContain('type="checkbox" name="confirm_account"');
+    expect(html).toContain('name="decision" value="approve">Connect Claude Code as owner@example.com</button>');
     const form = html.slice(html.indexOf("<form"));
     expect(form).toContain("owner@example.com");
+  });
+  it("keeps the full long account identifier in the explicit action", () => {
+    const actingUser = `${"long".repeat(30)}@example.com`;
+    expect(renderConsentPage({ ...base, actingUser })).toContain(`as ${actingUser}</button>`);
   });
   it("says where the assistant's approval requests will go", () => {
     expect(renderConsentPage(base)).toContain("approval requests will come to this account");
@@ -210,6 +216,7 @@ describe("consent names the account and makes the person confirm it", () => {
     const html = renderConsentPage({ ...base, actingUser: '<img src=x onerror=a>', switchAccountUrl: '"><script>x()</script>' });
     expect(html).not.toContain("<img src=x");
     expect(html).not.toContain("<script>x()</script>");
+    expect(html).toContain('value="approve">Connect Claude Code as &lt;img src=x onerror=a&gt;</button>');
   });
   it("says why nothing was connected when Connect came without the account confirmed", () => {
     expect(renderConsentPage({ ...base, accountNotice: true }))
