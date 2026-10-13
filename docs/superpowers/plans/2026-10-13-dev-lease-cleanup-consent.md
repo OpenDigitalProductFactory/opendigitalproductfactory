@@ -41,8 +41,8 @@ The risk is narrowing on caller-asserted rather than server-recorded ownership. 
 
 ## Documentation impact
 
-There is no UI control or public API shape change. This plan records the operational behavior and recovery limits. Live acceptance and native semantic review remain UNRUN until independently recorded.
+There is no UI control or public API shape change. Update `docs/operations/local-ci-sandbox-slots.md` with owned cleanup eligibility, retained approval boundaries and truthful terminal behavior. Live acceptance and native semantic review remain UNRUN until independently recorded.
 
 ## Backlog coverage
 
-Pending native immutable-plan coverage before source implementation. Parent BI-25CB699C, Workroom WC-796A89FA; atomic deliverable mapped to the existing BI, with no dependencies.
+Initial native planning receipt: cmv67i1ua1a4001o78yav9uoh, atomic, covering immutable plan commit de5743aef92bdeac08b9a122f4fc08594bd72067/blob 6d01322b2e670e45c80df1d540df47116512d79d. Parent BI-25CB699C, Workroom WC-796A89FA; atomic deliverable mapped to the existing BI, with no dependencies. Final source publication will reconcile current coverage in the Workroom without treating this initial receipt as a code-review or runtime verdict.
