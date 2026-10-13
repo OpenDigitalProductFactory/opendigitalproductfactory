@@ -23,8 +23,26 @@ preserves the host reserve and an inference-growth reserve. Cheap Node guards
 such as documentation, policy, and change-impact checks do not enter this lane
 and remain concurrent.
 
-A full lane produces a typed `host_resource_queued` response and exits without
-leaving a waiting Node process. Stray matching processes are included as
+A full lane exits 75 with `host_resource_durable_wait`. The command does not
+start until admitted. `resumeOwner: detached-resumer` hands the wait to the
+existing background resumer; `resumeOwner: caller` means no detached owner
+started. The response includes `resumePin`: pass it as `--resume-pin <value>`
+before the child-command `--` only when resuming that exact attempt. A fresh
+invocation intentionally creates a different attempt.
+
+Retries preserve the original lease and queue age while updating process
+identity. Source, command, owner, credential, dependency or resource-budget
+changes stop the old attempt unrun (exit 82). Terminal leases stop unrun (81);
+active or foreign leases cannot be taken over. The server still evaluates
+current capacity on every retry.
+
+Diagnostics live in `<git-common-dir>/dpf-local-ci-queue-observers`, or the
+configured `DPF_LOCAL_QUEUE_OBSERVER_DIR`. Each resumer log records its actual
+PID, each gate child's PID and bounded command output. On Windows WMI launches,
+`launcherPid` names the short-lived launcher; use the log's `start` PID for the
+resumer, not the launcher. Logs do not turn a queued or unrun command into PASS.
+
+Stray matching processes are included as
 `evidence-only` diagnostics; the broker never kills a process merely because
 its command line resembles a heavy workload. Only the admitted runner's own
 descendant group may be terminated when lease authority is lost.

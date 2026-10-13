@@ -552,7 +552,7 @@ async function claimNonprodEnvironmentLeaseHandler(
   }).catch((error: unknown) => {
     // BI-D35B85BF: a resume that would cancel a running or foreign lease is refused, not thrown.
     const code = getErrorMessage(error);
-    if (code === "nonprod_resume_lease_active" || code === "nonprod_resume_not_owner") return { refused: code } as const;
+    if (/^nonprod_resume_(?:lease_active|not_owner|identity_mismatch|lease_expired)$/.test(code)) return { refused: code } as const;
     throw error;
   });
   if ("refused" in result) {
