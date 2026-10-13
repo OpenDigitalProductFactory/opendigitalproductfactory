@@ -65,7 +65,7 @@ describe("selected Codex catalog authentication", () => {
 
 describe("container-owned private catalog lifecycle", () => {
   function runner(home: string, cache?: unknown) {
-    const child = Object.assign(new EventEmitter(), { kill: vi.fn(), stdin: { write: vi.fn(), end: vi.fn() }, stdout: new EventEmitter() });
+    const child = Object.assign(new EventEmitter(), { kill: vi.fn(), stdin: Object.assign(new EventEmitter(), { write: vi.fn(), end: vi.fn() }), stdout: new EventEmitter() });
     const fs = { mkdtempSync: vi.fn(() => home), chmodSync: vi.fn(), rmSync: vi.fn(),
       lstatSync: vi.fn(() => { if (cache === undefined) throw new Error("private-cache-error"); return { isFile: (): boolean => true, size: 1000 }; }),
       readFileSync: vi.fn(() => typeof cache === "string" ? cache : JSON.stringify(cache)),
@@ -103,6 +103,25 @@ describe("container-owned private catalog lifecycle", () => {
   });
 
   const freshCache = () => ({ fetched_at: new Date().toISOString(), client_version: "0.157.0", identity: "private-opaque-scope", models: [{ slug: "future-model" }] });
+  it.each(["EPIPE", "ERR_STREAM_DESTROYED"])("owns shutdown and cleanup after a child input %s error", async (code) => {
+    vi.useFakeTimers();
+    const r = runner("/tmp/dpf-codex-catalog-broken-pipe");
+    expect(() => r.child.stdin.emit("error", Object.assign(new Error("selected-private-token"), { code }))).not.toThrow();
+    expect(r.child.kill).toHaveBeenCalledWith("SIGTERM");
+    r.process.stdin.emit("data", Buffer.from("selected-private-token"));
+    r.process.stdin.emit("end");
+    expect(r.child.stdin.write).not.toHaveBeenCalled();
+    expect(r.child.stdin.end).not.toHaveBeenCalled();
+    expect(r.process.stdout.write).not.toHaveBeenCalled();
+    expect(r.fs.rmSync).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(r.child.kill).toHaveBeenCalledWith("SIGKILL");
+    r.child.emit("exit", 0);
+    expect(r.fs.rmSync).toHaveBeenCalledTimes(1);
+    expect(r.fs.rmSync).toHaveBeenCalledWith("/tmp/dpf-codex-catalog-broken-pipe", { recursive: true, force: true });
+    expect(r.process.exitCode).toBe(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
   function catalogFrames(r: ReturnType<typeof runner>, data = [{ model: "future-model" }]) {
     r.process.stdin.emit("data", Buffer.from('{"method":"account/login/start","id":2,"params":{"accessToken":"selected-private-token"}}\n'));
     r.child.stdout.emit("data", Buffer.from(JSON.stringify({ id: 3, result: { data, nextCursor: null } }) + "\n"));

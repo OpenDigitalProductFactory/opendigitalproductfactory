@@ -29,7 +29,10 @@ const maxBytes = 4 * 1024 * 1024;
 let loginStartedAt = null;
 let input = '';
 const inputDecoder = new StringDecoder('utf8');
+let inputFailed = false;
+child.stdin.on('error', () => { inputFailed = true; stop(); });
 process.stdin.on('data', (chunk) => {
+  if (inputFailed) return;
   input += inputDecoder.write(chunk);
   if (Buffer.byteLength(input) > maxBytes) return stop();
   const lines = input.split('\n'); input = lines.pop() ?? '';
@@ -38,7 +41,7 @@ process.stdin.on('data', (chunk) => {
   }
   child.stdin.write(chunk);
 });
-process.stdin.on('end', () => child.stdin.end());
+process.stdin.on('end', () => { if (!inputFailed) child.stdin.end(); });
 const provenance = (message) => {
   const missing = { responseId: message.id, verified: false };
   try {
@@ -74,7 +77,7 @@ child.stdout.on('data', (chunk) => {
     process.stdout.write(line + '\n');
   }
 });
-const cleanup = (code) => { clearTimeout(watchdog); clearTimeout(hardStop); fs.rmSync(home, { recursive: true, force: true }); process.exitCode = code; };
+const cleanup = (code) => { clearTimeout(watchdog); clearTimeout(hardStop); fs.rmSync(home, { recursive: true, force: true }); process.exitCode = inputFailed ? 1 : code; };
 child.on('error', () => cleanup(1));
 child.on('exit', (code) => cleanup(code ?? 1));
 `;
