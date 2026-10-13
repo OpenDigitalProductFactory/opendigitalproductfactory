@@ -54,6 +54,7 @@ export type ImmutableReaderArguments = {
  * `version` is the revision id and `expectedBlobId` is its value digest.
  */
 export type ImmutableReaderArtifactRef =
+  | { kind: "document-version"; repositoryFullName: string; versionId: string; valueDigest: string }
   | {
     kind?: "repo-blob-at-commit";
     repositoryFullName: string;
@@ -79,10 +80,15 @@ export function isImmutablePageReader(toolName: string): boolean {
 }
 
 export function immutablePageReaderForArtifact(artifactRef: ImmutableReaderArtifactRef): string {
+  if (artifactRef.kind === "document-version") return REPOSITORY_BLOB_READER_TOOL;
   return artifactRef.kind === "feature-build-revision" ? BUILD_ARTIFACT_REVISION_READER_TOOL : REPOSITORY_BLOB_READER_TOOL;
 }
 
 export function immutableReaderArgumentsFor(artifactRef: ImmutableReaderArtifactRef): ImmutableReaderArguments {
+  if (artifactRef.kind === "document-version") return {
+    repositoryFullName: artifactRef.repositoryFullName, path: `initiative-body-version/${artifactRef.versionId}`,
+    version: artifactRef.versionId, expectedBlobId: artifactRef.valueDigest,
+  };
   if (artifactRef.kind === "feature-build-revision") {
     return {
       repositoryFullName: artifactRef.repositoryFullName,

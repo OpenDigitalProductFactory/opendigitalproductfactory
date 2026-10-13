@@ -1,5 +1,6 @@
-import { immutableArtifactIdentity } from "@/lib/mcp-task-review-contract";
+import { immutableArtifactIdentity, parseInitiativeReviewArtifactRef } from "@/lib/mcp-task-review-contract";
 import { randomUUID } from "node:crypto";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
 import { Prisma, prisma } from "@dpf/db";
 
@@ -28,6 +29,8 @@ import {
 import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inventory";
 
 import { validateInitiativeBaselineChainHead } from "./baseline-repository";
+import { bodyBaselineInputsMatch } from "./body-baseline-binding";
+import { resolveReviewerIdentity } from "./reviewer-identity";
 import { loadBaselineSourceForItem, type BaselineSourceDb } from "./baseline-source";
 import {
   MAX_OBJECTIVE_MAPPING_EVIDENCE_ACTIVITIES,
@@ -41,6 +44,7 @@ export type InitiativeObjectiveMapping = {
 };
 
 export type InitiativeObjectiveMappingProposal = {
+  taskRunId?: string;
   schemaVersion: 1;
   proposalId: string;
   subject: { kind: "backlog-item"; id: string };
@@ -99,20 +103,7 @@ function parseBaseline(value: unknown): BaselinePayload | null {
     ...row.acceptanceStatements.map((entry) => (entry as Record<string, unknown>).acceptanceId as string),
   ];
   if (statementIds.length === 0 || new Set(statementIds).size !== statementIds.length) return null;
-  const artifact = object(row.artifactRef);
-  const artifactRef = artifact?.kind === "repo-blob-at-commit"
-    && typeof artifact.repositoryFullName === "string"
-    && typeof artifact.commitSha === "string"
-    && typeof artifact.path === "string"
-    && typeof artifact.providerBlobId === "string"
-    ? {
-        kind: "repo-blob-at-commit" as const,
-        repositoryFullName: artifact.repositoryFullName,
-        commitSha: artifact.commitSha,
-        path: artifact.path,
-        providerBlobId: artifact.providerBlobId,
-      }
-    : undefined;
+  const artifactRef = parseInitiativeReviewArtifactRef(row.artifactRef) ?? undefined;
   return {
     ...row,
     ...(artifactRef ? { artifactRef } : {}),
@@ -364,7 +355,7 @@ export async function recordInitiativeObjectiveMappingProposal(args: {
   }
   const item = await prisma.backlogItem.findUnique({
     where: { itemId: args.itemId },
-    select: { id: true, itemId: true, organizationId: true },
+    select: { id: true, itemId: true, organizationId: true, body: true },
   });
   if (!item) return { ok: false, code: "OBJECTIVE_BASELINE_REQUIRED", error: `BacklogItem ${args.itemId} was not found.` };
   const authority = await prisma.authorizationDecisionLog.findUnique({
@@ -376,12 +367,8 @@ export async function recordInitiativeObjectiveMappingProposal(args: {
     return { ok: false, code: "AUTHORIZATION_DENIED", error: "The current tool call has no matching initiative-evidence allow decision." };
   }
   const organizationId = item.organizationId ?? "platform";
-  const proposerAliases = await prisma.principalAlias.findMany({
-    where: { aliasType: "user", aliasValue: args.proposerUserId, issuer: "" },
-    select: { principal: { select: { principalId: true } } },
-    take: 2,
-  });
-  const proposerPrincipalId = proposerAliases.length === 1 ? proposerAliases[0]?.principal.principalId : null;
+  const reviewer = await resolveReviewerIdentity(prisma, { reviewerUserId: args.proposerUserId, reviewerAgentId: args.proposerAgentId });
+  const proposerPrincipalId = reviewer?.principalId ?? null;
   if (!proposerPrincipalId) return { ok: false, code: "ARTIFACT_AUTHOR_REQUIRED", error: "Proposer principal identity is unavailable or ambiguous." };
 
   return prisma.$transaction(async (tx) => {
@@ -420,6 +407,21 @@ export async function recordInitiativeObjectiveMappingProposal(args: {
       || !exactArtifactRef(baseline.artifactRef, taskAuthority.data.binding.artifactRef)) {
       const error = "The current objective baseline does not match the executing TaskRun artifact binding.";
       return { ...err(error), code: "OBJECTIVE_BASELINE_CONFLICT" };
+    }
+    if (baseline.artifactRef.kind === "document-version") {
+      const currentItem = await tx.backlogItem.findUnique({ where: { id: item.id },
+        select: { itemId: true, organizationId: true, body: true } });
+      if (!currentItem || !bodyBaselineInputsMatch(baseline, { ...currentItem, binding: taskAuthority.data.binding })) {
+        return { ok: false, code: "OBJECTIVE_BASELINE_CONFLICT", error: "The retained criteria, source or organization no longer match this acceptance request." };
+      }
+      const payload = baseline as unknown as Record<string, unknown>;
+      const authorIds = [...new Set([payload.bodyAuthorPrincipalId, payload.sourceAuthorPrincipalId].filter((id): id is string => typeof id === "string" && id.length > 0))];
+      const authors = await tx.principal.findMany({ where: { id: { in: authorIds } },
+        select: { principalId: true } });
+      if (authorIds.length === 0 || authors.length !== authorIds.length || authors.some((author) => author.principalId === proposerPrincipalId)
+        || payload.authorAgentId === args.proposerAgentId) {
+        return { ok: false, code: "AUTHORIZATION_DENIED", error: "An acceptance reviewer must be independent of the criteria and delivered source authors." };
+      }
     }
     const baselineRecordedAt = rows.find((row) => parseBaseline(row.payload)?.baselineId === args.baselineId)?.recordedAt;
     if (!baselineRecordedAt) {
@@ -479,12 +481,24 @@ export async function recordInitiativeObjectiveMappingProposal(args: {
       activities: [...rows, ...evidenceRows, ...mappingRows],
     });
     if (reconciliation.state === "pass" || reconciliation.state === "fail") {
+      const existing = object(mappingRows[0]?.payload);
+      if (existing?.taskRunId === args.taskRunId && existing.proposerPrincipalId === proposerPrincipalId
+        && existing.proposerAgentId === args.proposerAgentId && existing.baselineId === args.baselineId
+        && existing.reason === args.reason.trim() && typeof existing.proposalId === "string"
+        && canonicalJson(existing.mappings) === canonicalJson(mappings)
+        && Array.isArray(existing.eligibleEvidenceActivityIds)
+        && exactStringSet(existing.eligibleEvidenceActivityIds as string[], eligibleEvidenceActivityIds)) {
+        const replay = ok();
+        if (!replay.ok) throw new Error("Canonical success constructor returned an error.");
+        return { ...replay, proposalId: existing.proposalId, proposal: existing as unknown as InitiativeObjectiveMappingProposal };
+      }
       const error = "A canonical objective mapping already exists for the current baseline.";
       return { ...err(error), code: "OBJECTIVE_MAPPING_ALREADY_EXISTS" };
     }
 
     const proposalId = `initiative-${randomUUID()}`;
     const proposal: InitiativeObjectiveMappingProposal = {
+      taskRunId: args.taskRunId!,
       schemaVersion: 1,
       proposalId,
       subject: { kind: "backlog-item", id: item.itemId },

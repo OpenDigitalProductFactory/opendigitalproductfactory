@@ -4,7 +4,7 @@ import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readi
 import { currentUserContext } from "@/lib/govern/current-user-context";
 import { can } from "@/lib/permissions";
 import { expandGrants } from "@/lib/tak/agent-grants";
-import { INITIATIVE_READINESS_LANES } from "@/lib/tak/initiative-readiness-tool-grants";
+import { INITIATIVE_READINESS_LANES, readinessLaneForRole } from "@/lib/tak/initiative-readiness-tool-grants";
 import { OAUTH_EXECUTION_AUTHORITY_SELECT, isCurrentOAuthExecutionAuthority } from "@/lib/auth/oauth-tokens";
 import { resolveAgentWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
 import { parseInitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
@@ -77,12 +77,14 @@ export async function authorizeCoworkerRequest(
     return deny("The connection's authorization is no longer current.");
   }
   const binding = parseInitiativeReviewBinding(params.initiativeReviewBinding);
-  const lane = binding && INITIATIVE_READINESS_LANES[binding.writerToolName];
+  const lane = binding?.gate === "objective-mapping" && binding.writerToolName === "record_initiative_evidence"
+    ? readinessLaneForRole("acceptance-reviewer")?.lane
+    : binding && INITIATIVE_READINESS_LANES[binding.writerToolName];
   if (options?.sourceOnly && (!binding || binding.eligibleEvidenceActivityIds?.length
     || !["record_initiative_design_review", "record_initiative_architecture_review"].includes(binding.writerToolName))) {
     return deny("This review does not have a source-only activity contract.");
   }
-  if (!binding?.workroomRef || !lane?.independent || !lane.gates.some((gate) => gate === binding.gate)
+  if (!binding?.workroomRef || !lane?.independent || (binding.gate !== "objective-mapping" && !lane.gates.some((gate) => gate === binding.gate))
     || params.targetAgent === context.agentId) return deny("Use an independent review request supplied by the item's readiness check.");
   const human = await currentUserContext(userId);
   if (!human || !can(human, "manage_backlog") || !can(human, lane.capability)) {
@@ -137,7 +139,7 @@ export async function authorizeCoworkerRequest(
     })()
     : await (async () => {
       const { resolveTerminalInitiativeRecovery } = await import("@/lib/backlog/initiative-readiness/terminal-recovery");
-      const recovery = await resolveTerminalInitiativeRecovery({ decision, currentAgentId: context!.agentId ?? null,
+      const recovery = await resolveTerminalInitiativeRecovery({ decision, currentAgentId: context!.agentId ?? null, currentUserId: userId,
         refusedWorkroomId: binding.workroomRef!.workroomId,
         taskAuthority: binding.gate === "plan-review" ? await (async () => {
           const taskAuthorityKey = await resolveMcpTaskAuthorityKey({ tokenId: context.apiTokenId!, userId, source: "oauth" });

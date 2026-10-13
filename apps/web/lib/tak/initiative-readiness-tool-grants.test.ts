@@ -243,6 +243,7 @@ describe("initiative readiness recovery routing", () => {
       toolName: "record_initiative_evidence",
       grant: "initiative_evidence_write",
       gate: "objective-mapping",
+      independent: true,
       targetAgentId: "AGT-WS-ACCEPT",
       requestCoworker: {
         requiredToolNames: ["record_initiative_evidence", "read_source_at_version"],
