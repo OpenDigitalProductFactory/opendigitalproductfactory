@@ -224,5 +224,19 @@ queued lease. Rollback is a signed revert; do not mutate historical leases.
 This is the remaining AC-4 repair under BI-25CB699C, not completion of the wider
 BI. Early quiescence detection before expensive preflight remains separate.
 During QR-2026-10-13-k0qmxdnz, native claim writes returned `portal_quiescing`.
-The operator-authorized recovery route permits bounded source work; live scope
-and coverage reconciliation remain unrun until the service accepts writes.
+The operator-authorized recovery route permitted bounded source work. After
+the upgrade, the normal claim succeeded as WC-FAB79D1A and atomic coverage
+`cmv5yzgu7009801nvclvqc2xp` bound plan commit
+`0b0c7f3ecc215639ec191e9cc579f326088cbf5b`. Implementation readiness returned
+allowed. No backlog completion or live resource lease was created.
+
+The existing MCP pack must project the two added identity/expiry refusals as
+structured errors, so clients stop unrun rather than report a product failure.
+Include its pack and dispatch tests in VC-HOST-RESUME. Operational instructions
+are updated in `docs/operations/local-ci-sandbox-slots.md`; the general pattern
+and developer-environment pages keep their existing resource-admission policy.
+The native impact contract identifies the lease and pack test suites plus the
+style-drift guard. Run all related suites, both TypeScript programs and affected
+policy guards. Full local integration and native semantic review remain unrun
+under the authorized recovery route; independent source review and protected
+GitHub checks remain required. No UI, schema or capacity-policy change occurs.
