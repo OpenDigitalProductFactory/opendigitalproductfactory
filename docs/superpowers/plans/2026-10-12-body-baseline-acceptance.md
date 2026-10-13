@@ -57,8 +57,10 @@ activities remain the only durable stores. No new authority or receipt store.
    or malformed history fails closed. Never mutate from a read projection.
 3. **C-BINDING / F-DISPATCH:** Extend immutable review bindings to retain both the
    criteria DocumentVersion and delivered repository source, plus the exact
-   eligible evidence set. Reuse bounded immutable pagination and terminal review
-   traversal. Both criteria and source must be read before disposition. Admit
+   eligible evidence set. The retained review document contains the exact body
+   and provider-verified source bytes with their separate identities, so one
+   bounded immutable document traversal covers both without a second evidence
+   hydration state machine. Both criteria and source must be read before disposition. Admit
    objective mapping as an independent acceptance lane without making research
    or dependency-disposition independent. Require current reviewer eligibility
    and exclude criteria/source authors at dispatch and again at the writer.
