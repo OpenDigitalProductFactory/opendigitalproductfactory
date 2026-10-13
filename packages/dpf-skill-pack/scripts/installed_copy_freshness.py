@@ -10,11 +10,19 @@ was the same class: a plugin-cache copy at the current version whose hook code
 predated two merges.
 
 This compares every copy update_agent_toolchain.installed_plugin_copies() names
-against the reference pack -- the root clone's, which root-clone-freshness keeps
-on main -- by version, by delivered content at an equal version, and, for the
+against a reference -- by version, by delivered content at an equal version, and, for the
 copies a Claude client reads its connector from, by the dpf endpoint and auth
 mode the updater's own policy would write for this environment. A copy newer
 than the reference is not called stale: the reference is behind, not the copy.
+
+The reference resolves in this order (BI-A67B65F4, design 2026-10-07 section 5.4):
+1. the manifest the portal serves -- --manifest-url, else the origin of the
+   shared copy's connector -- so an installed-runtime session with no source
+   checkout still has one;
+2. the root clone's pack (root-clone-freshness keeps it on main). An explicit
+   --skill-pack-path names this reference and skips the manifest.
+The manifest fetch waits 2 seconds. With no reference the result is "unknown",
+never "current". --json prints one status object for hooks/toolchain-freshness.mjs.
 
 Advisory only: prints one WARN line per stale copy, naming it and the repair,
 and exits 0 on every path. Never writes. Dependency-free; runs on the stock
@@ -30,8 +38,9 @@ import os
 import re
 import subprocess
 import sys
+import urllib.request
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional
 from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -39,6 +48,8 @@ import update_agent_toolchain as updater  # noqa: E402
 
 BACKLOG_ID = "BI-16EAAB62"
 SKIP_ENV_VAR = "DPF_SKIP_PLUGIN_COPY_CHECK"
+MANIFEST_PATH = "/api/agent-toolchain/manifest"
+MANIFEST_TIMEOUT_SECONDS = 2.0
 _TEMPLATE = re.compile(r"^\$\{DPF_MCP_URL:-([^}]+)\}$")
 # Written per install, so they legitimately differ between copies: the updater
 # regenerates the root descriptors for this host's endpoint, rewrites the Codex
@@ -129,33 +140,35 @@ def _auth_name(bearer: bool) -> str:
     return "a bearer header" if bearer else "OAuth"
 
 
-def assess_installed_copies(
-    reference: Path, home: Path, project_dir: Optional[Path], env: Mapping[str, str]
-) -> list[dict[str, Any]]:
-    want = pack_version(reference)
-    if want is None:
-        return []
-    want_digest: Optional[str] = None
+def _assess(
+    want: str,
+    want_digest: Callable[[], str],
+    skip: Optional[Path],
+    home: Path,
+    project_dir: Optional[Path],
+    env: Mapping[str, str],
+    reference_name: str,
+) -> tuple[list[dict[str, Any]], int]:
+    """Findings for every installed copy, and how many copies were compared."""
     expected = expected_connector(env)
     findings: list[dict[str, Any]] = []
+    checked = 0
     for copy in updater.installed_plugin_copies(home, project_dir):
         path: Path = copy["path"]
-        if not path.is_dir() or path.resolve() == reference.resolve():
+        if not path.is_dir() or (skip is not None and path.resolve() == skip.resolve()):
             continue
         have = pack_version(path)
         if have is None:
             continue
+        checked += 1
         have_key, want_key = _version_key(have), _version_key(want)
         if have_key is not None and want_key is not None and have_key > want_key:
             continue
         reasons: list[str] = []
         if have != want:
-            reasons.append(f"version {have}, the reference pack is {want}")
-        else:
-            if want_digest is None:
-                want_digest = delivered_digest(reference)
-            if delivered_digest(path) != want_digest:
-                reasons.append(f"content differs from the reference pack at the same version {want}")
+            reasons.append(f"version {have}, {reference_name} is {want}")
+        elif delivered_digest(path) != want_digest():
+            reasons.append(f"content differs from {reference_name} at the same version {want}")
         if copy["connector"]:
             loaded = installed_connector(path, env)
             if loaded is not None and (_endpoint(loaded[0]) != _endpoint(expected[0]) or loaded[1] != expected[1]):
@@ -165,20 +178,77 @@ def assess_installed_copies(
                 )
         if reasons:
             findings.append({"label": copy["label"], "path": path, "reasons": reasons})
-    return findings
+    return findings, checked
+
+
+def _assess_against_pack(
+    reference: Path, home: Path, project_dir: Optional[Path], env: Mapping[str, str]
+) -> Optional[tuple[list[dict[str, Any]], int]]:
+    want = pack_version(reference)
+    if want is None:
+        return None
+    cached: list[str] = []
+
+    def want_digest() -> str:
+        if not cached:
+            cached.append(delivered_digest(reference))
+        return cached[0]
+
+    return _assess(want, want_digest, reference, home, project_dir, env, "the reference pack")
+
+
+def assess_installed_copies(
+    reference: Path, home: Path, project_dir: Optional[Path], env: Mapping[str, str]
+) -> list[dict[str, Any]]:
+    result = _assess_against_pack(reference, home, project_dir, env)
+    return result[0] if result else []
+
+
+def manifest_url_from_connector(home: Path, env: Mapping[str, str]) -> Optional[str]:
+    """The manifest URL on the origin the shared copy's dpf connector points at."""
+    loaded = installed_connector(updater.shared_managed_plugin_path(home), env)
+    if loaded is None:
+        return None
+    parts = urlsplit(loaded[0])
+    if parts.scheme not in ("http", "https") or not parts.netloc:
+        return None
+    return f"{parts.scheme}://{parts.netloc}{MANIFEST_PATH}"
+
+
+def fetch_manifest(url: str, timeout: float = MANIFEST_TIMEOUT_SECONDS) -> dict[str, Any]:
+    """The served manifest's version and digest. Raises on any failure.
+
+    Advisory only: this compares versions and never runs what it reads, so the
+    signature is not checked here. The updater verifies it before any use.
+    """
+    request = urllib.request.Request(url, headers={"Accept": "application/json"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 -- caller allows http(s) only
+        data = json.loads(response.read(1_000_000).decode("utf-8"))
+    if not isinstance(data, dict) or not isinstance(data.get("packVersion"), str) or not isinstance(data.get("packDigest"), str):
+        raise ValueError("the manifest has no packVersion or packDigest")
+    return data
+
+
+def assess_against_manifest(
+    manifest: Mapping[str, Any], home: Path, project_dir: Optional[Path], env: Mapping[str, str]
+) -> tuple[list[dict[str, Any]], int]:
+    digest = str(manifest["packDigest"])
+    return _assess(str(manifest["packVersion"]), lambda: digest, None, home, project_dir, env, "the portal manifest")
 
 
 def repair_command(reference: Path) -> str:
     script = reference / "scripts" / "update_agent_toolchain.py"
-    return f'{"python" if os.name == "nt" else "python3"} "{script}"'
+    return f'run {"python" if os.name == "nt" else "python3"} "{script}"'
 
 
-def render_findings(findings: list[dict[str, Any]], reference: Path) -> list[str]:
-    repair = repair_command(reference)
+def render_findings(
+    findings: list[dict[str, Any]], reference: Optional[Path] = None, repair: Optional[str] = None
+) -> list[str]:
+    repair = repair or (repair_command(reference) if reference else "update the DPF agent toolchain")
     return [
         f"WARN: stale DPF plugin copy -- {f['label']} at {f['path']}: {'; '.join(f['reasons'])}. "
         "A client that loads it runs old skills and hooks, and a connector that differs makes the "
-        f"desktop app see two dpf servers and refuse sign-in. Repair: run {repair}, then restart "
+        f"desktop app see two dpf servers and refuse sign-in. Repair: {repair}, then restart "
         f"the client. ({BACKLOG_ID}; silence: {SKIP_ENV_VAR}=1)"
         for f in findings
     ]
@@ -205,24 +275,77 @@ def resolve_reference_skill_pack(project_dir: Path) -> Path:
     return root_pack if (root_pack / ".claude-plugin" / "plugin.json").is_file() else own
 
 
+def _origin(url: str) -> str:
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}"
+
+
+def _reason(error: BaseException) -> str:
+    reason = getattr(error, "reason", None)
+    return str(reason if reason is not None else error) or type(error).__name__
+
+
+def _status(findings: list[dict[str, Any]], checked: int, reference: str, lines: list[str]) -> dict[str, Any]:
+    if findings:
+        return {"status": "stale", "reference": reference, "lines": lines}
+    if checked == 0:
+        return {"status": "unknown", "reference": reference, "reason": "no installed copy was found to compare", "lines": []}
+    return {"status": "current", "reference": reference, "lines": []}
+
+
+def check(args: argparse.Namespace, env: Mapping[str, str]) -> dict[str, Any]:
+    """One status object: current, stale or unknown, with its reference and lines."""
+    home = updater.home_dir()
+    project_dir = Path(args.project_dir).expanduser().resolve()
+    unreachable = ""
+    if not args.skill_pack_path:
+        url = args.manifest_url or manifest_url_from_connector(home, env)
+        if not url or urlsplit(url).scheme not in ("http", "https"):
+            unreachable = "no portal address was found in the shared copy's connector"
+        else:
+            try:
+                manifest = fetch_manifest(url)
+            except Exception as error:  # noqa: BLE001 -- offline is a result, not a failure
+                unreachable = f"the portal manifest at {_display(url)} was unreachable ({_reason(error)})"
+            else:
+                findings, checked = assess_against_manifest(manifest, home, project_dir, env)
+                reference = f"the portal manifest at {_display(url)} (pack {manifest['packVersion']})"
+                repair = f"update the DPF agent toolchain from {_origin(url)}"
+                return _status(findings, checked, reference, render_findings(findings, repair=repair))
+    pack = (
+        Path(args.skill_pack_path).expanduser().resolve()
+        if args.skill_pack_path
+        else resolve_reference_skill_pack(project_dir)
+    )
+    result = _assess_against_pack(pack, home, project_dir, env)
+    if result is None:
+        reason = unreachable or "no reference pack was found"
+        return {"status": "unknown", "reference": None, "reason": f"{reason}, and no source checkout is present", "lines": []}
+    findings, checked = result
+    reference = f"the reference pack at {pack}" + (f" ({unreachable})" if unreachable else "")
+    return _status(findings, checked, reference, render_findings(findings, pack))
+
+
 def main(argv: list[str]) -> int:
+    as_json = "--json" in argv
     try:
         if os.environ.get(SKIP_ENV_VAR) == "1":
             return 0
         parser = argparse.ArgumentParser(description="Warn when an installed dpf-platform copy has drifted.")
         parser.add_argument("--project-dir", default=os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
         parser.add_argument("--skill-pack-path", default=None)
+        parser.add_argument("--manifest-url", default=None)
+        parser.add_argument("--json", action="store_true")
         args = parser.parse_args(argv)
-        project_dir = Path(args.project_dir).expanduser().resolve()
-        reference = (
-            Path(args.skill_pack_path).expanduser().resolve()
-            if args.skill_pack_path
-            else resolve_reference_skill_pack(project_dir)
-        )
-        findings = assess_installed_copies(reference, updater.home_dir(), project_dir, os.environ)
-        for line in render_findings(findings, reference):
-            print(line)
-    except (Exception, SystemExit):  # noqa: BLE001 -- an advisory never fails a session
+        report = check(args, os.environ)
+        if args.json:
+            print(json.dumps(report))
+        else:
+            for line in report["lines"]:
+                print(line)
+    except (Exception, SystemExit) as error:  # noqa: BLE001 -- an advisory never fails a session
+        if as_json:
+            print(json.dumps({"status": "unknown", "reference": None, "reason": f"the checker failed ({_reason(error)})", "lines": []}))
         return 0
     return 0
 

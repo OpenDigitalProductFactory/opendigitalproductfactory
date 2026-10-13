@@ -160,6 +160,18 @@ test("hooks.json wires the SessionStart PreToolUse guard self-test via CLAUDE_PL
   assert.ok(existsSync(join(here, "pretooluse-guard-selftest.mjs")));
 });
 
+test("hooks.json wires the SessionStart toolchain freshness advisory via CLAUDE_PLUGIN_ROOT (BI-A67B65F4)", () => {
+  // The advisory must ride the plugin plane so installed-runtime sessions run it;
+  // the source repo's settings.json registration was removed so it runs once.
+  const ss = loadHooksJson()?.hooks?.SessionStart ?? [];
+  const cmds = [];
+  for (const entry of ss) for (const h of entry?.hooks ?? []) if (typeof h?.command === "string") cmds.push(h.command);
+  const mine = cmds.filter((c) => c.includes("toolchain-freshness.mjs"));
+  assert.equal(mine.length, 1, "SessionStart must run toolchain-freshness.mjs once");
+  assert.ok(mine[0].includes("CLAUDE_PLUGIN_ROOT"), "the advisory must load from ${CLAUDE_PLUGIN_ROOT}");
+  assert.ok(existsSync(join(here, "toolchain-freshness.mjs")));
+});
+
 test("repo .claude/settings.json does NOT also define WorktreeCreate (anti double-create)", () => {
   const settingsPath = join(here, "..", "..", "..", ".claude", "settings.json");
   if (!existsSync(settingsPath)) return; // standalone plugin install

@@ -372,7 +372,16 @@ A small **Node** wrapper ships in the pack (`hooks/toolchain-freshness.mjs`), be
 - It is advisory and never writes.
 - It uses a 2-second network timeout. Offline means "unknown", never "current".
 
-The source-repo-only `.claude/settings.json` registration is removed, so the advisory does not run twice. Grok and Antigravity load the same `hooks.json` through their manifests. Codex gets it through the managed `hooks.json` path. The hook only accelerates: the server-side verdict (§5.2) is the guarantee.
+The source-repo-only `plugin-copy-freshness` registration in `.claude/settings.json` is removed, so the advisory does not run twice. The `reconcile-claude-plugin` registration stays: it writes (it reinstalls the plugin and pins the connector URL), so an advisory cannot replace it. It retires with P2b's project-scope convergence (§8).
+
+How each client reaches the hook (as built in P7):
+
+- **Claude Code** (CLI and desktop) auto-loads the plugin's `hooks/hooks.json`.
+- **Codex** loads `hooks/hooks.json` from its plugin cache. Its `~/.codex/hooks.json` fallback carries PreToolUse guards only, so a Codex host on that fallback runs no SessionStart hooks.
+- **Grok** does not run plugin-bundled hooks (BI-883FC2FC). It runs `~/.grok/hooks/dpf-guards.json`, whose SessionStart entry `grok-session-start.mjs` now calls this hook.
+- **Antigravity** hooks stay unsupported until proven (BI-47A81FEB).
+
+All three use the SessionStart `hookSpecificOutput.additionalContext` envelope, with no top-level `decision`. The hook only accelerates: the server-side verdict (§5.2) is the guarantee.
 
 The same move applies to `pin-plugin-mcp-url.mjs`. It writes the literal endpoint the desktop app needs, but today it runs only from the source repo's `reconcile-claude-plugin` hook. So in an installed-runtime session (D:\DPF) the desktop app refused sign-in with "This session's copy of the connector points at a different server URL". This was observed 2026-10-07, and the cache was repaired by running the helper by hand. Until P2 bakes a parseable URL into the shipped descriptor, the updater runs the pin step for **every** project-scope record it converges, not only the source repo's.
 

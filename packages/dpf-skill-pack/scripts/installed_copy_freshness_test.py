@@ -13,14 +13,18 @@ Every case builds a fake HOME; nothing reads the real one.
 
 from __future__ import annotations
 
+import http.server
 import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
+from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import update_agent_toolchain as updater
@@ -189,6 +193,148 @@ class InstalledCopyFreshnessTest(unittest.TestCase):
             [sys.executable, str(SCRIPT), "--project-dir", str(self.project), "--skill-pack-path", str(self.reference)],
             capture_output=True, text=True, env=env, timeout=30,
         )
+
+
+class _ManifestHandler(http.server.BaseHTTPRequestHandler):
+    """Serves the manifest the test sets on the server, or hangs when told to."""
+
+    def do_GET(self):  # noqa: N802 -- http.server API
+        server = self.server
+        if server.hang:  # type: ignore[attr-defined]
+            time.sleep(5)
+        if self.path != freshness.MANIFEST_PATH:
+            self.send_response(404)
+            self.end_headers()
+            return
+        body = json.dumps(server.manifest).encode("utf-8")  # type: ignore[attr-defined]
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args):  # silence the test log
+        return
+
+
+class ManifestReferenceTest(unittest.TestCase):
+    """BI-A67B65F4: an installed-runtime session has no root clone, so the
+    reference is the manifest the portal serves (design 2026-10-07 §5.4)."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.home = self.root / "home"
+        self.install = self.root / "install"  # no checkout here
+        self.install.mkdir()
+        self.pack = write_reference_pack(self.root, version="0.2.9")
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _ManifestHandler)
+        self.server.daemon_threads = True
+        self.server.hang = False  # type: ignore[attr-defined]
+        self.server.manifest = {  # type: ignore[attr-defined]
+            "schemaVersion": 1,
+            "packVersion": "0.2.9",
+            "packDigest": freshness.delivered_digest(self.pack),
+        }
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.origin = f"http://127.0.0.1:{self.server.server_address[1]}"
+
+    def tearDown(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+        self._tmp.cleanup()
+
+    def shared_copy(self, url: str = "") -> Path:
+        shared = install_copy(self.pack, updater.shared_managed_plugin_path(self.home))
+        updater.ensure_claude_repo_mcp_config(shared, url or f"{self.origin}/api/mcp/v1", dry_run=False)
+        return shared
+
+    def run_cli(self, *extra: str, env_extra: Optional[dict] = None, project: Optional[Path] = None) -> dict:
+        env = {k: v for k, v in os.environ.items() if not k.startswith("DPF_")}
+        env["HOME"] = str(self.home)
+        env["USERPROFILE"] = str(self.home)
+        env["DPF_MCP_URL"] = f"{self.origin}/api/mcp/v1"
+        env.update(env_extra or {})
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--json", "--project-dir", str(project or self.install), *extra],
+            capture_output=True, text=True, env=env, timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)
+
+    def test_manifest_url_from_the_shared_copys_connector(self):
+        self.shared_copy()
+        url = freshness.manifest_url_from_connector(self.home, {})
+        self.assertEqual(url, f"{self.origin}{freshness.MANIFEST_PATH}")
+
+    def test_no_shared_copy_means_no_connector_origin(self):
+        self.assertIsNone(freshness.manifest_url_from_connector(self.home, {}))
+
+    def test_current_copy_against_the_manifest_reports_current(self):
+        self.shared_copy()
+        report = self.run_cli()
+        self.assertEqual(report["status"], "current", report)
+        self.assertIn("manifest", report["reference"])
+        self.assertIn("0.2.9", report["reference"])
+        self.assertEqual(report["lines"], [])
+
+    def test_stale_version_against_the_manifest_names_the_copy(self):
+        self.server.manifest = {**self.server.manifest, "packVersion": "0.2.10"}  # type: ignore[attr-defined]
+        shared = self.shared_copy()
+        report = self.run_cli()
+        self.assertEqual(report["status"], "stale", report)
+        self.assertEqual(len(report["lines"]), 1, report)
+        self.assertIn(str(shared), report["lines"][0])
+        self.assertIn("0.2.10", report["lines"][0])
+        self.assertIn(self.origin, report["lines"][0])
+
+    def test_same_version_different_content_is_stale(self):
+        self.server.manifest = {**self.server.manifest, "packDigest": "0" * 64}  # type: ignore[attr-defined]
+        self.shared_copy()
+        report = self.run_cli()
+        self.assertEqual(report["status"], "stale", report)
+        self.assertIn("content differs", report["lines"][0])
+
+    def test_explicit_manifest_url_wins_over_the_connector(self):
+        self.shared_copy("https://elsewhere.invalid/api/mcp/v1")
+        report = self.run_cli("--manifest-url", f"{self.origin}{freshness.MANIFEST_PATH}",
+                              env_extra={"DPF_MCP_URL": "https://elsewhere.invalid/api/mcp/v1"})
+        self.assertEqual(report["status"], "current", report)
+
+    def test_offline_portal_is_unknown_never_current(self):
+        self.shared_copy("http://127.0.0.1:9/api/mcp/v1")  # discard port: nothing listens
+        report = self.run_cli(env_extra={"DPF_MCP_URL": "http://127.0.0.1:9/api/mcp/v1"})
+        self.assertEqual(report["status"], "unknown", report)
+        self.assertIn("manifest", report["reason"])
+
+    def test_a_portal_that_does_not_answer_times_out_in_about_two_seconds(self):
+        self.server.hang = True  # type: ignore[attr-defined]
+        self.shared_copy()
+        started = time.monotonic()
+        report = self.run_cli()
+        self.assertEqual(report["status"], "unknown", report)
+        self.assertLess(time.monotonic() - started, 4.5)
+
+    def test_no_copy_to_compare_is_unknown(self):
+        report = self.run_cli("--manifest-url", f"{self.origin}{freshness.MANIFEST_PATH}")
+        self.assertEqual(report["status"], "unknown", report)
+
+    def test_root_clone_is_the_fallback_when_the_portal_is_unreachable(self):
+        shared = install_copy(self.pack, updater.shared_managed_plugin_path(self.home))
+        updater.ensure_claude_repo_mcp_config(shared, "http://127.0.0.1:9/api/mcp/v1", dry_run=False)
+        # A source checkout: its own pack is the root-clone reference.
+        report = self.run_cli(env_extra={"DPF_MCP_URL": "http://127.0.0.1:9/api/mcp/v1"},
+                              project=self.root / "repo")
+        self.assertEqual(report["status"], "current", report)
+        self.assertIn(str(self.pack.resolve()), report["reference"])
+        self.assertIn("unreachable", report["reference"])
+
+    def test_malformed_manifest_is_unknown(self):
+        self.server.manifest = {"hello": "world"}  # type: ignore[attr-defined]
+        self.shared_copy()
+        report = self.run_cli()
+        self.assertEqual(report["status"], "unknown", report)
 
 
 class DeliveredDigestParityTest(unittest.TestCase):
