@@ -62,7 +62,7 @@ connection settings, model availability, or routing eligibility.
 
 ## Where AI may run
 
-The **Where AI may run** control on [AI providers](/platform/ai/providers)
+The **Where AI may run** control on [AI providers](connecting-providers.md)
 applies to DPF coding and coworker tasks. It does not enable coding or configure
 an external desktop coding app.
 
