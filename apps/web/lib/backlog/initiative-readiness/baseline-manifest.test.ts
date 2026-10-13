@@ -91,6 +91,18 @@ describe("lossless governed scope", () => {
     expect(parseInitiativeScopeManifest(scope().replace("| ID |", "| AC-ID |"))).toMatchObject({ ok: true });
   });
 
+  it.each([
+    "| AC-REPAIR-1: reconcile successful discovery | discover → persist | backend tests |",
+    "| Reference interpreter | interpreter.ts | Reuse existing rules |\n| AC-INTERPRETER harness | parity.test.ts | Extend parity |",
+  ])("ignores incidental AC references in ordinary tables", rows => {
+    const text = `${scope()}\n\n| Existing work | File or flow | Verification |\n| --- | --- | --- |\n${rows}`;
+    const result = parseInitiativeScopeManifest(text);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    expect(result.acceptance).toHaveLength(1);
+    expect(result.acceptance[0]!.acceptanceId).toBe("AC-1");
+  });
+
   it("includes a wrapped objective's complete Markdown paragraph", () => {
     expect(parseInitiativeScopeManifest(scope().replace("Preserve the source.", "Preserve the source.\nIncluding the remainder.")))
       .toMatchObject({ ok: true, objectives: [{ statementDigest: digest("Preserve the source. Including the remainder.") }] });

@@ -81,9 +81,17 @@ export function parseInitiativeScopeManifest(
     }
     if (token.type === "table_open") {
       headerLines.add(start);
-      const width = tableCells(lines[start]!)?.length;
-      const hasScope = lines.slice(start + 2, end).some(line => /^\s*\|\s*AC-/i.test(line));
-      if (width && hasScope) for (let index = start + 2; index < end; index++) tableWidths.set(index, width);
+      const header = tableCells(lines[start]!);
+      const width = header?.length;
+      // An AC reference inside a grounding/traceability table is prose. A
+      // scope table declares objective links or uses a complete AC-ID cell.
+      // Once recognized, validate every row, including malformed identifiers.
+      const hasScope = /^objectives?$/i.test(header?.[1] ?? "")
+        || lines.slice(start + 2, end).some(line => /^\s*\|\s*AC-[A-Z0-9-]+\s*\|/i.test(line));
+      for (let index = start + 2; index < end; index++) {
+        if (width && hasScope) tableWidths.set(index, width);
+        else ignoredLines.add(index);
+      }
     }
     if (token.type === "paragraph_open") for (let index = start; index < end; index++) objectiveParagraphs.set(index, end);
   }
