@@ -18,6 +18,7 @@ import { prisma } from "@dpf/db";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import {
   EXECUTION_EVIDENCE_KINDS,
+  evidenceKindMetadata,
   isExecutionEvidenceKind,
   validateExecutionEvidenceStructure,
 } from "@/lib/backlog/execution-evidence";
@@ -48,7 +49,7 @@ function redactFunctionalFailureText(text: string): string {
 const definitions: ToolDefinition[] = [
   {
     name: "record_execution_evidence",
-    description: "Attach typed evidence to a backlog item (tests, production build, UX, migration, source provenance, spec review, manual check, or supporting link). Positive completion evidence is later resolved server-side; a supplied ToolExecution reference must identify a successful execution owned by the same user.",
+    description: "Attach typed evidence to a backlog item (tests, production build, UX, migration, source provenance, spec review, manual check, or supporting link). A supplied ToolExecution must belong to the same user. Failed executions may be linked only by failure evidence kinds; these never earn completion credit. Other kinds require successful execution, including manual checks.",
     inputSchema: {
       type: "object",
       properties: {
@@ -169,11 +170,13 @@ async function recordExecutionEvidenceHandler(
       where: { id: toolExecutionId },
       select: { id: true, success: true, userId: true },
     });
-    if (!toolExecution?.success || toolExecution.userId !== userId) {
+    const allowsFailedExecution = evidenceKindMetadata(kindRaw).polarity === "fail";
+    if (!toolExecution || toolExecution.userId !== userId
+      || (!toolExecution.success && !allowsFailedExecution)) {
       return {
         success: false,
         error: "invalid_tool_execution",
-        message: `ToolExecution ${toolExecutionId} does not resolve to a successful execution owned by this user`,
+        message: `ToolExecution ${toolExecutionId} must exist, belong to this user, and be successful unless the evidence kind records a failure`,
       };
     }
   }
