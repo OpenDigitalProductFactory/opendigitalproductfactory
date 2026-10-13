@@ -183,7 +183,7 @@ export function runtimeImports(source) {
   const text = stripComments(source);
   const out = [];
   const staticRe =
-    /(?:^|[\n;])\s*(import|export)\s+((?:type\s+)?)((?:[^;"'`]|\{[^}]*\})*?)\s*from\s*["']([^"']+)["']/g;
+    /(?:^|[\n;])\s*(import|export)\s+((?:type\s+)?)([^;"'`]*?)\s*from\s*["']([^"']+)["']/g;
   for (const m of text.matchAll(staticRe)) {
     if (m[2].trim() === "type") continue;
     const clause = m[3].trim();
@@ -323,7 +323,7 @@ function resolveWorkspaceImport(root, ws, specifier) {
         if (!pattern.includes("*") || typeof value !== "string") continue;
         const [pre, post] = pattern.split("*");
         if (key.startsWith(pre) && key.endsWith(post)) {
-          target = value.replace("*", key.slice(pre.length, key.length - post.length));
+          target = value.replaceAll("*", key.slice(pre.length, key.length - post.length));
           break;
         }
       }
