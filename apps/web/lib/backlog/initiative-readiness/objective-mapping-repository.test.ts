@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   transaction: vi.fn(),
   loadCapsuleLivenessInventory: vi.fn(),
+  resolveAgentWorkroomAccess: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -24,6 +25,9 @@ vi.mock("@dpf/db", () => ({
 
 vi.mock("@/lib/work-capsules/liveness-inventory", () => ({
   loadCapsuleLivenessInventory: mocks.loadCapsuleLivenessInventory,
+}));
+vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({
+  resolveAgentWorkroomAccess: mocks.resolveAgentWorkroomAccess,
 }));
 
 import {
@@ -157,6 +161,7 @@ function transactionDb(evidence = [{
     },
     workroom: {
       findUnique: vi.fn().mockResolvedValue({
+        id: "room-row-1",
         capsuleId: "WC-PLATFORM",
         backlogItemId: "BI-PLATFORM",
         repositoryFullName,
@@ -231,6 +236,7 @@ describe("recordInitiativeObjectiveMappingProposal", () => {
       capsulesAll: [{ capsuleId: "WC-PLATFORM", isLive: true }],
       livenessSummary: {},
     });
+    mocks.resolveAgentWorkroomAccess.mockResolvedValue({ decision: { level: "content" } });
     mocks.transaction.mockImplementation(async (work) => work(transactionDb()));
   });
 
@@ -294,6 +300,14 @@ describe("recordInitiativeObjectiveMappingProposal", () => {
   it("rejects the retained criteria or source author at the receipt writer", async () => {
     const { args } = bodyWriterFixture("principal-1");
     await expect(recordInitiativeObjectiveMappingProposal(args)).resolves.toMatchObject({ ok: false, code: "AUTHORIZATION_DENIED" });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects revoked paired Workroom admission after criteria were read", async () => {
+    const { args } = bodyWriterFixture();
+    mocks.resolveAgentWorkroomAccess.mockResolvedValue({ decision: { level: "header" } });
+    await expect(recordInitiativeObjectiveMappingProposal(args)).resolves.toMatchObject({ ok: false, code: "AUTHORIZATION_DENIED" });
+    expect(mocks.resolveAgentWorkroomAccess).toHaveBeenCalledWith({ userId: "user-1", agentId: "agent-1", workroomId: "room-row-1", requested: "content" });
     expect(mocks.create).not.toHaveBeenCalled();
   });
 

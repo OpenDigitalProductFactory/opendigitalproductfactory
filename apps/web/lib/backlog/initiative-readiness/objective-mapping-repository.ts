@@ -289,6 +289,7 @@ async function validateExecutingObjectiveMappingTask(args: {
   const room = await args.tx.workroom.findUnique({
     where: { capsuleId: binding.workroomRef.workroomId },
     select: {
+      id: true,
       capsuleId: true,
       backlogItemId: true,
       repositoryFullName: true,
@@ -312,6 +313,14 @@ async function validateExecutingObjectiveMappingTask(args: {
   if (liveness.capsulesAll.length !== 1 || liveness.capsulesAll[0]?.isLive !== true) {
     const error = "The executing TaskRun no longer matches the current live Workroom identity.";
     return { ...err(error), code: "OBJECTIVE_MAPPING_AUTHORITY_CONFLICT" };
+  }
+  if (binding.artifactRef.kind === "document-version") {
+    const { resolveAgentWorkroomAccess } = await import("@/lib/work-management/workroom-agent-access.server");
+    const access = await resolveAgentWorkroomAccess({ userId: args.proposerUserId,
+      agentId: args.proposerAgentId, workroomId: room.id, requested: "content" });
+    if (access.decision.level !== "content") {
+      return { ...err("The reviewer or delegating person no longer has content admission to this Workroom. Resolve admission through the governed coworker engagement procedure and refresh acceptance recovery."), code: "AUTHORIZATION_DENIED" };
+    }
   }
   return ok({ binding: binding as ObjectiveMappingBinding, lane: bound.lane });
 }
