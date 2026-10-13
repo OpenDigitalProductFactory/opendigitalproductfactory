@@ -1,5 +1,5 @@
 {
-  "note": "Acknowledged DIRECT dependencies. The New Dependency Gate (scripts/sbom/check-new-dependencies.mjs) fails a PR that adds a direct dependency not listed here, so every acquired package is a deliberate, recorded decision. Add an entry ONLY after vetting: npm provenance attestation, package age + downloads, maintainer count, license, `pnpm scan:deps` (OSV), and whether an existing dep already covers it — record the outcome in `note`. See docs/architecture/dependency-reduction-routine.md.",
+  "note": "Acknowledged DIRECT dependencies and canonical keep/reduce/absorb dispositions. The New Dependency Gate (scripts/sbom/check-new-dependencies.mjs) fails a PR that adds an unlisted direct dependency, leaves a new external package without a complete disposition, or drifts the generated matrix. Add an entry ONLY after vetting provenance, package age and downloads, maintainers, license, `pnpm scan:deps` (OSV), overlap with existing dependencies, and the ongoing disposition. See docs/architecture/dependency-reduction-routine.md.",
   "dependencies": {
     "@axe-core/playwright": {
       "added": "2026-06-21",
@@ -9,7 +9,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@dpf/api-client": {
       "added": "2026-06-21",
@@ -107,7 +113,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@expo/vector-icons": {
       "added": "2026-06-21",
@@ -117,7 +129,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@floating-ui/react": {
       "added": "2026-06-21",
@@ -127,7 +145,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@fullcalendar/core": {
       "added": "2026-06-21",
@@ -137,7 +161,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@fullcalendar/daygrid": {
       "added": "2026-06-21",
@@ -147,7 +177,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@fullcalendar/interaction": {
       "added": "2026-06-21",
@@ -157,7 +193,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@fullcalendar/react": {
       "added": "2026-06-21",
@@ -167,7 +209,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@fullcalendar/timegrid": {
       "added": "2026-06-21",
@@ -177,7 +225,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@jest/globals": {
       "added": "2026-09-25",
@@ -187,7 +241,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "Acknowledged 2026-09-25 with the apps/mobile workspace split (plan 2026-09-08 M6). Mobile tests already imported it; it resolved only through the root workspace hoisting jest. Part of the Jest 30 family already in the tree (same major, same maintainers as jest), so no new package or publisher. Declared explicitly so the mobile workspace resolves it on its own."
+      "note": "Acknowledged 2026-09-25 with the apps/mobile workspace split (plan 2026-09-08 M6). Mobile tests already imported it; it resolved only through the root workspace hoisting jest. Part of the Jest 30 family already in the tree (same major, same maintainers as jest), so no new package or publisher. Declared explicitly so the mobile workspace resolves it on its own.",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@opentelemetry/api": {
       "added": "2026-06-21",
@@ -197,7 +257,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@playwright/test": {
       "added": "2026-06-21",
@@ -207,7 +273,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@prisma/adapter-pg": {
       "added": "2026-06-21",
@@ -217,7 +289,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@prisma/client": {
       "added": "2026-06-21",
@@ -227,7 +305,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@react-native/jest-preset": {
       "added": "2026-08-04",
@@ -237,7 +321,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "Official Meta/React Native package (@react-native scope, same publisher as react-native itself). Split out of react-native's own package in RN 0.85 / jest-expo 57 as an explicit peer dep — dev-only, test-config surface, no runtime code shipped to the app bundle. Pinned to 0.85.3 to match the workspace's react-native version (BI-91077E80)."
+      "note": "Official Meta/React Native package (@react-native scope, same publisher as react-native itself). Split out of react-native's own package in RN 0.85 / jest-expo 57 as an explicit peer dep — dev-only, test-config surface, no runtime code shipped to the app bundle. Pinned to 0.85.3 to match the workspace's react-native version (BI-91077E80).",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@ricky0123/vad-web": {
       "added": "2026-06-21",
@@ -247,7 +337,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@tailwindcss/postcss": {
       "added": "2026-06-21",
@@ -257,7 +353,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@testing-library/jest-dom": {
       "added": "2026-06-21",
@@ -267,7 +369,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@testing-library/react": {
       "added": "2026-06-21",
@@ -277,7 +385,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@testing-library/react-native": {
       "added": "2026-06-21",
@@ -287,7 +401,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@types/jest": {
       "added": "2026-06-21",
@@ -297,7 +417,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@types/mailparser": {
       "added": "2026-09-09",
@@ -307,7 +433,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "Type definitions for mailparser (DefinitelyTyped, MIT); dev-only."
+      "note": "Type definitions for mailparser (DefinitelyTyped, MIT); dev-only.",
+      "disposition": "keep",
+      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@types/markdown-it": {
       "added": "2026-09-29",
@@ -317,7 +449,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "Type definitions for markdown-it 14 (DefinitelyTyped, MIT); dev-only. markdown-it 14 ships no types."
+      "note": "Type definitions for markdown-it 14 (DefinitelyTyped, MIT); dev-only. markdown-it 14 ships no types.",
+      "disposition": "keep",
+      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@types/net-snmp": {
       "added": "2026-06-21",
@@ -327,7 +465,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@types/node": {
       "added": "2026-06-21",
@@ -342,7 +486,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@types/papaparse": {
       "added": "2026-06-21",
@@ -352,7 +502,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@types/pg": {
       "added": "2026-06-21",
@@ -363,7 +519,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@types/picomatch": {
       "added": "2026-06-21",
@@ -373,7 +535,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@types/react": {
       "added": "2026-06-21",
@@ -384,7 +552,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@types/react-dom": {
       "added": "2026-06-21",
@@ -394,7 +568,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@vitejs/plugin-react": {
       "added": "2026-06-21",
@@ -404,7 +584,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@vitest/coverage-v8": {
       "added": "2026-07-27",
@@ -415,7 +601,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "Official Vitest V8 coverage provider, peer-aligned at 4.1.10 with the pinned Vitest runtime. Required because Vitest 4 loads coverage providers as separate packages; no existing dependency supplies exhaustive V8 coverage. Vetted: MIT, npm SLSA provenance attestation, published since 2023, 5 maintainers, 31.7M weekly downloads, and pnpm scan:deps reported 0 advisories across the workspace."
+      "note": "Official Vitest V8 coverage provider, peer-aligned at 4.1.10 with the pinned Vitest runtime. Required because Vitest 4 loads coverage providers as separate packages; no existing dependency supplies exhaustive V8 coverage. Vetted: MIT, npm SLSA provenance attestation, published since 2023, 5 maintainers, 31.7M weekly downloads, and pnpm scan:deps reported 0 advisories across the workspace.",
+      "disposition": "keep",
+      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "@xyflow/react": {
       "added": "2026-06-21",
@@ -425,7 +617,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "autoprefixer": {
       "added": "2026-06-21",
@@ -435,7 +633,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "axe-core": {
       "added": "2026-08-28",
@@ -445,7 +649,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "Direct declaration fixes the existing InstallationIdentityPanel axe-core import; 4.12.1 was already resolved transitively via @axe-core/playwright (zero new resolved components). MPL-2.0, npm integrity signature plus SLSA provenance attestation, DequeLabs upstream, 277,937,886 npm downloads in the last month, and pnpm scan:deps reports zero blocking vulnerabilities."
+      "note": "Direct declaration fixes the existing InstallationIdentityPanel axe-core import; 4.12.1 was already resolved transitively via @axe-core/playwright (zero new resolved components). MPL-2.0, npm integrity signature plus SLSA provenance attestation, DequeLabs upstream, 277,937,886 npm downloads in the last month, and pnpm scan:deps reports zero blocking vulnerabilities.",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "bcryptjs": {
       "added": "2026-06-21",
@@ -456,7 +666,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "dotenv": {
       "added": "2026-06-21",
@@ -468,7 +684,13 @@
         "dev",
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "elkjs": {
       "added": "2026-06-21",
@@ -478,7 +700,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "expo": {
       "added": "2026-06-21",
@@ -488,7 +716,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "expo-camera": {
       "added": "2026-06-21",
@@ -498,7 +732,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "expo-linking": {
       "added": "2026-06-21",
@@ -508,7 +748,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "expo-local-authentication": {
       "added": "2026-06-21",
@@ -518,7 +764,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "expo-location": {
       "added": "2026-06-21",
@@ -528,7 +780,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "expo-notifications": {
       "added": "2026-06-21",
@@ -538,7 +796,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "expo-router": {
       "added": "2026-06-21",
@@ -548,7 +812,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "expo-secure-store": {
       "added": "2026-06-21",
@@ -558,7 +828,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "expo-sqlite": {
       "added": "2026-06-21",
@@ -568,7 +844,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "expo-status-bar": {
       "added": "2026-06-21",
@@ -578,7 +860,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "fast-xml-parser": {
       "added": "2026-06-21",
@@ -588,7 +876,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "fflate": {
       "added": "2026-06-21",
@@ -598,7 +892,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "fuse.js": {
       "added": "2026-06-21",
@@ -608,9 +908,14 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
-
     "i18n-iso-countries": {
       "added": "2026-06-21",
       "workspaces": [
@@ -619,7 +924,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "imapflow": {
       "added": "2026-09-09",
@@ -629,7 +940,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "Mailroom IMAP adapter (design 2026-09-09 s3, BI-13919D7E). MIT; Postal Systems (Andris Reinman, the Nodemailer/EmailEngine maintainer); promise API, UID search, UIDVALIDITY handling; actively released; no known OSV advisories at adoption. Rejected node-imap (unmaintained since 2019, callback API) and imap-simple (wraps node-imap). Bumped to ^2.1.2 on 2026-09-29 (plan 2026-09-08 M7) so it shares libmime 5.4.6, @zone-eu/mailsplit 5.4.19, libqp 2.1.2 and libbase64 1.3.1 with mailparser 3.9.31; MIT, same maintainer, npm SLSA v1 provenance, released 2026-09-28 past the release-age floor, no breaking changes in 2.1 (additive exports and fixes)."
+      "note": "Mailroom IMAP adapter (design 2026-09-09 s3, BI-13919D7E). MIT; Postal Systems (Andris Reinman, the Nodemailer/EmailEngine maintainer); promise API, UID search, UIDVALIDITY handling; actively released; no known OSV advisories at adoption. Rejected node-imap (unmaintained since 2019, callback API) and imap-simple (wraps node-imap). Bumped to ^2.1.2 on 2026-09-29 (plan 2026-09-08 M7) so it shares libmime 5.4.6, @zone-eu/mailsplit 5.4.19, libqp 2.1.2 and libbase64 1.3.1 with mailparser 3.9.31; MIT, same maintainer, npm SLSA v1 provenance, released 2026-09-28 past the release-age floor, no breaking changes in 2.1 (additive exports and fixes).",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "inngest": {
       "added": "2026-06-21",
@@ -639,7 +956,17 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "absorb",
+      "rationale": "Absorb into the owned Postgres durable-job engine after the governed four-batch, seven-day soak; phase 2 is delivered and phase 3 retires Inngest only after the soak passes.",
+      "evidence": [
+        "DI-E52E32AEA1E4",
+        "BI-068BBA33",
+        "BI-66D2BB3F",
+        "BI-742D569C",
+        "docs/superpowers/specs/2026-09-25-postgres-durable-job-engine-design.md",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M3"
+      ]
     },
     "jest": {
       "added": "2026-06-21",
@@ -649,7 +976,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "jest-expo": {
       "added": "2026-06-21",
@@ -659,7 +992,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "jose": {
       "added": "2026-06-21",
@@ -669,7 +1008,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "jsdom": {
       "added": "2026-06-21",
@@ -679,7 +1024,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "jsep": {
       "added": "2026-06-21",
@@ -689,7 +1040,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "libphonenumber-js": {
       "added": "2026-06-21",
@@ -699,7 +1056,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "lucide-react": {
       "added": "2026-06-21",
@@ -709,7 +1072,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "mailparser": {
       "added": "2026-09-09",
@@ -719,7 +1088,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "Mailroom MIME parsing for polled IMAP messages (design 2026-09-09 s3). MIT; same maintainer as nodemailer; about 1M weekly downloads; actively released; no known OSV advisories at adoption. Attachment bytes are never written to disk (metadata only). Bumped to ^3.9.31 on 2026-09-29 (plan 2026-09-08 M7) so its exact nodemailer pin (10.0.12) matches the direct dependency; MIT, npm SLSA v1 provenance, released 2026-09-28 past the release-age floor."
+      "note": "Mailroom MIME parsing for polled IMAP messages (design 2026-09-09 s3). MIT; same maintainer as nodemailer; about 1M weekly downloads; actively released; no known OSV advisories at adoption. Attachment bytes are never written to disk (metadata only). Bumped to ^3.9.31 on 2026-09-29 (plan 2026-09-08 M7) so its exact nodemailer pin (10.0.12) matches the direct dependency; MIT, npm SLSA v1 provenance, released 2026-09-28 past the release-age floor.",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "maplibre-gl": {
       "added": "2026-10-02",
@@ -729,7 +1104,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "BI-814F86E1 map renderer. Vetted 2026-10-01: BSD-3-Clause; MapLibre org (4 maintainers, board@maplibre.org); on npm since 2020-12; npm SLSA v1 provenance attestation; pnpm scan:deps (OSV) clean. No existing dependency renders maps. Evaluation: docs/security/tool-evaluations/2026-09-25-maplibre-pmtiles.md; WWMD maplibre-pmtiles-inhouse-wrapper (high confidence). Pinned exactly; loaded only by dynamic import in GeographicSceneCanvas."
+      "note": "BI-814F86E1 map renderer. Vetted 2026-10-01: BSD-3-Clause; MapLibre org (4 maintainers, board@maplibre.org); on npm since 2020-12; npm SLSA v1 provenance attestation; pnpm scan:deps (OSV) clean. No existing dependency renders maps. Evaluation: docs/security/tool-evaluations/2026-09-25-maplibre-pmtiles.md; WWMD maplibre-pmtiles-inhouse-wrapper (high confidence). Pinned exactly; loaded only by dynamic import in GeographicSceneCanvas.",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "markdown-it": {
       "added": "2026-09-29",
@@ -739,7 +1120,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "Plan 2026-09-08 M5: the one markdown renderer, lib/shared/markdown.ts renderMarkdown() with raw HTML off (founder decision 2026-09-26, WWMD DI-D9292D812CFF). Replaces react-markdown + remark-gfm (retired below; −87 resolved components). Vetted 2026-09-29: MIT; markdown-it org on GitHub, one npm maintainer; ~32M weekly downloads; 14.3.2 published 2026-09-12 (past the release-age floor); no npm provenance attestation; OSV clean. 14.x rather than 15.x because 14 reuses the linkify-it 5, uc.micro 2, entities 4 and punycode.js already in the tree (15 added two duplicated names). No network, native or runtime-exec surface."
+      "note": "Plan 2026-09-08 M5: the one markdown renderer, lib/shared/markdown.ts renderMarkdown() with raw HTML off (founder decision 2026-09-26, WWMD DI-D9292D812CFF). Replaces react-markdown + remark-gfm (retired below; −87 resolved components). Vetted 2026-09-29: MIT; markdown-it org on GitHub, one npm maintainer; ~32M weekly downloads; 14.3.2 published 2026-09-12 (past the release-age floor); no npm provenance attestation; OSV clean. 14.x rather than 15.x because 14 reuses the linkify-it 5, uc.micro 2, entities 4 and punycode.js already in the tree (15 added two duplicated names). No network, native or runtime-exec surface.",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "msw": {
       "added": "2026-06-21",
@@ -749,7 +1136,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "nativewind": {
       "added": "2026-06-21",
@@ -759,7 +1152,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "net-snmp": {
       "added": "2026-06-21",
@@ -770,7 +1169,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "next": {
       "added": "2026-06-21",
@@ -780,7 +1185,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "next-auth": {
       "added": "2026-06-21",
@@ -790,7 +1201,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "nodemailer": {
       "added": "2026-06-21",
@@ -800,7 +1217,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "Outbound SMTP transport for apps/web/lib/shared/email.ts. Upgraded to ^10.0.12 on 2026-09-29 (plan 2026-09-08 M7): clears GHSA-6vj9-mwq6-2f5v and GHSA-8vvx-rff5-p5rq (fixed in 10.0.2) and collapses the second copy mailparser pinned. Vetting: licence MIT-0 from 10.0.0 (OSI-approved, more permissive than the earlier MIT); single maintainer andris (Andris Reinman, author since 2011); npm SLSA v1 provenance attestation on 10.0.12; released 2026-09-28, past the 24 h release-age floor; about 26M weekly downloads; zero runtime dependencies; ships its own TypeScript declarations, so @types/nodemailer is retired; Node >= 20 required (the portal runs Node 20+); scan-dependencies reports no OSV advisory for 10.0.12."
+      "note": "Outbound SMTP transport for apps/web/lib/shared/email.ts. Upgraded to ^10.0.12 on 2026-09-29 (plan 2026-09-08 M7): clears GHSA-6vj9-mwq6-2f5v and GHSA-8vvx-rff5-p5rq (fixed in 10.0.2) and collapses the second copy mailparser pinned. Vetting: licence MIT-0 from 10.0.0 (OSI-approved, more permissive than the earlier MIT); single maintainer andris (Andris Reinman, author since 2011); npm SLSA v1 provenance attestation on 10.0.12; released 2026-09-28, past the 24 h release-age floor; about 26M weekly downloads; zero runtime dependencies; ships its own TypeScript declarations, so @types/nodemailer is retired; Node >= 20 required (the portal runs Node 20+); scan-dependencies reports no OSV advisory for 10.0.12.",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "papaparse": {
       "added": "2026-06-21",
@@ -810,7 +1233,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "pg": {
       "added": "2026-06-21",
@@ -822,7 +1251,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "picomatch": {
       "added": "2026-06-21",
@@ -832,7 +1267,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "pmtiles": {
       "added": "2026-10-02",
@@ -842,7 +1283,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "BI-814F86E1 single-file vector tile archives served by byte range from the install. Vetted 2026-10-01: BSD-3-Clause; Protomaps (1 npm maintainer, bdon) — a bus-factor risk accepted because the format is an open spec (PMTiles v3) and the client is small enough to absorb if abandoned; no npm provenance attestation; on npm since 2021-02; pnpm scan:deps (OSV) clean. No existing dependency covers it. Pinned exactly."
+      "note": "BI-814F86E1 single-file vector tile archives served by byte range from the install. Vetted 2026-10-01: BSD-3-Clause; Protomaps (1 npm maintainer, bdon) — a bus-factor risk accepted because the format is an open spec (PMTiles v3) and the client is small enough to absorb if abandoned; no npm provenance attestation; on npm since 2021-02; pnpm scan:deps (OSV) clean. No existing dependency covers it. Pinned exactly.",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "postcss": {
       "added": "2026-06-21",
@@ -852,7 +1299,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "prisma": {
       "added": "2026-06-21",
@@ -862,7 +1315,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "prom-client": {
       "added": "2026-06-21",
@@ -873,7 +1332,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "react": {
       "added": "2026-06-21",
@@ -884,7 +1349,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "react-data-grid": {
       "added": "2026-06-21",
@@ -894,7 +1365,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "react-day-picker": {
       "added": "2026-06-21",
@@ -904,7 +1381,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "react-dom": {
       "added": "2026-06-21",
@@ -914,7 +1397,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "react-native": {
       "added": "2026-06-21",
@@ -924,7 +1413,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "react-native-reanimated": {
       "added": "2026-08-06",
@@ -934,7 +1429,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "Software Mansion (swmansion), MIT. Canonical RN animation lib, already present transitively (via nativewind/expo-router/react-native-screens/gesture-handler/drawer-layout) — promoted to direct + pinned to 4.3.1, the version Expo SDK 56 declares in bundledNativeModules.json. No new supply-chain surface; pin unblocks the native iOS build (BI-3C588501)."
+      "note": "Software Mansion (swmansion), MIT. Canonical RN animation lib, already present transitively (via nativewind/expo-router/react-native-screens/gesture-handler/drawer-layout) — promoted to direct + pinned to 4.3.1, the version Expo SDK 56 declares in bundledNativeModules.json. No new supply-chain surface; pin unblocks the native iOS build (BI-3C588501).",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "react-native-safe-area-context": {
       "added": "2026-06-21",
@@ -944,7 +1445,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "react-native-screens": {
       "added": "2026-06-21",
@@ -954,7 +1461,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "react-native-sse": {
       "added": "2026-06-21",
@@ -964,7 +1477,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "react-native-worklets": {
       "added": "2026-08-06",
@@ -974,7 +1493,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "Software Mansion (swmansion), MIT. Reanimated 4's worklets runtime companion, already present transitively — promoted to direct + pinned to 0.8.3, the version Expo SDK 56 declares in bundledNativeModules.json (ships worklets/Compat/StableApi.h that expo-modules-core requires). No new supply-chain surface; pin unblocks the native iOS build (BI-3C588501)."
+      "note": "Software Mansion (swmansion), MIT. Reanimated 4's worklets runtime companion, already present transitively — promoted to direct + pinned to 0.8.3, the version Expo SDK 56 declares in bundledNativeModules.json (ships worklets/Compat/StableApi.h that expo-modules-core requires). No new supply-chain surface; pin unblocks the native iOS build (BI-3C588501).",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "react-test-renderer": {
       "added": "2026-06-21",
@@ -984,7 +1509,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "recharts": {
       "added": "2026-06-21",
@@ -994,7 +1525,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "sharp": {
       "added": "2026-06-21",
@@ -1004,7 +1541,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "smol-toml": {
       "added": "2026-06-21",
@@ -1014,7 +1557,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "tailwindcss": {
       "added": "2026-06-21",
@@ -1025,7 +1574,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "tsx": {
       "added": "2026-06-21",
@@ -1039,7 +1594,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "typescript": {
       "added": "2026-06-21",
@@ -1062,7 +1623,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "undici": {
       "added": "2026-06-21",
@@ -1075,7 +1642,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "vite": {
       "added": "2026-06-21",
@@ -1086,7 +1659,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "vitest": {
       "added": "2026-06-21",
@@ -1105,7 +1684,13 @@
       "kinds": [
         "dev"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "yaml": {
       "added": "2026-09-25",
@@ -1116,7 +1701,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "Vetted 2026-09-25 as the YAML parser for the harness-owned OpenAPI contract runtime that replaced Stoplight Prism (plan 2026-09-08 M4). ISC, zero dependencies, 2.9.0 already resolved in the lockfile before adoption (vite, postcss-load-config), so it adds no package. ~150M weekly downloads, published since 2011. OSV: no advisories for 2.9.0. Risks recorded: single maintainer (eemeli) and no npm provenance attestation on 2.9.0. Parses only repo-committed vendor specs, never untrusted input. apps/web adopted the same 2.9.1 copy on 2026-10-09 (BI-99D7C104) to parse user-guide frontmatter and drop gray-matter, whose js-yaml 3 chain pulled unpatched sprintf-js."
+      "note": "Vetted 2026-09-25 as the YAML parser for the harness-owned OpenAPI contract runtime that replaced Stoplight Prism (plan 2026-09-08 M4). ISC, zero dependencies, 2.9.0 already resolved in the lockfile before adoption (vite, postcss-load-config), so it adds no package. ~150M weekly downloads, published since 2011. OSV: no advisories for 2.9.0. Risks recorded: single maintainer (eemeli) and no npm provenance attestation on 2.9.0. Parses only repo-committed vendor specs, never untrusted input. apps/web adopted the same 2.9.1 copy on 2026-10-09 (BI-99D7C104) to parse user-guide frontmatter and drop gray-matter, whose js-yaml 3 chain pulled unpatched sprintf-js.",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "zod": {
       "added": "2026-06-21",
@@ -1129,7 +1720,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream: the Tier 0 rent posture and existing supply-chain gates carry less lifecycle risk than owning this maintained runtime dependency, and no approved reduction route exists.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     },
     "zustand": {
       "added": "2026-06-21",
@@ -1139,7 +1736,13 @@
       "kinds": [
         "prod"
       ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+      "note": "bootstrap — pre-existing dependency, acknowledged in bulk",
+      "disposition": "keep",
+      "rationale": "Keep upstream in the isolated mobile lockfile: this is part of the maintained Expo/React Native stack, and absorbing it would recreate platform infrastructure without an approved product route.",
+      "evidence": [
+        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
+        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
+      ]
     }
   },
   "retired": {

@@ -407,7 +407,9 @@ deliberate, recorded decision — not a silent lockfile change.
   ride in through it and are covered by Axis 1 (drift) + Axis 2 (OSV). The
   vetting decision belongs at the direct-dep boundary.
 - **Acknowledging** (`--update-allowlist`) records each package with its
-  workspaces + a `note`. Vet before acknowledging: npm provenance attestation,
+  workspaces + a `note`, but deliberately leaves a new external package
+  incomplete until its `keep`, `reduce` or `absorb` disposition, rationale and
+  evidence are supplied. Vet before acknowledging: npm provenance attestation,
   package age + downloads, maintainer count, license, `pnpm scan:deps` (OSV), and
   whether an existing dependency already covers it. **The allowlist entry is the
   vetting record.**
@@ -418,6 +420,38 @@ deliberate, recorded decision — not a silent lockfile change.
   never adds one back. Reversing a retirement means deleting its `retired`
   entry in the same PR and saying why.
 - Pure Node, network-free → safe as a required PR check.
+
+### Disposition ledger and generated matrix
+
+`sbom/dependency-allowlist.json` is also the single source of architectural
+posture for every current direct external registry package. Do not maintain a
+second hand-written inventory:
+
+- `keep` means the Tier-0 rent posture remains the deliberate decision;
+- `reduce` means narrow, consolidate or remove the package through the cited
+  route;
+- `absorb` means replace it with cited first-party substrate.
+
+Every disposition carries a rationale and evidence. A `reduce` or `absorb`
+entry must name the live backlog item, decision, plan or delivery record that
+owns the change; a heuristic candidate report is not a route. First-party
+`workspace:`, `file:` and `link:` dependencies are outside this external
+supply-chain set.
+
+`pnpm dependency:matrix` deterministically projects the ledger plus current
+workspace, dependency-kind and resolved-version observations into
+`sbom/dependency-disposition-matrix.md`. `pnpm check:dependency-dispositions`
+checks completeness and byte-for-byte currency. The existing `pnpm
+check:new-deps` gate runs the same validation, so a package cannot be acquired
+without a decision and the checked-in matrix cannot drift. Review the ledger
+when a dependency is added, removed, moves between workspaces, or gains an
+approved consolidation route.
+
+The security baseline is already delivered, not work for this matrix to repeat:
+BI-6B317EFA / PR #5163 cleared Dependabot alert #157 (`mysql2`), #159
+(`@faker-js/faker`) and #164–#167 (`fast-uri`); the later main-branch dependency
+scan passed. Those transitive fixes remain owned by the vulnerability and
+override controls above.
 
 ### Why this shape (WWMD)
 
@@ -464,6 +498,10 @@ goes through WWMD (`principle_decide`: `operational_independence` +
 `vendor_lock_in` vs `long_term_maintainability` + `blast_radius`). A standing
 review-list win: `gray-matter` (carrier of our one `js-yaml` finding) is a
 replace candidate that would shed that vuln entirely.
+
+Candidate output is advisory measurement only. The allowlist disposition is the
+governed package decision, and it stays `keep` until a concrete approved route
+justifies `reduce` or `absorb`.
 
 ## Build-time tools are tools, not workspace dependencies
 

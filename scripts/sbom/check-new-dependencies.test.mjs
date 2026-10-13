@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { findRetiredInUse } from "./check-new-dependencies.mjs";
+import { createUpdatedAllowlist, findRetiredInUse } from "./check-new-dependencies.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -30,4 +30,30 @@ test("the live allowlist never acknowledges a name it also retires", () => {
     assert.match(entry.retired, /^\d{4}-\d{2}-\d{2}$/, `${name} needs a retired date`);
     assert.ok(entry.reason && entry.reason.length > 20, `${name} needs a reason`);
   }
+});
+
+test("updating the allowlist preserves decisions but leaves a new external dependency incomplete", () => {
+  const current = new Map([
+    ["existing", { workspaces: new Set(["apps/web"]), kinds: new Set(["prod"]), versions: new Set(["1.0.0"]) }],
+    ["new-package", { workspaces: new Set(["apps/web"]), kinds: new Set(["dev"]), versions: new Set(["2.0.0"]) }],
+  ]);
+  const prior = {
+    dependencies: {
+      existing: {
+        added: "2026-01-01",
+        workspaces: ["apps/web"],
+        kinds: ["prod"],
+        note: "vetted",
+        disposition: "keep",
+        rationale: "Keep upstream while it remains the maintained standard.",
+        evidence: ["docs/design.md"],
+      },
+    },
+    retired: {},
+  };
+
+  const updated = createUpdatedAllowlist(current, prior, "2026-10-13");
+  assert.equal(updated.dependencies.existing.disposition, "keep");
+  assert.equal(updated.dependencies["new-package"].disposition, undefined);
+  assert.equal(updated.dependencies["new-package"].note, "Vetting pending — record provenance, maintenance, license, OSV result, overlap review, and a keep/reduce/absorb disposition.");
 });
