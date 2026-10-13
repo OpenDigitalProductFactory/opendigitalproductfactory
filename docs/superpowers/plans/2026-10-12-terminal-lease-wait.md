@@ -72,4 +72,17 @@ Atomic mapping: terminal-lease-wait -> BI-25CB699C, no dependencies.
 Requirement refs: AC-1, AC-2, AC-3, AC-4.
 Contract ref: CT-TERMINAL-WAIT. Flow ref: FLOW-LEASE-RELEASE.
 Verification ref: VC-TERMINAL-WAIT.
-Record native coverage against the immutable plan before source implementation.
+Native receipt `cmv6366mv0bn301t6ov2p1juu` binds plan commit
+`b208a308c1b1d97d2c2fe60048938c18f5df1bdb`. Receipt
+`cmv63bx410hhz01t6f05f0m6x` adds the focused release test path after the
+module-size guard required splitting it from the existing near-ceiling suite.
+The original `environment-lease.test.ts` remains unchanged.
+
+## Source verification
+
+The pre-fix regression run failed seven assertions: expired/cancelled waits
+were projected as admitted, unknown prior state implied admission, and release
+replay changed completed history. The repaired release path and settlement
+helper pass those assertions. Source-local verification does not deploy this
+change or settle the historical live task. The coordinator owns independent
+review, protected publication, release and runtime acceptance.

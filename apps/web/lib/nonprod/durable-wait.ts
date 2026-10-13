@@ -329,6 +329,10 @@ export async function settleNonprodLeaseWait(input: {
   const task = await input.db.taskRun.findUnique({ where: { taskRunId: input.taskRunId } });
   const wait = parseNonprodLeaseWait(task?.progressPayload);
   if (!task || !wait || wait.leaseId !== input.leaseId) return { settled: false };
+  // A release retry closes no new wait and must not rewrite admission history
+  // or its clock. Completion here concerns the wait, never command execution.
+  if (task.status === "completed" && wait.eventConsumed
+    && (wait.state === "admitted" || wait.state === "terminal")) return { settled: true };
   const now = input.now ?? new Date();
   const next: NonprodLeaseWaitProjection = {
     ...wait,
@@ -359,7 +363,9 @@ export async function afterNonprodLeaseRelease(input: {
       db: input.db as DurableWaitDb & { taskRun: NonNullable<DurableWaitDb["taskRun"]> },
       taskRunId: input.lease.taskRunId,
       leaseId: input.lease.leaseId,
-      state: input.priorStatus === "queued" ? "terminal" : "admitted",
+      // Expiry/cancellation (including a repeated release) proves no admission.
+      // A released lease previously passed through active in this lifecycle.
+      state: input.priorStatus === "active" || input.priorStatus === "released" ? "admitted" : "terminal",
       now: input.now,
     });
   }
