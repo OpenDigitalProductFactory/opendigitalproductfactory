@@ -1,8 +1,8 @@
 # Choosing Hardware for DPF
 
-*Market availability reviewed August 24, 2026. Product configurations, prices,
-and regional stock change frequently; follow the manufacturer links before
-ordering.*
+*Mac mini configurations reviewed October 12, 2026; other machine examples last
+reviewed August 24, 2026. Product configurations, prices, and regional stock
+change frequently; follow the manufacturer links before ordering.*
 
 DPF has two customer deployment models:
 
@@ -29,9 +29,39 @@ After choosing the host, continue with the [Windows](windows.md),
 | Local-first operations, Apple unified memory | **Apple Silicon · 2 TB SSD · 64 GB unified memory practical; 128 GB recommended when the host must run larger local models or double as a development machine.** This profile can run larger local models and longer context without a separate VRAM ceiling. |
 | Contributor/development workstation | **16–24 modern CPU cores · 128 GB memory · 4 TB NVMe SSD · 32 GB VRAM or 128 GB unified memory.** This profile adds capacity for source work, worktrees, builds, tests, browser automation, and local model evaluation. |
 
-The customer profiles exclude Build Studio, local coding-model capacity, source
-worktrees, and build workers. Those belong to a customizable contributor
-installation or an external development environment.
+The customer profiles size day-to-day operations. Embedded Build Studio can
+handle supported changes on a customizable install without separate Claude or
+Codex apps. It still needs a configured AI provider and development workspace;
+builds, tests, previews, source worktrees, and local coding models consume
+resources wherever they run. Size that additional workload separately. Removing
+external agent apps does not make a full development workload fit the operations
+profile.
+
+## A Mac mini for everyday business operations
+
+A Mac mini is a suggested compact host for DPF as a business operating system:
+the application and business records run on the organization's own machine,
+while people use the browser-based workspace to coordinate daily work.
+
+- **Mac mini with M6, 32 GB unified memory and a 1 TB SSD:** matches DPF's
+  provider-assisted operations planning profile. Approved external AI providers
+  handle model inference; those configured requests leave the host.
+- **Mac mini with M5 Pro, 64 GB unified memory and a 2 TB SSD:** matches the
+  practical Apple local-first profile. Qualify the chosen model, context,
+  voice/document services, and simultaneous coworker work together.
+- **A 128 GB Apple Silicon host:** consider this when larger local models or
+  substantial development share the business host.
+
+Apple currently lists a maximum of **32 GB on the M6 mini** and **64 GB on the
+M5 Pro mini**. The newer chip does not replace memory capacity, and a larger SSD
+does not replace RAM. See [Apple's Mac mini specifications](https://www.apple.com/mac-mini/specs/).
+
+These are workload-based suggestions, not an exact-model DPF certification or a
+promise that every business fits in 32 GB. The memory use of an actively developed
+128 GB installation is not a measured minimum for ordinary operations. Before
+standardizing on 32 GB, verify a representative business workload, peak
+concurrency, memory pressure, restart recovery, and any enabled Build Studio
+work. Include a UPS and backups on separate storage with a tested restore path.
 
 ## Machines available now
 
@@ -47,7 +77,7 @@ organization.
 | --- | --- | --- |
 | [HP EliteDesk 8 Mini](https://www.hp.com/us-en/shop/vwa/desktops/opsy%3DWindows-11-Pro%26brand%3DEliteDesk) | Windows 11 Pro, 32 GB RAM, 1 TB SSD | Compact business desktop with no unnecessary discrete-GPU cost |
 | [Dell Pro Tower](https://www.dell.com/en-us/shop/desktop-computers/dell-pro-tower-desktop/spd/dell-pro-qct1250-desktop/gcto_qct1250_usx) | Windows 11 Pro, 32 GB RAM, 1 TB SSD | Conventional, serviceable business tower |
-| [Apple Mac mini with M4 Pro](https://www.apple.com/shop/buy-mac/mac-mini/m4-pro-chip-12-core-cpu-16-core-gpu-48gb-memory-1tb-storage) | 48–64 GB unified memory, 1 TB SSD | Quiet, compact host that can also run a useful local model when needed |
+| [Apple Mac mini with M6](https://www.apple.com/mac-mini/specs/) | 32 GB unified memory, 1 TB SSD | Compact suggested host for everyday operations with approved external AI providers; validate the business workload |
 
 There is little benefit in buying a large GPU for this deployment unless the
 organization expects to move primary inference on-site later.
@@ -77,7 +107,7 @@ make the same model more knowledgeable.
 | --- | --- | --- |
 | [MacBook Pro with M5 Max](https://www.apple.com/macbook-pro/specs/) | Up to 128 GB unified memory and 8 TB SSD | Best portable option; 128 GB is already an effective DPF operations-and-development machine |
 | [Mac Studio](https://www.apple.com/shop/buy-mac/mac-studio/) | M4 Max up to 128 GB; M3 Ultra up to 512 GB unified memory | Best fixed Apple host; choose 128 GB for DPF unless a demonstrated larger-model workload justifies more |
-| [Mac mini with M4 Pro](https://support.apple.com/en-us/121555) | Up to 64 GB unified memory and 8 TB SSD | Lower-cost local-first entry for one operator and a smaller operational model |
+| [Mac mini with M5 Pro](https://www.apple.com/mac-mini/specs/) | Configure 64 GB unified memory and 2 TB SSD; supports up to 8 TB SSD | Compact local-first candidate; qualify model, context, and concurrency before deployment |
 
 Apple Silicon is a generally available DPF install surface. See the [macOS
 installation guide](macos.md). Memory cannot be upgraded after purchase, so buy

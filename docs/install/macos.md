@@ -53,6 +53,15 @@ models or serve as both the DPF host and a development workstation.
 See [Choosing Hardware for DPF](hardware.md) for current Mac and Windows machine
 examples, NVIDIA speed tradeoffs, model sizing, and purchase checks.
 
+For a compact business host, consider a **Mac mini with M6, 32 GB unified memory
+and a 1 TB SSD** for provider-assisted operations, or a **Mac mini with M5 Pro,
+64 GB unified memory and a 2 TB SSD** for local-first operations. These are
+planning configurations, not exact-model certifications; validate the actual
+business workload and any enabled build workload before purchase. Embedded
+Build Studio supports governed changes on customizable installs without separate
+Claude or Codex apps, but builds, tests, previews, and local coding models need
+additional capacity wherever they execute.
+
 ## Prerequisites
 
 The installer auto-installs Docker Desktop. You bring:
