@@ -148,10 +148,9 @@ DPF_DOCKER_WARN_MEM_MB="${DPF_DOCKER_WARN_MEM_MB:-8192}" # 8 GB soft target
 #   Windows (WSL2)  the VM sizes dynamically and, since WSL 2.0,
 #                   autoMemoryReclaim returns freed pages to Windows. A
 #                   generous ceiling costs little because it is given back.
-#   macOS (VZ)      a FIXED-size Apple Virtualization VM. Its resident size
-#                   grows toward the ceiling as pages are touched and is
-#                   NEVER returned to the host. Over-allocation ratchets
-#                   until the host starves.
+#   macOS          Docker Desktop's VM allocation competes with native apps
+#                  and local models. A generous limit can leave too little
+#                  headroom; container usage alone does not measure VM footprint.
 #
 # Starving the host does not break the install — it breaks the local-CI
 # capacity watchdog later, with `host-capacity-lost:host-memory-low` and no
@@ -213,10 +212,9 @@ dpf_preflight_docker_memory() {
     if [ "$mem_mb" -gt "$ceiling_mb" ] 2>/dev/null; then
       warn "Docker VM memory is ${mem_mb} MB of ${host_mb} MB host RAM (over ${DPF_DOCKER_MAX_MEM_FRACTION}%)."
       if [ "$(uname -s 2>/dev/null)" = "Darwin" ]; then
-        info "  On macOS the Docker VM never returns memory to the host, so this ratchets"
-        info "  upward until builds fail with host-capacity-lost:host-memory-low."
-        info "  Fix: Docker Desktop -> Settings -> Resources -> Memory. 16-24 GB is ample;"
-        info "  DPF containers use around 4 GB and the rest is build headroom."
+        info "  Docker VM allocation competes with native applications and AI models."
+        info "  Re-run the current installer to size local Desktop memory (8-32 GiB),"
+        info "  or adjust Docker Desktop -> Settings -> Resources -> Memory."
       else
         info "  WSL2 reclaims freed memory, so this is usually benign — but an explicit"
         info "  memory= in %USERPROFILE%\\.wslconfig pins it. Remove it, or lower it, and"

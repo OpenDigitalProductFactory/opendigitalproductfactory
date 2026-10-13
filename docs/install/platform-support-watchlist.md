@@ -13,6 +13,19 @@ not a passing test or a product validation failure. Host PATH is unchanged.
 Git isolation fixtures write files through Node instead of invoking a shell.
 PKI rejection assertions and existing POSIX permission checks remain intact.
 
+## macOS Docker memory allocation (BI-DC4352E8)
+
+An oversized Docker VM can compete with native applications and models even
+when container usage is modest. The installer now bounds local Desktop memory
+to a quarter of host RAM (8 GiB floor, 32 GiB cap), preserving valid smaller
+allocations. It verifies the running VM, backs up settings, restarts gracefully
+with consent for running containers or enabled Docker AI, and restores the
+previously running containers. Missing, malformed, symlinked or managed settings
+fail before shutdown. See [the Mac guide](macos.md#docker-memory-during-installation).
+This is installer convergence, not an automatic migration of existing installs
+or proof of the cause of historical Chatterbox growth. Native model memory is
+outside the Docker VM allocation.
+
 A running tally of **platform-specific gotchas** to watch for when supporting
 DPF's target environments. This is the operational companion to the canonical
 design docs — it tracks *symptoms and recurring traps*, not contracts:

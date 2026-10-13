@@ -270,6 +270,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "scripts/installer/lib/state-cleanup-temps.test.mjs",
         "scripts/installer/lib/docker.test.mjs",
+        "scripts/installer/lib/macos-memory.test.mjs",
+        "scripts/installer/macos-docker-memory.test.mjs",
         "scripts/installer/lib/pnpm.test.mjs",
         "scripts/installer/prepare-runtime-state.test.mjs",
         "scripts/installer/stage-ca-password.test.mjs",
