@@ -145,16 +145,16 @@ The capability row reading `active` while its services are absent (BI-83260BB3 a
 
 ## 10. Delivery ledger
 
-Successor BI ids are added after governed capture. Each slice is independently shippable.
+Each slice is independently shippable and filed as a live BI under EP-MFG-DELIVER-INSTALL. Plan: [implementation plan](../plans/2026-10-13-monitoring-operator-choice-plan.md).
 
-| Key | Deliverable | Sections / acceptance | Depends on |
-| --- | --- | --- | --- |
-| D1 | Monitoring resource budgets + compose limits, measured | §8 / AC-MON-08 | — |
-| D2 | Install-state decision record + upgrade carry (schema, resolver migration, apply-script journaling) | §4, §5 Upgrade / AC-MON-09, part of AC-MON-05 | — |
-| D3 | Installer question, flag and headless default (ps1 + sh) | §5 / AC-MON-01, AC-MON-02 | D1, D2 |
-| D4 | Honest off-state across metric surfaces and API | §7 / AC-MON-07 | — |
-| D5 | Settings surface + governed switch + onboarding step | §5 Onboarding, §6 / AC-MON-03..06 | D2, BI-5ACBAC50 |
-| D6 | Documentation correction | §8 / AC-MON-10 | — |
+| Key | Deliverable | Sections / acceptance | Depends on | Live BI |
+| --- | --- | --- | --- | --- |
+| D1 | Monitoring resource budgets + compose limits, measured | §8 / AC-MON-08 | — | BI-D6769E2F |
+| D2 | Install-state decision record + upgrade carry (schema, resolver migration, apply-script journaling) | §4, §5 Upgrade / AC-MON-09, part of AC-MON-05 | — | BI-0048E94D |
+| D3 | Installer question, flag and headless default (ps1 + sh) | §5 / AC-MON-01, AC-MON-02 | D1, D2 | BI-31F11C37 |
+| D4 | Honest off-state across metric surfaces and API | §7 / AC-MON-07 | — | BI-2CE9CBF4 |
+| D5 | Settings surface + governed switch + onboarding step | §5 Onboarding, §6 / AC-MON-03..06 | D2, BI-5ACBAC50 | BI-8BBFE50B |
+| D6 | Documentation correction | §8 / AC-MON-10 | — | BI-B670E078 |
 
 ## Design grounding
 
