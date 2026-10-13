@@ -67,8 +67,11 @@ const initiativeReviewProperties = {
 const definitions: ToolDefinition[] = [
   {
     name: "get_my_approval_status",
-    description: "Read the outcome of an approval requested by your current assistant identity for the authenticated user. Returns only status, a safe next step, and an exact Inbox link. Does not approve, retry, or grant access to the target.",
-    inputSchema: { type: "object", properties: { envelopeId: { type: "string", minLength: 1, maxLength: 128 } }, required: ["envelopeId"], additionalProperties: false },
+    description: "Read an exact approval outcome by envelopeId, or use mode pending to discover up to 20 unexpired requests for the authenticated user and current assistant. Pending entries name owner, expiry, exact Inbox link and immutable review locator; hasMore names a bounded page. Does not approve, retry, transfer ownership or grant access.",
+    inputSchema: { type: "object", properties: {
+      mode: { type: "string", enum: ["exact", "pending"], description: "Defaults to exact; pending omits envelopeId." },
+      envelopeId: { type: "string", minLength: 1, maxLength: 128 },
+    }, additionalProperties: false },
     requiredCapability: null,
     sideEffect: false,
     executionMode: "immediate",
@@ -343,6 +346,18 @@ async function findCoworkerHandler(params: Record<string, unknown>): Promise<Too
 
 const handlers: Record<string, ToolPackHandler> = {
   get_my_approval_status: async (params, userId, context) => {
+    if (params.mode !== undefined && params.mode !== "exact" && params.mode !== "pending") {
+      return { success: false, error: "invalid_params", message: "Choose exact or pending approval lookup." };
+    }
+    if (params.mode === "pending") {
+      if (Object.hasOwn(params, "envelopeId")) return { success: false, error: "invalid_params", message: "Pending discovery must omit envelopeId." };
+      if (!userId || !context?.agentId) return { success: false, error: "approval_identity_required", message: "Approval discovery requires an authenticated user and assistant." };
+      const { listPendingApprovalOutcomes } = await import("@/lib/coworker/approval-outcome-store");
+      const data = await listPendingApprovalOutcomes(userId, context.agentId);
+      return { success: true, message: data.hasMore
+        ? "Showing 20 pending requests. Open your Inbox to review the remaining requests."
+        : `Found ${data.approvals.length} pending approval request(s) for your current user and assistant.`, data };
+    }
     const envelopeId = typeof params.envelopeId === "string" ? params.envelopeId.trim() : "";
     if (!envelopeId || envelopeId.length > 128) return { success: false, error: "invalid_params", message: "An approval request ID is required." };
     const { readApprovalOutcome } = await import("@/lib/coworker/approval-outcome-store");
