@@ -24,6 +24,7 @@ import { persistDiscoveredInventory } from "./discovered-model-inventory";
 import { findProviderCredential, resolveCredentialProviderId } from "./provider-account-credentials";
 export { resolveCredentialProviderId } from "./provider-account-credentials";
 import { supportsTextGeneration } from "@/lib/routing/model-classifier";
+import { modelOutputCapacityFields } from "./model-output-capacity";
 
 /**
  * Resolve the `supportsToolUse` value a metadata-sync should persist for a model,
@@ -665,10 +666,15 @@ export async function profileModelsInternal(
     // If the model doesn't match provider restrictions, retire it
     if (!modelMatchesRestrictions(m.modelId)) {
       const card = extractModelCardWithFallback(providerId, m.modelId, m.rawMetadata);
+      const existingProfile = await prisma.modelProfile.findUnique({
+        where: { providerId_modelId: { providerId, modelId: m.modelId } },
+        select: { profileSource: true, capabilityOverrides: true },
+      });
       const metadataFields = {
         modelFamily: card.modelFamily,
         modelClass: card.modelClass,
         maxInputTokens: card.maxInputTokens,
+        ...modelOutputCapacityFields(card.maxOutputTokens, existingProfile),
         inputModalities: card.inputModalities,
         outputModalities: card.outputModalities,
         // For Ollama: force streaming=true (all models support it) since the
@@ -718,6 +724,7 @@ export async function profileModelsInternal(
         update: {
           modelStatus: "retired",
           retiredReason: "Model not accessible with provider credential type",
+          ...modelOutputCapacityFields(card.maxOutputTokens, existingProfile),
         },
       });
       console.log(`[profiling] Retired restricted model ${JSON.stringify(m.modelId)} from ${JSON.stringify(providerId)}`);
@@ -819,18 +826,11 @@ export async function profileModelsInternal(
       console.log(
         `[drift] Provider metadata changed for ${JSON.stringify(providerId)}/${JSON.stringify(m.modelId)} — hash ${existingProfile.rawMetadataHash!.slice(0, 8)}→${card.rawMetadataHash.slice(0, 8)}`
       );
-      // For seed-level profiles, allow scores to be re-derived on this sync.
-      // For evaluated/admin profiles, flag for admin review via driftDetectedAt.
-      if (existingProfile.profileSource === "seed") {
-        await prisma.modelProfile.update({
-          where: { providerId_modelId: { providerId, modelId: m.modelId } },
-          data: { driftDetectedAt: new Date() },
-        });
-      } else {
-        await prisma.modelProfile.update({
-          where: { providerId_modelId: { providerId, modelId: m.modelId } },
-          data: { driftDetectedAt: new Date() },
-        });
+      await prisma.modelProfile.update({
+        where: { providerId_modelId: { providerId, modelId: m.modelId } },
+        data: { driftDetectedAt: new Date() },
+      });
+      if (existingProfile.profileSource !== "seed") {
         console.log(`[drift] ${JSON.stringify(providerId)}/${JSON.stringify(m.modelId)} has evaluated/admin profile — flagged for review`);
       }
     }
@@ -860,6 +860,7 @@ export async function profileModelsInternal(
       modelFamily: card.modelFamily,
       modelClass: card.modelClass,
       maxInputTokens: card.maxInputTokens,
+      ...modelOutputCapacityFields(card.maxOutputTokens, existingProfile),
       inputModalities: card.inputModalities,
       outputModalities: card.outputModalities,
       capabilities: (providerId === "local" || providerId === "ollama")
