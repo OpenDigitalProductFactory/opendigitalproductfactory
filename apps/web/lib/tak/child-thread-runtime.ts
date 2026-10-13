@@ -5,6 +5,7 @@ import { prisma } from "@dpf/db";
 import type { ChatMessage } from "@/lib/routing/chat-message-types";
 import { agentEventBus } from "@/lib/agent-event-bus";
 import { readCollaborationProvenance } from "@/lib/tak/conversation-participants-core";
+import { postChildResultToParent } from "@/lib/tak/child-result-message";
 import {
   executeAutonomousAgenticLoop,
   resolveAutonomousWorkAgent,
@@ -36,7 +37,7 @@ async function emitCollaborationReturn(
   childThreadId: string,
   taskRunId: string,
   outcome: "completed" | "failed" | "canceled",
-  options?: { specialistReply?: string; routeContext?: string },
+  options?: { specialistReply?: string; routeContext?: string; resultText?: string },
 ): Promise<void> {
   try {
     const child = await prisma.agentThread.findUnique({
@@ -46,10 +47,27 @@ async function emitCollaborationReturn(
     if (!child?.parentThreadId) return;
     const tr = await prisma.taskRun.findUnique({
       where: { taskRunId },
-      select: { a2aMetadata: true },
+      select: { a2aMetadata: true, currentAgentId: true },
     });
     const prov = readCollaborationProvenance(tr?.a2aMetadata);
-    if (!prov) return; // only emit returns for governed collaboration spawns
+    // BI-B3194260: every child's result lands in the parent conversation once.
+    // The provider-compliance collaboration posts its own owner message below.
+    if (prov?.summary !== PROVIDER_COMPLIANCE_COLLABORATION_SUMMARY) {
+      const agentId = prov?.toAgentId ?? tr?.currentAgentId ?? null;
+      const agent = agentId
+        ? await prisma.agent.findFirst({ where: { OR: [{ agentId }, { slugId: agentId }] }, select: { name: true } })
+        : null;
+      await postChildResultToParent(prisma as never, {
+        parentThreadId: child.parentThreadId,
+        childTaskRunId: taskRunId,
+        agentId,
+        agentName: agent?.name ?? "The delegated coworker",
+        outcome,
+        text: options?.resultText ?? null,
+        routeContext: options?.routeContext ?? DEFAULT_ROUTE_CONTEXT,
+      });
+    }
+    if (!prov) return; // the handoff card and chain link belong to governed collaboration spawns
     if (prov.delegationLinkId) await closeDelegationLink(prov.delegationLinkId, outcome);
     let ownerMessage: string | undefined;
     if (prov.summary === PROVIDER_COMPLIANCE_COLLABORATION_SUMMARY) {
@@ -171,6 +189,7 @@ async function completeChildThreadExecution(input: {
   });
   await emitCollaborationReturn(input.context.threadId, input.context.taskRunId, "completed", {
     specialistReply: input.replyText,
+    resultText: input.replyText,
     routeContext: input.context.routeContext,
   });
 }
@@ -457,5 +476,8 @@ async function markChildThreadFailed(
       });
     });
 
-  await emitCollaborationReturn(context.threadId, context.taskRunId, "failed");
+  await emitCollaborationReturn(context.threadId, context.taskRunId, "failed", {
+    resultText: message,
+    routeContext: context.routeContext,
+  });
 }
