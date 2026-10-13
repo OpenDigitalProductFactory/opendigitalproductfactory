@@ -276,9 +276,15 @@ function rejectionResult(
   };
 }
 
-/** Also read by the approval-convergence probe (scripts/approval-convergence-probe.ts), on a read-only session. */
-export async function runPreToolHooks(event: ToolLifecycleEvent): Promise<GovernedExecuteResult | null> {
-  for (const hook of _lifecycleHooks) {
+/**
+ * Also run by the approval-convergence probe (lib/coworker/approval-convergence-probe-run.ts),
+ * which passes the same governance hooks bound to a read-only transaction.
+ */
+export async function runPreToolHooks(
+  event: ToolLifecycleEvent,
+  hooks: readonly ToolLifecycleHook[] = _lifecycleHooks,
+): Promise<GovernedExecuteResult | null> {
+  for (const hook of hooks) {
     const decision = await hook.onPreToolUse?.(event);
     if (decision?.decision === "deny") {
       return rejectionResult(event.toolName, "hook_denied", decision.reason);

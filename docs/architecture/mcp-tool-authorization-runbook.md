@@ -522,6 +522,10 @@ For recovery, begin with the local [routing reference](../../packages/dpf-skill-
 
 The paired `correct_workroom_sensitivity` operation uses that same administrative boundary and retains the normal exact authority approval. Its transaction rechecks current permission, verified classification, invalid-only eligibility and the revision/JSON compare-and-swap, then retains the original declaration in the audit. Neither operation grants room admission or changes coworker clearance. Ordinary room reads and writes keep their existing data-access checks. An administrator must verify actual classification before proposing a historical correction; DEV posture does not supply it.
 
+## Approval convergence probe
+
+`probe_pending_approval_conversion` (BI-129EFFD1) runs the AC-PROBE dry run inside the server: no inputs, `sideEffect: false` (advise-safe, admitted by a `read` token), the narrow `approval_probe_read` grant (in `dpf.read`; held by the admin assistant and the three external development identities), and the handler refuses any caller without `manage_platform`. Each evaluation step runs on a `SET TRANSACTION READ ONLY` transaction and no tool handler is called.
+
 ## Recovering an interrupted independent review
 
 Read the canonical task with MCP `tasks/get` and `tasks/result`. Native review

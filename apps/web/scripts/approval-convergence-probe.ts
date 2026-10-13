@@ -8,7 +8,11 @@
 // refusal code per row plus each owner's activity. Run by an agent before
 // PR-B and PR-C and recorded as workroom evidence; never run by CI.
 //
-// Read-only by construction: the session is opened with
+// The probe itself is lib/coworker/approval-convergence-probe-run.ts, shared
+// with the `probe_pending_approval_conversion` MCP tool (BI-129EFFD1), which is
+// the normal way to run it against the live install. This script is for local
+// use. Read-only twice over: the runner evaluates on SET TRANSACTION READ ONLY
+// transactions, and this session is also opened with
 // `default_transaction_read_only=on`, verified before anything is read, so the
 // database refuses any write a resolver or hook might attempt (it is then
 // reported as that row's `hook-error` / `authority-evidence-unavailable`).
@@ -68,54 +72,15 @@ async function main(): Promise<void> {
     process.exit(3);
   }
 
-  const [{ PLATFORM_TOOLS }, decision, resolver, grants, gaid, policy, users, governed, probe] = await Promise.all([
-    import("@/lib/mcp-tools"),
-    import("@/lib/govern/authority/coworker-authority-decision"),
-    import("@/lib/govern/authority/resolve-coworker-tool-authority"),
-    import("@/lib/tak/agent-grants"),
-    import("@/lib/tak/gaid-actor-envelope"),
-    import("@/lib/tak/consequential-tool-policy"),
-    import("@/lib/govern/current-user-context"),
-    import("@/lib/mcp-governed-execute"),
-    import("@/lib/coworker/approval-convergence-probe"),
-  ]);
-  const { registerServerToolGovernanceHooks } = await import("@/lib/governance/register-tool-governance-hooks");
-  registerServerToolGovernanceHooks();
-
-  const pending = await prisma.agentActionProposal.findMany({
-    where: { status: "proposed" },
-    orderBy: [{ actionType: "asc" }, { proposedAt: "asc" }],
-    select: {
-      proposalId: true, actionType: true, parameters: true, agentId: true, threadId: true, taskRunId: true, proposedAt: true,
-      thread: { select: { user: { select: { id: true, isActive: true, lastSeenAt: true } } } },
-    },
-  });
-
-  const now = new Date();
-  const results = [];
-  for (const row of pending) {
-    results.push(await probe.probePendingProposal(
-      { ...row, owner: row.thread.user ?? null },
-      {
-        findTool: (name) => PLATFORM_TOOLS.find((tool) => tool.name === name),
-        userContext: (userId) => users.currentUserContext(userId),
-        agentGrantAllowed: async (agentId, toolName) =>
-          grants.isToolAllowedByGrants(toolName, await grants.getAgentToolGrantsAsync(agentId)),
-        resolveAuthorityInput: (args) => resolver.resolveCoworkerToolAuthorityInput(args),
-        evaluate: decision.evaluateCoworkerAuthority,
-        resolveGaid: (args) => gaid.resolveGaidActorEnvelope(args),
-        preToolHooks: (args) => governed.runPreToolHooks(args),
-        alignmentRequired: (tool, toolName) => policy.classifyConsequentialTool({ tool, toolName }).alignmentRequired,
-      },
-      now,
-    ));
-  }
+  const { runApprovalConvergenceProbe } = await import("@/lib/coworker/approval-convergence-probe-run");
+  const report = await runApprovalConvergenceProbe(prisma as never);
+  const results = report.rows;
 
   if (process.argv.includes("--json")) {
-    console.log(JSON.stringify({ probedAt: now.toISOString(), summary: probe.summarizeProbe(results), rows: results }, null, 2));
+    console.log(JSON.stringify(report, null, 2));
   } else {
-    console.log(`probed ${results.length} pending proposals at ${now.toISOString()}`);
-    console.log(JSON.stringify(probe.summarizeProbe(results), null, 2));
+    console.log(`probed ${results.length} pending proposals at ${report.probedAt}`);
+    console.log(JSON.stringify(report.summary, null, 2));
     for (const row of results) {
       console.log([row.proposalId, row.actionType, row.agentId, row.refusal, row.escalation ?? "-", `gaid=${row.gaid}`,
         `hook=${row.hook}`, `align=${row.alignmentRequired}`, `owner=${row.ownerId}`, `active=${row.ownerActive}`,

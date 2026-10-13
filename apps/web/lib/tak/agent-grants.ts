@@ -424,6 +424,9 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   search_tool_marketplace: ["registry_read"],
   get_my_coworker_profile: ["registry_read"],
   get_my_approval_status: ["registry_read"],
+  // BI-129EFFD1: the AC-PROBE dry run. Read-only, platform-admin capability;
+  // its own narrow grant so holding it reveals nothing else.
+  probe_pending_approval_conversion: ["approval_probe_read"],
   assess_my_capabilities: ["registry_read"],
   submit_coworker_capability_need: ["registry_read"],
   list_my_capability_needs: ["registry_read"],
