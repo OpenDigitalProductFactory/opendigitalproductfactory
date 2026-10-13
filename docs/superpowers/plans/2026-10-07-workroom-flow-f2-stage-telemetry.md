@@ -65,6 +65,7 @@ status: active
 ## Recorded limitations
 
 - **Graph rooms are not measured yet.** Parallel branches are deferred until a graph shape is live.
+- **The replay is bounded in memory.** The portal heap is about 1.5 GB (BI-927FF076). The replay works through 25 rooms at a time and inserts each page before reading the next. Each drive row carries only the five fields the planner reads, about 18 MB across all 90 days against 117 MB for the full snapshots. It re-aggregates past days from stage rows only, selected in the query. Pages land under a staging actor (`backfill:drive-log:v2:partial`) that becomes final only after the last page. If a run dies part-way, the next run clears it and starts again.
 - **Replayed history is coarse.** It has drive-tick resolution and uses each room's current shape claim. Live events have neither limitation.
 - **Human touch time is not captured.** It counts as wait.
 
