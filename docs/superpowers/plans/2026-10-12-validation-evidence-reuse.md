@@ -173,3 +173,56 @@ from the flag. Supplied malformed or unqualified proof still blocks. Exercise
 the actual `buildPublishedReadinessCommand` and guard the caller's existing
 server preflight ordering. Broader projected-tree proof transport stays open;
 never rebind a private-tree PASS onto the remapped published tree.
+
+## Host-resource retry identity follow-up
+
+AC-4 remains incomplete for `host-heavy-resource`: the runner derives its claim
+key from the current PID, while a detached retry starts a new process. Five
+queued leases were observed for one receiver invocation on October 12. The
+server also rejects PID changes on an existing host claim. Changing only the
+client key would replace duplicate rows with failed retries.
+
+CT-HOST-RESUME / FLOW-HOST-RESUME / VC-HOST-RESUME extend the existing claim,
+`resumeLeaseId`, detached resumer and local queue observer. No new queue,
+service, table or evidence authority is introduced. One logical invocation gets
+a random attempt identifier plus a digest of source, command, owner, worktree,
+branch and resource budget. Replays carry that identity before the child-command
+separator; genuinely new invocations get new identifiers. Changed inputs stop
+the old attempt unrun rather than silently admitting different work.
+
+Within the existing locked lease transaction, only an exact same-owner,
+same-provider, same-contract, pinned queued host lease may transfer process
+identity. Preserve its lease ID and original queue timestamp. Missing, foreign,
+terminal, active or mismatched resume targets never create a replacement or
+take over an active execution. Fresh claims retain normal capacity admission.
+
+The existing observer directory retains the actual resumer PID, child PID and
+bounded per-attempt output. The launcher PID is explicitly a launcher, not
+claimed as the durable child. Credentials and raw environment are not logged.
+Cancellation, source drift and terminal leases stop retries without running the
+command. Keep recursion suppression and the existing retry deadline.
+
+Sequence: add failing runner/resumer and mocked-transaction regression tests;
+implement the bounded identity handoff; run those suites and existing resume,
+host-admission and resumer suites; independent review and protected CI precede
+publication. No live claim storm or lease cleanup is part of this repair.
+Touched paths: `scripts/host-resource-runner.mjs` and its test,
+`scripts/lib/durable-wait-resumer.mjs` and its test,
+`scripts/local-ci-durable-wait-resumer.mjs`, and
+`apps/web/lib/nonprod/environment-lease.ts`, `environment-lease-resume.ts` and
+their host-resource/resume tests. A source-local helper may isolate identity
+calculation without adding a durable store. The shared client transport must
+retain ordinary local-CI behavior.
+
+Regression coverage must prove stable lease count and queue age across changing
+PIDs, fresh identities for new invocations, exact argv preservation, changed
+source/command/owner/budget rejection, terminal/foreign/active lease refusal,
+normal queued-to-admitted progression, and retained child output and identity.
+The server PID handoff is the principal risk: accept it only for the exact pinned
+queued lease. Rollback is a signed revert; do not mutate historical leases.
+
+This is the remaining AC-4 repair under BI-25CB699C, not completion of the wider
+BI. Early quiescence detection before expensive preflight remains separate.
+During QR-2026-10-13-k0qmxdnz, native claim writes returned `portal_quiescing`.
+The operator-authorized recovery route permits bounded source work; live scope
+and coverage reconciliation remain unrun until the service accepts writes.
