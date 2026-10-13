@@ -4,10 +4,16 @@
 #
 # The rule, in one place for the installer and the agent-toolchain bootstrap:
 #   DPF_MCP_URL         = an explicit DPF_MCP_URL already in the environment;
-#                         then the saved user endpoint; then
+#                         then a saved https user endpoint; then
 #                         <PUBLIC_URL>/api/mcp/v1?tier=full when the install's
 #                         .env names an https PUBLIC_URL; otherwise none
-#                         (the client plugin's loopback default applies).
+#                         (the client plugin's https default applies).
+#   Only an https endpoint whose host is a name or IPv4 address is ever
+#   persisted. The persisted DPF_MCP_URL is what Claude desktop and Claude Code
+#   expand into their OAuth connector, and OAuth refuses plain http
+#   (BI-46B636B0); Docker publishes the portal on IPv4 only, so an IPv6
+#   literal such as [::1] refuses the connection. A loopback-http choice for
+#   Codex or Grok lives in that client's own config, never here (BI-8FD7C0C9).
 #   NODE_EXTRA_CA_CERTS = the organization root bundle, for an https endpoint
 #                         only: DPF_PKI_TRUST_BUNDLE, then the install's .env,
 #                         then saved NODE_EXTRA_CA_CERTS, then ~/.dpf/pki/root_ca.crt.
@@ -69,7 +75,8 @@ dpf_resolve_mcp_client_env() {
     DPF_MCP_CLIENT_URL="$DPF_MCP_URL"
   else
     saved="$(dpf_mcp_saved_env_value DPF_MCP_URL)"
-    if [ -n "$saved" ]; then
+    # A saved value this module would refuse to write is a leftover leak.
+    if [ -n "$saved" ] && dpf_mcp_client_endpoint_can_persist "$saved"; then
       DPF_MCP_CLIENT_URL="$saved"
     else
       case "$public" in
@@ -141,44 +148,28 @@ dpf_launchd_setenv() {
   "$launchctl_cmd" setenv "$1" "$2" 2>/dev/null || true
 }
 
-# HTTPS and loopback HTTP are supported persistence targets. This checks the
-# transport only; it neither authenticates nor creates credentials.
+# Usage: dpf_mcp_client_endpoint_can_persist URL -- true only for an https URL
+# with no userinfo whose host is a name or IPv4 address. Checks the transport
+# only; it neither authenticates nor creates credentials.
 dpf_mcp_client_endpoint_can_persist() {
-  local authority port
-  case "$1" in
-    https://*) return 0 ;;
-    http://*)
-      authority="${1#http://}"; authority="${authority%%/*}"
-      authority="$(printf '%s' "$authority" | tr '[:upper:]' '[:lower:]')"
-      case "$authority" in
-        localhost|127.0.0.1|'[::1]') return 0 ;;
-        localhost:*|127.0.0.1:*|'[::1]':*)
-          port="${authority##*:}"
-          case "$port" in ''|*[!0-9]*) return 1 ;; esac
-          [ "$port" -le 65535 ] 2>/dev/null && return 0
-          ;;
-      esac
-      ;;
-  esac
-  return 1
+  local authority
+  case "$1" in https://*) ;; *) return 1 ;; esac
+  authority="${1#https://}"; authority="${authority%%[/?#]*}"
+  case "$authority" in ''|*@*|\[*) return 1 ;; esac
+  return 0
 }
 
 # Usage: dpf_persist_mcp_client_env (after dpf_resolve_mcp_client_env)
-# Returns 1 and writes nothing for an unsupported endpoint.
+# Returns 1 and writes nothing -- env file, profiles or launchd -- for an
+# endpoint dpf_mcp_client_endpoint_can_persist refuses.
 dpf_persist_mcp_client_env() {
   dpf_mcp_client_endpoint_can_persist "${DPF_MCP_CLIENT_URL:-}" || return 1
   dpf_set_client_env_export DPF_MCP_URL "$DPF_MCP_CLIENT_URL" || return $?
-  case "$DPF_MCP_CLIENT_URL" in
-    https://*) dpf_set_client_env_export NODE_EXTRA_CA_CERTS "${DPF_MCP_CLIENT_CA_BUNDLE:-}" || return $? ;;
-  esac
+  dpf_set_client_env_export NODE_EXTRA_CA_CERTS "${DPF_MCP_CLIENT_CA_BUNDLE:-}" || return $?
   dpf_source_client_env_from_profiles
   dpf_launchd_setenv DPF_MCP_URL "$DPF_MCP_CLIENT_URL"
+  dpf_launchd_setenv NODE_EXTRA_CA_CERTS "${DPF_MCP_CLIENT_CA_BUNDLE:-}"
   export DPF_MCP_URL="$DPF_MCP_CLIENT_URL"
-  case "$DPF_MCP_CLIENT_URL" in
-    https://*)
-      dpf_launchd_setenv NODE_EXTRA_CA_CERTS "${DPF_MCP_CLIENT_CA_BUNDLE:-}"
-      if [ -n "${DPF_MCP_CLIENT_CA_BUNDLE:-}" ]; then export NODE_EXTRA_CA_CERTS="$DPF_MCP_CLIENT_CA_BUNDLE"; fi
-      ;;
-  esac
+  if [ -n "${DPF_MCP_CLIENT_CA_BUNDLE:-}" ]; then export NODE_EXTRA_CA_CERTS="$DPF_MCP_CLIENT_CA_BUNDLE"; fi
   return 0
 }

@@ -11,8 +11,13 @@
 // different server URL". So the per-machine installed copy (the plugin cache
 // the reconcile step materializes) gets this machine's literal endpoint.
 //
-// The target is DPF_MCP_URL when it is a parseable https URL, else the
-// template's own default. A fixed `localhost` in the repo would not do: an
+// The target is DPF_MCP_URL when it is a parseable https URL whose host is not
+// an IPv6 literal, else the template's own default. An inherited plain-http or
+// [::1] value (BI-8FD7C0C9: a test once wrote http://[::1]:3000 into launchd,
+// and Docker publishes the portal on IPv4 only) never becomes the connector,
+// and an OAuth descriptor already holding a plain-http literal -- which cannot
+// authenticate by any path, BI-46B636B0 -- is repinned to the canonical
+// https endpoint. A fixed `localhost` in the repo would not do: an
 // install with a configured PUBLIC_URL names that origin as its OAuth resource,
 // and a client on another host name would be refused its token.
 //
@@ -35,6 +40,8 @@ export const EXIT_LEFT_ALONE = 11;
 
 const PLUGIN_KEY = "dpf-platform@dpf-platform-local";
 const TEMPLATE_RE = /^\$\{DPF_MCP_URL:-([^}]+)\}$/;
+// The checked-in descriptor's default (packages/dpf-skill-pack/claude.mcp.json).
+export const CANONICAL_MCP_URL = "https://localhost/api/mcp/v1?tier=full";
 
 function readJson(path) {
   try {
@@ -56,7 +63,7 @@ function httpsUrl(value) {
   if (typeof value !== "string" || !value.trim()) return null;
   try {
     const url = new URL(value.trim());
-    if (url.protocol !== "https:" || url.username || url.password) return null;
+    if (url.protocol !== "https:" || url.username || url.password || url.hostname.startsWith("[")) return null;
     return url.toString();
   } catch {
     return null;
@@ -69,6 +76,7 @@ export function resolvePinTarget(currentUrl, env = process.env) {
   if (fromEnv) return fromEnv;
   const template = typeof currentUrl === "string" ? currentUrl.match(TEMPLATE_RE) : null;
   if (template) return httpsUrl(template[1]);
+  if (typeof currentUrl === "string" && /^http:\/\//i.test(currentUrl.trim())) return CANONICAL_MCP_URL;
   return null;
 }
 

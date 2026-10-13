@@ -59,6 +59,10 @@ function bash(script, { home, env = {} }) {
       DPF_FIXTURE_HOME: posix(home),
       // Never inherit the operator's own client environment into a test.
       DPF_MCP_URL: "", DPF_PKI_TRUST_BUNDLE: "", NODE_EXTRA_CA_CERTS: "",
+      // Never reach the operator's launchd either: on macOS a case that named
+      // no seam ran the real `launchctl setenv DPF_MCP_URL` and left the
+      // desktop app dialing http://[::1]:3000 (BI-8FD7C0C9).
+      DPF_LAUNCHCTL: fakeLaunchctl(home),
       ...env,
     },
   });
@@ -275,7 +279,7 @@ for (const adapter of ["sh", "ps1"]) {
   // BI-BFDB0A42: this case runs the bootstrap's python block. The Build Studio
   // sandbox has no python, so skip there as the PowerShell twin does without pwsh.
   const NEEDS_PYTHON = pythonExe ? null : { skip: "no python on this machine; the bootstrap's endpoint block cannot run" };
-  test(`${adapter}: bootstrap selects saved operator endpoint before install defaults and keeps explicit selection`, NEEDS_PYTHON ?? (adapter === "sh" ? NEEDS_BASH : NEEDS_POWERSHELL), () => {
+  test(`${adapter}: bootstrap keeps the saved Codex endpoint out of the shared selection and keeps explicit selection`, NEEDS_PYTHON ?? (adapter === "sh" ? NEEDS_BASH : NEEDS_POWERSHELL), () => {
     withHome(({ home, install }) => {
       writeFileSync(join(install, ".env"), "PUBLIC_URL=https://desk.lan\n");
       writeEndpointReaderFixture(install, adapter);
@@ -311,7 +315,9 @@ for (const adapter of ["sh", "ps1"]) {
       };
       assert.equal(run(), "https://desk.lan/api/mcp/v1?tier=full|");
       writeFileSync(config, '[mcp_servers.dpf]\nurl="http://127.0.0.1:3000/api/mcp/v1?tier=full"\n');
-      assert.equal(run(), "http://127.0.0.1:3000/api/mcp/v1?tier=full|");
+      // Codex keeps its loopback choice in its own config (the updater
+      // preserves it); it is not the endpoint every other client is given.
+      assert.equal(run(), "https://desk.lan/api/mcp/v1?tier=full|");
       assert.equal(run("https://explicit.lan/api/mcp/v1"), "https://explicit.lan/api/mcp/v1|");
       assert.equal(readFileSync(config, "utf8"), '[mcp_servers.dpf]\nurl="http://127.0.0.1:3000/api/mcp/v1?tier=full"\n');
     });
@@ -439,89 +445,80 @@ test("saved export parsing rejects executable assignments and leaves credential 
 });
 
 
-// Selected loopback transport is a preference, independent of credential state.
-test("saved loopback endpoint survives an HTTPS install default", NEEDS_BASH, () => {
+// The shared DPF_MCP_URL is what Claude desktop and Claude Code read for their
+// OAuth connector, and OAuth refuses plain http (BI-46B636B0). A plain-http
+// value there can only be a leftover leak, so it never outranks the HTTPS
+// install default and is never written (BI-8FD7C0C9).
+test("a saved plain-http endpoint does not outrank the HTTPS install default", NEEDS_BASH, () => {
   withHome(({home, install}) => {
     writeRoot(home);
     writeFileSync(join(install, ".env"), "PUBLIC_URL=https://localhost\n");
-    const endpoint = "http://127.0.0.1:3000/api/mcp/v1?tier=full";
-    const out = bash(`. "$ENV_LIB"; dpf_set_client_env_export DPF_MCP_URL '${endpoint}'; dpf_resolve_mcp_client_env "$INSTALL"; printf '%s|%s' "$DPF_MCP_CLIENT_URL" "$DPF_MCP_CLIENT_CA_BUNDLE"`, {home, env:{INSTALL:posix(install)}});
-    assert.equal(out.status, 0, out.stderr);
-    assert.equal(out.stdout, `${endpoint}|`);
+    for (const endpoint of ["http://127.0.0.1:3000/api/mcp/v1?tier=full", "http://[::1]:3000/api/mcp/v1?tier=full"]) {
+      const out = bash(`. "$ENV_LIB"; dpf_set_client_env_export DPF_MCP_URL '${endpoint}'; dpf_resolve_mcp_client_env "$INSTALL"; printf '%s|%s' "$DPF_MCP_CLIENT_URL" "$DPF_MCP_CLIENT_CA_BUNDLE"`, {home, env:{INSTALL:posix(install)}});
+      assert.equal(out.status, 0, out.stderr);
+      assert.equal(out.stdout, `https://localhost/api/mcp/v1?tier=full|${defaultShellBundle(home)}`);
+    }
   });
 });
 
-test("Windows: saved loopback endpoint survives an HTTPS install default", NEEDS_POWERSHELL, () => {
+test("Windows: a saved plain-http endpoint does not outrank the HTTPS install default", NEEDS_POWERSHELL, () => {
   withHome(({home, install}) => {
     writeRoot(home);
     writeFileSync(join(install, ".env"), "PUBLIC_URL=https://localhost\n");
     const endpoint = "http://127.0.0.1:3000/api/mcp/v1?tier=full";
     const out = powershell(`. '${q(envLibPs)}'
       $r = Resolve-DpfMcpClientEnv -InstallDir '${q(install)}' -ExplicitUrl '' -HomeDir '${q(home)}' -GetUserEnv {param($n) if($n -eq 'DPF_MCP_URL') {'${endpoint}'}}
-      "$($r.McpUrl)|$($r.CaBundle)"`);
-    assert.equal(out, `${endpoint}|`);
+      "$($r.McpUrl)"`);
+    assert.equal(out, "https://localhost/api/mcp/v1?tier=full");
   });
 });
 
-test("selected loopback endpoint persists without changing credentials or CA settings", NEEDS_BASH, () => {
-  withHome(({home, install}) => {
-    const endpoint = "http://127.0.0.1:3000/api/mcp/v1?tier=full";
-    const out = bash(`. "$ENV_LIB"; dpf_set_client_env_export NODE_EXTRA_CA_CERTS 'operator-root'; printf "export DPF_MCP_BEARER_TOKEN='fixture-secret'\\n" >> "$(dpf_mcp_client_env_file)"; DPF_MCP_CLIENT_URL='${endpoint}'; DPF_MCP_CLIENT_CA_BUNDLE='unused'; dpf_persist_mcp_client_env; printf 'first=%s|' "$?"; dpf_persist_mcp_client_env; printf 'second=%s|' "$?"; printf '%s' "$DPF_MCP_URL"`, {home, env:{INSTALL:posix(install),DPF_CLIENT_ENV_PLATFORM:'Linux'}});
-    assert.equal(out.status, 0, out.stderr);
-    assert.equal(out.stdout, `first=0|second=0|${endpoint}`);
-    const file=readFileSync(join(home,'.dpf','agent-toolchain.env'),'utf8');
-    assert.match(file, /^export NODE_EXTRA_CA_CERTS='operator-root'$/m);
-    assert.match(file, /^export DPF_MCP_BEARER_TOKEN='fixture-secret'$/m);
-    assert.equal((file.match(/^export DPF_MCP_URL=/gm)??[]).length,1);
-    assert.equal((readFileSync(join(home,'.profile'),'utf8').match(/dpf-mcp-token/g)??[]).length,1);
-  });
-});
+const REFUSED_SHARED_ENDPOINTS = [
+  "http://localhost:3000/api/mcp/v1?tier=full",
+  "http://127.0.0.1:3000/api/mcp/v1?tier=full",
+  "http://[::1]:3000/api/mcp/v1?tier=full",
+  // Docker publishes the portal on IPv4 only; localhost reaches it either way.
+  "https://[::1]/api/mcp/v1?tier=full",
+  "http://192.168.1.5:3000/api/mcp/v1",
+  "http://127.0.0.1:3000@evil.test/api/mcp/v1",
+];
 
-test("Windows: selected loopback endpoint persists once without changing CA settings", NEEDS_POWERSHELL, () => {
-  const endpoint = "http://127.0.0.1:3000/api/mcp/v1?tier=full";
-  const out = powershell(`. '${q(envLibPs)}'
-    $store = @{DPF_MCP_URL='https://localhost/api/mcp/v1?tier=full'; NODE_EXTRA_CA_CERTS='operator-root'}; $script:writes=0
-    $get={param($n) $store[$n]}; $set={param($n,$v) $script:writes++; $store[$n]=$v}
-    $client=[pscustomobject]@{McpUrl='${endpoint}'; CaBundle='unused'}
-    $first=Set-DpfMcpClientEnv -ClientEnv $client -GetUserEnv $get -SetUserEnv $set
-    $second=Set-DpfMcpClientEnv -ClientEnv $client -GetUserEnv $get -SetUserEnv $set
-    "$first|$second|$($script:writes)|$($store['DPF_MCP_URL'])|$($store['NODE_EXTRA_CA_CERTS'])|$env:DPF_MCP_URL"`);
-  assert.equal(out, `persisted|unchanged|1|${endpoint}|operator-root|${endpoint}`);
-});
-
-test("non-loopback HTTP endpoints remain excluded from persistence", NEEDS_BASH, () => {
-  for(const endpoint of ['http://192.168.1.5:3000/api/mcp/v1','http://127.0.0.1.evil.test:3000/api/mcp/v1','http://127.0.0.1:3000@evil.test/api/mcp/v1','http://127.0.0.2:3000/api/mcp/v1','http://localhost:99999/api/mcp/v1']) {
+test("plain-http and IPv6-literal endpoints never reach the shared env file or launchd", NEEDS_BASH, () => {
+  for (const endpoint of REFUSED_SHARED_ENDPOINTS) {
     withHome(({home}) => {
-      const out=bash(`. "$ENV_LIB"; DPF_MCP_CLIENT_URL='${endpoint}'; dpf_persist_mcp_client_env; printf '%s' "$?"`,{home});
-      assert.equal(out.stdout,'1');
-      assert.equal(existsSync(join(home,'.dpf','agent-toolchain.env')),false);
+      mkdirSync(join(home, ".dpf"), { recursive: true });
+      const saved = "# managed\nexport DPF_MCP_BEARER_TOKEN='fixture-secret'\nexport DPF_MCP_URL='https://localhost/api/mcp/v1?tier=full'\nexport NODE_EXTRA_CA_CERTS='operator-root'\n";
+      writeFileSync(join(home, ".dpf", "agent-toolchain.env"), saved);
+      const out = bash(`. "$ENV_LIB"; DPF_MCP_CLIENT_URL='${endpoint}'; DPF_MCP_CLIENT_CA_BUNDLE='unused'; dpf_persist_mcp_client_env; printf '%s' "$?"`,
+        { home, env: { DPF_CLIENT_ENV_PLATFORM: "Darwin" } });
+      assert.equal(out.stdout, "1", endpoint);
+      assert.equal(readFileSync(join(home, ".dpf", "agent-toolchain.env"), "utf8"), saved, endpoint);
+      assert.equal(existsSync(join(home, "launchctl.log")), false, `launchd untouched for ${endpoint}`);
     });
   }
 });
 
-test("Windows: non-loopback HTTP endpoints remain excluded from persistence", NEEDS_POWERSHELL, () => {
-  for(const endpoint of ['http://192.168.1.5:3000/api/mcp/v1','http://127.0.0.1.evil.test:3000/api/mcp/v1','http://127.0.0.1:3000@evil.test/api/mcp/v1','http://127.0.0.2:3000/api/mcp/v1','http://localhost:99999/api/mcp/v1']) {
-    const out=powershell(`. '${q(envLibPs)}'; $script:writes=0
+// The exact leak: a case that names no launchctl seam on a Mac. The spy is the
+// first `launchctl` on PATH, standing in for the operator's real one.
+test("persisting a loopback http endpoint on macOS never calls the real launchctl", NEEDS_BASH, () => {
+  withHome(({home}) => {
+    const spyDir = join(home, "spy-bin");
+    mkdirSync(spyDir);
+    writeFileSync(join(spyDir, "launchctl"), `#!/bin/sh\nprintf '%s\\n' "$*" >> "${posix(home)}/real-launchctl.log"\n`);
+    chmodSync(join(spyDir, "launchctl"), 0o755);
+    const out = spawnSync("bash", ["-c", `HOME="$DPF_FIXTURE_HOME"; export HOME; . "$ENV_LIB"; DPF_MCP_CLIENT_URL='http://[::1]:3000/api/mcp/v1?tier=full'; dpf_persist_mcp_client_env; printf '%s' "$?"`], {
+      encoding: "utf8",
+      env: { PATH: `${posix(spyDir)}${delimiter}${process.env.PATH}`, HOME: posix(home), DPF_FIXTURE_HOME: posix(home), ENV_LIB: envLib, DPF_CLIENT_ENV_PLATFORM: "Darwin", DPF_MCP_URL: "" },
+    });
+    assert.equal(out.stdout, "1");
+    assert.equal(existsSync(join(home, "real-launchctl.log")), false, "the operator's launchd was written");
+  });
+});
+
+test("Windows: plain-http and IPv6-literal endpoints never reach the User environment", NEEDS_POWERSHELL, () => {
+  for (const endpoint of REFUSED_SHARED_ENDPOINTS) {
+    const out = powershell(`. '${q(envLibPs)}'; $script:writes=0
       $r=Set-DpfMcpClientEnv -ClientEnv ([pscustomobject]@{McpUrl='${endpoint}';CaBundle=''}) -GetUserEnv {param($n) ''} -SetUserEnv {param($n,$v) $script:writes++}; "$r|$($script:writes)"`);
-    assert.equal(out,'not-https|0');
-  }
-});
-
-
-test("loopback persistence accepts localhost and IPv6 without rewriting the selection", NEEDS_BASH, () => {
-  for(const endpoint of ['http://localhost:3000/api/mcp/v1?tier=full','http://[::1]:3000/api/mcp/v1?tier=full']) {
-    withHome(({home}) => {
-      const out=bash(`. "$ENV_LIB"; DPF_MCP_CLIENT_URL='${endpoint}'; dpf_persist_mcp_client_env; printf '%s|%s' "$?" "$DPF_MCP_URL"`,{home});
-      assert.equal(out.status,0,out.stderr);
-      assert.equal(out.stdout,`0|${endpoint}`);
-    });
-  }
-});
-
-test("Windows: loopback persistence accepts localhost and IPv6 without rewriting the selection", NEEDS_POWERSHELL, () => {
-  for(const endpoint of ['http://localhost:3000/api/mcp/v1?tier=full','http://[::1]:3000/api/mcp/v1?tier=full']) {
-    const out=powershell(`. '${q(envLibPs)}'; $store=@{}
-      $r=Set-DpfMcpClientEnv -ClientEnv ([pscustomobject]@{McpUrl='${endpoint}';CaBundle=''}) -GetUserEnv {param($n) $store[$n]} -SetUserEnv {param($n,$v) $store[$n]=$v}; "$r|$($store['DPF_MCP_URL'])"`);
-    assert.equal(out,`persisted|${endpoint}`);
+    assert.equal(out, "not-https|0", endpoint);
   }
 });
