@@ -35,6 +35,13 @@ is unavailable and does not offer or queue an upgrade.
    (**Installing now**) and after one fails (**Update still pending**), so a
    failed or in-progress attempt never reads as being up to date.
 2. Review the pending upgrade and what it will change before triggering anything.
+   **What's in this update?** compares the running build with the resolved
+   update. Consumer installs read published source changes without needing a
+   local source checkout; source-backed installs read their configured clone.
+   If change details are temporarily unavailable, retry the summary. That
+   does not mean the known update target is missing and does not apply an update.
+   Published comparisons use commit descriptions and available PR details;
+   they do not attribute the comparison's combined file list to individual changes.
 3. Trigger the upgrade inside an approved deployment window when you can. The
    server durably admits the request and assigns its `SUR-*` run identity before
    queue dispatch begins. Normal changes respect the window; pressing
