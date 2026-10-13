@@ -150,6 +150,16 @@ test("hooks.json wires the SessionStart process-spine health check via CLAUDE_PL
   );
 });
 
+test("hooks.json wires the SessionStart PreToolUse guard self-test via CLAUDE_PLUGIN_ROOT (BI-E5C45F61)", () => {
+  const ss = loadHooksJson()?.hooks?.SessionStart ?? [];
+  const cmds = [];
+  for (const entry of ss) for (const h of entry?.hooks ?? []) if (typeof h?.command === "string") cmds.push(h.command);
+  const selftest = cmds.filter((c) => c.includes("pretooluse-guard-selftest.mjs"));
+  assert.ok(selftest.length === 1, "SessionStart must run pretooluse-guard-selftest.mjs once so an inert guard plane is reported");
+  assert.ok(selftest[0].includes("CLAUDE_PLUGIN_ROOT"), "the self-test must load from ${CLAUDE_PLUGIN_ROOT}");
+  assert.ok(existsSync(join(here, "pretooluse-guard-selftest.mjs")));
+});
+
 test("repo .claude/settings.json does NOT also define WorktreeCreate (anti double-create)", () => {
   const settingsPath = join(here, "..", "..", "..", ".claude", "settings.json");
   if (!existsSync(settingsPath)) return; // standalone plugin install

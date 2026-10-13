@@ -270,6 +270,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "scripts/installer/lib/state-cleanup-temps.test.mjs",
         "scripts/installer/lib/docker.test.mjs",
+        "scripts/installer/lib/macos-memory.test.mjs",
+        "scripts/installer/macos-docker-memory.test.mjs",
         "scripts/installer/lib/pnpm.test.mjs",
         "scripts/installer/prepare-runtime-state.test.mjs",
         "scripts/installer/stage-ca-password.test.mjs",
@@ -452,6 +454,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // the image — so it reaches main green and breaks the release chain.
       node("scripts/check-dockerfile-copied-script-imports.mjs"),
       node("--test", "scripts/check-dockerfile-copied-script-imports.test.mjs"),
+      // The package-resolution twin (BI-PIR-53d2c42d): scripts the image runs
+      // from /app/apps/web-src resolve bare imports from the `@dpf/db...`
+      // runtime set, not the web app's deps. A web-only package anywhere in
+      // their graph (prom-client via lib/operate/metrics) killed the boot-time
+      // wiki re-embed with "Cannot find module". Static graph walk, no install.
+      node("scripts/check-web-src-script-imports.mjs"),
+      node("--test", "scripts/check-web-src-script-imports.test.mjs"),
       // The test-fixture twin: a contract test that cpSync's modules into a temp
       // tree one at a time dies on ERR_MODULE_NOT_FOUND when a copied module
       // gains a static import the fixture never copies. Hit twice on 2026-09-25
@@ -1045,6 +1054,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "packages/dpf-skill-pack/hooks/plugin-hooks-wired.test.mjs",
+      ),
+      // BI-E5C45F61: the SessionStart self-test that reports an inert
+      // PreToolUse guard plane. Unlisted = unrun.
+      node(
+        "--test",
+        "packages/dpf-skill-pack/hooks/pretooluse-guard-selftest.test.mjs",
       ),
       // BI-0B292D84: AGENTS.md 12 requires a Workroom claim before work on
       // every surface. It was prose - 30 of 79 live worktree branches carried

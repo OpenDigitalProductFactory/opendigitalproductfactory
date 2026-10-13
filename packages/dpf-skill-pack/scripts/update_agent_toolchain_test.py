@@ -1931,9 +1931,11 @@ class WrapperEndpointParityTest(unittest.TestCase):
         self.assertIn('--mcp-url "$MCP_ENDPOINT_NAMED"', sh)
         self.assertNotRegex(ps1, r"-McpUrl \$McpEndpoint\b(?!Named)")
         self.assertIn("-McpUrl $McpEndpointNamed", ps1)
-        # Persisting a non-https endpoint keys on the operator naming one, not
-        # on a comparison with a hard-coded default.
-        self.assertIn('if [ -n "$MCP_ENDPOINT_NAMED" ]; then', sh)
+        # A named non-https endpoint reaches the clients only through
+        # --mcp-url; it is never written to the env file or launchd that
+        # Claude's OAuth connector reads (BI-8FD7C0C9).
+        self.assertNotIn('dpf_launchd_setenv DPF_MCP_URL "$MCP_ENDPOINT"', sh)
+        self.assertNotIn('dpf_set_client_env_export DPF_MCP_URL "$MCP_ENDPOINT"', sh)
 
     def test_python_default_is_canonical_https_oauth(self):
         self.assertEqual(updater.DEFAULT_MCP_URL, "https://localhost/api/mcp/v1")

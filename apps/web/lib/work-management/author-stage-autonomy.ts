@@ -19,7 +19,10 @@
 // via the investment read model), that portfolio's budget for the current
 // quarter (loadPortfolioBudgets; none set is NOT funded, never read as zero),
 // and the portfolio's delivered plus in-flight points this quarter within the
-// allocation. An unsized or unattributed item is not funded, as admission
+// allocation. Both come from the read model's spend rule (BI-77313ADD): work
+// delivered this quarter by delivery date, plus work actively in progress. An
+// earlier quarter's delivery still awaiting acceptance, and a room parked on
+// attention with nothing running, commit nothing. An unsized or unattributed item is not funded, as admission
 // refuses an unsized autonomous start.
 
 import { ACUMEN_ROOM_SHAPES } from "./acumen-room-shapes";

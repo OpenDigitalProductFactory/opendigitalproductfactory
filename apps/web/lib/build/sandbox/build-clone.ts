@@ -110,6 +110,46 @@ export function buildSandboxBuildCloneCommand(args: {
   return `if [ -d ${q(`${path}/.git`)} ] && [ "$(git -C ${P} rev-parse --abbrev-ref HEAD 2>/dev/null)" = ${q(branchRef)} ]; then ${reuse}; else ${recreate}; fi`;
 }
 
+/**
+ * Rebase the clone's build branch onto `ontoRef` (BI-76BD65E6). A shipped build
+ * whose base moved on is otherwise refused at publication forever: the PR lays
+ * the clone's whole touched files over current main, so an un-rebased branch
+ * would silently revert upstream edits to them.
+ *
+ * Never leaves a rebase half-done. Prints `rebase=ok` with the new head, or
+ * `rebase=conflict` with the conflicted files after aborting; either way the
+ * command succeeds, so the caller reads the outcome rather than an exit code.
+ * Hooks are off for the same reason as the sync push: this is internal.
+ */
+export function buildSandboxBuildCloneRebaseCommand(path: string, ontoRef: string): string {
+  const P = q(path);
+  const git = `git -C ${P} -c core.hooksPath=/dev/null`;
+  return [
+    `cd ${P}`,
+    `if ${git} rebase --quiet ${q(ontoRef)} >/dev/null 2>&1; then printf 'rebase=ok\\nhead=%s\\n' "$(git -C ${P} rev-parse HEAD)"; else printf 'rebase=conflict\\nfiles=%s\\n' "$(git -C ${P} diff --name-only --diff-filter=U | tr '\\n' ',' | sed 's/,$//')"; ${git} rebase --abort >/dev/null 2>&1 || true; fi`,
+  ].join(" && ");
+}
+
+export type BuildCloneRebaseOutcome =
+  | { status: "ok"; headSha: string }
+  | { status: "conflict"; files: string[] }
+  | { status: "unknown"; output: string };
+
+export function parseBuildCloneRebaseOutput(output: string): BuildCloneRebaseOutcome {
+  const fields = new Map<string, string>();
+  for (const line of output.split(/\r?\n/)) {
+    const index = line.indexOf("=");
+    if (index > 0) fields.set(line.slice(0, index).trim(), line.slice(index + 1).trim());
+  }
+  const status = fields.get("rebase");
+  const head = fields.get("head") ?? "";
+  if (status === "ok" && /^[0-9a-f]{40}$/.test(head)) return { status: "ok", headSha: head };
+  if (status === "conflict") {
+    return { status: "conflict", files: (fields.get("files") ?? "").split(",").map((f) => f.trim()).filter(Boolean) };
+  }
+  return { status: "unknown", output: output.slice(0, 500) };
+}
+
 /** Sync the branch back, then delete the clone. Best-effort, like the worktree removal it replaces. */
 export function buildSandboxBuildCloneRemoveCommand(path: string, branchRef: string, workspace: string): string {
   return [

@@ -116,6 +116,9 @@ Flags:
   --headless    Non-interactive (no prompts). Defaults are used (install
                 mode defaults to "customer"); required for CI / unattended
                 installs.
+  --allow-docker-restart
+                Permit macOS Docker memory setup to interrupt existing Docker
+                workloads. Headless mode alone does not grant this permission.
   --customer    Ready-to-go install: run the pre-built release images and
                 skip contributor tooling. Skips the interactive mode prompt.
   --contributor Customizable install: build the full stack from local source,
@@ -172,6 +175,7 @@ EOF
 }
 
 DPF_DRY_RUN=0
+DPF_ALLOW_DOCKER_RESTART=0
 DPF_MODE="dev"          # dev | release — compose chain. Derived from the
                         # install mode below unless set explicitly via a flag.
 DPF_MODE_EXPLICIT=0     # 1 once --dev/--release is passed, so the install-mode
@@ -190,6 +194,7 @@ SUBCOMMAND=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run)              DPF_DRY_RUN=1 ;;
+    --allow-docker-restart)  DPF_ALLOW_DOCKER_RESTART=1 ;;
     --headless)             DPF_HEADLESS=1; export DPF_HEADLESS ;;
     --release)              DPF_MODE="release"; DPF_MODE_EXPLICIT=1 ;;
     --dev)                  DPF_MODE="dev"; DPF_MODE_EXPLICIT=1 ;;
@@ -391,6 +396,10 @@ if [ "$DPF_DRY_RUN" = "1" ]; then
   echo ""
   step "Dry-run plan"
   echo "  Would run:"
+  if [ "$(uname -s)" = "Darwin" ]; then
+    echo "    Size local Docker Desktop memory to a quarter of host RAM (8-32 GiB);"
+    echo "    preserve a valid smaller allocation and request restart consent for active workloads."
+  fi
   echo "    docker compose ${DPF_COMPOSE_FILES[*]} up -d"
   echo ""
   echo "  Install state file: $(dpf_state_path)"
@@ -418,7 +427,7 @@ case "$rc" in
      else
        dpf_state_write_json edge '{"enabled":false,"mode":null}' 2>/dev/null || true
      fi
-     dpf_preflight_docker_memory ;;
+     ;;
   75) # Docker was just installed; operator must log out / newgrp
       echo ""
       warn "Re-run install-dpf.sh after logging out and back in (or 'newgrp docker')."
@@ -449,6 +458,13 @@ if [ "$NODE_MAJOR" -lt 20 ] 2>/dev/null; then
   fail "Node.js v20+ required. Current: $(node -v). Upgrade and re-run."
 fi
 ok "Node.js $(node -v)"
+
+# Size Desktop before dependency/image work. A running VM must agree with
+# its saved allocation; restart alone does not correct the persisted limit.
+. "$REPO_ROOT/scripts/installer/lib/macos-memory.sh"
+step "Docker memory"
+dpf_converge_macos_memory
+dpf_preflight_docker_memory
 
 dpf_ensure_pnpm "$REPO_ROOT" || fail "The pinned pnpm prerequisite is not ready."
 ok "pnpm $(pnpm -v)"

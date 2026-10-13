@@ -146,7 +146,7 @@ export async function loadPortfolioTieOut(db: ReadDb, now: Date = new Date()): P
   const period = quarterBounds(now);
   const window = { start: new Date(now.getTime() - THROUGHPUT_WINDOW_WEEKS * WEEK_MS), end: new Date(now.getTime() + 1) };
   const [quarterItems, { windowItems, historyStart }, budgets, openReservations, [untraced], aiByItem] = await Promise.all([
-    loadInvestmentItems(db, period),
+    loadInvestmentItems(db, period, { now }),
     loadThroughput(db, now),
     loadPortfolioBudgets(db, period),
     db.$queryRaw<Array<{ itemId: string; portfolioId: string; points: number }>>`

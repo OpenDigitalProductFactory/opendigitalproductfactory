@@ -18,7 +18,7 @@
 // Spec: docs/superpowers/specs/2026-09-24-portfolio-budget-and-investment-wip-design.md
 
 import { quarterBounds } from "@/lib/portfolio/investment-points";
-import { loadInvestmentItems, resolveInvestmentItem, summarizePortfolioInvestment } from "@/lib/portfolio/investment-read-model";
+import { isActivelyInProgress, loadInvestmentItems, resolveInvestmentItem, summarizePortfolioInvestment } from "@/lib/portfolio/investment-read-model";
 import { loadPortfolioBudgets } from "@/lib/portfolio/portfolio-budget";
 import { resolveInvestmentPoints } from "@/lib/portfolio/investment-points";
 import { deliveredPointsFrom, loadThroughput, measureThroughput, measuredWeeklyThroughput } from "@/lib/portfolio/throughput";
@@ -102,7 +102,7 @@ export async function evaluateItemAdmission(db: ReadDb, input: {
 }): Promise<ItemAdmission> {
   const now = input.now ?? new Date();
   const period = quarterBounds(now);
-  const items = await loadInvestmentItems(db, period);
+  const items = await loadInvestmentItems(db, period, { now });
   const item = items.find((row) => row.itemId === input.itemId) ?? null;
   // The same attribution the read model and the budget proposal use (BI-291F7451),
   // so platform work draws on the Foundational allowance its budget funds.
@@ -110,7 +110,11 @@ export async function evaluateItemAdmission(db: ReadDb, input: {
   const summary = summarizePortfolioInvestment(items, now);
   const inFlightPoints = summary.rows.find((row) => row.portfolioId === portfolioId)?.inFlightPoints ?? 0;
   const itemPoints = item ? resolveInvestmentPoints(item).points : null;
-  const alreadyInFlight = Boolean(item && (item.status === "in-progress" || item.status === "awaiting-acceptance" || item.activeBuildId || item.hasLiveWorkroom));
+  // Points in flight is a concurrency limit, so it counts only work actively in
+  // progress (the read model's spend rule, BI-77313ADD): an item whose room is
+  // parked on attention, or that was delivered and awaits acceptance, is a new
+  // start when an agent picks it up, and is admitted against the allowance.
+  const alreadyInFlight = Boolean(item && isActivelyInProgress(item));
   const override = portfolioId
     ? (await loadPortfolioBudgets(db, period)).find((b) => b.id === portfolioId)?.budget?.wipAllowancePoints ?? null
     : null;

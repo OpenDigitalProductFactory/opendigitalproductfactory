@@ -49,6 +49,7 @@ const EXTERNAL_DEVELOPMENT_GRANTS = [
   "build_lifecycle", "sandbox_execute", "initiative_evidence_write",
   "decision_record_create", "backlog_triage", "document_write", "ea_graph_read",
   "approval_probe_read",
+  "coworker_catalog_read", "coworker_engagement_write",
 ];
 
 export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {

@@ -278,7 +278,7 @@ const definitions: ToolDefinition[] = [
       "Heartbeat an active shared nonproduction environment lease, optionally binding its assigned slot before host mutation. " +
       "Only the owning session can renew, and a lapsed lease is not revivable. " +
       "Renew on a human-scale cadence (on gate stages / ~minutes), not every few seconds. " +
-      "On owner mismatch or not_found: stop retrying; re-claim with claimKey if work continues.",
+      "On owner mismatch, not_found or lease_terminal: stop; never automatically re-claim or scan replacement keys. A new explicitly wanted admission needs a new claimKey; queued claims resume through their durable TaskRun.",
     inputSchema: {
       type: "object",
       properties: {
