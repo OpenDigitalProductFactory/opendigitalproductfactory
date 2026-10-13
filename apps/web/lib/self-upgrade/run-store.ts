@@ -402,6 +402,14 @@ export async function completeRun(runId: string): Promise<SelfUpgradeRunRow> {
       completedAt: updated.completedAt ?? completedAt,
     },
   });
+  // Durable upgrade state is the source; the existing dispatcher reconciles a
+  // lost wakeup. Admission failure must not turn a completed upgrade into failure.
+  try {
+    const { reconcileAcceptanceUpgradeWakeupFromStore } = await import("@/lib/backlog/acceptance-sweep/acceptance-upgrade-wakeup");
+    await reconcileAcceptanceUpgradeWakeupFromStore();
+  } catch (error) {
+    console.warn("[self-upgrade] acceptance wakeup deferred to reconciliation", error);
+  }
   return updated;
 }
 

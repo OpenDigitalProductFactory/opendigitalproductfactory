@@ -58,6 +58,24 @@ the work.
 
 ## Activity and Participants
 
+### Delegation and recovery
+
+The workforce panel's **Delegation and recovery** disclosure shows recorded parent
+and child responsibility links, their coordinators, and the route to a named person.
+Opening it keeps you in the selected room. The route does not grant access, approve
+work or establish that someone received a notification; check the activity timeline
+for actual events and decisions.
+
+**Recovery path needs attention** means the route cannot be resolved. Open it for
+the missing assignment, conflicting links or access guidance. A parent's contents
+remain private unless you are admitted with sufficient clearance. Dependency links
+do not make another room responsible for this one.
+
+A room held for an hour uses the recorded recovery route for its stall notice.
+Missing recipient bindings or a failed notification write leave the notice unsent
+for retry. A recorded notice does not mean the blockage is resolved or the room
+has completed; the room keeps its existing stage and closure rules.
+
 ### Inspecting the process
 
 The process view separates the versioned **Intended process** from **Observed
@@ -65,6 +83,13 @@ execution** records. Select a step to see its position, reason, next action,
 owner, supporting evidence, and affected work. Required evidence is not proof
 that the evidence has been recorded. Where a receipt cannot be linked to an
 individual step, the view reports that gap and keeps it in the room evidence.
+
+Stage-scoped development evidence recorded for the room's current source and
+process version can appear under that step's required evidence. A link means the
+record was observed; it does not grant approval or verify completion. After the
+room changes source or process version, older records remain in its history and
+do not satisfy the current step's evidence binding. Earlier records without a
+source binding remain uncorrelated.
 
 **Observed execution** counts activity events and receipts separately. Expand a
 record for its source identity, actor and timestamp. An event records what was

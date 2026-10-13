@@ -57,7 +57,7 @@
     "disabled": "Disabled",
     "unavailable": "Unavailable",
     "notSetUp": "Not set up",
-    "active": "Active",
+    "active": "Traffic enabled",
     "degraded": "Degraded",
     "changePause": "Change pause",
     "setResumeTime": "Set resume time",
@@ -75,6 +75,20 @@
     "pauseChanged": "Pause changed. Refresh.",
     "stillUnavailable": "Provider remains unavailable.",
     "positiveDuration": "Enter a positive duration."
+  },
+  "providerRouting": {
+    "heading": "Routing right now",
+    "hostReserved": "Local capacity is reserved for platform verification.",
+    "hostUnavailable": "Local capacity ownership could not be checked.",
+    "pauseEnds": "Pause ends",
+    "nextAttempt": "Next attempt after",
+    "indefinite": "Until you enable it.",
+    "pauseExplanation": "Pausing stops new requests. Running work may finish. Resuming preserves usage, account and health restrictions.",
+    "sharedAuth": "ChatGPT and Codex share one OpenAI sign-in. Traffic controls are separate.",
+    "manageSignIn": "Manage shared sign-in",
+    "manageChatGPT": "Manage ChatGPT",
+    "details": "More routing details",
+    "workloadRules": "Workload rules apply per request."
   },
   "offerPositioning": {
     "open": "+ Add what you offer and who it's for",

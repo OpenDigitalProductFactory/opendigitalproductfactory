@@ -36,6 +36,14 @@ describe("local provider pause control", () => {
     expect(await screen.findByRole("button", { name: "Resume now" })).toBeTruthy();
     expect(screen.queryByRole("spinbutton")).toBeNull();
   });
+  it("uses the same timed control for a cloud provider without reactivating automatic disable", async () => {
+    actions.resumeProvider.mockResolvedValue({ outcome: "resumed", status: "disabled", connectionStatus: "active" });
+    render(<ProviderStatusToggle providerId="chatgpt" initialStatus="disabled" initialConnectionStatus="paused" initialPause={{ resumeAt: "2026-10-14T02:00:00Z" }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Resume now" }));
+    await waitFor(() => expect(actions.resumeProvider).toHaveBeenCalledWith("chatgpt"));
+    expect(await screen.findByText("Unavailable")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Resume now" })).toBeNull();
+  });
   it("adds a duration only to an already paused provider", async () => {
     actions.getProviderPause.mockResolvedValue({ resumeAt: null });
     render(<ProviderStatusToggle providerId="local" initialStatus="inactive" />);

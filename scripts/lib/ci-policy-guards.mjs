@@ -376,6 +376,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/git-shallow-preflight.test.mjs",
         "scripts/lib/ensure-compile-ready.test.mjs",
         "scripts/pregate-preflight.test.mjs",
+        "scripts/pregate.test.mjs",
+        "scripts/lib/pregate-preflight-receipt.test.mjs",
         "scripts/gate-context.test.mjs",
         "scripts/gate-wait.test.mjs",
         // The landing orchestrator and the obligation banner that replaced a

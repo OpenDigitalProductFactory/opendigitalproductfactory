@@ -9,6 +9,7 @@
 import type { GovernedExecuteResult } from "@/lib/mcp-governed-execute-types";
 import { envelopeInboxRoute } from "@/lib/coworker/envelope-routes";
 import { GOVERNED_REJECTION_DISPOSITION } from "./governed-rejection-disposition";
+import { isRecord } from "@/lib/shared/coerce";
 
 /**
  * A call parked on a human decision, worded so the model can tell it apart from
@@ -82,12 +83,19 @@ export function settledApprovalResult(
     ? settled.result as Record<string, unknown>
     : {};
   const recordedMessage = typeof recorded["message"] === "string" ? ` ${recorded["message"]}` : "";
-  if (settled.status === "failed") {
+  const recordedData = recorded["data"];
+  // Older admin command results marked a captured nonzero exit successful.
+  // This exact producer marker proves failure; other tools' prose proves none.
+  const legacyCommandFailure = toolName === "admin_run_command"
+    && recorded["message"] === "Command exited with error.";
+  if (settled.status === "failed" || recorded["success"] === false || legacyCommandFailure) {
     const recordedError = typeof recorded["error"] === "string" ? recorded["error"] : null;
     // BI-5B34D277: a governed refusal settles the approval before the tool
     // runs, so "already ran" would misreport a call that never ran.
     const refusedBeforeRun = recordedError !== null && recordedError in GOVERNED_REJECTION_DISPOSITION;
-    const happened = refusedBeforeRun
+    const happened = recordedError === "approval_execution_unknown" || Object.keys(recorded).length === 0
+      ? `was approved by a person (approval request ${settled.envelopeId}) but its execution outcome could not be confirmed`
+      : refusedBeforeRun
       ? `was approved by a person (approval request ${settled.envelopeId}) but refused before it ran`
       : `already ran once after a person approved it (approval request ${settled.envelopeId}) and did not complete`;
     return {
@@ -97,7 +105,10 @@ export function settledApprovalResult(
         + (recordedError ? ` (${recordedError}).` : ".") + recordedMessage
         + " Calling it again returns this same outcome and does not ask the person again."
         + " Fix the cause first; once the approval window has closed, a new request can be made.",
-      data: { envelopeId: settled.envelopeId, recordedError, inboxHref: envelopeInboxRoute(settled.envelopeId) },
+      data: {
+        ...(isRecord(recordedData) ? recordedData : recordedData !== undefined ? { recordedData } : {}),
+        envelopeId: settled.envelopeId, recordedError, inboxHref: envelopeInboxRoute(settled.envelopeId),
+      },
       governance: { approvalReplayOf: settled.envelopeId },
     } as GovernedExecuteResult;
   }

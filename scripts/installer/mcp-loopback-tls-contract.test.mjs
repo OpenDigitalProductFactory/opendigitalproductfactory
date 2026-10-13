@@ -39,15 +39,15 @@ test("the portal leaf is issued for a year, on a provisioner whose claims allow 
   assert.match(shell, /dpf-edge-client[\s\S]*--x509-default-dur 720h --x509-max-dur 720h/);
 });
 
-test("the toolchain bootstrap persists the organization root and the https endpoint beside the token", async () => {
+test("the toolchain bootstrap uses the shared transport persistence gate", async () => {
   const [shell, lib] = await Promise.all([
     read("scripts/dpf-bootstrap-agent-toolchain.sh"),
     read("scripts/installer/lib/mcp-client-env.sh"),
   ]);
 
-  // Resolution lives once in the shared module (BI-2D545A0C): PUBLIC_URL from the
-  // install's .env, then explicit env; the bundle from explicit env, the .env, the
-  // default PKI dir — https only. Behaviour: scripts/installer/mcp-client-env.test.mjs.
+  // The shared module resolves explicit and saved preferences before install
+  // defaults. HTTPS alone attaches a CA. Executed adapter behavior lives in
+  // scripts/installer/mcp-client-env.test.mjs.
   assert.match(shell, /dpf_resolve_mcp_client_env "\$REPO_ROOT"/);
   assert.match(shell, /export NODE_EXTRA_CA_CERTS="\$MCP_TRUST_BUNDLE"/);
   assert.match(lib, /DPF_PKI_TRUST_BUNDLE/);
@@ -62,8 +62,9 @@ test("the toolchain bootstrap persists the organization root and the https endpo
   assert.match(shell, /dpf_launchd_setenv DPF_MCP_BEARER_TOKEN/);
   assert.match(lib, /dpf_launchd_setenv DPF_MCP_URL/);
   assert.match(lib, /dpf_launchd_setenv NODE_EXTRA_CA_CERTS/);
-  // The transport lines are persisted on any https endpoint, even with no token, never at dry-run.
-  assert.match(shell, /\[ "\$DRY_RUN" -eq 0 \] && \[ "\$_https_endpoint" -eq 1 \]/);
+  // The shared gate accepts supported transport independently of credentials;
+  // dry-run still suppresses persistence.
+  assert.match(shell, /\[ "\$DRY_RUN" -eq 0 \] && dpf_mcp_client_endpoint_can_persist "\$MCP_ENDPOINT_NAMED"/);
   // The token mint path still routes through the same writer (no second env file).
   assert.match(shell, /persist_mcp_token_posix\(\) \{\n\s+DPF_MCP_BEARER_TOKEN="\$1"\n\s+persist_mcp_client_env_posix\n\}/);
   // The scope probe presents the bundle to curl.

@@ -286,6 +286,30 @@ describe("resolveAndPersistPolicyActionAuthority", () => {
       explanation: expect.stringContaining("missing a current, explicit"),
     });
     expect(authorizationCreate).toHaveBeenCalledTimes(1);
+
+    const authorInput = structuredClone(authorityInput);
+    authorInput.task = null;
+    authorInput.action.toolName = "record_initiative_evidence";
+    authorInput.action.routeContext = "/build/work/WC-AUTHOR";
+    authorInput.room = { workroomId: "WC-AUTHOR", collaborationShape: null, workShapeKey: null };
+    authorInput.authorResearchBinding = { itemId: "BI-F0715C9C", buildId: "FB-AUTHOR", revisionId: "revision-author",
+      valueDigest: "sha256:value", contentDigest: "sha256:bytes", authorUserId: "user-mark", authorPrincipalId: "principal-mark",
+      authorAgentId: null, workroomId: "WC-AUTHOR", reason: "Canonical research", authorityVersion: null, roomPolicyDigest: "sha256:room" };
+    authorInput.rawParams = { itemId: "BI-F0715C9C", gate: "research", decision: "pass",
+      artifactRef: { kind: "feature-build-revision", revisionId: "revision-author" }, reason: "Canonical research", findings: [], resolvedFindingRefs: [] };
+    const authorBinding = buildCoworkerApprovalBinding(authorInput);
+    decisionFind.mockResolvedValue([{ ...decisionRow, outcomePayload: { ...decisionRow.outcomePayload,
+      policyActionBinding: { ...decisionRow.outcomePayload.policyActionBinding, actionKey: authorInput.action.toolName,
+        routeContext: authorInput.action.routeContext, artifactFingerprint: authorBinding.inputFingerprint } } }]);
+    const authorResult = await resolveAndPersistPolicyActionAuthority({ execution: {
+      toolName: authorInput.action.toolName, rawParams: authorInput.rawParams, userId: "user-mark",
+      userContext: { platformRole: "admin", isSuperuser: false }, context: { agentId: "AGT-WS-DEV", routeContext: authorInput.action.routeContext }, source: "agentic-loop",
+    }, authorityInput: authorInput, approvalBinding: authorBinding }, db as never);
+    expect(authorResult).toMatchObject({ outcome: "approved" });
+    expect(authorizationCreate).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      rationale: expect.objectContaining({ authorResearchBinding: authorInput.authorResearchBinding, artifactFingerprint: authorBinding.inputFingerprint }),
+    }) }));
+    expect(envelopeCreate).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ taskRunId: null }) }));
   });
 
   it.each([

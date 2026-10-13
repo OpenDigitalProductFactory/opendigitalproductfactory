@@ -6,8 +6,6 @@ import type {
   InitiativeReviewerRecovery,
 } from "@/lib/tak/initiative-readiness-tool-grants";
 
-import { projectBacklogItemReadiness } from "./entry-adapter";
-import { loadInheritedInitiativeScope } from "./parent-scope-inheritance";
 import type { TerminalRecoveryPorts } from "./terminal-recovery";
 import type { InitiativeReadinessDecision } from "./types";
 
@@ -153,31 +151,4 @@ export async function routeDesignReviewsBeforeBaseline(args: {
   });
 }
 
-const PLAN_UNAVAILABLE: InitiativeRecoveryCanonicalArtifact = {
-  resolved: false,
-  nextAction: "Record valid plan coverage for the current baseline and this Workroom repository, including the immutable plan commit and blob, then retry plan review.",
-};
-
-/** The same baseline-validated plan the implementation claim hands its reviewer. */
-export async function loadPlanReviewArtifact(args: {
-  itemId: string;
-  repositoryFullName: string;
-}): Promise<InitiativeRecoveryCanonicalArtifact> {
-  const item = await prisma.backlogItem.findUnique({
-    where: { itemId: args.itemId },
-    include: { activeBuild: { select: { kind: true } }, activities: { orderBy: [{ recordedAt: "asc" }, { id: "asc" }] } },
-  });
-  if (!item) return PLAN_UNAVAILABLE;
-  const inheritedScope = await loadInheritedInitiativeScope(prisma, { childItemId: item.itemId, childRowId: item.id });
-  const { planArtifact } = projectBacklogItemReadiness({
-    item: { ...item, activeBuildKind: item.activeBuild?.kind ?? null },
-    activities: item.activities,
-    inheritedScope,
-    target: "implementation",
-    transitionObject: { kind: "backlog-item", id: item.itemId, expectedVersion: "read-projection", targetState: "implementation" },
-    authorization: "pass", capsuleIdentity: "pass", evaluatedAt: new Date().toISOString(),
-  });
-  return planArtifact && planArtifact.repositoryFullName.toLowerCase() === args.repositoryFullName.toLowerCase()
-    ? { resolved: true, path: planArtifact.path, commitSha: planArtifact.commitSha, providerBlobId: planArtifact.providerBlobId }
-    : PLAN_UNAVAILABLE;
-}
+export { loadPlanReviewArtifact } from "./canonical-plan-source";

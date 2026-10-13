@@ -481,6 +481,11 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
     ].filter((value): value is string => Boolean(value));
 
     const roomAuthority = execution.context?.roomAuthority ?? null;
+    const authorResearchBinding = execution.toolName === "record_initiative_evidence" && !initiativeReviewBinding && initiativeAuthority.subject.kind === "backlog-item"
+      ? await (await import("@/lib/build/author-research-policy-binding")).resolveAuthorResearchPolicyBinding({ toolName: execution.toolName, params: execution.rawParams,
+          userId: execution.userId, agentId: agent.agentId, itemId: initiativeAuthority.subject.id,
+          routeContext: execution.context?.routeContext ?? null }, db as never)
+      : null;
     const callConsequence = await resolveCallConsequence(tool, {
       toolName: execution.toolName,
       params: execution.rawParams,
@@ -489,6 +494,7 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
     });
     const input: CoworkerAuthorityInput = {
       authContext: effectiveAuth,
+      ...(authorResearchBinding ? { authorResearchBinding } : {}),
       organizationId: initiativeAuthority.organizationId,
       action: {
         toolName: execution.toolName,

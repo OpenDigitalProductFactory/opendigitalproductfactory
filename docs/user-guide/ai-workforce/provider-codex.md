@@ -46,6 +46,20 @@ Codex is categorized as an "agent" provider, which means it behaves differently 
 - **Advanced diagnostics**: Opens model history, routing details and a manual refresh for troubleshooting. A failed refresh retains the previous catalog; results report models returned by that refresh and genuinely new records separately.
 - **MCP service**: Codex has a linked MCP (Model Context Protocol) service called "OpenAI Codex Agent" that provides two tools: `codex` (start a coding session) and `codex-reply` (continue a thread). This service activates automatically when you connect via OAuth and deactivates when you disconnect.
 
+Discovery for a selected Codex or ChatGPT account reads that account's subscription
+CLI catalog. It uses a private CLI state directory and memory-only authentication;
+simultaneous catalog reads do not replace each other's credentials. Missing,
+disabled, or changed accounts fail without using another account. A failed read
+preserves the last successful model-access result, and models absent from one
+account are not retired for another account. Signing in or discovering models
+does not establish permission to send sensitive data, and adding an account alone
+does not enable account-aware execution routing.
+
+The catalog process has a container-owned watchdog and removes its private state
+after exit, including when the client disconnects. Credentials travel over process
+stdin, not command arguments, shared auth files, or provider error logs. External
+token login follows the [OpenAI app-server protocol](https://learn.chatgpt.com/docs/app-server).
+
 ## Linked MCP Service
 
 When you connect Codex via OAuth, the platform automatically activates the "OpenAI Codex Agent" MCP service. This allows the platform's AI coworker agents to dispatch coding tasks to Codex.

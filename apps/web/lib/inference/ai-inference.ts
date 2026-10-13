@@ -21,6 +21,7 @@ import {
 } from "@/lib/ai-provider-internals";
 import type { RoutedExecutionPlan } from "../routing/recipe-types";
 import type { ChatMessage, ToolCallEntry } from "../routing/chat-message-types";
+import { resolveRuntimeConnectionStatus } from "../routing/provider-suitability/onboarding-recommendation";
 import { resolveDefaultExecutionAdapter } from "../routing/execution-plan";
 import { getExecutionAdapter } from "../routing/execution-adapter-registry";
 import { resolveExecutionAdapter } from "../routing/resolve-execution-adapter";
@@ -134,8 +135,25 @@ async function resolveExecutionBaseUrl(
   return provider.baseUrl ?? provider.endpoint;
 }
 
-async function readEnabledLocalProvider(providerId: string) {
-  if (!isLocalProviderId(providerId)) return null;
+async function readEnabledRoutingProvider(providerId: string) {
+  if (!isLocalProviderId(providerId)) {
+    const [connection, lifecycle] = await Promise.all([
+      prisma.aiProviderConnection.findUnique({
+        where: { connectionId: `provider-default-${providerId}` }, select: { status: true },
+      }),
+      prisma.modelProvider.findUnique({ where: { providerId }, select: { status: true } }),
+    ]);
+    // Legacy direct callers can predate the default account. An existing account
+    // and provider lifecycle both remain authoritative after admission. Resuming
+    // an operator pause must not clear an independent automatic provider hold.
+    const effectiveStatus = lifecycle
+      ? connection ? resolveRuntimeConnectionStatus(lifecycle.status, connection.status) : lifecycle.status
+      : connection?.status;
+    if ((connection || lifecycle) && !["active", "degraded"].includes(effectiveStatus ?? "")) {
+      throw new InferenceError("Provider account is not enabled for routing", "provider_error", providerId);
+    }
+    return null;
+  }
   const [provider, connection] = await Promise.all([
     prisma.modelProvider.findUnique({ where: { providerId } }),
     prisma.aiProviderConnection.findUnique({
@@ -224,7 +242,9 @@ export async function callProvider(
   // the shared adapter boundary so direct, agentic, evaluation and fallback
   // callers cannot start a local model while governed local CI owns the host.
   // Revalidate an older routing selection before waiting for or using local capacity.
-  const localProvider = await readEnabledLocalProvider(providerId);
+  // Transcription uses its registry adapter and has no model-routing connection.
+  const needsModelConnection = executionAdapterRaw !== "transcription";
+  const localProvider = needsModelConnection ? await readEnabledRoutingProvider(providerId) : null;
   await assertProviderDispatchCapacity(providerId);
   // Lease ownership is routing policy. Whether the card is free is an inference
   // fact, so it stays in this layer (routing may not import inference).
@@ -345,7 +365,7 @@ export async function callProvider(
   try {
     // Queued work has not started inference yet. A disable during admission
     // invalidates its earlier selection; finally still releases the slot.
-    await readEnabledLocalProvider(providerId);
+    if (needsModelConnection) await readEnabledRoutingProvider(providerId);
     await assertGovernedInferenceAuthority();
     result = await adapter.execute({
       providerId,

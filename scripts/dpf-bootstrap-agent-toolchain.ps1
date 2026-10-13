@@ -280,13 +280,13 @@ exit 127
     }
 }
 
-# On an https endpoint the transport values (DPF_MCP_URL + NODE_EXTRA_CA_CERTS)
-# are what let a client authorize over OAuth; persist them for new processes
-# even when no token was minted this run. Never at dry-run time.
+# Persist the selected HTTPS or loopback HTTP endpoint for new processes.
+# HTTPS may also carry the organization CA; credential setup is separate.
+# Save the preference even while OAuth is pending. Never at dry-run time.
 if (-not $DryRun) {
     $transport = Set-DpfMcpClientEnv -ClientEnv $McpClientEnv
     if ($transport -eq "persisted") {
-        Write-Ok "MCP client transport persisted (User env): https endpoint$(if ($McpTrustBundle) { ' + organization root bundle (NODE_EXTRA_CA_CERTS)' })."
+        Write-Ok "Saved the MCP endpoint preference for future sessions (User env)."
     } elseif ($transport -eq "unchanged") {
         Write-Ok "MCP client transport already persisted (User env): $McpEndpoint"
     }

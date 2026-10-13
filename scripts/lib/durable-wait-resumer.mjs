@@ -111,6 +111,8 @@ export function buildResumerInvocation({
   sha,
   ownerSessionId,
   pin = null,
+  gateFlags = [],
+  gateFlagsBeforeTerminator = false,
   execPath = process.execPath,
   intervalMs = DEFAULT_RESUME_INTERVAL_MS,
   deadlineMs = DEFAULT_RESUME_DEADLINE_MS,
@@ -134,6 +136,10 @@ export function buildResumerInvocation({
     : [];
   // Every attempt runs from the pinned worktree, not whatever cwd the resumer inherited.
   const cwdFlags = pin?.worktree ? ["--gate-cwd", pin.worktree] : [];
+  const replay = gateArgv.slice(1);
+  const flags = [...pinnedGateFlags(pin ?? {}), ...gateFlags];
+  const separator = gateFlagsBeforeTerminator ? replay.indexOf("--") : -1;
+  replay.splice(separator < 0 ? replay.length : separator, 0, ...flags);
   return {
     command: execPath,
     // argv[0] is the node binary the resumer supplies itself; argv[1] onward is
@@ -145,8 +151,7 @@ export function buildResumerInvocation({
       ...observerFlags,
       ...cwdFlags,
       "--",
-      ...gateArgv.slice(1),
-      ...pinnedGateFlags(pin ?? {}),
+      ...replay,
     ],
   };
 }
@@ -167,6 +172,8 @@ export function spawnDurableWaitResumer({
   sha,
   ownerSessionId,
   pin = null,
+  gateFlags = [],
+  gateFlagsBeforeTerminator = false,
   cwd,
   env = process.env,
   intervalMs = DEFAULT_RESUME_INTERVAL_MS,
@@ -184,6 +191,8 @@ export function spawnDurableWaitResumer({
     sha,
     ownerSessionId,
     pin,
+    gateFlags,
+    gateFlagsBeforeTerminator,
     execPath: env.DPF_RESUMER_NODE || process.execPath,
     intervalMs,
     deadlineMs,

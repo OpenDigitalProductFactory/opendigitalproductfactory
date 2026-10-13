@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   applyNonprodCapacityEvent,
+  afterNonprodLeaseRelease,
   capacityEventId,
   checkpointNonprodLeaseWait,
   parseNonprodLeaseWait,
@@ -50,6 +51,53 @@ function db() {
 }
 
 describe("durable nonproduction lease wait", () => {
+  it.each(["expired", "cancelled", "queued", ""])('never infers admission from prior status "%s"', async (priorStatus) => {
+    const mock = db();
+    const wait = await checkpointNonprodLeaseWait({
+      db: mock, userId: "user-1", lease: lease(), queuePosition: 1,
+      waitDeadlineAt: new Date("2026-08-30T20:00:00.000Z"), now: NOW,
+    });
+    mock.nonProductionEnvironmentLease.findFirst.mockResolvedValue(null as never);
+    await afterNonprodLeaseRelease({
+      db: mock, lease: { ...lease(), taskRunId: wait.taskRunId, status: "expired" }, priorStatus, now: NOW,
+    });
+    expect(parseNonprodLeaseWait(mock.task()?.progressPayload)).toMatchObject({ state: "terminal", eventConsumed: true });
+    expect(mock.task()?.progressPayload.summary).not.toMatch(/admitted|success/i);
+  });
+
+  it.each(["admitted", "terminal"] as const)("preserves already-settled %s history on release replay", async (state) => {
+    const mock = db();
+    const wait = await checkpointNonprodLeaseWait({
+      db: mock, userId: "user-1", lease: lease(), queuePosition: 1,
+      waitDeadlineAt: new Date("2026-08-30T20:00:00.000Z"), now: NOW,
+    });
+    await settleNonprodLeaseWait({ db: mock, taskRunId: wait.taskRunId, leaseId: "NPEL-WAIT-1", state, now: NOW });
+    const settled = mock.task();
+    mock.taskRun.update.mockClear();
+    mock.nonProductionEnvironmentLease.findFirst.mockResolvedValue(null as never);
+    await afterNonprodLeaseRelease({
+      db: mock, lease: { ...lease(), taskRunId: wait.taskRunId, status: "expired" }, priorStatus: "expired",
+      now: new Date(NOW.getTime() + 1_000),
+    });
+    expect(mock.taskRun.update).not.toHaveBeenCalled();
+    expect(mock.task()).toBe(settled);
+  });
+
+  it("refuses settlement for a missing task or another lease's wait", async () => {
+    const mock = db();
+    expect(await settleNonprodLeaseWait({
+      db: mock, taskRunId: "TR-MISSING", leaseId: "NPEL-OTHER", state: "terminal", now: NOW,
+    })).toEqual({ settled: false });
+    const wait = await checkpointNonprodLeaseWait({
+      db: mock, userId: "user-1", lease: lease(), queuePosition: 1,
+      waitDeadlineAt: new Date("2026-08-30T20:00:00.000Z"), now: NOW,
+    });
+    expect(await settleNonprodLeaseWait({
+      db: mock, taskRunId: wait.taskRunId, leaseId: "NPEL-OTHER", state: "terminal", now: NOW,
+    })).toEqual({ settled: false });
+    expect(mock.taskRun.update).not.toHaveBeenCalled();
+  });
+
   it("checkpoints one deterministic suspended TaskRun and binds it to the lease", async () => {
     const mock = db();
     const first = await checkpointNonprodLeaseWait({
