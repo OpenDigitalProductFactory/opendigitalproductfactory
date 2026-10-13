@@ -47,6 +47,17 @@ impersonation, approval, retry or historical task mutation is added.
 
 ## Acceptance
 
+The owning item's acceptance statements at planning time are quoted here for
+medium-shape coverage; BI-06AE037F remains their canonical home:
+
+- Every `requiresApproval` external TaskRun returns an actionable approval location or a governed caller-visible approval operation.
+- The authorized delegating principal can list the pending envelope and its immutable review binding.
+- A different signed-in user is never allowed to approve merely because they are an administrator; transfer/impersonation, if supported, is explicit and audited.
+- The attention surface and external result agree on owner, status, expiry, and next action.
+- Tests cover token-owner/browser-user mismatch, correct-owner visibility, unauthorized settlement refusal, and same-TaskRun continuation after approval.
+
+The bounded repair's verification requirements are:
+
 - AC-1: An authenticated assistant can discover its user's pending requests
   without knowing their IDs, with an exact Inbox link for each.
 - AC-2: A mismatched user or assistant receives no other identity's requests;
@@ -60,6 +71,14 @@ impersonation, approval, retry or historical task mutation is added.
   only settlement path.
 
 ## Verification and limits
+
+FLOW-DISCOVERY: authenticated assistant reads its own pending envelopes, follows
+the exact Inbox link and continues through the existing owner decision path.
+The contract remains `get_my_approval_status`, `readApprovalOutcome` and
+`parseInitiativeReviewBinding`. Source-local verification lives in
+`apps/web/lib/mcp/packs/coworker-pack.test.ts` and
+`apps/web/lib/coworker/approval-outcome-store.test.ts`. LIVE-DISCOVERY denotes
+canonical MCP pending-mode verification after deployment.
 
 The 53 existing approval-location/isolation/settlement/recovery tests passed on
 f881fcb84de1bb07748f017ce07ecb85042507ac; their target sources match the base
