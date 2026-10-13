@@ -72,6 +72,8 @@ async function main(): Promise<void> {
     process.exit(3);
   }
 
+  const { registerServerToolGovernanceHooks } = await import("@/lib/governance/register-tool-governance-hooks");
+  registerServerToolGovernanceHooks();
   const { runApprovalConvergenceProbe } = await import("@/lib/coworker/approval-convergence-probe-run");
   const report = await runApprovalConvergenceProbe(prisma as never);
   const results = report.rows;

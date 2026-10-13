@@ -4,7 +4,8 @@ import {
   createCompletionEvidenceGovernanceHook,
   type CompletionEvidenceHookDeps,
 } from "@/lib/backlog/completion-evidence-governance-hook";
-import { registerToolLifecycleHook } from "@/lib/mcp-governed-execute";
+import { installApprovalProbeRuntime } from "@/lib/coworker/approval-convergence-probe-runtime";
+import { registerToolLifecycleHook, runPreToolHooks } from "@/lib/mcp-governed-execute";
 import type { ToolLifecycleHook } from "@/lib/mcp-governed-execute-types";
 import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
 import {
@@ -156,4 +157,10 @@ export function buildServerToolGovernanceHooks(
 
 export function registerServerToolGovernanceHooks(): void {
   for (const hook of buildServerToolGovernanceHooks()) registerToolLifecycleHook(hook);
+  // The AC-PROBE runner cannot import the catalog or these hooks (it is reached
+  // from a tool pack); it runs the same hooks bound to its read-only transaction.
+  installApprovalProbeRuntime({
+    findTool: (name) => PLATFORM_TOOLS.find((tool) => tool.name === name),
+    runGovernanceHooks: (event, db, options) => runPreToolHooks(event, buildServerToolGovernanceHooks(db, options)),
+  });
 }

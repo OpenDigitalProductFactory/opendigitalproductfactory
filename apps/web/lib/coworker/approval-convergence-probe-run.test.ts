@@ -3,6 +3,9 @@
 // can reach the database runs inside a transaction whose FIRST statement is
 // SET TRANSACTION READ ONLY, a write attempted there is refused and reported on
 // its row, and no tool handler is ever called.
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -16,10 +19,9 @@ const mocks = vi.hoisted(() => ({
   agentGrants: vi.fn(),
 }));
 
-vi.mock("@/lib/mcp-tools", () => ({
-  PLATFORM_TOOLS: [{ name: "run_hive_scout_ingest", consequence: "outward", sideEffect: true, requiredCapability: null }],
-}));
-vi.mock("@/lib/mcp/tool-registry", () => ({ getHandler: () => mocks.handler }));
+// Any tool execution path the runner could reach is a spy that must stay untouched.
+vi.mock("@/lib/mcp-governed-execute", () => ({ governedExecuteTool: mocks.governedExecuteTool, runPreToolHooks: mocks.governedExecuteTool }));
+vi.mock("@/lib/mcp-tools", () => ({ executeTool: mocks.handler, PLATFORM_TOOLS: [] }));
 vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: mocks.currentUserContext }));
 vi.mock("@/lib/govern/authority/resolve-coworker-tool-authority", () => ({ resolveCoworkerToolAuthorityInput: mocks.resolveAuthority }));
 vi.mock("@/lib/govern/authority/coworker-authority-decision", () => ({ evaluateCoworkerAuthority: mocks.evaluate }));
@@ -29,22 +31,25 @@ vi.mock("@/lib/tak/agent-grants", () => ({
   isToolAllowedByGrants: (tool: string, grants: string[]) => grants.includes(tool),
 }));
 vi.mock("@/lib/tak/consequential-tool-policy", () => ({ classifyConsequentialTool: () => ({ alignmentRequired: true }) }));
-vi.mock("@/lib/governance/register-tool-governance-hooks", () => ({ buildServerToolGovernanceHooks: mocks.buildHooks }));
-vi.mock("@/lib/mcp-governed-execute", async () => {
-  // The real hook runner, so the hooks the runner builds are what run.
-  return {
-    governedExecuteTool: mocks.governedExecuteTool,
-    runPreToolHooks: async (event: unknown, hooks: Array<{ onPreToolUse?: (e: unknown) => Promise<{ decision: string; reason?: string }> }>) => {
-      for (const hook of hooks) {
+import { READ_ONLY_STATEMENT, runApprovalConvergenceProbe, withReadOnlyTransaction } from "./approval-convergence-probe-run";
+import { installApprovalProbeRuntime } from "./approval-convergence-probe-runtime";
+
+type Hook = { onPreToolUse?: (event: unknown) => Promise<{ decision: string; reason?: string }> };
+const TOOL = { name: "run_hive_scout_ingest", consequence: "outward", sideEffect: true, requiredCapability: null };
+
+/** The runtime the boot registration installs: the catalog lookup, and the hooks bound to the db it is given. */
+function installRuntime() {
+  installApprovalProbeRuntime({
+    findTool: (name) => (name === TOOL.name ? TOOL as never : undefined),
+    runGovernanceHooks: async (event, db, options) => {
+      for (const hook of mocks.buildHooks(db, options) as Hook[]) {
         const decision = await hook.onPreToolUse?.(event);
-        if (decision?.decision === "deny") return { success: false, message: decision.reason };
+        if (decision?.decision === "deny") return { success: false, message: decision.reason ?? "" };
       }
       return null;
     },
-  };
-});
-
-import { READ_ONLY_STATEMENT, runApprovalConvergenceProbe, withReadOnlyTransaction } from "./approval-convergence-probe-run";
+  });
+}
 
 const READ_ONLY_ERROR = "cannot execute INSERT in a read-only transaction";
 const NOW = new Date("2026-10-13T12:00:00Z");
@@ -89,6 +94,7 @@ beforeEach(() => {
   mocks.resolveGaid.mockResolvedValue({ gaid: "gaid:x" });
   mocks.agentGrants.mockResolvedValue(["run_hive_scout_ingest"]);
   mocks.buildHooks.mockReturnValue([]);
+  installRuntime();
 });
 
 describe("approval convergence probe run (AC-PROBE, BI-129EFFD1)", () => {
@@ -133,6 +139,13 @@ describe("approval convergence probe run (AC-PROBE, BI-129EFFD1)", () => {
     expect(mocks.governedExecuteTool).not.toHaveBeenCalled();
   });
 
+  it("refuses to run before the server has installed its governance runtime", async () => {
+    const { db } = fakeDb();
+    installApprovalProbeRuntime(null);
+    await expect(runApprovalConvergenceProbe(db as never, NOW)).rejects.toThrow("not available");
+    expect(db.agentActionProposal.findMany).not.toHaveBeenCalled();
+  });
+
   it("a write the resolver attempts is reported as authority-evidence-unavailable", async () => {
     const { db } = fakeDb();
     mocks.resolveAuthority.mockImplementation(async (_args: unknown, tx: { workroomActivity: { create(): Promise<void> } }) => {
@@ -142,5 +155,14 @@ describe("approval convergence probe run (AC-PROBE, BI-129EFFD1)", () => {
     const report = await runApprovalConvergenceProbe(db as never, NOW);
     expect(report.rows[0]).toMatchObject({ refusal: "authority-evidence-unavailable", detail: READ_ONLY_ERROR });
     expect(mocks.handler).not.toHaveBeenCalled();
+  });
+
+  it("cannot reach a tool executor: it imports no catalog, executor or handler registry", () => {
+    const source = readFileSync(resolve(__dirname, "approval-convergence-probe-run.ts"), "utf8");
+    const imports = [...source.matchAll(/from "([^"]+)"/g)].map((match) => match[1]);
+    for (const banned of ["@/lib/mcp-tools", "@/lib/mcp-governed-execute", "@/lib/mcp/tool-registry"]) {
+      expect(imports).not.toContain(banned);
+    }
+    expect(source).not.toMatch(/executeTool|getHandler|\.handlers\b/);
   });
 });

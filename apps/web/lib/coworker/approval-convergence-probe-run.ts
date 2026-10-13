@@ -10,8 +10,10 @@
 // GAID principal resolution, the pre-tool hooks and the authority resolver —
 // runs inside its own interactive transaction whose FIRST statement is
 // `SET TRANSACTION READ ONLY`, with that transaction as its client: the hooks
-// are the server's governance hooks bound to it (buildServerToolGovernanceHooks),
-// and the resolver and GAID resolver take it as their `db`. PostgreSQL refuses
+// are the server's governance hooks bound to it (buildServerToolGovernanceHooks,
+// reached through the runtime the boot registration installs, see
+// approval-convergence-probe-runtime.ts), and the resolver and GAID resolver
+// take it as their `db`. PostgreSQL refuses
 // any write there, and the probe core reports it on the row as `hook-error` or
 // `authority-evidence-unavailable`. One transaction per step keeps a refused
 // write from aborting the next step's reads. The attention notification the
@@ -25,9 +27,6 @@ import type { Prisma, prisma } from "@dpf/db";
 import { evaluateCoworkerAuthority } from "@/lib/govern/authority/coworker-authority-decision";
 import { resolveCoworkerToolAuthorityInput } from "@/lib/govern/authority/resolve-coworker-tool-authority";
 import { currentUserContext } from "@/lib/govern/current-user-context";
-import { buildServerToolGovernanceHooks } from "@/lib/governance/register-tool-governance-hooks";
-import { runPreToolHooks } from "@/lib/mcp-governed-execute";
-import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
 import { getAgentToolGrantsAsync, isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { classifyConsequentialTool } from "@/lib/tak/consequential-tool-policy";
 import { resolveGaidActorEnvelope } from "@/lib/tak/gaid-actor-envelope";
@@ -38,6 +37,7 @@ import {
   type ProbeDeps,
   type ProbeRowResult,
 } from "./approval-convergence-probe";
+import { requireApprovalProbeRuntime } from "./approval-convergence-probe-runtime";
 
 export const READ_ONLY_STATEMENT = "SET TRANSACTION READ ONLY";
 
@@ -69,6 +69,7 @@ export async function runApprovalConvergenceProbe(
   db: ApprovalProbeDb,
   now: Date = new Date(),
 ): Promise<ApprovalConvergenceProbeReport> {
+  const runtime = requireApprovalProbeRuntime();
   const pending = await db.agentActionProposal.findMany({
     where: { status: "proposed" },
     orderBy: [{ actionType: "asc" }, { proposedAt: "asc" }],
@@ -80,14 +81,13 @@ export async function runApprovalConvergenceProbe(
 
   const readOnly = <T>(work: (tx: Prisma.TransactionClient) => Promise<T>) => withReadOnlyTransaction(db, work);
   const deps: ProbeDeps = {
-    findTool: (name) => PLATFORM_TOOLS.find((tool) => tool.name === name),
+    findTool: (name) => runtime.findTool(name),
     userContext: (userId) => readOnly((tx) => currentUserContext(userId, tx)),
     agentGrantAllowed: async (agentId, toolName) => isToolAllowedByGrants(toolName, await getAgentToolGrantsAsync(agentId)),
     resolveAuthorityInput: (args) => readOnly((tx) => resolveCoworkerToolAuthorityInput(args, tx as never)),
     evaluate: evaluateCoworkerAuthority,
     resolveGaid: (args) => readOnly((tx) => resolveGaidActorEnvelope(args, tx)),
-    preToolHooks: (args) => readOnly((tx) =>
-      runPreToolHooks(args, buildServerToolGovernanceHooks(tx, { notifyCircuit: refuseAttentionNotification }))),
+    preToolHooks: (args) => readOnly((tx) => runtime.runGovernanceHooks(args, tx, { notifyCircuit: refuseAttentionNotification })),
     alignmentRequired: (tool, toolName) => classifyConsequentialTool({ tool, toolName }).alignmentRequired,
   };
 
