@@ -30,6 +30,9 @@ export const CRITICAL_PACKAGES = [
   { name: "react", importers: ["apps/web"] },
   { name: "react-dom", importers: ["apps/web"] },
   { name: "typescript", importers: ["apps/web", "."] },
+  // The checker scripts/run-tsc.mjs runs (BI-2B8D67A9), pinned once at the root
+  // under an npm alias. A TS7 bump must reach the sandbox before it grades a diff.
+  { name: "typescript7", importers: ["."] },
   { name: "prisma", importers: ["packages/db", "."] },
   {
     name: "vitest",
@@ -50,7 +53,18 @@ export { baseVersion };
 export function parseLockedVersion(lockfileText, importerPath, packageName) {
   if (!lockfileText) return "";
   const hit = findImporterDependency(parseImporters(lockfileText), importerPath, packageName);
-  return hit ? baseVersion(hit.version) : "";
+  return hit ? aliasTargetVersion(baseVersion(hit.version)) : "";
+}
+
+/**
+ * An npm-aliased dependency ("typescript7": "npm:typescript@7.0.2") is recorded
+ * as "<target>@<version>", while its installed package.json carries only the
+ * version. Return the version so both sides compare (BI-D2FE6931). Plain
+ * versions and link:/file: specifiers pass through unchanged.
+ */
+function aliasTargetVersion(version) {
+  const match = /^(?:@[^/@\s]+\/)?[^/@\s]+@(\d[^\s]*)$/.exec(version);
+  return match ? match[1] : version;
 }
 
 /**

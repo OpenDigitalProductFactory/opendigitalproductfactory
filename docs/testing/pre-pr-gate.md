@@ -1087,6 +1087,20 @@ program takes seconds instead of minutes. TypeScript 6 remains the workspace's
 verdicts. The non-blocking CI job "Typecheck (TS6 reference, advisory)" does
 the same on every pull request.
 
+Updating TypeScript 7 is one PR that bumps the root `typescript7` alias
+(`pnpm add -w -D typescript7@npm:typescript@<version>`). Every surface follows
+the lockfile from there:
+- worktrees reinstall;
+- the local-CI sandbox's freshness step refuses to grade until its installed
+  `typescript7` matches the lock;
+- GitHub CI installs fresh;
+- Build Studio type-checks through `run-tsc.mjs` (BI-D2FE6931).
+
+Dependabot is not relied on to notice new releases of an `npm:`-aliased
+dependency. The weekly "TypeScript Checker Currency" workflow
+(`scripts/audit-typescript-checker-currency.mjs`) compares the pin with npm's
+latest release and keeps one tracking issue open while the pin is behind.
+
 The local feedback loop is therefore:
 
 1. **Pre-commit hook** catches secrets + type errors before they leave your machine.

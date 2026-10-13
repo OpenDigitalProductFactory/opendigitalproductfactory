@@ -91,6 +91,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-2B8D67A9: run-tsc selects TS7 by default and TS6 under DPF_TSC=6,
       // and a signal-killed native compiler still exits 88 (BI-27D3DCCD).
       node("--test", "scripts/lib/tsc-compiler.test.mjs"),
+      // BI-D2FE6931: the weekly TS7 pin currency audit classifies correctly.
+      node("--test", "scripts/audit-typescript-checker-currency.test.mjs"),
       node("scripts/check-guards.mjs"),
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
       node("scripts/check-capability-compose-profiles.mjs"),

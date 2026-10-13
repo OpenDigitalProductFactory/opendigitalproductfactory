@@ -199,8 +199,9 @@ describe("runSandboxTests type-checks every package the change touches", () => {
     const exec = vi.mocked(execInSandbox);
     exec.mockReset();
     exec.mockImplementation(async (_id: string, cmd: string) => {
+      if (cmd.includes("apps/mobile/pnpm-lock.yaml")) return "__yes__";
       if (cmd.startsWith("test -f")) return "__no__";
-      const pkg = /cd \/workspace\/\.builds\/FB-1\/([^ ]+) && pnpm exec tsc --noEmit/.exec(cmd)?.[1];
+      const pkg = /cd \/workspace\/\.builds\/FB-1\/([^ ]+) && (?:pnpm exec tsc|node \/workspace\/\.builds\/FB-1\/scripts\/run-tsc\.mjs) --noEmit/.exec(cmd)?.[1];
       if (pkg) return tsc[pkg] ?? "";
       return "";
     });
@@ -211,10 +212,23 @@ describe("runSandboxTests type-checks every package the change touches", () => {
 
   it("checks apps/mobile as well as apps/web when mobile files change, never through npx", async () => {
     const { commands } = await run(["apps/mobile/src/features/visitor/visitor.store.ts"]);
-    const tsc = commands.filter((cmd) => /tsc --noEmit/.test(cmd));
+    const tsc = commands.filter((cmd) => /--noEmit/.test(cmd));
     expect(tsc.some((cmd) => cmd.includes("/apps/mobile && pnpm exec tsc --noEmit"))).toBe(true);
-    expect(tsc.some((cmd) => cmd.includes("/apps/web && pnpm exec tsc --noEmit"))).toBe(true);
+    expect(tsc.some((cmd) => cmd.includes("/apps/web && node /workspace/.builds/FB-1/scripts/run-tsc.mjs --noEmit"))).toBe(true);
     expect(tsc.some((cmd) => /npx /.test(cmd))).toBe(false);
+  });
+
+  // BI-D2FE6931: a root-workspace package is checked with the platform's one
+  // compiler entry point (scripts/run-tsc.mjs, TypeScript 7), so Build Studio
+  // grades with the compiler CI uses and follows its pin. apps/mobile has its own
+  // workspace and lockfile, exactly as CI's mobile job, and keeps its own tsc.
+  it("checks root-workspace packages through run-tsc, never the workspace's bare tsc", async () => {
+    const { commands } = await run(["packages/db/src/x.ts", "apps/web/lib/x.ts"]);
+    const tsc = commands.filter((cmd) => /--noEmit/.test(cmd));
+    for (const pkg of ["apps/web", "packages/db"]) {
+      expect(tsc).toContain(`cd /workspace/.builds/FB-1/${pkg} && node /workspace/.builds/FB-1/scripts/run-tsc.mjs --noEmit 2>&1 || true`);
+    }
+    expect(tsc.some((cmd) => /pnpm exec tsc/.test(cmd))).toBe(false);
   });
 
   it("fails on a type error in a changed mobile file, reported relative to the package", async () => {
