@@ -28,8 +28,8 @@ decomposed again in their own plans before implementation.
 | P5a | Open-child limit and closed delegation links | BI-A0BFA63E | — | branch committed |
 | P5b | Child threads run as durable jobs; an interrupted child fails visibly | BI-287E1DD0 | P2 | branch committed |
 | P5c | Results land on the parent, parent wake modes, cancel cascade, no authority widening | BI-CC057853 | P3, P4, P5b | to decompose |
-| P6 | Recovery by effect class and queue hold | BI-2B6A8A74 | P2, P5b | filed |
-| P7 | Agent CLIs as supervised runtimes | BI-05715F4C | P4, P5c | to decompose |
+| P6 | Recovery by effect class and queue hold | BI-2B6A8A74 | P2, P5b | delivered (P6a #6305, P6b this PR) |
+| P7 | Agent CLIs as supervised runtimes | BI-05715F4C | P4, P5c | delivered (P7a–P7e, one PR) |
 
 ## Phases
 
@@ -103,11 +103,29 @@ Every outbox effect and job step declares `replay-safe` or `process-bound`;
 undeclared counts as process-bound. Boot order is logged; a provider failure
 holds the room queue until `resume_workroom_queue`.
 
+- **P6a (BI-4FA0EFEB, #6305):** `JobFunctionOptions.recovery`; a process-bound
+  run whose worker died fails as `cancelled_after_process_loss`.
+- **P6b:** `workroom-queue-hold.ts` writes the hold from the scheduler's failure
+  path; `workroom-drive.ts` and `workroom-drive-graph.ts` pause with
+  `provider_held`; `resume_workroom_queue` releases it (design §4.6 amendment).
+
 ### P7 — Agent CLI runtimes (BI-05715F4C)
 
 An executor adapter contract over the Claude Agent SDK and Codex `app-server`,
 a per-session room-scoped MCP credential, approval bridging, a resume and
-handoff matrix, and usage-limit auto-resume. Decomposed in its own plan.
+handoff matrix, and usage-limit auto-resume. Decomposed into:
+
+- **P7a credential:** `lib/auth/workroom-session-token.ts`, migration
+  `20261014090000_workroom_session_credential`; resolved in `transport-auth.ts`,
+  bound in the MCP route (`workroomBindingRefusal`).
+- **P7b contract and supervisor:** `workroom-runtime/types.ts`, `supervisor.ts`,
+  `sandbox-launcher.ts`, `drive_workroom_runtime`.
+- **P7c Codex:** `codex-app-server-adapter.ts` over `json-rpc-peer.ts`.
+- **P7d Claude:** `claude-stream-adapter.ts`.
+- **P7e approvals:** `runtime-request-policy.ts`, `approve_runtime_permission`.
+
+Left for follow-up: usage-limit auto-resume and a provider handoff (one room
+moving a thread from one CLI to the other).
 
 ## Traceability
 
@@ -128,7 +146,7 @@ handoff matrix, and usage-limit auto-resume. Decomposed in its own plan.
 | OBJ-DDL-DELEGATE | AC-DDL-DELEGATE-CANCEL | child_authority_escalation_denied | coworker delegates to a child | BI-CC057853 |
 | OBJ-DDL-RECOVER | AC-DDL-RECOVER-CLASS | failInterruptedChildThread | portal restarts mid-work | BI-2B6A8A74 |
 | OBJ-DDL-RECOVER | AC-DDL-RECOVER-HOLD | resume_workroom_queue | provider fails mid-work | BI-2B6A8A74 |
-| OBJ-DDL-RUNTIME | AC-DDL-RUNTIME-SCOPE | heartbeat_workroom | room drives an agent CLI | BI-05715F4C |
+| OBJ-DDL-RUNTIME | AC-DDL-RUNTIME-SCOPE | drive_workroom_runtime | room drives an agent CLI | BI-05715F4C |
 
 ## Risks and rollback
 
