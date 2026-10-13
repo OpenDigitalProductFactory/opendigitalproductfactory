@@ -43,7 +43,7 @@ describe("approve on someone's behalf (AC-OVERRIDE)", () => {
 
     expect(result).toMatchObject({ ok: true, envelope: { status: "approved" } });
     expect(updateMany).toHaveBeenCalledWith({
-      where: { id: "env-1", status: "proposed" },
+      where: { id: "env-1", status: "proposed", resolvedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: expect.any(Date) } }] },
       data: {
         status: "approved",
         argsJson: {
@@ -95,7 +95,7 @@ describe("approve on someone's behalf (AC-OVERRIDE)", () => {
   it("leaves the delegate path unchanged: no override record, no audit row", async () => {
     await approveEnvelope("env-1", "owner-1", { reason: "ignored", callerIsAdmin: true });
     expect(updateMany).toHaveBeenCalledWith({
-      where: { id: "env-1", status: "proposed" },
+      where: { id: "env-1", status: "proposed", resolvedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: expect.any(Date) } }] },
       data: { status: "approved", argsJson: { approvalBinding: BINDING, humanApproval: { userId: "owner-1", approvedAt: expect.any(String) } } },
     });
     expect(createAuthorizationDecisionLog).not.toHaveBeenCalled();
@@ -120,8 +120,8 @@ describe("decline on someone's behalf (AC-OVERRIDE)", () => {
   it("an admin who is not the delegate declines with a reason, recorded on the request and in the audit", async () => {
     const result = await denyEnvelope("env-1", "admin-1", { reason: "Not wanted any more.", callerIsAdmin: true });
     expect(result).toMatchObject({ ok: true });
-    expect(update).toHaveBeenCalledWith({
-      where: { id: "env-1" },
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: "env-1", status: "proposed", resolvedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: expect.any(Date) } }] },
       data: {
         status: "declined",
         resolvedAt: expect.any(Date),
@@ -140,12 +140,12 @@ describe("decline on someone's behalf (AC-OVERRIDE)", () => {
   it("refuses a non-admin non-delegate and an admin with no reason", async () => {
     expect(await denyEnvelope("env-1", "someone-else", { reason: "x", callerIsAdmin: false })).toMatchObject({ ok: false, httpStatus: 403 });
     expect(await denyEnvelope("env-1", "admin-1", { reason: " ", callerIsAdmin: true })).toMatchObject({ ok: false, httpStatus: 400 });
-    expect(update).not.toHaveBeenCalled();
+    expect(updateMany).not.toHaveBeenCalled();
   });
 
   it("leaves the delegate decline unchanged", async () => {
     await denyEnvelope("env-1", "owner-1");
-    expect(update).toHaveBeenCalledWith({ where: { id: "env-1" }, data: { status: "declined", resolvedAt: expect.any(Date) } });
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: "env-1", status: "proposed", resolvedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: expect.any(Date) } }] }, data: { status: "declined", resolvedAt: expect.any(Date) } });
   });
 });
 
