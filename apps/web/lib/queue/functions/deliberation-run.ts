@@ -534,7 +534,7 @@ export const deliberationRun = jobs.createFunction(
           const { isBootstrappedDeliberationTaskRunId } = await import("@/lib/deliberation/bootstrapped-task-run");
           const tr = await prisma.taskRun.findUnique({ where: { taskRunId: data.taskRunId }, select: { routeContext: true } });
           if (tr?.routeContext === "deliberation" || isBootstrappedDeliberationTaskRunId(data.taskRunId)) {
-            await prisma.taskRun.updateMany({ where: { taskRunId: data.taskRunId, status: { in: ["working", "queued"] } },
+            await prisma.taskRun.updateMany({ where: { taskRunId: data.taskRunId, status: { in: ["working", "submitted"] } },
               data: { status: "input-required", progressPayload: { message: result.message } } });
           }
         });
