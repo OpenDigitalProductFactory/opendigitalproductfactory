@@ -41,4 +41,8 @@ https://platform.claude.com/docs/en/manage-claude/authentication#select-a-worksp
 
 ## Backlog coverage
 
-All internal steps deliver BI-FFC4C94D together. Storage or UI alone cannot deliver a working organization-scoped connection. Governed immutable plan coverage is pending; implementation must wait for its receipt.
+All internal steps deliver BI-FFC4C94D together. Storage or UI alone cannot deliver a working organization-scoped connection. Governed immutable plan coverage: cmv61spie117p01q67jnvb23l, bound to plan blob 5318ce50625df10b9612d584781745b9abf97899 at 76b5a2c227976d3f2b4d4a75f9ee7599a629955e. Research receipt initiative-f2894c6c-20bf-43cb-9aa9-47545407ffa2; implementation admission IRD-6E1C9DFA70D3. No runtime completion is implied by these planning receipts.
+
+## Implementation checkpoint
+
+Workspace storage, validation, UI, MCP configuration and verification/explicit-account discovery/execution header paths are implemented in the worktree. Default catalog discovery in ai-provider-internals.ts is still pending the exact-file handoff from WC-1F5CB5B4. The feature must not be published as complete until that path is covered. Source tests passed: 50 setup/header/discovery tests and 65 inference/data/MCP tests; web typecheck passed. Served UI, migration application and real organization-key verification remain unrun. UX critique requested as CE-FF0E248F; option-fit decision DI-BCDE1809D902 prefers optional disclosure.

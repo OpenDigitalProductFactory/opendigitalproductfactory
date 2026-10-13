@@ -120,6 +120,13 @@ describe("callProvider", () => {
     }));
   });
 
+  it("passes the configured Anthropic workspace to the execution adapter", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({ providerId: "anthropic", status: "active", authMethod: "api_key", authHeader: "x-api-key", baseUrl: "https://api.anthropic.com/v1", endpoint: null });
+    mockGetDecryptedCredential.mockResolvedValueOnce({ secretRef: "test-key", providerWorkspaceId: "wrkspc_accountA" });
+    await callProvider("anthropic", "claude-model", [{ role: "user", content: "hi" }], "system");
+    expect(mockAdapterExecute).toHaveBeenCalledWith(expect.objectContaining({ provider: expect.objectContaining({ headers: expect.objectContaining({ "anthropic-workspace-id": "wrkspc_accountA", "x-api-key": "test-key" }) }) }));
+  });
+
   it("routes Codex OAuth execution through the ChatGPT backend", async () => {
     mockPrisma.modelProvider.findUnique.mockImplementation(({ where }: { where: { providerId: string } }) => {
       if (where.providerId === "codex") {

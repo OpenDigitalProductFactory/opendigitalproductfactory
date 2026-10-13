@@ -77,6 +77,18 @@ const providerFixture: ProviderWithCredential = {
 
 describe("ProviderDetailForm", () => {
   afterEach(() => { cleanup(); vi.clearAllMocks(); });
+
+  it("saves the Anthropic workspace without requiring the key to be re-entered", async () => {
+    vi.mocked(configureProvider).mockResolvedValue({});
+    vi.mocked(testProviderAuth).mockResolvedValue({ ok: true, message: "Connected" });
+    const fixture = { ...providerFixture, provider: { ...providerFixture.provider, providerId: "anthropic", name: "Anthropic" } };
+    render(<ProviderDetailForm pw={fixture} canWrite models={[]} profiles={[]} hasActiveProvider />);
+    fireEvent.click(screen.getByText("Organization-scoped key"));
+    fireEvent.change(screen.getByLabelText("Anthropic workspace ID"), { target: { value: "wrkspc_accountA" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save & verify connection" }));
+    await waitFor(() => expect(configureProvider).toHaveBeenCalledWith(expect.objectContaining({ providerId: "anthropic", providerWorkspaceId: "wrkspc_accountA" })));
+    expect(vi.mocked(configureProvider).mock.calls[0][0]).not.toHaveProperty("secretRef");
+  });
   it("keeps ChatGPT shared authentication changes in the Codex management page", () => {
     const fixture: ProviderWithCredential = { ...providerFixture, provider: { ...providerFixture.provider, providerId: "chatgpt", authMethod: "oauth2_authorization_code", supportedAuthMethods: ["oauth2_authorization_code"], authorizeUrl: "https://auth.openai.com/oauth/authorize" } };
     render(<ProviderDetailForm pw={fixture} canWrite models={[]} profiles={[]} hasActiveProvider />);

@@ -3,6 +3,7 @@
 // Server actions in actions/*.ts can import from here freely.
 
 import { prisma } from "@dpf/db";
+import { providerWorkspaceHeaders } from "./provider-workspace";
 import { computeTokenCost, computeComputeCost } from "@/lib/ai-provider-types";
 import {
   aiInferenceDuration,
@@ -100,6 +101,7 @@ async function buildAuthHeaders(
   if (authMethod === "api_key") {
     const cred = await getDecryptedCredential(providerId);
     if (!cred?.secretRef || !authHeader) throw new InferenceError("No credential configured", "auth", providerId);
+    Object.assign(headers, providerWorkspaceHeaders(providerId, cred.providerWorkspaceId));
     headers[authHeader] = authHeader === "Authorization" ? `Bearer ${cred.secretRef}` : cred.secretRef;
   } else if (authMethod === "oauth2_client_credentials") {
     const tokenResult = await getProviderBearerToken(providerId);

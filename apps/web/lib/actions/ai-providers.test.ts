@@ -673,6 +673,21 @@ describe("configureProvider", () => {
     );
   });
 
+  it("persists and explicitly clears Anthropic workspace configuration", async () => {
+    expect(await configureProvider({ providerId: "anthropic", enabledFamilies: [], providerWorkspaceId: " wrkspc_accountA " })).toEqual({});
+    expect(mockPrisma.credentialEntry.upsert).toHaveBeenCalledWith(expect.objectContaining({ update: expect.objectContaining({ providerWorkspaceId: "wrkspc_accountA" }) }));
+    expect(await configureProvider({ providerId: "anthropic", enabledFamilies: [], providerWorkspaceId: "" })).toEqual({});
+    expect(mockPrisma.credentialEntry.upsert).toHaveBeenLastCalledWith(expect.objectContaining({ update: expect.objectContaining({ providerWorkspaceId: null }) }));
+  });
+
+  it("rejects unsupported or malformed workspaces before writing configuration", async () => {
+    for (const providerId of ["openai", "anthropic"]) {
+      expect(await configureProvider({ providerId, enabledFamilies: [], providerWorkspaceId: "not-a-workspace" })).toHaveProperty("error");
+    }
+    expect(mockPrisma.credentialEntry.upsert).not.toHaveBeenCalled();
+    expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+  });
+
   it("activates the paired OpenAI provider when configuring ChatGPT OAuth", async () => {
     mockPrisma.modelProvider.findUnique.mockImplementation(({ select }: { select?: Record<string, boolean> }) => {
       if (select?.cliEngine) {
