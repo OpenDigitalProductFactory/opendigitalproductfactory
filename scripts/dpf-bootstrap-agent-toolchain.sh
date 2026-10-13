@@ -503,13 +503,12 @@ exit 127'
   fi
 fi
 
-# On an https endpoint the transport lines (DPF_MCP_URL + NODE_EXTRA_CA_CERTS)
-# are what let a client authorize over OAuth; persist them even when no token
+# Persist the selected HTTPS or loopback HTTP endpoint for new processes.
+# HTTPS may also carry the organization CA; persist even when no token
 # was minted this run. Never at dry-run time.
-case "$MCP_ENDPOINT_NAMED" in https://*) _https_endpoint=1 ;; *) _https_endpoint=0 ;; esac
-if [ "$DRY_RUN" -eq 0 ] && [ "$_https_endpoint" -eq 1 ]; then
+if [ "$DRY_RUN" -eq 0 ] && dpf_mcp_client_endpoint_can_persist "$MCP_ENDPOINT_NAMED"; then
   persist_mcp_client_env_posix
-  ok "MCP client transport persisted: https endpoint${MCP_TRUST_BUNDLE:+ + organization root bundle (NODE_EXTRA_CA_CERTS)}."
+  ok "Saved the MCP endpoint preference for future sessions."
 fi
 
 # Grok credential (BI-5BCDB07C). Independent of the legacy PAT mint above:

@@ -252,3 +252,24 @@ and leave its MCP connection unchanged. Do not disclose that diagnostic for a
 foreign or expired lease, change origin matching, or widen fixture authority.
 First reproduce the opaque owned-lease refusal, then verify the recovery text
 and unchanged foreign-lease refusal with the related provisioning tests.
+
+### Persist the selected loopback endpoint
+
+BI-D4BB5AE3 and BI-9F258707 retain the toolchain convergence work. The
+current source at 53fd5e971901d993dc7ebe069943e0bff96fa08c rejects a
+selected HTTP endpoint in both persistence adapters, while an HTTPS install
+origin takes precedence over a saved user preference. This is a reproduced
+source defect, not proof of which writer changed the host at 19:57.
+
+1. Reproduce saved-preference displacement and missing loopback persistence
+   with temporary homes and mocked Windows User writes.
+2. Reuse the existing shared client-environment modules: explicit process
+   selection first, then saved user preference, then the HTTPS install default.
+   Keep the bootstrap's saved-client selection and explicit override semantics.
+3. Persist HTTPS and supported loopback HTTP selections without changing
+   credentials, certificate trust, or non-loopback HTTP policy. Preserve the
+   exact selected URL, unrelated CA settings and idempotence.
+4. Correct bootstrap transport reporting and the endpoint-precedence runbook.
+   Run the affected multi-platform adapter and updater tests, then normal
+   governed publication checks. Actual installed convergence and OAuth live
+   acceptance remain required after canonical deployment.
