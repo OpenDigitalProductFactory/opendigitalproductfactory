@@ -121,6 +121,14 @@ host with a source checkout can point `DPF_HOST_SOURCE_ROOT` at it instead.
   could answer. This means "unknown", never "not merged". Check that the
   clone exists and has an `origin/main`. The item stays awaiting acceptance
   with its evidence until the signal can answer.
+- **A merge never outranks a current failure:** if the newest evidence of any
+  kind on the item (tests, build, UX, migration) is a failure recorded in the
+  last 30 days, the item cannot close: not by the sweep, the status tool, the
+  backlog editor or a deployment closure. The completion check names the
+  failing row. Fix it and record a passing result of the same kind, which
+  replaces the failure. A manual check is always recorded as a pass, so
+  writing "blocked" in its text does not stop a close (BI-4A222439,
+  BI-00A50610).
 
 ## Known limit
 
