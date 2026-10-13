@@ -62,6 +62,13 @@ Build Studio supports governed changes on customizable installs without separate
 Claude or Codex apps, but builds, tests, previews, and local coding models need
 additional capacity wherever they execute.
 
+For larger local models or document-heavy professional work, including law-firm
+workloads, evaluate a **Mac Studio with M5 Max, 128 GB unified memory and a
+2–4 TB SSD**. Apple offers 128 GB with the 40-core GPU configuration. Choose an
+M5 Ultra only when measured model capacity or throughput needs justify it. See
+the [hardware guide](hardware.md#local-ai-for-professional-firms) for sizing and
+data-handling checks.
+
 ## Prerequisites
 
 The installer auto-installs Docker Desktop. You bring:

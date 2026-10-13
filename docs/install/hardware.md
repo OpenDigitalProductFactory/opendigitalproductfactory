@@ -1,6 +1,6 @@
 # Choosing Hardware for DPF
 
-*Mac mini configurations reviewed October 12, 2026; other machine examples last
+*Mac mini and Mac Studio configurations reviewed October 12, 2026; other machine examples last
 reviewed August 24, 2026. Product configurations, prices, and regional stock
 change frequently; follow the manufacturer links before ordering.*
 
@@ -49,8 +49,9 @@ while people use the browser-based workspace to coordinate daily work.
 - **Mac mini with M5 Pro, 64 GB unified memory and a 2 TB SSD:** matches the
   practical Apple local-first profile. Qualify the chosen model, context,
   voice/document services, and simultaneous coworker work together.
-- **A 128 GB Apple Silicon host:** consider this when larger local models or
-  substantial development share the business host.
+- **Mac Studio with M5 Max, 128 GB unified memory and a 2–4 TB SSD:** consider
+  this when larger local models, document-heavy workflows, or substantial
+  development share the business host.
 
 Apple currently lists a maximum of **32 GB on the M6 mini** and **64 GB on the
 M5 Pro mini**. The newer chip does not replace memory capacity, and a larger SSD
@@ -62,6 +63,26 @@ promise that every business fits in 32 GB. The memory use of an actively develop
 standardizing on 32 GB, verify a representative business workload, peak
 concurrency, memory pressure, restart recovery, and any enabled Build Studio
 work. Include a UPS and backups on separate storage with a tested restore path.
+
+### Local AI for professional firms
+
+For a law firm that wants primary AI processing on-site, the **M5 Max Mac Studio
+with 128 GB unified memory and a 2–4 TB SSD** is a higher-capacity evaluation
+candidate. The memory leaves more room for the model, document processing,
+context, and the DPF services than either Mac mini configuration. Actual response
+times and simultaneous-user capacity need to be measured with the firm's
+representative documents and chosen inference backend.
+
+Apple lists 128 GB with the **18-core CPU / 40-core GPU M5 Max** configuration.
+The **M5 Ultra** supports up to **512 GB** unified memory; consider it only when
+measured model capacity or throughput justifies the larger machine. See
+[Apple's Mac Studio specifications](https://www.apple.com/mac-studio/specs/).
+
+Local hosting alone does not establish confidentiality or legal-work quality.
+Confirm which AI providers and integrations can receive documents, enforce
+matter access, test backup restoration, and qualify each intended AI workflow
+before using client material. An enabled external fallback can still send
+approved requests off-site.
 
 ## Machines available now
 
@@ -106,7 +127,7 @@ make the same model more knowledgeable.
 | Representative machine | Configuration available | Buying note |
 | --- | --- | --- |
 | [MacBook Pro with M5 Max](https://www.apple.com/macbook-pro/specs/) | Up to 128 GB unified memory and 8 TB SSD | Best portable option; 128 GB is already an effective DPF operations-and-development machine |
-| [Mac Studio](https://www.apple.com/shop/buy-mac/mac-studio/) | M4 Max up to 128 GB; M3 Ultra up to 512 GB unified memory | Best fixed Apple host; choose 128 GB for DPF unless a demonstrated larger-model workload justifies more |
+| [Mac Studio with M5 Max or M5 Ultra](https://www.apple.com/mac-studio/specs/) | M5 Max: configure 128 GB and 2–4 TB SSD with the 40-core GPU; M5 Ultra: up to 512 GB | Higher-capacity local-AI candidate for document-heavy professional firms; validate workload before choosing Ultra |
 | [Mac mini with M5 Pro](https://www.apple.com/mac-mini/specs/) | Configure 64 GB unified memory and 2 TB SSD; supports up to 8 TB SSD | Compact local-first candidate; qualify model, context, and concurrency before deployment |
 
 Apple Silicon is a generally available DPF install surface. See the [macOS
