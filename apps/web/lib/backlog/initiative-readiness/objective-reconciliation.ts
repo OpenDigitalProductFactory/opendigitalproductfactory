@@ -19,6 +19,7 @@ export type ObjectiveReconciliationResult = {
 };
 
 type Baseline = {
+  origin?: string;
   baselineId: string;
   supersedesBaselineId: string | null;
   artifactDigest: string;
@@ -87,6 +88,7 @@ function parseBaseline(activity: ObjectiveReconciliationActivity, subjectIds: re
   const required = [...objectives, ...acceptance];
   if (required.length === 0 || new Set(required).size !== required.length) return null;
   return {
+    origin: typeof payload.origin === "string" ? payload.origin : undefined,
     baselineId: payload.baselineId,
     supersedesBaselineId: payload.supersedesBaselineId as string | null,
     artifactDigest: payload.artifactDigest,
@@ -150,6 +152,14 @@ export function reconcileInitiativeObjectives(args: {
     || mapping.baselineId !== baseline.baselineId || mapping.artifactDigest !== baseline.artifactDigest
     || subject?.kind !== "backlog-item" || subject.id !== args.itemId || !Array.isArray(mapping.mappings)) {
     return { state: "missing", baselineId: baseline.baselineId, evidenceRefs: [], requiredStatementIds: baseline.statementIds };
+  }
+  if (baseline.origin === "item-body") {
+    const eligible = selectEligibleObjectiveEvidenceActivityIds({ itemId: args.itemId, itemRowId: args.itemRowId,
+      baselineRecordedAt: baseline.recordedAt, activities: args.activities.filter((row) => row.kind === "evidence") });
+    const recorded = Array.isArray(mapping.eligibleEvidenceActivityIds) ? [...mapping.eligibleEvidenceActivityIds].sort() : [];
+    if (!eligible.ok || JSON.stringify(recorded) !== JSON.stringify(eligible.data.activityIds)) {
+      return { state: "missing", baselineId: baseline.baselineId, evidenceRefs: [], requiredStatementIds: baseline.statementIds };
+    }
   }
   const byStatement = new Map<string, string[]>();
   for (const raw of mapping.mappings) {

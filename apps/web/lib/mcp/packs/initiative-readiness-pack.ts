@@ -287,8 +287,10 @@ async function resolveExternalInitiativeReviewBinding(
   // receipt schema's artifactRef for this kind carries only the revision id.
   const isRevision = artifact["kind"] === "feature-build-revision"
     && typeof artifact["revisionId"] === "string" && artifact["revisionId"].trim().length > 0;
+  const isDocument = artifact["kind"] === "document-version"
+    && typeof artifact["versionId"] === "string" && artifact["versionId"].trim().length > 0;
   if (
-    (!isRepoBlob && !isRevision)
+    (!isRepoBlob && !isRevision && !isDocument)
     || (expectedCurrentBaselineId !== undefined
       && expectedCurrentBaselineId !== null
       && typeof expectedCurrentBaselineId !== "string")
@@ -303,7 +305,8 @@ async function resolveExternalInitiativeReviewBinding(
       ? { expectedCurrentBaselineId: expectedCurrentBaselineId as string | null }
       : {}),
     ...(eligibleEvidenceActivityIds ? { eligibleEvidenceActivityIds } : {}),
-    artifactRef: isRevision
+    artifactRef: isDocument ? { kind: "document-version", versionId: (artifact["versionId"] as string).trim() }
+      : isRevision
       ? { kind: "feature-build-revision", revisionId: (artifact["revisionId"] as string).trim() }
       : {
         kind: "repo-blob-at-commit",
