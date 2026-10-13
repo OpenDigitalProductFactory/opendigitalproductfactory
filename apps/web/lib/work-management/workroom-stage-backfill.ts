@@ -14,8 +14,11 @@
  *   something the last replay dropped) first removes the rows an earlier
  *   version wrote. They are derived from the drive log, which is untouched, so
  *   replacing them loses nothing.
- * - Never double counts: it replays only rows older than the first live stage
- *   event.
+ * - Never double counts: a version replays the drive log up to the moment it
+ *   runs and replaces every stage row before that moment, live ones included.
+ *   Every stage row is derived from the drive trail (the drive writes a trail
+ *   row on each state change and emits from it), so the trail rebuilds them
+ *   under the planner as it is now; rows written after that moment are kept.
  * - Resolution is the drive tick, and the shape is the room's current claim.
  *   Both are stated limitations; live events after deploy have neither.
  * - Past days are re-aggregated for `wr:` queues only, with no live counts, so
@@ -46,7 +49,14 @@ import {
  * dropped both, so the 2026-09-23 pile of rooms paused on
  * missing_explicit_coordinator never appeared.
  */
-export const STAGE_BACKFILL_ACTOR = "backfill:drive-log:v2";
+/**
+ * v3: a finite room is one run (its daily cycle stamp no longer opens a new
+ * item each day), and a recurring cycle still open when the next begins is
+ * cancelled rather than finished as a success. v2 and every live row before
+ * it read each day's rollover as a completed run, so flow time sat at ~24h in
+ * every portfolio and throughput counted day boundaries.
+ */
+export const STAGE_BACKFILL_ACTOR = "backfill:drive-log:v3";
 /** Every replay version, current and superseded. */
 export const STAGE_BACKFILL_ACTOR_PREFIX = "backfill:drive-log";
 /** Rows of a replay still in progress; renamed to the final actor when it completes. */
@@ -87,10 +97,12 @@ export function replayDriveLog(rooms: readonly DriveLogRoom[], until: Date): Sta
 
 export type StageBackfillDeps = {
   alreadyBackfilled: () => Promise<boolean>;
-  /** Remove rows an earlier or unfinished replay wrote; returns the days they covered. */
-  clearSuperseded: () => Promise<string[]>;
-  /** Earliest live (non-backfill) stage event, or null when none yet. */
-  firstLiveEventAt: () => Promise<Date | null>;
+  /**
+   * Remove every stage row before `until` that this version did not write:
+   * earlier or unfinished replays, and live rows the replay rebuilds. Returns
+   * the days they covered.
+   */
+  clearReplaced: (until: Date) => Promise<string[]>;
   /** Rooms with drive rows in the window, without their rows. */
   listDriveLogRooms: (since: Date, until: Date) => Promise<string[]>;
   /** The drive trails of these rooms, each row reduced to what the planner reads. */
@@ -115,8 +127,8 @@ export async function backfillWorkroomStageTelemetry(
   const now = deps.now();
   // The event table keeps 90 days; replaying further back is swept at once.
   const since = new Date(now.getTime() - (options.lookbackDays ?? 90) * DAY_MS);
-  const until = (await deps.firstLiveEventAt()) ?? now;
-  const days = new Set(await deps.clearSuperseded());
+  const until = now;
+  const days = new Set(await deps.clearReplaced(until));
   const rooms = await deps.listDriveLogRooms(since, until);
   let inserted = 0;
   for (let i = 0; i < rooms.length; i += STAGE_BACKFILL_ROOM_PAGE) {
@@ -151,21 +163,16 @@ export async function defaultStageBackfillDeps(): Promise<StageBackfillDeps> {
         where: { itemKind: WORKROOM_STAGE_ITEM_KIND, actorId: STAGE_BACKFILL_ACTOR },
         select: { id: true },
       })) !== null,
-    clearSuperseded: async () => {
+    clearReplaced: async (until) => {
       const where = {
         itemKind: WORKROOM_STAGE_ITEM_KIND,
-        actorId: { startsWith: STAGE_BACKFILL_ACTOR_PREFIX, not: STAGE_BACKFILL_ACTOR },
+        occurredAt: { lt: until },
+        OR: [{ actorId: null }, { actorId: { not: STAGE_BACKFILL_ACTOR } }],
       };
       const rows = await prisma.queueTelemetryEvent.findMany({ where, select: { occurredAt: true } });
       await prisma.queueTelemetryEvent.deleteMany({ where });
       return [...new Set(rows.map((row) => row.occurredAt.toISOString().slice(0, 10)))];
     },
-    firstLiveEventAt: async () =>
-      (await prisma.queueTelemetryEvent.findFirst({
-        where: { itemKind: WORKROOM_STAGE_ITEM_KIND, NOT: { actorId: { startsWith: STAGE_BACKFILL_ACTOR_PREFIX } } },
-        orderBy: { occurredAt: "asc" },
-        select: { occurredAt: true },
-      }))?.occurredAt ?? null,
     listDriveLogRooms: async (since, until) => {
       const rows = await prisma.$queryRaw<{ capsuleId: string }[]>`
         SELECT DISTINCT c."capsuleId"

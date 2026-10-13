@@ -79,8 +79,7 @@ describe("backfillWorkroomStageTelemetry", () => {
     const days: string[] = [];
     const d: StageBackfillDeps = {
       alreadyBackfilled: async () => false,
-      clearSuperseded: async () => [],
-      firstLiveEventAt: async () => t(26),
+      clearReplaced: async () => [],
       listDriveLogRooms: async () => ["WC-1"],
       loadDriveLog: async (ids) => ids.includes("WC-1") ? [
         {
@@ -109,19 +108,27 @@ describe("backfillWorkroomStageTelemetry", () => {
     expect(inserted).toEqual([]);
   });
 
-  it("tags every row, stops before the first live event, and re-aggregates each touched day", async () => {
-    const { d, inserted, days } = deps();
+  it("tags every row, replays up to the moment it runs, and re-aggregates each touched day", async () => {
+    let clearedBefore: Date | null = null;
+    const { d, inserted, days } = deps({
+      clearReplaced: async (until) => {
+        clearedBefore = until;
+        return [];
+      },
+    });
     const result = await backfillWorkroomStageTelemetry(d);
-    expect(result).toMatchObject({ ran: true, transitions: 3, days: 2, until: t(26).toISOString() });
+    // It replaces every stage row before that moment, live ones included, and rebuilds them from the trail.
+    expect(clearedBefore).toEqual(t(30));
+    expect(result).toMatchObject({ ran: true, transitions: 5, days: 3, until: t(30).toISOString() });
     // Written under the staging actor; commit renames them to the final one.
     expect(inserted.every((row) => (row as { actorId: string }).actorId === STAGE_BACKFILL_STAGING_ACTOR)).toBe(true);
-    expect(days).toEqual(["2026-09-23", "2026-09-24"]);
+    expect(days).toEqual(["2026-09-23", "2026-09-24", "2026-09-27"]);
   });
 
   it("a new replay version clears the rows an earlier one wrote and re-aggregates the days they covered", async () => {
     const order: string[] = [];
     const { d, days } = deps({
-      clearSuperseded: async () => {
+      clearReplaced: async () => {
         order.push("clear");
         return ["2026-09-20"];
       },
@@ -132,8 +139,8 @@ describe("backfillWorkroomStageTelemetry", () => {
     });
     await backfillWorkroomStageTelemetry(d);
     expect(order).toEqual(["clear", "insert"]);
-    expect(days).toEqual(["2026-09-20", "2026-09-23", "2026-09-24"]);
-    expect(STAGE_BACKFILL_ACTOR).toBe("backfill:drive-log:v2");
+    expect(days).toEqual(["2026-09-20", "2026-09-23", "2026-09-24", "2026-09-27"]);
+    expect(STAGE_BACKFILL_ACTOR).toBe("backfill:drive-log:v3");
   });
 
   it("replays a page of rooms at a time and inserts each page before reading the next", async () => {
