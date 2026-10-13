@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: active
 ---
 
 # Discover pending external approvals through the existing status reader
