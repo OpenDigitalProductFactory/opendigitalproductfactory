@@ -75,4 +75,12 @@ Atomic mapping: early-quiescence -> BI-25CB699C, no dependencies.
 Requirement refs: AC-1, AC-2, AC-3, AC-4.
 Contract ref: CT-EARLY-QUIESCENCE. Flow ref: FLOW-PREFLIGHT.
 Verification ref: VC-EARLY-QUIESCENCE.
-Native receipt pending immutable plan publication; implementation has not begun.
+Native atomic receipt `cmv60fyxw1lvs01nvx80mdd0j` binds plan commit
+`4068144984c60f16bbfa56f654d311bc208d20c6`. Refreshed receipt
+`cmv60knsu1m1z01nvn2td5b04` includes removal of the existing pregate-test
+exclusion from `scripts/ci-policy-test-inventory-allowlist.txt` when registering
+the suite in protected CI. These receipts are coverage, not passing tests.
+
+The failing regression reproduced status 0 instead of the required wait 75
+before the early reader was wired. After repair, the same regression passes;
+mock-only HTTP coverage observes one read and zero preflight/write calls.
