@@ -22,8 +22,9 @@ import { ensureDurableInferenceTaskRecipes } from "./mcp-task-durable-inference-
 import { mcpTaskNotificationBus } from "./mcp-task-notification-bus";
 import { parseResourceWaitProjection, resourceWaitDue } from "./mcp-task-capacity-contract";
 import { parseTerminalWriterWait } from "./mcp-task-replay-projection";
-import { recoverTerminalWriterEscalation, TERMINAL_WRITER_MAX_ATTEMPTS } from "./mcp-task-terminal-writer-escalation";
+import { recoverTerminalWriterEscalation, terminalWriterRetryIsExhausted, TERMINAL_WRITER_MAX_ATTEMPTS } from "./mcp-task-terminal-writer-escalation";
 import { parseInitiativeReviewBinding } from "./mcp-task-review-contract";
+import { loadTaskInitiativeReviewOutcome, reconcilePersistedReviewStatus } from "./mcp-task-review-outcome";
 
 export { REMOTE_TASK_EXECUTION_EVENT };
 
@@ -39,7 +40,8 @@ export async function automaticReviewerRecoveryWait(row: {
   const wait = parseTerminalWriterWait(row.progressPayload);
   if (!binding || !wait || wait.noncompliance !== "prose-without-required-writer"
     || binding.writerToolName !== wait.writerToolName
-    || wait.validationFailure || recoverTerminalWriterEscalation(row.progressPayload)) return null;
+    || wait.validationFailure || wait.writerRejection || terminalWriterRetryIsExhausted(wait.attempt)
+    || recoverTerminalWriterEscalation(row.progressPayload)) return null;
   const observedAt = Date.parse(wait.observedAt);
   if (!Number.isFinite(observedAt) || now.getTime() - observedAt < DISPATCH_STALE_MS) return null;
   const [writer, envelope] = await Promise.all([
@@ -52,6 +54,30 @@ export async function automaticReviewerRecoveryWait(row: {
     }),
   ]);
   return writer || envelope ? null : wait;
+}
+
+/**
+ * BI-2E479619: a reviewer parked as a missing writer whose governed writer in
+ * fact recorded a verified receipt (a CLI ran it natively, so the turn never
+ * saw it) is settled to that recorded outcome. It is never re-dispatched:
+ * automaticReviewerRecoveryWait keeps refusing rows with a writer row, and
+ * this separate branch completes them instead. Compare-and-set on the parked
+ * state, so a concurrent resume or operator action wins.
+ */
+export async function healParkedReviewFromReceipt(row: {
+  taskRunId: string; status: string; updatedAt: Date; progressPayload: unknown; a2aMetadata: unknown;
+}): Promise<boolean> {
+  if (row.status !== "input-required" && row.status !== "submitted") return false;
+  const metadata = record(row.a2aMetadata);
+  if (metadata?.["trigger"] !== "external-mcp") return false;
+  const binding = parseInitiativeReviewBinding(metadata["initiativeReviewBinding"]);
+  const wait = parseTerminalWriterWait(row.progressPayload);
+  if (!binding || (wait && wait.writerToolName !== binding.writerToolName)) return false;
+  const outcome = await loadTaskInitiativeReviewOutcome(row.taskRunId, binding);
+  if (!outcome) return false;
+  const settled = await reconcilePersistedReviewStatus(row.taskRunId, row.progressPayload, outcome, row);
+  if (settled) console.info(`[mcp-task-dispatch] settled ${row.taskRunId} to its recorded ${outcome.gate} receipt ${outcome.receiptId}`);
+  return settled;
 }
 
 export type RemoteTaskDispatchProjection = {
@@ -363,6 +389,7 @@ export async function reconcilePersistedRemoteTaskDispatches(input?: {
     const isResourceWaitCandidate = row.status === "submitted"
       && metadata?.["trigger"] === "external-mcp"
       && parseResourceWaitProjection(progress) !== null;
+    if (await healParkedReviewFromReceipt(row)) continue;
     const isReviewerRecoveryCandidate = await automaticReviewerRecoveryWait(row, now);
     if (!isDurableCandidate && !isOrdinaryCandidate && !isResourceWaitCandidate && !isReviewerRecoveryCandidate) {
       raced += 1;

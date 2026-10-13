@@ -37,7 +37,8 @@ export async function listWorkroomObservation(db: Db, params: Record<string, unk
       }, { isolationLevel: "RepeatableRead", timeout: 5000, maxWait: 1000 });
       if (capsulesAll.length > WORKROOM_OBSERVATION_LIMIT) throw new Error("snapshot_capacity_exceeded");
       return store.capture(params.staleOnly === true ? capsulesAll.filter(c => !c.isLive) : capsulesAll, identity,
-        { limit: typeof params.limit === "number" ? params.limit : undefined, observedAt: now.getTime(), summary: livenessSummary });
+        { limit: typeof params.limit === "number" ? params.limit : undefined, observedAt: now.getTime(), summary: livenessSummary,
+          ownershipScope: context.authSource === "oauth" ? "caller-visible" : "installation" });
     } finally { captures--; }
   } catch (error) {
     const code = error instanceof Error ? error.message : "snapshot_unavailable";

@@ -1,6 +1,7 @@
 import type { InitiativeArtifactRef, InitiativeGateKey } from "@/lib/backlog/initiative-readiness";
 import { INITIATIVE_DISPOSITION_GUIDANCE, validateInitiativeDisposition, findingEvidenceMatchesRead, type InitiativeFindingEvidence } from "@/lib/backlog/initiative-readiness/disposition-contract";
 import { prisma } from "@dpf/db";
+import { parseInitiativeReviewBinding, type InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import {
   RESEARCH_DEFINITIONS,
   READINESS_PROFILES,
@@ -16,6 +17,7 @@ import {
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { verifyTerminalWriterCitation } from "@/lib/mcp-task-terminal-writer-context";
 import { createInitiativeReviewTerminalToolPolicy, IMMUTABLE_PAGE_READER_TOOLS } from "@/lib/tak/terminal-tool-policy";
+import { resolveAcceptanceStewardRunBinding } from "@/lib/backlog/acceptance-sweep/steward-objective-mapping-authority";
 
 const artifactRefSchema = {
   type: "object",
@@ -241,6 +243,7 @@ async function resolveExternalInitiativeReviewBinding(
   expectedCurrentBaselineId?: string | null;
   eligibleEvidenceActivityIds?: string[];
   artifactRef: InitiativeArtifactRef;
+  workroomRef?: InitiativeReviewBinding["workroomRef"] | null;
 } | null> {
   if (!taskRunId) return null;
   const run = await prisma.taskRun.findUnique({
@@ -271,6 +274,10 @@ async function resolveExternalInitiativeReviewBinding(
     return null;
   }
   const artifact = rawArtifact as Record<string, unknown>;
+  // Reuse the issued-packet parser. Invalid context fails closed below; an
+  // absent legacy reference keeps the exact-artifact-head resolver unchanged.
+  const workroomRef = binding["workroomRef"] === undefined ? undefined
+    : parseInitiativeReviewBinding(binding)?.workroomRef ?? null;
   const isRepoBlob = artifact["kind"] === "repo-blob-at-commit"
     && typeof artifact["repositoryFullName"] === "string"
     && typeof artifact["commitSha"] === "string"
@@ -291,6 +298,7 @@ async function resolveExternalInitiativeReviewBinding(
   return {
     itemId,
     gate,
+    ...(workroomRef !== undefined ? { workroomRef } : {}),
     ...(expectedCurrentBaselineId !== undefined
       ? { expectedCurrentBaselineId: expectedCurrentBaselineId as string | null }
       : {}),
@@ -307,9 +315,40 @@ async function resolveExternalInitiativeReviewBinding(
   };
 }
 
+/**
+ * BI-099A0BA3: an acceptance steward room's scheduled run may write only the
+ * objective mapping the platform issued to that room, for its item, with the
+ * binding the server holds. Null for every other run, which is untouched.
+ */
+async function resolveStewardRoomBinding(
+  actionKey: string,
+  params: Record<string, unknown>,
+  taskRunId: string | undefined,
+): Promise<{ binding: Awaited<ReturnType<typeof resolveExternalInitiativeReviewBinding>> } | { refusal: ToolResult } | null> {
+  if (actionKey !== "record_initiative_evidence") return null;
+  const steward = await resolveAcceptanceStewardRunBinding(taskRunId);
+  if (!steward) return null;
+  if (params.operation !== "objective-mapping"
+    || (params.itemId !== undefined && params.itemId !== (steward.ok ? steward.data.itemId : params.itemId))) {
+    return { refusal: { success: false, error: "steward-room-objective-mapping-only", message: "An acceptance steward room records only the objective mapping the platform issued it, for its own item: call record_initiative_evidence with operation \"objective-mapping\"." } };
+  }
+  if (!steward.ok) {
+    return { refusal: { success: false, error: "objective-mapping-packet-unavailable", message: `This room holds no current platform-issued objective-mapping packet (${steward.reason}). Record what you verified with record_workroom_evidence; the next acceptance sweep issues a current packet.` } };
+  }
+  const { binding } = steward.data;
+  return { binding: { ...binding, artifactRef: binding.artifactRef as InitiativeArtifactRef } };
+}
+
 function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
   return async (params, userId, context): Promise<ToolResult> => {
-    const binding = await resolveExternalInitiativeReviewBinding(actionKey, context?.taskRunId);
+    let binding = await resolveExternalInitiativeReviewBinding(actionKey, context?.taskRunId);
+    if (binding?.workroomRef === null) return { success: false, error: "CANONICAL_DESIGN_AMBIGUOUS",
+      message: "The accepted review's workroom binding is malformed. Reconcile the server-issued packet before retrying." };
+    if (!binding) {
+      const steward = await resolveStewardRoomBinding(actionKey, params, context?.taskRunId);
+      if (steward && "refusal" in steward) return steward.refusal;
+      if (steward) binding = steward.binding;
+    }
     if (binding) {
       params = {
         ...params,
@@ -447,6 +486,8 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
       gate: gate as InitiativeGateKey,
       decision,
       artifactRef: params.artifactRef as InitiativeArtifactRef,
+      workroomRef: binding?.workroomRef ?? undefined,
+      expectedCurrentBaselineId: binding?.expectedCurrentBaselineId,
       reason: String(params.reason ?? ""),
       findings,
       resolvedFindingRefs,
@@ -455,6 +496,7 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
       authorityDecisionId: context?.authorityDecisionId ?? null,
       tokenScope: context?.tokenScope ?? null,
       requiresIndependentReviewer: lane.independent,
+      authorizationParams: params,
       selectedProfile: gate === "classification" && decision === "pass" ? selectedProfile as never : undefined,
     });
     return result.ok

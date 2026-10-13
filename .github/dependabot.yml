@@ -27,27 +27,10 @@ updates:
     labels:
       - "dependencies"
       - "javascript"
-  # BI-32F2BE47: probe has its own lockfile; security alerts fire but UPDATE PRs
-  # never did because only directory "/" was declared. Same cooldown as root.
-  - package-ecosystem: "npm"
-    directory: "/scripts/probes/marketing-media"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 2
-    cooldown:
-      default-days: 5
-      semver-major-days: 14
-      semver-minor-days: 7
-      semver-patch-days: 3
-    labels:
-      - "dependencies"
-      - "javascript"
-      - "probe"
+    # Coordinate compatible root updates so shared transitive pins move together.
     groups:
       minor-and-patch:
-        update-types:
-          - "minor"
-          - "patch"
+        update-types: ["minor", "patch"]
     ignore:
       # Expo SDK is a lockstep upgrade: `expo` core and every `expo-*`
       # companion package must move together to the same SDK line.
@@ -118,6 +101,27 @@ updates:
       # the guard's override list, not independently.
       - dependency-name: "@floating-ui/*"
 
+  # BI-32F2BE47: probe has its own lockfile; security alerts fire but UPDATE PRs
+  # never did because only directory "/" was declared. Same cooldown as root.
+  - package-ecosystem: "npm"
+    directory: "/scripts/probes/marketing-media"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 2
+    cooldown:
+      default-days: 5
+      semver-major-days: 14
+      semver-minor-days: 7
+      semver-patch-days: 3
+    labels:
+      - "dependencies"
+      - "javascript"
+      - "probe"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
   # apps/mobile resolves in its own workspace and lockfile (plan 2026-09-08 M6),
   # so root updates no longer reach it. Same cooldown as the root. The Expo /
   # React Native lockstep rules live here, where they apply to the mobile tree.

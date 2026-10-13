@@ -164,6 +164,31 @@ export function resolveBoundInitiativeReviewBinding(
   return binding;
 }
 
+/**
+ * The item a bound initiative write is about, from server facts only. An
+ * external run names it in its bound packet; an acceptance steward room's
+ * scheduled run names it through the packet the platform issued its room
+ * (BI-099A0BA3, security review L1: before this the subject came from model
+ * arguments, so the decision could carry no object and a tenant item's
+ * organization could not be matched). Null when neither applies.
+ */
+export async function resolveTrustedInitiativeItemId(input: {
+  task: InitiativeReviewTask | null;
+  toolName: string;
+  boundItemId: string | null;
+  loadStewardItemId: (taskRunId: string) => Promise<string | null>;
+}): Promise<string | null> {
+  if (input.boundItemId) return input.boundItemId;
+  if (input.toolName !== "record_initiative_evidence" || !input.task?.taskRunId.startsWith(SCHEDULED_RUN_PREFIX)) return null;
+  return input.loadStewardItemId(input.task.taskRunId);
+}
+
+async function loadAcceptanceStewardItemId(taskRunId: string): Promise<string | null> {
+  const { resolveAcceptanceStewardRunBinding } = await import("@/lib/backlog/acceptance-sweep/steward-objective-mapping-authority");
+  const steward = await resolveAcceptanceStewardRunBinding(taskRunId);
+  return steward?.ok ? steward.data.itemId : null;
+}
+
 export function resolveBoundInitiativeReviewItem(
   task: InitiativeReviewTask | null,
   executingToolName: string,
@@ -325,6 +350,22 @@ function authSource(
 }
 
 /**
+ * BI-C8EC05C9 (spec D2 S2): the propose boundary reaches the escalation gate,
+ * and under it no policy projection may approve on a person's behalf
+ * (policy-action-judgment.ts reads policyProjectionAllowed). Without it,
+ * projection is allowed unless the operator's HITL policy is "always".
+ */
+export function proposeBoundaryAuthority(
+  context: Pick<GovernedExecuteContext, "proposeBoundary"> | undefined,
+  hitlPolicy: string | null | undefined,
+): { proposeBoundary?: true; policyProjectionAllowed: boolean } {
+  const operatorAllows = hitlPolicy?.trim().toLowerCase() !== "always";
+  return context?.proposeBoundary === true
+    ? { proposeBoundary: true, policyProjectionAllowed: false }
+    : { policyProjectionAllowed: operatorAllows };
+}
+
+/**
  * Resolve the server-owned inputs for the pure authority evaluator. Model
  * output and caller-provided policy claims never enter this function.
  */
@@ -383,7 +424,12 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
       task,
       execution.toolName,
     );
-    const trustedBoundItemId = initiativeReviewBinding?.itemId ?? null;
+    const trustedBoundItemId = await resolveTrustedInitiativeItemId({
+      task,
+      toolName: execution.toolName,
+      boundItemId: initiativeReviewBinding?.itemId ?? null,
+      loadStewardItemId: loadAcceptanceStewardItemId,
+    });
     const [agent, delegation, initiativeAuthority] = await Promise.all([
       agentPromise,
       delegationPromise,
@@ -424,7 +470,9 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
     const approvalPolicy = deriveCoworkerApprovalPolicy({
       hitlTierDefault: agent.hitlTierDefault,
       hitlPolicy: agent.governanceProfile?.hitlPolicy ?? null,
-      serverBoundInitiativeReview: Boolean(trustedBoundItemId),
+      // Only an external review binding changes the approval policy; a steward
+      // run is steered by its room's declared mandate instead.
+      serverBoundInitiativeReview: Boolean(initiativeReviewBinding),
     });
     const sensitivity = coerceDataSensitivity(agent.sensitivity);
     const decisionVersionIds = [
@@ -433,6 +481,11 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
     ].filter((value): value is string => Boolean(value));
 
     const roomAuthority = execution.context?.roomAuthority ?? null;
+    const authorResearchBinding = execution.toolName === "record_initiative_evidence" && !initiativeReviewBinding && initiativeAuthority.subject.kind === "backlog-item"
+      ? await (await import("@/lib/build/author-research-policy-binding")).resolveAuthorResearchPolicyBinding({ toolName: execution.toolName, params: execution.rawParams,
+          userId: execution.userId, agentId: agent.agentId, itemId: initiativeAuthority.subject.id,
+          routeContext: execution.context?.routeContext ?? null }, db as never)
+      : null;
     const callConsequence = await resolveCallConsequence(tool, {
       toolName: execution.toolName,
       params: execution.rawParams,
@@ -441,6 +494,7 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
     });
     const input: CoworkerAuthorityInput = {
       authContext: effectiveAuth,
+      ...(authorResearchBinding ? { authorResearchBinding } : {}),
       organizationId: initiativeAuthority.organizationId,
       action: {
         toolName: execution.toolName,
@@ -456,8 +510,7 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
         routeContext: execution.context?.routeContext ?? null,
         allowedRouteContexts: deriveAllowedRouteContexts(tool.screenSurface),
         approvalPolicy,
-        policyProjectionAllowed:
-          agent.governanceProfile?.hitlPolicy.trim().toLowerCase() !== "always",
+        ...proposeBoundaryAuthority(execution.context, agent.governanceProfile?.hitlPolicy),
         consequence: callConsequence.consequence,
         ...(callConsequence.refinement ? { consequenceRefinement: callConsequence.refinement } : {}),
         ...(execution.context?.workCase

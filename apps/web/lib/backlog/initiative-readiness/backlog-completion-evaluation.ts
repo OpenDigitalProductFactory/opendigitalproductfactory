@@ -42,6 +42,9 @@ import {
 import { type InheritanceDb, loadInheritedInitiativeScope } from "./parent-scope-inheritance";
 import type { InitiativeReadinessDecision, InitiativeTransitionObject } from "./types";
 
+/** The shape an operational close is gated as (BI-B22E50BC). */
+const OPERATIONAL_CLOSE_WORK_SHAPE = "delivery-small@1.0.0";
+
 export type BacklogCompletionItem = {
   id: string;
   itemId: string;
@@ -110,6 +113,7 @@ export type BacklogCompletionDependencies = {
 export type BacklogCompletionEvaluation = {
   governed: boolean;
   decision: InitiativeReadinessDecision;
+  independentAcceptanceDecision: InitiativeReadinessDecision;
   reconciliation: ObjectiveReconciliationResult;
   delivery: "pass" | "fail" | "missing";
   mergedThroughGates: MergeDeliverySignal;
@@ -282,11 +286,26 @@ export async function evaluateBacklogItemCompletion(args: {
     && completion.verdict.normalizedManifest?.workClass === "documentation"
     && (completion.verdict.acceptanceEvidenceRefs?.length ?? 0) > 0;
   const boundWorkShape = await readBoundWorkShapeRef(db as unknown as BoundWorkShapeDb, item.itemId);
+  // BI-B22E50BC: an operational close (a chore, tool or skill done with no code:
+  // a dismissed alert, a config change, a runbook run) never claims a workroom,
+  // so it has no bound shape and fell onto the v2 fix table, which owes a spec
+  // baseline and reconciliation it cannot produce without making artifacts
+  // just to pass the gate. The only exit was retiring work that was done. A
+  // well-formed operational manifest, on a work type the evidence policy lets
+  // close as operational, is gated as the small shape it is: its manual check
+  // is the delivery and the acceptance. A bound shape always wins, and an item
+  // a Build Studio build governs is code delivery, never an operational close.
+  const operationalClose = boundWorkShape == null
+    && item.activeBuild == null
+    && completion.kind === "evaluated"
+    && completion.verdict.normalizedManifest?.workClass === "operational"
+    && !completion.verdict.blockers.some((entry) => entry.code === "incompatible-work-class");
+  const gatedWorkShape = boundWorkShape ?? (operationalClose ? OPERATIONAL_CLOSE_WORK_SHAPE : null);
   // BI-05F8860A / readiness.v3 shape-requirements: a small or break-fix item
   // is accepted by the runtime check on the live install or the
   // failing-to-passing test, recorded as manual/ux evidence — "no spec, no
   // plan, no reconciliation receipt".
-  const boundShape = readinessShapeFromWorkShape(boundWorkShape);
+  const boundShape = readinessShapeFromWorkShape(gatedWorkShape);
   const smallShapeAcceptance = (boundShape === "small" || boundShape === "break-fix")
     && completion.kind === "evaluated"
     && completion.verdict.allowed
@@ -300,11 +319,11 @@ export async function evaluateBacklogItemCompletion(args: {
   const deliveryEvidenceRefs = completion.kind === "evaluated"
     ? completion.verdict.normalizedManifest?.evidenceActivityIds ?? []
     : [];
-  const projected = (deps.projectReadiness ?? projectBacklogItemReadiness)({
+  const projectionInput: Parameters<typeof projectBacklogItemReadiness>[0] = {
     item: {
       ...item,
       activeBuildKind: item.activeBuild?.kind ?? null,
-      workShape: boundWorkShape,
+      workShape: gatedWorkShape,
       // BI-243BC956: completion re-reads the room's declared edit scope.
       deliverySensitivity: assessDeliverySensitivity({
         ...item,
@@ -340,10 +359,20 @@ export async function evaluateBacklogItemCompletion(args: {
       },
     },
     evaluatedAt,
-  });
+  };
+  const project = deps.projectReadiness ?? projectBacklogItemReadiness;
+  const projected = project(projectionInput);
+  const independent = project({ ...projectionInput, completion: {
+    ...projectionInput.completion!,
+    acceptanceEvidence: reconciliation.state === "pass" || directDocumentationAcceptance || smallShapeAcceptance
+      ? "pass" : reconciliation.state === "fail" ? "fail" : "missing",
+    objectiveReconciliation: reconciliation.state === "pass" || smallShapeAcceptance
+      ? "pass" : reconciliation.state === "fail" ? "fail" : "missing",
+  } });
   return {
     governed: projected.governed,
     decision: deployment ? projectDeploymentClosure(projected.decision, deployment) : projected.decision,
+    independentAcceptanceDecision: independent.decision,
     reconciliation,
     delivery,
     mergedThroughGates,

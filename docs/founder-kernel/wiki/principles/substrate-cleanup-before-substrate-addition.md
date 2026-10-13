@@ -147,7 +147,7 @@ Before opening a PR that adds a new substrate layer:
 - [`one-data-model`](../../../professions/data-architect/wiki/one-data-model.md) — the architectural reason
   fragmentation is expensive
 - [`architecture-over-shortcuts`](architecture-over-shortcuts.md) — the
-  20% refactoring budget posture this principle operationalizes
+  architecture posture this principle operationalizes; current owner-scoped allocation is in [Absorb, Don't Adopt](absorb-dont-adopt.md)
 
 ## Spec references
 
@@ -157,7 +157,7 @@ Before opening a PR that adds a new substrate layer:
 
 ## Amendment 2026-09-22 — surface a deprecation when you meet it, and price a big one
 
-The 20% budget above covers the seams you choose to work on. Two clauses extend it
+The applicable owner-scoped refactoring budget covers the seams you choose to work on. Two clauses extend it
 to the debt that arrives on its own.
 
 **Surface a deprecation proactively.** When a library, framework or internal module

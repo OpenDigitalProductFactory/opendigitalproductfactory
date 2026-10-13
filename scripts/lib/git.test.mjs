@@ -69,3 +69,28 @@ test("real git: runGit distinguishes a repo from a non-repo", () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// BI-1D04A29F: batch commands need stdin, and byte-counted batch output needs a Buffer.
+test("input feeds stdin and binary returns a Buffer", () => {
+  let seen;
+  const exec = (_cmd, _args, options) => {
+    seen = options;
+    return Buffer.from("ok\n");
+  };
+  const out = gitText(["cat-file", "--batch"], { exec, input: "abc\n", binary: true });
+  assert.ok(Buffer.isBuffer(out));
+  assert.equal(seen.input, "abc\n");
+  assert.equal(seen.stdio[0], "pipe");
+  assert.equal(seen.encoding, undefined);
+});
+
+test("without input stdin stays ignored and output is utf8 text", () => {
+  let seen;
+  const exec = (_cmd, _args, options) => {
+    seen = options;
+    return " text \n";
+  };
+  assert.equal(gitText(["status"], { exec }), "text");
+  assert.equal(seen.stdio[0], "ignore");
+  assert.equal(seen.encoding, "utf8");
+});

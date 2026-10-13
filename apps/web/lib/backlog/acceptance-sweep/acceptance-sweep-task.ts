@@ -4,11 +4,8 @@
 // Design: docs/superpowers/specs/2026-09-24-acceptance-accountability-design.md §3.3.
 // Plan:   docs/superpowers/plans/2026-09-24-acceptance-accountability-plan.md, phase 2.
 //
-// Off the LLM path entirely. One run at a time is guaranteed upstream: the
-// scheduler's guarded claim (executeScheduledAgentTask, BI-D1CD3A11) advances
-// nextRunAt with a conditional update before any branch runs, so exactly one
-// dispatcher wins a due tick and a concurrent poll or retry returns without
-// running. This executor adds no lock of its own.
+// Off the LLM path. The acceptance-specific lease claims before cadence is
+// changed; every mutation validates that owner inside a task-row transaction.
 
 import {
   prisma,
@@ -20,7 +17,10 @@ import {
   ACCEPTANCE_TREND_DAYS,
 } from "@dpf/db";
 
-import { computeNextCronRun } from "@/lib/operate/cron-next-run";
+import type { SweepClaim } from "./acceptance-sweep-checkpoint";
+import type { TerminalTransitionClient } from "@/lib/backlog/initiative-readiness/terminal-transition-repository";
+import { withAcceptanceSweepWrite, type SweepFenceDb } from "./acceptance-sweep-fence";
+import { claimAcceptanceSweep, finishAcceptanceSweep, renewAcceptanceSweep, type SweepLeaseClient } from "./acceptance-sweep-lease";
 import { resolveWorkOwner, type AccountableOwnerDb } from "@/lib/portfolio/accountable-owner";
 
 import { loadAcceptancePoolAges, type AcceptancePoolAgeDb } from "./acceptance-pool-age";
@@ -30,6 +30,8 @@ import { selectAcceptanceSweepPage, type AcceptanceSweepPageDb } from "./accepta
 import { runAcceptanceSweep, type AcceptanceSweepConfig, type AcceptanceSweepPorts, type AcceptanceSweepSummary } from "./acceptance-sweep-run";
 import type { InPlatformOwnerDb } from "./in-platform-owners";
 import type { AgedSweepCandidate } from "./acceptance-sweep-routing";
+import type { DeliveryActorDb } from "./delivery-actors";
+import { issueAcceptanceObjectiveMappingPacket, type IssuePacketDb } from "./issue-objective-mapping-packet";
 import { routeAgedItems, type AcceptanceRouteDb, type RouteOutcome } from "./route-aged-item";
 import {
   COMPLETION_TRANSITION_TOOL,
@@ -71,11 +73,6 @@ type RoomDb = {
       select: { id: true };
     }): Promise<{ id: string }>;
   };
-};
-
-type TaskStatusDb = {
-  scheduledAgentTask: { update(args: { where: { taskId: string }; data: Record<string, unknown> }): Promise<unknown> };
-  scheduledJob: { update(args: { where: { jobId: string }; data: Record<string, unknown> }): Promise<unknown> };
 };
 
 /** The cursor the previous run recorded. A lost cursor only restarts the round-robin. */
@@ -148,17 +145,20 @@ type RouteTextDb = {
   };
 };
 
-type SweepDb = RoomDb & TaskStatusDb & AcceptancePoolAgeDb & AcceptanceSweepPageDb & OwedSnapshotDb & InPlatformOwnerDb
-  & AcceptanceSweepCloseDb & PlatformConfigDb & AcceptanceRouteDb & AccountableOwnerDb & RouteTextDb;
+type SweepDb = RoomDb & AcceptancePoolAgeDb & AcceptanceSweepPageDb & OwedSnapshotDb & InPlatformOwnerDb
+  & AcceptanceSweepCloseDb & PlatformConfigDb & AcceptanceRouteDb & AccountableOwnerDb & RouteTextDb & IssuePacketDb
+  & DeliveryActorDb & TerminalTransitionClient;
 
 /**
  * Give this run's aged, non-closable items a steward room each (BI-C1781121).
  * The room brief quotes the item's title and acceptance criteria, read here
  * because the page selects ids only. The room's owner is the person
  * accountable for the platform's automatic work (resolveWorkOwner, Foundational).
+ * A routed medium or large item's live room is issued the owner's
+ * objective-mapping packet (BI-099A0BA3, issue-objective-mapping-packet.ts).
  */
 export async function routeAgedSweepCandidates(
-  db: AcceptanceRouteDb & AccountableOwnerDb & RouteTextDb,
+  db: AcceptanceRouteDb & AccountableOwnerDb & RouteTextDb & IssuePacketDb,
   now: Date,
   candidates: readonly AgedSweepCandidate[],
   limit: number,
@@ -181,6 +181,7 @@ export async function routeAgedSweepCandidates(
       projection,
     })),
     resolveOwnerUserId: async () => (await resolveWorkOwner(db, {})).userId,
+    issuePacket: (args) => issueAcceptanceObjectiveMappingPacket({ db, now, ...args }),
   });
 }
 
@@ -207,22 +208,46 @@ export function productionCloseAuthorisationPorts(db: PlatformConfigDb): CloseAu
   };
 }
 
-function productionPorts(db: SweepDb, now: Date, agentId: string): AcceptanceSweepPorts {
+export function productionAcceptanceSweepPorts(db: SweepDb, now: Date, agentId: string, taskId: string, claim: SweepClaim): AcceptanceSweepPorts {
   const evaluateDeps = productionSweepEvaluateDeps(db);
+  const leaseDb = db as unknown as SweepFenceDb<SweepDb & SweepLeaseClient>;
+  const write = <T>(callback: (tx: SweepDb & SweepLeaseClient) => Promise<T>) =>
+    withAcceptanceSweepWrite(leaseDb, taskId, claim, callback);
   return {
     now,
     loadPoolAges: () => loadAcceptancePoolAges(db, now),
     loadLastCursor: () => loadLastSweepCursor(db),
     selectPage: (args) => selectAcceptanceSweepPage(db, args),
     evaluate: (item) => evaluateOwedAcceptance(item, evaluateDeps),
-    recordSnapshot: (item, projection) => recordOwedAcceptanceSnapshot({ db, backlogItemId: item.id, projection, recordedByAgentId: agentId }),
-    recordRun: (summary) => recordSweepRun(db, summary, agentId),
-    route: (candidates, limit) => routeAgedSweepCandidates(db, now, candidates, limit),
+    recordSnapshot: (item, projection) => write(tx => recordOwedAcceptanceSnapshot({ db: tx, backlogItemId: item.id, projection, recordedByAgentId: agentId })),
+    recordRun: (summary) => write(tx => recordSweepRun(tx, summary, agentId)),
+    route: async (candidates, limit) => {
+      const outcomes: RouteOutcome[] = [];
+      let remaining = limit;
+      const ordered = [...candidates].sort((a, b) => b.ageDays - a.ageDays || a.item.itemId.localeCompare(b.item.itemId));
+      for (const candidate of ordered) {
+        const routed = await write(tx => routeAgedSweepCandidates(tx, now, [candidate], remaining));
+        remaining -= routed.filter(row => row.outcome === "routed").length;
+        outcomes.push(...routed);
+      }
+      return outcomes;
+    },
     resolveCloseAuthorisation: (): Promise<CloseAuthorisation> =>
       resolveCloseAuthorisation(agentId, productionCloseAuthorisationPorts(db)),
     close: async (item, decision, authorisation) => {
       const { completeBacklogItemTransition } = await import("@/lib/backlog/initiative-readiness/backlog-terminal-transition");
-      return closeAllowedAcceptanceItem({ item, decision, authorisation, agentId, now, db, complete: completeBacklogItemTransition });
+      const { prepareSweepCompletionSignals } = await import("./prepare-completion-signals");
+      const prepared = await prepareSweepCompletionSignals(db as unknown as Parameters<typeof prepareSweepCompletionSignals>[0], item.id);
+      return closeAllowedAcceptanceItem({ item, decision, authorisation, agentId, now, db,
+        complete: args => completeBacklogItemTransition({ ...args, dependencies: prepared.dependencies, db: {
+          // Normal mutation AND CAS-conflict audit retry revalidate the owner
+          // and signal inputs. No Git, network or global-client read under lock.
+          $transaction: callback => write(async tx => {
+            await prepared.assertCurrent(tx as unknown as Parameters<typeof prepared.assertCurrent>[0]);
+            return callback(tx);
+          }),
+        } }),
+      });
     },
   };
 }
@@ -239,14 +264,16 @@ export async function executeAcceptanceSweepTask(
   const db = deps.db ?? (prisma as unknown as SweepDb);
   const run = deps.run ?? runAcceptanceSweep;
   const agentId = task.agentId || ACCEPTANCE_SWEEP_AGENT_ID;
-  const nextRunAt = computeNextCronRun(task.schedule, startedAt);
-  const record = async (data: { lastStatus: "ok" | "error"; lastError: string | null }) => {
-    const fields = { lastRunAt: startedAt, ...data, nextRunAt };
-    await db.scheduledAgentTask.update({ where: { taskId: task.taskId }, data: fields });
-    await db.scheduledJob.update({ where: { jobId: task.taskId }, data: fields }).catch(() => {});
-  };
+  const leaseDb = db as unknown as SweepFenceDb<SweepDb & SweepLeaseClient>;
+  const claim = await claimAcceptanceSweep(leaseDb, task.taskId);
+  if (!claim) return;
+  let renewalError: unknown = null;
+  const heartbeat = setInterval(() => {
+    void renewAcceptanceSweep(leaseDb, task.taskId, claim).catch(error => { renewalError = error; });
+  }, 60_000);
+  let failure: string | null = null;
   try {
-    const summary = await run(productionPorts(db, startedAt, agentId), {
+    const summary = await run(productionAcceptanceSweepPorts(db, startedAt, agentId, task.taskId, claim), {
       pageSize: ACCEPTANCE_SWEEP_PAGE_SIZE,
       agedDays: ACCEPTANCE_AGED_DAYS,
       trendDays: ACCEPTANCE_TREND_DAYS,
@@ -254,9 +281,14 @@ export async function executeAcceptanceSweepTask(
       routeLimit: ACCEPTANCE_SWEEP_ROUTE_LIMIT,
       recordedByAgentId: agentId,
     });
+    if (renewalError) throw renewalError;
     console.info("[acceptance-sweep] %s", summary.headline);
-    await record({ lastStatus: "ok", lastError: null });
   } catch (err) {
-    await record({ lastStatus: "error", lastError: err instanceof Error ? err.message : "unknown error" });
+    failure = err instanceof Error ? err.message : "unknown error";
+  } finally {
+    clearInterval(heartbeat);
   }
+  // Ownership loss refuses this write too. Never fall back to an unconditional
+  // status/cadence update that could overwrite a recovered worker's progress.
+  await finishAcceptanceSweep(leaseDb, task.taskId, claim, { startedAt, schedule: task.schedule, error: failure });
 }

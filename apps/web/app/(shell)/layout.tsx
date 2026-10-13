@@ -34,6 +34,7 @@ import { UxInitialLoadBoundary } from "@/components/shell/UxInitialLoadBoundary"
 import { resolveCustomerSurface } from "@/lib/owner-first/archetype-surface";
 import { resolveFinanceSurface } from "@/lib/finance/finance-surface";
 import { recordUserSeen } from "@/lib/identity/last-seen";
+import { PortalVitals } from "@/components/telemetry/PortalVitals";
 
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
   // First-run check — redirect to setup if no org exists.
@@ -212,7 +213,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
     <PhoneCountryProvider country={phoneCountry}>
       <SystemEventProvider>
       {brandingCss && <style dangerouslySetInnerHTML={{ __html: brandingCss }} />}
-      <div className="min-h-screen flex flex-col bg-[var(--dpf-bg)]">
+      <div className="min-h-screen flex flex-col bg-[var(--dpf-bg)]" data-nav-mode={navMode}>
         {/* Common Shell Action-Result Contract (BI-9C0954D0) C6: the first
             focusable element skips the global header/rail chrome straight to the
             route task, so keyboard and assistive-tech owners reach their work
@@ -316,6 +317,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
                       labelOverrides={shellLabelOverrides}
                     />
                   )}
+                  <PortalVitals />
                   <UxInitialLoadBoundary>{children}</UxInitialLoadBoundary>
                 </div>
               </div>

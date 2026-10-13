@@ -293,7 +293,10 @@ test("canonical gate heartbeats during a long command and releases once", async 
       },
     });
 
-    assert.ok([0, 3].includes(result.code), result.output);
+    // This timing-only command writes no execution metadata. It must renew and
+    // release, but cannot produce a product verdict from its zero exit alone.
+    assert.equal(result.code, 5, result.output);
+    assert.match(result.output, /completion checkpoint missing or invalid/);
     assert.ok(calls.includes("renew_nonprod_environment_lease"), `${calls.join(", ")}\n${result.output}`);
     assert.equal(calls.filter((tool) => tool === "release_nonprod_environment_lease").length, 1);
     assert.ok(calls.indexOf("renew_nonprod_environment_lease") < calls.indexOf("release_nonprod_environment_lease"));
@@ -1477,7 +1480,8 @@ test("admitted gate writes running state before starting the expensive command",
       },
     });
 
-    assert.ok([0, 3].includes(result.code), result.output);
+    assert.equal(result.code, 5, result.output);
+    assert.match(result.output, /completion checkpoint missing or invalid/);
     const state = JSON.parse(await readFile(observedState, "utf8"));
     assert.equal(state.branch, "fix/local-ci-descendant-fence");
     assert.equal(state.leaseId, "NPEL-RUNNING-STATE");
@@ -1878,9 +1882,9 @@ test("sampleAsync yields to the event loop, so a timer due mid-scan still fires"
 
 test("sampleAsync reports the same descendants as the synchronous sample", async () => {
   const rows = [
-    { pid: 100, parentPid: 1, commandLine: "root" },
-    { pid: 101, parentPid: 100, commandLine: "child" },
-    { pid: 102, parentPid: 101, commandLine: "grandchild" },
+    { pid: 100, birthTime: "100", parentPid: 1, commandLine: "root" },
+    { pid: 101, birthTime: "101", parentPid: 100, commandLine: "child" },
+    { pid: 102, birthTime: "102", parentPid: 101, commandLine: "grandchild" },
   ];
   const tracker = createProcessTreeTracker({
     rootPid: 100,
@@ -1894,12 +1898,12 @@ test("sampleAsync reports the same descendants as the synchronous sample", async
 test("process tree tracker remembers descendants before they reparent", async () => {
   const snapshots = [
     [
-      { pid: 100, parentPid: 1 },
-      { pid: 101, parentPid: 100 },
-      { pid: 102, parentPid: 101 },
+      { pid: 100, birthTime: "100", parentPid: 1 },
+      { pid: 101, birthTime: "101", parentPid: 100 },
+      { pid: 102, birthTime: "102", parentPid: 101 },
     ],
     [
-      { pid: 102, parentPid: 1 },
+      { pid: 102, birthTime: "102", parentPid: 1 },
     ],
   ];
   const alive = new Set([102]);
@@ -1918,10 +1922,10 @@ test("process tree tracker remembers descendants before they reparent", async ()
   });
 
   assert.deepEqual(collectDescendantPids(100, [
-    { pid: 100, parentPid: 1 },
-    { pid: 101, parentPid: 100 },
-    { pid: 102, parentPid: 101 },
-    { pid: 200, parentPid: 1 },
+    { pid: 100, birthTime: "100", parentPid: 1 },
+    { pid: 101, birthTime: "101", parentPid: 100 },
+    { pid: 102, birthTime: "102", parentPid: 101 },
+    { pid: 200, birthTime: "200", parentPid: 1 },
   ]), [101, 102]);
 
   tracker.sample();
@@ -2069,7 +2073,8 @@ test("POSIX gate heartbeats and releases through its injectable transport", asyn
       },
     });
 
-    assert.ok([0, 3].includes(result.code), result.output);
+    assert.equal(result.code, 5, result.output);
+    assert.match(result.output, /completion checkpoint missing or invalid/);
     assert.ok(calls.includes("renew_nonprod_environment_lease"), `${calls.join(", ")}\n${result.output}`);
     assert.equal(calls.filter((tool) => tool === "release_nonprod_environment_lease").length, 1);
   } finally {
@@ -2273,8 +2278,9 @@ test("no test in this file wrote gate artifacts into the checkout running it", (
 // now runs a different command than the descendant it once remembered.
 test("the descendant cleanup never kills a reused process id", async () => {
   let rows = [
-    { pid: 100, parentPid: 1, commandLine: "node local-ci-runner.mjs" },
-    { pid: 101, parentPid: 100, commandLine: "docker build ." },
+    { pid: 1, parentPid: 0, birthTime: "1" },
+    { pid: 100, birthTime: "100", parentPid: 1, commandLine: "node local-ci-runner.mjs" },
+    { pid: 101, birthTime: "101", parentPid: 100, commandLine: "docker build ." },
   ];
   const terminated = [];
   const events = [];
@@ -2290,8 +2296,8 @@ test("the descendant cleanup never kills a reused process id", async () => {
   tracker.sample();
   // The build exits; its id is reused by a stranger's resumer, and the runner lingers.
   rows = [
-    { pid: 100, parentPid: 1, commandLine: "node local-ci-runner.mjs" },
-    { pid: 101, parentPid: 4242, commandLine: "node local-ci-durable-wait-resumer.mjs --branch other" },
+    { pid: 100, birthTime: "100", parentPid: 1, commandLine: "node local-ci-runner.mjs" },
+    { pid: 101, birthTime: "201", parentPid: 4242, commandLine: "node local-ci-durable-wait-resumer.mjs --branch other" },
   ];
   await tracker.waitForQuiescence({ graceMs: 0, pollMs: 1 });
   assert.deepEqual(terminated, [100]);
@@ -2319,4 +2325,27 @@ test("the gate's own ancestors are never its conflicting mutators", () => {
     findConflictingLocalCiMutatorPids(processRows.filter((row) => row.pid !== 50000), { currentPid: 47700 }),
     [],
   );
+});
+
+
+test("local-CI admission ignores runner names in shell payloads and unrelated arguments", () => {
+  const commands = [
+    '/bin/zsh -c "node /repo/scripts/local-ci-runner.mjs --check; sleep 300"',
+    'sleep 300',
+    'node /repo/report.mjs /repo/scripts/local-ci-runner.mjs',
+    'node -e "console.log(1)" /repo/scripts/local-ci-runner.mjs',
+    'cat /repo/.local-ci-runner/output.log',
+    'docker inspect /repo/.local-ci-runner',
+  ];
+  const rows = commands.map((commandLine, index) => ({ pid: index + 10, parentPid: index === 1 ? 10 : 1, commandLine }));
+  assert.deepEqual(findLiveLocalCiMutatorPids(rows), []);
+});
+
+test("local-CI admission recognizes quoted executable and script paths with Node options", () => {
+  const rows = [
+    { pid: 10, parentPid: 1, commandLine: '\"C:\\Program Files\\nodejs\\node.exe\" --require \"C:\\tools\\hook.cjs\" \"D:\\DPF source\\scripts\\local-ci-runner.mjs\" --candidate fix/x' },
+    { pid: 11, parentPid: 10, commandLine: 'vitest run' },
+    { pid: 12, parentPid: 1, commandLine: 'node --max-old-space-size=4096 /repo/scripts/local-integration-ci.mjs' },
+  ];
+  assert.deepEqual(findLiveLocalCiMutatorPids(rows), [10, 11, 12]);
 });

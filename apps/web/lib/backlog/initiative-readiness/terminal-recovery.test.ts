@@ -158,8 +158,9 @@ describe("terminal initiative recovery", () => {
     expect(unavailable.escalations).toEqual([expect.objectContaining({ reason: "no-canonical-artifact", nextAction: "The source provider is unavailable." })]);
   });
 
-  it("BI-817556D8: a pre-delivery plan review routes on its own instead of dying on the acceptance lanes", async () => {
-    const ports = deps();
+  it.each([false, true])("a covered pre-delivery plan routes independently of design changes (unchanged branch: %s)", async (unchanged) => {
+    const ports = deps([{ ...room, baseSha: unchanged ? headSha : baseSha }]);
+    if (unchanged) ports.discoverArtifact.mockResolvedValue({ resolved: false, nextAction: "No changed design on this branch." });
     const reviewer = { agentId: "AGT-REVIEW", displayName: "Independent reviewer", status: "active", archived: false, lifecycleStage: "production" };
     ports.resolveRecovery.mockImplementation((input) => resolveInitiativeReviewerRecovery({
       ...input,
@@ -192,6 +193,7 @@ describe("terminal initiative recovery", () => {
     expect(ports.loadPlanArtifact).toHaveBeenCalledWith({ itemId: "BI-TERMINAL", repositoryFullName: room.repositoryFullName });
     expect(ports.loadEligibleEvidenceActivityIds).not.toHaveBeenCalled();
     expect(ports.loadObjectiveMappingHistory).not.toHaveBeenCalled();
+    if (unchanged) expect(ports.discoverArtifact).not.toHaveBeenCalled();
 
     // Without a baseline-valid plan the route stays unroutable with a named next step, never a guessed artifact.
     ports.loadPlanArtifact.mockResolvedValue({ resolved: false, nextAction: "Record valid plan coverage." });

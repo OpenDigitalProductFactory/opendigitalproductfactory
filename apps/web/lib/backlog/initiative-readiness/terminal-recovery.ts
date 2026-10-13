@@ -546,9 +546,15 @@ export async function resolveTerminalInitiativeRecovery(args: {
   decision: InitiativeReadinessDecision;
   currentAgentId: string | null;
   refusedWorkroomId: string | null;
+  taskAuthority?: import("./exhausted-plan-review").PlanReviewTaskAuthority | null;
   ports?: TerminalRecoveryPorts;
 }): Promise<TerminalInitiativeRecovery> {
-  const ports = args.ports ?? DEFAULT_TERMINAL_RECOVERY_PORTS;
+  const suppliedPorts = args.ports ?? DEFAULT_TERMINAL_RECOVERY_PORTS;
+  const ports = args.taskAuthority ? { ...suppliedPorts, resolveRecovery:
+    async (input: Parameters<typeof resolveInitiativeReviewerRecovery>[0]) => suppliedPorts.resolveRecovery({
+      ...input, isPlanReviewExhausted: (await import("./exhausted-plan-review"))
+        .createExhaustedPlanReviewPredicate(args.taskAuthority!, prisma),
+    }) } : suppliedPorts;
   const acceptanceLane = [...args.decision.blockers, ...args.decision.unmet]
     .find((entry) => entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED");
   if (acceptanceLane && acceptanceLane.accountableRole === "delivery-coordinator") {
@@ -627,6 +633,20 @@ export async function resolveTerminalInitiativeRecovery(args: {
   }
 
   const decision = designPhase ?? args.decision;
+  // A plan-only review reads the baseline-validated covered plan, exactly as
+  // the claim issuer does. An unchanged branch need not author a new design.
+  // Other design and acceptance lanes retain their own artifact resolution.
+  if (designPhase && [...designPhase.blockers, ...designPhase.unmet]
+    .every((entry) => entry.code === "PLAN_REVIEW_REQUIRED")) {
+    return ports.resolveRecovery({
+      decision,
+      currentAgentId: args.currentAgentId,
+      db: prisma as never,
+      dispatchContext,
+      planArtifact: await ports.loadPlanArtifact({ itemId: decision.subject.id, repositoryFullName: room.repositoryFullName }),
+      expectedCurrentBaselineId: baseline.baselineId,
+    });
+  }
   const needsObjectiveMapping = [...decision.blockers, ...decision.unmet]
     .some((entry) => entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED"
       || entry.code === "OBJECTIVE_RECONCILIATION_REQUIRED");

@@ -16,6 +16,7 @@ describe("plan review advisory rules (BI-A87DE5E1)", () => {
   // The revision loop then rewrote buildPlan (a good 2-task plan, 03:08) under an
   // orchestrator already running the rejected one (dispatched 03:07).
   it("stops revising once the build has left plan", () => {
+    expect(shouldReviseRejectedPlan({ decision: "fail", reviewIncomplete: true }, "plan")).toBe(false);
     expect(shouldReviseRejectedPlan({ decision: "fail" }, "plan")).toBe(true);
     expect(shouldReviseRejectedPlan({ decision: "fail" }, "build")).toBe(false);
     expect(shouldReviseRejectedPlan({ decision: "pass" }, "plan")).toBe(false);

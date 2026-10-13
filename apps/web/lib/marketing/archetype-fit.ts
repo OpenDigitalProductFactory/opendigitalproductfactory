@@ -11,8 +11,13 @@
 //
 // Two finding kinds:
 //   - platform-leak  → software-platform / DPF-internal artifacts that are
-//                       foreign to EVERY customer archetype. Always a hard
-//                       BLOCK (must not publish, badge as imported/test data).
+//                       foreign to the business's audience. A hard BLOCK
+//                       (must not publish, badge as imported/test data) —
+//                       EXCEPT where the term names what this business itself
+//                       sells (BI-E92B6BC9): a business whose own offer is the
+//                       platform (the vendor, or a partner reselling it) must be
+//                       able to market it, and software-industry vocabulary is
+//                       the software-platform category's own language.
 //   - off-archetype  → vocabulary that clearly belongs to a DIFFERENT customer
 //                       archetype than the active one. A WARN — confirm before
 //                       sending — because cross-sell copy can be legitimate.
@@ -48,6 +53,11 @@ type TermSpec = {
   term: string;
   pattern: RegExp;
   message: string;
+  /**
+   * Software-industry vocabulary rather than platform plumbing: foreign to a
+   * restaurant's audience, but the software-platform category's own language.
+   */
+  industryVocabulary?: boolean;
 };
 
 // Escape a literal and allow flexible internal whitespace, matched on word-ish
@@ -62,31 +72,36 @@ function termPattern(literal: string): RegExp {
   return new RegExp(`(?<![\\w-])${escaped}(?![\\w-])`, "i");
 }
 
-function spec(term: string, message: string): TermSpec {
-  return { term, pattern: termPattern(term), message };
+function spec(term: string, message: string, options?: { industryVocabulary?: boolean }): TermSpec {
+  return { term, pattern: termPattern(term), message, ...options };
 }
 
-// ─── Platform-leak terms (universal hard block) ────────────────────────────
-// Software-platform / DPF-internal artifacts. These do not belong in ANY
-// customer's marketing, regardless of archetype, so they always block.
+const INDUSTRY = { industryVocabulary: true } as const;
+
+/** The archetype category whose own language is software-industry vocabulary. */
+const SOFTWARE_PLATFORM_CATEGORY = "software-platform";
+
+// ─── Platform-leak terms (block unless sold) ───────────────────────────────
+// Software-platform / DPF-internal artifacts. They block unless the business
+// itself sells what the term names (see isLeakExempt).
 const PLATFORM_LEAK_TERMS: TermSpec[] = [
   spec("Build Studio", "“Build Studio” is a software-platform build tool, not a customer marketing concept."),
   spec("Digital Product Factory", "“Digital Product Factory” is the internal platform name and must not reach a customer audience."),
-  spec("technical founder", "“technical founder” is software-startup language, foreign to this business's audience."),
-  spec("technical co-founder", "“technical co-founder” is software-startup language, foreign to this business's audience."),
-  spec("technical founders", "“technical founders” is software-startup language, foreign to this business's audience."),
-  spec("AI workflow", "“AI workflow” exposes internal platform mechanics rather than a customer benefit."),
-  spec("agentic", "“agentic” is internal platform jargon, not customer marketing language."),
+  spec("technical founder", "“technical founder” is software-startup language, foreign to this business's audience.", INDUSTRY),
+  spec("technical co-founder", "“technical co-founder” is software-startup language, foreign to this business's audience.", INDUSTRY),
+  spec("technical founders", "“technical founders” is software-startup language, foreign to this business's audience.", INDUSTRY),
+  spec("AI workflow", "“AI workflow” exposes internal platform mechanics rather than a customer benefit.", INDUSTRY),
+  spec("agentic", "“agentic” is internal platform jargon, not customer marketing language.", INDUSTRY),
   spec("AI coworker", "“AI coworker” is internal platform tooling, not something to market to customers."),
-  spec("software platform", "“software platform” is not what this business sells to its customers."),
-  spec("SaaS", "“SaaS” is software-industry positioning, foreign to this business's audience."),
+  spec("software platform", "“software platform” is not what this business sells to its customers.", INDUSTRY),
+  spec("SaaS", "“SaaS” is software-industry positioning, foreign to this business's audience.", INDUSTRY),
   spec("self-upgrade", "“self-upgrade” is internal platform machinery, not a customer message."),
   spec("MCP server", "“MCP server” is internal platform plumbing and must not appear in marketing."),
   spec("MCP tool", "“MCP tool” is internal platform plumbing and must not appear in marketing."),
   spec("backlog item", "“backlog item” is internal delivery jargon, not a customer marketing concept."),
   spec("work capsule", "“work capsule” is internal platform jargon, not a customer marketing concept."),
   spec("Prisma", "“Prisma” is an internal database detail that must never appear in marketing copy."),
-  spec("codebase", "“codebase” is software-engineering language, foreign to this business's marketing."),
+  spec("codebase", "“codebase” is software-engineering language, foreign to this business's marketing.", INDUSTRY),
 ];
 
 // ─── Off-archetype signatures (warn) ────────────────────────────────────────
@@ -152,9 +167,15 @@ function severityRank(severity: ArchetypeFitSeverity): number {
 export function assessArchetypeFit(input: {
   text: string | null | undefined;
   category: string | null | undefined;
+  /**
+   * The organization's own offer text (see buildOwnOfferText). A leak term that
+   * names what this business sells is its product, not a leak.
+   */
+  ownOffer?: string | null;
 }): ArchetypeFitAssessment {
   const text = (input.text ?? "").toString();
   const category = (input.category ?? "").trim().toLowerCase();
+  const ownOffer = input.ownOffer ?? null;
   const findings: ArchetypeFitFinding[] = [];
 
   if (text.trim().length === 0) {
@@ -163,8 +184,9 @@ export function assessArchetypeFit(input: {
 
   const seen = new Set<string>();
 
-  // 1) Platform leaks — always block.
+  // 1) Platform leaks — block, unless the business sells what the term names.
   for (const leak of PLATFORM_LEAK_TERMS) {
+    if (isLeakExempt(leak, category, ownOffer)) continue;
     if (leak.pattern.test(text)) {
       const key = `leak:${leak.term.toLowerCase()}`;
       if (seen.has(key)) continue;
@@ -202,6 +224,78 @@ export function assessArchetypeFit(input: {
     findings: trimmed,
     summary: summarize(severity, trimmed),
   };
+}
+
+/**
+ * A leak term is not a leak for a business that sells what it names: it
+ * appears in the business's own offer, or it is software-industry vocabulary
+ * and the business is a software platform.
+ */
+function isLeakExempt(leak: TermSpec, category: string, ownOffer: string | null): boolean {
+  if (leak.industryVocabulary && category === SOFTWARE_PLATFORM_CATEGORY) return true;
+  return ownOffer !== null && ownOffer.trim().length > 0 && leak.pattern.test(ownOffer);
+}
+
+/**
+ * The platform-leak terms copy for this business must still avoid — the
+ * drafter states these, so what it is told and what the guard blocks are the
+ * same rule.
+ */
+export function platformLeakTermsFor(input: {
+  category: string | null | undefined;
+  ownOffer?: string | null;
+}): string[] {
+  const category = (input.category ?? "").trim().toLowerCase();
+  const ownOffer = input.ownOffer ?? null;
+  return PLATFORM_LEAK_TERMS.filter((leak) => !isLeakExempt(leak, category, ownOffer)).map(
+    (leak) => leak.term,
+  );
+}
+
+/**
+ * The organization's own offer, as one text the fit check can match: what its
+ * storefront sells, how it describes itself, and its stated value proposition.
+ * Null when it has said nothing — then nothing is exempt.
+ */
+export function buildOwnOfferText(input: {
+  items?: Array<{ name: string; description?: string | null }> | null;
+  tagline?: string | null;
+  description?: string | null;
+  valueProposition?: string | null;
+}): string | null {
+  const parts = [
+    ...(input.items ?? []).flatMap((item) => [item.name, item.description ?? null]),
+    input.tagline ?? null,
+    input.description ?? null,
+    input.valueProposition ?? null,
+  ]
+    .map((part) => (part ?? "").trim())
+    .filter((part) => part.length > 0);
+  return parts.length > 0 ? parts.join("\n") : null;
+}
+
+/** The storefront-item query the own-offer text reads: what is actually on sale. */
+export const OWN_OFFER_ITEMS_QUERY = {
+  where: { isActive: true },
+  select: { name: true, description: true },
+  orderBy: { sortOrder: "asc" as const },
+};
+
+/** buildOwnOfferText over the records as loaded (storefront config + business context). */
+export function ownOfferFromRecords(
+  storefront: {
+    items?: Array<{ name: string; description?: string | null }> | null;
+    tagline?: string | null;
+    description?: string | null;
+  } | null | undefined,
+  business: { valueProposition?: string | null } | null | undefined,
+): string | null {
+  return buildOwnOfferText({
+    items: storefront?.items ?? [],
+    tagline: storefront?.tagline,
+    description: storefront?.description,
+    valueProposition: business?.valueProposition,
+  });
 }
 
 function summarize(severity: ArchetypeFitSeverity, findings: ArchetypeFitFinding[]): string {

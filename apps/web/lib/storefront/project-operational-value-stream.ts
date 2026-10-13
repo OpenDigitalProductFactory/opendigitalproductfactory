@@ -1,4 +1,4 @@
-import { ALL_ARCHETYPES, deriveOperationalValueStream } from "@dpf/storefront-templates";
+import { ALL_ARCHETYPES, deriveOperationalValueStream, type OperationalValueStream } from "@dpf/storefront-templates";
 import {
   projectArchetypeValueStream,
   type ProjectArchetypeValueStreamInput,
@@ -9,6 +9,7 @@ import {
   type JobDefinitionConvergence,
 } from "./converge-job-definitions";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { projectArchetypeRoomDefinitions, withArchetypeProjectionTransaction } from "@dpf/db/archetype-room-definition-projection";
 
 type Db = ProjectArchetypeValueStreamInput["db"];
 
@@ -40,10 +41,22 @@ export async function projectOperationalValueStreamForArchetype(input: {
     throw new Error(`Template archetype ${input.archetypeId} not found in ALL_ARCHETYPES`);
   }
   const ovsm = deriveOperationalValueStream(template);
-  const projected = await projectArchetypeValueStream({
-    db: input.db,
-    orgId: input.organizationId,
-    ovsm,
+  return projectOperationalValueStreamModel({ ...input, ovsm });
+}
+
+/** Shared production reconciliation seam; callers own model selection. */
+export async function projectOperationalValueStreamModel(input: {
+  db?: Db;
+  organizationId: string;
+  archetypeId: string;
+  ovsm: OperationalValueStream;
+}) {
+  const { ovsm } = input;
+  const projected = await withArchetypeProjectionTransaction(input.db, input.organizationId, async (db) => {
+    const projectionInput = { db, orgId: input.organizationId, ovsm };
+    const diagram = await projectArchetypeValueStream(projectionInput);
+    const roomDefinitions = await projectArchetypeRoomDefinitions(projectionInput);
+    return { ...diagram, roomDefinitions };
   });
 
   // Derive-on-read, never stored (kernel: job-definition-convergence, composite

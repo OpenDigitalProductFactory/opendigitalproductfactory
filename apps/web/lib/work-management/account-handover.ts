@@ -26,6 +26,7 @@ import { createHash } from "node:crypto";
 import type { prisma } from "@dpf/db";
 
 import { resolveWorkOwner, type WorkOwnerSource } from "@/lib/portfolio/accountable-owner";
+import { PORTFOLIO_SLUG_BY_ROLE } from "@/lib/portfolio/portfolio-role";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 
 import { executeCoordinatorAppointment } from "./execute-coordinator-appointment.server";
@@ -70,12 +71,7 @@ const TERMINAL_ROOM_STATUSES = ["complete", "abandoned", "archived"];
 const TERMINAL_BUILD_PHASES = ["complete", "failed", "abandoned"];
 
 /** Workroom.portfolioRole -> Portfolio.slug. */
-const SLUG_BY_ROLE: Record<string, string> = {
-  foundational: "foundational",
-  manufactureAndDeliver: "manufacturing_and_delivery",
-  forEmployees: "for_employees",
-  productsAndServicesSold: "products_and_services_sold",
-};
+const SLUG_BY_ROLE: Record<string, string> = PORTFOLIO_SLUG_BY_ROLE;
 
 const KIND_ORDER: Record<HandoverKind, number> = { build: 0, room: 1, "scheduled-task": 2 };
 

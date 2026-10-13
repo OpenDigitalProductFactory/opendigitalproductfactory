@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import { semanticReviewDecisionPresentation } from "./review-decision-presentation";
 
 describe("semantic review decision presentation", () => {
+  it("shows an incomplete legacy fail-closed verdict as an execution wait", () => {
+    expect(semanticReviewDecisionPresentation("fail", true)).toEqual({ title: "Review incomplete", variant: "warn" });
+  });
   it.each([
     ["pass", { title: "Review approved", variant: "success" }],
     ["fail", { title: "Changes requested", variant: "error" }],

@@ -438,6 +438,9 @@
     "apps/web/components/ops/SelfUpgradeLiveProvider.tsx": [
       "docs/architecture/background-operation-observation-contract.md"
     ],
+    "apps/web/components/ops/workrooms/AreaFlowPanel.tsx": [
+      "docs/user-guide/workspace/work-rooms.md"
+    ],
     "apps/web/components/ops/workrooms/PortfolioActivityTree.tsx": [
       "docs/architecture/workroom-vocabulary-boundary.md"
     ],
@@ -490,6 +493,9 @@
     "apps/web/components/workbooks/grid-office-export.ts": [
       "docs/user-guide/workspace/workbooks.md"
     ],
+    "apps/web/components/workspace-home/MainStreamHero.tsx": [
+      "docs/user-guide/workspace/work-rooms.md"
+    ],
     "apps/web/components/workspace/WorkCaseAttentionLens.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
@@ -497,6 +503,9 @@
       "docs/user-guide/workspace/work-rooms.md"
     ],
     "apps/web/components/workspace/workroom/WorkroomCycles.tsx": [
+      "docs/user-guide/workspace/work-rooms.md"
+    ],
+    "apps/web/components/workspace/workroom/WorkroomFlowMap.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
     "apps/web/components/workspace/workroom/WorkroomParticipants.tsx": [
@@ -731,8 +740,14 @@
       "docs/architecture/decision-vectors.md",
       "docs/architecture/vector-decisioning-and-jsi.md"
     ],
+    "apps/web/lib/decision-perspective/org-business-gate.ts": [
+      "docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md"
+    ],
     "apps/web/lib/decision-perspective/planned-file-paths.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/decision-perspective/profession-corpus.ts": [
+      "docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md"
     ],
     "apps/web/lib/decision-perspective/stance-promotion.ts": [
       "docs/architecture/vector-decisioning-and-jsi.md"
@@ -922,6 +937,13 @@
     "apps/web/lib/identity/principal-linking.ts": [
       "docs/architecture/ai-agent-meta-model.md"
     ],
+    "apps/web/lib/improvement-flywheel/signals.ts": [
+      "docs/architecture/improvement-signal-intake.md"
+    ],
+    "apps/web/lib/incumbent/coverage-ai.ts": [
+      "docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md",
+      "docs/strategy/2026-10-11-rea-absorption-and-hardware-neutral-business-ai.md"
+    ],
     "apps/web/lib/inference/data-screening/evaluate-inference-policy.ts": [
       "docs/user-guide/ai-workforce/sensitive-data-policy-packs.md"
     ],
@@ -959,6 +981,10 @@
       "docs/founder-kernel/wiki/principles/outbound-actions-require-explicit-go.md"
     ],
     "apps/web/lib/marketing/archetype-fit.ts": [
+      "docs/platform-usability-standards.md"
+    ],
+    "apps/web/lib/marketing/buyer-archetype-value.ts": [
+      "docs/marketing/archetype-owner-quick-guide.md",
       "docs/platform-usability-standards.md"
     ],
     "apps/web/lib/marketing/channels/contracts.ts": [
@@ -1066,6 +1092,9 @@
     ],
     "apps/web/lib/observability/monitor-source-reachability.ts": [
       "docs/operations/observability-coverage.md"
+    ],
+    "apps/web/lib/onboarding/setup-completion-seeds.ts": [
+      "docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md"
     ],
     "apps/web/lib/operate/db-continuity.ts": [
       "docs/architecture/delivery-surfaces-runbook.md"
@@ -1377,6 +1406,9 @@
     "apps/web/lib/tak/mcp-tool-policy.ts": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
+    "apps/web/lib/tak/native-mcp-executions.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
     "apps/web/lib/tak/precondition-ordering-types.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
@@ -1435,6 +1467,9 @@
     "apps/web/lib/voice-synthesis/tts-health-contract.test.ts": [
       "docs/operations/observability-coverage.md"
     ],
+    "apps/web/lib/wiki/enrich-org-corpus.ts": [
+      "docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md"
+    ],
     "apps/web/lib/wiki/principle-lint-detectors.ts": [
       "docs/operations/runtime-kernel-commandments.md"
     ],
@@ -1475,6 +1510,9 @@
     "apps/web/lib/work-management/portfolio-activity-projection.ts": [
       "docs/architecture/workroom-vocabulary-boundary.md"
     ],
+    "apps/web/lib/work-management/room-ai-spend.ts": [
+      "docs/user-guide/workspace/work-rooms.md"
+    ],
     "apps/web/lib/work-management/room-channel-continuity.ts": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
@@ -1513,7 +1551,8 @@
     ],
     "apps/web/lib/work-management/work-shapes.ts": [
       "docs/architecture/gated-permissions-process.md",
-      "docs/architecture/work-shapes-and-the-decision-gate.md"
+      "docs/architecture/work-shapes-and-the-decision-gate.md",
+      "docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md"
     ],
     "apps/web/lib/work-management/work-unit.ts": [
       "docs/founder-kernel/wiki/principles/universal-work-formula.md"
@@ -2343,6 +2382,9 @@
     "scripts/lib/git-changed-files.mjs": [
       "docs/architecture/enforced-ci-gates.md"
     ],
+    "scripts/lib/guard-bash.mjs": [
+      "docs/install/platform-support-watchlist.md"
+    ],
     "scripts/lib/hooks-dir.mjs": [
       "docs/testing/pre-pr-gate.md"
     ],
@@ -2515,6 +2557,9 @@
       "docs/founder-kernel/wiki/principles/worktree-per-session.md",
       "docs/user-guide/contributing/developer-setup.md"
     ],
+    "scripts/semantic-review-policy.json": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "scripts/set-hooks-path.mjs": [
       "docs/testing/pre-pr-gate.md"
     ],
@@ -2564,6 +2609,9 @@
     ],
     "services/edge-node/src/sweep.ts": [
       "docs/install/edge-node-air-gapped.md"
+    ],
+    "tests/release/installer-release-contract.test.mjs": [
+      "docs/security/tool-evaluations/2026-10-07-chatterbox-tts-api.md"
     ],
     "tests/release/local-ci-gate-contract.test.mjs": [
       "docs/testing/pre-pr-gate.md"
@@ -2990,7 +3038,8 @@
       "scripts/pre-push-gate-infrastructure-probe.mjs",
       "scripts/pre-push-gate-slot-contract.test.mjs",
       "scripts/pregate-preflight.mjs",
-      "scripts/pregate-status.mjs"
+      "scripts/pregate-status.mjs",
+      "scripts/semantic-review-policy.json"
     ],
     "docs/architecture/build-studio-namespace.md": [
       "apps/web/lib/build/build-plan-paths.ts",
@@ -3215,6 +3264,9 @@
       "scripts/installer/gpp-permit-secret-contract.test.mjs",
       "scripts/installer/install-release-assets.mjs"
     ],
+    "docs/architecture/improvement-signal-intake.md": [
+      "apps/web/lib/improvement-flywheel/signals.ts"
+    ],
     "docs/architecture/initiative-readiness-runbook.md": [
       "apps/web/lib/backlog/acceptance-sweep/execution-evidence-owner.ts",
       "apps/web/lib/backlog/initiative-readiness/evaluate.ts",
@@ -3226,6 +3278,7 @@
       "apps/web/lib/mcp/external-coworker-task-adapter.ts",
       "apps/web/lib/mcp/packs/coworker-pack.ts",
       "apps/web/lib/tak/initiative-readiness-tool-grants.ts",
+      "apps/web/lib/tak/native-mcp-executions.ts",
       "apps/web/lib/work-capsules/governed-work-claim.ts",
       "apps/web/lib/work-management/room-shapes.ts",
       "packages/db/data/agent_registry.json"
@@ -3542,6 +3595,7 @@
       "scripts/installer/lib/platform.sh",
       "scripts/lib/dockerfile-portal-build.test.mjs",
       "scripts/lib/entry-module.mjs",
+      "scripts/lib/guard-bash.mjs",
       "scripts/lib/host-available-memory.mjs",
       "scripts/publish-host-gpu.ps1",
       "scripts/setup.ps1",
@@ -3589,6 +3643,9 @@
       "scripts/lib/resolve-capability-compose-profiles.mjs",
       "scripts/pr-health.mjs",
       "scripts/pr-health.test.mjs"
+    ],
+    "docs/marketing/archetype-owner-quick-guide.md": [
+      "apps/web/lib/marketing/buyer-archetype-value.ts"
     ],
     "docs/operations/ai-provider-compliance-source-renewal-runbook.md": [
       "apps/web/lib/routing/provider-suitability/provider-compliance-advisory.ts",
@@ -3669,6 +3726,7 @@
       "apps/web/components/ui/form/SelectField.tsx",
       "apps/web/design/tokens-utilities.test.ts",
       "apps/web/lib/marketing/archetype-fit.ts",
+      "apps/web/lib/marketing/buyer-archetype-value.ts",
       "apps/web/lib/readability/policy.ts",
       "apps/web/lib/shared/use-save-state.test.ts",
       "apps/web/lib/shared/use-save-state.ts",
@@ -3750,6 +3808,9 @@
       "apps/web/lib/canonical-host.ts",
       "apps/web/lib/security/client-address.ts"
     ],
+    "docs/security/tool-evaluations/2026-10-07-chatterbox-tts-api.md": [
+      "tests/release/installer-release-contract.test.mjs"
+    ],
     "docs/specs/device-identification-and-portfolio-placement-spec.md": [
       "apps/web/lib/queue/functions/hive-scout-ingest.ts",
       "packages/db/src/discovery-fingerprint-redaction.ts",
@@ -3789,6 +3850,17 @@
       "apps/web/lib/govern/auth.ts",
       "apps/web/lib/routing/provider-suitability/openrouter-policy.ts",
       "docker-compose.linux.yml"
+    ],
+    "docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md": [
+      "apps/web/lib/decision-perspective/org-business-gate.ts",
+      "apps/web/lib/decision-perspective/profession-corpus.ts",
+      "apps/web/lib/incumbent/coverage-ai.ts",
+      "apps/web/lib/onboarding/setup-completion-seeds.ts",
+      "apps/web/lib/wiki/enrich-org-corpus.ts",
+      "apps/web/lib/work-management/work-shapes.ts"
+    ],
+    "docs/strategy/2026-10-11-rea-absorption-and-hardware-neutral-business-ai.md": [
+      "apps/web/lib/incumbent/coverage-ai.ts"
     ],
     "docs/testing/archetype-audit-plan.md": [
       "packages/storefront-templates/src/archetypes/index.ts",
@@ -3978,11 +4050,15 @@
     "docs/user-guide/workspace/work-rooms.md": [
       "apps/web/app/(shell)/workspace/cases/[caseKey]/page.tsx",
       "apps/web/app/(shell)/workspace/my-queue/page.tsx",
+      "apps/web/components/ops/workrooms/AreaFlowPanel.tsx",
+      "apps/web/components/workspace-home/MainStreamHero.tsx",
       "apps/web/components/workspace/WorkCaseAttentionLens.tsx",
       "apps/web/components/workspace/WorkCaseDetailView.tsx",
       "apps/web/components/workspace/workroom/WorkroomCycles.tsx",
+      "apps/web/components/workspace/workroom/WorkroomFlowMap.tsx",
       "apps/web/components/workspace/workroom/WorkroomParticipants.tsx",
       "apps/web/lib/work-management/coworker-engagement-case-projection.ts",
+      "apps/web/lib/work-management/room-ai-spend.ts",
       "apps/web/lib/work-management/room-channel-continuity.ts",
       "apps/web/lib/work-management/room-channel-ingress.ts",
       "apps/web/lib/work-management/room-participation.ts",

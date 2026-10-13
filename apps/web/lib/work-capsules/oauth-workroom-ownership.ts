@@ -23,6 +23,8 @@ export function assertOAuthWorkroomOwner(room: Ownership, actor: WorkCapsuleActo
 
 /** The one call through which a person hands their own room to a new assistant (BI-821EEB18). */
 export const WORKROOM_HANDOVER_TOOL = "reassign_workroom_executor";
+/** Single-room owner recovery. Unlike an ordinary room write, this may repair admission itself. */
+export const WORKROOM_COORDINATOR_APPOINTMENT_TOOL = "appoint_room_coordinator";
 
 /** Runs at governed dispatch, before a tool can write evidence or renew a lease. */
 type OAuthCapsuleTarget = {
@@ -73,10 +75,62 @@ function handoverRefused(refusal: HandoverRefusal) {
           + "Only the room's owner can give it back the access it had, from the room's participants." };
 }
 
+const workroomAccessDenied = () => ({
+  success: false as const,
+  error: "workroom_access_denied",
+  message: "You or your assistant are not admitted to this workroom. Ask its owner to invite you.",
+});
+
+const workroomDataAccessRequired = () => ({
+  success: false as const,
+  error: "workroom_data_access_required",
+  message: "You or your assistant cannot use this workroom's information. Ask an administrator to review data access in AI Coworker Identity. Signing in again will not change this permission.",
+  data: { recoveryUrl: "/platform/identity/agents" },
+});
+
+/**
+ * Authorize the one tool that can repair a room whose current admission is
+ * wrong. Normal admitted callers retain the ordinary exact-room rule. The
+ * fallback belongs only to the acting human and only when that human can
+ * manage the platform; assistant grants never manufacture this authority.
+ */
+export async function coordinatorAppointmentAccessRefusal(input: {
+  capsuleId: string;
+  userId: string;
+  agentId?: string;
+}) {
+  const { prisma } = await import("@dpf/db");
+  const room = await prisma.workroom.findUnique({ where: { capsuleId: input.capsuleId }, select: { id: true } });
+  if (!room) return workroomAccessDenied();
+
+  if (input.agentId) {
+    const { resolveAgentWorkroomAccess } = await import("@/lib/work-management/workroom-agent-access.server");
+    const { decision } = await resolveAgentWorkroomAccess({
+      userId: input.userId,
+      agentId: input.agentId,
+      workroomId: room.id,
+      requested: "action",
+    });
+    if (decision.level === "action") return null;
+    if (decision.reason === "insufficient-clearance") return workroomDataAccessRequired();
+  }
+
+  const { currentUserContext } = await import("@/lib/govern/current-user-context");
+  const { can } = await import("@/lib/govern/permissions");
+  const human = input.userId ? await currentUserContext(input.userId) : null;
+  return human && can(human, "manage_platform") ? null : workroomAccessDenied();
+}
+
 export async function workroomTargetAccessRefusal(input: OAuthCapsuleTarget) {
   if (input.authSource !== "oauth" || typeof input.params.capsuleId !== "string") return null;
-  const notAdmitted = { success: false as const, error: "workroom_access_denied",
-    message: "You or your assistant are not admitted to this workroom. Ask its owner to invite you." };
+  if (input.toolName === WORKROOM_COORDINATOR_APPOINTMENT_TOOL) {
+    return coordinatorAppointmentAccessRefusal({
+      capsuleId: input.params.capsuleId,
+      userId: input.userId,
+      agentId: input.agentId,
+    });
+  }
+  const notAdmitted = workroomAccessDenied();
   const { prisma } = await import("@dpf/db");
   const room = await prisma.workroom.findUnique({ where: { capsuleId: input.params.capsuleId }, select: { id: true } });
   if (!room || !input.agentId) return notAdmitted;
@@ -90,11 +144,7 @@ export async function workroomTargetAccessRefusal(input: OAuthCapsuleTarget) {
   const first = await access(handover);
   const { decision } = first;
   if (decision.level === requested) return null;
-  if (decision.reason === "insufficient-clearance") return {
-    success: false as const, error: "workroom_data_access_required",
-    message: "You or your assistant cannot use this workroom's information. Ask an administrator to review data access in AI Coworker Identity. Signing in again will not change this permission.",
-    data: { recoveryUrl: "/platform/identity/agents" },
-  };
+  if (decision.reason === "insufficient-clearance") return workroomDataAccessRequired();
   const asHandover = handover ? first : await access(true);
   if (!handover && asHandover.decision.level === "action") {
     const { providerToExecutorKind } = await import("./external-session-capture");

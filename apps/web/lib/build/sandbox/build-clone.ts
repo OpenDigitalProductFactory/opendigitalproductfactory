@@ -36,9 +36,15 @@ const q = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
  * Push the clone's build branch back into the shared repo, so the branch is
  * recorded there for promotion, GC and audit. No-op unless `path` is a clone
  * (a `.git` directory, not a worktree's gitlink file) on `branchRef`.
+ *
+ * The push never leaves the sandbox, so it runs no client hooks. The clone's
+ * own core.hooksPath cannot be trusted here: the repo's postinstall re-points it
+ * at .githooks after the clone's config sets /dev/null, and the contributor
+ * pre-push gate then refused this push and failed FB-91774D92 at start
+ * (2026-10-08). Gates run in the guard gauntlet, not on this internal sync.
  */
 export function buildSandboxBuildCloneSyncCommand(path: string, branchRef: string): string {
-  return `if [ -d ${q(`${path}/.git`)} ] && [ "$(git -C ${q(path)} rev-parse --abbrev-ref HEAD 2>/dev/null)" = ${q(branchRef)} ]; then git -C ${q(path)} push --quiet --force ${SHARED_REMOTE} ${q(`HEAD:refs/heads/${branchRef}`)}; fi`;
+  return `if [ -d ${q(`${path}/.git`)} ] && [ "$(git -C ${q(path)} rev-parse --abbrev-ref HEAD 2>/dev/null)" = ${q(branchRef)} ]; then git -C ${q(path)} -c core.hooksPath=/dev/null push --no-verify --quiet --force ${SHARED_REMOTE} ${q(`HEAD:refs/heads/${branchRef}`)}; fi`;
 }
 
 /**

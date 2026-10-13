@@ -16,6 +16,7 @@
 //   5. Emit pushThreadProgress events on queue, dispatch, completion,
 //      degradation, and finish.
 
+import { resolveLocalServedContextTokens } from "@/lib/inference/local-model-context-reconcile";
 import { jobs } from "@/lib/jobs";
 import { gateBetweenSteps, type GateBetweenStepsRunner } from "../quiescence-gates";
 import { sealDeliberationOnRoom } from "@/lib/deliberation/deliberation-room-bridge.server";
@@ -179,7 +180,7 @@ export async function runDeliberation(input: RunDeliberationInput): Promise<void
         "@/lib/routing/loader"
       );
       const [manifests, policies, overrides] = await Promise.all([
-        loadEndpointManifests(),
+        loadEndpointManifests(Date.now(), resolveLocalServedContextTokens),
         loadPolicyRules(),
         loadOverrides(contract.taskType),
       ]);

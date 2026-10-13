@@ -28,8 +28,8 @@ type GrantRow = Awaited<ReturnType<OwedAcceptanceOwnerDb["agentToolGrant"]["find
 export type InPlatformGrants = {
   /** The grant read with external agents' rows removed. */
   db: OwedAcceptanceOwnerDb;
-  /** External agents seen holding `grant`, other than `excludeAgentId`. */
-  externalHoldersOf(grant: string, excludeAgentId: string | null): string[];
+  /** External agents seen holding `grant`, other than the excluded ones. */
+  externalHoldersOf(grant: string, excludeAgentIds: readonly string[]): string[];
 };
 
 export function inPlatformGrants(db: InPlatformOwnerDb): InPlatformGrants {
@@ -59,9 +59,9 @@ export function inPlatformGrants(db: InPlatformOwnerDb): InPlatformGrants {
         },
       },
     },
-    externalHoldersOf: (grant, excludeAgentId) =>
+    externalHoldersOf: (grant, excludeAgentIds) =>
       [...externalGrants.entries()]
-        .filter(([agentId, grants]) => agentId !== excludeAgentId && grants.has(grant))
+        .filter(([agentId, grants]) => !excludeAgentIds.includes(agentId) && grants.has(grant))
         .map(([agentId]) => agentId)
         .sort(),
   };
@@ -75,13 +75,13 @@ export function inPlatformGrants(db: InPlatformOwnerDb): InPlatformGrants {
 export function withNoInPlatformCoworker(
   recovery: OwedAcceptanceOwnerRecovery,
   grants: Pick<InPlatformGrants, "externalHoldersOf">,
-  authorAgentId: string | null,
+  excludedAgentIds: readonly string[],
 ): OwedAcceptanceOwnerRecovery {
   return {
     ...recovery,
     escalations: recovery.escalations.map((escalation) => {
       if (escalation.reason !== "no-eligible-reviewer") return escalation;
-      const external = grants.externalHoldersOf(escalation.grant, authorAgentId);
+      const external = grants.externalHoldersOf(escalation.grant, excludedAgentIds);
       if (external.length === 0) return escalation;
       return {
         ...escalation,

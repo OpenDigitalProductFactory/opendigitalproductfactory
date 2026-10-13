@@ -42,6 +42,8 @@ describe("provider onboarding recommendation", () => {
   it("uses runtime provider activation without reviving a disabled connection", () => {
     expect(resolveRuntimeConnectionStatus("active", "unconfigured")).toBe("active");
     expect(resolveRuntimeConnectionStatus("active", "disabled")).toBe("disabled");
+    expect(resolveRuntimeConnectionStatus("active", "paused")).toBe("paused");
+    expect(resolveRuntimeConnectionStatus("active", "inactive")).toBe("inactive");
     expect(resolveRuntimeConnectionStatus("inactive", "active")).toBe("inactive");
   });
   it("limits an unreviewed personal or unknown cloud connection to public or synthetic work", () => {

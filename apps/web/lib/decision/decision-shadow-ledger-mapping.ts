@@ -102,6 +102,13 @@ export type BridgeableDecisionRow = {
   autonomous: boolean;
   subjectKind: string | null;
   subjectRef: string | null;
+  /**
+   * When the decision was made. Only a backfill of a decision that predates the
+   * bridge passes it (BI-7D1E43DE), so its ledger row carries the decision's own
+   * time rather than the time of the backfill. Live writes leave it to the
+   * column default.
+   */
+  observedAt?: Date | null;
 };
 
 export type DecisionShadowLedgerEntry = {
@@ -122,6 +129,8 @@ export type DecisionShadowLedgerEntry = {
   agreement: boolean | null;
   reconciledAt: Date | null;
   sourceKind: typeof DECISION_LEDGER_SOURCE_KIND;
+  /** Present only when the row supplied it; written on create, never updated. */
+  observedAt?: Date;
   decisionInteractionId: string;
   taskRunId: string | null;
   metadata: {
@@ -185,6 +194,7 @@ export function buildDecisionShadowLedgerEntry(row: BridgeableDecisionRow): Deci
       agreement: resolution ? resolution.agreement : null,
       reconciledAt: resolution ? new Date(resolution.resolvedAt) : null,
       sourceKind: DECISION_LEDGER_SOURCE_KIND,
+      ...(row.observedAt ? { observedAt: row.observedAt } : {}),
       decisionInteractionId: row.interactionId,
       taskRunId: row.taskRunId,
       metadata: {

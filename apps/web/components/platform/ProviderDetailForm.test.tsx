@@ -77,15 +77,20 @@ const providerFixture: ProviderWithCredential = {
 
 describe("ProviderDetailForm", () => {
   afterEach(() => { cleanup(); vi.clearAllMocks(); });
+  it("keeps ChatGPT shared authentication changes in the Codex management page", () => {
+    const fixture: ProviderWithCredential = { ...providerFixture, provider: { ...providerFixture.provider, providerId: "chatgpt", authMethod: "oauth2_authorization_code", supportedAuthMethods: ["oauth2_authorization_code"], authorizeUrl: "https://auth.openai.com/oauth/authorize" } };
+    render(<ProviderDetailForm pw={fixture} canWrite models={[]} profiles={[]} hasActiveProvider />);
+    expect(screen.queryByRole("button", { name: /sign in|disconnect/i })).toBeNull();
+  });
   it("recovers the ready button after a rejected save", async () => {
     vi.mocked(configureProvider).mockRejectedValue(new Error("network failure"));
     render(<ProviderDetailForm pw={providerFixture} canWrite models={[]} profiles={[]} hasActiveProvider />);
-    fireEvent.click(screen.getByRole("button", { name: "Save & ready provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save & verify connection" }));
     await waitFor(() => expect(screen.getByText(/Setup failed\. Retry\./)).toBeTruthy());
     // The failure message is set inside the transition; the button label and
     // disabled state only reset once the transition settles, which can be a
     // later render than the one that shows the message.
-    const button = await screen.findByRole("button", { name: "Save & ready provider" });
+    const button = await screen.findByRole("button", { name: "Save & verify connection" });
     expect((button as HTMLButtonElement).disabled).toBe(false);
     expect(testProviderAuth).not.toHaveBeenCalled();
   });
@@ -93,7 +98,7 @@ describe("ProviderDetailForm", () => {
     vi.mocked(configureProvider).mockResolvedValue({});
     vi.mocked(testProviderAuth).mockResolvedValue({ ok: false, message: "HTTP 429" });
     render(<ProviderDetailForm pw={providerFixture} canWrite models={[]} profiles={[]} hasActiveProvider />);
-    fireEvent.click(screen.getByRole("button", { name: "Save & ready provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save & verify connection" }));
     await waitFor(() => expect(screen.getByText(/HTTP 429/)).toBeTruthy());
     expect(testProviderAuth).toHaveBeenCalledWith("zai", false);
     expect(discoverModels).not.toHaveBeenCalled();
@@ -111,13 +116,28 @@ describe("ProviderDetailForm", () => {
       />,
     );
 
-    expect(html).toContain("Technical readiness");
+    expect(html).toContain("Connection");
     expect(html).toContain("Workload data-use rules apply.");
-    expect(html).toContain("Save &amp; ready provider");
+    expect(html).toContain("Save &amp; verify connection");
     expect(html).not.toContain(">Save<");
     expect(html).not.toContain("Test &amp; Discover");
     expect(html).not.toContain("Discover &amp; Profile Models");
     expect(html).not.toContain("Advanced: model families");
+  });
+
+  it("keeps historical model cards behind disclosure and refreshes without duplicate profiling", async () => {
+    const model = { id: "history", providerId: "zai", modelId: "historical-model", rawMetadata: {}, discoveredAt: new Date(), lastSeenAt: new Date() };
+    vi.mocked(discoverModels).mockResolvedValue({ discovered: 1, newCount: 0, profiled: 1 });
+    render(<ProviderDetailForm pw={providerFixture} canWrite models={[model]} profiles={[]} hasActiveProvider />);
+    expect(screen.queryByText("historical-model")).toBeNull();
+    expect(screen.queryByText("Ready")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Advanced diagnostics" }));
+    expect(screen.getByText("historical-model")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Refresh model diagnostics" }));
+    await waitFor(() => expect(screen.getByText("1 model discovered (0 new)")).toBeTruthy());
+    expect(profileModels).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Hide diagnostics" }));
+    expect(screen.queryByText("historical-model")).toBeNull();
   });
 
   // BI-2DD7042A: connected/expired must be judged by the tokenExpiresAt

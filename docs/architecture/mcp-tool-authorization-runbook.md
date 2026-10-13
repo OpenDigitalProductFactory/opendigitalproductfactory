@@ -1,5 +1,60 @@
 # MCP tool authorization runbook
 
+**Routine delegated maintenance (BI-B22C8E02).** Current OAuth consent steers
+authorized ordinary reads and reversible work without a new approval for each
+call. Account model discovery with an explicit account identity synchronizes
+catalog metadata using existing credentials; it is ordinary bookkeeping.
+Credential changes, activation, disconnect, sign-in and authentication probes
+retain the provider tool's authority consequence. The command tool recognizes
+only a bounded local diagnostic grammar (Compose ps/logs and Git status/rev-parse)
+and executes those reads as an argument vector without a shell. Unknown flags,
+alternate projects/configs, arbitrary scripts and composed shell commands retain
+the existing irreversible consequence and destructive-command blocks. Grants,
+token scope, clearance and room membership are still checked. DEV identity is
+context, never an extra grant; the paired installation remains read-only.
+
+## Reading an owned semantic review's recovery state
+
+The existing `tasks/get` and `tasks/result` methods return `recovery.details`
+for semantic reviews after checking the authenticated task owner. This includes
+at most 100 task node IDs, recorded status, digest binding and current scoped
+remediation verification identity. It excludes raw provider output and diagnostic
+text. A truncated node list cannot establish complete execution settlement.
+
+Failed or inactive tasks do not prove their provider executions have settled.
+`executionSettled` requires a fresh recorded health verification bound to this
+task, request digest and Workroom, covering every unresolved node. Readback uses
+the same evidence predicate as successor admission. `retryAuthorized` remains
+false: only `retry_semantic_review` rechecks current authority, immutable
+checkpoints, lineage and recovery budget before any dispatch. Missing evidence
+requires actual execution reconciliation; reading this packet neither creates
+a health receipt nor records a passing review.
+
+Design and plan review handlers preserve the last completed semantic round when
+their two-reviewer panel cannot complete. `reviewIncomplete` and
+`usableReviewerCount` distinguish that condition from a document rejection.
+Infrastructure errors are not prior design findings, and incomplete attempts do
+not increment the revision round or trigger document regeneration. The handler
+returns `retry_review`; repeat the review only after reviewer execution recovers.
+Plan auto-resume preserves the saved plan while this condition remains unresolved.
+The review panel and readiness strip show incomplete execution as a wait, not
+approval or changes requested. A completed individual review stays visible beside
+the incomplete panel; historical outage findings and inflated rounds are excluded
+from the current recovery guidance. Original records remain intact.
+
+Bound spec-approval reviewers receive the initiative's current authoritative
+classification in their tool contract. A document titled "repair" does not
+make a feature initiative a fix. Dispatch and the receipt writer share the
+monotonic classification projection; the writer rechecks under its transaction
+lock. A classification mismatch names the expected profile and permits bounded
+correction on the same task, preserving the request key, immutable artifact,
+reviewer identity and authority. Missing classification still requires repair
+of the underlying facts; retrying cannot authorize a downgrade.
+
+Task replay preserves a recorded writer rejection's code, explanation and
+same-task recovery action. A rejected packet must not be displayed as a missing
+writer or as a request for another human approval. Terminal tasks remain terminal.
+
 **Review retries after permission vocabulary changes.** A bound independent review
 keeps its original task, request key and saved authority scope. Adding an unrelated
 grant to an OAuth public scope must not make the same immutable review a different
@@ -40,6 +95,14 @@ assistant attribution. Older connections missing approved identity need one
 consent repair through the client's reconnect flow. Never assign an old room
 to its caller or substitute a legacy token to repair OAuth.
 
+External evidence capture resolves the same authenticated human and assistant
+principals as other Workroom writers. A newly captured room records that ownership
+before returning its identity. Backlog and session binding are independent:
+adoption may fill a missing session reference on a room already bound to its
+backlog item, but cannot replace a recorded session. The conditional write also
+refuses a concurrent session assignment. Previously unowned rooms still require
+the existing owner-recovery path; capture does not manufacture their admission.
+
 **Status:** procedure reference. The *rules* — the authorization principle, scope escalation, and grant enforcement — live in [`AGENTS.md`](../../AGENTS.md) §8/§8a and stay always-on. This file holds transport detail, token issuance and rotation, worktree MCP sync, and the grant-intersection mechanics. Relocated from §8 by BI-0020D511 Phase 1; no rule was dropped.
 
 External coding agents use the real MCP JSON-RPC 2.0 transport at `/api/mcp/v1` (`apps/web/app/api/mcp/v1/route.ts`). The older `/api/mcp/tools` and `/api/mcp/call` endpoints remain for in-portal coworker chat and are not the external MCP client contract.
@@ -61,7 +124,7 @@ Authorized product surfaces use the six generic `surface_*` MCP tools rather tha
 
 **MCP bearer tokens (`dpfmcp_...`) are the legacy path, on a deprecation horizon.** They are issued from Admin > Platform Development > MCP and still resolve; issuance closes when `DPF_MCP_PAT_ISSUANCE_CLOSED=1` and resolution ends at the operator's horizon (`DPF_MCP_PAT_RESOLUTION_DISABLED=1`). Treat `.mcp.json` and `.vscode/mcp.json` as local credential files only; they are ignored by git and must never be committed. An OAuth client stores its own tokens and needs neither file for credentials.
 
-**One dpf connector per client, owned by the plugin (BI-5201141C, design §12.4.4).** Claude Code's `dpf` server is the `dpf-platform` plugin's descriptor, `packages/dpf-skill-pack/claude.mcp.json`: URL-only, `${DPF_MCP_URL:-https://localhost/api/mcp/v1?tier=full}`, no `Authorization` header, plus the `oauth.scopes` pin. It authenticates by OAuth after one Connect click. Claude Code matches a plugin server against configured servers **by endpoint, not by name** (Claude Code MCP documentation, "scope hierarchy and precedence"): a project `.mcp.json` `dpf` entry at a different URL does not replace the plugin's server, it loads beside it as a second `dpf` connector. So on https nothing writes one: the portal's host writer writes `.mcp.json` / `.vscode/mcp.json` only when the client cannot authorize by OAuth (plain http, or explicit legacy mode); the toolchain bootstrap plans the repo `.mcp.json` only in those cases; the worktree seed and sync scripts never copy it; and `.claude/settings.json` no longer auto-enables project servers. Antigravity's plugin descriptor (`antigravity.mcp.json`) follows the same URL-only rule; Grok keeps its bearer descriptor until it has a credential without a paste (§12.4.7). Codex's connector is its home config, `~/.codex/config.toml`. Both checked-in descriptors are generator output (`update_agent_toolchain.py`) and a test fails if they drift.
+**One dpf connector per client, owned by the plugin (BI-5201141C, design §12.4.4).** Claude Code's `dpf` server is the `dpf-platform` plugin's descriptor, `packages/dpf-skill-pack/claude.mcp.json`: URL-only, `${DPF_MCP_URL:-https://localhost/api/mcp/v1?tier=full}`, no `Authorization` header, plus the `oauth.scopes` pin. It authenticates by OAuth after one Connect click. Claude Code matches a plugin server against configured servers **by endpoint, not by name** (Claude Code MCP documentation, "scope hierarchy and precedence"): a project `.mcp.json` `dpf` entry at a different URL does not replace the plugin's server, it loads beside it as a second `dpf` connector. So on https nothing writes one: the portal's host writer writes `.mcp.json` / `.vscode/mcp.json` only when the client cannot authorize by OAuth (plain http, or explicit legacy mode); the toolchain bootstrap plans the repo `.mcp.json` only in those cases; the worktree seed and sync scripts never copy it; and `.claude/settings.json` no longer auto-enables project servers. Antigravity's plugin descriptor (`antigravity.mcp.json`) follows the same URL-only rule; Grok's descriptor names `bearer_token_file`, which setup refreshes from a client_credentials client (§12.4.7). Codex's connector is its home config, `~/.codex/config.toml`. Both checked-in descriptors are generator output (`update_agent_toolchain.py`) and a test fails if they drift.
 
 *Existing machines converge on their own (AC-CANON-3).* The SessionStart `mcp-health` hook (sh and ps1, sharing `scripts/hooks/lib/retire-project-dpf-connector.mjs`) retires a leftover project `dpf` entry at session start, resume, clear and compact, but only when all of these hold: the endpoint is https; the installed `dpf-platform` plugin's `claude.mcp.json` (found through `~/.claude/plugins/installed_plugins.json`) is confirmed URL-only; and the entry is platform-written — key `dpf`, url on `/api/mcp/v1` at loopback or at the `DPF_MCP_URL` origin. It removes only that key, keeps every other server, writes `{"mcpServers": {}}` rather than deleting the file when `dpf` was the only server, writes atomically, keeps a one-time backup at `.mcp.json.pre-single-connector`, and does nothing on a rerun. It prints one line naming what it retired; the session that retired it still has both servers, and the next session start loads one. When a condition is not met it leaves the file alone and prints the note instead. The plugin itself converges when the toolchain bootstrap reruns or `claude plugin update dpf-platform@dpf-platform-local` picks up 0.2.8. Then `/mcp` lists one `dpf` server, from the plugin.
 
@@ -79,7 +142,7 @@ Authorized product surfaces use the six generic `surface_*` MCP tools rather tha
 
 *PAT caller (unchanged contract).* If `/api/mcp/v1` returns an MCP tool result with `structuredContent.error = "insufficient_token_scope"` and `requiredScope` such as `"write"`, stop the MCP workflow and surface the required scope to the operator. Do not fall back to `psql`, Prisma scripts, direct DB edits, or hidden runtime patches to bypass the MCP scope gate. The correct action is to issue a scoped token in the portal, update the client token using the displayed setup command/snippet, call `/api/mcp/token/refresh` with the new token, and retry through MCP.
 
-**Interactive setup defaults to OAuth (BI-A5307F9E).** The shared `mcpClientBearerHeaderRequired` policy accounts for the client and endpoint. Codex uses URL-only configuration on HTTPS and HTTP loopback (`localhost`, `127.0.0.1`, `[::1]`). Bootstrap and updater reruns remove the managed `DPF_MCP_BEARER_TOKEN` override; they preserve user-owned credential overrides and never revoke credentials. Other clients retain their established compatibility requirements where OAuth has not been verified. Grok remains explicitly in that category; remote HTTP is not advertised as secure OAuth.
+**Interactive setup defaults to OAuth (BI-A5307F9E).** The shared `mcpClientBearerHeaderRequired` policy accounts for the client and endpoint. Codex uses URL-only configuration on HTTPS and HTTP loopback (`localhost`, `127.0.0.1`, `[::1]`). Bootstrap and updater reruns remove the managed `DPF_MCP_BEARER_TOKEN` override; they preserve user-owned credential overrides and never revoke credentials. Other clients retain their established compatibility requirements where OAuth has not been verified. Grok does not use the browser OAuth scope pin; setup refreshes bearer_token_file from a client_credentials client (§12.4.7). Remote HTTP is not advertised as secure OAuth.
 
 **Install and rerun behavior.** The default bootstrap does not mint a PAT while OAuth authorization is pending. Its banner separates configuration written from an authenticated connection: sign in through the client's MCP authorization flow (Codex: `codex mcp login dpf`), then verify a governed read and a permitted write. A separate PAT probe does not establish that the client's OAuth session works. Existing user-owned overrides require explicit operator review rather than being silently removed.
 
@@ -92,10 +155,12 @@ Authorized product surfaces use the six generic `surface_*` MCP tools rather tha
 **Connect over loopback https — OAuth, nothing to rotate (BI-FA2C46D7).** On an install with the organization PKI bootstrapped, the client can authorize itself and the token path above stops being needed for desktop clients. Every step is a checked-in script; the operator's only action is one browser consent.
 
 1. `bash scripts/bootstrap-organization-pki.sh --mode authority --hostname localhost --san 127.0.0.1` (re-runnable; reuses the CA). The portal certificate is issued for a year (`DPF_PKI_PORTAL_CERT_DURATION`, default `8760h`) — earlier bootstraps issued a 24h leaf that expired the next day and silently broke LDAPS and any https front (BI-5727522F); a leaf shorter than the configured lifetime is re-issued on the next run. The script starts the Caddy front (`docker-compose.tls.yml`, `:443 → portal:3000`); the installer's compose chain and the autostart unit keep it running because `DPF_ORGANIZATION_TRUST_ENABLED=1` is recorded in `.env`.
-2. `bash scripts/dpf-bootstrap-agent-toolchain.sh` (or the `.ps1` twin). The endpoint is the install's canonical origin: `DPF_MCP_URL` = `<PUBLIC_URL>/api/mcp/v1?tier=full`, read from `PUBLIC_URL` in the install's `.env`; an explicit `DPF_MCP_URL` stands only when the install names no https origin (BI-2D545A0C). For an https endpoint it resolves the organization root (`DPF_PKI_TRUST_BUNDLE`, then the install's `.env`, then `~/.dpf/pki/root_ca.crt`) and persists `DPF_MCP_URL` and `NODE_EXTRA_CA_CERTS` beside the token — the User environment on Windows; `~/.dpf/agent-toolchain.env` (sourced from `~/.zshenv` and `~/.profile`) plus, on macOS, the launchd user environment elsewhere. Node clients (Claude Code, Codex, the gate scripts) trust the install's own CA through that variable. The installers (`install-dpf.ps1`, `install-dpf.sh`) persist the same two values on every run through the same module, `scripts/installer/lib/mcp-client-env.{sh,ps1}`, and add the root to the installing user's trust store (`scripts/installer/lib/machine-trust.{sh,ps1}`, one OS prompt) so browsers on the host open the canonical origin without a warning; the bootstrap does not touch the trust store. Claude Code's connector is the plugin descriptor (one connector, above), which carries **no** `headers.Authorization` (the scheme rule above) — that is what lets discovery run — and `oauth.scopes` = `dpf.read dpf.work dpf.build` (BI-3D2FD68C). The portal's protected-resource metadata advertises the same three scopes (`ADVERTISED_SCOPES` in `apps/web/lib/auth/oauth-scope-map.ts`, BI-CE5F8C0A); the pin keeps the consent on the write scopes even if that advertisement ever narrows, because a client holding only `dpf.read` is read-only for good: progressive disclosure never shows it a write tool, so the `insufficient_scope` step-up has nothing to fire on. `dpf.business`, `dpf.operate` and `dpf.admin` stay a deliberate operator choice. The pinned set lives once, as `MCP_CLIENT_OAUTH_SCOPE_PIN` in `packages/integration-shared/src/mcp-client-credential-policy.ts`, and the skill pack's Python generator mirrors it. Claude Code reads the descriptor only when it starts, so restart the desktop client after a plugin update. The checked-in descriptor names its endpoint as `${DPF_MCP_URL:-https://localhost/api/mcp/v1?tier=full}`; the desktop app cannot parse that before sign-in (its log reads `verifyPluginMcpBinding ... expected=<unparseable>` and Connect fails with "points at a different server URL"), so the SessionStart plugin reconcile writes this machine's literal endpoint into the installed copy (`scripts/hooks/lib/pin-plugin-mcp-url.mjs`, BI-1229E42C). It takes effect in the next session.
+2. `bash scripts/dpf-bootstrap-agent-toolchain.sh` (or the `.ps1` twin). An explicit process `DPF_MCP_URL` selects the endpoint, including supported loopback HTTP for OAuth discovery recovery. Otherwise it prefers the saved Codex endpoint, then the saved user endpoint, then `<PUBLIC_URL>/api/mcp/v1?tier=full` from an HTTPS install origin (BI-2D545A0C). HTTPS and explicitly selected loopback HTTP endpoints persist for future processes. HTTP persistence leaves certificate settings and credentials unchanged. For an https endpoint it resolves the organization root (`DPF_PKI_TRUST_BUNDLE`, then the install's `.env`, then `~/.dpf/pki/root_ca.crt`) and persists `DPF_MCP_URL` and `NODE_EXTRA_CA_CERTS` beside the token — the User environment on Windows; `~/.dpf/agent-toolchain.env` (sourced from `~/.zshenv` and `~/.profile`) plus, on macOS, the launchd user environment elsewhere. Node clients (Claude Code, Codex, the gate scripts) trust the install's own CA through that variable. The installers (`install-dpf.ps1`, `install-dpf.sh`) persist the same two values on every run through the same module, `scripts/installer/lib/mcp-client-env.{sh,ps1}`, and add the root to the installing user's trust store (`scripts/installer/lib/machine-trust.{sh,ps1}`, one OS prompt) so browsers on the host open the canonical origin without a warning; the bootstrap does not touch the trust store. Claude Code's connector is the plugin descriptor (one connector, above), which carries **no** `headers.Authorization` (the scheme rule above) — that is what lets discovery run — and `oauth.scopes` = `dpf.read dpf.work dpf.build` (BI-3D2FD68C). The portal's protected-resource metadata advertises the same three scopes (`ADVERTISED_SCOPES` in `apps/web/lib/auth/oauth-scope-map.ts`, BI-CE5F8C0A); the pin keeps the consent on the write scopes even if that advertisement ever narrows, because a client holding only `dpf.read` is read-only for good: progressive disclosure never shows it a write tool, so the `insufficient_scope` step-up has nothing to fire on. `dpf.business`, `dpf.operate` and `dpf.admin` stay a deliberate operator choice. The pinned set lives once, as `MCP_CLIENT_OAUTH_SCOPE_PIN` in `packages/integration-shared/src/mcp-client-credential-policy.ts`, and the skill pack's Python generator mirrors it. Claude Code reads the descriptor only when it starts, so restart the desktop client after a plugin update. The checked-in descriptor names its endpoint as `${DPF_MCP_URL:-https://localhost/api/mcp/v1?tier=full}`; the desktop app cannot parse that before sign-in (its log reads `verifyPluginMcpBinding ... expected=<unparseable>` and Connect fails with "points at a different server URL"), so the SessionStart plugin reconcile writes this machine's literal endpoint into the installed copy (`scripts/hooks/lib/pin-plugin-mcp-url.mjs`, BI-1229E42C). It takes effect in the next session.
 3. Restart the desktop client. On first connection it discovers the authorization server, registers itself (RFC 7591), and opens a browser consent page on the signed-in portal; approve once — the page names the assistant the connection will act as and lists the pinned scopes in plain words (read, work and build for Claude Code); `Adjust permissions` reveals one checkbox per scope if you want to grant less. From then on the access token refreshes silently. `Admin > Platform Development` lists the client beside any remaining PATs. To consent again later (for example after the pin changes), type `/mcp` in the Claude Code composer, pick `dpf`, and choose Authenticate. The desktop app's Settings > Connectors page lists claude.ai connectors only; it is not the place to sign in. `/mcp` shows the plugin's server as the only `dpf` entry — if a second `dpf` appears (a project server), a leftover `.mcp.json` entry is loading beside the plugin; see *Existing machines* above. If the consent page stays on screen after Approve, the sign-in still completed: the redirect targets the `claude://` scheme, so the tab never navigates away.
 
 The SessionStart health hook reads the OAuth challenge on https (a `401` naming `resource_metadata` is the healthy answer) and no longer asks for a token there. Headless callers that cannot open a browser use a `client_credentials` client (design Slice 2b) or, until then, a PAT. Liveness: `OAuthRefreshToken` rows become non-zero on the install and a session authenticates with `source=oauth` (BI-CE5F8C0A).
+
+**Preserve an existing Codex connection.** A toolchain updater run without `--mcp-url` or a nonempty process `DPF_MCP_URL` preserves the saved `mcp_servers.dpf` URL and operator options. Bootstrap also reads that saved URL before install-origin defaults when no process endpoint is named, so its probes and planner use the approved resource. Fresh bootstrap still follows the install HTTPS origin; new standalone connections default to HTTPS localhost. An explicitly named endpoint replaces the saved URL; CLI selection takes precedence over the environment. The shared read-only reader refuses an unreadable URL, embedded credentials or recognized credential query keys before printing the URL or writing configuration. Check the saved endpoint and the public discovery metadata before retrying authentication. If the endpoint changed unexpectedly, restore the approved endpoint through the supported connector command and inspect the client result; changing the resource may initiate OAuth again. Do not treat successful login as proof of silent refresh or task authority. Do not disable certificate validation, inject a legacy token, or substitute a different host.
 
 **Concurrent sessions and refresh.** Several sessions of one client can share a stored refresh token. When the same client refreshes the same token again within `DPF_OAUTH_REFRESH_REUSE_GRACE_SECONDS` (default 60s) of rotating it, the server issues a sibling credential and revokes nothing. Reuse after the window, or by another client, still revokes the whole credential family as `refresh_token_replayed`, and the client reports "This connection was reused. Reconnect to continue." In that case, re-authenticate with `/mcp`. The rule and its security reasoning: [credential-lifecycle amendment](../superpowers/specs/2026-09-21-oauth-external-build-authority-design.md#refresh-reuse-grace-amendment-bi-25c6219e-2026-10-02) (BI-25C6219E).
 
@@ -314,7 +379,10 @@ readiness issues now, and an independent reviewer. The request key makes client
 and server dispatch one TaskRun. A route is not sent again within 30 minutes,
 and each attempt, refusal, or missing connection is recorded on the room as a
 `reviewer-dispatch` activity. An author does not need a working client for its
-delivered work to be reviewed.
+delivered work to be reviewed. The same sweep also covers items still open or in
+progress (BI-3A462B04): it sends the design-stage reviews they owe (design-spec,
+spec approval, architecture review, plan review), read from the implementation
+decision, on the same author connection and with the same checks.
 
 `objective-mapping` is an evidence proposal for terminal evaluation, not an
 initiative approval receipt. The acceptance reviewer records it through
@@ -456,6 +524,14 @@ execution classification and next action. Polling helps only while execution is
 active. A capacity refusal before dispatch is infrastructure-inconclusive;
 transport loss remains uncertain. Neither is a failed code review or permission
 to publish. Workroom history retains the reviewer checkpoints and receipts.
+
+When a local review fails near five minutes, inspect the actual transport as
+well as the model deadline. The process-lived provider transport uses the
+canonical local inference ceiling for headers and body inactivity; caller
+signals still impose shorter deadlines. A responsive short probe does not
+verify a large review prompt or prove why a historical request failed. Preserve
+transport error codes when available and distinguish successful probe cases
+from deferred or unrun cases in remediation evidence.
 
 Within the original window, the original requester can confirm
 `retry_semantic_review`. Current saved authority, grants, quiescence and bounded

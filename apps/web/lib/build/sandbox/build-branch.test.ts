@@ -26,7 +26,7 @@ import {
   buildSandboxStaleGitLockCleanupCommand,
 } from "./build-branch";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { shouldPreserveBuildBranchWork } from "./sandbox-source-currency";
@@ -459,8 +459,10 @@ describe("getClientIdentity upstream default", () => {
 // commit (60 such resets in the sandbox's last 400 reflog entries), the
 // widest writes on the shared index that concurrent builds collide on.
 describe("sandbox repo-state probe", () => {
+  // The probe is a POSIX command for the Linux sandbox. Run `sh` in the fixture working directory; a
+  // relative path avoids Windows backslashes being read as shell escapes.
   function probe(dir: string): string {
-    return execFileSync("sh", ["-c", buildSandboxRepoStateProbeCommand(dir)], { encoding: "utf8" });
+    return execFileSync("sh", ["-c", buildSandboxRepoStateProbeCommand(".")], { cwd: dir, encoding: "utf8" });
   }
 
   function gitIn(dir: string, ...args: string[]): void {
@@ -535,15 +537,18 @@ describe("stale sandbox git lock cleanup", () => {
   it("removes lock files older than the bound and keeps fresh ones", () => {
     const gitDir = mkdtempSync(join(tmpdir(), "dpf-locks-"));
     try {
-      execFileSync("mkdir", ["-p", join(gitDir, "worktrees", "FB-1")]);
+      mkdirSync(join(gitDir, "worktrees", "FB-1"), { recursive: true });
+      const staleAt = new Date(Date.now() - 30 * 60 * 1000);
       for (const f of ["shallow.lock", "index.lock", join("worktrees", "FB-1", "index.lock")]) {
         writeFileSync(join(gitDir, f), "");
-        execFileSync("touch", ["-t", "202609251353", join(gitDir, f)]);
+        utimesSync(join(gitDir, f), staleAt, staleAt);
       }
       writeFileSync(join(gitDir, "packed-refs.lock"), "");
-      execFileSync("sh", ["-c", buildSandboxStaleGitLockCleanupCommand(gitDir)]);
-      const left = execFileSync("sh", ["-c", `cd ${gitDir} && find . -name '*.lock' | sort`], { encoding: "utf8" }).trim();
-      expect(left).toBe("./packed-refs.lock");
+      execFileSync("sh", ["-c", buildSandboxStaleGitLockCleanupCommand(".")], { cwd: gitDir });
+      expect(existsSync(join(gitDir, "packed-refs.lock"))).toBe(true);
+      for (const f of ["shallow.lock", "index.lock", join("worktrees", "FB-1", "index.lock")]) {
+        expect(existsSync(join(gitDir, f))).toBe(false);
+      }
     } finally {
       rmSync(gitDir, { recursive: true, force: true });
     }

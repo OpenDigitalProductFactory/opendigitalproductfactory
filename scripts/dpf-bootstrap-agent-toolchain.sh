@@ -191,15 +191,33 @@ GROK_CONFIG_PATH="$HOME/.grok/config.toml"
 KERNEL_PRINCIPLES_DIR="$REPO_ROOT/docs/founder-kernel/wiki/principles"
 CONTRIBUTOR_MEMORY_DIR="$HOME/.claude/projects"
 PROJECT_SLUG="$(printf '%s' "$REPO_ROOT" | sed -E 's:[/:]:-:g' | sed -E 's:^-+::')"
-# BI-2D545A0C (design 12.4.3): the endpoint is the install's canonical origin,
-# read from PUBLIC_URL in the install's .env, and on https Node clients trust
-# the organization's own CA (BI-FA2C46D7). One rule, shared with the installer:
-# installer/lib/mcp-client-env.sh. An explicit DPF_MCP_URL stands only when the
-# install names no https origin.
+# BI-2D545A0C (design 12.4.3): an explicit process DPF_MCP_URL
+# selects the endpoint before the saved Codex choice and install defaults.
+# On HTTPS, Node clients trust the organization CA (BI-FA2C46D7).
+# The shared installer/lib/mcp-client-env module owns resolution.
 # shellcheck source=installer/lib/mcp-client-env.sh
 . "$SCRIPT_DIR/installer/lib/mcp-client-env.sh"
-dpf_resolve_mcp_client_env "$REPO_ROOT"
-MCP_ENDPOINT="${DPF_MCP_CLIENT_URL:-http://127.0.0.1:3000/api/mcp/v1}"
+SELECTED_MCP_URL="${DPF_MCP_URL:-}"
+if [ -z "$SELECTED_MCP_URL" ] && [ -f "$CODEX_CONFIG_PATH" ]; then
+  if ! SELECTED_MCP_URL="$(bash "$REPO_ROOT/packages/dpf-skill-pack/scripts/update-agent-toolchain.sh" --print-existing-codex-mcp-url)"; then
+    fail "Cannot read the saved Codex endpoint. Set DPF_MCP_URL explicitly to repair it."
+    exit 1
+  fi
+fi
+DPF_MCP_URL="$SELECTED_MCP_URL" dpf_resolve_mcp_client_env "$REPO_ROOT"
+# MCP_ENDPOINT_NAMED is the endpoint the install or operator named (may be
+# empty); only it is forwarded to the updater, whose canonical https/OAuth
+# default governs otherwise (BI-772023BC). The probes and the plan bridge need
+# a concrete URL, so they read that same default from the updater's one line.
+MCP_ENDPOINT_NAMED="${DPF_MCP_CLIENT_URL:-}"
+MCP_ENDPOINT="$MCP_ENDPOINT_NAMED"
+if [ -z "$MCP_ENDPOINT" ]; then
+  MCP_ENDPOINT="$(sed -n 's/^DEFAULT_MCP_URL = "\(.*\)"$/\1/p' "$REPO_ROOT/packages/dpf-skill-pack/scripts/update_agent_toolchain.py" 2>/dev/null || true)"
+fi
+if [ -z "$MCP_ENDPOINT" ]; then
+  fail "Cannot read the default MCP endpoint from packages/dpf-skill-pack/scripts/update_agent_toolchain.py; set DPF_MCP_URL or restore the skill pack."
+  exit 1
+fi
 MCP_TRUST_BUNDLE="$DPF_MCP_CLIENT_CA_BUNDLE"
 if [ -n "$MCP_TRUST_BUNDLE" ]; then
   export NODE_EXTRA_CA_CERTS="$MCP_TRUST_BUNDLE"
@@ -357,8 +375,9 @@ persist_mcp_client_env_posix() {
   # so they do not read the profile; launchd carries the values for this boot.
   dpf_launchd_setenv DPF_MCP_BEARER_TOKEN "$_tok"
   if ! dpf_persist_mcp_client_env; then
-    # A non-default http endpoint the operator named keeps its line.
-    if [ "$MCP_ENDPOINT" != "http://127.0.0.1:3000/api/mcp/v1" ]; then
+    # A non-https endpoint the operator named keeps its line; with none named
+    # the updater's default applies and nothing is persisted.
+    if [ -n "$MCP_ENDPOINT_NAMED" ]; then
       dpf_set_client_env_export DPF_MCP_URL "$MCP_ENDPOINT"
       dpf_launchd_setenv DPF_MCP_URL "$MCP_ENDPOINT"
     fi
@@ -484,14 +503,71 @@ exit 127'
   fi
 fi
 
-# On an https endpoint the transport lines (DPF_MCP_URL + NODE_EXTRA_CA_CERTS)
-# are what let a client authorize over OAuth; persist them even when no token
+# Persist the selected HTTPS or loopback HTTP endpoint for new processes.
+# HTTPS may also carry the organization CA; persist even when no token
 # was minted this run. Never at dry-run time.
-case "$MCP_ENDPOINT" in https://*) _https_endpoint=1 ;; *) _https_endpoint=0 ;; esac
-if [ "$DRY_RUN" -eq 0 ] && [ "$_https_endpoint" -eq 1 ]; then
+if [ "$DRY_RUN" -eq 0 ] && dpf_mcp_client_endpoint_can_persist "$MCP_ENDPOINT_NAMED"; then
   persist_mcp_client_env_posix
-  ok "MCP client transport persisted: https endpoint${MCP_TRUST_BUNDLE:+ + organization root bundle (NODE_EXTRA_CA_CERTS)}."
+  ok "Saved the MCP endpoint preference for future sessions."
 fi
+
+# Grok credential (BI-5BCDB07C). Independent of the legacy PAT mint above:
+# a credentials client inside the portal, then a bearer_token_file refresh.
+# A refused client stops the refresher. This does not mint a personal access token.
+provision_grok_credential() {
+  [ "$GROK_PRESENT" -eq 1 ] || return 0
+  if [ "$DRY_RUN" -eq 1 ]; then
+    info "DRY-RUN: would create the Grok credentials client and refresh its bearer file."
+    return 0
+  fi
+  if ! command -v node >/dev/null 2>&1; then
+    warn "node not found; cannot refresh the Grok credential."
+    return 0
+  fi
+  if ! command -v docker >/dev/null 2>&1; then
+    warn "docker not found; cannot create the Grok credentials client."
+    return 0
+  fi
+  PORTAL_CONTAINER="$(resolve_portal_container)"
+  if [ "$(docker inspect -f '{{.State.Running}}' "$PORTAL_CONTAINER" 2>/dev/null)" != "true" ]; then
+    warn "Portal container '$PORTAL_CONTAINER' is not running; Grok credential was not created."
+    return 0
+  fi
+  _grok_err="$(mktemp)"
+  _link_script="$REPO_ROOT/scripts/link-web-src-workspace.sh"
+  if [ -f "$_link_script" ]; then
+    docker exec -i "$PORTAL_CONTAINER" sh -s < "$_link_script" >/dev/null 2>>"$_grok_err" \
+      || warn "Could not link workspace packages into web-src; trying the Grok client issuer anyway."
+  fi
+  # shellcheck disable=SC2016
+  _grok_issuer='cd /app/apps/web-src || exit 2
+for t in /app/node_modules/.bin/tsx /app/packages/db/node_modules/.bin/tsx; do
+  if [ -x "$t" ]; then exec "$t" scripts/issue-grok-credentials-client.ts "$@"; fi
+done
+if node -e "require.resolve(\"tsx\")" >/dev/null 2>&1; then exec node --import tsx scripts/issue-grok-credentials-client.ts "$@"; fi
+echo "issue-grok-credentials-client: no tsx runtime found in the portal image" >&2
+exit 127'
+  if _grok_out="$(docker exec "$PORTAL_CONTAINER" sh -c "$_grok_issuer" issuer 2>"$_grok_err")"; then
+    if printf '%s\n' "$_grok_out" | node "$REPO_ROOT/scripts/refresh-grok-mcp-credential.mjs" write-client --config "$GROK_CONFIG_PATH"; then
+      # The updater receives only an operator-named endpoint. The refresher
+      # still calls the resolved URL, including the install default.
+      _grok_mcp_url="$MCP_ENDPOINT"
+      if node "$REPO_ROOT/scripts/refresh-grok-mcp-credential.mjs" refresh --mcp-url "$_grok_mcp_url" --config "$GROK_CONFIG_PATH"; then
+        ok "Grok credential refreshed into bearer_token_file."
+      else
+        warn "Grok credential refresh did not complete."
+      fi
+    else
+      warn "Grok credentials client was not stored."
+    fi
+  else
+    warn "Grok credentials client was not created. Diagnostics:"
+    sed -n '1,40p' "$_grok_err" >&2 || true
+  fi
+  rm -f "$_grok_err"
+}
+
+provision_grok_credential
 
 # Refresh native plugin registrations before the config plan reads preferences.
 # The standalone updater owns this migration on every bootstrap path.
@@ -500,7 +576,8 @@ if [ ! -f "$PLUGIN_UPDATER" ]; then
   fail "Standalone updater missing at $PLUGIN_UPDATER; cannot proceed."
   exit 1
 fi
-plugin_update_args=(--codex-plugin-only --mcp-url "$MCP_ENDPOINT")
+plugin_update_args=(--codex-plugin-only)
+[ -n "$MCP_ENDPOINT_NAMED" ] && plugin_update_args+=(--mcp-url "$MCP_ENDPOINT_NAMED")
 [ "$DRY_RUN" -eq 1 ] && plugin_update_args+=(--dry-run)
 if ! bash "$PLUGIN_UPDATER" "${plugin_update_args[@]}"; then
   fail "Plugin refresh failed; configuration planning stopped."
@@ -544,7 +621,8 @@ trap 'rm -f "$PLAN_TMP"' EXIT
 if ! pnpm "${bridge_args[@]}" > "$PLAN_TMP" 2>&1; then
   warn "compute-plan failed; using standalone skill-pack updater fallback."
   cat "$PLAN_TMP" >&2
-  fallback_args=(--mcp-url "$MCP_ENDPOINT")
+  fallback_args=()
+  [ -n "$MCP_ENDPOINT_NAMED" ] && fallback_args+=(--mcp-url "$MCP_ENDPOINT_NAMED")
   [ "$DRY_RUN" -eq 1 ] && fallback_args+=(--dry-run)
   if ! bash "$PLUGIN_UPDATER" "${fallback_args[@]}"; then
     fail "Standalone updater failed."

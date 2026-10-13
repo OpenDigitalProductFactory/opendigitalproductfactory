@@ -3,7 +3,7 @@ import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readi
 import type { OwedAcceptance } from "./owed-acceptance";
 import type { CloseOutcome } from "./acceptance-sweep-close";
 import type { CloseAuthorisation, CloseDisabledReason } from "./close-authorisation";
-import { summarizePoolAge, type AcceptancePoolAge, type AcceptancePoolAgeSummary } from "./acceptance-pool-age";
+import { summarizePoolAge, type AcceptancePoolAges, type AcceptancePoolAgeSummary } from "./acceptance-pool-age";
 import type { AcceptanceSweepPage, AcceptanceSweepPageItem } from "./acceptance-sweep-page";
 import {
   emptyRouting,
@@ -51,7 +51,7 @@ export type SweepEvaluation = OwedAcceptance & { decision?: InitiativeReadinessD
 
 export type AcceptanceSweepPorts = {
   now: Date;
-  loadPoolAges(): Promise<Map<string, AcceptancePoolAge>>;
+  loadPoolAges(): Promise<AcceptancePoolAges>;
   /** The cursor the previous run recorded, or null on the first run. */
   loadLastCursor(): Promise<string | null>;
   selectPage(args: { pageSize: number; cursor: string | null }): Promise<AcceptanceSweepPage>;
@@ -133,7 +133,7 @@ function increment(counts: Record<string, number>, key: string): void {
 function headline(summary: Omit<AcceptanceSweepSummary, "headline">, agedDays: number): string {
   const { pool, page } = summary;
   return [
-    `Acceptance sweep: ${pool.size} awaiting acceptance, ${pool.aged} aged ${agedDays}+ days`,
+    `Acceptance sweep: ${pool.size} acceptance obligations, ${pool.aged} aged ${agedDays}+ days`,
     `${pool.agedOverTrend} over ${pool.trendDays} days`,
     `${pool.ageBasisCreated} aged from creation (no entry record)`,
     `page of ${page.evaluated}: ${page.snapshotsWritten} changed, ${page.closable} closable, ${page.owned} with an owner, ${page.unroutableItems} unroutable`,
@@ -244,7 +244,8 @@ export async function runAcceptanceSweep(
     }
   }
 
-  const runsPerRevisit = config.pageSize > 0 ? Math.ceil(pool.size / config.pageSize) : 0;
+  const candidatePoolSize = ages.candidateCount ?? pool.size;
+  const runsPerRevisit = config.pageSize > 0 ? Math.ceil(candidatePoolSize / config.pageSize) : 0;
   const withoutHeadline: Omit<AcceptanceSweepSummary, "headline"> = {
     schemaVersion: 1,
     ranAt: ports.now.toISOString(),
@@ -253,7 +254,7 @@ export async function runAcceptanceSweep(
     items: listed,
     // The sweep runs daily, so runs per revisit is also the revisit period in days.
     revisit: {
-      poolSize: pool.size,
+      poolSize: candidatePoolSize,
       pageSize: config.pageSize,
       runsPerRevisit,
       exceedsTrendWindow: runsPerRevisit > config.trendDays,

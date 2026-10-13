@@ -18,6 +18,18 @@ export const agentTaskDispatch = jobs.createFunction(
     const gate = await gateAtEntry(step, "agent/task-dispatch");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
+    await step.run("reconcile-acceptance-upgrade-wakeup", async () => {
+      try {
+        const { reconcileAcceptanceUpgradeWakeupFromStore } = await import(
+          "@/lib/backlog/acceptance-sweep/acceptance-upgrade-wakeup"
+        );
+        return await reconcileAcceptanceUpgradeWakeupFromStore();
+      } catch (error) {
+        console.warn("[agent-task-dispatch] acceptance wakeup reconciliation unavailable", error);
+        return { outcome: "unavailable" };
+      }
+    });
+
     // Once an hour (on the top-of-hour :00 tick of this */5 poll), converge every
     // coworker self-task with its owner's Proactivity toggle so the two can't
     // silently desync — create tasks for coworkers turned up before they were

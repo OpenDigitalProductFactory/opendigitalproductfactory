@@ -25,9 +25,10 @@ vi.mock("@/lib/mcp-task-review-document", () => ({ validateReviewDocument: async
 
 import { authorizeCoworkerRequest } from "./independent-review-request";
 import type { ToolExecutionContext } from "@/lib/mcp-tool-types";
-import { remoteTaskRequestDigest } from "@/lib/mcp-task-capacity-contract";
+import { deterministicExternalTaskRunId, remoteTaskRequestDigest } from "@/lib/mcp-task-capacity-contract";
 import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import { resolveInitiativeReviewerRecovery } from "@/lib/tak/initiative-readiness-tool-grants";
+import { createExhaustedPlanReviewPredicate } from "@/lib/backlog/initiative-readiness/exhausted-plan-review";
 import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
 import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness/types";
 
@@ -60,6 +61,45 @@ beforeEach(() => {
 });
 
 describe("consent-bound independent review request", () => {
+  it("authorizes the same alternate exact plan packet as the issuer after owned exhaustion", async () => {
+    const implementation: InitiativeReadinessDecision = {
+      decisionId: "IRD-PLAN", policyVersion: "initiative-readiness.v3", subject: { kind: "backlog-item", id: "BI-TEST" },
+      transitionObject: { kind: "work-capsule", id: "WC-TEST", expectedVersion: "claim.v1", targetState: "implementation" },
+      profile: "fix", target: "implementation", verdict: "input-required", satisfied: [], blockers: [],
+      unmet: [readinessRequirement({ code: "PLAN_REVIEW_REQUIRED", state: "missing", accountableRole: "plan-reviewer" })],
+      evaluatedAt: "2026-10-12T20:00:00Z",
+    };
+    const input = { decision: implementation, currentAgentId: "AGT-AUTHOR", expectedCurrentBaselineId: "BASE-1",
+      dispatchContext: { workroomId: "WC-TEST", repositoryFullName: "org/repo", branchName: "fix/test", headSha: "a".repeat(40) },
+      planArtifact: { resolved: true as const, path: "docs/superpowers/plans/recovery.md", commitSha: "b".repeat(40), providerBlobId: "c".repeat(40) },
+      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue(["AGT-FIRST", "AGT-NEXT"].flatMap(agentId => ["initiative_design_review", "file_read"].map(grantKey => ({
+        grantKey, agent: { agentId, displayName: agentId, status: "active", archived: false, lifecycleStage: "production" },
+      })))) } },
+    };
+    const old = (await resolveInitiativeReviewerRecovery(input)).reviewerRoutes[0]!.requestCoworker;
+    const scope = ["initiative_evidence_write", "backlog-item:BI-TEST", ...old.requiredToolNames!.map(name => `tool:${name}`)];
+    const authority = { userId: "human", taskAuthorityKey: "oauth-family:consent-family" };
+    const taskRunId = deterministicExternalTaskRunId(authority.taskAuthorityKey, old.requestKey);
+    mocks.task.mockImplementation(async ({ where }) => where.taskRunId === taskRunId ? {
+      taskRunId, userId: "human", currentAgentId: "AGT-FIRST", status: "input-required", authorityScope: scope,
+      a2aMetadata: { taskAuthorityKey: authority.taskAuthorityKey, idempotencyKey: old.requestKey, requestedAgentId: "AGT-FIRST",
+        requestDigestVersion: 2, requestDigest: remoteTaskRequestDigest({ agentId: old.targetAgent, routeContext: "/build",
+          title: old.questionPacketSummary, objective: old.objective, prompt: old.objective, idempotencyKey: old.requestKey,
+          riskClass: "bounded-write", authorityScope: scope, collaborationKind: "handoff", initiativeReviewBinding: old.initiativeReviewBinding }) },
+      progressPayload: { terminalWriterWait: { schemaVersion: 1, kind: "missing-terminal-writer", writerToolName: "record_initiative_design_review",
+        resumeMode: "same-taskrun", attempt: 3, observedAt: "2026-10-12T20:00:00Z" } },
+    } : null);
+    const issue = (taskAuthority: typeof authority) => resolveInitiativeReviewerRecovery({ ...input,
+      isPlanReviewExhausted: createExhaustedPlanReviewPredicate(taskAuthority, { taskRun: { findFirst: mocks.task } }) });
+    const alternate = (await issue(authority)).reviewerRoutes[0]!.requestCoworker;
+    expect(alternate.targetAgent).toBe("AGT-NEXT");
+    mocks.item.mockResolvedValue({ success: true, data: { readiness: { decisions: { implementation } } } });
+    mocks.recovery.mockImplementation(({ taskAuthority }) => issue(taskAuthority));
+    expect(await authorizeCoworkerRequest(alternate, "human", context)).toEqual({ bounded: true });
+    expect((await authorizeCoworkerRequest(old, "human", context)).refusal).toBeDefined();
+    expect((await authorizeCoworkerRequest({ ...alternate, requestKey: old.requestKey }, "human", context)).refusal).toBeDefined();
+  });
+
   it("accepts the real claim issuer's baseline-before-coverage packet without widening authority", async () => {
     const implementation: InitiativeReadinessDecision = {
       decisionId: "IRD-BASELINE-PREREQUISITE", policyVersion: "initiative-readiness.v3",

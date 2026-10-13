@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# Host-native Edge Node installation for macOS. Docker Desktop containers do
-# not own the host multicast interfaces, so federation.discovery must run on
-# the host. Source this file from install-dpf.sh.
+# Host-native Edge Node installation for macOS and Linux. Docker Desktop
+# containers do not own the host multicast interfaces, so federation.discovery
+# must run on the host; and host upkeep (the operator-approved Docker VM
+# restart, BI-28EFE18A) must run outside the VM it restarts. Every install gets
+# the node; DPF_EDGE_ROLE=host-upkeep keeps it to heartbeat and host upkeep
+# when the edge features are not enabled. Source this file from install-dpf.sh.
 
 if [ "${DPF_NATIVE_EDGE_HOST_LOADED:-}" = "1" ]; then
   return 0
@@ -56,8 +59,13 @@ dpf_native_edge_install() {
   local repo_root="$1"
   local bootstrap_token="${2:-}"
   local node_name="${3:-$(hostname -s 2>/dev/null || echo dpf-macos)}"
+  local edge_role="${4:-full}"
   local platform_name
   platform_name="$(uname -s 2>/dev/null || true)"
+  if [ "$platform_name" = "Linux" ]; then
+    dpf_native_edge_install_linux "$repo_root" "$bootstrap_token" "$node_name" "$edge_role"
+    return $?
+  fi
   [ "$platform_name" = "Darwin" ] || return 0
 
   local state_root="${DPF_STATE_DIR:-$HOME/.dpf}"
@@ -126,6 +134,8 @@ dpf_native_edge_install() {
     printf 'DPF_BOOTSTRAP_TOKEN=%s\n' "$bootstrap_token"
     printf 'DPF_EDGE_NODE_NAME=%s\n' "$node_name"
     printf 'DPF_INSTALL_MODE=native\n'
+    printf 'DPF_EDGE_ROLE=%s\n' "$edge_role"
+    printf 'DPF_AUTOSTART_TASK_NAME=%s\n' "local.dpf-autostart"
     printf 'DPF_EDGE_STATE_DIR=%s\n' "$edge_state_dir"
     printf 'DPF_INSTALL_ROOT=%s\n' "$repo_root"
     printf 'DPF_ORGANIZATION_TRUST_ROLE=%s\n' "$organization_role"
@@ -161,6 +171,141 @@ dpf_native_edge_install() {
       warn "Native Edge Node could not start after upgrade; the prior binary was restored. See $log_dir/edge-node.err.log."
     else
       warn "Native Edge Node was installed but launchd could not start it. See $log_dir/edge-node.err.log."
+    fi
+    return 1
+  fi
+}
+
+# Linux (BI-28EFE18A): the same native node under a systemd user unit, beside
+# the platform's own dpf.service (scripts/installer/lib/autostart.sh, which
+# also enables linger so both survive logout). Linux keeps its edge container
+# for opted-in edge features; this node always runs the host-upkeep role.
+_dpf_native_edge_linux_arch() {
+  case "$(uname -m 2>/dev/null)" in
+    x86_64|amd64) echo amd64 ;;
+    aarch64|arm64) echo arm64 ;;
+    *) echo "" ;;
+  esac
+}
+
+_dpf_native_edge_acquire_linux() {
+  local repo_root="$1" destination="$2" version="$3" arch="$4"
+  local asset="dpf-edge-node-linux-$arch"
+  local source_binary="$repo_root/services/edge-node-go/bin/$asset"
+  local temporary_dir
+  temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/dpf-native-edge.XXXXXX")"
+
+  if [ -x "$source_binary" ]; then
+    cp "$source_binary" "$destination"
+  elif command -v go >/dev/null 2>&1 && [ -f "$repo_root/services/edge-node-go/go.mod" ]; then
+    (cd "$repo_root/services/edge-node-go" && \
+      GOOS=linux GOARCH="$arch" CGO_ENABLED=0 go build -trimpath \
+        -ldflags "-s -w -X main.Version=${version:-dev}" \
+        -o "$destination" ./cmd/dpf-edge-node)
+  else
+    local checksum_asset="dpf-edge-node-checksums.sha256"
+    curl --fail --location --silent --show-error \
+      "$(_dpf_native_edge_release_url "$version" "$asset")" -o "$temporary_dir/$asset"
+    curl --fail --location --silent --show-error \
+      "$(_dpf_native_edge_release_url "$version" "$checksum_asset")" -o "$temporary_dir/$checksum_asset"
+    grep "  ${asset}$" "$temporary_dir/$checksum_asset" > "$temporary_dir/$asset.sha256"
+    (cd "$temporary_dir" && sha256sum -c "$asset.sha256")
+    cp "$temporary_dir/$asset" "$destination"
+  fi
+
+  chmod 0755 "$destination"
+  rm -rf "$temporary_dir"
+}
+
+dpf_native_edge_install_linux() {
+  local repo_root="$1"
+  local bootstrap_token="${2:-}"
+  local node_name="${3:-$(hostname -s 2>/dev/null || echo dpf-linux)}"
+  local edge_role="${4:-host-upkeep}"
+  local arch
+  arch="$(_dpf_native_edge_linux_arch)"
+  if [ -z "$arch" ]; then
+    warn "Native Edge Node: unsupported CPU architecture $(uname -m 2>/dev/null); host upkeep stays unavailable on this host."
+    return 1
+  fi
+  if ! command -v systemctl >/dev/null 2>&1; then
+    warn "Native Edge Node needs systemd user services; host upkeep stays unavailable on this host."
+    return 1
+  fi
+
+  local state_root="${DPF_STATE_DIR:-$HOME/.dpf}"
+  local bin_dir="$state_root/bin"
+  local edge_state_dir="$state_root/edge-node"
+  local log_dir="$state_root/logs"
+  local env_file="$state_root/edge-node.env"
+  local binary="$bin_dir/dpf-edge-node"
+  local binary_candidate="$binary.next"
+  local binary_backup="$binary.previous"
+  local unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+  local unit="$unit_dir/dpf-edge-node.service"
+  local version="${DPF_NATIVE_EDGE_VERSION:-$(git -C "$repo_root" describe --tags --abbrev=0 2>/dev/null || echo latest)}"
+  local authority_url="${DPF_LAN_AUTHORITY_URL:-http://127.0.0.1:3000}"
+  local platform_env="$repo_root/.env"
+  local edge_action_url edge_action_ca edge_action_cert edge_action_key edge_action_public
+  edge_action_url="$(_dpf_native_edge_env_value "$platform_env" DPF_EDGE_ACTION_URL)"
+  edge_action_ca="$(_dpf_native_edge_env_value "$platform_env" DPF_EDGE_ACTION_CA_FILE)"
+  edge_action_cert="$(_dpf_native_edge_env_value "$platform_env" DPF_EDGE_ACTION_CERT_FILE)"
+  edge_action_key="$(_dpf_native_edge_env_value "$platform_env" DPF_EDGE_ACTION_KEY_FILE)"
+  edge_action_public="$(_dpf_native_edge_env_value "$platform_env" DPF_EDGE_ACTION_SIGNING_PUBLIC_KEY_FILE)"
+
+  mkdir -p "$bin_dir" "$edge_state_dir" "$log_dir" "$unit_dir"
+  chmod 0700 "$state_root" "$edge_state_dir"
+  # Acquire and verify the replacement while the current service stays online.
+  rm -f "$binary_candidate"
+  _dpf_native_edge_acquire_linux "$repo_root" "$binary_candidate" "$version" "$arch"
+  systemctl --user stop dpf-edge-node.service 2>/dev/null || true
+  if [ -f "$binary" ]; then
+    cp "$binary" "$binary_backup"
+    chmod 0755 "$binary_backup"
+  fi
+  mv "$binary_candidate" "$binary"
+
+  {
+    printf 'DPF_AUTHORITY_URL=%s\n' "$authority_url"
+    printf 'DPF_BOOTSTRAP_TOKEN=%s\n' "$bootstrap_token"
+    printf 'DPF_EDGE_NODE_NAME=%s\n' "$node_name"
+    printf 'DPF_INSTALL_MODE=native\n'
+    printf 'DPF_EDGE_ROLE=%s\n' "$edge_role"
+    printf 'DPF_AUTOSTART_TASK_NAME=%s\n' "dpf.service"
+    printf 'DPF_EDGE_STATE_DIR=%s\n' "$edge_state_dir"
+    printf 'DPF_INSTALL_ROOT=%s\n' "$repo_root"
+    if [ -n "$edge_action_url" ] && [ -f "$edge_action_ca" ] && [ -f "$edge_action_cert" ] && [ -f "$edge_action_key" ] && [ -f "$edge_action_public" ]; then
+      printf 'DPF_EDGE_ACTION_URL=%s\n' "$edge_action_url"
+      printf 'DPF_EDGE_ACTION_CA_FILE=%s\n' "$edge_action_ca"
+      printf 'DPF_EDGE_ACTION_CERT_FILE=%s\n' "$edge_action_cert"
+      printf 'DPF_EDGE_ACTION_KEY_FILE=%s\n' "$edge_action_key"
+      printf 'DPF_EDGE_ACTION_SIGNING_PUBLIC_KEY_FILE=%s\n' "$edge_action_public"
+    fi
+  } > "$env_file"
+  chmod 0600 "$env_file"
+
+  {
+    printf '%s\n' '[Unit]' 'Description=DPF native Edge Node (host upkeep)' 'After=network-online.target' ''
+    printf '%s\n' '[Service]'
+    printf 'EnvironmentFile=%s\n' "$env_file"
+    printf 'ExecStart=%s\n' "$binary"
+    printf '%s\n' 'Restart=always' 'RestartSec=10'
+    printf 'StandardOutput=append:%s/edge-node.out.log\n' "$log_dir"
+    printf 'StandardError=append:%s/edge-node.err.log\n' "$log_dir"
+    printf '%s\n' '' '[Install]' 'WantedBy=default.target'
+  } > "$unit"
+  chmod 0644 "$unit"
+
+  systemctl --user daemon-reload 2>/dev/null || true
+  if systemctl --user enable --now dpf-edge-node.service 2>/dev/null; then
+    ok "Native Edge Node installed and supervised by systemd (user unit)"
+  else
+    if [ -f "$binary_backup" ]; then
+      mv "$binary_backup" "$binary"
+      systemctl --user restart dpf-edge-node.service 2>/dev/null || true
+      warn "Native Edge Node could not start after upgrade; the prior binary was restored. See $log_dir/edge-node.err.log."
+    else
+      warn "Native Edge Node was installed but systemd could not start it. See $log_dir/edge-node.err.log."
     fi
     return 1
   fi

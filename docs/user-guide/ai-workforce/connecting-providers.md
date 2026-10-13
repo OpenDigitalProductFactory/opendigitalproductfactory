@@ -11,11 +11,29 @@ relatedCode:
 
 ## Overview
 
-The platform connects to external AI providers to run inference for your AI workforce. Depending on the provider, you can authenticate using one of three methods: API Key, OAuth Sign-in, or None (for local providers). Each method is configured on the provider's detail page under External Services.
+The platform connects to external AI providers to run inference for your AI workforce. Depending on the provider, you can authenticate using one of three methods: API Key, OAuth Sign-in, or None (for local providers). Open **Platform > AI Operations > Providers & Routing**, then choose **Manage** beside a provider.
+
+### Routing status and temporary pauses
+
+Z.ai GLM Coding is also listed separately so you can manage its coding endpoint and traffic. It inherits the main Z.ai key unless you configure an override.
+
+Each provider's **Routing right now** panel shows its operator pause alongside current usage limits, retry times, account or health restrictions, the platform's local-only policy, and local capacity reserved for platform verification. Times display in your browser's timezone. Open **More routing details** for recent health and subscription allocation observations. Workload and model requirements are checked separately for each request.
+
+Choose **Pause now** to stop new model requests immediately. The pause lasts until you resume it. Choose **Set resume time** to add a duration in hours or days. A scheduled pause persists across refreshes and restarts. You can change the time, keep it paused indefinitely, or choose **Resume now** early. Work already running may finish.
+
+Resuming removes the operator pause. It does not reset a provider's usage limit or override an authentication, billing, health, account, or local-only restriction. The panel keeps those restrictions visible. Read-only viewers can inspect the status; provider managers can change it.
+
+**ChatGPT and Codex share one OpenAI sign-in.** Both appear in Providers & Routing. The ChatGPT detail links to Codex to manage shared authentication; Codex links back to ChatGPT traffic controls. Pausing one provider leaves the other's operator control unchanged, although both can be affected by their shared subscription usage limit.
 
 Authentication proves only that a connection works. Before using company or customer data, also identify whether the connected account is personal/individual, business/team, enterprise, or unknown, and review its contract, retention, training, and processing-region terms. DPF keeps unreviewed hosted connections limited to public or synthetic work.
 
 ## Authentication Methods
+
+On a provider's detail page, **Configured** means settings and model profiles
+are saved. **Save & verify connection** runs a connection check; a successful
+check shows **Connection verified**. Neither label grants access to every saved
+model or overrides workload rules. Open **Advanced diagnostics** to inspect model
+history or refresh the catalog. Routine discovery runs automatically.
 
 ### API Key
 
@@ -135,7 +153,7 @@ This is recorded as an operator attestation, not contract proof. A DPA, BAA, sup
 
 If the organization's business setup explicitly requires processing in a region, the page names that region and asks whether this connected account can guarantee it. The organization being based in the United States, EEA, UK, or elsewhere does not by itself prove what a provider account purchased or enabled. When no region is required, there is no region question, and saving the other account terms preserves any existing region evidence.
 
-After you save the declaration, the provider page separates **Technical readiness** from data-use eligibility. Technical readiness means the connection, model catalog, and routing metadata are prepared. The trust panel states whether the connection can handle the company work represented by the current setup or only public and synthetic work. Missing optional evidence may remain visible as history, but it does not raise an action. A missing or invalid required claim names the blocked scope and the next action. DPA evidence is requested only on policy paths that require it; it is not a universal provider-setup requirement.
+After you save the declaration, the provider page separates connection verification from data-use eligibility. Saved model profiles describe catalog history; they do not confirm that every model is currently available. The trust panel states whether the connection can handle the company work represented by the current setup or only public and synthetic work. Missing optional evidence may remain visible as history, but it does not raise an action. A missing or invalid required claim names the blocked scope and the next action. DPA evidence is requested only on policy paths that require it; it is not a universal provider-setup requirement.
 
 For EEA, UK, public-sector, healthcare, education, financial-services, or other regulated use, ask the COO to consult the Data Governance Agent. The answer should cite applicable regulator guidance and provider terms, identify unknowns, and recommend qualified review when it cannot substantiate a claim.
 

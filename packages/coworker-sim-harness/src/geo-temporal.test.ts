@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { MINUTE } from "./virtual-clock";
 import {
-  type GeoPoint,
+  type LatLng,
   etaAt,
   geoDistanceKm,
   positionAt,
@@ -11,8 +11,8 @@ import {
   withinGeofence,
 } from "./geo-temporal";
 
-const ORIGIN: GeoPoint = { lat: 0, lng: 0 };
-const ONE_DEG_NORTH: GeoPoint = { lat: 1, lng: 0 }; // ~111.2 km from origin
+const ORIGIN: LatLng = { lat: 0, lng: 0 };
+const ONE_DEG_NORTH: LatLng = { lat: 1, lng: 0 }; // ~111.2 km from origin
 
 describe("geoDistanceKm", () => {
   it("is zero for the same point", () => {
@@ -59,7 +59,7 @@ describe("withinGeofence", () => {
   it("is true inside the radius and false outside", () => {
     expect(withinGeofence(ORIGIN, ORIGIN, 100)).toBe(true);
     // ~111 m north of the site
-    const justNorth: GeoPoint = { lat: 0.001, lng: 0 };
+    const justNorth: LatLng = { lat: 0.001, lng: 0 };
     expect(withinGeofence(justNorth, ORIGIN, 100)).toBe(false);
     expect(withinGeofence(justNorth, ORIGIN, 200)).toBe(true);
   });

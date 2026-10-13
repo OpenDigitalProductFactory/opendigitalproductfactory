@@ -4,13 +4,16 @@ import {
   type TerminalRecoveryPorts,
 } from "@/lib/backlog/initiative-readiness/terminal-recovery";
 import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness/types";
+import type { ActionResult } from "@/lib/shared/action-result";
 
-import { projectOwedAcceptance, type OwedAcceptanceOwnerRecovery, type OwedAcceptanceOwnerResolver } from "./owed-acceptance";
+import { loadItemDeliveryActorIds, type DeliveryActorDb } from "./delivery-actors";
+import { excludedAgentSet, projectOwedAcceptance, type OwedAcceptanceOwnerRecovery, type OwedAcceptanceOwnerResolver } from "./owed-acceptance";
 import { executionEvidenceGrants, isExecutionEvidenceLane, resolveExecutionEvidenceOwner } from "./execution-evidence-owner";
 import { createOwedAcceptanceOwnerResolver } from "./owed-acceptance-owner";
 import { inPlatformGrants, withNoInPlatformCoworker, type InPlatformOwnerDb } from "./in-platform-owners";
-import type { AcceptanceSweepPageItem } from "./acceptance-sweep-page";
+import { retainedDeploymentObligation, type AcceptanceSweepPageItem } from "./acceptance-sweep-page";
 import type { SweepEvaluation } from "./acceptance-sweep-run";
+import { retainedAcceptanceWithoutBinding } from "./retained-acceptance";
 
 // One item's owed acceptance, as the sweep computes it (BI-DF255666).
 // Design: docs/superpowers/specs/2026-09-24-acceptance-accountability-design.md §3.1, §3.3 step 2.
@@ -30,6 +33,8 @@ import type { SweepEvaluation } from "./acceptance-sweep-run";
 
 export type SweepEvaluateDeps = {
   loadAuthorAgentId(item: AcceptanceSweepPageItem): Promise<string | null>;
+  /** BI-099A0BA3 (M1): every agent that delivered the item, any room (delivery-actors.ts). */
+  loadDeliveryActorIds(item: AcceptanceSweepPageItem): Promise<ActionResult<string[]>>;
   loadCompletionDecision(itemId: string, authorAgentId: string | null): Promise<InitiativeReadinessDecision | null>;
   resolveOwner: OwedAcceptanceOwnerResolver;
 };
@@ -53,7 +58,7 @@ export function createSweepOwnerResolver(context: {
 }): OwedAcceptanceOwnerResolver {
   const grants = inPlatformGrants(context.db);
   const loadLaneGrants = context.executionEvidenceGrants ?? executionEvidenceGrants;
-  const chain: OwedAcceptanceOwnerResolver = async ({ decision, authorAgentId }) => withNoInPlatformCoworker(await resolveTerminalInitiativeRecovery({
+  const chain: OwedAcceptanceOwnerResolver = async ({ decision, authorAgentId, excludedAgentIds }) => withNoInPlatformCoworker(await resolveTerminalInitiativeRecovery({
     decision,
     currentAgentId: authorAgentId,
     refusedWorkroomId: null,
@@ -67,25 +72,27 @@ export function createSweepOwnerResolver(context: {
         ...(args.planArtifact !== undefined ? { planArtifact: args.planArtifact } : {}),
         expectedCurrentBaselineId: args.expectedCurrentBaselineId ?? null,
         ...(args.eligibleEvidenceActivityIds ? { eligibleEvidenceActivityIds: args.eligibleEvidenceActivityIds } : {}),
-      })({ decision: args.decision, authorAgentId: args.currentAgentId }),
+      })({ decision: args.decision, authorAgentId: args.currentAgentId, excludedAgentIds: excludedAgentSet(authorAgentId, excludedAgentIds) }),
     },
-  }), grants, authorAgentId);
+  }), grants, excludedAgentSet(authorAgentId, excludedAgentIds));
 
-  return async ({ decision, authorAgentId }) => {
+  return async ({ decision, authorAgentId, excludedAgentIds }) => {
     const inLane = (entry: InitiativeReadinessDecision["unmet"][number]) => isExecutionEvidenceLane(decision, entry);
     const lane = [...decision.blockers, ...decision.unmet].filter(inLane);
-    if (lane.length === 0) return chain({ decision, authorAgentId });
+    if (lane.length === 0) return chain({ decision, authorAgentId, excludedAgentIds });
     const rest = {
       ...decision,
       blockers: decision.blockers.filter((entry) => !inLane(entry)),
       unmet: decision.unmet.filter((entry) => !inLane(entry)),
     };
     const chained: OwedAcceptanceOwnerRecovery = rest.blockers.length + rest.unmet.length > 0
-      ? await chain({ decision: rest, authorAgentId })
+      ? await chain({ decision: rest, authorAgentId, excludedAgentIds })
       : { reviewerRoutes: [], escalations: [], unroutable: [] };
     const owned = await resolveExecutionEvidenceOwner({
       entries: lane,
       authorAgentId,
+      // BI-099A0BA3 (M1): every delivery actor, not only the guessed author.
+      excludedAgentIds: excludedAgentSet(authorAgentId, excludedAgentIds),
       grants,
       satisfyingGrants: await loadLaneGrants(),
     });
@@ -115,19 +122,48 @@ export async function evaluateOwedAcceptance(
   const authorAgentId = await deps.loadAuthorAgentId(item);
   const decision = await deps.loadCompletionDecision(item.itemId, authorAgentId);
   if (!decision) return null;
+  // Fail closed: an item whose delivery actors cannot be read names no owner this run.
+  const actors = await deps.loadDeliveryActorIds(item);
+  if (!actors.ok) throw new Error(`The delivery actors of ${item.itemId} could not be read: ${actors.error}`);
+  // The completion read can observe a closure newer than the page snapshot.
+  if (item.status === "done" || decision.transitionObject.expectedVersion === "done") {
+    return retainedAcceptanceWithoutBinding(decision, excludedAgentSet(authorAgentId, actors.data));
+  }
   // The decision travels with the projection so a closure (BI-45D3BBF4) cites the gate it acted on.
-  return { ...(await projectOwedAcceptance({ decision, authorAgentId, resolveOwner: deps.resolveOwner })), decision };
+  return {
+    ...(await projectOwedAcceptance({ decision, authorAgentId, excludedAgentIds: actors.data, resolveOwner: deps.resolveOwner })),
+    decision,
+  };
 }
 
 /** Production bindings. Lazy imports keep the read tools off the scheduler's import graph. */
-export function productionSweepEvaluateDeps(db: InPlatformOwnerDb): SweepEvaluateDeps {
+export function productionSweepEvaluateDeps(db: InPlatformOwnerDb & DeliveryActorDb): SweepEvaluateDeps {
   return {
+    loadDeliveryActorIds: (item) => loadItemDeliveryActorIds(db, item.itemId),
     loadAuthorAgentId: async (item) => {
       const { loadRoomAuthors } = await import("@/lib/backlog/initiative-readiness/server-reviewer-dispatch");
       // A room may record the item's BI- id or its row id (Build Studio writes the row id).
       return authorAgentIdFrom(await loadRoomAuthors({ backlogItemId: { in: [item.itemId, item.id] } }), item);
     },
     loadCompletionDecision: async (itemId, authorAgentId) => {
+      const { prisma } = await import("@dpf/db");
+      const { BACKLOG_COMPLETION_ITEM_SELECT, evaluateBacklogItemCompletion, isDirectMergePlatformWork } = await import("@/lib/backlog/initiative-readiness/backlog-completion-evaluation");
+      const item = await prisma.backlogItem.findUnique({ where: { itemId }, select: BACKLOG_COMPLETION_ITEM_SELECT });
+      if (item?.status === "done") {
+        const activities = await prisma.backlogItemActivity.findMany({
+          where: { backlogItemId: item.id, kind: "status_change" },
+          orderBy: [{ recordedAt: "desc" }, { id: "desc" }], take: 1,
+          select: { kind: true, recordedAt: true, payload: true },
+        });
+        if (!isDirectMergePlatformWork(item) || !retainedDeploymentObligation({
+          ...item, activities, agentId: null, claimedByAgentId: null,
+        })) return null;
+        const result = await evaluateBacklogItemCompletion({
+          db: prisma, item, rawManifest: undefined, evaluatedAt: new Date().toISOString(),
+          transitionObject: { kind: "backlog-item", id: itemId, expectedVersion: "done", targetState: "completion" },
+        });
+        return result.independentAcceptanceDecision;
+      }
       const { getBacklogItem } = await import("@/lib/mcp/packs/backlog-pack-read-tools");
       const result = await getBacklogItem({ itemId }, authorAgentId);
       const completion = (result.data?.readiness as { decisions?: { completion?: unknown } } | undefined)?.decisions?.completion;

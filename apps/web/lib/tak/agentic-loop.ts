@@ -25,6 +25,7 @@ import {
 } from "@/lib/tak/evidence-requirement";
 import { resolveRouteContext } from "@/lib/route-context-map";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
+import { isGovernedToolRefusal } from "@/lib/govern/authority/governed-rejection-disposition";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { recordCoworkerTurnMetric } from "@/lib/operate/coworker-turn-metrics";
 import type { ChatMessage, ToolCallEntry } from "@/lib/routing/chat-message-types";
@@ -1024,7 +1025,7 @@ export type RunAgenticLoopParams = {
    * call records the same token id in ToolExecution audit rows.
    */
   apiTokenId?: string | null;
-  tokenScope?: "read" | "write" | "admin";
+  tokenScope?: "read" | "write" | "admin"; tokenGrantScopes?: string[]; // nested governed dispatch is authorized against these (BI-F8C661D0)
   /**
    * Governed Hermes learning Slice 1: active coworker skill for this run.
    * When set, every governed tool call records the same skillId in
@@ -1298,10 +1299,19 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   let ctxPeakTokens = 0; // Peak assembled context (est. tokens) this turn — dumb-zone gauge.
   let resolvedMaxContextTokens: number | null = null; // BI-9679EB1A: learned from the first dispatch; sizes compaction + the gauge to the real window.
   let sandboxUnavailableCount = 0; // Circuit breaker: stop trying sandbox tools if unavailable
-  // Stop grant-starved agents before they burn the full turn trying different
-  // forbidden tools. Reset on any success so mixed grant surfaces remain valid.
-  let forbiddenGrantStreak = 0;
-  const forbiddenGrantTools = new Set<string>(); // names seen rejected, for the blocked message
+  // Count settled refusals through the executor's shared classification.
+  let refusalStreak = 0;
+  const refusedTools = new Set<string>();
+  const refusalReasons = new Set<string>();
+  const stopRefusedTurn = (): AgenticResult => {
+    const blockedTools = Array.from(refusedTools).sort();
+    const reasons = Array.from(refusalReasons).sort();
+    console.warn(`[agentic-loop] refused: ${refusalStreak} settled rejections. agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)} tools=${JSON.stringify(blockedTools)} reasons=${JSON.stringify(reasons)}. Aborting loop.`);
+    const message = `Blocked — coworker ${agentId} cannot complete these actions in the current work scope: ` +
+      `${blockedTools.join(", ")} (${reasons.join(", ")}). ` +
+      "Resolve the recorded refusal or route the work to an authorized coworker before retrying.";
+    return completeResult(message, lastResult, { failure: { kind: "policy-or-capability", message } });
+  };
   let previousResponseId: string | undefined; // Responses API conversation chaining
 
   // Per-turn observability: one structured summary line with the correlation
@@ -1408,26 +1418,6 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     if (sandboxUnavailableCount >= 2) {
       console.warn(`[agentic-loop] sandbox unavailable after ${sandboxUnavailableCount} attempts. Aborting loop.`);
       return completeResult("The sandbox is not available — no slots are free. Please ensure the sandbox container is running (check Docker Desktop), then try again.");
-    }
-
-    // Grant-starvation circuit breaker — after 3 consecutive forbidden_grant
-    // rejections with no intervening success, this agent's profile is missing
-    // the grants for the work it was handed. Continuing only burns iterations
-    // (repetition detector won't fire — the model varies which forbidden tool
-    // it tries). Exit with an actionable, honest blocked status that names the
-    // held-back tools so the operator can grant them, rather than spinning to
-    // MAX_DURATION with executedTools=0.
-    if (forbiddenGrantStreak >= 3) {
-      const blockedTools = Array.from(forbiddenGrantTools).sort();
-      console.warn(
-        `[agentic-loop] grant-starved: ${forbiddenGrantStreak} consecutive forbidden_grant rejections. ` +
-        `agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)} tools=${JSON.stringify(blockedTools)}. Aborting loop.`,
-      );
-      return completeResult(
-          `Blocked — hard stop, not a retry situation. This agent's profile lacks the grant(s) required for ` +
-          `the tools it needs: ${blockedTools.join(", ")}. Every attempt was rejected with \`forbidden_grant\`. ` +
-          `A platform operator needs to grant \`${agentId}\` access to these tools (or hand the work to a peer that already holds them) before it can proceed.`,
-      );
     }
 
     // Time ceiling — phase-aware duration limits.
@@ -1654,7 +1644,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     }
     totalInputTokens += result.inputTokens;
     totalOutputTokens += result.outputTokens;
-
+    if (params.terminalToolPolicy) await (await import("./native-mcp-executions")).foldNativeMcpExecutions({ taskRunId, providerId: result.providerId, sinceMs: startTime, records: executedTools }); // BI-2E479619: CLI-native MCP calls are this turn's tool records too.
     // No tool calls — check if agent stalled with intent to continue
     if (!result.toolCalls || result.toolCalls.length === 0) {
       const trimmed = result.content.trim();
@@ -2423,7 +2413,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
             threadId,
             taskRunId: taskRunId ?? undefined,
             apiTokenId: apiTokenId ?? undefined,
-            tokenScope: params.tokenScope,
+            tokenScope: params.tokenScope, tokenGrantScopes: params.tokenGrantScopes,
             skillId: tracker.activeSkillId ?? undefined,
             // In-portal coworker chat turns attach COWORKER_READ_BASELINE_GRANTS
             // to the tool surface (actions/agent-coworker.ts). Flag the turn so
@@ -2474,15 +2464,15 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         sandboxUnavailableCount++;
       }
 
-      // Grant-starvation circuit breaker: governedExecuteTool returns the
-      // rejection code in `error` ("forbidden_grant"). Count consecutive
-      // rejections; any successful tool clears the streak so a mixed surface
-      // (some grants present) never trips it.
-      if (!toolResult.success && toolResult.error === "forbidden_grant") {
-        forbiddenGrantStreak++;
-        forbiddenGrantTools.add(tc.name);
-      } else if (toolResult.success) {
-        forbiddenGrantStreak = 0;
+      if (isGovernedToolRefusal(toolResult)) {
+        refusalStreak++;
+        refusedTools.add(tc.name);
+        refusalReasons.add(toolResult.error ?? "refused");
+      } else {
+        // Success, pending input/approval and inconclusive checks break a streak.
+        refusalStreak = 0;
+        refusedTools.clear();
+        refusalReasons.clear();
       }
 
       const modelEvidenceTruncated = params.terminalToolPolicy?.readerToolNames.includes(tc.name)
@@ -2494,7 +2484,9 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       }
       iterationResults.push({ tc, toolResult });
       onProgress?.({ type: "tool:complete", tool: tc.name, success: toolResult.success });
-
+      // Also bound a batch from one inference; varying arguments evade the
+      // exact-call repetition detector. Keep all completed calls in the result.
+      if (refusalStreak >= 3) return stopRefusedTurn();
 
     }
 

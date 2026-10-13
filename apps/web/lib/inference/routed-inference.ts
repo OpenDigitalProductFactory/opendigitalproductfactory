@@ -8,6 +8,7 @@
  * champion/challenger, rate tracking, and outcome telemetry.
  */
 
+import { resolveLocalServedContextTokens } from "@/lib/inference/local-model-context-reconcile";
 import type { ChatMessage, ToolCallEntry } from "@/lib/routing/chat-message-types";
 import type {
   RouteDecision,
@@ -28,8 +29,7 @@ import {
 import { withProviderReconciliationRetry } from "@/lib/inference/provider-reconciliation";
 import { routeEndpointV2 } from "@/lib/routing/pipeline-v2";
 import {
-  ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION,
-  activityHarnessOverridesFromProposalRows,
+  loadApprovedActivityHarnessOverrides,
 } from "@/lib/routing/activity-harness-approval-source";
 import { callWithFallbackChain } from "@/lib/routing/fallback";
 import { prisma } from "@dpf/db";
@@ -256,7 +256,7 @@ async function prepareRoute(
   });
 
   const [manifests, policies, overrides] = await Promise.all([
-    loadEndpointManifests(),
+    loadEndpointManifests(Date.now(), resolveLocalServedContextTokens),
     loadPolicyRules(),
     loadOverrides(taskType),
   ]);
@@ -282,24 +282,8 @@ async function prepareRoute(
 
   const activityHarnessConfidenceOverrides =
     options?.activityContract && !prep?.skipRecipe
-      ? activityHarnessOverridesFromProposalRows(
-          await prisma.agentActionProposal.findMany({
-            where: {
-              actionType: ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION,
-              status: { in: ["approve", "approved", "executed"] },
-            },
-            orderBy: { decidedAt: "desc" },
-            take: 40,
-            select: {
-              proposalId: true,
-              actionType: true,
-              parameters: true,
-              status: true,
-              decidedById: true,
-              decidedAt: true,
-            },
-          }),
-        )
+      // Facts and legacy approved proposals (dual read, BI-C8EC05C9).
+      ? await loadApprovedActivityHarnessOverrides(prisma, { take: 40 })
       : [];
 
   const decision = await routeEndpointV2(manifests, contract, policies, overrides, {

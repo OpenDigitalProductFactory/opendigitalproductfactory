@@ -18,6 +18,16 @@ Docker Desktop 4.40+ includes a built-in Model Runner that provides an OpenAI-co
 
 The local provider is pre-configured and activates automatically when Docker Model Runner is reachable. No API key or sign-in is required.
 
+### Pausing local AI
+
+Choose **Pause now** beside Docker Model Runner or Ollama to stop new local-model requests immediately. The pause lasts until you resume it. It persists across refreshes, health checks, and service restarts. Requests already running may finish; new dispatches stay blocked, including requests selected before the pause that have not started yet.
+
+After pausing, choose **Set resume time** and enter a positive duration in hours or days. The control shows the exact resume date and time in your browser's timezone. You can choose **Resume now**, **Change pause**, or **Until I resume it** at any time. Changing a pause cancels the authority of its previous timer.
+
+The server owns the timer; you can close the page or chat. After a restart or delivery delay, overdue timers are checked every five minutes. Resumption checks runner reachability while routing is still paused. If the runner is unavailable, the pause ends but local AI stays unavailable. Existing authentication, billing, account, capacity, model, and routing restrictions still apply. A resume time does not guarantee the model's problems have been resolved.
+
+A temporary runner outage can still recover automatically when you have left the provider enabled. Work that requires local processing remains blocked while local AI is disabled; other work can use an eligible connected provider.
+
 ### Pulling Models
 
 Models must be pulled before they can be used:

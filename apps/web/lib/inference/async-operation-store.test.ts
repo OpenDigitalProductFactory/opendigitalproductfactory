@@ -451,6 +451,12 @@ describe("PrismaAsyncOperationStore", () => {
       take: 100,
     });
 
+    // BI-6BB830E4: a row at the attempt cap is dead-lettered and no longer selected.
+    await store.listUndeliveredTransitions({ limit: 10, maxAttempts: 24 });
+    expect(mocks.db.asyncInferenceOperationTransition.findMany).toHaveBeenLastCalledWith(expect.objectContaining({
+      where: { deliveredAt: null, deliveryAttempts: { lt: 24 } },
+    }));
+
     await expect(store.markTransitionDeliveryAttempt("transition-1")).resolves.toBe(true);
     await store.markTransitionDelivered("transition-1", now);
     expect(mocks.db.asyncInferenceOperationTransition.updateMany).toHaveBeenNthCalledWith(1, {

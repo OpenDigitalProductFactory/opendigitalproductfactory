@@ -219,6 +219,13 @@ export interface WorkroomOutcomeView {
 }
 
 export interface WorkroomView {
+  /** Source requirements are read through the room's existing access boundary.
+   * They do not establish organization applicability or qualification. */
+  reviewProfile?: {
+    source: ReturnType<typeof import("./room-review-profile").composeRoomReviewProfile>;
+    applicability: "unknown";
+    assessment: "not-exercised";
+  };
   roomKey: string;
   caseRef: WorkCaseRef;
   identity: WorkroomIdentityView;
