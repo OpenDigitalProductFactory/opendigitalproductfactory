@@ -13,7 +13,19 @@ For agentic workers: execute this plan one independently reviewable backlog item
 
 ## Current admission
 
-The eight Windows synthetic PdfCraft checks passed; they are not engine/runtime acceptance. Research and independent scope approval have passed. Architecture and plan reviews remain pending. Do not implement runtime source adoption until the current immutable coverage and slice admission are valid. Do not downgrade the parent xlarge scope to bypass decomposition.
+This effort is parked for later prioritization at the operator's request on 2026-10-12. This documentation preserves the proposed integration; it does not deliver it. The operator selected **In-context tools**: native editors stay within their existing work context, with shared source links, document preview/version controls and coworker handoff.
+
+The eight Windows synthetic PdfCraft checks passed; they are not engine/runtime acceptance. Research, independent scope approval and architecture review have passed. Architecture receipt `initiative-2980bb71-e900-4c74-b7c3-f5c51aea5951` binds the design at `fe67cc912e13ca058700b0d739e711b56af69449`; its obligations remain transaction-level version fencing, durable retry deduplication, independent engine/license/retirement qualification and deployment-contract verification. Plan review and runtime qualification remain unproved. Revalidate immutable coverage, current source and slice admission before implementation; never downgrade the parent xlarge scope to bypass decomposition.
+
+## Preserved close-out evidence
+
+Parent BI-C03605C4 and children BI-5D5AB47E, BI-3F319D83 and BI-EBDB6CAE remain open for prioritization. Workroom WC-28624802 activity `cmv642jim17fv01t66ztuqznl` contains full database snapshots and SHA256 hashes of the design, plan, selected interactive prototype, narrow source inventory, registry license inventory and Windows probe report. The backlog bodies link that snapshot and record the restart instructions; the evidence does not depend only on local files.
+
+The seven official portable applications are installed under `D:/Applications/ArtCraft`; archives are under `D:/Downloads/ArtCraft`. That local installation is delivered. No DPF engine source was bundled, runtime feature implemented, platform deployed or customer data migrated by this effort.
+
+Q investigated PdfCraft v0.6.0 at `53a5880386789fc3531e54f6e6ffdef9a8e41f1a`. The candidate closure is five internal crates (organize, content, cos, crypt, filters), with 51 inventoried files / 593,659 source bytes. All 54 registry archives in the full upstream lockfile candidate upper bound passed checksum verification; declared licenses and notice hashes were captured. This upper bound is not a target/feature-resolved production SBOM. The `r-efi` archive has no separate notice file and needs explicit notice resolution; security and license dispositions remain unapproved.
+
+Linux qualification did not run: the initial governed build reservation requested 2 GiB, below the 16 GiB docker-build floor. No nonproduction leases remained at close-out. Future qualification uses the current governed runner and measured host resources; do not replay the old wait. Compile/runtime, malformed/encrypted corpus, root confinement, independent output fidelity, actual dependency/image footprint and retirement comparison remain required. H may be prioritized independently because it reuses delivered exports; P waits for Q.
 
 ## Deliverable graph and traceability
 
