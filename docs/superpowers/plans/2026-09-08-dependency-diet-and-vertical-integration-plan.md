@@ -223,7 +223,7 @@ Acceptance criteria copied from BI-10922358 for four-way traceability:
 - **M12-AC6:** The dependency-reduction routine and the 2026-09-08 dependency-diet plan identify the ledger, review rule, and delivery status.
 - **M12-AC7:** Existing six-alert remediation is cross-linked as delivered evidence rather than reimplemented.
 
-The single flow `M12-F1` is acquisition or periodic review → canonical allowlist decision → generated matrix → New Dependency Gate check. The verification contract `M12-V1` is the two source-local Node test files plus both check-mode commands named above. The implementation contract `M12-C1` is atomic because the decision source, projection and gate must change together to avoid publishing or enforcing a partial truth.
+The single flow `M12-F1` is acquisition or periodic review → canonical allowlist decision → generated matrix → New Dependency Gate check. The verification contract `M12-V1` is the registered `scripts/sbom/check-new-dependencies.test.mjs` source-local suite plus both check-mode commands named above. The implementation contract `M12-C1` is atomic because the decision source, projection and gate must change together to avoid publishing or enforcing a partial truth.
 
 This is BI-10922358. It closes the audit's missing package-by-package answer without duplicating the allowlist or treating a heuristic candidate report as architecture doctrine.
 
