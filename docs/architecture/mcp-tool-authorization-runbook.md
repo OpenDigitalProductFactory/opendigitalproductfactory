@@ -516,6 +516,12 @@ The connection briefing carries bounded identity, mission, locale and owning-sco
 For recovery, begin with the local [routing reference](../../packages/dpf-skill-pack/skills/dpf-systematic-debugging/references/recovery-routing.md). Protocol conformance and deterministic routing tests do not establish fresh-model behavior. After deployment, exercise normal delivery, broken upgrade, unavailable MCP/CI, denied authority and stale expedite occupancy on supported hosts, recording tools attached, route selected, outcome and actual usage where available.
 
 
+## Administrator classification recovery
+
+`review_workroom_sensitivity` is a platform-administrator control-plane read. It returns only the room id, revision digest, canonical classification (or null) and whether an invalid historical declaration needs review. It does not return room contents, titles, membership or historical prose. OAuth dispatch checks the current human's `manage_platform` permission for this exact tool instead of requiring room-content admission.
+
+The paired `correct_workroom_sensitivity` operation uses that same administrative boundary and retains the normal exact authority approval. Its transaction rechecks current permission, verified classification, invalid-only eligibility and the revision/JSON compare-and-swap, then retains the original declaration in the audit. Neither operation grants room admission or changes coworker clearance. Ordinary room reads and writes keep their existing data-access checks. An administrator must verify actual classification before proposing a historical correction; DEV posture does not supply it.
+
 ## Recovering an interrupted independent review
 
 Read the canonical task with MCP `tasks/get` and `tasks/result`. Native review
