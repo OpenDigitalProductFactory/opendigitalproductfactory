@@ -2250,6 +2250,9 @@
       "docs/architecture/theme-aware-styling-runbook.md",
       "docs/design/golden-triangle-design.md"
     ],
+    "scripts/check-web-src-script-imports.mjs": [
+      "docs/architecture/enforced-ci-gates.md"
+    ],
     "scripts/ci-change-scope.mjs": [
       "docs/testing/pre-pr-gate.md"
     ],
@@ -2288,6 +2291,7 @@
       "docs/operations/install.md"
     ],
     "scripts/fresh-install.ps1": [
+      "docs/architecture/enforced-ci-gates.md",
       "docs/install/scratch-install-rehearsal.md",
       "docs/operations/disaster-recovery.md",
       "docs/testing/archetype-audit-plan.md"
@@ -2477,7 +2481,8 @@
       "docs/architecture/platform-substrate-boundaries.md"
     ],
     "scripts/portal-migrate-boot.sh": [
-      "docs/architecture/data-model-stewardship-runbook.md"
+      "docs/architecture/data-model-stewardship-runbook.md",
+      "docs/architecture/enforced-ci-gates.md"
     ],
     "scripts/pr-health.mjs": [
       "docs/maintenance/staleness-report.md",
@@ -2581,6 +2586,7 @@
       "docs/install/platform-support-watchlist.md"
     ],
     "scripts/setup.sh": [
+      "docs/architecture/enforced-ci-gates.md",
       "docs/install/macos.md",
       "docs/install/platform-support-watchlist.md"
     ],
@@ -3232,9 +3238,13 @@
       "scripts/check-retired-substrate.mjs",
       "scripts/check-spec-plan-doc.mjs",
       "scripts/check-stewardship-scope.mjs",
+      "scripts/check-web-src-script-imports.mjs",
+      "scripts/fresh-install.ps1",
       "scripts/lib/git-changed-files.mjs",
       "scripts/lib/mermaid-renderer.mjs",
-      "scripts/lib/published-doc-roots.mjs"
+      "scripts/lib/published-doc-roots.mjs",
+      "scripts/portal-migrate-boot.sh",
+      "scripts/setup.sh"
     ],
     "docs/architecture/failure-analysis-and-recovery.md": [
       "apps/web/lib/change-review/failure-analysis.ts",
