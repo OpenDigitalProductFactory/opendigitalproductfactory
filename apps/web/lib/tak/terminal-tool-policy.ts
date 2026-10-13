@@ -183,7 +183,7 @@ function boundedInteger(value: unknown, minimum: number, maximum: number): value
  * less a fixed envelope allowance, less an escaping margin.
  */
 export function readerPageCharsForModelView(modelVisibleChars: number): number {
-  return Math.max(500, Math.floor((modelVisibleChars - 1_200) * 0.8));
+  return Math.min(SOURCE_READ_MAX_CHARS, Math.max(500, Math.floor((modelVisibleChars - 1_200) * 0.8)));
 }
 
 // A fixed floor, then one read per page of the bound artifact plus two for a

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SOURCE_READ_DEFAULT_MAX_CHARS } from "../source-page-lines";
+import { SOURCE_READ_DEFAULT_MAX_CHARS, SOURCE_READ_MAX_CHARS } from "../source-page-lines";
 import {
   normalizeTerminalToolArguments,
   readerPageCharsForModelView,
@@ -47,6 +47,14 @@ function sourcePage(content: string, startLine: number, totalLines: number, tota
 }
 
 describe("governed reader pages fit what the model can see", () => {
+  it("keeps generated large-context pages valid when the writer rechecks persisted arguments", () => {
+    const generated = normalizeTerminalToolArguments(policy, "read_source_at_version", {}, 100_000);
+    expect(generated.kind).toBe("allow");
+    if (generated.kind !== "allow") throw new Error("Expected a bound reader page");
+    expect(generated.arguments.maxChars).toBeLessThanOrEqual(SOURCE_READ_MAX_CHARS);
+    expect(normalizeTerminalToolArguments(policy, "read_source_at_version", generated.arguments)).toEqual(generated);
+  });
+
   it("clamps an unsized or oversized read to the model-visible page", () => {
     const page = readerPageCharsForModelView(DEFAULT_TOOL_RESULT_CHAR_CAP);
     expect(page).toBeLessThan(DEFAULT_TOOL_RESULT_CHAR_CAP);
