@@ -87,6 +87,29 @@ describe("administrator permission review", () => {
     await reviewReady();
     expect(await screen.findByRole("button", { name: "Keep current permissions for all" })).toBeVisible();
   });
+  it("shows a refreshed preview failure and discards the previous choices", async () => {
+    const { rerender } = render(withMessages(<AuthorityReconciliation agentId="AGT-EXT-CODEX" initialPreview={initialPreview} />));
+    await reviewReady();
+    fireEvent.click(screen.getByRole("button", { name: "Keep current permissions for all" }));
+    rerender(withMessages(<AuthorityReconciliation agentId="AGT-EXT-CODEX" initialPreview={null} loadError="Preview failed after refresh" />));
+    expect(screen.getByRole("alert")).toHaveTextContent("Preview failed after refresh");
+    expect(screen.queryByRole("button", { name: "Approve choices" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Review permission differences" })).toBeEnabled();
+    expect(mocks.approve).not.toHaveBeenCalled();
+  });
+  it("does not assert a permission conflict when the preview is unavailable", () => {
+    render(withMessages(<AuthorityReconciliation agentId="AGT-EXT-CODEX" initialPreview={null} loadError="Preview failed" />));
+    expect(screen.getByRole("alert")).toHaveTextContent("Preview failed");
+    expect(screen.queryByText(/A previous record has different permissions/)).toBeNull();
+    expect(screen.getByText("Preview unavailable.")).toBeVisible();
+  });
+  it("clears a prior loader error when refreshed props confirm no conflict", () => {
+    const { rerender, container } = render(withMessages(<AuthorityReconciliation agentId="AGT-EXT-CODEX" initialPreview={null} loadError="Preview failed" />));
+    expect(screen.getByRole("alert")).toHaveTextContent("Preview failed");
+    rerender(withMessages(<AuthorityReconciliation agentId="AGT-EXT-CODEX" initialPreview={{ ...initialPreview, differences: [] }} loadError={null} />));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(container.textContent).toBe("");
+  });
   it("invalidates displayed choices when server props refresh to a different digest", async () => {
     const { rerender } = render(withMessages(<AuthorityReconciliation agentId="AGT-EXT-CODEX" initialPreview={initialPreview} />));
     await reviewReady();

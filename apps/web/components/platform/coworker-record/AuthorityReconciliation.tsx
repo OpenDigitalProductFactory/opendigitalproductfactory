@@ -30,8 +30,9 @@ export function AuthorityReconciliation({ agentId, initialPreview, loadError }: 
   useEffect(() => {
     setRemaining(initialCount);
     setPreview(null); setChoices({});
+    setError(loadError ?? null);
     if (initialCount) setSaved(false);
-  }, [initialPreview?.digest, initialCount]);
+  }, [initialPreview?.digest, initialCount, loadError]);
 
   function review() {
     setError(null); setChoices({}); setPreview(null);
@@ -76,7 +77,7 @@ export function AuthorityReconciliation({ agentId, initialPreview, loadError }: 
     {showReview && <Surface padding="sm" className="space-y-3">
       <p className="font-dpf-semibold">{remaining > 0
         ? t("coworkerPermissions.differenceCount", { count: remaining }) : t("coworkerPermissions.previewUnavailable")}</p>
-      <p className="text-dpf-muted">{t("coworkerPermissions.conflictSummary")}</p>
+      {remaining > 0 && <p className="text-dpf-muted">{t("coworkerPermissions.conflictSummary")}</p>}
       <Button variant="secondary" onClick={review} disabled={pending}>{t("coworkerPermissions.review")}</Button>
       {preview && <div className="space-y-3">
         <div className="flex flex-wrap gap-2">
