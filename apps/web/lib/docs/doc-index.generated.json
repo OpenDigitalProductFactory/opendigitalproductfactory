@@ -6001,6 +6001,7 @@
       "publishedPortal": false,
       "anchors": [
         "acceptance-sweep-operator-runbook",
+        "medium-work-whose-criteria-are-in-its-body",
         "closing-items-the-gate-already-allows-off-by-default",
         "what-the-summary-tells-you",
         "who-verifies-an-item-that-is-not-closable",

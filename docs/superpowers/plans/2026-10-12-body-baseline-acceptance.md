@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Body-baseline independent acceptance repair
 
 Backlog: BI-F89EC5BA. Reproduction and final acceptance: BI-CAP-437F7745.
@@ -49,8 +53,9 @@ activities remain the only durable stores. No new authority or receipt store.
    product-linked medium reproduction with valid body criteria and no persisted
    baseline. Execute it against unchanged production code and retain the failure.
 2. **C-BASELINE / R-VERSION:** Persist an immutable body criteria version and
-   initiative_scope_baseline in a serialized, authorized triage/claim or completion
-   mutation. Existing approved or inherited spec baselines win. Capture parsed
+   initiative_scope_baseline in the serialized, authorized completion mutation,
+   only after delivery passes and independent acceptance remains unmet.
+   Existing approved or inherited spec baselines win. Capture parsed
    statements, line anchors, body digest, item/organization and author provenance;
    mint no spec-approval receipt. Reuse exact versions on retries and append an
    explicit superseding baseline on changed criteria. Missing author provenance
@@ -58,9 +63,9 @@ activities remain the only durable stores. No new authority or receipt store.
 3. **C-BINDING / F-DISPATCH:** Extend immutable review bindings to retain both the
    criteria DocumentVersion and delivered repository source, plus the exact
    eligible evidence set. The retained review document contains the exact body
-   and provider-verified source bytes with their separate identities, so one
-   bounded immutable document traversal covers both without a second evidence
-   hydration state machine. Both criteria and source must be read before disposition. Admit
+   and the delivered repository/head identity. It does not archive repository
+   source bytes. Existing source delivery and eligible evidence remain separate
+   prerequisites. The existing bounded immutable traversal hydrates criteria. Admit
    objective mapping as an independent acceptance lane without making research
    or dependency-disposition independent. Require current reviewer eligibility
    and exclude criteria/source authors at dispatch and again at the writer.
@@ -68,7 +73,9 @@ activities remain the only durable stores. No new authority or receipt store.
    resolve the current criteria, source head, item/organization and eligible
    evidence under existing authority checks. Stale inputs refuse; unchanged
    retries reuse TaskRun/proposal identity. Preserve historical receipts and
-   the existing request-key evolution rules; active old authority is not churned.
+   the existing request-key evolution rules for unchanged authority. Under
+   DI-B4DA9112DF4B, a server-proven obsolete body binding permits a successor;
+   the historical TaskRun remains auditable and cannot write a current receipt.
 5. **F-RECOVERY / V-GUIDANCE:** Explain the actual absent prerequisite: readable
    criteria, persisted version, source identity, fresh eligible evidence or
    eligible independent reviewer. Keep missing completion-manifest feedback on
@@ -83,7 +90,8 @@ activities remain the only durable stores. No new authority or receipt store.
 
 Twenty percent of implementation effort is reserved for relevant refactoring:
 centralize immutable artifact identity and baseline parsing used by issuer,
-admission, terminal traversal and writer. Keep existing spec/build lanes stable.
+admission, terminal traversal and writer; extract shared immutable pagination
+and historical-artifact classification. Keep existing spec/build lanes stable.
 
 ## Verification and impact
 
