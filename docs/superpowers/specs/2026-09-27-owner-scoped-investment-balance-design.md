@@ -39,7 +39,9 @@ The MCP connection reports this operator's development install, purpose `evolve-
 
 The existing budget epic has nine items. None of their acceptance criteria supplies this owner-scoped balance. Their delivered code is reused even where backlog acceptance is pending. BI-9C384562 covers WWMD authority routing and policy ratification, not allocation; BI-6B33B1C8 covers craft-corpus curation, not budgeting. This work does not reopen either.
 
-## 3. Research and benchmarking
+Current-base reconciliation (2026-10-13, `e4edd79cd6c`): `platform-dev-policy.ts` now supplies `resolveDevelopmentInvestmentTarget` and shared guidance to MCP and Build Studio. Extend this existing resolver. `absorb-dont-adopt` and `architecture-over-shortcuts` now express the owner-scoped policy; only active contradictory guidance still needs correction. `portfolio/accountable-owner.ts` supplies canonical accountable identity, but its fallback owner is not proof of funding authority. `portfolio/ai-resource.ts` counts BuildPhaseRun once per item; use that authoritative source for the initial observed mix and explicitly disclose external/other inference coverage gaps instead of summing overlapping ledgers.
+
+## 3. Research & Benchmarking
 
 The following are design precedents, not new dependencies:
 
@@ -48,6 +50,8 @@ The following are design precedents, not new dependencies:
 | [Apache Hadoop Capacity Scheduler](https://hadoop.apache.org/docs/r3.4.0/hadoop-yarn/hadoop-yarn-site/CapacityScheduler.html) | Hierarchical allocation and weights within a parent budget | Preempting a running governed task to repair a share imbalance |
 | [Apache Airflow pools](https://airflow.apache.org/docs/apache-airflow/2.10.5/administration-and-deployment/pools.html) | Keep resource admission separate from ordering eligible work | Uniform task slots as a proxy for token investment |
 | [Kubernetes resource quotas](https://kubernetes.io/docs/concepts/policy/resource-quotas/) | Bind resource policy to its owning scope and show usage | A hard admission refusal solely because one investment category exceeds its target |
+| [AWS Budgets actions](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-controls.html) | Separate a budget threshold from the authority to perform a resulting action | Automatic resource shutdown for a planning-share deficit |
+| [Microsoft Cost Management budgets](https://learn.microsoft.com/en-us/azure/cost-management-billing/costs/tutorial-acm-create-budgets) | Explicit scope and actual-versus-forecast labels | Treating incomplete observation as real-time complete consumption |
 
 These systems do not establish DPF founder identity or decide customer business priorities. That authority comes from DPF's existing scoped identity and decision contracts.
 
@@ -104,14 +108,26 @@ Corpus changes ship with runtime support: `AGENTS.md` points to the canonical po
 
 ## 8. Objectives and acceptance
 
-| Objective | Acceptance |
-| --- | --- |
-| OBJ-BAL-1: allocation follows its accountable owner | AC-BAL-1: the same verified founder shared-platform binding resolves 80/20 on dev and prod, including an install with a customer archetype; non-founder archetype work resolves 20/80 on either environment |
-| OBJ-BAL-2: explicit choices survive lifecycle changes | AC-BAL-2: owner overrides survive upgrade/setup reruns; executor changes preserve bindings; funding transfer requires a successor; cross-owner/expired/stale writes fail |
-| OBJ-BAL-3: every delivery surface reads one policy | AC-BAL-3: identical fixtures produce identical effective policy and reason through Build Studio and MCP; per-item bindings keep mixed rooms separate |
-| OBJ-BAL-4: long-run steering uses honest evidence | AC-BAL-4: deduplicated token totals reconcile; missing, stale, mirrored, mixed and external usage are labelled; simulated multiple dispatches approach target when eligible demand permits without per-task quotas |
-| OBJ-BAL-5: obligations and authority remain intact | AC-BAL-5: emergency bugs remain eligible, counted as refactor; no policy bypasses spend/WIP/readiness checks; WWWD customer money cannot inherit WWMD spending direction |
-| OBJ-BAL-6: owners and agents can understand the result | AC-BAL-6: live setup, budget view, Build Studio and external reads show owner, scope, target and coverage; active corpus guidance agrees; light/dark, keyboard and narrow viewport checks pass |
+**OBJ-BAL-1:** Allocation follows its accountable owner.
+
+**OBJ-BAL-2:** Explicit choices survive lifecycle changes.
+
+**OBJ-BAL-3:** Every delivery surface reads one policy.
+
+**OBJ-BAL-4:** Long-run steering uses honest evidence.
+
+**OBJ-BAL-5:** Obligations and authority remain intact.
+
+**OBJ-BAL-6:** Owners and agents can understand the result.
+
+| Acceptance | Objective | Statement |
+| --- | --- | --- |
+| AC-BAL-1 | OBJ-BAL-1 | The same verified founder shared-platform binding resolves 80/20 on dev and prod, including an install with a customer archetype; non-founder archetype work resolves 20/80 on either environment. |
+| AC-BAL-2 | OBJ-BAL-2 | Owner overrides survive upgrade/setup reruns; executor changes preserve bindings; funding transfer requires a successor; cross-owner/expired/stale writes fail. |
+| AC-BAL-3 | OBJ-BAL-3 | Identical fixtures produce identical effective policy and reason through Build Studio and MCP; per-item bindings keep mixed rooms separate. |
+| AC-BAL-4 | OBJ-BAL-4 | Deduplicated token totals reconcile; missing, stale, mirrored, mixed and external usage are labelled; simulated multiple dispatches approach target when eligible demand permits without per-task quotas. |
+| AC-BAL-5 | OBJ-BAL-5 | Emergency bugs remain eligible, counted as refactor; no policy bypasses spend/WIP/readiness checks; WWWD customer money cannot inherit WWMD spending direction. |
+| AC-BAL-6 | OBJ-BAL-6 | Live setup, budget view, Build Studio and external reads show owner, scope, target and coverage; active corpus guidance agrees; light/dark, keyboard and narrow viewport checks pass. |
 
 The test matrix crosses founder/customer, platform/archetype, dev/prod and embedded/external execution. It also includes no budget row, unknown owner, unratified authority, customer-funded platform contribution, mixed rooms, multi-parent conflict, cyclic hierarchy, ownership transfer, cloned installation, paired-install replay and missing telemetry. Cross-install production mutation is not part of this development verification.
 
