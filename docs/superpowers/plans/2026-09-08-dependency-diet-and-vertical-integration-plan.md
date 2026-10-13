@@ -201,11 +201,25 @@ Dependency work does not move this number (§1.6). What does:
 3. **CI shape.** The long poles are the UX route sweep (573 s) and the production build (420 s), not tsc (274 s). The route sweep is the next target once M1 lands, because a smaller image is a faster sandbox boot for it.
 4. **Measure, then ratchet.** Commit the `--extendedDiagnostics` baseline (`Files`, `Lines of TypeScript`, `Check time`) next to `sbom/baseline.json` and fail a PR that grows checked lines by more than its diff explains.
 
+### M12 · Make every direct external dependency an explicit keep, reduce or absorb decision · effort S · leverage H · no decision needed
+
+Turn `sbom/dependency-allowlist.json` into the canonical package-acquisition and disposition ledger instead of creating a second hand-maintained inventory. Every currently declared registry dependency receives exactly one `keep`, `reduce` or `absorb` disposition, a rationale and evidence; `reduce` and `absorb` entries must point at a concrete backlog item, decision or delivery record. First-party `workspace:`, `file:` and `link:` dependencies remain outside this external-supply-chain decision set.
+
+Delivery order:
+
+1. Add failing source-local tests for complete coverage, valid dispositions, evidence on `reduce`/`absorb`, first-party exclusion and deterministic output.
+2. Add one pure-Node validator and Markdown renderer over the allowlist plus the live package manifests.
+3. Classify the complete current external set. Default to `keep` under the rent posture when there is no approved reduction route; record the active Postgres durable-job route for `inngest` as `absorb`.
+4. Generate `sbom/dependency-disposition-matrix.md` from the ledger and make the New Dependency Gate fail when a current external dependency is missing a disposition or the generated matrix is stale.
+5. Expose explicit check and regeneration commands and keep the existing CI entry point as the enforcement path.
+
+This is BI-10922358. It closes the audit's missing package-by-package answer without duplicating the allowlist or treating a heuristic candidate report as architecture doctrine.
+
 ## 4. Sequencing
 
 | Wave | Moves | Why this order |
 |---|---|---|
-| **A · packaging and hygiene** (no decisions) | M1, M2, M7, M8, M9, M11 step 1 | Each is one PR, reversible, and lands the measurement baselines the later waves are judged by. M1 alone is most of the image win. |
+| **A · packaging and hygiene** (no decisions) | M1, M2, M7, M8, M9, M11 step 1, M12 | Each is one PR, reversible, and lands the measurement and governance baselines the later waves are judged by. M1 alone is most of the image win. |
 | **B · decisions** | M6 (founder), M3 and M4 and M5 (`principle_decide`) | Route the four decisions in parallel while Wave A ships; M6 is the biggest lockfile win and needs only a yes. |
 | **C · structural** | M3 build-out behind BET-11, M11 steps 2 to 4, M5 build-out | Migration-bearing work sequenced behind its read-model and scheduler substrate. |
 
@@ -235,6 +249,7 @@ Dependency work does not move this number (§1.6). What does:
 - `sbom/baseline.json` totals become budgets, ratcheted down per wave, not informational.
 - Typecheck line-count and check-time baseline (M11).
 - `check-retired-substrate.mjs` flips to forbid (M9).
+- Complete direct-external-dependency disposition coverage and a byte-for-byte generated matrix check in the existing New Dependency Gate (M12).
 
 ## 8. Backlog coverage
 
@@ -252,6 +267,7 @@ Filed 2026-09-08 under `EP-8DC217EB` (they decompose BI-C0CEB377, BET-14):
 | M9 retired-substrate sweep | BI-B1977CEE | small | p2 |
 | M10 observability fleet profile gate | BI-A5B2A32F | retired: already implemented | — |
 | M11 typecheck at the source | BI-0A3B155F | medium | p2 |
+| M12 dependency disposition ledger and drift gate | BI-10922358 | medium | p2 |
 
 ## 9. What this plan does not do
 
@@ -390,6 +406,7 @@ Every S-move and M1, M2, M4, M5, M6, M7, M8 and M9 are done. Open:
 - **M11 step 2.** Delivered through PR-4 of the 2026-09-30 spec (§10.1). PR-5, `lib` and `ui` as project references, proceeds only if a re-measurement on the PR-4 tree shows a UI-only cold check saving 40% or more. No guard yet holds `lib` declaration emit at 0: the cheapest is `"declaration": true` under `noEmit` in `apps/web/tsconfig.json` (about 60 s on one cold run), after the 14 declaration errors in `app/` and `proxy.ts` are fixed. Step 4 is done (#5793). Step 3 (CI shape) is unchanged.
 - **edge-node image installs without `--frozen-lockfile`.** Done: every Dockerfile installs `--frozen-lockfile`, enforced by `check-docker-patch-context.mjs` (#5829). Because `pnpm deploy --legacy` ignores the lockfile under the hoisted linker, the edge-node, adp and integration-test-harness images now assert their deployed tree against the lockfile (`scripts/sbom/assert-deploy-matches-lockfile.mjs`, #5829, #5837).
 - **Owed records.** Filed 2026-09-29; decision outcomes recorded 2026-10-02 (§10.6.1).
+- **M12 disposition ledger.** In progress under BI-10922358: the existing acquisition allowlist becomes the single source for package-level `keep`, `reduce` and `absorb` decisions; its deterministic Markdown projection and the New Dependency Gate hold coverage and drift.
 
 ### 10.7 Backlog coverage
 
@@ -416,5 +433,6 @@ M8 and the §7 ratchet ran against BI-5265CAD0 (M7 + M8). The S-moves were deliv
 | M9 | BI-B1977CEE | awaiting acceptance (#5285, #5774) |
 | M11 | BI-0A3B155F | open: steps 1 and 4 done; step 2 re-scoped (DI-F2DCF2FEDBE7) and delivered through PR-4 (#5830, #5838, #5848, #5849, #5862); PR-5 re-measured 2026-10-01 on local hardware (spec §8): a UI-only cold check is 44% faster than the whole program in total time and 39% faster in check time, at the 40% bar; a CI-runner measurement decides it (BI-71085BD4); step 3 unchanged |
 | M11 precursor | BI-F68CD3E3 | merged into BI-0A3B155F on 2026-10-01 (WWMD DI-CECDB7C8C91C): its premise was corrected on 2026-09-29, and the cycle is at its floor of 75, held by `check-no-web-import-cycle-growth.mjs` (#5797, #5805, #5813, #5825) |
+| M12 | BI-10922358 | in progress: canonical dispositions, generated matrix and New Dependency Gate enforcement |
 
 M2, M7 + M8 and M9 stop at awaiting acceptance. The readiness gate refused `done` for each: it wants research, plan-coverage and acceptance evidence those older items never recorded (`initiative_not_ready`: RESEARCH_REQUIRED, PLAN_REQUIRED, ACCEPTANCE_EVIDENCE_REQUIRED, OBJECTIVE_BASELINE_REQUIRED, OBJECTIVE_RECONCILIATION_REQUIRED). The work is merged; acceptance is a reviewer's step. A retry on 2026-10-01 for M2 was refused with the same five codes; the research lane also refuses a receipt unless a live Workroom is bound to the item's branch, and these items predate one.
