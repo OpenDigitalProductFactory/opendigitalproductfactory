@@ -50,7 +50,9 @@ BACKLOG_ID = "BI-16EAAB62"
 SKIP_ENV_VAR = "DPF_SKIP_PLUGIN_COPY_CHECK"
 MANIFEST_PATH = "/api/agent-toolchain/manifest"
 MANIFEST_TIMEOUT_SECONDS = 2.0
-_TEMPLATE = re.compile(r"^\$\{DPF_MCP_URL:-([^}]+)\}$")
+# The variable a copy's template names is the one the client loading it reads:
+# DPF_CLAUDE_MCP_URL on current copies, DPF_MCP_URL on legacy ones (BI-D6A6462A).
+_TEMPLATE = re.compile(r"^\$\{(DPF_(?:CLAUDE_)?MCP_URL):-([^}]+)\}$")
 # Written per install, so they legitimately differ between copies: the updater
 # regenerates the root descriptors for this host's endpoint, rewrites the Codex
 # manifest with a content version, and Claude Code keeps one marker file per
@@ -114,7 +116,11 @@ def _display(url: str) -> str:
 
 def expected_connector(env: Mapping[str, str]) -> tuple[str, bool]:
     """The endpoint and bearer-ness the updater would write for this environment."""
-    url = updater.with_mcp_catalog_tier(env.get("DPF_MCP_URL") or updater.DEFAULT_MCP_URL, "full")
+    # Claude's own variable outranks the shared one, which a stale checkout or
+    # another client may have set (BI-D6A6462A); the shared one still names an
+    # http-only install's endpoint (BI-46B636B0).
+    named = env.get(updater.CLAUDE_MCP_URL_ENV_VAR) or env.get("DPF_MCP_URL")
+    url = updater.with_mcp_catalog_tier(named or updater.DEFAULT_MCP_URL, "full")
     try:
         bearer = updater.mcp_client_bearer_header_required(url, "claude", env.get("DPF_MCP_AUTH_MODE") or "oauth")
     except ValueError:
@@ -130,7 +136,7 @@ def installed_connector(copy: Path, env: Mapping[str, str]) -> Optional[tuple[st
     url = server["url"]
     template = _TEMPLATE.match(url)
     if template:
-        url = env.get("DPF_MCP_URL") or template.group(1)
+        url = env.get(template.group(1)) or template.group(2)
     headers = server.get("headers")
     bearer = isinstance(headers, dict) and any(str(k).lower() == "authorization" for k in headers)
     return url, bearer
