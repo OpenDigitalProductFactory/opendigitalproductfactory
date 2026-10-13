@@ -763,6 +763,21 @@ describe("v3: the bound delivery shape keys the gates", () => {
     });
   });
 
+  // BI-6F2872FC AC-6: the item view projects with its active build's reviewed
+  // design, so it reads the same verdict as the build gate.
+  it("hands the active build's reviewed design through the summary projection", () => {
+    const shaped = { ...item, workShape: "delivery-medium@1.0.0", deliverySensitivity: "low" as const, body: "just prose" };
+    const withDesign = projectBacklogItemReadinessSummary({
+      item: shaped, activities: [], hasSpec: false, hasPlan: false, evaluatedAt: "2026-10-13T00:00:00.000Z",
+      buildDesign: { reviewPassed: true, acceptanceCriteriaCount: 3 },
+    });
+    const without = projectBacklogItemReadinessSummary({
+      item: shaped, activities: [], hasSpec: false, hasPlan: false, evaluatedAt: "2026-10-13T00:00:00.000Z",
+    });
+    expect(withDesign.decisions.implementation.verdict).toBe("allowed");
+    expect(without.decisions.implementation.unmet.map((entry) => entry.code)).toContain("RESEARCH_REQUIRED");
+  });
+
   it("raises a small item at high sensitivity to the large gates and leaves an unshaped item on v2", () => {
     const raised = projectBacklogItemReadiness({
       item: { ...item, workShape: "delivery-small@1.0.0", deliverySensitivity: "high" },

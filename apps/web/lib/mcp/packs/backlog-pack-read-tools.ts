@@ -413,6 +413,9 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
           draftApprovedAt: true,
           sandboxId: true,
           createdAt: true,
+          designDoc: true,
+          designReview: true,
+          buildPlan: true,
         },
       },
       activities: {
@@ -445,6 +448,21 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
   const { assessDeliverySensitivity } = await import("@/lib/backlog/initiative-readiness/delivery-sensitivity");
   const boundWorkShape = await readBoundWorkShapeRef(prisma, item.itemId);
   const declaredPaths = await readBoundEditPaths(prisma, item.itemId).catch(() => []);
+  // BI-6F2872FC AC-6: an item with an active build is judged on the facts its
+  // build gate uses (plan paths raise sensitivity; the reviewed design is the
+  // proportional shapes' research). Without them this view, the owed-review
+  // router and the acceptance sweep saw a different, unraised item than the
+  // gate refusing it, so the reviews the gate owed were never dispatched.
+  const activeBuild = item.activeBuild;
+  const buildFacts = activeBuild
+    ? await (await import("@/lib/build/build-entry-gate")).loadBuildReadinessFacts(prisma as never, {
+      kind: activeBuild.kind,
+      designDoc: activeBuild.designDoc,
+      designReview: activeBuild.designReview,
+      buildPlan: activeBuild.buildPlan,
+      originator: { id: item.id, itemId: item.itemId, title: item.title, body: item.body, workType: item.workType },
+    }).catch(() => null)
+    : null;
   const evaluatedAt = new Date().toISOString();
   // BI-094B41AC: an item awaiting acceptance reads the completion gate's own
   // evaluation (merge signal included), so this view and the gate agree. Null
@@ -466,7 +484,8 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
     item: {
       id: item.id,
       workShape: boundWorkShape,
-      deliverySensitivity: assessDeliverySensitivity({ title: item.title, body: item.body, workType: item.workType, declaredPaths }),
+      deliverySensitivity: buildFacts?.deliverySensitivity
+        ?? assessDeliverySensitivity({ title: item.title, body: item.body, workType: item.workType, declaredPaths }),
       body: item.body,
       itemId: item.itemId,
       status: item.status,
@@ -484,6 +503,7 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
     hasSpec,
     hasPlan,
     evaluatedAt,
+    buildDesign: buildFacts?.buildDesign ?? null,
   }));
   const deliveryReadiness = gateCompletion
     ? { ...projectedReadiness, completionEvaluation: { source: "completion-gate" as const, mergeDelivery: gateCompletion.mergedThroughGates } }
