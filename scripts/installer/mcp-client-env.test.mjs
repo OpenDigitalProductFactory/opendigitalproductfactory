@@ -24,6 +24,8 @@ const hasBash = spawnSync("bash", ["-c", "true"]).status === 0;
 const hasOpenssl = spawnSync("openssl", ["version"]).status === 0;
 const NEEDS_BASH = { skip: hasBash ? false : "no bash on this machine" };
 const NEEDS_TRUST_TOOLS = { skip: hasBash && hasOpenssl ? false : "needs bash and openssl to mint a fixture root" };
+const pythonProbe = spawnSync(process.platform === "win32" ? "python" : "python3", ["-c", "import sys; print(sys.executable)"], { encoding: "utf8" });
+const pythonExe = pythonProbe.status === 0 ? pythonProbe.stdout.trim() : null;
 
 function powershellHost() {
   for (const candidate of ["pwsh", "powershell"]) {
@@ -270,7 +272,10 @@ function writeEndpointReaderFixture(install, extension) {
 }
 
 for (const adapter of ["sh", "ps1"]) {
-  test(`${adapter}: bootstrap selects saved operator endpoint before install defaults and keeps explicit selection`, adapter === "sh" ? NEEDS_BASH : NEEDS_POWERSHELL, () => {
+  // BI-BFDB0A42: this case runs the bootstrap's python block. The Build Studio
+  // sandbox has no python, so skip there as the PowerShell twin does without pwsh.
+  const NEEDS_PYTHON = pythonExe ? null : { skip: "no python on this machine; the bootstrap's endpoint block cannot run" };
+  test(`${adapter}: bootstrap selects saved operator endpoint before install defaults and keeps explicit selection`, NEEDS_PYTHON ?? (adapter === "sh" ? NEEDS_BASH : NEEDS_POWERSHELL), () => {
     withHome(({ home, install }) => {
       writeFileSync(join(install, ".env"), "PUBLIC_URL=https://desk.lan\n");
       writeEndpointReaderFixture(install, adapter);
@@ -278,9 +283,7 @@ for (const adapter of ["sh", "ps1"]) {
       // Keep the real shell wrapper, but bind its interpreter inside this fixture.
       const bin = join(home, "bin");
       mkdirSync(bin);
-      const python = spawnSync(process.platform === "win32" ? "python" : "python3", ["-c", "import sys; print(sys.executable)"], { encoding: "utf8" });
-      assert.equal(python.status, 0, python.stderr);
-      writeFileSync(join(bin, "python3"), `#!/bin/sh\nexec '${posix(python.stdout.trim()).replaceAll("'", "'\\''")}' "$@"\n`);
+      writeFileSync(join(bin, "python3"), `#!/bin/sh\nexec '${posix(pythonExe).replaceAll("'", "'\\''")}' "$@"\n`);
       chmodSync(join(bin, "python3"), 0o755);
       const config = join(home, ".codex/config.toml");
       mkdirSync(dirname(config), { recursive: true });
