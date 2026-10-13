@@ -24,6 +24,7 @@ const CLAUDE_PATH = "C:\\Users\\Test\\.claude\\plugins\\installed_plugins.json";
 /** Build an FS shim that satisfies the bridge's needs for a happy-path test. */
 function buildFs(args: {
   codexText?: string;
+  projectText?: string;
   claudeJsonText?: string;
   liveDirs?: Set<string>;
 }) {
@@ -33,12 +34,14 @@ function buildFs(args: {
 
   return {
     readFileSync: (path: string, _encoding: BufferEncoding): string => {
+      if (path === join(REPO, ".codex", "config.toml")) return args.projectText ?? "";
       if (path === CODEX_PATH) return codexText ?? "";
       if (path === CLAUDE_PATH) return claudeJsonText ?? "";
       // Fall through to real FS for kernel principle fixtures.
       return readFileSync(path, "utf8");
     },
     existsSync: (path: string): boolean => {
+      if (path === join(REPO, ".codex", "config.toml")) return args.projectText !== undefined;
       if (path === CODEX_PATH) return codexText !== undefined;
       if (path === CLAUDE_PATH) return claudeJsonText !== undefined;
       // Live-dirs whitelist for the stale-entry detection path.
@@ -196,5 +199,20 @@ describe("summarizePlan", () => {
     expect(summary).toMatch(/token=missing/);
     expect(summary).toMatch(/mcp-probe=skip:no_token/);
     expect(summary).toMatch(/preview-state=authorization_pending/);
+  });
+});
+
+
+describe("project Codex configuration", () => {
+  it("includes a repair for an existing project override in the shared adapter plan", () => {
+    const plan = computeAgentToolchainPlan(baseOptions({
+      mcpEndpoint: "https://localhost/api/mcp/v1",
+      fs: buildFs({ projectText: '[mcp_servers.dpf]\nurl="http://localhost:3000/mcp"' }),
+    }));
+    const projectWrite = plan.codex?.writes.find(w => w.path === join(REPO, ".codex", "config.toml"));
+    expect(projectWrite?.content).toContain("https://localhost/api/mcp/v1?tier=full");
+  });
+  it("does not return a ready plan for malformed project TOML", () => {
+    expect(() => computeAgentToolchainPlan(baseOptions({ fs: buildFs({ projectText: '[mcp_servers.dpf]\nurl="unfinished' }) }))).toThrow(/project.*TOML/i);
   });
 });

@@ -78,3 +78,5 @@ Rollback is a source revert; retain local configuration for operator recovery.
 REQ-PROJECT-ENDPOINT, CONTRACT-PROJECT-CONFIG, FLOW-PROJECT-CONVERGENCE and
 VERIFY-PROJECT-CONFIG form one atomic deliverable under BI-9F258707. Updated
 immutable backlog coverage is required before source implementation.
+
+Coverage receipt: `cmv68u5ty08wb01laytsfyfhy` binds the atomic project endpoint deliverable to BI-9F258707 at commit `c54d5b479b4d85d92f4835c6bbdbd7fd2e15ac65`. No external dependency BI is required.

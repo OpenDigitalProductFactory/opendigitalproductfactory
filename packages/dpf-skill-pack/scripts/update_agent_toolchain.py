@@ -805,6 +805,54 @@ def ensure_codex_config(
     return write_text_if_changed(path, text)
 
 
+def ensure_codex_project_config(project_root: Path, mcp_url: str, dry_run: bool) -> bool:
+    """Repair an explicitly scoped override, validating all preserved TOML data."""
+    path = project_root / ".codex" / "config.toml"
+    if not path.exists():
+        return False
+    try:
+        import tomllib as toml_parser
+    except ImportError:
+        try:
+            import tomli as toml_parser
+        except ImportError:
+            raise ValueError("Project Codex TOML requires Python 3.11+ or tomli; configuration unchanged") from None
+    text = path.read_text(encoding="utf-8-sig")
+    try:
+        parsed = toml_parser.loads(text)
+    except ValueError:
+        raise ValueError("Invalid project Codex TOML; configuration unchanged") from None
+    servers = parsed.get("mcp_servers", {})
+    if not isinstance(servers, dict) or "dpf" not in servers:
+        return False
+    existing = servers["dpf"]
+    if not isinstance(existing, dict):
+        raise ValueError("Invalid project Codex TOML DPF table; configuration unchanged")
+    expected = dict(existing)
+    expected["url"] = with_mcp_catalog_tier(mcp_url, "full")
+    if mcp_client_bearer_header_required(mcp_url, "codex"):
+        expected.setdefault("bearer_token_env_var", TOKEN_ENV_VAR)
+    elif expected.get("bearer_token_env_var") == TOKEN_ENV_VAR:
+        del expected["bearer_token_env_var"]
+    if existing == expected:
+        return False
+    # Reuse the standalone writer, then verify its whole semantic result.
+    # Unusual TOML spellings it cannot preserve are refused, never clobbered.
+    body = codex_mcp_body(text, mcp_url)
+    body = [line for line in body if not re.match(r"^enabled\s*=", line)]
+    if "enabled" in existing:
+        body.append("enabled = " + json.dumps(existing["enabled"]))
+    updated = upsert_toml_table(text, "[mcp_servers.dpf]", body)
+    servers["dpf"] = expected
+    try:
+        verified = toml_parser.loads(updated) == parsed
+    except ValueError:
+        verified = False
+    if not verified:
+        raise ValueError("Cannot safely preserve project Codex TOML; configuration unchanged")
+    return True if dry_run else write_text_if_changed(path, updated)
+
+
 def mcp_client_bearer_header_required(endpoint: str, client: str = "claude", auth_mode: str | None = None) -> bool:
     """Mirror the shared TypeScript policy; shared fixtures guard agreement."""
     mode = auth_mode or os.environ.get("DPF_MCP_AUTH_MODE", "oauth")
@@ -2174,6 +2222,7 @@ def hook_reference(skill_pack: Path) -> str:
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Update DPF Codex/Claude/Grok/Antigravity agent skills and MCP wiring.")
     parser.add_argument("--skill-pack-path", default=str(default_skill_pack_path()))
+    parser.add_argument("--project-root", type=Path, help="Explicit repository whose existing Codex override should converge")
     parser.add_argument("--mcp-url", default=os.environ.get("DPF_MCP_URL") or None)
     parser.add_argument("--auth-mode", choices=("oauth", "legacy"), default=os.environ.get("DPF_MCP_AUTH_MODE", "oauth"))
     parser.add_argument("--codex-only", action="store_true")
@@ -2286,6 +2335,11 @@ def main(argv: list[str]) -> int:
             # mutation so the next process does not warn that `dpf-platform`
             # lacks its `@marketplace` qualifier.
             ensure_codex_config(home, args.mcp_url, args.dry_run, process_spine_root)
+        if args.project_root and args.project_root.resolve() != home.resolve():
+            global_config = codex_config_path(home)
+            saved = global_config.read_text(encoding="utf-8-sig") if global_config.exists() else ""
+            endpoint = args.mcp_url or existing_codex_mcp_endpoint(saved) or DEFAULT_MCP_URL
+            ensure_codex_project_config(args.project_root, endpoint, args.dry_run)
         codex_hooks_status = install_codex_hooks(codex_managed, home, args.dry_run)
         print(
             f"  Codex      : marketplace + config converged; plugin {codex_status}; "

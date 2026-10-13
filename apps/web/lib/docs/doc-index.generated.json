@@ -5695,6 +5695,7 @@
       "anchors": [
         "platform-support-watch-list-living-document",
         "windows-host-guard-interpreters-bi-ba5f777a",
+        "repository-local-codex-endpoint-overrides-bi-9f258707",
         "target-environments",
         "how-to-use-this-file",
         "1-monitoring-telemetry",
