@@ -71,6 +71,15 @@ function run(f: ReturnType<typeof fixtures>) {
 }
 
 describe("runApprovedPlatformRequest", () => {
+  it("proves unchanged raw arguments against the separately sealed author fact and still enters the governor", async () => {
+    const authorResearchBinding = { itemId: "BI-AUTHOR", buildId: "FB-AUTHOR", revisionId: "revision-1",
+      valueDigest: "sha256:value", contentDigest: "sha256:bytes", authorUserId: "user-1", authorPrincipalId: "principal-author",
+      authorAgentId: null, workroomId: "WC-AUTHOR", reason: "Research", authorityVersion: null, roomPolicyDigest: "sha256:room" };
+    const f = fixtures({ envelope: { argsJson: { approvalBinding: { taskRunId: "TR-SCHED-1", routeContext: "/platform/ops", chainId: null,
+      authorResearchBinding, inputFingerprint: fingerprintCoworkerInput(PARAMS, authorResearchBinding) } } } });
+    await expect(run(f)).resolves.toMatchObject({ status: "executed" });
+    expect(f.execute).toHaveBeenCalledWith(expect.objectContaining({ rawParams: PARAMS }));
+  });
   it("runs the exact approved call once, with the marker's source and the replayed identity", async () => {
     const f = fixtures();
     await expect(run(f)).resolves.toEqual({ status: "executed", message: "Triage ran.", entityId: "TRIAGE-1" });

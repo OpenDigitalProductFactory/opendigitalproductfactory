@@ -1,5 +1,18 @@
 # Platform Support Watch-List (living document)
 
+## Windows host guard interpreters (BI-BA5F777A)
+
+Windows may resolve `bash` to the WSL launcher while `sh` is absent. Native
+Windows fixture paths cannot be passed unchanged to WSL. Shell fixtures use
+`scripts/lib/guard-bash.mjs` to probe native path support in Git Bash discovered
+through the process PATH, a custom Git installation, or standard machine/user
+install locations. Host preflight, PR readiness and the policy runner share a child-only shell
+environment, so nested fixtures find Bash, sh and Git utilities consistently.
+Missing compatible Bash is a `GuardRuntimeEnvironmentError`,
+not a passing test or a product validation failure. Host PATH is unchanged.
+Git isolation fixtures write files through Node instead of invoking a shell.
+PKI rejection assertions and existing POSIX permission checks remain intact.
+
 A running tally of **platform-specific gotchas** to watch for when supporting
 DPF's target environments. This is the operational companion to the canonical
 design docs — it tracks *symptoms and recurring traps*, not contracts:
@@ -70,6 +83,14 @@ host NICs regardless). See the "Network sweep data path" decision in the
 roadmap before touching any host exporter.
 
 ## 2. Shell scripts (BSD vs GNU coreutils)
+
+Local-CI cleanup must never traverse a recycled PID tree. Revision 2 uses an
+owned Windows Job Object, process creation identity checks, and durable execution
+checkpoints. Parent-pipe loss closes the owned job; other process identities are
+never inferred from a matching command line. Windows loss and exact-handle tests
+cover the implementation. POSIX identity/signal races remain explicitly bounded
+in the [recovery procedure](../architecture/build-gate-runbook.md#recovering-an-interrupted-gate-publication).
+The admission floor retires older gate clients after the server is upgraded.
 
 macOS ships BSD userland; Linux ships GNU. The installer targets **bash 3.2**
 and **python3 3.9** (stock macOS) — no associative arrays, `mapfile`, or

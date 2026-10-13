@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Room classification repair prototype</title>
+<style>
+:root{color-scheme:light dark;--dpf-bg:Canvas;--dpf-text:CanvasText;--dpf-border:GrayText;--dpf-accent:Highlight}
+body{font:1rem/1.5 system-ui;margin:2rem auto;max-width:42rem;padding:1rem;background:var(--dpf-bg);color:var(--dpf-text)}
+label{display:block;margin:1rem 0}input,select,button{font:inherit;padding:.5rem;border:1px solid var(--dpf-border);border-radius:.5rem}input,select{display:block;width:100%;box-sizing:border-box}button{cursor:pointer}summary{cursor:pointer}
+</style>
+<h1>Define this room</h1><p>Prototype with synthetic data. It changes no DPF record.</p>
+<button id="open">Define this room</button>
+<form id="form" hidden>
+<label>What does finished look like?<input value="Verified repair"></label>
+<label>Who answers for it?<input value="role:owner"></label>
+<details><summary>More room details</summary>
+<label>Sensitivity limit<select id="classification"><option value="">Not declared</option><option>public</option><option>internal</option><option>confidential</option><option>restricted</option></select></label>
+<label><input id="legacy" type="checkbox" style="width:auto;display:inline"> Show a historical unresolved declaration</label>
+</details>
+<button type="submit">Save</button> <button id="cancel" type="button">Cancel</button>
+</form><p id="result" role="status"></p>
+<script>
+const form=document.getElementById('form'), field=document.getElementById('classification'), result=document.getElementById('result');
+const canonical=field.innerHTML;
+document.getElementById('open').onclick=()=>{form.hidden=false};
+document.getElementById('cancel').onclick=()=>{form.hidden=true};
+document.getElementById('legacy').onchange=e=>{field.disabled=e.target.checked;field.innerHTML=e.target.checked?'<option>Needs classification review</option>':canonical};
+form.onsubmit=e=>{e.preventDefault();result.textContent=field.disabled?'Intent saved; historical classification retained.':'Prototype boundary saved.';form.hidden=true};
+</script></html>

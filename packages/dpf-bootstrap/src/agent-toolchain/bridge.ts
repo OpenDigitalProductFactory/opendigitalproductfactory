@@ -199,7 +199,7 @@ export function computeAgentToolchainPlan(
   }
 
   // Grok plan (skipped when Grok CLI absent). Dedicated TOML wiring for
-  // [mcp_servers.dpf] using the grok.mcp.json descriptor (env-var token).
+  // [mcp_servers.dpf] using bearer_token_file (design 12.4.7).
   let grok: { present: boolean; config?: GrokConfigPlan } | null = null;
   if (options.grokCliPresent && options.grokConfigPath) {
     const grokText = _exists(options.grokConfigPath)

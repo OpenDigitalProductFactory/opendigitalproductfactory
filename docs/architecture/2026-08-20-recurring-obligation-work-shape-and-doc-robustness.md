@@ -7,6 +7,12 @@ area: architecture
 
 # Recurring-Obligation Work Shape and Documentation Robustness
 
+The provider-pause reconciliation cadence is an implemented recovery consumer:
+its core catalog entry runs every five minutes and reads overdue persisted
+pause identities. It preserves superseding operator actions and independent
+health restrictions. The [provider control guide](../user-guide/ai-workforce/provider-ollama.md)
+describes the controls, expiry behavior, and restart recovery together.
+
 **Scoping pass, 2026-08-20.** Triggered by an operator observation on the public
 compliance and licensing-readiness pages: the docs describe *records and screens*
 but never describe **what the AI Coworker actually does, in what shape, on what

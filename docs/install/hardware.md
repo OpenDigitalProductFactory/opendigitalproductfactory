@@ -1,8 +1,9 @@
 # Choosing Hardware for DPF
 
-*Market availability reviewed August 24, 2026. Product configurations, prices,
-and regional stock change frequently; follow the manufacturer links before
-ordering.*
+*Mac mini, Mac Studio, Framework Desktop, and DGX Spark configurations reviewed
+October 12, 2026; other machine examples last
+reviewed August 24, 2026. Product configurations, prices, and regional stock
+change frequently; follow the manufacturer links before ordering.*
 
 DPF has two customer deployment models:
 
@@ -29,9 +30,60 @@ After choosing the host, continue with the [Windows](windows.md),
 | Local-first operations, Apple unified memory | **Apple Silicon · 2 TB SSD · 64 GB unified memory practical; 128 GB recommended when the host must run larger local models or double as a development machine.** This profile can run larger local models and longer context without a separate VRAM ceiling. |
 | Contributor/development workstation | **16–24 modern CPU cores · 128 GB memory · 4 TB NVMe SSD · 32 GB VRAM or 128 GB unified memory.** This profile adds capacity for source work, worktrees, builds, tests, browser automation, and local model evaluation. |
 
-The customer profiles exclude Build Studio, local coding-model capacity, source
-worktrees, and build workers. Those belong to a customizable contributor
-installation or an external development environment.
+The customer profiles size day-to-day operations. Embedded Build Studio can
+handle supported changes on a customizable install without separate Claude or
+Codex apps. It still needs a configured AI provider and development workspace;
+builds, tests, previews, source worktrees, and local coding models consume
+resources wherever they run. Size that additional workload separately. Removing
+external agent apps does not make a full development workload fit the operations
+profile.
+
+## A Mac mini for everyday business operations
+
+A Mac mini is a suggested compact host for DPF as a business operating system:
+the application and business records run on the organization's own machine,
+while people use the browser-based workspace to coordinate daily work.
+
+- **Mac mini with M6, 32 GB unified memory and a 1 TB SSD:** matches DPF's
+  provider-assisted operations planning profile. Approved external AI providers
+  handle model inference; those configured requests leave the host.
+- **Mac mini with M5 Pro, 64 GB unified memory and a 2 TB SSD:** matches the
+  practical Apple local-first profile. Qualify the chosen model, context,
+  voice/document services, and simultaneous coworker work together.
+- **Mac Studio with M5 Max, 128 GB unified memory and a 2–4 TB SSD:** consider
+  this when larger local models, document-heavy workflows, or substantial
+  development share the business host.
+
+Apple currently lists a maximum of **32 GB on the M6 mini** and **64 GB on the
+M5 Pro mini**. The newer chip does not replace memory capacity, and a larger SSD
+does not replace RAM. See [Apple's Mac mini specifications](https://www.apple.com/mac-mini/specs/).
+
+These are workload-based suggestions, not an exact-model DPF certification or a
+promise that every business fits in 32 GB. The memory use of an actively developed
+128 GB installation is not a measured minimum for ordinary operations. Before
+standardizing on 32 GB, verify a representative business workload, peak
+concurrency, memory pressure, restart recovery, and any enabled Build Studio
+work. Include a UPS and backups on separate storage with a tested restore path.
+
+### Local AI for professional firms
+
+For a law firm that wants primary AI processing on-site, the **M5 Max Mac Studio
+with 128 GB unified memory and a 2–4 TB SSD** is a higher-capacity evaluation
+candidate. The memory leaves more room for the model, document processing,
+context, and the DPF services than either Mac mini configuration. Actual response
+times and simultaneous-user capacity need to be measured with the firm's
+representative documents and chosen inference backend.
+
+Apple lists 128 GB with the **18-core CPU / 40-core GPU M5 Max** configuration.
+The **M5 Ultra** supports up to **512 GB** unified memory; consider it only when
+measured model capacity or throughput justifies the larger machine. See
+[Apple's Mac Studio specifications](https://www.apple.com/mac-studio/specs/).
+
+Local hosting alone does not establish confidentiality or legal-work quality.
+Confirm which AI providers and integrations can receive documents, enforce
+matter access, test backup restoration, and qualify each intended AI workflow
+before using client material. An enabled external fallback can still send
+approved requests off-site.
 
 ## Machines available now
 
@@ -47,7 +99,7 @@ organization.
 | --- | --- | --- |
 | [HP EliteDesk 8 Mini](https://www.hp.com/us-en/shop/vwa/desktops/opsy%3DWindows-11-Pro%26brand%3DEliteDesk) | Windows 11 Pro, 32 GB RAM, 1 TB SSD | Compact business desktop with no unnecessary discrete-GPU cost |
 | [Dell Pro Tower](https://www.dell.com/en-us/shop/desktop-computers/dell-pro-tower-desktop/spd/dell-pro-qct1250-desktop/gcto_qct1250_usx) | Windows 11 Pro, 32 GB RAM, 1 TB SSD | Conventional, serviceable business tower |
-| [Apple Mac mini with M4 Pro](https://www.apple.com/shop/buy-mac/mac-mini/m4-pro-chip-12-core-cpu-16-core-gpu-48gb-memory-1tb-storage) | 48–64 GB unified memory, 1 TB SSD | Quiet, compact host that can also run a useful local model when needed |
+| [Apple Mac mini with M6](https://www.apple.com/mac-mini/specs/) | 32 GB unified memory, 1 TB SSD | Compact suggested host for everyday operations with approved external AI providers; validate the business workload |
 
 There is little benefit in buying a large GPU for this deployment unless the
 organization expects to move primary inference on-site later.
@@ -76,8 +128,8 @@ make the same model more knowledgeable.
 | Representative machine | Configuration available | Buying note |
 | --- | --- | --- |
 | [MacBook Pro with M5 Max](https://www.apple.com/macbook-pro/specs/) | Up to 128 GB unified memory and 8 TB SSD | Best portable option; 128 GB is already an effective DPF operations-and-development machine |
-| [Mac Studio](https://www.apple.com/shop/buy-mac/mac-studio/) | M4 Max up to 128 GB; M3 Ultra up to 512 GB unified memory | Best fixed Apple host; choose 128 GB for DPF unless a demonstrated larger-model workload justifies more |
-| [Mac mini with M4 Pro](https://support.apple.com/en-us/121555) | Up to 64 GB unified memory and 8 TB SSD | Lower-cost local-first entry for one operator and a smaller operational model |
+| [Mac Studio with M5 Max or M5 Ultra](https://www.apple.com/mac-studio/specs/) | M5 Max: configure 128 GB and 2–4 TB SSD with the 40-core GPU; M5 Ultra: up to 512 GB | Higher-capacity local-AI candidate for document-heavy professional firms; validate workload before choosing Ultra |
+| [Mac mini with M5 Pro](https://www.apple.com/mac-mini/specs/) | Configure 64 GB unified memory and 2 TB SSD; supports up to 8 TB SSD | Compact local-first candidate; qualify model, context, and concurrency before deployment |
 
 Apple Silicon is a generally available DPF install surface. See the [macOS
 installation guide](macos.md). Memory cannot be upgraded after purchase, so buy
@@ -138,26 +190,36 @@ for memory-efficient local and single-user work, and vLLM on supported NVIDIA
 hosts for higher throughput. See [Docker Model Runner inference
 engines](https://docs.docker.com/ai/model-runner/inference-engines/).
 
-## Shared-memory systems not yet in the standard profile
+## Compact Linux candidates — qualification required
 
-The market now includes additional 128 GB shared-memory machines:
+Linux runs DPF containers through native Docker Engine without Docker Desktop's
+additional VM. That can reduce hosting overhead; DPF has not measured a general
+efficiency advantage across these machines. The [Linux install guide](linux.md)
+remains early access, with Ubuntu 24.04 x86-64 as the recorded first pilot target.
 
-- [Framework Desktop](https://frame.work/desktop?tab=machine-learning) combines
-  Ryzen AI Max+ 395 with 128 GB shared memory and can allocate up to 96 GB to its
-  Radeon GPU. Docker Model Runner's GPU-backed Windows path currently requires
-  NVIDIA; AMD acceleration is available through Docker Engine on Linux, while
-  DPF's native Linux install remains early access.
-- [NVIDIA DGX Spark](https://marketplace.nvidia.com/en-us/enterprise/personal-ai-supercomputers/dgx-spark/)
-  and OEM GB10 systems such as HP ZGX Nano and Lenovo ThinkStation PGX provide
-  128 GB coherent unified memory in a compact Linux ARM system. DPF publishes
-  multi-architecture images, but its standard local-inference path on this
-  hardware has not yet been qualified.
+| Compact candidate | Configuration to evaluate | DPF qualification boundary |
+| --- | --- | --- |
+| [Framework Desktop](https://frame.work/desktop) | 128 GB shared memory and 2–4 TB SSD as a local-AI planning target; the current 4.5 L Ryzen AI Max+ PRO 495 family offers up to 192 GB | x86 PC supporting Linux or Windows. Validate the exact AMD GPU, drivers, and inference backend on Linux; the manufacturer's preinstalled Fedora option is not DPF certification. |
+| [NVIDIA DGX Spark](https://www.nvidia.com/en-us/products/workstations/dgx-spark/) | 128 GB coherent unified memory; storage up to 4 TB in a 150 × 150 × 50.5 mm enclosure | Compact GB10 ARM system with NVIDIA DGX OS. DPF's ARM64 images do not establish installer, CUDA inference, tool use, or recovery qualification on this host. |
 
-These machines are strong evaluation candidates and may become excellent DPF
-appliances. Do not buy one as the default production host until the exact DPF
-installer, Docker Model Runner backend, model, tool-call parser, and recovery
-path have passed the same functional checks as the generally available Windows
-and Apple Silicon routes.
+Framework Desktop is the PC alternative to evaluate when a shared memory pool
+and a choice of Linux or Windows matter. DGX Spark is the smaller NVIDIA local-AI
+candidate. Neither is a qualified DPF replacement for the generally available
+Apple Silicon path yet. For provider-assisted operations, a conventional compact
+x86 business PC with 32 GB RAM and a 1 TB SSD can instead be sized against the
+operations profile, with Linux pilot acceptance still required.
+
+[Docker Model Runner](https://docs.docker.com/ai/model-runner/) lists CPU, NVIDIA
+CUDA, AMD ROCm, and Vulkan backends for Docker Engine on Linux. Backend support
+does not establish support for every GPU or model. Do not carry a Linux AMD
+recommendation over to DPF's Windows local-inference path without separate
+qualification.
+
+Before recommending either candidate for a business, verify the exact DPF
+installer, GPU backend, model, tool-call parser, peak concurrent workload,
+reboot, upgrade, backup, and restore path. The same validation applies to a law
+firm's local document workflows; hardware capacity alone does not establish
+confidentiality or legal-work quality.
 
 ## Before ordering
 

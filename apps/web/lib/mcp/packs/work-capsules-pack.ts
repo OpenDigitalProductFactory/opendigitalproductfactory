@@ -11,6 +11,7 @@
 import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import { workCapsuleToolEnums } from "@/lib/work-capsules/mcp-handlers";
 import { DELIVERY_SHAPE_REFS } from "@/lib/work-management/delivery-shapes";
+import { PRINCIPAL_SENSITIVITIES } from "@dpf/db/principal-sensitivity";
 import type { ToolPack } from "../tool-pack";
 
 const ENUMS = workCapsuleToolEnums();
@@ -56,6 +57,22 @@ const scopeProperties = {
 } as const;
 
 const definitions: ToolDefinition[] = [
+  {
+    name: "review_workroom_sensitivity",
+    description: "Read exact-room administrative classification state and a revision digest. Returns no room content or historical prose. Use before an administrator verifies an invalid declaration.",
+    inputSchema: { type: "object", properties: { capsuleId: { type: "string" } }, required: ["capsuleId"] },
+    requiredCapability: "manage_platform", sideEffect: false,
+  },
+  {
+    name: "correct_workroom_sensitivity",
+    description: "Correct one invalid Workroom sensitivity declaration after an administrator verifies actual classification. Requires the exact review digest and rationale; retains the original in an audit. Cannot lower a valid classification or widen global clearance. Governed approval still applies.",
+    inputSchema: { type: "object", properties: {
+      capsuleId: { type: "string" }, expectedDigest: { type: "string" },
+      sensitivity: { type: "string", enum: [...PRINCIPAL_SENSITIVITIES] },
+      classificationReviewed: { type: "boolean", const: true }, rationale: { type: "string", minLength: 20, maxLength: 2000 },
+    }, required: ["capsuleId", "expectedDigest", "sensitivity", "classificationReviewed", "rationale"] },
+    requiredCapability: "manage_platform", executionMode: "proposal", sideEffect: true, consequence: "authority",
+  },
   {
     name: "list_workrooms",
     description:
@@ -425,8 +442,10 @@ export const workCapsulesPack: ToolPack = {
   packId: "work-capsules",
   definitions,
   handlers: {
+    review_workroom_sensitivity: (params, userId) => import("@/lib/work-management/workroom-sensitivity-review.server").then(m => m.reviewWorkroomSensitivityTool(params, userId)),
+    correct_workroom_sensitivity: (params, userId, context) => import("@/lib/work-management/workroom-sensitivity-review.server").then(m => m.correctWorkroomSensitivityTool(params, userId, context)),
     list_workrooms: (params, userId, context) => HANDLERS().then((m) => m.listWorkCapsulesTool(params, userId, context)),
-    get_workroom: (params) => HANDLERS().then((m) => m.getWorkCapsuleTool(params)),
+    get_workroom: (params, userId, context) => HANDLERS().then((m) => m.getWorkCapsuleTool(params, userId, context)),
     create_workroom: (params, userId, context) => HANDLERS().then((m) => m.createWorkCapsuleTool(params, userId, context)),
     plan_workroom_worktree: (params, userId, context) => HANDLERS().then((m) => m.planCapsuleWorktreeTool(params, userId, context)),
     adopt_worktree: (params, userId, context) => HANDLERS().then((m) => m.adoptWorktreeTool(params, userId, context)),
@@ -445,7 +464,7 @@ export const workCapsulesPack: ToolPack = {
     record_agent_activity: (params, userId, context) => HANDLERS().then((m) => m.recordAgentActivityTool(params, userId, context)),
     // Legacy workroom names — callable, deliberately NOT advertised in `definitions`.
     list_work_capsules: (params, userId, context) => HANDLERS().then((m) => m.listWorkCapsulesTool(params, userId, context)),
-    get_work_capsule: (params) => HANDLERS().then((m) => m.getWorkCapsuleTool(params)),
+    get_work_capsule: (params, userId, context) => HANDLERS().then((m) => m.getWorkCapsuleTool(params, userId, context)),
     create_work_capsule: (params, userId, context) => HANDLERS().then((m) => m.createWorkCapsuleTool(params, userId, context)),
     plan_capsule_worktree: (params, userId, context) => HANDLERS().then((m) => m.planCapsuleWorktreeTool(params, userId, context)),
     claim_capsule_scope: (params, userId, context) => HANDLERS().then((m) => m.claimCapsuleScopeTool(params, userId, context)),
@@ -456,6 +475,8 @@ export const workCapsulesPack: ToolPack = {
     reassign_capsule_executor: (params, userId, context) => HANDLERS().then((m) => m.reassignCapsuleExecutorTool(params, userId, context)),
   },
   grants: {
+    review_workroom_sensitivity: ["admin_read"],
+    correct_workroom_sensitivity: ["admin_write"],
     list_workrooms: ["work_capsule_read"],
     get_workroom: ["work_capsule_read"],
     create_workroom: ["work_capsule_write"],

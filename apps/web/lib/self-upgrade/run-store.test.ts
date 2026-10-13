@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   executeRawUnsafe: vi.fn(),
   broadcastSystem: vi.fn(),
   recordCorrectiveRecoveryEvidence: vi.fn(),
+  reconcileAcceptance: vi.fn().mockResolvedValue({ outcome: "reconciled" }),
 }));
 vi.mock("@dpf/db", () => ({
   Prisma: { TransactionIsolationLevel: { Serializable: "Serializable" } },
@@ -28,6 +29,9 @@ vi.mock("@dpf/db", () => ({
   })(),
 }));
 vi.mock("@/lib/self-upgrade/change-record", () => ({ safeSyncSelfUpgradeChangeRecord: vi.fn() }));
+vi.mock("@/lib/backlog/acceptance-sweep/acceptance-upgrade-wakeup", () => ({
+  reconcileAcceptanceUpgradeWakeupFromStore: mocks.reconcileAcceptance,
+}));
 vi.mock("@/lib/agent-event-bus", () => ({
   agentEventBus: { broadcastSystem: mocks.broadcastSystem },
 }));
@@ -58,6 +62,14 @@ const report = {
 
 describe("self-upgrade evidence merging", () => {
   beforeEach(() => { vi.clearAllMocks(); mocks.update.mockResolvedValue({}); });
+
+  it("wakes acceptance after durable success without rolling back the upgrade when admission is unavailable", async () => {
+    mocks.update.mockResolvedValue({ runId: "SUR-LIVE", status: "succeeded" });
+    mocks.reconcileAcceptance.mockRejectedValueOnce(new Error("temporary database interruption"));
+    await expect(completeRun("SUR-LIVE")).resolves.toMatchObject({ status: "succeeded" });
+    expect(mocks.reconcileAcceptance).toHaveBeenCalledOnce();
+    expect(mocks.update.mock.invocationCallOrder[0]).toBeLessThan(mocks.reconcileAcceptance.mock.invocationCallOrder[0]!);
+  });
 
   it("redacts readiness messages and caps failures", () => {
     const sanitized = sanitizePromoterReadinessReport({ ...report, failures: Array.from({ length: 20 }, (_, i) => ({ code: `c${i}`, message: `secret=value-${i}` })) });

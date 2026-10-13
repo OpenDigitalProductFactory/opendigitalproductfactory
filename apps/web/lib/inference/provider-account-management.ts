@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { prisma, type Prisma } from "@dpf/db";
+import { prisma, setProviderStatusWithDefaultConnection, type Prisma } from "@dpf/db";
 import { encryptSecret } from "@/lib/credential-crypto";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
+import { isLocalProviderId } from "@/lib/routing/provider-locality";
 
 export const ACCOUNT_ACCESS_RESET = {
   accessibleModelIds: [] as string[], modelsVerifiedAt: null,
@@ -87,6 +88,19 @@ export async function configureProviderAccount(input: {
 export async function setProviderAccountEnabled(connectionId: string, enabled: boolean): Promise<ActionResult> {
   const connection = await prisma.aiProviderConnection.findUnique({ where: { connectionId }, include: { credentialEntry: { select: { status: true } } } });
   if (!connection) return err("Provider account not found");
+  if (isLocalProviderId(connection.providerId) && connectionId === `provider-default-${connection.providerId}`) {
+    if (enabled && connection.status === "paused") {
+      const { resumeLocalProvider } = await import("./provider-operator-pause");
+      const resumed = await resumeLocalProvider({ providerId: connection.providerId });
+      return resumed.outcome === "resumed" ? ok() : err("The pause changed. Refresh before resuming.");
+    }
+    // Local runtimes have no account credential. Keep the operator control in
+    // the same transaction as the provider status so boot cannot heal it away.
+    await setProviderStatusWithDefaultConnection(prisma, {
+      providerId: connection.providerId, status: enabled ? "active" : "inactive",
+    });
+    return ok();
+  }
   await prisma.aiProviderConnection.update({ where: { connectionId }, data: { status: enabled ? connection.credentialEntry?.status === "ok" ? "active" : "unconfigured" : "disabled" } });
   return ok();
 }

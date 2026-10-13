@@ -74,6 +74,78 @@ function providerFetch(signOff = "Signed-off-by: Author <author@example.com>") {
 }
 
 describe("resolveRepositoryArtifact", () => {
+  it.each(["subject", "locator", "digest", "unbound"])("refuses invalid canonical plan proof: %s", async (drift) => {
+    const headSha = "c".repeat(40);
+    const proof = { itemId: "BI-TEST", baselineId: "baseline-1", scopeOwnerItemId: "BI-PARENT", artifactRef: locator,
+      digest: `sha256:${createHash("sha256").update(bytes).digest("hex")}` };
+    if (drift === "subject") proof.itemId = "BI-FOREIGN";
+    if (drift === "locator") proof.artifactRef = { ...locator, path: "docs/superpowers/plans/foreign.md" };
+    if (drift === "digest") proof.digest = `sha256:${"d".repeat(64)}`;
+    const fetchImpl = providerFetch();
+    expect(await resolveRepositoryArtifact({ locator, subject: { kind: "backlog-item", id: "BI-TEST" },
+      workroomRef: drift === "unbound" ? undefined : { kind: "workroom-head", workroomId: "WC-TEST0001",
+        repositoryFullName: locator.repositoryFullName, branchName: "feat/test", headSha }, canonicalPlanProof: proof,
+      db: db({ capsules: [capsule({ headSha })] }) as never, fetchImpl: fetchImpl as typeof fetch,
+    })).toMatchObject({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS" });
+    if (drift !== "digest") expect(fetchImpl).not.toHaveBeenCalled();
+  });
+  it("retains the canonical coverage plan despite a different current file blob, without claiming byte equivalence", async () => {
+    const headSha = "c".repeat(40);
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => String(url).includes(`?ref=${headSha}`)
+      ? new Response(JSON.stringify({ type: "file", sha: "d".repeat(40), encoding: "base64",
+        content: Buffer.from("---\nstatus: active\n---\n" + bytes).toString("base64") }), { status: 200 })
+      : providerFetch()(url));
+    const result = await resolveRepositoryArtifact({ locator, subject: { kind: "backlog-item", id: "BI-TEST" },
+      workroomRef: { kind: "workroom-head", workroomId: "WC-TEST0001", repositoryFullName: locator.repositoryFullName,
+        branchName: "feat/test", headSha },
+      canonicalPlanProof: { itemId: "BI-TEST", baselineId: "baseline-1", scopeOwnerItemId: "BI-PARENT", artifactRef: locator,
+        digest: `sha256:${createHash("sha256").update(bytes).digest("hex")}` },
+      db: db({ capsules: [capsule({ headSha })] }) as never, fetchImpl: fetchImpl as typeof fetch,
+    } as Parameters<typeof resolveRepositoryArtifact>[0]);
+    expect(result).toMatchObject({ ok: true, artifact: { bytes } });
+    expect(fetchImpl).not.toHaveBeenCalledWith(expect.stringContaining(`?ref=${headSha}`), expect.anything());
+    expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining(`?ref=${locator.commitSha}`), expect.anything());
+  });
+  it.each(["missing", "branch", "head", "repository", "duplicate", "author", "sign-off", "changed-blob"])("refuses a bound historical plan after %s drift", async (drift) => {
+    const headSha = "c".repeat(40);
+    const room = capsule({ headSha });
+    const rows = drift === "missing" ? [] : drift === "duplicate" ? [room, room] : [room];
+    const workroomRef = { kind: "workroom-head" as const, workroomId: room.capsuleId,
+      repositoryFullName: locator.repositoryFullName, branchName: "feat/test", headSha };
+    if (drift === "branch") workroomRef.branchName = "feat/foreign";
+    if (drift === "head") workroomRef.headSha = "d".repeat(40);
+    if (drift === "repository") workroomRef.repositoryFullName = "foreign/repo";
+    if (drift === "author") room.createdByPrincipalId = "foreign-author";
+    const store = db({ capsules: rows });
+    const fetchImpl = drift === "changed-blob" ? vi.fn(async () => new Response(JSON.stringify({
+      type: "file", sha: "d".repeat(40), encoding: "base64", content: bytes.toString("base64"),
+    }), { status: 200 })) : providerFetch(drift === "sign-off" ? "Unsigned" : undefined);
+    const result = await resolveRepositoryArtifact({ locator, subject: { kind: "backlog-item", id: "BI-TEST" },
+      workroomRef, db: store as never, fetchImpl: fetchImpl as typeof fetch });
+    expect(result).toMatchObject({ ok: false });
+    expect(store.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
+      backlogItemId: "BI-TEST", repositoryFullName: locator.repositoryFullName, archivedAt: null,
+      status: { notIn: ["abandoned", "cancelled"] },
+    }) }));
+    if (["missing", "branch", "head", "repository", "duplicate"].includes(drift)) expect(fetchImpl).not.toHaveBeenCalled();
+  });
+  it("resolves the unchanged historical plan through its exact current server-bound workroom", async () => {
+    const headSha = "45eb029a53ffd593f08be48eb4a061488aaa735f";
+    const original = { ...locator, commitSha: "99986af2a1fb1ff8d041ca7d9080ea6d02a4f963" };
+    const store = db({ capsules: [capsule({ headSha })] });
+    const fetchImpl = providerFetch();
+    const result = await resolveRepositoryArtifact({
+      locator: original, subject: { kind: "backlog-item", id: "BI-7AA4EB6B" },
+      workroomRef: { kind: "workroom-head", workroomId: "WC-TEST0001",
+        repositoryFullName: locator.repositoryFullName, branchName: "feat/test", headSha },
+      db: store as never, fetchImpl: fetchImpl as typeof fetch,
+    } as Parameters<typeof resolveRepositoryArtifact>[0]);
+    expect(result).toMatchObject({ ok: true, artifact: { bytes, authorPrincipalId: "principal-author" } });
+    expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining(`/commits/${original.commitSha}`), expect.anything());
+    expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining(`?ref=${headSha}`), expect.anything());
+    expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining(`?ref=${original.commitSha}`), expect.anything());
+    expect(original.commitSha).toBe("99986af2a1fb1ff8d041ca7d9080ea6d02a4f963");
+  });
   it("uses and closes the isolated production transport for immutable blob reads", async () => {
     const frameworkFetch = vi.fn().mockRejectedValue(new Error("framework context unavailable"));
     vi.stubGlobal("fetch", frameworkFetch);

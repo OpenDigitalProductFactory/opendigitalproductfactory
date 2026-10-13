@@ -66,6 +66,8 @@ export * from "./room-definition-contract";
 
 export interface WorkCaseSourceRegistryEntry {
   sourceKey: string;
+  /** Compatibility address; review inventories count its canonical definition once. */
+  canonicalSourceKey?: string;
   definitionVersion: number;
   displayLabel: string;
   owningArea: string;
@@ -439,6 +441,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
   },
   {
     sourceKey: "storefront-booking",
+    canonicalSourceKey: "booking",
     definitionVersion: 2,
     displayLabel: "Storefront booking",
     owningArea: "storefront",
@@ -729,6 +732,18 @@ export function getWorkCaseSourceEntry(
   const normalized = sourceKey?.trim();
   if (!normalized) return null;
   return SOURCE_REGISTRY_BY_KEY.get(normalized) ?? null;
+}
+
+/** Resolve aliases for definition-level review without changing occurrence addresses. */
+export function getCanonicalWorkCaseSourceEntry(sourceKey: string): WorkCaseSourceRegistryEntry | null {
+  const seen = new Set<string>();
+  let entry = getWorkCaseSourceEntry(sourceKey);
+  while (entry?.canonicalSourceKey) {
+    if (seen.has(entry.sourceKey)) return null;
+    seen.add(entry.sourceKey);
+    entry = getWorkCaseSourceEntry(entry.canonicalSourceKey);
+  }
+  return entry;
 }
 
 export function getWorkroomDefinitionIdentity(

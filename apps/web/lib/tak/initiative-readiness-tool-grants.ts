@@ -289,6 +289,8 @@ export async function resolveInitiativeReviewerRecovery(input: {
   planArtifact?: InitiativeRecoveryCanonicalArtifact | null;
   expectedCurrentBaselineId?: string | null;
   eligibleEvidenceActivityIds?: readonly string[];
+  /** Server-owned history predicate; never a caller-supplied exclusion list. */
+  isPlanReviewExhausted?: (packet: ReturnType<typeof requestCoworkerPacket>) => Promise<boolean>;
 }): Promise<InitiativeReviewerRecovery> {
   const requirements = [...input.decision.blockers, ...input.decision.unmet];
   const requested: Array<{
@@ -353,10 +355,11 @@ export async function resolveInitiativeReviewerRecovery(input: {
     const requiredGrants = bindable
       ? [entry.route.lane.grant, IMMUTABLE_READER_GRANT]
       : [entry.route.lane.grant];
-    const candidate = deterministicRows.find((row) =>
+    const candidates = deterministicRows.filter((row) =>
       row.grantKey === entry.route.lane.grant
       && requiredGrants.every((grant) => grantsByAgent.get(row.agent.agentId)?.has(grant))
       && (!entry.route.lane.independent || row.agent.agentId !== input.currentAgentId));
+    let candidate: GrantHolderRow | undefined = candidates[0];
     if (candidate) {
       if (!input.dispatchContext) {
         escalations.push({
@@ -406,17 +409,34 @@ export async function resolveInitiativeReviewerRecovery(input: {
         });
         continue;
       }
-      const packet = requestCoworkerPacket({
+      const dispatch = input.dispatchContext;
+      const preparePacket = (targetAgentId: string) => requestCoworkerPacket({
         decision: input.decision,
         gate: entry.gate,
         toolName: entry.route.toolName,
-        targetAgentId: candidate.agent.agentId,
-        dispatch: input.dispatchContext,
+        targetAgentId,
+        dispatch,
         independent: entry.route.lane.independent,
         artifact: bindable && artifact?.resolved ? artifact : null,
         expectedCurrentBaselineId: input.expectedCurrentBaselineId ?? null,
         eligibleEvidenceActivityIds,
       });
+      let packet = preparePacket(candidate.agent.agentId);
+      if (entry.gate === "plan-review" && input.isPlanReviewExhausted) {
+        for (const next of candidates) {
+          const nextPacket = preparePacket(next.agent.agentId);
+          if (await input.isPlanReviewExhausted(nextPacket)) { candidate = undefined; continue; }
+          candidate = next;
+          packet = nextPacket;
+          break;
+        }
+        if (!candidate) {
+          escalations.push({ accountableRole: entry.role, toolName: entry.route.toolName,
+            grant: entry.route.lane.grant, reason: "no-eligible-reviewer",
+            nextAction: "All currently eligible independent plan reviewers exhausted this exact packet. Select another eligible reviewer/provider through recorded authority; do not replay exhausted tasks or reset their attempts." });
+          continue;
+        }
+      }
       reviewerRoutes.push({
         accountableRole: entry.role,
         toolName: entry.route.toolName,

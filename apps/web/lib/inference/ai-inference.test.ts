@@ -1,15 +1,81 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
 
+vi.mock("@dpf/db", () => ({ prisma: {
+  modelProvider: { findUnique: vi.fn() },
+  aiProviderConnection: { findUnique: vi.fn() },
+} }));
+
 vi.mock("@/lib/routing/local-provider-capacity", () => ({
   assertProviderDispatchCapacity: vi.fn(),
 }));
 
+const { executeAdapter } = vi.hoisted(() => ({ executeAdapter: vi.fn() }));
+vi.mock("../routing/execution-adapter-registry", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../routing/execution-adapter-registry")>(),
+  getExecutionAdapter: () => ({ execute: executeAdapter }),
+}));
+vi.mock("./inference-admission", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./inference-admission")>(),
+  acquireInferenceSlot: vi.fn(),
+}));
+vi.mock("./host-gpu-admission", () => ({ assertLocalGpuFree: vi.fn() }));
+vi.mock("../routing/adapter-telemetry-writer", () => ({ writeAdapterTelemetry: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("../routing/provider-capacity/store", () => ({
+  clearProviderCapacityStatus: vi.fn().mockResolvedValue(undefined),
+  recordProviderCapacityStatus: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { callProvider, classifyHttpError, InferenceError } from "./ai-inference";
 import { assertProviderDispatchCapacity } from "@/lib/routing/local-provider-capacity";
+import { prisma } from "@dpf/db";
+import { acquireInferenceSlot } from "./inference-admission";
 
 beforeEach(() => {
   vi.mocked(assertProviderDispatchCapacity).mockReset();
   vi.mocked(assertProviderDispatchCapacity).mockResolvedValue(undefined);
+  vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "active" } as any);
+  vi.mocked(prisma.aiProviderConnection.findUnique).mockResolvedValue({ status: "active" } as any);
+  vi.mocked(acquireInferenceSlot).mockReset().mockResolvedValue(vi.fn());
+  executeAdapter.mockReset().mockResolvedValue({ text: "done", toolCalls: [], inferenceMs: 1, usage: { inputTokens: 1, outputTokens: 1 } });
+});
+
+it("rechecks setup removal after a cloud selection waits for admission", async () => {
+  vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "active", baseUrl: "http://provider.test/v1", authMethod: "none" } as any);
+  const release = vi.fn();
+  vi.mocked(acquireInferenceSlot).mockImplementationOnce(async () => {
+    vi.mocked(prisma.aiProviderConnection.findUnique).mockResolvedValue({ status: "unconfigured" } as any);
+    vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "unconfigured" } as any);
+    return release;
+  });
+  await expect(callProvider("openai", "model-test", [], "system")).rejects.toThrow("not enabled for routing");
+  expect(executeAdapter).not.toHaveBeenCalled();
+  expect(release).toHaveBeenCalledOnce();
+});
+
+it.each(["disabled", "inactive", "unconfigured"])("blocks a %s cloud provider even when its connection is active", async status => {
+  vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status, baseUrl: "https://provider.example/v1", authMethod: "none" } as any);
+  await expect(callProvider("openai", "model-test", [], "system")).rejects.toThrow("not enabled for routing");
+  expect(executeAdapter).not.toHaveBeenCalled();
+  expect(acquireInferenceSlot).not.toHaveBeenCalled();
+});
+
+it.each(["active", "degraded"])("preserves %s legacy cloud dispatch without a default account", async status => {
+  vi.mocked(prisma.aiProviderConnection.findUnique).mockResolvedValue(null);
+  vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status, baseUrl: "https://provider.example/v1", authMethod: "none" } as any);
+  await expect(callProvider("openai", "model-test", [], "system")).resolves.toMatchObject({ content: "done" });
+  expect(executeAdapter).toHaveBeenCalledOnce();
+});
+
+it.each(["disabled", "inactive", "unconfigured"])("blocks a cloud provider that becomes %s during admission and releases its slot", async status => {
+  vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "active", baseUrl: "https://provider.example/v1", authMethod: "none" } as any);
+  const release = vi.fn();
+  vi.mocked(acquireInferenceSlot).mockImplementationOnce(async () => {
+    vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status } as any);
+    return release;
+  });
+  await expect(callProvider("openai", "model-test", [], "system")).rejects.toThrow("not enabled for routing");
+  expect(executeAdapter).not.toHaveBeenCalled();
+  expect(release).toHaveBeenCalledOnce();
 });
 
 describe("InferenceError", () => {
@@ -38,6 +104,70 @@ describe("InferenceError", () => {
 });
 
 describe("callProvider host-capacity boundary", () => {
+  it.each(["active", "degraded"])("dispatches an eligible %s local provider and releases its slot", async (status) => {
+    vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status, baseUrl: "http://localhost:11434/v1", authMethod: "none" } as any);
+    vi.mocked(prisma.aiProviderConnection.findUnique).mockResolvedValue({ status } as any);
+    const release = vi.fn();
+    vi.mocked(acquireInferenceSlot).mockResolvedValueOnce(release);
+    await expect(callProvider("local", "qwen", [{ role: "user", content: "triage" }], "system"))
+      .resolves.toMatchObject({ content: "done" });
+    expect(executeAdapter).toHaveBeenCalledOnce();
+    expect(release).toHaveBeenCalledOnce();
+  });
+
+  it.each(["provider", "connection"])("does not dispatch when the %s is disabled while waiting for a slot", async (target) => {
+    vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "active", baseUrl: "http://localhost:11434/v1", authMethod: "none" } as any);
+    const release = vi.fn();
+    let wake!: () => void;
+    let entered!: () => void;
+    const waiting = new Promise<void>((resolve) => { entered = resolve; });
+    vi.mocked(acquireInferenceSlot).mockImplementationOnce(() => {
+      entered();
+      return new Promise<() => void>((resolve) => { wake = () => resolve(release); });
+    });
+    const pending = callProvider("local", "qwen", [{ role: "user", content: "triage" }], "system");
+    const rejected = expect(pending).rejects.toMatchObject({ code: "provider_error", message: "Local provider is not enabled for routing" });
+    await waiting;
+    if (target === "provider") vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "inactive" } as any);
+    else vi.mocked(prisma.aiProviderConnection.findUnique).mockResolvedValue({ status: "inactive" } as any);
+    wake();
+    await rejected;
+    expect(executeAdapter).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalledOnce();
+  });
+
+  it.each(["inactive", "disabled"])("rejects a stale local selection when the connection is %s before capacity wait", async (status) => {
+    vi.mocked(prisma.aiProviderConnection.findUnique).mockResolvedValue({ status } as any);
+    await expect(callProvider("local", "qwen", [{ role: "user", content: "triage" }], "system"))
+      .rejects.toMatchObject({ code: "provider_error", message: "Local provider is not enabled for routing" });
+    expect(assertProviderDispatchCapacity).not.toHaveBeenCalled();
+  });
+  it("rejects a cloud request paused while it waits for an inference slot", async () => {
+    vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "active", baseUrl: "https://provider.example/v1", authMethod: "none" } as any);
+    const release = vi.fn();
+    let wake!: () => void;
+    let entered!: () => void;
+    const waiting = new Promise<void>(resolve => { entered = resolve; });
+    vi.mocked(acquireInferenceSlot).mockImplementationOnce(() => {
+      entered();
+      return new Promise<() => void>(resolve => { wake = () => resolve(release); });
+    });
+    const pending = callProvider("openai", "model-test", [], "system");
+    const rejected = expect(pending).rejects.toThrow("Provider account is not enabled for routing");
+    await waiting;
+    vi.mocked(prisma.aiProviderConnection.findUnique).mockResolvedValue({ status: "paused" } as any);
+    wake();
+    await rejected;
+    expect(executeAdapter).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a disabled local provider even if its connection still appears active", async () => {
+    vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "inactive" } as any);
+    await expect(callProvider("local", "qwen", [{ role: "user", content: "triage" }], "system"))
+      .rejects.toMatchObject({ code: "provider_error" });
+    expect(assertProviderDispatchCapacity).not.toHaveBeenCalled();
+  });
   it("stops before provider setup when local capacity is reserved", async () => {
     const deferred = Object.assign(new Error("local capacity reserved"), {
       name: "LocalProviderCapacityDeferredError",

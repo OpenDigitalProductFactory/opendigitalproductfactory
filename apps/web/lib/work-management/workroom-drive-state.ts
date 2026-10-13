@@ -1,5 +1,6 @@
 import { isRecord } from "@/lib/shared/coerce";
 import type { PriorWorkroomDrive } from "./workroom-drive-receipts";
+import { readDispatchCheckpoint } from "./workroom-drive-checkpoint";
 
 export type StoredWorkroomDriveState = {
   currentStageKey: string | null;
@@ -121,11 +122,13 @@ export function projectStoredWorkroomDriveObservation(workspaceState: unknown) {
     && typeof pending.principalRef === "string" && pending.principalRef.trim()
     ? `Stage ${stored.currentStageKey} is waiting on ${pending.principalRef.trim()}.` : null;
   const marked = markedStagesOf(drive);
+  const dispatchCheckpoint = readDispatchCheckpoint(isRecord(workspaceState) ? workspaceState.workroomDispatchCheckpoint : null);
   return {
     currentStageKey: stored.currentStageKey, proposedStageKey: stored.currentStageKey,
     receipts: stored.receipts, budgetUsage: stored.budgetUsage,
     stopConditionHits: stored.stopConditionHits, reviewDue: stored.reviewDue, attentionReason,
     // Graph rooms only: several stages can be current at once. Absent means today's single stage.
     ...(marked ? { currentStageKeys: marked.keys, stageIterations: marked.iterations, ...(marked.runKey !== undefined ? { runKey: marked.runKey } : {}) } : {}),
+    ...(dispatchCheckpoint ? { dispatchCheckpoint } : {}),
   };
 }

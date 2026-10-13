@@ -93,10 +93,45 @@ for arg in "$@"; do
   if [ "$arg" = "--env-file" ]; then take_env_file=1; fi
 done
 [ -n "$DOCKER_LOG" ] && printf '%s\\n' "$*" >> "$DOCKER_LOG"
+# Operation and format are argv fields, never substrings of a temporary path.
+case "\${1-}" in
+  create) printf "candidate-container"; exit 0 ;;
+  rm) printf 'reconcile-remove %s\\n' "$*" >> "$DOCKER_LOG"; exit 0 ;;
+  cp)
+    [ "$#" = 3 ] && [ "$2" = "candidate-container:/dpf-release-assets/." ] || exit 1
+    mkdir -p "$3" && cp -R "$DPF_TEST_RELEASE_ASSETS"/. "$3/"
+    exit "$?"
+    ;;
+esac
+if [ "\${1-}" = inspect ] || { [ "\${1-}" = image ] && [ "\${2-}" = inspect ]; }; then
+  inspect_format=
+  inspect_target=
+  take_format=0
+  for arg in "$@"; do
+    if [ "$take_format" = 1 ]; then inspect_format="$arg"; take_format=0; continue; fi
+    case "$arg" in
+      --format|-f) take_format=1 ;;
+      --format=*) inspect_format="\${arg#--format=}" ;;
+      image|inspect) ;;
+      *) inspect_target="$arg" ;;
+    esac
+  done
+  case "$inspect_format" in
+    "{{.Id}}")
+      if [ "$inspect_target" = dpf-sandbox:target ]; then printf 'sha256:sandbox-target'
+      else printf "%s" "\${DPF_TEST_RELEASE_ENGINE_ID:-$DPF_TEST_RELEASE_CONFIG_DIGEST}"; fi
+      exit 0 ;;
+    "{{range .RepoDigests}}{{println .}}{{end}}")
+      printf "%s@%s\\n" "$DPF_TEST_RELEASE_REPO" "\${DPF_TEST_RELEASE_REPO_ID:-$DPF_TEST_RELEASE_ENGINE_ID}"; exit 0 ;;
+    "{{.Os}}") printf "%s" "\${DPF_TEST_RELEASE_OS:-linux}"; exit 0 ;;
+    "{{.Architecture}}") printf "%s" "\${DPF_TEST_RELEASE_ARCHITECTURE:-amd64}"; exit 0 ;;
+    *"org.opencontainers.image.version"*) printf "%s" "$DPF_TEST_RELEASE_TAG"; exit 0 ;;
+    *"org.opencontainers.image.revision"*) printf "%s" "$DPF_TEST_RELEASE_SHA"; exit 0 ;;
+  esac
+fi
 case "$*" in
   *"ps -q sandbox"*) printf 'sandbox-container' ;;
   *"config --images sandbox"*) printf 'dpf-sandbox:target\\n' ;;
-  *"image inspect --format {{.Id}} dpf-sandbox:target"*) printf 'sha256:sandbox-target' ;;
   *"{{.State.Running}} {{.Image}}"*)
     case "\${DPF_TEST_SANDBOX_STATE:-running}" in
       exited) printf 'false sha256:sandbox-target' ;;
@@ -116,20 +151,7 @@ case "$*" in
       printf 'exited 2026-09-01T00:00:00Z'
     fi
     ;;
-  "rm "*) printf 'reconcile-remove %s\\n' "$*" >> "$DOCKER_LOG" ;;
-  *".Id"*) printf "%s" "\${DPF_TEST_RELEASE_ENGINE_ID:-$DPF_TEST_RELEASE_CONFIG_DIGEST}" ;;
-  *".RepoDigests"*) printf "%s@%s\n" "$DPF_TEST_RELEASE_REPO" "\${DPF_TEST_RELEASE_REPO_ID:-$DPF_TEST_RELEASE_ENGINE_ID}" ;;
-  *".Os"*) printf "%s" "\${DPF_TEST_RELEASE_OS:-linux}" ;;
-  *".Architecture"*) printf "%s" "\${DPF_TEST_RELEASE_ARCHITECTURE:-amd64}" ;;
   *"buildx imagetools inspect"*"--raw"*) case "$*" in *"@$DPF_TEST_RELEASE_PLATFORM_MANIFEST_DIGEST"*) printf '{"config":{"digest":"%s"}}' "\${DPF_TEST_RELEASE_REGISTRY_CONFIG_DIGEST:-$DPF_TEST_RELEASE_CONFIG_DIGEST}" ;; *) if [ "\${DPF_TEST_DUPLICATE_PLATFORM:-no}" = yes ]; then printf '{"manifests":[{"digest":"%s","platform":{"os":"%s","architecture":"%s"}},{"digest":"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","platform":{"os":"%s","architecture":"%s"}}]}' "$DPF_TEST_RELEASE_PLATFORM_MANIFEST_DIGEST" "$DPF_TEST_RELEASE_OS" "$DPF_TEST_RELEASE_ARCHITECTURE" "$DPF_TEST_RELEASE_OS" "$DPF_TEST_RELEASE_ARCHITECTURE"; else printf '{"manifests":[{"digest":"%s","platform":{"os":"%s","architecture":"%s"}}]}' "$DPF_TEST_RELEASE_PLATFORM_MANIFEST_DIGEST" "$DPF_TEST_RELEASE_OS" "$DPF_TEST_RELEASE_ARCHITECTURE"; fi ;; esac ;;
-  *"org.opencontainers.image.version"*) printf "%s" "$DPF_TEST_RELEASE_TAG" ;;
-  *"org.opencontainers.image.revision"*) printf "%s" "$DPF_TEST_RELEASE_SHA" ;;
-  "create "*) printf "candidate-container" ;;
-  "cp candidate-container:/dpf-release-assets/. "*)
-    for destination in "$@"; do :; done
-    # Match Docker's directory-copy semantics on both platforms.
-    mkdir -p "$destination"; cp -R "$DPF_TEST_RELEASE_ASSETS"/. "$destination/"
-    ;;
   *"recover-human-principal-backfill-migration.mjs --verify-rolled-back"*)
     [ "\${DPF_TEST_PRINCIPAL_VERIFY_FAIL:-no}" = "yes" ] && exit 1
     printf "verified"

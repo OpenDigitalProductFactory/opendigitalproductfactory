@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Provider loading truth — interactive design prototype</title>
+<style>
+:root{--dpf-bg:#f7f9fc;--dpf-surface-1:#fff;--dpf-text:#182638;--dpf-muted:#526579;--dpf-border:#d2dde8;--dpf-accent:#146fb0;--dpf-font-body:system-ui,sans-serif}
+[data-theme=dark]{--dpf-bg:#0d1420;--dpf-surface-1:#152131;--dpf-text:#e4edf6;--dpf-muted:#a8bbcd;--dpf-border:#35495f;--dpf-accent:#86caff}
+*{box-sizing:border-box}body{margin:0;background:var(--dpf-bg);color:var(--dpf-text);font:16px/1.5 var(--dpf-font-body)}
+aside,main{max-width:64rem;margin:auto;padding:24px}aside{border-bottom:1px solid var(--dpf-border)}
+button{font:inherit;min-height:44px;padding:8px 16px;border:1px solid var(--dpf-border);border-radius:8px;background:var(--dpf-surface-1);color:var(--dpf-text);cursor:pointer}
+button:focus-visible{outline:3px solid var(--dpf-accent);outline-offset:3px}.tools{display:flex;gap:8px;flex-wrap:wrap}
+.hint{color:var(--dpf-muted);font-size:14px}.notice{padding:24px;border:1px solid var(--dpf-border);border-radius:12px;background:var(--dpf-surface-1)}
+h1{font-size:24px;line-height:1.3;margin:0 0 16px}p{margin:0 0 16px}.skeleton{background:var(--dpf-border);height:24px;border-radius:8px;margin:16px 0}.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.cards .skeleton{height:132px}
+@media(max-width:640px){aside,main{padding:16px}.cards{grid-template-columns:1fr}}
+</style>
+<body>
+<aside aria-label="Prototype controls">
+  <p><strong>Design prototype</strong> · BI-59E37E39</p>
+  <p class="hint">Preview controls below are separate from the product. This file makes no network requests and changes no provider settings.</p>
+  <div class="tools">
+    <button id="initial">Initial loading</button><button id="delayed">After 15 seconds</button><button id="complete">Data arrives</button><button id="theme">Switch theme</button>
+  </div>
+</aside>
+<main id="surface"></main>
+<script>
+const surface=document.getElementById('surface');
+let timer,refreshCount=0;
+function initial(){
+  clearTimeout(timer);
+  surface.setAttribute('role','status');surface.setAttribute('aria-live','polite');surface.setAttribute('aria-label','Loading provider data');
+  surface.innerHTML='<h1>Loading connections</h1><div class="skeleton" style="max-width:24rem"></div><div class="cards"><div class="skeleton"></div><div class="skeleton"></div></div>';
+  timer=setTimeout(delayed,15000);
+}
+function delayed(){
+  clearTimeout(timer);
+  surface.setAttribute('role','status');surface.setAttribute('aria-live','polite');surface.setAttribute('aria-label','Loading provider data');
+  surface.innerHTML='<section class="notice"><h1>Still loading your connections</h1><p>This is taking longer than usual. You can keep waiting or refresh the page.</p><button id="refresh">Refresh page</button></section>';
+  document.getElementById('refresh').onclick=()=>{refreshCount++;initial()};
+}
+document.getElementById('initial').onclick=initial;
+document.getElementById('delayed').onclick=delayed;
+document.getElementById('complete').onclick=()=>{clearTimeout(timer);surface.removeAttribute('role');surface.removeAttribute('aria-label');surface.innerHTML='<section class="notice"><h1>Connections</h1><p class="hint">Prototype transition: the completed page replaces its loading boundary.</p></section>'};
+document.getElementById('theme').onclick=()=>{document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark'};
+initial();
+</script>
+</body>
+</html>

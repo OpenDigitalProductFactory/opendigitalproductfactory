@@ -45,6 +45,24 @@ describe("readWorkroomBoundaryClaim", () => {
 });
 
 describe("withWorkroomBoundaryClaim", () => {
+  it("rejects new unknown sensitivity labels instead of locking the room", () => {
+    expect(() => withWorkroomBoundaryClaim([], { sensitivityCeiling: "engineering-only" } as never)).toThrow(/sensitivity/i);
+    expect(() => withWorkroomBoundaryClaim([], { sensitivityCeiling: 42 } as never)).toThrow(/sensitivity/i);
+  });
+
+  it("requires reviewed correction before replacing or clearing an old unknown label", () => {
+    const prior = [{ workroomBoundary: { outcome: "Original", sensitivityCeiling: "engineering-only" } }];
+    for (const sensitivityCeiling of ["internal", null]) {
+      expect(() => withWorkroomBoundaryClaim(prior, { outcome: "Edited", sensitivityCeiling } as never)).toThrow(/review/i);
+    }
+  });
+
+  it("preserves the exact historical label during an ordinary intent edit", () => {
+    const prior = [{ workroomBoundary: { outcome: "Original", sensitivityCeiling: "  engineering-only  " } }];
+    const result = withWorkroomBoundaryClaim(prior, { outcome: "Edited", preserveSensitivity: true } as never);
+    expect((result[0] as {workroomBoundary: {sensitivityCeiling: string}}).workroomBoundary.sensitivityCeiling).toBe("  engineering-only  ");
+    expect(readWorkroomBoundaryClaim(result)?.outcome).toBe("Edited");
+  });
   it("preserves every other claim, including the declared shape", () => {
     const next = withWorkroomBoundaryClaim([SHAPE_ENTRY], { outcome: "Shipped" });
     expect(next).toContainEqual(SHAPE_ENTRY);

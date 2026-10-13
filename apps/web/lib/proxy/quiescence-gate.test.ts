@@ -134,6 +134,30 @@ describe("isMutationRequest", () => {
 });
 
 describe("evaluateGate — pure decision", () => {
+  it("delegates only the exact OAuth token POST during a known drain", () => {
+    expect(evaluateGate(makeRequest("https://example.com/api/oauth/token", { method: "POST" }), drainingState).kind).toBe("pass");
+    for (const path of ["/api/oauth/token-evil", "/api/oauth/token/extra"]) {
+      expect(evaluateGate(makeRequest(`https://example.com${path}`, { method: "POST" }), drainingState).kind).toBe("block");
+    }
+    expect(isAllowListed("/api/oauth/token")).toBe(false);
+  });
+
+  it.each(["swapping", "unknown"] as const)("refuses token POST with an OAuth response while %s", async level => {
+    const decision = evaluateGate(makeRequest("https://example.com/api/oauth/token", { method: "POST" }), { ...drainingState, level });
+    expect(decision.kind).toBe("block");
+    if (decision.kind === "block") {
+      expect(decision.response.status).toBe(503);
+      expect(decision.response.headers.get("retry-after")).toBe("30");
+      expect(await decision.response.json()).toMatchObject({ error: "temporarily_unavailable" });
+    }
+  });
+
+  it("does not invent a normal token state when the state lookup fails", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("state unavailable")));
+    const decision = await checkQuiescenceForRequest(makeRequest("https://example.com/api/oauth/token", { method: "POST" }), "http://127.0.0.1:3000");
+    expect(decision.kind).toBe("block");
+  });
+
   it("passes everything during normal", () => {
     const req = makeRequest("https://example.com/portal", { method: "POST" });
     const d = evaluateGate(req, normalState);
