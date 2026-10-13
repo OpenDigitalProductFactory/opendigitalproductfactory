@@ -10,6 +10,7 @@ export const agentChildThreadRun = jobs.createFunction(
   {
     id: "agent/child-thread-run",
     retries: 0,
+    recovery: "process-bound",
     concurrency: [{ key: "event.data.taskRunId", limit: 1 }],
     triggers: [{ event: "agent/child-thread.run" }],
     onFailure: async ({ event, error }) => {
