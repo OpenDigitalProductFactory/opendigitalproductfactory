@@ -1,4 +1,6 @@
 import { prisma } from "@dpf/db";
+import { loadRoutingManagement } from "./routing-management-loader";
+import type { RoutingManagementData } from "./routing-management-types";
 import { getMapTemplate } from "./templates";
 import {
   projectAgentsToStations,
@@ -85,6 +87,7 @@ export type LoadOperationsMapDataOptions = {
 export const STALLED_TASK_RUN_LIMIT = 200;
 
 export type OperationsMapData = {
+  routingManagement: RoutingManagementData;
   template: OperationsMapTemplate;
   agents: StationedOperationsMapAgent[];
   projections: OperationsMapProjection[];
@@ -401,6 +404,10 @@ export async function loadOperationsMapData(
         inputTokens: true,
         outputTokens: true,
         estimatedCostUsd: true,
+        quotaPoolConsumed: true,
+        userAccepted: true,
+        errorClass: true,
+        httpStatus: true,
         startedAt: true,
       },
     }),
@@ -651,6 +658,13 @@ export async function loadOperationsMapData(
     capacity: providerCapacity,
     providers,
   });
+  const routingManagement = await loadRoutingManagement({
+    decisions: routeDecisionRows,
+    attempts: adapterRuns,
+    outcomes: routeOutcomes,
+    usage: tokenUsage,
+    models: modelProfiles.map(m => ({ endpointId: m.id, providerId: m.providerId, modelId: m.modelId, label: m.friendlyName, status: m.modelStatus })),
+  });
 
   // ── Compose coworker-to-coworker (A2A) interactions ──────────────────
   // Project A2A edges from existing substrate and merge them into the
@@ -748,6 +762,7 @@ export async function loadOperationsMapData(
   });
 
   return {
+    routingManagement,
     template,
     agents: stationedAgents,
     projections,
