@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Routing management research — BI-2BBD9D34
 
 The operator reviewed the clickable prototype and asked to deliver its consolidated navigation and investigation model. Founder-funded direction is 80% refactoring and usability simplification, 20% necessary additions. This replaces the earlier 20% allocation in the conversation; these are investment targets, not literal token quotas.

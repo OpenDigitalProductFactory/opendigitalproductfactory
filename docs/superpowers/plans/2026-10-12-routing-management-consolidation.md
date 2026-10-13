@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Consolidate routing management — BI-2BBD9D34
 
 For agentic workers: execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use the governed local merged-code build and exact-tree completion gate before a success claim, and DCO sign-off for handoff.
