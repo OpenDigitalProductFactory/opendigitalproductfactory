@@ -1,8 +1,7 @@
 // apps/web/lib/ai-provider-internals.ts
 // Internal discovery/profiling logic and shared private helpers.
 // NOT a server action file — must never have "use server" directive.
-// Called by checkBundledProviders() (page-load health check) and
-// by the server actions in ai-providers.ts (which add auth guards).
+// Used by page-load health checks and guarded provider server actions.
 
 import { prisma, type Prisma } from "@dpf/db";
 import { decryptSecret, encryptSecret } from "@/lib/credential-crypto";
@@ -25,6 +24,7 @@ import { findProviderCredential, resolveCredentialProviderId } from "./provider-
 export { resolveCredentialProviderId } from "./provider-account-credentials";
 import { supportsTextGeneration } from "@/lib/routing/model-classifier";
 import { providerWorkspaceHeaders } from "./provider-workspace";
+import { modelOutputCapacityFields, refreshModelOutputCapacity } from "./model-output-capacity";
 
 /**
  * Resolve the `supportsToolUse` value a metadata-sync should persist for a model,
@@ -666,6 +666,11 @@ export async function profileModelsInternal(
     // If the model doesn't match provider restrictions, retire it
     if (!modelMatchesRestrictions(m.modelId)) {
       const card = extractModelCardWithFallback(providerId, m.modelId, m.rawMetadata);
+      const existingProfile = await prisma.modelProfile.findUnique({
+        where: { providerId_modelId: { providerId, modelId: m.modelId } },
+        select: { profileSource: true, capabilityOverrides: true },
+      });
+      await refreshModelOutputCapacity({ providerId, modelId: m.modelId }, card.maxOutputTokens, existingProfile);
       const metadataFields = {
         modelFamily: card.modelFamily,
         modelClass: card.modelClass,
@@ -710,6 +715,7 @@ export async function profileModelsInternal(
           retiredReason: "Model not accessible with provider credential type",
           generatedBy: "system:metadata-sync",
           ...metadataFields,
+          ...modelOutputCapacityFields(card.maxOutputTokens),
           reasoning: 50, codegen: 50, toolFidelity: 50,
           instructionFollowingScore: 50, structuredOutputScore: 50,
           conversational: 50, contextRetention: 50,
@@ -814,29 +820,22 @@ export async function profileModelsInternal(
       where: { providerId_modelId: { providerId, modelId: m.modelId } },
       select: { rawMetadataHash: true, profileSource: true, supportsToolUse: true, capabilityOverrides: true },
     });
+    await refreshModelOutputCapacity({ providerId, modelId: m.modelId }, card.maxOutputTokens, existingProfile);
     const driftDetected = existingProfile?.rawMetadataHash != null
       && existingProfile.rawMetadataHash !== card.rawMetadataHash;
     if (driftDetected) {
       console.log(
         `[drift] Provider metadata changed for ${JSON.stringify(providerId)}/${JSON.stringify(m.modelId)} — hash ${existingProfile.rawMetadataHash!.slice(0, 8)}→${card.rawMetadataHash.slice(0, 8)}`
       );
-      // For seed-level profiles, allow scores to be re-derived on this sync.
-      // For evaluated/admin profiles, flag for admin review via driftDetectedAt.
-      if (existingProfile.profileSource === "seed") {
-        await prisma.modelProfile.update({
-          where: { providerId_modelId: { providerId, modelId: m.modelId } },
-          data: { driftDetectedAt: new Date() },
-        });
-      } else {
-        await prisma.modelProfile.update({
-          where: { providerId_modelId: { providerId, modelId: m.modelId } },
-          data: { driftDetectedAt: new Date() },
-        });
+      await prisma.modelProfile.update({
+        where: { providerId_modelId: { providerId, modelId: m.modelId } },
+        data: { driftDetectedAt: new Date() },
+      });
+      if (existingProfile.profileSource !== "seed") {
         console.log(`[drift] ${JSON.stringify(providerId)}/${JSON.stringify(m.modelId)} has evaluated/admin profile — flagged for review`);
       }
     }
 
-    // EP-INF-003: ModelCard metadata fields — always safe to overwrite on re-sync.
     // supportsToolUse precedence lives in the pure resolveSyncedToolUse helper so the
     // "sticky false" trap (BI-B6DEBFFE) is unit-tested and can never silently re-pin a
     // healed model. A deliberate non-tool pin lives in capabilityOverrides, not the raw
@@ -918,6 +917,7 @@ export async function profileModelsInternal(
     // Don't overwrite admin-set tier on re-sync
     const shouldWriteTier = !existingFull?.qualityTierSource || existingFull.qualityTierSource !== "admin";
 
+    // Source is creation-only: an intervening admin row must retain ownership.
     const scoreFields = shouldWriteScores ? {
       reasoning: ds.reasoning,
       codegen: ds.codegen,
@@ -926,7 +926,6 @@ export async function profileModelsInternal(
       structuredOutputScore: ds.structuredOutput,
       conversational: ds.conversational,
       contextRetention: ds.contextRetention,
-      profileSource: "seed" as const,
       profileConfidence: card.metadataConfidence,
     } : {
       // Only update confidence from metadata, don't touch scores or source
@@ -963,6 +962,7 @@ export async function profileModelsInternal(
         retiredAt:     createStatus === "retired" ? new Date() : null,
         retiredReason: createStatus === "retired" ? "Deprecated by provider at discovery time" : null,
         ...metadataFields,
+        ...modelOutputCapacityFields(card.maxOutputTokens),
         qualityTier,
         qualityTierSource: "auto",
         // EP-INF-012b: Use card dimension scores (family baseline or known catalog)
