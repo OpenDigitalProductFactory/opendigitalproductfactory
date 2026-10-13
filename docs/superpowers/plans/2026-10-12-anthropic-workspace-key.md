@@ -1,3 +1,6 @@
+---
+status: active
+---
 # Anthropic organization-scoped API key repair
 
 Backlog: BI-FFC4C94D. Workroom: WC-E0A57942. Delivery: small, atomic repair.
@@ -44,5 +47,7 @@ https://platform.claude.com/docs/en/manage-claude/authentication#select-a-worksp
 All internal steps deliver BI-FFC4C94D together. Storage or UI alone cannot deliver a working organization-scoped connection. Governed immutable plan coverage: cmv61spie117p01q67jnvb23l, bound to plan blob 5318ce50625df10b9612d584781745b9abf97899 at 76b5a2c227976d3f2b4d4a75f9ee7599a629955e. Research receipt initiative-f2894c6c-20bf-43cb-9aa9-47545407ffa2; implementation admission IRD-6E1C9DFA70D3. No runtime completion is implied by these planning receipts.
 
 ## Implementation checkpoint
+
+Platform data-architecture decision DI-24F7FF4EC4EA records the single FK-heuristic exception for CredentialEntry.providerWorkspaceId: Anthropic owns this external namespace, so there is no DPF target relation or index query path. No other baseline entry changes. Craft consultation DI-E9170D5940CF had no applicable guidance and was recorded as defer, not approval. New setup copy uses the existing setup translation catalog provided by the root layout.
 
 Workspace storage, validation, UI, MCP configuration and verification/discovery/execution header paths are implemented in the worktree. The operator-approved exact-file co-claim permits default catalog discovery to use the same workspace helper; its regression test first reproduced the missing header. Source tests previously passed: 50 setup/header/discovery tests and 65 inference/data/MCP tests; web typecheck passed. Final source verification, served UI, migration application and real organization-key verification remain pending. UX critique requested as CE-FF0E248F; option-fit decision DI-BCDE1809D902 prefers optional disclosure.
