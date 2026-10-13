@@ -11,6 +11,7 @@ import {
 } from "@/lib/ai-provider-types";
 import { encryptSecret } from "@/lib/credential-crypto";
 import { normalizeProviderWorkspaceId } from "@/lib/inference/provider-workspace";
+import { configureDefaultProviderWorkspace } from "@/lib/inference/provider-account-management";
 import {
   autoDiscoverAndProfile,
   profileModelsInternal,
@@ -184,6 +185,7 @@ export async function configureProvider(input: {
   let providerWorkspaceId: string | null | undefined;
   try { providerWorkspaceId = normalizeProviderWorkspaceId(input.providerId, input.providerWorkspaceId); }
   catch (error) { return { error: error instanceof Error ? error.message : "Invalid workspace ID" }; }
+  if (providerWorkspaceId && input.authMethod && input.authMethod !== "api_key") return { error: "Workspace selection requires an Anthropic API key" };
 
   // Validate OAuth fields: if any OAuth field is provided, require the essential ones
   // (skip for oauth2_authorization_code — those fields are stored on the provider row, not credentials)
@@ -194,6 +196,7 @@ export async function configureProvider(input: {
     }
   }
 
+  if (providerWorkspaceId !== undefined) await configureDefaultProviderWorkspace(input.providerId, providerWorkspaceId);
   // Clear credential fields from previous auth method when switching
   if (input.authMethod) {
     const clearFields: Record<string, null> = {};
@@ -218,7 +221,7 @@ export async function configureProvider(input: {
     || input.clientId !== undefined
     || input.clientSecret !== undefined
     || input.tokenEndpoint !== undefined
-    || input.scope !== undefined || providerWorkspaceId !== undefined;
+    || input.scope !== undefined;
 
   if (hasCredentialFields) {
     const encSecretRef    = input.secretRef    !== undefined ? encryptSecret(input.secretRef)    : undefined;
@@ -233,7 +236,6 @@ export async function configureProvider(input: {
         ...(encClientSecret !== undefined          && { clientSecret: encClientSecret }),
         ...(input.tokenEndpoint !== undefined      && { tokenEndpoint: input.tokenEndpoint }),
         ...(input.scope !== undefined              && { scope: input.scope }),
-        ...(providerWorkspaceId !== undefined      && { providerWorkspaceId }),
         status: "pending",
       },
       update: {
@@ -242,7 +244,6 @@ export async function configureProvider(input: {
         ...(encClientSecret !== undefined          && { clientSecret: encClientSecret }),
         ...(input.tokenEndpoint !== undefined      && { tokenEndpoint: input.tokenEndpoint }),
         ...(input.scope !== undefined              && { scope: input.scope }),
-        ...(providerWorkspaceId !== undefined      && { providerWorkspaceId }),
         status: "pending",
       },
     });

@@ -14,6 +14,8 @@ const {
   mockClearCapacity,
 } = vi.hoisted(() => ({
   mockPrisma: {
+    $transaction: vi.fn(),
+    complianceEvidence: { updateMany: vi.fn() },
     modelProfile: { findFirst: vi.fn() },
     modelProvider: {
       findUnique: vi.fn(),
@@ -637,6 +639,8 @@ describe("discoverModels", () => {
 describe("configureProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPrisma.$transaction = vi.fn(async (run) => run(mockPrisma));
+    mockPrisma.credentialEntry.findUnique.mockResolvedValue(null);
     mockAuth.mockResolvedValue({
       user: {
         id: "user-1",
@@ -678,6 +682,24 @@ describe("configureProvider", () => {
     expect(mockPrisma.credentialEntry.upsert).toHaveBeenCalledWith(expect.objectContaining({ update: expect.objectContaining({ providerWorkspaceId: "wrkspc_accountA" }) }));
     expect(await configureProvider({ providerId: "anthropic", enabledFamilies: [], providerWorkspaceId: "" })).toEqual({});
     expect(mockPrisma.credentialEntry.upsert).toHaveBeenLastCalledWith(expect.objectContaining({ update: expect.objectContaining({ providerWorkspaceId: null }) }));
+  });
+
+  it.each(["wrkspc_accountB", ""])("invalidates default account proofs before activating workspace %s even when discovery fails", async (workspace) => {
+    mockPrisma.credentialEntry.findUnique.mockResolvedValue({ id: "credential-a", providerWorkspaceId: "wrkspc_accountA", providerConnection: { id: "connection-a" } });
+    mockActivateProvider.mockResolvedValue({ warning: "Discovery failed" });
+    await configureProvider({ providerId: "anthropic", enabledFamilies: [], providerWorkspaceId: workspace });
+    expect(mockPrisma.complianceEvidence.updateMany).toHaveBeenCalledWith({ where: { providerConnectionId: "connection-a", claimKey: { not: null }, status: "active" }, data: { status: "superseded" } });
+    expect(mockPrisma.aiProviderConnection.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "connection-a" }, data: expect.objectContaining({ accessibleModelIds: [], modelsVerifiedAt: null, accountClass: "unknown", evidenceStatus: "unreviewed", entitlements: {} }) }));
+    expect(mockPrisma.modelProvider.update).toHaveBeenCalledWith({ where: { providerId: "anthropic" }, data: { sensitivityClearance: ["public"] } });
+    expect(mockPrisma.aiProviderConnection.update.mock.invocationCallOrder[0]).toBeLessThan(mockActivateProvider.mock.invocationCallOrder[0]);
+    expect(mockPrisma.$transaction).toHaveBeenCalled();
+  });
+
+  it.each([undefined, " wrkspc_accountA "])("preserves default account proofs when workspace is omitted or unchanged (%s)", async (workspace) => {
+    mockPrisma.credentialEntry.findUnique.mockResolvedValue({ id: "credential-a", providerWorkspaceId: "wrkspc_accountA", providerConnection: { id: "connection-a" } });
+    await configureProvider({ providerId: "anthropic", enabledFamilies: [], providerWorkspaceId: workspace });
+    expect(mockPrisma.complianceEvidence.updateMany).not.toHaveBeenCalled();
+    expect(mockPrisma.aiProviderConnection.update).not.toHaveBeenCalled();
   });
 
   it("rejects unsupported or malformed workspaces before writing configuration", async () => {

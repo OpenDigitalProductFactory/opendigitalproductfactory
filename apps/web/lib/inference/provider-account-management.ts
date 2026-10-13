@@ -19,6 +19,27 @@ export async function invalidateProviderAccountProofs(tx: Pick<Prisma.Transactio
   });
 }
 
+/** A workspace change can select a different upstream account without replacing the key row. */
+export async function configureDefaultProviderWorkspace(providerId: string, workspaceId: string | null) {
+  await prisma.$transaction(async (tx) => {
+    const current = await tx.credentialEntry.findUnique({
+      where: { providerId }, select: { providerWorkspaceId: true, providerConnection: { select: { id: true } } },
+    });
+    if (current && current.providerWorkspaceId !== workspaceId && current.providerConnection) {
+      const id = current.providerConnection.id;
+      await invalidateProviderAccountProofs(tx, id);
+      await tx.aiProviderConnection.update({ where: { id }, data: ACCOUNT_ACCESS_RESET });
+      await tx.aiProviderConnection.updateMany({ where: { id, status: { not: "disabled" } }, data: { status: "unconfigured" } });
+      await tx.modelProvider.update({ where: { providerId }, data: { sensitivityClearance: ["public"] } });
+    }
+    await tx.credentialEntry.upsert({
+      where: { providerId },
+      create: { providerId, providerWorkspaceId: workspaceId, status: "pending" },
+      update: { providerWorkspaceId: workspaceId, status: "pending" },
+    });
+  });
+}
+
 /** A provider account owns credentials and evidence; catalog defaults are never copied as contract proof. */
 export async function addProviderAccount(input: {
   providerId: string;
