@@ -8,7 +8,7 @@
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node ../../scripts/run-tsc.mjs --noEmit",
     "verify-lifecycle": "tsx scripts/verify-lifecycle.ts"
   },
   "dependencies": {

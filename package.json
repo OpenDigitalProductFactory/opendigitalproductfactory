@@ -135,6 +135,7 @@
   "devDependencies": {
     "@axe-core/playwright": "catalog:",
     "@playwright/test": "^1.63.0",
-    "tsx": "catalog:"
+    "tsx": "catalog:",
+    "typescript7": "npm:typescript@7.0.2"
   }
 }

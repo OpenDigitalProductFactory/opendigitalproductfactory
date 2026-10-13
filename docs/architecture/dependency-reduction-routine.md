@@ -205,6 +205,10 @@ by lines its diff does not explain (plan 2026-09-08 M11 step 4). Its anchor is
 It reads the program from the compile CI already runs. `scripts/run-tsc.mjs`,
 given `DPF_TSC_PROGRAM_REPORT=<file>`, adds `--listFiles --extendedDiagnostics`
 to the same tsc run and writes the file list and diagnostics to `<file>`. The
+report records which compiler produced it (`compilerVersion`). TypeScript 7, the
+default checker since BI-2B8D67A9, ships its `lib.*.d.ts` in the platform
+package `@typescript/typescript-<platform>-<arch>/lib`, and the ratchet counts
+those as library lines exactly like TypeScript 6's `typescript/lib`. The
 Typecheck job sets it, then runs the ratchet on the report. That costs no
 second compile. The job uploads the resulting analysis as the
 `typecheck-program-analysis` artifact.

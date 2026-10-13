@@ -88,6 +88,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-no-manual-vm-cache-drop.test.mjs"),
       node("--test", "scripts/host-resource-runner.test.mjs"),
       node("--test", "scripts/lib/semantic-review-artifact.test.mjs", "scripts/semantic-review-gate.test.mjs"),
+      // BI-2B8D67A9: run-tsc selects TS7 by default and TS6 under DPF_TSC=6,
+      // and a signal-killed native compiler still exits 88 (BI-27D3DCCD).
+      node("--test", "scripts/lib/tsc-compiler.test.mjs"),
       node("scripts/check-guards.mjs"),
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
       node("scripts/check-capability-compose-profiles.mjs"),
