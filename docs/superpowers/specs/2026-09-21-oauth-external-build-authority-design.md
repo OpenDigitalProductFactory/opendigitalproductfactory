@@ -470,6 +470,65 @@ records the escalation branch and the consent binding. Approval cards show the
 exact proposal, found by the envelope id on the pending execution, and state
 that authorizing is not review.
 
+### Complete proposal disclosure correction (BI-12E5DD91, 2026-10-13)
+
+Current baseline `e4edd79cd6cfa83ac00df4dd64494090573b3e23` preserves the
+proposed parameters but its approval projection truncates values at 600 characters,
+shows at most 12 fields, and drops explicit null and empty strings. The card has
+no complete-content view. This leaves the exact-content acceptance below unmet.
+It also describes unclassified actions as reversible without evidence.
+
+WWMD `DI-A314C6DEDDF5` selects a bounded summary with complete disclosure over
+unbounded inline content. Advisory UX engagement: `CE-2357A290`. The interactive
+prototype retains the existing card hierarchy and puts a read-only complete-input
+disclosure before the decision buttons. Its buttons are demonstrative only.
+
+#### Acceptance retained from the canonical backlog
+
+- OAuth-bound assistant: record_workroom_evidence / record_runtime_verification / create_backlog_item run without an envelope; decision log records the escalation branch.
+- invite_room_participant / manage_coworker_tool_grant (authority consequence) still escalate; revoked binding, other user's room, sibling room still denied.
+- Every remaining card shows action, destination/target, proposed content, consequence, governing reason (escalation branch) and decision scope; unknown shapes say so explicitly and show the raw proposed arguments.
+- Approval of an external envelope tells the caller exactly how to resume; approve/deny/expiry status persisted and shown.
+- Live verification after governed release.
+
+#### Ordered correction and verification
+
+1. `complete-input-projection`: extend the existing decision projection with the
+   complete formatted proposed parameters, preserving keys, long values, fields
+   beyond the summary limit, null, empty and false. Reuse originalToolParameters
+   and its existing audit-key removal; do not create a second parameter source.
+   Keep the summary bounded. Missing classification states uncertainty without
+   claiming reversibility. Test `complete-input-values` before implementation.
+2. `complete-input-card`: compose one complete-content disclosure in the existing
+   CoworkerEnvelopeApproval card for exact, known receipt and handover summaries.
+   Reuse native details and domain styles; plain text rendering must never execute
+   proposed HTML. Keep decision controls visible outside disclosure. Test
+   `complete-input-accessibility`, unresolved content, and existing outcome states.
+3. `approval-regression`: run projection, card, attention-source, policy, replay,
+   outcome and isolation tests, package typechecks, style/UX gates, and the
+   governed exact-tree gate. Release via protected PR and self-upgrade. Verify
+   the served inbox's full value, keyboard access, mobile layout and persisted
+   outcomes. Source tests do not establish those live results.
+
+These steps form one atomic correction under BI-12E5DD91: the additional
+projection has no user benefit without its rendering, and rendering cannot
+recover data lost by the old projection. About 20% of the correction is focused
+consolidation: one full-content projection and one disclosure for all card kinds.
+No new approval engine, route, database model or delegation is introduced.
+Existing actor, exact-input, room, grant, expiry and independent-review checks
+remain authoritative. The separate decision race repair belongs to BI-872069BE.
+
+#### Design grounding and risk
+
+Reuse the recommendation/authorization design, existing envelope projection,
+ToolExecution.parameters and CoworkerEnvelopeApproval. The source of truth is
+the original stored call; audit-only keys remain outside the user proposal.
+Showing complete already-proposed content can increase response size and expose
+values previously hidden by truncation to the same authorized recipient; do not
+broaden recipients, fetch another user's call or introduce content into logs.
+Rollback reverts the additive projection/disclosure, not any authority control.
+Missing content remains explicitly unresolved.
+
 ## One-click connection (BI-05E0EA33, amendment 2026-09-23)
 
 Backlog: BI-05E0EA33 (triaging; no implementation authorized by this text).
