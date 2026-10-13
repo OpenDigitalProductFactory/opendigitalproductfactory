@@ -17,6 +17,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Surface } from "@/components/ui/Surface";
+import { EnvelopeDecisionButtons } from "./EnvelopeDecisionButtons";
 import type { AttentionEnvelopeApproval } from "@/lib/attention/types";
 import { envelopeInboxRoute, envelopeResultRoute, envelopeStatusRoute } from "@/lib/coworker/envelope-routes";
 import { SOURCE_CATALOG } from "@dpf/i18n";
@@ -239,26 +240,11 @@ export function CoworkerEnvelopeApproval({
           </a>
         </div>
       ) : approval.actionable ? (
-        <>
-        {pending ? (
-          <p className="text-xs text-[var(--dpf-muted)]" role="status">
-            {COPY.saving}
-          </p>
-        ) : null}
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" disabled={pending} onClick={() => void decide("approve")}>
-            Authorize
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={pending}
-            onClick={() => void decide("decline")}
-          >
-            Decline
-          </Button>
-        </div>
-        </>
+        <EnvelopeDecisionButtons
+          pending={pending}
+          onAuthorize={() => void decide("approve")}
+          onDecline={() => void decide("decline")}
+        />
       ) : (
         <p className="text-xs text-[var(--dpf-muted)]">
           This request is closed. Your coworker can ask again.

@@ -21,6 +21,8 @@ import { prisma } from "@dpf/db";
 import { lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil, getCwd } from "@/lib/shared/lazy-node";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
+import { parseAdminDiagnostic } from "../admin-command-diagnostic";
+import { stripSqlComments } from "../sql-comments";
 
 // These tools are available on the /admin route for platform administration.
 // Tier 1 = read-only, Tier 2 = reversible, Tier 3 = destructive (sideEffect: true).
@@ -102,7 +104,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "admin_run_command",
-    description: "Run a shell command in the project directory. Only docker compose, git, and pnpm commands are permitted. Destructive commands require user confirmation.",
+    description: "Run a diagnostic or controlled command in the project directory. Only docker compose, git, and pnpm commands are permitted. Bounded local diagnostics use current delegation; destructive commands remain blocked.",
     inputSchema: {
       type: "object",
       properties: {
@@ -114,6 +116,9 @@ const definitions: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: true, // Tier 3: potentially destructive
     consequence: "irreversible",
+    consequenceForCall: async ({ params }) => parseAdminDiagnostic(params.command)
+      ? { consequence: null, reason: "bounded-local-diagnostic" }
+      : { consequence: "irreversible", reason: "command-effect-not-proven-routine" },
   },
 ];
 
@@ -194,17 +199,16 @@ function toJsonSafe(value: unknown): unknown {
 async function adminQueryDb(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   const sql = String(params.sql ?? "").trim();
   if (!sql) return { success: false, error: "sql is required.", message: "Provide a SQL query." };
-  // Only allow SELECT (and WITH ... SELECT)
-  // CodeQL #23 (js/polynomial-redos): bound the unbounded `.*` and
-  // `[\s\S]*?` runs so adversarial SQL with thousands of `-` or
-  // `/*` chars can't trigger polynomial backtracking. SQL queries
-  // in this tool are bounded by the admin tool surface; 100k chars
-  // is well above any legitimate query.
-  const normalized = sql
-    .slice(0, 100_000)
-    .replace(/--[^\n]{0,10000}/gm, "")
-    .replace(/\/\*[\s\S]{0,10000}?\*\//g, "")
-    .trim();
+  // Normalize actual comments without altering quoted SQL. The helper bounds
+  // input and refuses incomplete text before the existing read-only checks.
+  let normalized: string;
+  try {
+    normalized = stripSqlComments(sql);
+  } catch (err) {
+    const error = (err as Error).message;
+    await logAdminActivity(userId, "admin_query_db", { sql }, "blocked", 1, error);
+    return { success: false, error, message: "Provide complete SQL within the character limit." };
+  }
   if (!/^(SELECT|WITH)\b/i.test(normalized)) {
     await logAdminActivity(userId, "admin_query_db", { sql }, "blocked", 1, "Only SELECT queries permitted");
     return { success: false, error: "Only SELECT queries are permitted.", message: "This tool is read-only. Use SELECT statements only." };
@@ -350,26 +354,33 @@ async function adminRunCommand(params: Record<string, unknown>, userId: string):
     return {
       success: false,
       error: "Destructive command blocked by safety policy.",
-      message: `This command is blocked: "${command.slice(0, 80)}". Destructive operations (rm -rf, docker compose down, git push, --force) require manual execution in the terminal.`,
+      message: `This command is blocked: "${command.slice(0, 80)}". Use the governed recovery or deployment operation for destructive work.`,
     };
   }
 
   try {
-    const { exec: execCb } = lazyChildProcess();
+    const diagnostic = parseAdminDiagnostic(command);
+    const { exec: execCb, execFile: execFileCb } = lazyChildProcess();
     const { promisify } = lazyUtil();
     const execAsync = promisify(execCb);
-    await logAdminActivity(userId, "admin_run_command", { command }, "success", 2, `Running: ${command.slice(0, 200)}`);
-    const { stdout, stderr } = await execAsync(command + " 2>&1", {
-      cwd: composeCwd(),
-      timeout: 60_000,
-    });
+    await logAdminActivity(userId, "admin_run_command", { command }, "success", diagnostic ? 1 : 2, `Running: ${command.slice(0, 200)}`);
+    const options = { cwd: composeCwd(), timeout: 60_000 };
+    // The exact argv admitted by the refiner is executed without a shell.
+    const { stdout, stderr } = diagnostic
+      ? await promisify(execFileCb)(diagnostic.file, diagnostic.args, options)
+      : await execAsync(command + " 2>&1", options);
     const output = (stdout + "\n" + stderr).trim();
-    return { success: true, message: `Command completed.`, data: { command, output: output.slice(0, 15000) } };
+    return { success: true, message: `Command completed.`, data: { command, output: output.slice(0, 15000), exitCode: 0 } };
   } catch (err) {
-    const execErr = err as { stdout?: string; stderr?: string; message?: string };
+    const execErr = err as { stdout?: string; stderr?: string; message?: string; code?: unknown; signal?: unknown };
     const output = ((execErr.stdout ?? "") + "\n" + (execErr.stderr ?? "")).trim();
-    if (output) return { success: true, message: "Command exited with error.", data: { command, output: output.slice(0, 15000) } };
-    return { success: false, error: (execErr.message ?? "Command failed").slice(0, 1000), message: `Failed: ${command.slice(0, 80)}` };
+    const data = {
+      command, output: output.slice(0, 15000),
+      exitCode: typeof execErr.code === "number" && Number.isFinite(execErr.code) ? execErr.code : null,
+      ...(typeof execErr.signal === "string" ? { signal: execErr.signal } : {}),
+    };
+    if (output) return { success: false, error: "command_failed", message: "Command exited with error.", data };
+    return { success: false, error: (execErr.message ?? "Command failed").slice(0, 1000), message: `Failed: ${command.slice(0, 80)}`, data };
   }
 }
 

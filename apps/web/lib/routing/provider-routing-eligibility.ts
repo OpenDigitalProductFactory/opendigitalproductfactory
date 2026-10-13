@@ -46,6 +46,8 @@ export interface RoutingEligibility {
   label: string;
   /** One-line, plain-language reason — the "why" half. No model IDs / internals. */
   reason: string;
+  /** Contextual read models can suppress the generic enable/reconnect suggestion. */
+  recommendedAction?: string | null;
 }
 
 export interface RoutingEligibilityInput {
@@ -184,6 +186,7 @@ export function deriveRoutingEligibility(input: RoutingEligibilityInput): Routin
  * unit-testable and can render from data already on the admin page.
  */
 export function recommendedActionFor(eligibility: RoutingEligibility): string | null {
+  if (eligibility.recommendedAction !== undefined) return eligibility.recommendedAction;
   switch (eligibility.state) {
     case "unconfigured":
       return "Set this provider up to make it available to routing.";

@@ -60,11 +60,9 @@ This is the **decision** step; `dpf-pr-with-dco` is the **execution** step that 
 
 4. **Sweep for overlap.** Check open PRs and other worktrees for work touching the same files (`gh pr list`, `git worktree list`) so you don't land a conflicting change — the overlap sweep that `dpf-pr-with-dco` formalizes.
 
-5. **Freeze and independently review the assembled change.** Account for every file, create a DCO-signed local commit, and confirm `git status --short` is clean. Run `pregate` to produce exact-tree evidence first, then before publication call the native `review_semantic_change` operation with the Workroom, exact base/head tree hashes, a digest of the committed diff, changed files, and a failure analysis bound to those executed evidence records. The current reviewer requires gate evidence, so review cannot precede its production. A docs-only low-risk change may return an evidenced auto-pass. Runtime code must run the independent Change Reviewer. If it fails, repair and mint a fresh receipt; after two failed repair rounds, stop the loop and escalate for operator review. Any material commit, rebase, policy/reviewer change, or specialist-set change makes the prior receipt stale.
+5. **Freeze and independently review the assembled change.** Account for every file, create a DCO-signed local commit, and confirm `git status --short` is clean. Produce exact-tree gate evidence, then follow the [semantic review publication procedure](../../../../docs/architecture/build-gate-runbook.md#semantic-review-publication-and-infrastructure-recovery) for `review_semantic_change`, receipt validation and bounded infrastructure recovery. Keep independent client assessments separately attributed.
 
-   Save the returned receipt with `pnpm review:semantic-gate -- record --receipt-file <tool-result.json> --evidence-id <id>` so the deterministic pre-push adapter validates the exact receipt locally. Treat infrastructure-inconclusive execution as a retryable capacity state, never as a semantic finding.
-
-6. **Hand off.** With the shape decided, branch green + clean, and semantic-review receipt fresh for the current committed tree, invoke [`dpf-pr-with-dco`](../dpf-pr-with-dco/SKILL.md) for evidence/review validation and PR mechanics.
+6. **Hand off.** With the shape decided, branch green + clean, and the current publication policy satisfied with any unrun review recorded, invoke [`dpf-pr-with-dco`](../dpf-pr-with-dco/SKILL.md) for PR mechanics.
 
 ## Guardrails
 

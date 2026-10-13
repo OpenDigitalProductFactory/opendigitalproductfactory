@@ -63,8 +63,9 @@ export const MCP_CLIENT_OAUTH_SCOPE_PIN = "dpf.read dpf.work dpf.build";
  * The `oauth.scopes` value a client entry for `endpoint` carries: the pin when
  * the client is Claude Code and its credential path is OAuth (no bearer header
  * required for that client and mode), nothing otherwise. Only Claude Code
- * reads `oauth.scopes`; Codex, Grok, VS Code and Antigravity have no such
- * field, so a pin there would be noise at best and a parse error at worst.
+ * receives this pin. Grok uses client_credentials and bearer_token_file
+ * (design 12.4.7), not the browser oauth_scopes field. Codex, VS Code and
+ * Antigravity do not read oauth.scopes either.
  */
 export function mcpClientOAuthScopePin(
   endpoint: string,

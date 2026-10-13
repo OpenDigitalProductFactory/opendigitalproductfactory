@@ -55,9 +55,12 @@ export async function resolveDeploymentClosureProof(args: {
 }
 
 /** Server-owned reads; a caller cannot submit a deployment assertion as proof. */
-export async function resolveBacklogDeploymentClosure(args: { itemId: string; workType: string | null; roots: string[] }): Promise<DeploymentClosureResult> {
+export async function resolveBacklogDeploymentClosure(args: {
+  itemId: string; workType: string | null; roots: string[];
+  db?: Pick<typeof import("@dpf/db").prisma, "workroom" | "selfUpgradeRun" | "contributorInventorySnapshot">;
+}): Promise<DeploymentClosureResult> {
   try {
-    const { prisma } = await import("@dpf/db");
+    const prisma = args.db ?? (await import("@dpf/db")).prisma;
     const { getDeployedSha } = await import("@/lib/self-upgrade/completion");
     const { isReachableFromTrunk, trustedGitArgs } = await import("@/lib/work-capsules/git-scanner");
     // Newest attempt wins: an old merged PR cannot close newly reopened work.

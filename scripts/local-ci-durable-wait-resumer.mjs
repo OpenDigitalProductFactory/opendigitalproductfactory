@@ -162,14 +162,22 @@ const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 // VISIBLE one: every re-claim opened a terminal window that stole the
 // operator's focus (observed 2026-09-22, six resumers, a window every few
 // seconds). The gate's own children inherit the hidden console.
-function runGateOnce({ gateArgv, env, spawnFn, cwd }) {
+function runGateOnce({ gateArgv, env, spawnFn, cwd, log }) {
   return new Promise((resolve) => {
     const child = spawnFn(process.execPath, gateArgv, {
       // Explicit, so a resumed gate runs in the pinned worktree (BI-D35B85BF).
       ...(cwd ? { cwd } : {}),
-      stdio: "ignore",
+      stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
       env: { ...env, [RESUME_MARKER_ENV]: "1" },
+    });
+    log("gate-start", { pid: child.pid ?? null });
+    let remaining = 65536;
+    for (const stream of ["stdout", "stderr"]) child[stream]?.on("data", chunk => {
+      if (remaining <= 0) return;
+      const text = String(chunk).slice(0, remaining);
+      remaining -= text.length;
+      log("gate-output", { pid: child.pid ?? null, stream, text, truncated: remaining === 0 });
     });
     child.once("error", () => resolve(null));
     child.once("exit", (code) => resolve(code));
@@ -205,7 +213,7 @@ export async function resumeUntilAdmitted({
       return { code: EXIT_QUEUED, attempts, blockedAttempts, outcome: classifyResumeOutcome(EXIT_QUEUED) };
     }
     attempts += 1;
-    const code = await runGateOnce({ gateArgv, env, spawnFn, cwd });
+    const code = await runGateOnce({ gateArgv, env, spawnFn, cwd, log });
     const blocked = code !== null && code !== EXIT_QUEUED && isRetryableExit(code);
     if (blocked) blockedAttempts += 1;
     blockedStreak = blocked ? blockedStreak + 1 : 0;

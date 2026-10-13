@@ -13,6 +13,7 @@ import { MCP_CREDENTIAL_HELP, resolveMcpCredential } from "./lib/mcp-credential.
 import { admittedLeaseTtlMs, superviseLeaseRun } from "./lib/lease-supervisor.mjs";
 import { readProcessIdentity } from "./lib/local-sandbox-fence.mjs";
 import { spawnDurableWaitResumer } from "./lib/durable-wait-resumer.mjs";
+import { readHostAttemptContext, resolveHostAttempt, hostResumePin } from "./lib/host-resource-attempt.mjs";
 
 const PROFILE_CONTRACT = JSON.parse(readFileSync(
   new URL("../apps/web/lib/nonprod/host-resource-profiles.json", import.meta.url),
@@ -33,7 +34,7 @@ export const HEAVY_PROCESS_CLASSES = Object.freeze([
 ]);
 
 export function parseHostResourceArgs(argv) {
-  const options = { class: { type: "string" } };
+  const options = { class: { type: "string" }, "resume-pin": { type: "string" } };
   const { values, tokens } = utilParseArgs({ args: argv, options, strict: false, allowPositionals: true, tokens: true });
   const terminator = tokens.find((token) => token.kind === "option-terminator");
   const stray = tokens.find((token) => token !== terminator && (terminator === undefined || token.index < terminator.index)
@@ -44,6 +45,9 @@ export function parseHostResourceArgs(argv) {
   if (!HEAVY_PROCESS_CLASSES.includes(resourceClass)) {
     throw new Error(`unsupported resource class: ${resourceClass}`);
   }
+  if (values["resume-pin"] !== undefined && (typeof values["resume-pin"] !== "string" || !values["resume-pin"])) {
+    throw new Error("--resume-pin requires a nonempty value");
+  }
   const command = terminator === undefined ? [] : argv.slice(terminator.index + 1);
   if (command.length === 0) {
     throw new Error("a command is required after --");
@@ -52,6 +56,7 @@ export function parseHostResourceArgs(argv) {
     resourceClass,
     command: command[0],
     commandArgs: command.slice(1),
+    ...(values["resume-pin"] ? { resumePin: values["resume-pin"] } : {}),
   };
 }
 
@@ -98,14 +103,17 @@ export function buildHostResourceClaim({
   availableMemoryBytes,
   inferenceResident,
   ungovernedProcesses,
+  attempt,
 }) {
   const profile = PROFILE_CONTRACT.profiles[resourceClass];
   if (!profile) throw new Error(`unsupported resource class: ${resourceClass}`);
+  if (!attempt?.claimKey) throw new Error("host resource attempt identity is required");
   return {
     environmentKey: "host-heavy-resource",
     ownerProvider,
     ownerSessionId,
-    claimKey: `host-resource:${ownerSessionId}:${pid}`,
+    claimKey: attempt.claimKey,
+    ...(attempt?.leaseId ? { resumeLeaseId: attempt.leaseId } : {}),
     purpose: `host-resource:${resourceClass}`,
     url: "host://localhost",
     ports: [],
@@ -214,7 +222,7 @@ function createOwnedChild({ command, commandArgs }) {
 
 async function main() {
   const parsed = parseHostResourceArgs(process.argv.slice(2));
-  if (process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true") {
+  if (!parsed.resumePin && (process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true")) {
     process.exitCode = await runCommand(parsed);
     return;
   }
@@ -228,12 +236,26 @@ async function main() {
   const ownerSessionId = process.env.DPF_GATE_OWNER_SESSION_ID
     || process.env.CODEX_THREAD_ID
     || `host-${hostname()}`;
+  const identify = () => readHostAttemptContext({
+    resourceClass: parsed.resourceClass, command: parsed.command, commandArgs: parsed.commandArgs,
+    expectedMemoryBytes: PROFILE_CONTRACT.profiles[parsed.resourceClass].expectedMemoryMiB * 1024 ** 2,
+    ownerProvider, ownerSessionId, worktreePath: cwd.replaceAll("\\", "/"),
+    branchName: gitValue(["branch", "--show-current"]), mcpUrl: connection.mcpUrl,
+  });
+  let attempt;
+  let context;
+  try { context = identify(); attempt = resolveHostAttempt(context, parsed.resumePin); } catch {
+    process.stderr.write("host-resource-runner: source or invocation identity unavailable/changed; command unrun.\n");
+    process.exitCode = 82;
+    return;
+  }
   const claimArgs = buildHostResourceClaim({
     ...parsed,
     ownerProvider,
     ownerSessionId,
     worktreePath: cwd.replaceAll("\\", "/"),
-    branchName: gitValue(["branch", "--show-current"]),
+    branchName: context.branchName,
+    attempt,
     pid: process.pid,
     processIdentity: readProcessIdentity(process.pid),
     now: new Date(),
@@ -245,7 +267,17 @@ async function main() {
   const claim = await mcpCall("claim_nonprod_environment_lease", claimArgs, connection);
   const leaseId = claim?.entityId ?? claim?.data?.lease?.leaseId;
   if (claim?.success !== true || !leaseId) {
+    if (claim?.error === "lease_terminal" || (parsed.resumePin && /^nonprod_resume_/.test(claim?.error ?? ""))) {
+      process.stderr.write(JSON.stringify({ status: "unrun", reason: claim.error }) + "\n");
+      process.exitCode = 81;
+      return;
+    }
     throw new Error(`host resource admission failed: ${claim?.error ?? "unknown"}`);
+  }
+  if (claim?.data?.admission?.status === "terminal") {
+    process.stderr.write(JSON.stringify({ status: "unrun", reason: "terminal-lease", leaseId }) + "\n");
+    process.exitCode = 81;
+    return;
   }
   if (claim?.data?.admission?.status === "queued") {
     // BI-D35B85BF. This block used to assert that "the event/reconciler wakes
@@ -257,15 +289,24 @@ async function main() {
       runnerPath: resolve(SCRIPT_DIR, "local-ci-durable-wait-resumer.mjs"),
       gateArgv: process.argv,
       cwd: process.cwd(),
+      observerDirectory: process.env.DPF_LOCAL_QUEUE_OBSERVER_DIR
+        || resolve(cwd, gitValue(["rev-parse", "--git-common-dir"]), "dpf-local-ci-queue-observers"),
+      branch: context.branchName,
+      sha: context.source.head,
+      ownerSessionId,
+      gateFlags: ["--resume-pin", hostResumePin(attempt, leaseId)],
+      gateFlagsBeforeTerminator: true,
     });
     process.stderr.write(JSON.stringify({
       status: "queued",
       code: "host_resource_durable_wait",
       leaseId,
+      resumePin: hostResumePin(attempt, leaseId),
       taskRunId: claim?.data?.admission?.taskRunId ?? null,
       resumeMode: claim?.data?.admission?.resumeMode ?? "durable-task",
       resumeOwner: resume.spawned ? "detached-resumer" : "caller",
-      resumerPid: resume.pid,
+      resumerPid: resume.via === "wmi-breakaway" ? null : resume.pid,
+      launcherPid: resume.via === "wmi-breakaway" ? resume.pid : null,
       ...(resume.spawned ? {} : { resumeUnavailableReason: resume.reason }),
       resourceClass: parsed.resourceClass,
       reason: claim?.data?.poolPolicy?.rollbackReason ?? "capacity-full",
@@ -275,6 +316,12 @@ async function main() {
     return;
   }
 
+  if (claim?.data?.admission?.status !== "admitted") throw new Error("host resource admission was not granted");
+  try { resolveHostAttempt(identify(), hostResumePin(attempt, leaseId)); } catch {
+    await mcpCall("release_nonprod_environment_lease", { leaseId }, connection);
+    process.exitCode = 82;
+    return;
+  }
   const child = createOwnedChild(parsed);
   const expiresAt = claim?.data?.lease?.expiresAt;
   const result = await superviseLeaseRun({

@@ -92,9 +92,19 @@ The portal always configures its local durable-execution endpoint. Redis and
 Inngest are therefore core services and start without a Compose profile; the
 `runtime-durable-automation` profile only adds optional supporting services.
 Startup reconciliation discovers an empty provider, then retries uncalibrated
-seed profiles on later boots until a durable evaluation is recorded. The exact
+text-generating seed profiles on later boots until a durable evaluation is
+recorded. Chat calibration excludes embedding, image and audio models at both
+queueing and execution; each probe uses its declared output token limit. These
+simple prompts measure the selected model, so another provider cannot substitute
+for it. The exact
 bundled Qwen 3.8 27B model carries a low-confidence provisional routing floor;
 smaller generic Qwen models do not inherit it.
+
+Decision Concierge records why it skips a case in the standing governance room.
+An empty action question, an unfinished panel or an unchanged completed case does
+not start another panel. New questions, options or recorded evidence can make a
+completed case eligible again. An unfinished run remains attached for recovery;
+the sweep does not erase it or treat it as an owner decision.
 
 Windows and POSIX lifecycle commands share the same preservation contract. A
 normal stop or uninstall names every overlay that may have created resources but
@@ -204,7 +214,9 @@ Claude-only update:
 bash packages/dpf-skill-pack/scripts/update-agent-toolchain.sh --claude-only
 ```
 
-Use `DPF_MCP_URL` to point at a non-local MCP endpoint. Restart Codex or Claude
+Without `DPF_MCP_URL` the updater connects to the install's canonical address,
+`https://localhost/api/mcp/v1`, and sets the client up for OAuth sign-in. Use
+`DPF_MCP_URL` to point at a different MCP endpoint. Restart Codex or Claude
 Code after the updater finishes because both clients load plugins and skills at
 session start.
 

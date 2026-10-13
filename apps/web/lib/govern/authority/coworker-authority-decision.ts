@@ -6,7 +6,6 @@ import { effectiveApprovalExpiry } from "@/lib/coworker/approval-lifetime";
 
 import type { EffectiveAuthContext } from "@/lib/identity/effective-auth-context";
 import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
-
 import {
   canAccessAuthoritySubject,
   type AuthoritySubject,
@@ -16,6 +15,30 @@ import {
   type EscalationDecision,
   type EscalationSteering,
 } from "./escalation-gate";
+
+/** Canonical author fact, not approval to start work or an independent verdict. */
+export type AuthorResearchPolicyBinding = {
+  itemId: string; buildId: string; revisionId: string;
+  valueDigest: string; contentDigest: string;
+  authorUserId: string; authorPrincipalId: string; authorAgentId: string | null;
+  workroomId: string; reason: string;
+  authorityVersion: string | null;
+  roomPolicyDigest: string;
+};
+
+/** Pure argument boundary; eligibility must not import the server evidence loader. */
+export function isExactAuthorResearchParams(params: Record<string, unknown>): boolean {
+  const ref = params.artifactRef;
+  return params.gate === "research" && params.decision === "pass"
+    && typeof params.itemId === "string" && typeof params.reason === "string"
+    && Array.isArray(params.findings) && params.findings.length === 0
+    && Array.isArray(params.resolvedFindingRefs) && params.resolvedFindingRefs.length === 0
+    && Object.keys(params).every((key) => ["itemId", "gate", "decision", "artifactRef", "reason", "findings", "resolvedFindingRefs"].includes(key))
+    && !!ref && typeof ref === "object" && !Array.isArray(ref)
+    && (ref as Record<string, unknown>).kind === "feature-build-revision"
+    && typeof (ref as Record<string, unknown>).revisionId === "string"
+    && Object.keys(ref).every((key) => ["kind", "revisionId"].includes(key));
+}
 
 export const COWORKER_AUTHORITY_OUTCOMES = [
   "allow",
@@ -57,6 +80,7 @@ export type CoworkerAuthorityReasonCode =
   | "approval-not-active";
 
 export type CoworkerApprovalBinding = {
+  authorResearchBinding?: AuthorResearchPolicyBinding;
   actingHumanUserId: string;
   actingAgentId: string;
   chainId: string | null;
@@ -97,6 +121,11 @@ export type CoworkerAuthorityInput = {
     /** A Work Case may elevate an otherwise ordinary mutation to consequential. */
     workCaseConsequential?: boolean;
     requiresDelegationChain?: boolean;
+    /**
+     * BI-C8EC05C9: server-set propose boundary. Escalation input only, never
+     * part of the approval binding, so no existing approval stops matching.
+     */
+    proposeBoundary?: boolean;
   };
   /**
    * BI-6B3DA9DD: what can decide this action without a person, server-resolved.
@@ -136,6 +165,8 @@ export type CoworkerAuthorityInput = {
     /** Immutable server-validated review scope; never sourced from tool args. */
     initiativeReviewBinding?: InitiativeReviewBinding;
   } | null;
+  /** Separate server-owned author fact; never independent-review steering. */
+  authorResearchBinding?: AuthorResearchPolicyBinding | null;
   rawParams: Record<string, unknown>;
   approval?: {
     envelopeId?: string;
@@ -154,6 +185,11 @@ export type CoworkerAuthorityInput = {
      * re-check at execution (approval-lifetime.ts, BI-0012E6CA).
      */
     approvedAt?: Date | null;
+    /**
+     * BI-C8EC05C9: the approved envelope was raised under a propose boundary.
+     * Its TaskRun was never paused, so the gate must not resume it.
+     */
+    proposeBoundary?: boolean;
   } | null;
   now?: Date;
   /**
@@ -268,8 +304,8 @@ function fingerprint(value: unknown): string {
 
 /** The exact-call fingerprint an approval binds to (BI-12E5DD91: the
  *  approved-request runner proves stored arguments are the approved ones). */
-export function fingerprintCoworkerInput(rawParams: Record<string, unknown>): string {
-  return fingerprint(rawParams);
+export function fingerprintCoworkerInput(rawParams: Record<string, unknown>, authorResearchBinding?: AuthorResearchPolicyBinding | null): string {
+  return fingerprint(authorResearchBinding ? { params: rawParams, authorResearchBinding } : rawParams);
 }
 
 function normalize(value: string | null | undefined): string | null {
@@ -288,6 +324,7 @@ export function buildCoworkerApprovalBinding(
   }
 
   return {
+    ...(input.authorResearchBinding ? { authorResearchBinding: input.authorResearchBinding } : {}),
     actingHumanUserId: humanId,
     actingAgentId: agentId,
     chainId: normalize(input.delegation?.chainId),
@@ -295,7 +332,7 @@ export function buildCoworkerApprovalBinding(
     toolName: input.action.toolName.trim(),
     subject: input.subject ?? null,
     routeContext: normalize(input.action.routeContext),
-    inputFingerprint: fingerprintCoworkerInput(input.rawParams),
+    inputFingerprint: fingerprintCoworkerInput(input.rawParams, input.authorResearchBinding),
     sensitivity: input.dataPolicy.sensitivity,
     decisionVersionFingerprint: fingerprint(
       [...(input.dataPolicy.decisionVersionIds ?? [])].sort(),
@@ -341,6 +378,7 @@ function escalationFor(input: CoworkerAuthorityInput): EscalationDecision {
     },
     dataPolicy: { sensitivity: input.dataPolicy.sensitivity },
     steering: input.steering ?? "none",
+    ...(input.action.proposeBoundary === true ? { proposeBoundary: true } : {}),
   });
 }
 

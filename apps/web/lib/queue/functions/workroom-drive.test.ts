@@ -285,6 +285,61 @@ describe("applyDrivePlan lease expiry", () => {
     expect(driveDb.scheduledAgentTask.upsert).not.toHaveBeenCalled();
   });
 
+  it("retains the enqueue checkpoint even when the later drive snapshot is never written", async () => {
+    const fx = persistedLease();
+    driveDb.workroom.findUnique.mockResolvedValue({ workspaceState: { unrelated: true }, objective: "Review evidence" });
+    driveDb.workroom.update.mockClear();
+    driveDb.workroomActivity.create.mockClear();
+    // Simulate controller loss immediately after the scheduling transaction.
+    fx.persist.mockRejectedValueOnce(new Error("controller lost"));
+    await expect(runWorkroomDriveJob(new Date("2026-09-01T00:00:00.000Z"), {
+      listRooms: async () => [room()], effects: fx,
+    })).rejects.toThrow("controller lost");
+    expect(driveDb.workroom.update).toHaveBeenCalledWith(expect.objectContaining({ data: {
+      workspaceState: { unrelated: true, workroomDispatchCheckpoint: expect.objectContaining({
+        version: 1, revision: 1, objective: "Review evidence",
+        confirmedEffect: expect.objectContaining({ kind: "scheduled-task-enqueued" }),
+        nextAction: "reconcile-scheduled-task",
+      }) },
+    } }));
+    expect(driveDb.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      kind: "workroom-dispatch-confirmed",
+    }) }));
+  });
+
+  it.each(["matching", "missing", "foreign-agent", "changed-stage"])("reconciles a %s task after snapshot loss without reactivating it", async (caseName) => {
+    const fx = persistedLease();
+    const now = new Date("2026-09-01T00:00:00.000Z");
+    let workspace: Record<string, unknown> = {};
+    let task: Record<string, unknown> | null = null;
+    driveDb.workroom.findUnique.mockImplementation(async () => ({ workspaceState: workspace }));
+    driveDb.workroom.update.mockImplementation(async ({ data }) => {
+      if (data.workspaceState) workspace = data.workspaceState;
+      return {};
+    });
+    driveDb.scheduledAgentTask.upsert.mockImplementation(async ({ create }) => {
+      task = create;
+      return {};
+    });
+    driveDb.scheduledAgentTask.findUnique.mockImplementation(async () => task);
+    fx.persist.mockRejectedValueOnce(new Error("controller lost"));
+    await expect(runWorkroomDriveJob(now, { listRooms: async () => [room()], effects: fx })).rejects.toThrow("controller lost");
+    const confirmed = structuredClone(workspace.workroomDispatchCheckpoint);
+    // A replacement reconstructs from durable state; the original snapshot is absent.
+    // The task may already have executed and become inactive. Do not touch it.
+    fx.state.expiresAt = null;
+    driveDb.workroomActivity.create.mockClear();
+    if (caseName === "missing") task = null;
+    if (caseName === "foreign-agent") task = Object.assign({}, task, { agentId: "replacement-agent" });
+    if (caseName === "changed-stage") task = Object.assign({}, task, { taskConfig: { workroomStage: { shapeKey: "other", shapeVersion: "1", stageKey: "other", tools: [] } } });
+    const replay = runWorkroomDriveJob(now, { listRooms: async () => [room()], effects: fx });
+    if (caseName === "matching") await replay;
+    else await expect(replay).rejects.toThrow(/identity reconciliation/);
+    expect(driveDb.scheduledAgentTask.upsert).toHaveBeenCalledTimes(1);
+    expect(workspace.workroomDispatchCheckpoint).toEqual(confirmed);
+    expect(driveDb.workroomActivity.create).not.toHaveBeenCalled();
+  });
+
   it("fences scheduling when ownership changes after acquisition", async () => {
     const fx = persistedLease();
     const acquire = fx.acquireLease;
@@ -297,6 +352,15 @@ describe("applyDrivePlan lease expiry", () => {
       listRooms: async () => [room()], effects: fx,
     });
     expect(result.dispatched).toBe(0);
+    expect(driveDb.scheduledAgentTask.upsert).not.toHaveBeenCalled();
+  });
+
+  it("refuses corrupt checkpoint history before queueing another task", async () => {
+    const fx = persistedLease();
+    driveDb.workroom.findUnique.mockResolvedValue({ workspaceState: { workroomDispatchCheckpoint: { version: 2, revision: 5 } } });
+    await expect(runWorkroomDriveJob(new Date("2026-09-01T00:00:00.000Z"), {
+      listRooms: async () => [room()], effects: fx,
+    })).rejects.toThrow(/checkpoint/);
     expect(driveDb.scheduledAgentTask.upsert).not.toHaveBeenCalled();
   });
 
@@ -483,6 +547,9 @@ describe("stage-declared tools reach the dispatched task", () => {
     const expected = {
       trigger: { kind: "time", recordedAt: "2026-08-01T00:00:00.000Z" },
       workroomStage: stage,
+      workroomDispatchCheckpoint: expect.objectContaining({
+        roomId: "row-1", confirmedEffect: expect.objectContaining({ taskId: "task-1" }),
+      }),
     };
     expect(args?.create?.taskConfig).toEqual(expected);
     expect(args?.update?.taskConfig).toEqual(expected);

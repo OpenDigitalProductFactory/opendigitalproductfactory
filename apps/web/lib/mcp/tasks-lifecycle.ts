@@ -27,7 +27,7 @@ import {
 import type { AuthorizedAsyncOperationResult } from "@/lib/inference/async-operation-read-model";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
 import { withTaskRunApprovalLocation } from "./external-approval-location-lookup";
-import { semanticReviewRecoveryObservation } from "@/lib/change-review/semantic-review-recovery-policy";
+import { readSemanticReviewRecovery } from "@/lib/change-review/semantic-review-recovery-readback";
 import { projectRemoteTaskReplay } from "../mcp-task-replay-projection";
 import {
   DURABLE_INFERENCE_TASK_CONTRACT_FAMILY,
@@ -274,7 +274,7 @@ export async function handleTasksGet(
     return { kind: "ok", value: durableTaskObject(row, operation) };
   }
   const task = { ...toMcpTaskObject(row), ...(object(row.a2aMetadata)?.gateKind === "semantic-review"
-    ? { recovery: semanticReviewRecoveryObservation(row.status, row.progressPayload) } : {}) };
+    ? { recovery: await readSemanticReviewRecovery(row, userId) } : {}) };
   if (row.status !== "input-required" && row.status !== "auth-required") {
     return { kind: "ok", value: task };
   }
@@ -349,7 +349,7 @@ export async function handleTasksResult(
   }
   if (!isTerminalTaskStatus(row.status)) {
     const recovery = object(row.a2aMetadata)?.gateKind === "semantic-review"
-      ? semanticReviewRecoveryObservation(row.status, row.progressPayload) : null;
+      ? await readSemanticReviewRecovery(row, userId) : null;
     const structuredContent: Record<string, unknown> = {
       taskId,
       status: mcpTaskStateForWire(row.status),
@@ -390,7 +390,7 @@ export async function handleTasksResult(
     completedAt: row.completedAt?.toISOString() ?? null,
   };
   if (object(row.a2aMetadata)?.gateKind === "semantic-review") {
-    structured.recovery = semanticReviewRecoveryObservation(row.status, row.progressPayload);
+    structured.recovery = await readSemanticReviewRecovery(row, userId);
     const evidenceId = object(row.progressPayload)?.evidenceRecordId;
     const capsuleId = object(row.a2aMetadata)?.capsuleId;
     const evidence = typeof evidenceId === "string" && typeof capsuleId === "string"

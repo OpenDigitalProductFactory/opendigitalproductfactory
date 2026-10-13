@@ -2,104 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { projectBacklogItemReadiness, projectBacklogItemReadinessSummary, readinessShapeFromWorkShape } from "./entry-adapter";
 
-const item = {
-  id: "row-1",
-  itemId: "BI-ENTRY",
-  type: "portfolio",
-  source: "user-request",
-  workType: "feature",
-  scopeKind: "platform",
-  archetypeCategories: [],
-  archetypeIds: [],
-  activeBuildKind: null,
-};
-
-const transitionObject = {
-  kind: "work-capsule" as const,
-  id: "WC-PENDING",
-  expectedVersion: "new",
-  targetState: "working",
-};
-
-const baseline = {
-  schemaVersion: 1,
-  baselineId: "baseline-1",
-  subject: { kind: "backlog-item", id: "BI-ENTRY" },
-  profile: "cross-domain",
-  artifactDigest: "sha256:design",
-  supersedesBaselineId: null,
-  objectiveStatements: [{ objectiveId: "OBJ-1" }],
-  acceptanceStatements: [{ acceptanceId: "AC-1" }],
-  approvalReceiptId: "r-approval",
-  authoritySnapshot: { decision: "allow" },
-};
-
-function receipt(id: string, gateKey: string, decision: "pass" | "not-applicable" = "pass") {
-  return {
-    id,
-    kind: "initiative_gate_receipt",
-    gateKey,
-    recordedAt: new Date("2026-08-22T00:00:00.000Z"),
-    payload: {
-      schemaVersion: 1,
-      receiptId: id,
-      policyVersion: "initiative-readiness.v1",
-      gate: gateKey,
-      decision,
-      subject: { kind: "backlog-item", id: "BI-ENTRY" },
-      artifactRef: { kind: "document-version", versionId: "version-1" },
-      artifactDigest: "sha256:design",
-      artifactAuthorRef: "PRN-AUTHOR",
-      reviewerPrincipalId: "PRN-REVIEWER",
-      reviewerAgentId: "AGT-REVIEWER",
-      authorityDecisionId: "DI-1",
-      authoritySnapshot: {
-        decision: "allow",
-        effectiveHumanCapability: "manage_backlog",
-        effectiveAgentGrant: "initiative_review",
-        tokenScope: "organization",
-        organizationId: "ORG-1",
-        actionKey: "review_initiative",
-        policyVersion: "coworker-authority.v1",
-      },
-      reason: "Reviewed against the current canonical design.",
-      findingRefs: [],
-      resolvedFindingRefs: [],
-    },
-  };
-}
-
-function readyActivities() {
-  return [
-    { id: "baseline-row", kind: "initiative_scope_baseline", gateKey: null, recordedAt: new Date(), payload: baseline },
-    receipt("r-research", "research"),
-    receipt("r-approval", "spec-approval"),
-    receipt("r-architecture", "architecture-review"),
-    receipt("r-data", "data-review", "not-applicable"),
-    receipt("r-ux", "ux-fit-review", "not-applicable"),
-    receipt("r-security", "security-review", "not-applicable"),
-    receipt("r-compliance", "compliance-review", "not-applicable"),
-    receipt("r-domain", "domain-review", "not-applicable"),
-    receipt("r-plan-review", "plan-review"),
-    receipt("r-dependencies", "dependency-disposition", "not-applicable"),
-    {
-      id: "coverage-1",
-      kind: "plan_backlog_coverage",
-      gateKey: null,
-      recordedAt: new Date(),
-      payload: {
-        schemaVersion: 2,
-        decision: "atomic",
-        planPath: "docs/superpowers/plans/plan.md",
-        planArtifactRef: { kind: "repo-blob-at-commit", path: "docs/superpowers/plans/plan.md" },
-        planArtifactDigest: "sha256:plan",
-        scopeBaselineId: "baseline-1",
-        scopeBaselineArtifactDigest: "sha256:design",
-        deliverables: [],
-      },
-    },
-  ];
-}
+import { baseline, item, readyActivities, receipt, transitionObject } from "./entry-adapter.test-fixtures";
 
 function terminalFixture(payloadOverride: Record<string, unknown> = {}) {
   const decision = projectBacklogItemReadiness({
@@ -532,6 +435,44 @@ describe("plan-review binds the plan artifact, not the design (BI-B5C8FEFC)", ()
       evaluatedAt: "2026-08-22T00:00:00.000Z",
     });
     expect(projection.decision.unmet.find((entry) => entry.code === "SPEC_APPROVAL_REQUIRED")?.state).toBe("stale");
+  });
+});
+
+describe("a design amended after its spec approval owes the approval again (BI-7531B73C)", () => {
+  const later = new Date(Date.now() + 60_000);
+  const amended = (id: string, gateKey: string, digest = "sha256:amended") => {
+    const base = receipt(id, gateKey);
+    return { ...base, recordedAt: later, payload: { ...base.payload, artifactDigest: digest } };
+  };
+  const project = (activities: ReturnType<typeof readyActivities>) => projectBacklogItemReadiness({
+    item,
+    activities,
+    target: "implementation",
+    transitionObject,
+    authorization: "pass",
+    capsuleIdentity: "pass",
+    evaluatedAt: "2026-08-22T00:00:00.000Z",
+  });
+
+  it("reads spec approval stale once a review records against a newer design", () => {
+    const projection = project([...readyActivities(), amended("r-data-amended", "data-review")]);
+    expect(projection.decision.unmet.find((entry) => entry.code === "SPEC_APPROVAL_REQUIRED")?.state).toBe("stale");
+  });
+
+  it("stays satisfied when later receipts bind the approved design", () => {
+    const projection = project([...readyActivities(), amended("r-data-same", "data-review", "sha256:design")]);
+    expect(projection.decision.unmet.find((entry) => entry.code === "SPEC_APPROVAL_REQUIRED")).toBeUndefined();
+  });
+
+  it("ignores a plan review, which binds the plan", () => {
+    const projection = project([...readyActivities(), amended("r-plan-later", "plan-review", "sha256:plan-v2")]);
+    expect(projection.decision.unmet.find((entry) => entry.code === "SPEC_APPROVAL_REQUIRED")).toBeUndefined();
+  });
+
+  it("ignores receipts recorded before the baseline, such as research on an earlier draft", () => {
+    const early = { ...receipt("r-research-draft", "research"), payload: { ...receipt("r-research-draft", "research").payload, artifactDigest: "sha256:draft" } };
+    const projection = project([...readyActivities(), early]);
+    expect(projection.decision.unmet.find((entry) => entry.code === "SPEC_APPROVAL_REQUIRED")).toBeUndefined();
   });
 });
 

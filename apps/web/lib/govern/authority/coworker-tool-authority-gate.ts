@@ -10,6 +10,7 @@ import type {
 import type { ToolDefinition } from "@/lib/mcp-tool-types";
 
 import {
+  buildCoworkerApprovalBinding,
   evaluateCoworkerAuthority,
   type CoworkerAuthorityDecision,
   type CoworkerAuthorityInput,
@@ -37,6 +38,10 @@ export type AuthorityApprovalEnvelopeCreate = (input: {
   explanation: string;
   /** Sizes the request's lifetime; never part of the binding (BI-0012E6CA). */
   consequence?: ApprovalClassification;
+  /** Raised under a propose boundary: metadata, never part of the binding (BI-C8EC05C9). */
+  proposeBoundary?: boolean;
+  /** The chat message the request belongs to (BI-C8EC05C9). */
+  chatMessageId?: string;
 }) => Promise<{ id: string; status: string; expiresAt: Date | null }>;
 
 export type AuthorityApprovalTaskResume = (taskRunId: string) => Promise<void>;
@@ -253,6 +258,11 @@ async function writeAuthorizationDecision(
         input.task?.taskRunId ?? execution.context?.taskRunId ?? null,
       subjectKind: input.subject?.kind ?? null,
       authorityOrganizationScope: input.organizationId ?? null,
+      ...(input.authorResearchBinding ? {
+        authorResearchBinding: input.authorResearchBinding,
+        artifactFingerprint: buildCoworkerApprovalBinding(input).inputFingerprint,
+        expiresAt: (input.approval?.expiresAt ?? new Date(Date.now() + 60_000)).toISOString(),
+      } : {}),
       ...(input.action.consequenceRefinement
         ? { consequenceRefinement: input.action.consequenceRefinement }
         : {}),
@@ -460,6 +470,9 @@ export async function enforceCoworkerToolAuthority(
         // The call's resolved consequence sizes how long the person has to
         // answer: outward stays short, everything else waits for them.
         ...(input.action.consequence !== undefined ? { consequence: input.action.consequence } : {}),
+        // Server-set context only (BI-C8EC05C9); absent for every existing caller.
+        ...(execution.context?.proposeBoundary === true ? { proposeBoundary: true } : {}),
+        ...(execution.context?.chatMessageId ? { chatMessageId: execution.context.chatMessageId } : {}),
       });
       return {
         outcome: "reject",
@@ -505,7 +518,9 @@ export async function enforceCoworkerToolAuthority(
         : "the approval was already used by another run of this exact request",
     };
   }
-  if (approvedEnvelopeId && reservedAt && input.task?.taskRunId) {
+  // A propose-boundary request never paused its TaskRun, so there is nothing
+  // to resume, and resuming would flip a finished run back to working.
+  if (approvedEnvelopeId && reservedAt && input.task?.taskRunId && input.approval?.proposeBoundary !== true) {
     try {
       await resumeApprovedTask(input.task.taskRunId);
     } catch (error) {

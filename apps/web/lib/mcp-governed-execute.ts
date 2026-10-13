@@ -276,7 +276,8 @@ function rejectionResult(
   };
 }
 
-async function runPreToolHooks(event: ToolLifecycleEvent): Promise<GovernedExecuteResult | null> {
+/** Also read by the approval-convergence probe (scripts/approval-convergence-probe.ts), on a read-only session. */
+export async function runPreToolHooks(event: ToolLifecycleEvent): Promise<GovernedExecuteResult | null> {
   for (const hook of _lifecycleHooks) {
     const decision = await hook.onPreToolUse?.(event);
     if (decision?.decision === "deny") {

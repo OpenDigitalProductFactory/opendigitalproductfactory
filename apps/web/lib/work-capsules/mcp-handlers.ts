@@ -37,6 +37,7 @@ import {
 import type { BacklogBindingReader } from "./adopt-backlog-binding";
 import { adoptWorktree, establishNewRoomOwnership } from "./adopt-worktree-handler";
 import { reassignCapsuleExecutor } from "./reassign-executor-handler";
+import { WorkroomLeaseHeldError } from "./workroom-lease";
 import {
   claimWorkCapsuleScope,
   createWorkCapsule,
@@ -91,11 +92,14 @@ function stringParam(params: Record<string, unknown>, key: string): string | nul
 function workCapsuleDb(): CapsuleDb {
   return prisma as unknown as CapsuleDb;
 }
+// An ordinary write renews the writer's own lease; it never takes another
+// principal's live lease (BI-A7601AED).
 async function renewLeaseAfterCapsuleWrite(capsuleId: string, currentActor: WorkCapsuleActor) {
   return heartbeatWorkCapsule({
     db: workCapsuleDb(),
     capsuleId,
     actor: currentActor,
+    onHeldByOther: "keep",
   });
 }
 
@@ -184,7 +188,7 @@ export async function listWorkCapsulesTool(params: Record<string, unknown>, user
   return listWorkroomObservation(prisma as never, { ...params, status, decisionScope, portfolioRole }, userId, context);
 }
 
-export async function getWorkCapsuleTool(params: Record<string, unknown>): Promise<ToolResult> {
+export async function getWorkCapsuleTool(params: Record<string, unknown>, userId?: string, context?: ToolContext): Promise<ToolResult> {
   const capsuleId = stringParam(params, "capsuleId");
   if (!capsuleId) {
     return { success: false, error: "missing_capsuleId", message: "capsuleId is required." };
@@ -208,11 +212,19 @@ export async function getWorkCapsuleTool(params: Record<string, unknown>): Promi
     };
   }
   const { projectWorkroomRecovery } = await import("./workroom-recovery-projection");
+  const nestedCoordination = userId && context?.agentId
+    ? await (await import("@/lib/work-management/nested-room-coordination.server")).loadNestedRoomCoordination(prisma as never, {
+      roomId: capsule.id,
+      canReadRoom: async workroomId => (await (await import("@/lib/work-management/workroom-agent-access.server"))
+        .resolveAgentWorkroomAccess({ userId, agentId: context.agentId!, workroomId, requested: "content" })).decision.level === "content",
+    }).catch(() => ({ delegations: [], escalation: {
+      state: "setup-required" as const, reason: "coordination-read-unavailable", steps: [],
+    } })) : null;
   return {
     success: true,
     entityId: capsule.capsuleId,
     message: `Loaded ${capsule.capsuleId}.`,
-    data: { capsule: { ...capsule, recovery: projectWorkroomRecovery(capsule) } },
+    data: { capsule: { ...capsule, recovery: projectWorkroomRecovery(capsule), nestedCoordination } },
   };
 }
 
@@ -546,11 +558,22 @@ export async function heartbeatCapsuleTool(
     return { success: false, error: "missing_capsuleId", message: "capsuleId is required." };
   }
 
-  const capsule = await heartbeatWorkCapsule({
-    db: workCapsuleDb(),
-    capsuleId,
-    actor: await actor(userId, context),
-  });
+  let capsule;
+  try {
+    capsule = await heartbeatWorkCapsule({
+      db: workCapsuleDb(),
+      capsuleId,
+      actor: await actor(userId, context),
+    });
+  } catch (error) {
+    if (!(error instanceof WorkroomLeaseHeldError)) throw error;
+    return {
+      success: false,
+      error: error.code,
+      message: error.message,
+      data: { holderPrincipalId: error.holderPrincipalId, leaseExpiresAt: error.leaseExpiresAt.toISOString() },
+    };
+  }
 
   return {
     success: true,

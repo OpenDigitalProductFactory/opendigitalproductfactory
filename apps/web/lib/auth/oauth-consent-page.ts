@@ -172,6 +172,7 @@ ${renderAccount(view)}
 ${assistantBlock}
 <fieldset><legend>It will be able to:</legend>
 <ul class="perms">${permissionList}</ul>
+<p class="scope-detail">Within these permissions, your current connection covers routine reads and reversible work without another approval for each action. Changes to credentials or authority, destructive actions and restricted data keep their required approval checks. A development installation does not grant extra access.</p>
 <details><summary>Adjust permissions</summary>
 ${scopeRows}
 <p class="scope-detail">Unticking a permission grants less. You cannot grant more than was asked for.</p>

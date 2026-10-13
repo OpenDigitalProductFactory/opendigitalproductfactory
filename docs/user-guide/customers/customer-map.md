@@ -53,9 +53,47 @@ It never overwrites a site you placed by hand. When it finishes, the panel shows
 how many sites were placed, how many were not found, and how many are still
 missing.
 
+Once a service is chosen, new locations are found as they are saved, with no
+button to press:
+
+- a new customer site, or a site whose address changes;
+- a new address for one of your business locations;
+- your business's own address, saved during setup.
+
+Each lookup runs in the background, one at a time at the service's own pace, so
+saving is never slowed down. A position someone chose (a suggestion picked
+from the address search, a point placed by hand, or a site confirmed on a
+phone) is never replaced. Your business's own position also lets people nearby
+find you through the phone app's nearby search.
+
 The free public Nominatim service is not offered here. Its usage policy does not
 allow bulk lookups. See
 [Address Validation Providers](../platform/address-validation-providers.md).
+
+## Confirm A Site's Location From The Phone
+
+When someone checks in to a job on the phone app, and the job's site has an
+address but no confirmed position, the app asks:
+
+> Set the location of *site* from where you are now? Your phone's location is
+> used once, for this site only.
+
+- **Use my location** reads the phone's position once and saves it as the
+  site's location. The phone asks for location permission at this moment, and
+  only for while the app is open. If the customer has several sites, the app
+  asks which one you are at.
+- **Not now** hides the question for that site on this phone for 30 days.
+
+The position is only saved when it is accurate to 50 metres or better. If it is
+more than 1 kilometre from where the address was looked up, the app asks
+whether you are really at the site before saving. A position someone already
+chose (a picked suggestion, a point placed by hand, or an earlier phone
+confirmation) is never replaced. The customer's activity history records who
+confirmed the location and when.
+
+The app does not track where staff go. It does not use location in the
+background, and it keeps nothing about where a person was apart from the
+site's location they chose to save.
 
 ## Service Areas
 

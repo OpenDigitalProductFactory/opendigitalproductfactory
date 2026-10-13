@@ -9,6 +9,7 @@
 // it. Mirror the account-authoritative Codex CLI catalog instead.
 
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { persistDiscoveredInventory } from "./discovered-model-inventory";
 
 type DiscoveryResult = { discovered: number; newCount: number; modelIds?: string[]; error?: string };
 
@@ -26,14 +27,13 @@ export async function discoverViaChatGptBackend(input: {
     { Authorization: `Bearer ${tokenResult.token}` },
     input.baseUrl,
   );
-  if (result.error && result.models.length === 0) {
+  if (result.models.length === 0) {
     if (input.providerId === "chatgpt") {
       return mirrorCodexCatalogForChatgpt({ authMethod: input.authMethod, consumerError: result.error });
     }
-    return { discovered: 0, newCount: 0, error: result.error };
+    return { discovered: 0, newCount: 0, error: result.error ?? "Provider returned no models; previous inventory retained" };
   }
-  const newCount = await internals.upsertDiscoveredModels(input.providerId, result.models);
-  return { discovered: result.models.length, newCount };
+  return persistDiscoveredInventory(input.providerId, input.authMethod, result.models);
 }
 
 export async function mirrorCodexCatalogForChatgpt(input: {
@@ -42,10 +42,7 @@ export async function mirrorCodexCatalogForChatgpt(input: {
 }): Promise<DiscoveryResult> {
   const consumerError = input.consumerError ?? "consumer discovery returned no models";
   try {
-    const [{ discoverCodexCliModels }, internals] = await Promise.all([
-      import("@/lib/routing/codex-cli-model-catalog"),
-      import("@/lib/inference/ai-provider-internals"),
-    ]);
+    const { discoverCodexCliModels } = await import("./codex-cli-catalog-auth");
     const models = await discoverCodexCliModels("codex");
     if (models.length === 0) {
       return { discovered: 0, newCount: 0, error: `${consumerError}; Codex catalog listed no models` };
@@ -54,11 +51,7 @@ export async function mirrorCodexCatalogForChatgpt(input: {
       `[discovery] chatgpt: consumer backend refused (${JSON.stringify(consumerError)}); ` +
       `mirroring ${models.length} Codex-catalog model(s) of the shared ChatGPT account.`,
     );
-    const modelIds = models.map((model) => model.modelId);
-    const newCount = await internals.upsertDiscoveredModels("chatgpt", models);
-    await internals.reconcileDiscoveredModelPresence("chatgpt", new Set(modelIds));
-    await internals.readmitListedModels("chatgpt", input.authMethod, modelIds);
-    return { discovered: models.length, newCount, modelIds };
+    return await persistDiscoveredInventory("chatgpt", input.authMethod, models);
   } catch (err) {
     return { discovered: 0, newCount: 0, error: `${consumerError}; Codex catalog mirror failed: ${getErrorMessage(err)}` };
   }

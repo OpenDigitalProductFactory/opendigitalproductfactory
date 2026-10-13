@@ -377,7 +377,11 @@ writes the latest gate result to Git-local state
 pass on one slot retires any non-passing sibling-slot record for the same
 branch and SHA as `superseded`, and every reader of that state (`pregate:status`,
 the pre-push hook, `pr:health`, the PreToolUse publish guard) consults all
-slots, so an earlier attempt on another slot cannot shadow a real pass. It
+slots, so an earlier attempt on another slot cannot shadow a real pass.
+`pregate:status` re-reads the winner a superseded record names. If that record
+no longer passed the same branch and SHA (a late lease loss can rewrite it
+after the fact), it names the winner's actual status and says no slot holds a
+pass, instead of repeating "passed" (BI-A9031FF3). It
 overwrites stale state with `admitted` and then `running` as soon as it owns the
 sandbox, before the expensive command mutates the runtime. If the child wrapper
 exits before a terminal record is written, `pregate` reads that running state,
@@ -838,12 +842,30 @@ runs `.githooks/pre-push-gate` through
 the same no-network Git wrapper and proves the same unexpired SHA-bound record
 is sufficient for later publication.
 
-**Quiescence-aware evidence recovery.** `pnpm run pregate` now preflights
-`get_quiescence_status` once before the expensive gate. If the portal is actively
-draining or swapping, the gate records `blocked_quiescence`, emits
-`local_ci_quiescence_wait`, and parks with exit 75 before claiming the lease or
-running the full local-CI command. It does not poll: rerun pregate after the
-server-owned quiescence coordinator completes. If the expensive gate already passed but
+The contract runs on Windows hosts with Git Bash as well as in CI (BI-1B4910B4).
+The injected curl transport quotes its arguments for MSYS `sh`, which would
+otherwise collapse `\\` in a JSON body that carries a Windows path. A test's
+`DPF_LOCAL_CI_COMMAND` must work under `cmd.exe` too, because the gate runs it
+through the platform shell. The three `local-ci-runner.mjs` unshallow tests
+skip on Windows: they stub git with a POSIX script on `PATH`, and Windows only
+ever resolves `git.exe`.
+
+**Quiescence-aware evidence recovery.** After checking for a reusable PASS,
+`pnpm run pregate` reads `get_quiescence_status` before running host preflight.
+Confirmed draining or swapping emits `local_ci_quiescence_wait` and exits 75
+without executing guards, claiming a lease, spawning a waiter or changing gate
+and pending-evidence files. The early probe bounds each credential exchange and
+status request to 2.5 seconds. An unavailable, refused or malformed read is
+inconclusive, not PASS or FAIL, and continues the existing preflight/admission
+path. Record-exempt invocations and an audited preflight skip do not run this
+early probe. The standalone `pregate:preflight` remains a source-only check.
+
+The gate still rechecks quiescence immediately before admission: the early read
+does not reserve capacity or authorize a later claim. That late check records
+`blocked_quiescence` for an ordinary run and parks with the same exit 75, while
+preserving existing evidence on `--finalize-evidence`. Neither check polls:
+resume after the server-owned quiescence coordinator completes.
+If the expensive gate already passed but
 `record_local_integration_result` is refused with `portal_quiescing`, the gate
 writes `.git/dpf-local-ci-pending-evidence.json`, attempts
 `release_nonprod_environment_lease`, and records

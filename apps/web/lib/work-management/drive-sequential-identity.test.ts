@@ -344,7 +344,16 @@ async function runSequence(definition: WorkShapeDefinition, shapeIndex: number, 
         return "acquired";
       },
       upsertAgentTask: async (input) => {
-        calls.push({ effect: "upsertAgentTask", input: plain(input) });
+        // The frozen pre-3c golden covers planner behavior. Validate the new
+        // persistence identity separately, then compare every original field.
+        // Do not regenerate the golden to bless a changed scheduling decision.
+        const { dispatchScope, ...original } = input;
+        if (dispatchScope) {
+          expect(dispatchScope.runKey).toBeTruthy();
+          expect(dispatchScope.cycleKey).toBe(`${input.stage.shapeKey}@${input.stage.shapeVersion}:${input.now.toISOString().slice(0, 10)}`);
+          expect(dispatchScope.iteration).toBe(0);
+        }
+        calls.push({ effect: "upsertAgentTask", input: plain(original) });
         if (upsertFails) return false;
         taskIds.push(input.taskId);
         return true;
@@ -483,13 +492,18 @@ describe("AC-3C-SEQ-IDENTICAL: sequential rooms are byte-identical to the pre-3c
     // shapes to them. drive-resolution.test.ts, drive-marking-durable.test.ts
     // and workroom-drive-children.test.ts reach them.
     const graphOnly = new Set<string>(["construct_not_executable", "marking_unreadable", "gate_refused", "refused_to_stop", "awaiting_sub_shape", "sub_shape_stopped"]);
+    // A review stage's unsendable reviewer request (BI-2C8750FC) is reached only
+    // through the readiness review overlay, which this golden harness does not
+    // compose; workroom-drive-review-stages.test.ts reaches it.
+    const reviewStageOnly = new Set<string>(["reviewer_dispatch_unavailable"]);
     const expected = [
       ...Object.values(DRIVE_REASONS_BY_ACTION).flat(),
       "executor_writeback_unavailable",
       "cycle_complete",
-    ].filter((reason) => !graphOnly.has(reason));
+    ].filter((reason) => !graphOnly.has(reason) && !reviewStageOnly.has(reason));
     expect(expected.filter((reason) => !reached.has(reason))).toEqual([]);
     expect([...graphOnly].filter((reason) => reached.has(reason))).toEqual([]);
+    expect([...reviewStageOnly].filter((reason) => reached.has(reason))).toEqual([]);
   }, 300_000);
 
   it("no persisted sequential snapshot carries a marking or pendingAttentions key", async () => {

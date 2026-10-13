@@ -50,6 +50,7 @@ async function emitCollaborationReturn(
     });
     const prov = readCollaborationProvenance(tr?.a2aMetadata);
     if (!prov) return; // only emit returns for governed collaboration spawns
+    if (prov.delegationLinkId) await closeDelegationLink(prov.delegationLinkId, outcome);
     let ownerMessage: string | undefined;
     if (prov.summary === PROVIDER_COMPLIANCE_COLLABORATION_SUMMARY) {
       const advisory = outcome === "completed" && options?.specialistReply
@@ -81,6 +82,20 @@ async function emitCollaborationReturn(
   } catch {
     // non-fatal — the panel's in-flight poll still flips the done indicator.
   }
+}
+
+/**
+ * Close the handoff's DelegationChain link with the child's outcome
+ * (BI-A0BFA63E): links used to stay `active` forever. Only an active link is
+ * closed, so a repeated return cannot rewrite an outcome.
+ */
+async function closeDelegationLink(linkId: string, outcome: "completed" | "failed" | "canceled"): Promise<void> {
+  await prisma.delegationChain.updateMany({
+    where: { id: linkId, status: "active" },
+    data: outcome === "completed"
+      ? { status: "completed", completedAt: new Date() }
+      : { status: "failed", completedAt: new Date(), reason: `child ${outcome}` },
+  });
 }
 
 const TERMINAL_STATUSES = new Set([
@@ -384,6 +399,25 @@ async function loadUserContext(userId: string): Promise<AutonomousWorkUserContex
     platformRole: null,
     isSuperuser: owner?.isSuperuser ?? false,
   };
+}
+
+/**
+ * BI-287E1DD0: the durable child job failed terminally (its process died, or
+ * the engine gave up). The agentic loop is process-bound — its tool calls may
+ * already have had effects — so it is not replayed: the child is failed with a
+ * plain reason and its parent is told. A child that already reached a terminal
+ * state keeps it.
+ */
+export async function failInterruptedChildThread(context: ChildRuntimeContext, cause: string): Promise<void> {
+  const taskRun = await prisma.taskRun.findUnique({
+    where: { taskRunId: context.taskRunId },
+    select: { status: true },
+  });
+  if (!taskRun || TERMINAL_STATUSES.has(taskRun.status)) return;
+  await markChildThreadFailed(
+    context,
+    `Interrupted before it finished (${cause}). It was not re-run automatically because its tool calls may already have taken effect; ask for it again to retry.`,
+  );
 }
 
 async function markChildThreadFailed(

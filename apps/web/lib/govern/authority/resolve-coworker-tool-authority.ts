@@ -350,6 +350,22 @@ function authSource(
 }
 
 /**
+ * BI-C8EC05C9 (spec D2 S2): the propose boundary reaches the escalation gate,
+ * and under it no policy projection may approve on a person's behalf
+ * (policy-action-judgment.ts reads policyProjectionAllowed). Without it,
+ * projection is allowed unless the operator's HITL policy is "always".
+ */
+export function proposeBoundaryAuthority(
+  context: Pick<GovernedExecuteContext, "proposeBoundary"> | undefined,
+  hitlPolicy: string | null | undefined,
+): { proposeBoundary?: true; policyProjectionAllowed: boolean } {
+  const operatorAllows = hitlPolicy?.trim().toLowerCase() !== "always";
+  return context?.proposeBoundary === true
+    ? { proposeBoundary: true, policyProjectionAllowed: false }
+    : { policyProjectionAllowed: operatorAllows };
+}
+
+/**
  * Resolve the server-owned inputs for the pure authority evaluator. Model
  * output and caller-provided policy claims never enter this function.
  */
@@ -465,6 +481,11 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
     ].filter((value): value is string => Boolean(value));
 
     const roomAuthority = execution.context?.roomAuthority ?? null;
+    const authorResearchBinding = execution.toolName === "record_initiative_evidence" && !initiativeReviewBinding && initiativeAuthority.subject.kind === "backlog-item"
+      ? await (await import("@/lib/build/author-research-policy-binding")).resolveAuthorResearchPolicyBinding({ toolName: execution.toolName, params: execution.rawParams,
+          userId: execution.userId, agentId: agent.agentId, itemId: initiativeAuthority.subject.id,
+          routeContext: execution.context?.routeContext ?? null }, db as never)
+      : null;
     const callConsequence = await resolveCallConsequence(tool, {
       toolName: execution.toolName,
       params: execution.rawParams,
@@ -473,6 +494,7 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
     });
     const input: CoworkerAuthorityInput = {
       authContext: effectiveAuth,
+      ...(authorResearchBinding ? { authorResearchBinding } : {}),
       organizationId: initiativeAuthority.organizationId,
       action: {
         toolName: execution.toolName,
@@ -488,8 +510,7 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
         routeContext: execution.context?.routeContext ?? null,
         allowedRouteContexts: deriveAllowedRouteContexts(tool.screenSurface),
         approvalPolicy,
-        policyProjectionAllowed:
-          agent.governanceProfile?.hitlPolicy.trim().toLowerCase() !== "always",
+        ...proposeBoundaryAuthority(execution.context, agent.governanceProfile?.hitlPolicy),
         consequence: callConsequence.consequence,
         ...(callConsequence.refinement ? { consequenceRefinement: callConsequence.refinement } : {}),
         ...(execution.context?.workCase

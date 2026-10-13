@@ -6,6 +6,7 @@ import { prisma } from "@dpf/db";
 import { PlatformWorkspaceHome } from "@/components/workspace-home/PlatformWorkspaceHome";
 import { VerticalWorkspaceHome } from "@/components/workspace-home/VerticalWorkspaceHome";
 import { OperatorCockpit } from "@/components/workspace-home/OperatorCockpit";
+import { MainStreamHero } from "@/components/workspace-home/MainStreamHero";
 import { WorkspaceStorefrontAttention } from "@/components/owner-first/WorkspaceStorefrontAttention";
 import { WorkspaceTwinHero } from "@/components/workspace-home/WorkspaceTwinHero";
 import { resolveCloudProviderReadiness } from "@/lib/inference/cloud-provider-readiness";
@@ -133,16 +134,20 @@ export default async function WorkspacePage() {
           }
           density={simpleHome ? "simple" : "full"}
           platformBody={
-            <PlatformWorkspaceHome
-              data={platformHomeData}
-              heading="All workspace areas"
-              density="simple"
-            />
+            <>
+              <MainStreamHero archetypeId={archetypeRef?.archetypeId ?? null} />
+              <PlatformWorkspaceHome
+                data={platformHomeData}
+                heading="All workspace areas"
+                density="simple"
+              />
+            </>
           }
         />
       ) : (
         <>
           {cockpit}
+          <MainStreamHero archetypeId={archetypeRef?.archetypeId ?? null} />
           {workspaceHomeResolution.mode === "vertical" ? (
             <VerticalWorkspaceHome
               contribution={workspaceHomeResolution.contribution}

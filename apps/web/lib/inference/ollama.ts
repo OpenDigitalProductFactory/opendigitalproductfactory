@@ -90,7 +90,7 @@ export function resetLocalProviderProbeState(): void {
  * reachable, not absent: /v1/models answers without loading a model, but the
  * runner can be busy enough during a load to exceed the short budget.
  */
-async function probeLocalRunner(baseUrl: string): Promise<boolean> {
+export async function probeLocalRunner(baseUrl: string): Promise<boolean> {
   const url = baseUrl.endsWith("/v1") ? `${baseUrl}/models` : `${baseUrl}/v1/models`;
   for (const timeoutMs of [LOCAL_PROBE_TIMEOUT_MS, LOCAL_PROBE_RETRY_TIMEOUT_MS]) {
     try {
@@ -110,10 +110,18 @@ async function probeLocalRunner(baseUrl: string): Promise<boolean> {
 export async function checkBundledProviders(): Promise<void> {
   const provider = await prisma.modelProvider.findFirst({
     where: { providerId: "local" },
-    select: { providerId: true, status: true, baseUrl: true, endpoint: true },
+    select: { providerId: true, status: true, baseUrl: true, endpoint: true, updatedAt: true },
   });
 
   if (!provider) return;
+
+  const connection = await prisma.aiProviderConnection.findUnique({
+    where: { connectionId: "provider-default-local" },
+    select: { status: true },
+  });
+  // An operator's routing veto survives a healthy runner and page refresh.
+  // Health demotion leaves the connection active, so it can still recover.
+  if (connection?.status === "inactive" || connection?.status === "disabled" || connection?.status === "paused") return;
 
   const baseUrl = getOllamaBaseUrl(provider);
   const reachable = await probeLocalRunner(baseUrl);
@@ -130,10 +138,11 @@ export async function checkBundledProviders(): Promise<void> {
     reachable
     && (provider.status === "unconfigured" || provider.status === "disabled" || provider.status === "inactive")
   ) {
-    await prisma.modelProvider.update({
-      where: { providerId: "local" },
+    const promoted = await prisma.modelProvider.updateMany({
+      where: { providerId: "local", status: provider.status, updatedAt: provider.updatedAt },
       data: { status: "active" },
     });
+    if (promoted.count === 0) return; // Operator changed state while the probe ran.
     if (provider.status === "inactive") {
       console.info("[local-provider] runner reachable again; promoted local from inactive to active");
       await clearProviderCapacityStatus({ providerId: "local", source: "api" });
@@ -181,10 +190,11 @@ export async function checkBundledProviders(): Promise<void> {
       );
       return;
     }
-    await prisma.modelProvider.update({
-      where: { providerId: "local" },
+    const demoted = await prisma.modelProvider.updateMany({
+      where: { providerId: "local", status: "active", updatedAt: provider.updatedAt },
       data: { status: "inactive" },
     });
+    if (demoted.count === 0) return;
     console.warn(
       `[local-provider] runner unreachable on ${consecutiveLocalProbeFailures} consecutive checks; demoted local to inactive`,
     );

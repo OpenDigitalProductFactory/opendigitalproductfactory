@@ -21,7 +21,8 @@
 import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
-import { runApprovedExternalRequest } from "@/lib/coworker/approved-request-run";
+import { runApprovedExternalRequest, runApprovedPlatformRequest } from "@/lib/coworker/approved-request-run";
+import type { ApprovedRequestRun, PlatformRequestRun } from "@/lib/coworker/approved-request-run-types";
 import { approveEnvelope } from "@/lib/coworker/envelope-actions";
 import { recordApprovalOutcome } from "@/lib/coworker/approval-outcome-store";
 
@@ -30,6 +31,14 @@ type RouteContext = {
 };
 
 export const dynamic = "force-dynamic";
+
+/** What is recorded for a platform run: a settled run is its recorded outcome (BI-C8EC05C9). */
+function recordablePlatformRun(run: PlatformRequestRun): ApprovedRequestRun {
+  if (run.status !== "settled") return run;
+  return run.outcome === "executed"
+    ? { status: "executed", message: run.message, ...(run.entityId ? { entityId: run.entityId } : {}) }
+    : { status: "failed", message: run.message };
+}
 
 export async function POST(_request: Request, context: RouteContext): Promise<Response> {
   const session = await auth();
@@ -51,7 +60,13 @@ export async function POST(_request: Request, context: RouteContext): Promise<Re
   // call runs here, once, through the governed executor; a call parked inside
   // an external task resumes that task (BI-9FD11E5E). The approval itself is
   // already recorded, so a run that cannot happen is reported, never an error.
-  const execution = await runApprovedExternalRequest(envelopeId).catch((error: unknown) => ({
+  // BI-C8EC05C9: a call the platform parked for itself (its park row carries
+  // the approval-resume marker) is checked FIRST, because a converted
+  // scheduled request has a TaskRun and is not an external task to resume.
+  // Without the marker this falls through to the external path unchanged.
+  const execution = await runApprovedPlatformRequest(envelopeId).then(
+    (platform) => (platform ? recordablePlatformRun(platform) : runApprovedExternalRequest(envelopeId)),
+  ).catch((error: unknown) => ({
     status: "failed" as const,
     message: error instanceof Error ? error.message : "The approved action could not be run.",
   }));

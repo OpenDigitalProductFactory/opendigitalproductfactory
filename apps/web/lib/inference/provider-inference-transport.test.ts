@@ -1,26 +1,114 @@
-import { describe, expect, it, vi } from "vitest";
+import { once } from "node:events";
+import { createServer, type ServerResponse } from "node:http";
+import { createRequire } from "node:module";
+import { setImmediate } from "node:timers/promises";
 
-const mocks = vi.hoisted(() => ({
-  createTransport: vi.fn(),
-  fetch: vi.fn(),
-  close: vi.fn(),
-}));
+import { describe, expect, it } from "vitest";
 
-vi.mock("@/lib/network/off-threadpool-fetch", () => ({
-  createOffThreadpoolFetchTransport: mocks.createTransport,
-}));
+import { providerInferenceFetch } from "./provider-inference-transport";
 
-describe("provider inference transport", () => {
-  it("owns one process-lived off-threadpool fetch transport", async () => {
-    mocks.createTransport.mockReturnValue({
-      fetch: mocks.fetch,
-      close: mocks.close,
+// Undici exports this clock specifically for tests. Advance its real HTTP
+// parser timers while retaining real sockets, rather than waiting ten minutes.
+const require = createRequire(import.meta.url);
+const transportClock = require("undici/lib/util/timers.js") as {
+  tick(milliseconds?: number): void;
+};
+
+async function withProvider(
+  test: (url: string, dispatched: Promise<ServerResponse>) => Promise<void>,
+) {
+  let dispatched!: (response: ServerResponse) => void;
+  const received = new Promise<ServerResponse>((resolve) => { dispatched = resolve; });
+  const server = createServer((_request, response) => dispatched(response));
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("expected TCP listener");
+  try {
+    await test(`http://127.0.0.1:${address.port}/`, received);
+  } finally {
+    server.closeAllConnections();
+    server.close();
+    await once(server, "close");
+  }
+}
+
+describe("provider inference transport deadlines", () => {
+  it("accepts reviewer headers after the old five-minute transport cutoff", async () => {
+    await withProvider(async (url, dispatched) => {
+      const outcome = providerInferenceFetch(url, { signal: AbortSignal.timeout(600_000) })
+        .then((response) => response.text()).catch((error: unknown) => error);
+      const response = await dispatched;
+      transportClock.tick();
+      transportClock.tick(310_000);
+      await setImmediate();
+      response.end("independent review response");
+      expect(await outcome).toBe("independent review response");
     });
+  });
 
-    const { providerInferenceFetch } = await import("./provider-inference-transport");
+  it("accepts a delayed response body within the reviewer deadline", async () => {
+    await withProvider(async (url, dispatched) => {
+      const request = providerInferenceFetch(url, { signal: AbortSignal.timeout(600_000) });
+      const response = await dispatched;
+      response.writeHead(200, { "content-type": "text/plain" });
+      response.write("review ");
+      const result = await request;
+      const outcome = result.text().catch((error: unknown) => error);
+      transportClock.tick();
+      transportClock.tick(310_000);
+      await setImmediate();
+      response.end("complete");
+      expect(await outcome).toBe("review complete");
+    });
+  });
 
-    expect(mocks.createTransport).toHaveBeenCalledOnce();
-    expect(providerInferenceFetch).toBe(mocks.fetch);
-    expect(mocks.close).not.toHaveBeenCalled();
+  it("still stops a request at the caller's shorter deadline", async () => {
+    await withProvider(async (url, dispatched) => {
+      const controller = new AbortController();
+      const outcome = providerInferenceFetch(url, { signal: controller.signal })
+        .catch((error: unknown) => error);
+      await dispatched;
+      controller.abort(new DOMException("governed deadline reached", "TimeoutError"));
+      expect(await outcome).toMatchObject({ name: "TimeoutError" });
+    });
+  });
+
+  it("retains a finite transport ceiling when no caller signal is supplied", async () => {
+    await withProvider(async (url, dispatched) => {
+      const outcome = providerInferenceFetch(url).catch((error: unknown) => error);
+      await dispatched;
+      transportClock.tick();
+      transportClock.tick(610_000);
+      expect(await outcome).toMatchObject({ cause: { code: "UND_ERR_HEADERS_TIMEOUT" } });
+    });
+  });
+
+  it("retains the body timeout backstop after headers arrive", async () => {
+    await withProvider(async (url, dispatched) => {
+      const request = providerInferenceFetch(url);
+      const response = await dispatched;
+      response.writeHead(200);
+      response.write("partial review");
+      const result = await request;
+      const outcome = result.text().catch((error: unknown) => error);
+      transportClock.tick();
+      transportClock.tick(610_000);
+      expect(await outcome).toMatchObject({ cause: { code: "UND_ERR_BODY_TIMEOUT" } });
+    });
+  });
+
+  it("honors caller cancellation while reading the body", async () => {
+    await withProvider(async (url, dispatched) => {
+      const controller = new AbortController();
+      const request = providerInferenceFetch(url, { signal: controller.signal });
+      const response = await dispatched;
+      response.writeHead(200);
+      response.write("partial review");
+      const result = await request;
+      const outcome = result.text().catch((error: unknown) => error);
+      controller.abort(new DOMException("governed deadline reached", "TimeoutError"));
+      expect(await outcome).toMatchObject({ name: "TimeoutError" });
+    });
   });
 });

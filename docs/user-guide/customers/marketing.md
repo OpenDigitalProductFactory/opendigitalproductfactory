@@ -165,6 +165,15 @@ Marketing Strategist plans one campaign per buyer type (for example HVAC
 contractors, dental practices, or IT partners), and drafts speak to that
 owner's own day and benefit, while staying inside what is available today.
 
+## Correcting a Plan That Started Wrong
+
+If the plan was bootstrapped on the wrong premise — the wrong buyer, or the
+wrong sales motion — tell the Marketing Strategist what is true. It can change
+how you reach buyers (for example to a partner channel) and retire the briefs
+and asset tasks built on the old premise. Retired work is archived with the
+reason, not deleted, and stops appearing on the strategy page, the calendar and
+the scheduler.
+
 ## Understand the Two Funnels
 
 - **Marketing Funnel** (`/customer/marketing/funnel`) explains acquisition

@@ -241,3 +241,43 @@ describe("buildUserAwareFieldDispatchNotificationProposals", () => {
     expect(mocks.prisma.agentActionProposal.create).not.toHaveBeenCalled();
   });
 });
+
+// Approval convergence A1 characterisation (BI-C8EC05C9), creation site S4.
+// Nothing in production calls the persistence function, and the action type it
+// writes is not a registered tool, so approving such a row through the generic
+// approveProposal branch returns "Unknown tool" and the row goes to `failed`
+// (that branch is pinned in proposals.characterization.test.ts). PR-B deletes
+// the persistence function and this case with it.
+describe("S4 — field dispatch proposals (characterisation)", () => {
+  it("has no production caller and writes a non-tool action type", async () => {
+    const { closeSync, openSync, readFileSync, readdirSync } = await import("node:fs");
+    const { join, dirname } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const webRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+    const callers: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(path);
+          continue;
+        }
+        if (!entry.isFile() || !/\.tsx?$/.test(entry.name) || /\.test\.tsx?$/.test(entry.name)) continue;
+        const fd = openSync(path, "r");
+        try {
+          if (readFileSync(fd, "utf8").includes("proposeUserAwareFieldDispatchNotifications(")) {
+            callers.push(path.slice(webRoot.length + 1).split("\\").join("/"));
+          }
+        } finally {
+          closeSync(fd);
+        }
+      }
+    };
+    for (const root of ["app", "lib", "components"]) walk(join(webRoot, root));
+    expect(callers).toEqual(["lib/proactivity/field-dispatch-runtime.server.ts"]);
+
+    const { FIELD_DISPATCH_CUSTOMER_NOTIFICATION_ACTION } = await import("./field-dispatch-runtime");
+    expect(FIELD_DISPATCH_CUSTOMER_NOTIFICATION_ACTION).toBe("field_dispatch_customer_notification");
+  });
+});

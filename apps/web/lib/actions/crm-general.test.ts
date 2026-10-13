@@ -99,6 +99,10 @@ vi.mock("@/lib/actions/finance", () => ({
   generateInvoiceFromSalesOrder: vi.fn(),
 }));
 
+vi.mock("@/lib/geocoding/request.server", () => ({
+  requestAddressGeocodeIfMissing: vi.fn().mockResolvedValue(false),
+}));
+
 vi.mock("@/lib/shared/site-address-validation", () => ({
   searchValidatedSiteAddresses: vi.fn(),
   resolveValidatedSiteAddress: vi.fn(),
@@ -106,6 +110,7 @@ vi.mock("@/lib/shared/site-address-validation", () => ({
 
 import { prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
+import { requestAddressGeocodeIfMissing } from "@/lib/geocoding/request.server";
 import {
   resolveValidatedSiteAddress,
   searchValidatedSiteAddresses,
@@ -271,6 +276,9 @@ describe("createCustomerSite", () => {
     expect(prisma.$transaction).toHaveBeenCalledTimes(2);
     expect(revalidatePath).toHaveBeenCalledWith("/customer");
     expect(revalidatePath).toHaveBeenCalledWith("/customer/acct-1");
+    // BI-C318C227 §2.1: the saved site's address is offered to geocode-on-save.
+    expect(requestAddressGeocodeIfMissing).toHaveBeenCalledTimes(1);
+    expect(requestAddressGeocodeIfMissing).toHaveBeenCalledWith(result.site.primaryAddressId);
   });
 });
 
@@ -371,6 +379,7 @@ describe("updateCustomerSite", () => {
     expect(site.primaryAddressId).toBe("address-new");
     expect(resolveValidatedSiteAddress).toHaveBeenCalledWith("provider-ref-2");
     expect(revalidatePath).toHaveBeenCalledWith("/customer/acct-1");
+    expect(requestAddressGeocodeIfMissing).toHaveBeenCalledWith("address-new");
   });
 
   it("allows metadata-only updates when a primary address already exists", async () => {
@@ -397,6 +406,7 @@ describe("updateCustomerSite", () => {
 
     expect(site.serviceNotes).toBe("Updated note");
     expect(resolveValidatedSiteAddress).not.toHaveBeenCalled();
+    expect(requestAddressGeocodeIfMissing).not.toHaveBeenCalled();
   });
 });
 
