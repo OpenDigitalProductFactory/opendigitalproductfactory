@@ -38,6 +38,7 @@ import {
   resolveInferenceRuntimePolicy,
 } from "./local-inference-runtime-policy";
 import { isRecord } from "@/lib/shared/coerce";
+import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
 
 // Compatibility export for existing callers; callProvider now owns local
 // admission, so this adapter never acquires the lane itself.
@@ -46,7 +47,7 @@ export { withLocalInferenceLock } from "@/lib/queue/resource-lane";
 // ─── Inference HTTP timeouts ──────────────────────────────────────────────────
 // The runtime-policy module separates the governed, deliberately slower 27B
 // reviewer from generic local models. Both operator overrides and defaults stay
-// bounded, while the reviewer always receives its approved ten-minute window.
+// bounded; a server-bound parent deadline supplies the governed exception.
 
 // ─── Gemini part types ───────────────────────────────────────────────────────
 
@@ -455,21 +456,23 @@ export const chatAdapter: ExecutionAdapterHandler = {
     const startMs = Date.now();
     let res: Response;
     try {
-      // callProvider owns local admission, so the adapter's timeout begins only
-      // after the caller owns the local lane and actual HTTP dispatch starts.
+      // callProvider owns admission; governed queue wait consumes the parent budget.
+      await assertGovernedInferenceAuthority();
+      const execution = currentGovernedInferenceDeadline();
+      const timeout = createInferenceTimeoutSignal(resolveInferenceRuntimePolicy(providerId, modelId, {
+        defaultTimeoutMs: process.env.DPF_INFERENCE_TIMEOUT_MS,
+        localTimeoutMs: process.env.DPF_LOCAL_INFERENCE_TIMEOUT_MS,
+      }, execution ? { deadlineAt: execution.deadlineAt, now: Date.now() } : undefined).effectiveTimeoutMs);
       res = await request.fetchImpl(chatUrl, {
         method: "POST",
         headers: requestHeaders,
         body: JSON.stringify(body),
-        signal: createInferenceTimeoutSignal(resolveInferenceRuntimePolicy(providerId, modelId, {
-          defaultTimeoutMs: process.env.DPF_INFERENCE_TIMEOUT_MS,
-          localTimeoutMs: process.env.DPF_LOCAL_INFERENCE_TIMEOUT_MS,
-        }).effectiveTimeoutMs),
+        signal: execution ? AbortSignal.any([timeout, execution.signal]) : timeout,
       });
     } catch (e) {
       // A busy GPU is a capacity deferral. Wrapping it as "network" makes the
       // fallback chain treat the local model as broken instead of waiting.
-      if (e instanceof Error && e.name === "LocalProviderCapacityDeferredError") throw e;
+      if (e instanceof Error && ["LocalProviderCapacityDeferredError", "GovernedInferenceDeadlineError"].includes(e.name)) throw e;
       throw new InferenceError(
         `Network error calling ${providerId}: ${e instanceof Error ? e.message : String(e)}`,
         "network",

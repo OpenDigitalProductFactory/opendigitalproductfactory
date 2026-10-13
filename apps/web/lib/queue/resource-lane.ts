@@ -51,6 +51,8 @@ export interface ResourceLaneRunOptions {
   waitTimeoutMs?: number | null;
   /** Optional domain-specific timeout error factory. */
   waitTimeoutError?: () => Error;
+  /** Parent cancellation removes queued work; active work keeps its slot until settled. */
+  signal?: AbortSignal;
 }
 
 export interface ResourceLaneDeps {
@@ -75,6 +77,7 @@ export class ResourceLane {
     priority: "interactive" | "autonomous";
     autonomousAgingMs: number | null;
     waitTimer: ReturnType<typeof setTimeout> | null;
+    cleanup: () => void;
   }> = [];
   private active = false;
   private pumpScheduled = false;
@@ -102,6 +105,7 @@ export class ResourceLane {
    * otherwise queues (unbounded) exactly like the promise chain it replaces.
    */
   async run<T>(fn: () => Promise<T>, opts: ResourceLaneRunOptions = {}): Promise<T> {
+    opts.signal?.throwIfAborted();
     const maxQueueDepth = opts.maxQueueDepth ?? null;
     if (maxQueueDepth != null && this.waiting >= maxQueueDepth) {
       throw new LaneBusyError(this.laneKey, this.waiting);
@@ -123,14 +127,29 @@ export class ResourceLane {
         priority,
         autonomousAgingMs: normalizeAgingMs(opts.autonomousAgingMs),
         waitTimer: null as ReturnType<typeof setTimeout> | null,
+        cleanup: () => opts.signal?.removeEventListener("abort", cancel),
+      };
+      const cancel = () => {
+        const index = this.queue.indexOf(entry);
+        if (index < 0) return;
+        this.queue.splice(index, 1);
+        if (entry.waitTimer) clearTimeout(entry.waitTimer);
+        entry.cleanup();
+        this.waiting -= 1;
+        entry.reject(opts.signal?.reason ?? new Error("inference-parent-canceled"));
+        this.emit({ itemId, transition: "finished", outcome: "failed", depth: this.waiting,
+          durations: { waitMs: this.now() - enqueuedAt } });
+        this.schedulePump();
       };
       this.queue.push(entry);
+      opts.signal?.addEventListener("abort", cancel, { once: true });
       const waitTimeoutMs = normalizeWaitTimeoutMs(opts.waitTimeoutMs);
       if (waitTimeoutMs != null) {
         entry.waitTimer = setTimeout(() => {
           const index = this.queue.indexOf(entry);
           if (index < 0) return;
           this.queue.splice(index, 1);
+          entry.cleanup();
           this.waiting -= 1;
           const waitedMs = this.now() - enqueuedAt;
           entry.reject(opts.waitTimeoutError?.() ?? new Error(
@@ -167,6 +186,7 @@ export class ResourceLane {
     const index = this.selectNextIndex();
     const entry = this.queue.splice(index, 1)[0]!;
     if (entry.waitTimer) clearTimeout(entry.waitTimer);
+    entry.cleanup();
     this.waiting -= 1;
     const startedAt = this.now();
     this.emit({
@@ -311,15 +331,16 @@ const localInferenceLane = getResourceLane(LOCAL_INFERENCE_LANE_KEY, {
  *  own callers queue instead of misclassifying each other as external owners. */
 export function withLocalInferenceLock<T>(
   fn: () => Promise<T>,
-  options?: { modelId?: string | null; origin?: "interactive" | "autonomous" },
+  options?: { modelId?: string | null; origin?: "interactive" | "autonomous"; signal?: AbortSignal },
 ): Promise<T> {
   const origin = options?.origin ?? "interactive";
   const waitTimeoutMs = resolveAcquireTimeoutMs(origin);
   return localInferenceLane.run(
-    () => probeLocalGpuThenRun(fn, options?.modelId ?? null),
+    () => probeLocalGpuThenRun(fn, options?.modelId ?? null, options?.signal),
     {
       maxQueueDepth: localInferenceMaxQueueDepth(),
       priority: origin,
+      signal: options?.signal,
       autonomousAgingMs: localInferenceAutonomousAgingMs(),
       waitTimeoutMs,
       waitTimeoutError: () => createInferenceAdmissionTimeoutError("local", origin, waitTimeoutMs, {
@@ -329,8 +350,13 @@ export function withLocalInferenceLock<T>(
   );
 }
 
-async function probeLocalGpuThenRun<T>(fn: () => Promise<T>, modelId: string | null): Promise<T> {
+async function probeLocalGpuThenRun<T>(fn: () => Promise<T>, modelId: string | null, signal?: AbortSignal): Promise<T> {
+  signal?.throwIfAborted();
+  const { assertGovernedInferenceAuthority } = await import("@/lib/routing/governed-inference-deadline");
+  await assertGovernedInferenceAuthority();
   const { assertLocalGpuFree } = await import("@/lib/inference/host-gpu-admission");
   await assertLocalGpuFree({ modelId });
+  signal?.throwIfAborted();
+  await assertGovernedInferenceAuthority();
   return fn();
 }

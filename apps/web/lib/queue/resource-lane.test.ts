@@ -354,3 +354,58 @@ describe("withLocalInferenceLock — the ONE local-GPU admission gate (BI-98572A
     }
   });
 });
+
+describe("ResourceLane parent cancellation", () => {
+  it("removes an aborted priority waiter and its timeout before the next dispatch", async () => {
+    vi.useFakeTimers();
+    const lane = new ResourceLane("compute:priority-parent", { record: () => {} });
+    const hold = deferred<void>();
+    const active = lane.run(() => hold.promise);
+    await Promise.resolve();
+    const abort = new AbortController();
+    const dispatch = vi.fn(async () => "expired");
+    const canceled = lane.run(dispatch, {
+      priority: "interactive", signal: abort.signal, waitTimeoutMs: 500,
+    }).catch(error => error);
+    const next = lane.run(async () => "background", { priority: "autonomous" });
+    try {
+      abort.abort(new Error("parent expired"));
+      expect((await canceled).message).toBe("parent expired");
+      expect(lane.depth()).toBe(1);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(lane.depth()).toBe(1);
+      expect(dispatch).not.toHaveBeenCalled();
+      hold.resolve();
+      await active;
+      await expect(next).resolves.toBe("background");
+      expect(lane.depth()).toBe(0);
+    } finally {
+      hold.resolve();
+      await active;
+      vi.useRealTimers();
+    }
+  });
+
+  it("removes a canceled waiter without releasing the active GPU holder", async () => {
+    const lane = new ResourceLane("compute:parent-cancel", { record: () => {} });
+    const hold = deferred<void>();
+    const active = lane.run(() => hold.promise);
+    await Promise.resolve();
+    const abort = new AbortController();
+    let calls = 0;
+    const canceled = lane.run(async () => { calls++; }, { signal: abort.signal }).catch(error => error);
+    try {
+      expect(lane.depth()).toBe(1);
+      abort.abort(new Error("parent expired"));
+      await Promise.resolve();
+      expect(lane.depth()).toBe(0);
+      expect(calls).toBe(0);
+    } finally {
+      hold.resolve();
+      await active;
+      await canceled;
+    }
+    expect(calls).toBe(0);
+    await expect(lane.run(async () => "next")).resolves.toBe("next");
+  });
+});

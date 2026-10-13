@@ -12,8 +12,9 @@ import { mcpClientBearerHeaderRequired, type McpAuthMode, type McpClient } from 
  */
 
 import { existsSync, readFileSync, statSync } from "node:fs";
+import { join, resolve } from "node:path";
 
-import { planCodexConfig, type CodexConfigPlan } from "./codex-config";
+import { planCodexConfig, planCodexProjectConfig, type CodexConfigPlan } from "./codex-config";
 import {
   planMcpClientConfig,
   mcpClientConfigPaths,
@@ -182,6 +183,13 @@ export function computeAgentToolchainPlan(
       options.worktreeBase,
       options.authMode,
     );
+    const projectPath = join(options.repoRoot, ".codex", "config.toml");
+    if (resolve(projectPath) !== resolve(options.codexConfigPath) && _exists(projectPath)) {
+      const project = planCodexProjectConfig(_readFile(projectPath, "utf8"), projectPath, options.mcpEndpoint, options.authMode);
+      codex.writes.push(...project.writes);
+      codex.preservedUserIntent ||= project.preservedUserIntent;
+      codex.rationale += `; ${project.rationale}`;
+    }
   }
 
   // Claude plan (skipped when Claude CLI absent).
