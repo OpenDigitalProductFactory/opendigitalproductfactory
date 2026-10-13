@@ -50,7 +50,7 @@ This assessment respects [`verify-substrate-before-proposing-new`](../founder-ke
 
 ## 1. The problem, stated precisely
 
-Build Studio is a five-phase agentic pipeline (`ideate → plan → build → review → ship`, plus terminal `complete`/`failed`) defined in [`apps/web/lib/explore/feature-build-types.ts:441`](../../apps/web/lib/explore/feature-build-types.ts) with the transition matrix at [`feature-build-types.ts:657`](../../apps/web/lib/explore/feature-build-types.ts). The build phase is driven by `runBuildOrchestrator()` at [`apps/web/lib/build/build-orchestrator.ts:951`](../../apps/web/lib/build/build-orchestrator.ts), entered fire-and-forget via `autoExecuteBuild()` (defined at [`apps/web/lib/actions/build.ts:735`](../../apps/web/lib/actions/build.ts), called at `:710`/`:876`/`:908`/`:1149`).
+Build Studio is a five-phase agentic pipeline (`ideate → plan → build → review → ship`, plus terminal `complete`/`failed`; a build rebased onto main at ship returns to `review` to re-earn its evidence on the new tree, BI-76BD65E6) defined in [`apps/web/lib/explore/feature-build-types.ts:441`](../../apps/web/lib/explore/feature-build-types.ts) with the transition matrix at [`feature-build-types.ts:657`](../../apps/web/lib/explore/feature-build-types.ts). The build phase is driven by `runBuildOrchestrator()` at [`apps/web/lib/build/build-orchestrator.ts:951`](../../apps/web/lib/build/build-orchestrator.ts), entered fire-and-forget via `autoExecuteBuild()` (defined at [`apps/web/lib/actions/build.ts:735`](../../apps/web/lib/actions/build.ts), called at `:710`/`:876`/`:908`/`:1149`).
 
 We have spent months hardening it and it remains fragile. The concrete, observed failure modes:
 
