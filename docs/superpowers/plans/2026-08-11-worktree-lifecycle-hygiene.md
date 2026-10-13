@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Worktree lifecycle hygiene — liveness-before-reap, root-clone freshness, abandoned-merge quarantine
 
 **Date:** 2026-08-11
