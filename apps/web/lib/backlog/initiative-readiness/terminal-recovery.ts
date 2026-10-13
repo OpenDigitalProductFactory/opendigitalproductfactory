@@ -546,9 +546,15 @@ export async function resolveTerminalInitiativeRecovery(args: {
   decision: InitiativeReadinessDecision;
   currentAgentId: string | null;
   refusedWorkroomId: string | null;
+  taskAuthority?: import("./exhausted-plan-review").PlanReviewTaskAuthority | null;
   ports?: TerminalRecoveryPorts;
 }): Promise<TerminalInitiativeRecovery> {
-  const ports = args.ports ?? DEFAULT_TERMINAL_RECOVERY_PORTS;
+  const suppliedPorts = args.ports ?? DEFAULT_TERMINAL_RECOVERY_PORTS;
+  const ports = args.taskAuthority ? { ...suppliedPorts, resolveRecovery:
+    async (input: Parameters<typeof resolveInitiativeReviewerRecovery>[0]) => suppliedPorts.resolveRecovery({
+      ...input, isPlanReviewExhausted: (await import("./exhausted-plan-review"))
+        .createExhaustedPlanReviewPredicate(args.taskAuthority!, prisma),
+    }) } : suppliedPorts;
   const acceptanceLane = [...args.decision.blockers, ...args.decision.unmet]
     .find((entry) => entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED");
   if (acceptanceLane && acceptanceLane.accountableRole === "delivery-coordinator") {

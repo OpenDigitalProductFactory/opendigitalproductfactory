@@ -11604,6 +11604,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "routing-status-and-temporary-pauses",
         "authentication-methods",
         "api-key",
         "oauth-sign-in",
@@ -11751,6 +11752,7 @@
         "how-models-enter-the-system",
         "path-1-static-seed-install-time",
         "path-2-dynamic-discovery-runtime",
+        "when-the-connections-page-takes-longer-to-load",
         "quality-tiers",
         "agent-model-configuration",
         "default-agent-tiers",

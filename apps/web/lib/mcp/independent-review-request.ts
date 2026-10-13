@@ -138,7 +138,11 @@ export async function authorizeCoworkerRequest(
     : await (async () => {
       const { resolveTerminalInitiativeRecovery } = await import("@/lib/backlog/initiative-readiness/terminal-recovery");
       const recovery = await resolveTerminalInitiativeRecovery({ decision, currentAgentId: context!.agentId ?? null,
-        refusedWorkroomId: binding.workroomRef!.workroomId });
+        refusedWorkroomId: binding.workroomRef!.workroomId,
+        taskAuthority: binding.gate === "plan-review" ? await (async () => {
+          const taskAuthorityKey = await resolveMcpTaskAuthorityKey({ tokenId: context.apiTokenId!, userId, source: "oauth" });
+          return taskAuthorityKey ? { userId, taskAuthorityKey } : null;
+        })() : null });
       return recovery.reviewerRoutes.filter((route) => route.independent).map((route) => route.requestCoworker);
     })();
   if (!issued.some((issuedPacket) => canonicalJson(issuedPacket) === canonicalJson(params))) {

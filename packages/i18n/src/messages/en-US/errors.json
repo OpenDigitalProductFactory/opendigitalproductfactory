@@ -1,4 +1,11 @@
 {
+  "providerLoading": {
+    "status": "Loading provider data",
+    "providers": "Loading providers",
+    "heading": "Still loading your connections",
+    "body": "This is taking longer than usual. You can keep waiting or refresh the page.",
+    "refresh": "Refresh page"
+  },
   "localInventory": {
     "restricted": "Provider management access required.",
     "checking": "Checking inventory…",

@@ -80,6 +80,16 @@ describe("nonprod-lease pack — registration", () => {
 });
 
 describe("nonprod-lease pack — handler behavior (delegation preserved)", () => {
+  it.each(["nonprod_resume_identity_mismatch", "nonprod_resume_lease_expired"])("projects %s as a refusal, not a thrown transport error", async code => {
+    lease.claimNonprodEnvironmentLease.mockRejectedValueOnce(new Error(code));
+    const result = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
+      environmentKey: "active-candidate", ownerProvider: "codex", ownerSessionId: "s1",
+      claimKey: "fixture-claim", resumeLeaseId: "NPEL-ORIGINAL", purpose: "test",
+      url: "http://localhost:3010", ports: [3010], expiresAt: new Date(Date.now() + 60000).toISOString(),
+    }, "u1");
+    expect(result).toMatchObject({ success: false, error: code });
+    expect(durableWait.checkpointNonprodLeaseWait).not.toHaveBeenCalled();
+  });
   it("list returns admitted and queued leases from the service", async () => {
     lease.listActiveNonprodEnvironmentLeases.mockResolvedValue([{ id: "L1" }]);
     lease.listQueuedNonprodEnvironmentLeases.mockResolvedValue([{ id: "L2" }]);

@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
 import { loadEvidencePolicy } from "./lib/ci-evidence-plan.mjs";
 import { resolveMcpCredential } from "./lib/mcp-credential.mjs";
+import { readQuiescenceStatus, quiescenceBlocksWrites, quiescenceWait } from "./lib/gate-quiescence.mjs";
 import { readFailureEvidenceBinding } from "./lib/semantic-review-gate.mjs";
 
 // BI-46B03CAE — the lease-queue MCP calls cost more than mcpCall's 10s default.
@@ -1190,22 +1191,6 @@ function responseData(response) {
   return response?.data ?? response ?? {};
 }
 
-async function readQuiescenceStatus({ mcpUrl, bearerToken }) {
-  try {
-    const response = await mcpCall("get_quiescence_status", {}, { mcpUrl, bearerToken });
-    if (response?.success !== true) return null;
-    return responseData(response);
-  } catch (error) {
-    process.stderr.write(`gate-worktree: quiescence preflight unavailable (${error.message}); continuing to governed lease claim\n`);
-    return null;
-  }
-}
-
-function quiescenceBlocksWrites(status) {
-  return Boolean(status)
-    && ((status.level && status.level !== "normal") || status.writesRefused === true);
-}
-
 /**
  * Is anything still holding the local-CI slot?
  *
@@ -1503,7 +1488,8 @@ async function main() {
     bearerToken,
   });
   if (quiescenceBlocksWrites(quiescence)) {
-    const retryAfterSeconds = Number(quiescence.retryAfterSeconds || 30);
+    const wait = quiescenceWait(quiescence);
+    const { retryAfterSeconds } = wait;
     // A finalize-only invocation may already carry a genuine green gate whose
     // publication was deferred. Never replace that evidence with a wait
     // projection merely because the control plane is currently quiescing.
@@ -1526,14 +1512,7 @@ async function main() {
     // signal that the coordinator is trying to drain. Park once, preserve a
     // machine-readable resume hint, and let the caller invoke pregate again
     // after the coordinator's completion event or its normal task wake-up.
-    process.stderr.write(JSON.stringify({
-      status: "waiting",
-      code: "local_ci_quiescence_wait",
-      runId: quiescence.runId ?? quiescence.activeCoordinator?.runId ?? null,
-      level: quiescence.level ?? "quiescing",
-      retryAfterSeconds,
-      resumeMode: "durable-quiescence",
-    }) + "\n");
+    process.stderr.write(JSON.stringify(wait) + "\n");
     process.exit(75);
   }
 

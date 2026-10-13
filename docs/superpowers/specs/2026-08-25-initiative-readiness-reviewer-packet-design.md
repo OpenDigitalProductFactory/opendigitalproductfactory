@@ -244,6 +244,34 @@ dropped.
 
 ## 8. Security and separation of duties
 
+### Historical artifact and current Workroom — BI-CAP-EF2B04BB
+
+An issued review may bind an unchanged plan at its original commit while the
+Workroom has advanced. The governed handler carries `workroomRef` from the
+accepted TaskRun alongside `artifactRef`; callers cannot select that context.
+The resolver requires the exact live subject, repository, room, branch and
+current head. For plan review, the writer resolves the same current baseline-
+validated coverage projection that issued the packet, including inherited parent
+scope. It requires the accepted baseline, original locator and digest to match
+that canonical plan. A later file's front matter does not replace the recorded
+immutable plan or constitute a byte-equivalence claim. The scope owner's item
+row is locked and canonical coverage is revalidated before publication. A removed
+child, changed baseline, locator, digest or scope owner refuses publication.
+The receipt retains the original commit, blob, bytes, digest and DCO evidence.
+Other bound artifact lanes require the same provider path/blob at the current
+head. Without a trusted binding, the unique exact-artifact-head rule remains.
+
+Missing or malformed context, stale heads, foreign subjects, changed reviewed blobs and
+ambiguous ownership refuse publication. The receipt transaction locks and
+revalidates the room and accountable owner after provider verification. Existing
+reviewer independence, grant intersection, immutable reader evidence and receipt
+validation still apply. Do not adopt a historical plan commit as the current
+branch head or churn the request key to avoid a writer rejection. WWMD decision
+`DI-65FBD03E0230` selected reuse of current canonical coverage over reissuing
+unchanged plan work or adding Markdown metadata-normalization policy; it grants
+no missing tool authority. Deploy the
+source repair and use the original TaskRun's supported recovery.
+
 - No grant expansion. `authorityScope` is per-dispatch and names exactly the
   bound writer plus one immutable reader.
 - No self-approval. The existing `independent` exclusion of `currentAgentId` is

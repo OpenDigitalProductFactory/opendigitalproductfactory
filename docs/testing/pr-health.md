@@ -83,11 +83,32 @@ registry, exact diff, DCO, clean-tree, pushed-branch, and PR-trailer contracts
 before a contributor opens a PR. This is the shift-left gate; `pr:health`
 remains the end-to-end observer after GitHub creates the PR and starts CI.
 
+For ordinary external non-documentation changes, readiness requires one visible `Local-CI-Evidence:`
+or `Local-CI-Override:` trailer in the final PR body. An evidence identifier must
+match the existing worktree slot records for the current branch and commit,
+including a completed, published, unexpired verdict and matching producer
+metadata. Failed, pending, skipped, test-stub and foreign records do not qualify.
+The command only reads those records; it does not acquire a lease or rerun a gate.
+Correct a missing trailer using the actual qualified evidence. When evidence
+cannot be resolved, reconcile its provenance or use an already-authorized
+override; do not invent a PASS or repeat full validation merely to repair text.
+Allowed overrides are reported as **UNRUN**, and protected checks still apply.
+These metadata checks run even when local guard results are reused or skipped.
+
 Build Studio uses the same readiness command with an internal
 `--published-ref` mode. Its shipping transaction is deliberately branch-first:
 it publishes a recoverable branch, fetches and checks out that exact remote
 commit in the build sandbox, runs canonical readiness against the final PR
 body, restores the build branch, and opens a PR only for a ready verdict.
+
+That detached, exact `--published-ref` path retains Build Studio's separate
+server-owned canonical preflight requirement; it does not require external
+worktree slot files. Readiness reports **local proof UNPROVEN** in its text and
+JSON notes. The flag selects mechanical checks, not publication authority or a
+local integration PASS. Supplied local-CI trailers still require validation.
+An original/private-tree proof is not relabeled as proof of a remapped published
+tree. Transporting qualified canonical proof into that body's metadata remains
+a separate follow-up; the server's existing prepublication check still applies.
 Typecheck, tests, and acceptance evidence are additional fail-closed blockers.
 If any check fails, the tool returns the published branch, commit SHA, and
 blockers; it does not create a review-lane placeholder PR.

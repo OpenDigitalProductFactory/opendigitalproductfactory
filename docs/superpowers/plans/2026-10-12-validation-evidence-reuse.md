@@ -131,3 +131,112 @@ Both cache-hit paths now re-read identity before returning a reused result;
 the regression failed before this correction and passes after it. The runbook
 owner released the exact documentation claim through the native tool, and this
 Workroom claimed it before editing; no force/co-claim was used.
+
+## Publication attestation follow-up
+
+Coverage receipt: `cmv5vj5t3211201pg2kczysxk`, binding the follow-up plan at
+`8b0c959f4766cfa916e9c2a6495622e5e8400737`. Research receipt:
+`initiative-661f9726-3ee9-4a8f-b57c-117ba86bf315`.
+
+CT-PUBLICATION / FLOW-CORRECTION / VC-PUBLICATION: PRs #6235 and #6236
+omitted local-CI trailers after readiness reported READY. Their bodies have
+since been repaired without repeating executed validation. Extend the existing
+readiness command to reject missing publication attestation for non-docs changes.
+An evidence trailer must match a qualified, current-head result from the existing
+slot manifests and `classifySlotRecord`, not an arbitrary ID
+or an admission. Reuse the existing override classifier; an allowed override
+remains explicitly UNRUN, never PASS. Do not introduce a new gate or ledger.
+
+Sequence: reproduce missing attestation with a failing readiness test; add tests
+for failed, expired, foreign-head/branch, pending and skipped evidence, plus a
+qualified matching result and a truthful permitted override; wire the existing
+read-only gate reader into readiness; update contributor documentation. Keep
+metadata checks outside reusable guard execution. A docs-only change retains
+the existing evidence-policy exemption. Report unavailable proof as unresolved,
+not an instruction to repeat the entire gate. Existing protected CI remains
+authoritative. This is a continuation of the same atomic publication contract;
+the broader refresh/delegation requirements above remain open.
+
+Touched source: `scripts/pr-readiness.mjs`, `scripts/pr-readiness/core.mjs`,
+`scripts/pr-readiness.test.mjs`; documentation: `docs/testing/pr-health.md`.
+The native impact contract has no testImpact or guardObligation entries; run
+the readiness, pregate-status, PR-health, override and receipt regression suites
+and affected source guards. Rollback is a signed revert of this bounded adapter
+change. No runtime, schema, grant or UI changes are included.
+
+Compatibility boundary confirmed by the coordinator: ordinary external readiness
+requires local-CI attestation. Build Studio retains its existing server-owned
+`requireInPlatformPreflightRecord` before publication and detached exact-ref
+mechanical checks afterward. Absent external slot files do not block that path;
+text and JSON state local proof UNPROVEN, with no authority or PASS inferred
+from the flag. Supplied malformed or unqualified proof still blocks. Exercise
+the actual `buildPublishedReadinessCommand` and guard the caller's existing
+server preflight ordering. Broader projected-tree proof transport stays open;
+never rebind a private-tree PASS onto the remapped published tree.
+
+## Host-resource retry identity follow-up
+
+AC-4 remains incomplete for `host-heavy-resource`: the runner derives its claim
+key from the current PID, while a detached retry starts a new process. Five
+queued leases were observed for one receiver invocation on October 12. The
+server also rejects PID changes on an existing host claim. Changing only the
+client key would replace duplicate rows with failed retries.
+
+CT-HOST-RESUME / FLOW-HOST-RESUME / VC-HOST-RESUME extend the existing claim,
+`resumeLeaseId`, detached resumer and local queue observer. No new queue,
+service, table or evidence authority is introduced. One logical invocation gets
+a random attempt identifier plus a digest of source, command, owner, worktree,
+branch and resource budget. Replays carry that identity before the child-command
+separator; genuinely new invocations get new identifiers. Changed inputs stop
+the old attempt unrun rather than silently admitting different work.
+
+Within the existing locked lease transaction, only an exact same-owner,
+same-provider, same-contract, pinned queued host lease may transfer process
+identity. Preserve its lease ID and original queue timestamp. Missing, foreign,
+terminal, active or mismatched resume targets never create a replacement or
+take over an active execution. Fresh claims retain normal capacity admission.
+
+The existing observer directory retains the actual resumer PID, child PID and
+bounded per-attempt output. The launcher PID is explicitly a launcher, not
+claimed as the durable child. Credentials and raw environment are not logged.
+Cancellation, source drift and terminal leases stop retries without running the
+command. Keep recursion suppression and the existing retry deadline.
+
+Sequence: add failing runner/resumer and mocked-transaction regression tests;
+implement the bounded identity handoff; run those suites and existing resume,
+host-admission and resumer suites; independent review and protected CI precede
+publication. No live claim storm or lease cleanup is part of this repair.
+Touched paths: `scripts/host-resource-runner.mjs` and its test,
+`scripts/lib/durable-wait-resumer.mjs` and its test,
+`scripts/local-ci-durable-wait-resumer.mjs`, and
+`apps/web/lib/nonprod/environment-lease.ts`, `environment-lease-resume.ts` and
+their host-resource/resume tests. A source-local helper may isolate identity
+calculation without adding a durable store. The shared client transport must
+retain ordinary local-CI behavior.
+
+Regression coverage must prove stable lease count and queue age across changing
+PIDs, fresh identities for new invocations, exact argv preservation, changed
+source/command/owner/budget rejection, terminal/foreign/active lease refusal,
+normal queued-to-admitted progression, and retained child output and identity.
+The server PID handoff is the principal risk: accept it only for the exact pinned
+queued lease. Rollback is a signed revert; do not mutate historical leases.
+
+This is the remaining AC-4 repair under BI-25CB699C, not completion of the wider
+BI. Early quiescence detection before expensive preflight remains separate.
+During QR-2026-10-13-k0qmxdnz, native claim writes returned `portal_quiescing`.
+The operator-authorized recovery route permitted bounded source work. After
+the upgrade, the normal claim succeeded as WC-FAB79D1A and atomic coverage
+`cmv5yzgu7009801nvclvqc2xp` bound plan commit
+`0b0c7f3ecc215639ec191e9cc579f326088cbf5b`. Implementation readiness returned
+allowed. No backlog completion or live resource lease was created.
+
+The existing MCP pack must project the two added identity/expiry refusals as
+structured errors, so clients stop unrun rather than report a product failure.
+Include its pack and dispatch tests in VC-HOST-RESUME. Operational instructions
+are updated in `docs/operations/local-ci-sandbox-slots.md`; the general pattern
+and developer-environment pages keep their existing resource-admission policy.
+The native impact contract identifies the lease and pack test suites plus the
+style-drift guard. Run all related suites, both TypeScript programs and affected
+policy guards. Full local integration and native semantic review remain unrun
+under the authorized recovery route; independent source review and protected
+GitHub checks remain required. No UI, schema or capacity-policy change occurs.

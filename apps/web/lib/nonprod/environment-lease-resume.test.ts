@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@dpf/db", () => ({ prisma: {} }));
 
-import { resolveResumeClaim, SUPERSEDED_PHASE } from "./environment-lease-resume";
+import { resolveResumeClaim, SUPERSEDED_PHASE, validateHostResourceClaim } from "./environment-lease-resume";
 
 const NOW = new Date("2026-09-24T00:00:00.000Z");
 
@@ -31,6 +31,50 @@ function tx(pinned: Row | null) {
 }
 
 const base = { environmentKey: "local-integration-ci", ownerSessionId: "session-1", now: NOW };
+
+describe("host resource exact resume", () => {
+  const host = { ...base, environmentKey: "host-heavy-resource", ownerProvider: "codex" };
+  const pinned = () => ({ ...row(), environmentKey: host.environmentKey,
+    ownerProvider: "codex", expiresAt: new Date(NOW.getTime() + 60000) });
+
+  it("refuses a queued lease whose heartbeat budget already expired", async () => {
+    const prior = { ...pinned(), expiresAt: NOW };
+    await expect(resolveResumeClaim({ ...host, tx: tx(prior) as never,
+      resumeLeaseId: prior.leaseId, claimLease: prior as never })).rejects.toThrow("nonprod_resume_lease_expired");
+  });
+
+  it.each(["ownerProvider", "resourceClass", "expectedMemoryBytes", "worktreePath", "branchName", "purpose"])("cannot change %s while handing off a queued process", field => {
+    const prior = { ...pinned(), resourceClass: "vitest", expectedMemoryBytes: 8,
+      worktreePath: "/work", branchName: "fix/test", purpose: "host-resource:vitest",
+      ownerPid: 1, ownerProcessIdentity: "process-1" };
+    const input = { ...prior, resumeLeaseId: prior.leaseId, ownerProcessId: 2, ownerProcessIdentity: "process-2" };
+    expect(validateHostResourceClaim(prior as never, input)).toBe(true);
+    expect(() => validateHostResourceClaim(prior as never, { ...input, [field]: field === "expectedMemoryBytes" ? 16 : "changed" }))
+      .toThrow("host_resource_claim_contract_mismatch");
+    expect(() => validateHostResourceClaim(prior as never, { ...input, resumeLeaseId: undefined }))
+      .toThrow("host_resource_claim_contract_mismatch");
+  });
+
+  it.each(["released", "expired", "cancelled"])("never revives a %s host attempt", async status => {
+    const prior = { ...pinned(), status };
+    const db = tx(prior);
+    expect(await resolveResumeClaim({ ...host, tx: db as never,
+      resumeLeaseId: prior.leaseId, claimLease: prior as never })).toEqual({ kind: "terminal", lease: prior });
+    expect(db.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();
+  });
+
+  it.each(["missing", "foreign", "environment", "active", "different-key"])("refuses %s resume without changing any row", async condition => {
+    const prior = { ...pinned(),
+      ...(condition === "foreign" ? { ownerSessionId: "foreign" } : {}),
+      ...(condition === "environment" ? { environmentKey: "local-integration-ci" } : {}),
+      ...(condition === "active" ? { status: "active" } : {}),
+    };
+    const db = tx(condition === "missing" ? null : prior);
+    await expect(resolveResumeClaim({ ...host, tx: db as never, resumeLeaseId: prior.leaseId,
+      claimLease: condition === "different-key" ? null : prior as never })).rejects.toThrow(/nonprod_resume/);
+    expect(db.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();
+  });
+});
 
 describe("resolveResumeClaim", () => {
   it("does nothing for a claim that resumes nothing", async () => {

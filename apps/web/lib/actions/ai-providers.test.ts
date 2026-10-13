@@ -98,20 +98,8 @@ import {
   discoverModels,
   runProviderCatalogReconciliationIfDue,
   testProviderAuth,
-  toggleProviderStatus,
 } from "./ai-providers";
-import { setProviderStatusWithDefaultConnection } from "@dpf/db";
 import { updateProviderConnectionPosture } from "./provider-connection-posture";
-
-describe("operator provider toggle", () => {
-  it("disables the connection together with the provider", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "user-1", platformRole: "HR-000", isSuperuser: true } });
-    mockCan.mockReturnValue(true);
-    mockPrisma.modelProvider.findUnique.mockResolvedValue({ status: "active" });
-    await expect(toggleProviderStatus("local")).resolves.toEqual({ status: "inactive", warning: null });
-    expect(setProviderStatusWithDefaultConnection).toHaveBeenCalledWith(mockPrisma, { providerId: "local", status: "inactive" });
-  });
-});
 
 describe("updateProviderConnectionPosture", () => {
   beforeEach(() => {

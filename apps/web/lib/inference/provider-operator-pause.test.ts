@@ -47,6 +47,33 @@ function fixture(providerId = "local") {
 }
 
 describe("durable operator provider pause", () => {
+  it("preserves a cloud account's earlier routing disable after expiry", async () => {
+    const f = fixture("chatgpt");
+    f.state.connection.status = "inactive";
+    const pause = await pauseLocalProvider({ providerId: "chatgpt", actorId: "operator", duration: { value: 1, unit: "hours" } }, f.deps);
+    await resumeLocalProvider({ providerId: "chatgpt", operationId: pause.operationId, automatic: true }, { ...f.deps, now: new Date("2026-10-12T03:00:00Z") });
+    expect(f.state.connection.status).toBe("inactive");
+  });
+  it.each(["chatgpt", "codex", "openai"])("pauses %s without rewriting automatic provider health", async (providerId) => {
+    const f = fixture(providerId);
+    f.state.provider.status = "disabled";
+    const pause = await pauseLocalProvider({ providerId, actorId: "operator", duration: { value: 2, unit: "hours" } }, f.deps);
+    expect(f.state.connection.status).toBe("paused");
+    expect(f.state.provider.status).toBe("disabled");
+    await resumeLocalProvider({ providerId, operationId: pause.operationId, automatic: true }, { ...f.deps, now: new Date("2026-10-12T04:00:00Z") });
+    expect(f.state.connection.status).toBe("active");
+    expect(f.state.provider.status).toBe("disabled");
+    expect(f.probe).not.toHaveBeenCalled();
+  });
+  it("does not change cloud provider lifecycle when an operator pause expires", async () => {
+    const f = fixture("chatgpt");
+    const pause = await pauseLocalProvider({ providerId: "chatgpt", actorId: "operator", duration: { value: 1, unit: "hours" } }, f.deps);
+    expect(f.state.provider.status).toBe("active");
+    f.state.provider.status = "disabled";
+    await resumeLocalProvider({ providerId: "chatgpt", operationId: pause.operationId, automatic: true }, { ...f.deps, now: new Date("2026-10-12T03:00:00Z") });
+    expect(f.state.provider.status).toBe("disabled");
+    expect(f.tx.modelProvider.update).not.toHaveBeenCalled();
+  });
   it("retains pause changes and timer execution with distinct attribution", async () => {
     const f = fixture();
     await pauseLocalProvider({ providerId: "local", actorId: "operator" }, f.deps);

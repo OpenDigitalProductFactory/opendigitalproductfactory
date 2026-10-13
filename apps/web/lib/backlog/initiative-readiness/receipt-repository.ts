@@ -11,8 +11,10 @@ import {
   type InitiativeGateKey,
 } from "./receipt-schema";
 import type { ReadinessProfile } from "./types";
+import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import { resolveReviewerIdentity } from "./reviewer-identity";
 import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
+import { canonicalPlanMatchesArtifact, loadCanonicalPlanSource, sameCanonicalPlanSource } from "./canonical-plan-source";
 
 type ReceiptHistoryRow = { payload: unknown };
 
@@ -45,6 +47,9 @@ export async function recordInitiativeGateReceipt(args: {
   gate: InitiativeGateKey;
   decision: "pass" | "fail" | "not-applicable";
   artifactRef: InitiativeArtifactRef;
+  /** Trusted TaskRun context passed only by the governed tool handler. */
+  workroomRef?: InitiativeReviewBinding["workroomRef"];
+  expectedCurrentBaselineId?: string | null;
   reason: string;
   findings: Array<{ issue: string; severity: "critical" | "important" }>;
   resolvedFindingRefs: string[];
@@ -116,13 +121,27 @@ export async function recordInitiativeGateReceipt(args: {
   const rationale = authority.rationale && typeof authority.rationale === "object" && !Array.isArray(authority.rationale)
     ? authority.rationale as Record<string, unknown> : {};
   const authorPolicy = rationale.authorResearchBinding != null;
+  const boundPlanReview = args.gate === "plan-review" && args.workroomRef && args.artifactRef.kind === "repo-blob-at-commit";
+  const canonicalPlanProof = boundPlanReview ? await loadCanonicalPlanSource({
+    itemId: item.itemId, repositoryFullName: args.workroomRef!.repositoryFullName,
+  }) : null;
+  if (boundPlanReview && (!canonicalPlanProof || canonicalPlanProof.baselineId !== args.expectedCurrentBaselineId
+    || !canonicalPlanMatchesArtifact(canonicalPlanProof, args.artifactRef))) {
+    return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
+      error: "The accepted plan review no longer matches the current canonical baseline and coverage. Reconcile the server-issued packet; do not substitute a different artifact under the original request key." };
+  }
   const artifact = await resolveInitiativeArtifact({
     locator: args.artifactRef,
+    workroomRef: args.workroomRef,
+    canonicalPlanProof: canonicalPlanProof ?? undefined,
     subject: { kind: "backlog-item", id: item.itemId },
     organizationId: authority.organizationId ?? item.organizationId,
     allowHumanResearchAuthor: authorPolicy && args.gate === "research" && args.requiresIndependentReviewer === false,
   });
   if (!artifact.ok) return artifact;
+  if (canonicalPlanProof && artifact.artifact.digest !== canonicalPlanProof.digest) {
+    return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "The verified plan bytes no longer match the canonical coverage digest." };
+  }
 
   const gateKey = args.gate.replaceAll("-", "_") as never;
   const findingRefs = args.findings.map((finding) => buildStableInitiativeFindingId({
@@ -153,6 +172,35 @@ export async function recordInitiativeGateReceipt(args: {
       },
     });
     if (!lockedItem) return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "The governed initiative no longer exists." };
+    if (canonicalPlanProof) {
+      // Coverage/baseline writers serialize on their scope owner's item row.
+      // The reviewed child is already locked; pin its parent before re-reading.
+      if (canonicalPlanProof.scopeOwnerItemId !== item.itemId) {
+        await tx.$queryRaw`SELECT "id" FROM "BacklogItem" WHERE "itemId" = ${canonicalPlanProof.scopeOwnerItemId} FOR SHARE`;
+      }
+      const currentPlan = await loadCanonicalPlanSource({ itemId: item.itemId,
+        repositoryFullName: canonicalPlanProof.artifactRef.repositoryFullName, db: tx });
+      if (!currentPlan || !sameCanonicalPlanSource(canonicalPlanProof, currentPlan)) {
+        return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "The canonical plan baseline or coverage changed before receipt publication." };
+      }
+    }
+    if (args.workroomRef && args.artifactRef.kind === "repo-blob-at-commit") {
+      const ref = args.workroomRef;
+      // Provider verification happens outside the transaction. Lock the exact
+      // room before append so ownership/head cannot change underneath its proof.
+      await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "capsuleId" = ${ref.workroomId} FOR SHARE`;
+      const room = await tx.workroom.findUnique({ where: { capsuleId: ref.workroomId }, select: {
+        backlogItemId: true, repositoryFullName: true, headBranch: true, headSha: true,
+        archivedAt: true, status: true, createdByPrincipalId: true,
+      } });
+      if (!room || room.archivedAt || ["abandoned", "cancelled"].includes(room.status)
+        || room.backlogItemId !== item.itemId || room.repositoryFullName !== ref.repositoryFullName
+        || room.headBranch !== ref.branchName || room.headSha?.toLowerCase() !== ref.headSha.toLowerCase()
+        || room.createdByPrincipalId !== artifact.artifact.authorPrincipalId) {
+        return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
+          error: "The accepted review's workroom or accountable owner changed before receipt publication. Reconcile the actual workroom and review packet." };
+      }
+    }
     if (authorPolicy) {
       if ((lockedItem.organizationId ?? null) !== (authority.organizationId ?? null)) {
         return { ok: false, code: "AUTHORIZATION_DENIED", error: "The initiative authority scope changed before publication." };
