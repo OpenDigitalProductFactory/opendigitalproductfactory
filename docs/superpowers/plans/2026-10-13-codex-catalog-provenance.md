@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Codex catalog provenance repair — BI-59E37E39
 
 ## Objective and existing design
