@@ -40,6 +40,15 @@ function input(overrides: Partial<CompletionEvidencePolicyInput> = {}): Completi
 }
 
 describe("evaluateCompletionEvidence", () => {
+  it.each(["test_fail", "build_fail", "ux_fail", "migration_fail"] as const)("never grants completion credit for cited %s", (kind) => {
+    const result = evaluateCompletionEvidence(input({
+      rawManifest: { workClass: "operational", evidenceActivityIds: ["negative"] },
+      evidence: [fact("negative", kind)],
+    }));
+    expect(result.allowed).toBe(false);
+    expect(result.acceptanceEvidenceRefs).not.toContain("negative");
+  });
+
   it("allows a proportionate implementation manifest", () => {
     expect(evaluateCompletionEvidence(input())).toMatchObject({
       allowed: true,
