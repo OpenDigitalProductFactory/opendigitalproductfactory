@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import ProvidersLoading from "./loading";
+import { withMessages } from "@/test-support/with-messages";
 
 const { refresh } = vi.hoisted(() => ({ refresh: vi.fn() }));
 
@@ -14,7 +15,7 @@ describe("ProvidersLoading", () => {
 
   it("reports delayed loading without fabricating a dependency failure", () => {
     vi.useFakeTimers();
-    render(<ProvidersLoading />);
+    render(withMessages(<ProvidersLoading />));
     expect(screen.getByRole("status", { name: /loading provider data/i })).toBeTruthy();
 
     act(() => vi.advanceTimersByTime(15_000));
@@ -27,7 +28,7 @@ describe("ProvidersLoading", () => {
 
   it("refreshes only on an explicit action and starts a new pending cycle", () => {
     vi.useFakeTimers();
-    render(<ProvidersLoading />);
+    render(withMessages(<ProvidersLoading />));
     act(() => vi.advanceTimersByTime(15_000));
     fireEvent.click(screen.getByRole("button", { name: /refresh page/i }));
 
