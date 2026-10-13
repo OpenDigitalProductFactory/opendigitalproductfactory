@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { setFlagsFromString } from "node:v8";
+import { runInNewContext } from "node:vm";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -10,6 +12,13 @@ const databaseUrl = process.env.DATABASE_URL;
 const describeDatabase = databaseUrl ? describe : describe.skip;
 const schema = `sanitized_clone_integrity_${randomUUID().replaceAll("-", "")}`;
 let client: Client;
+
+// heapUsed counts unreachable garbage until V8 chooses to collect it, so an
+// unforced sample measures GC timing rather than what the copier retains.
+// Collect first so the bound applies to live (retained) heap only.
+setFlagsFromString("--expose-gc");
+const collectGarbage = runInNewContext("gc") as () => void;
+const retainedHeap = () => { collectGarbage(); return process.memoryUsage().heapUsed; };
 
 async function destinationCount(): Promise<number> {
   const result = await client.query<{ count: string }>(
@@ -75,7 +84,7 @@ describeDatabase("sanitized clone publication with PostgreSQL", () => {
         FROM generate_series(1, 2001) i`);
       let total = 0;
       let largestBatch = 0;
-      const heapBefore = process.memoryUsage().heapUsed;
+      const heapBefore = retainedHeap();
       let peakHeapGrowth = 0;
       await copySanitizedCursorBatches(client,
         `SELECT id, name, payload, NULL::text AS embedding FROM ${table} ORDER BY id`,
@@ -91,15 +100,18 @@ describeDatabase("sanitized clone publication with PostgreSQL", () => {
               [row.id, row.name, JSON.stringify(row.payload), row.embedding]);
             await writer.query("COMMIT");
           } catch (error) { await writer.query("ROLLBACK"); throw error; }
-          peakHeapGrowth = Math.max(peakHeapGrowth, process.memoryUsage().heapUsed - heapBefore);
+          peakHeapGrowth = Math.max(peakHeapGrowth, retainedHeap() - heapBefore);
         }, 50);
       expect(total).toBe(2001);
       expect(largestBatch).toBe(50);
       const copied = await writer.query(`SELECT count(*)::int AS count FROM ${destination} WHERE name LIKE 'Dev User %' AND embedding IS NULL`);
       expect(copied.rows[0].count).toBe(2001);
       // More than 64 MiB JSON plus 3072-element vectors is processed without a
-      // table-sized JS retention. Native vectors never cross the source wire.
-      expect(peakHeapGrowth).toBeLessThan(64 * 1024 * 1024);
+      // table-sized JS retention: live heap after each batch stays far below the
+      // ~63 MiB the full table would retain (one 50-row batch is ~1.6 MiB), so
+      // the bound catches cross-batch retention. Native vectors never cross the
+      // source wire.
+      expect(peakHeapGrowth).toBeLessThan(16 * 1024 * 1024);
     } finally {
       await client.query(`DROP TABLE ${table}`);
       await writer.query(`DROP TABLE ${destination}`);
