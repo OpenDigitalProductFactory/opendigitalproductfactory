@@ -5670,6 +5670,7 @@
         "supported-environment",
         "recommended-hardware",
         "prerequisites",
+        "docker-memory-during-installation",
         "quick-start",
         "contributor-separate-dev-workspace-from-install-recommended-bi-0856a4ce-phase-1",
         "what-the-installer-does",
@@ -5695,6 +5696,7 @@
       "anchors": [
         "platform-support-watch-list-living-document",
         "windows-host-guard-interpreters-bi-ba5f777a",
+        "macos-docker-memory-allocation-bi-dc4352e8",
         "target-environments",
         "how-to-use-this-file",
         "1-monitoring-telemetry",

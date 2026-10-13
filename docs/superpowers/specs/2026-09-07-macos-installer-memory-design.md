@@ -1,7 +1,12 @@
+---
+status: active
+---
+
 # Size Docker memory during macOS installation
 
 Backlog: BI-DC4352E8. Epic: EP-56AE0F69. Workroom: WC-5DE121A4.
-Status: proposed; implementation awaits governed review and coverage.
+Status: implemented for review; BI-DC4352E8 implementation claim allowed by
+initiative-readiness.v3 on 2026-10-13 using the small-fix evidence path.
 
 ## Problem and reproduction
 
@@ -57,7 +62,8 @@ a new runtime. Native Linux and Windows/WSL memory ownership remain unchanged.
 - R4: Changing the VM interrupts all its containers and host model runner work.
   Explain that before applying. With running containers, require interactive
   consent (default no) or explicit `--allow-docker-restart`; `--headless` alone
-  is not consent. No-running-container setup can converge automatically. Restore
+  is not consent. Docker AI enabled also requires consent because models can
+  run natively. Empty setup with Docker AI disabled can converge automatically. Restore
   all previously running container IDs, including restart-policy `no` containers.
 - R5: Reject malformed, missing, symlinked, or administrator-managed settings
   before stopping Docker. Support the documented current settings-store path.
@@ -129,5 +135,7 @@ then a normal start and verification. Source rollback is one PR revert.
 
 Implementation parent: BI-DC4352E8. Canonical plan: this document's ordered
 implementation section. Atomic mapping: R1-R7 -> C1-C2 -> F1-F2 -> V1-V4.
-The live coverage receipt is pending review of this immutable design artifact;
-this document does not claim a passing receipt or authorize implementation.
+The October small-fix implementation readiness receipt is IRD-4989F8C3C472.
+It reuses recorded source verification and the observed incident-remediation
+check; neither is claimed as execution of the new installer helper. New helper
+verification and publication evidence are recorded separately.
