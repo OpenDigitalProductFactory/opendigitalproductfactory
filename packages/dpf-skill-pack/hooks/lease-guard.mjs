@@ -87,7 +87,7 @@ function main() {
   const verdict = decide(command, process.env);
   if (!verdict.block) process.exit(0);
 
-  emitDeny(verdict.reason); // dual-envelope deny — blocks on every surface
+  emitDeny(verdict.reason); // deny in the envelope the sending surface honours
 }
 
 // Run only when invoked directly (not when imported by the test).
