@@ -61,3 +61,30 @@ describe("persisted initiative review outcome", () => {
     expect(await loadTaskInitiativeReviewOutcome("TR-1", binding)).toBeNull();
   });
 });
+
+describe("receipt artifact identity (BI-2E479619 follow-up)", () => {
+  // A feature-build revision binding carries repositoryFullName and valueDigest;
+  // the persisted receipt keeps only the identity (kind + revisionId). Live, 245
+  // parked reviewer runs held exactly this pair and never healed.
+  const revisionRef = { kind: "feature-build-revision" as const, repositoryFullName: "owner/repo", revisionId: "rev-1", valueDigest: "sha256:abc" };
+  const revisionBinding = { ...binding, artifactRef: revisionRef };
+  const storedRevision = { kind: "feature-build-revision", revisionId: "rev-1" };
+
+  it("matches a revision receipt that stores only the revision identity", async () => {
+    db.item.mockResolvedValue(item({ ...receipt, artifactRef: storedRevision }));
+    expect((await loadInitiativeReviewOutcome(revisionBinding, "receipt"))?.receiptId).toBe("receipt");
+  });
+  it("does not match a different revision", async () => {
+    db.item.mockResolvedValue(item({ ...receipt, artifactRef: { ...storedRevision, revisionId: "rev-2" } }));
+    expect(await loadInitiativeReviewOutcome(revisionBinding, "receipt")).toBeNull();
+  });
+  it("does not match when a stored non-identity field contradicts the binding", async () => {
+    db.item.mockResolvedValue(item({ ...receipt, artifactRef: { ...storedRevision, valueDigest: "sha256:other" } }));
+    expect(await loadInitiativeReviewOutcome(revisionBinding, "receipt")).toBeNull();
+  });
+  it("still requires every identity key of a repo blob", async () => {
+    const { path: _omitted, ...withoutPath } = artifactRef;
+    db.item.mockResolvedValue(item({ ...receipt, artifactRef: withoutPath }));
+    expect(await loadInitiativeReviewOutcome(binding, "receipt")).toBeNull();
+  });
+});
