@@ -518,6 +518,14 @@ No new approval engine, route, database model or delegation is introduced.
 Existing actor, exact-input, room, grant, expiry and independent-review checks
 remain authoritative. The separate decision race repair belongs to BI-872069BE.
 
+#### Backlog coverage
+
+Atomic coverage receipt `cmv684g361yco01o7s5e3dwhr` binds BI-12E5DD91 to this
+ordered fix design at commit `27f704ebf57381557cc3c780375c5955dcccb9eb`, blob
+`c8d696c1904c64a76c1c70723b47365c858d79e8`. The complete-proposal deliverable
+maps to BI-12E5DD91. There are no independent child deliverables or dependencies.
+BI-872069BE remains a coordinated separate race correction, not this patch.
+
 #### Design grounding and risk
 
 Reuse the recommendation/authorization design, existing envelope projection,
