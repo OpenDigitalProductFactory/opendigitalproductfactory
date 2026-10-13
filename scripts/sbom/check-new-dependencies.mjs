@@ -33,8 +33,13 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { listDirectDependencies } from "./generate-platform-sbom.mjs";
-import { LOCKFILE_ROOTS, repoWorkspacePath } from "./lockfile-roots.mjs";
+import { listAllDirectDependencies } from "./direct-dependencies.mjs";
+import {
+  DEPENDENCY_DISPOSITION_MATRIX_PATH,
+  matrixDrift,
+  renderDependencyDispositionMatrix,
+  validateDependencyDispositions,
+} from "./dependency-dispositions.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const ALLOWLIST_PATH = join(ROOT, "sbom", "dependency-allowlist.json");
@@ -55,19 +60,24 @@ export function findRetiredInUse(declaredNames, retired = {}) {
   return [...declaredNames].filter((name) => Object.hasOwn(retired, name)).sort();
 }
 
-/** Direct dependencies across every lockfile root, keyed by name, with repo-relative workspaces. */
-export function listAllDirectDependencies(repoRoot = ROOT) {
-  const merged = new Map();
-  for (const root of LOCKFILE_ROOTS) {
-    for (const [name, info] of listDirectDependencies(join(repoRoot, root.dir))) {
-      if (!merged.has(name)) merged.set(name, { workspaces: new Set(), kinds: new Set(), versions: new Set() });
-      const into = merged.get(name);
-      for (const ws of info.workspaces) into.workspaces.add(repoWorkspacePath(root, ws));
-      for (const k of info.kinds) into.kinds.add(k);
-      for (const v of info.versions) into.versions.add(v);
-    }
+export { listAllDirectDependencies } from "./direct-dependencies.mjs";
+
+/** Build the next allowlist without silently deciding the posture of a new package. */
+export function createUpdatedAllowlist(current, priorAllowlist, today) {
+  const prior = priorAllowlist?.dependencies ?? {};
+  const retired = priorAllowlist?.retired ?? {};
+  const dependencies = {};
+  for (const name of [...current.keys()].sort()) {
+    if (Object.hasOwn(retired, name)) continue;
+    const info = current.get(name);
+    dependencies[name] = prior[name] ?? {
+      added: today,
+      workspaces: [...info.workspaces].sort(),
+      kinds: [...info.kinds].sort(),
+      note: "Vetting pending — record provenance, maintenance, license, OSV result, overlap review, and a keep/reduce/absorb disposition.",
+    };
   }
-  return merged;
+  return { note: NOTE, dependencies, retired };
 }
 
 function main() {
@@ -76,21 +86,9 @@ function main() {
 
   if (update) {
     const priorAllowlist = loadAllowlist();
-    const prior = priorAllowlist?.dependencies ?? {};
-    const retired = priorAllowlist?.retired ?? {};
-    const dependencies = {};
-    for (const name of [...current.keys()].sort()) {
-      if (Object.hasOwn(retired, name)) continue;
-      const info = current.get(name);
-      dependencies[name] = prior[name] ?? {
-        added: today,
-        workspaces: [...info.workspaces].sort(),
-        kinds: [...info.kinds].sort(),
-        note: "bootstrap — pre-existing dependency, acknowledged in bulk",
-      };
-    }
-    writeFileSync(ALLOWLIST_PATH, JSON.stringify({ note: NOTE, dependencies, retired }, null, 2) + "\n");
-    process.stdout.write(`Allowlist updated: ${ALLOWLIST_PATH} (${Object.keys(dependencies).length} direct deps acknowledged)\n`);
+    const next = createUpdatedAllowlist(current, priorAllowlist, today);
+    writeFileSync(ALLOWLIST_PATH, JSON.stringify(next, null, 2) + "\n");
+    process.stdout.write(`Allowlist updated: ${ALLOWLIST_PATH} (${Object.keys(next.dependencies).length} direct deps acknowledged). New external entries remain incomplete until their disposition, rationale, and evidence are recorded.\n`);
     return;
   }
 
@@ -142,7 +140,35 @@ function main() {
     process.exit(1);
   }
 
-  process.stdout.write(`OK — no new direct dependencies (${acknowledged.size} acknowledged).\n`);
+  const dispositionIssues = validateDependencyDispositions(current, allow);
+  if (dispositionIssues.length) {
+    process.stderr.write(
+      [
+        `::error::${dispositionIssues.length} direct external dependency disposition issue${dispositionIssues.length === 1 ? "" : "s"} in sbom/dependency-allowlist.json:`,
+        ...dispositionIssues.map(({ name, code, message }) => `    - ${name}: ${code} — ${message}`),
+        "",
+        "  Record one keep/reduce/absorb disposition, rationale, and evidence reference for each package.",
+        "  Reduce and absorb decisions must point at their concrete delivery route.",
+        "",
+      ].join("\n"),
+    );
+    process.exit(1);
+  }
+
+  const expectedMatrix = renderDependencyDispositionMatrix(current, allow);
+  let actualMatrix = "";
+  try {
+    actualMatrix = readFileSync(DEPENDENCY_DISPOSITION_MATRIX_PATH, "utf8");
+  } catch {
+    // A missing generated matrix is drift.
+  }
+  const drift = matrixDrift(expectedMatrix, actualMatrix);
+  if (drift) {
+    process.stderr.write(`::error::${drift}\n`);
+    process.exit(1);
+  }
+
+  process.stdout.write(`OK — no new direct dependencies (${acknowledged.size} acknowledged); external dispositions and matrix are current.\n`);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
