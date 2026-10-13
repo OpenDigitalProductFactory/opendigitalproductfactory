@@ -8,6 +8,8 @@ import { readDocumentBlob } from "@/lib/documents/blob-storage";
 import { resolveRepositoryArtifact } from "./repository-artifact";
 import type { InitiativeArtifactRef, ResolvedInitiativeArtifact } from "./receipt-schema";
 import type { InitiativeSubject } from "./types";
+import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
+import type { CanonicalPlanSourceProof } from "./canonical-plan-source";
 
 type BuildRevisionRecord = {
   id: string;
@@ -115,6 +117,8 @@ function authorRequired(error: string): InitiativeArtifactResolution {
 export async function resolveInitiativeArtifact(args: {
   locator: InitiativeArtifactRef;
   subject: InitiativeSubject;
+  workroomRef?: InitiativeReviewBinding["workroomRef"];
+  canonicalPlanProof?: CanonicalPlanSourceProof;
   db?: InitiativeArtifactResolverDb;
   resolveDocumentAuthorAgent?: (versionId: string, principalId: string) => Promise<string | null>;
   documentBelongsToSubject?: (versionId: string, subject: InitiativeSubject) => Promise<boolean>;
@@ -263,7 +267,8 @@ export async function resolveInitiativeArtifact(args: {
     if (args.resolveRepositoryBlob) {
       providerBlob = await args.resolveRepositoryBlob(args.locator);
     } else {
-      const resolved = await resolveRepositoryArtifact({ locator: args.locator, subject: args.subject, db: db as never });
+      const resolved = await resolveRepositoryArtifact({ locator: args.locator, subject: args.subject,
+        workroomRef: args.workroomRef, canonicalPlanProof: args.canonicalPlanProof, db: db as never });
       if (!resolved.ok) return resolved;
       providerBlob = resolved.artifact;
     }
