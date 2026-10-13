@@ -73,12 +73,15 @@ test("every installer that writes an install .env generates both keys", async ()
   for (const key of KEYS) assert.match(fresh, new RegExp(`^${key}=\\$inngest`, "m"));
 });
 
-function runBash(script, env = {}) {
-  return spawnSync(bash, ["-c", script], { cwd: root, env: { ...process.env, ...env }, encoding: "utf8" });
-}
-
 test("installer output replaces a missing, placeholder or public key and keeps a real one", async () => {
   const dir = await mkdtemp(join(tmpdir(), "dpf-inngest-env-"));
+  // Run bash on a script file. `bash -c` makes CodeQL treat every argument,
+  // including a temp path, as part of the shell command.
+  const scriptFile = join(dir, "ensure-keys.sh");
+  await writeFile(scriptFile, `source scripts/installer/lib/prompts.sh
+for k in INNGEST_SIGNING_KEY INNGEST_EVENT_KEY; do dpf_env_ensure_secret_hex "$k" "$1" 32; done
+`);
+  await chmod(scriptFile, 0o755);
   try {
     const real = "7".repeat(64);
     const cases = {
@@ -90,8 +93,7 @@ test("installer output replaces a missing, placeholder or public key and keeps a
     for (const [name, body] of Object.entries(cases)) {
       const file = join(dir, `${name}.env`);
       await writeFile(file, body);
-      const result = runBash(`source scripts/installer/lib/prompts.sh
-for k in INNGEST_SIGNING_KEY INNGEST_EVENT_KEY; do dpf_env_ensure_secret_hex "$k" "$1" 32; done`.replace("$1", bashPath(file)));
+      const result = spawnSync(bash, [bashPath(scriptFile), bashPath(file)], { cwd: root, env: process.env, encoding: "utf8" });
       assert.equal(result.status, 0, result.stderr);
       const text = await readFile(file, "utf8");
       for (const literal of PUBLIC_KEYS) assert.ok(!text.includes(literal), `${name}: installer output still carries ${literal}`);

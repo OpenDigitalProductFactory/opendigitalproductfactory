@@ -63,6 +63,16 @@ export type GppPermitStore = {
   consumePermit: (row: Pick<PermitRow, "id" | "maxUses">) => Promise<boolean>;
   createObservation: (data: PermitObservationCreate) => Promise<void>;
   findLineage: (ref: PermitLineageRef) => Promise<PermitLineage>;
+  /**
+   * Revoke every unrevoked permit minted for these stages of this workroom
+   * (GPP Phase 3c PR-3c-3, BI-8875C9DF; design §6.2 "Permit revocation"): a
+   * rework leaves those stages, so their permits must not stay valid. Resolves
+   * the number revoked. No permit carries a `stageKey` on main yet
+   * (permit-mint.ts writes null), so it matches nothing until binding attach.
+   * Optional so a store double that predates it keeps compiling;
+   * stage-permit-revocation.ts treats a store without it as revoking nothing.
+   */
+  revokeStagePermits?: (input: { workroomId: string; stageKeys: readonly string[]; now: Date }) => Promise<number>;
 };
 
 // Column names differ from the spec's claim names where the FK Index Coverage
@@ -190,6 +200,14 @@ const prismaStore: GppPermitStore = {
       select: { id: true },
     });
     return decision ? { found: true, sealed: false } : { found: false };
+  },
+  async revokeStagePermits(input) {
+    if (input.stageKeys.length === 0) return 0;
+    const { count } = await prisma.gppPermit.updateMany({
+      where: { workroomRef: input.workroomId, stageKey: { in: [...input.stageKeys] }, revokedAt: null },
+      data: { revokedAt: input.now },
+    });
+    return count;
   },
 };
 

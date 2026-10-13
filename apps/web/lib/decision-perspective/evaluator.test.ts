@@ -196,7 +196,21 @@ describe("evaluateDecisionPerspective", () => {
     expect(result.rationale).toContain("Principle conflict");
   });
 
-  it("escalates high-risk decisions even when coverage is strong", () => {
+  // BI-7FFFBEE3 (operator rule 2026-10-07): the delegated policy decides, and an
+  // escalation names the policy field and value it exceeded. No hard-coded
+  // "high risk goes to a person".
+  const delegated = (overrides: Partial<DecisionPerspectiveProfile["autonomyPolicy"]> = {}) => profile({
+    autonomyPolicy: {
+      allowRecommendation: true,
+      allowArbitration: true,
+      maxRiskForArbitration: "high",
+      minimumConfidenceForRecommendation: 0.55,
+      minimumConfidenceForArbitration: 0.7,
+      ...overrides,
+    },
+  });
+
+  it("escalates a high-risk decision beyond an unchanged policy, naming the policy limit", () => {
     const result = evaluateDecisionPerspective(
       baseInput({
         riskTier: "high",
@@ -205,8 +219,36 @@ describe("evaluateDecisionPerspective", () => {
     );
 
     expect(result.outcomeType).toBe("escalate");
+    expect(result.rationale).toMatch(/maxRiskForRecommendation=medium/);
+    expect(result.rationale).not.toMatch(/even though profile confidence/);
+  });
+
+  it("lets the delegated policy arbitrate a high-risk decision it covers", () => {
+    const result = evaluateDecisionPerspective(
+      baseInput({ profile: delegated(), riskTier: "high", materials: [material({ confidenceWeight: 0.95 })] }),
+    );
+
     expect(result.confidenceScore).toBeGreaterThanOrEqual(0.7);
-    expect(result.rationale).toContain("high-risk");
+    expect(result.outcomeType).toBe("arbitrate");
+  });
+
+  it("escalates a critical-risk decision past the delegated limit and names the limit", () => {
+    const result = evaluateDecisionPerspective(
+      baseInput({ profile: delegated(), riskTier: "critical", materials: [material({ confidenceWeight: 0.95 })] }),
+    );
+
+    expect(result.outcomeType).toBe("escalate");
+    expect(result.rationale).toMatch(/critical/);
+    expect(result.rationale).toMatch(/maxRiskForArbitration=high/);
+  });
+
+  it("escalates a covered risk whose grounding is below the delegated confidence and names the threshold", () => {
+    const result = evaluateDecisionPerspective(
+      baseInput({ profile: delegated({ minimumConfidenceForArbitration: 0.99 }), riskTier: "high", materials: [material({ confidenceWeight: 0.95 })] }),
+    );
+
+    expect(result.outcomeType).toBe("escalate");
+    expect(result.rationale).toMatch(/minimumConfidenceForArbitration=0\.99/);
   });
 
   it("recommends high-confidence medium-risk decisions when arbitration is not allowed", () => {
@@ -472,5 +514,23 @@ describe("content-aware directional scoring (BI-7E1F128A)", () => {
       relevanceMethod: "lexical",
     });
     expect(lexical.outcomeType).toBe("escalate");
+  });
+});
+
+// BI-7FFFBEE3: customer risk envelopes are unchanged by the operator's WWMD
+// decision. Under each, a high-risk decision still escalates, and now names the
+// policy limit instead of a hard-coded tier.
+describe("risk envelopes keep high-risk decisions with a person, naming the limit", () => {
+  it.each(["conservative", "balanced", "progressive"] as const)("%s", async (posture) => {
+    const { resolveRiskEnvelope, riskEnvelopeToAutonomyPolicy } = await import("@/lib/govern/risk-posture");
+    const result = evaluateDecisionPerspective(
+      baseInput({
+        profile: profile({ autonomyPolicy: riskEnvelopeToAutonomyPolicy(resolveRiskEnvelope(posture)) }),
+        riskTier: "high",
+        materials: [material({ confidenceWeight: 0.95 })],
+      }),
+    );
+    expect(result.outcomeType).toBe("escalate");
+    expect(result.rationale).toMatch(/maxRiskForRecommendation=medium/);
   });
 });

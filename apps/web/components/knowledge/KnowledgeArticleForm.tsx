@@ -61,7 +61,7 @@ export function KnowledgeArticleForm({
     setSaving(true);
     setError(null);
     try {
-      const id = await createKnowledgeArticle({
+      await createKnowledgeArticle({
         title,
         body,
         category,

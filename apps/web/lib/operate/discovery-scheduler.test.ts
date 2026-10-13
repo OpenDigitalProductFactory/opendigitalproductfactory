@@ -4,6 +4,7 @@ vi.mock("@dpf/db", () => ({
   executeBootstrapDiscovery: vi.fn().mockResolvedValue({}),
   prisma: {
     scheduledJob: {
+      findUnique: vi.fn().mockResolvedValue({ metadata: { retiredAt: null, operatorSetting: "preserved" } }),
       upsert: vi.fn().mockResolvedValue({}),
       update: vi.fn().mockResolvedValue({}),
     },
@@ -79,6 +80,23 @@ describe("recordJobRun", () => {
       lastStatus: "ok",
     });
     expect(call.update).toMatchObject({ lastStatus: "ok" });
+  });
+});
+
+describe("durable triage reporting", () => {
+  it("writes the typed summary/cursor and preserves operator metadata", async () => {
+    const { prisma } = await import("@dpf/db");
+    const upsert = vi.mocked(prisma.scheduledJob.upsert);
+    upsert.mockClear();
+    await recordJobRun("backlog-triage-drain", "idle", undefined, { summary: "0 assessed; 25 held", cursor: "last-id", details: { held: 25 } });
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ update: expect.objectContaining({ lastRunSummary: "0 assessed; 25 held", runCursor: "last-id", metadata: { retiredAt: null, operatorSetting: "preserved", lastRunDetails: { held: 25 } } }) }));
+  });
+  it("propagates a durable report failure so the completed sweep can checkpoint-retry", async () => {
+    const { prisma } = await import("@dpf/db");
+    vi.mocked(prisma.scheduledJob.upsert).mockRejectedValueOnce(new Error("DB unavailable"));
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await expect(recordJobRun("backlog-triage-drain", "idle", undefined, { summary: "held", cursor: null, details: {} })).rejects.toThrow("DB unavailable");
+    log.mockRestore();
   });
 });
 

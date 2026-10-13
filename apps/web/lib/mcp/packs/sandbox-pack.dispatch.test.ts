@@ -62,7 +62,8 @@ vi.mock("@/lib/build/github-api-commit", () => ({
   createBranchAndPR: mockCreateBranchAndPR,
 }));
 
-vi.mock("@/lib/platform-dev-policy", () => ({
+vi.mock("@/lib/platform-dev-policy", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/platform-dev-policy")>(),
   getPlatformDevPolicyState: vi.fn(() => "contribution_ready"),
 }));
 

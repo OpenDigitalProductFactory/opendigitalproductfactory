@@ -110,11 +110,46 @@ describe("assessDeliverySensitivity", () => {
     });
   });
 
-  it("with no change fact at all, prose still raises — and says it was prose", () => {
-    const assessed = assessDeliverySensitivity({ title: "Harden the payment flow", body: "No paths named yet.", workType: "bug" });
-    expect(assessed).toEqual({
-      level: "high",
-      trigger: { signal: "keyword", source: "item-prose", evidence: "payment" },
+  // Operator direction 2026-10-07 (supersedes the prose fallback of WWMD
+  // DI-52BAAB9E6835): a word is not evidence. 47 builds sat in plan owing the
+  // large gates because their prose said "permission", "outbound", "schema"…
+  it("with no change fact at all, prose does not raise the shape", () => {
+    const assessed = assessDeliverySensitivity({ title: "Harden the payment permission flow", body: "No paths named yet.", workType: "bug" });
+    expect(assessed).toEqual({ level: "low", trigger: null });
+  });
+
+  it("a build plan's file list is a change fact: it raises on the files the plan will touch", () => {
+    const assessed = assessDeliverySensitivity({
+      title: "Surface exposure",
+      body: "Nothing cited.",
+      workType: "feature",
+      planPaths: ["apps/web/lib/surface-exposure/resolve-exposure.ts", "packages/db/prisma/schema/surface-exposure.prisma"],
     });
+    expect(assessed).toEqual({
+      level: "elevated",
+      trigger: { signal: "schema", source: "build-plan-paths", evidence: "packages/db/prisma/schema/surface-exposure.prisma" },
+    });
+  });
+
+  it("a plan that touches no substrate stays low even when its prose sounds sensitive", () => {
+    const assessed = assessDeliverySensitivity({
+      title: "Permission copy on the cart",
+      body: "Mentions permission and outbound.",
+      workType: "feature",
+      planPaths: ["apps/mobile/src/cart/CartBar.tsx", "apps/mobile/src/cart/CartBar.test.tsx"],
+    });
+    expect(assessed).toEqual({ level: "low", trigger: null });
+  });
+
+  it("declared Workroom edit paths outrank the plan's, and the plan's outrank paths the body cites", () => {
+    expect(assessDeliverySensitivity({
+      body: "Touches `apps/web/lib/auth.ts`.",
+      planPaths: ["apps/web/app/api/x/route.ts"],
+      declaredPaths: ["scripts/pregate.mjs"],
+    })).toEqual({ level: "low", trigger: null });
+    expect(assessDeliverySensitivity({
+      body: "Touches `apps/web/lib/auth.ts`.",
+      planPaths: ["apps/web/app/api/x/route.ts"],
+    })).toEqual({ level: "elevated", trigger: { signal: "route", source: "build-plan-paths", evidence: "apps/web/app/api/x/route.ts" } });
   });
 });

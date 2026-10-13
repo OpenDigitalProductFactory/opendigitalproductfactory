@@ -200,44 +200,18 @@ export async function triageOneItem(
   item: TriageCandidate,
   deps: Pick<TriageDrainDeps, "decide" | "applyBuild" | "recordDecision">,
 ): Promise<TriageItemOutcome> {
-  let decision: TriageDecision | null = null;
-  try {
-    decision = parseTriageDecision(await deps.decide(item));
-  } catch {
-    decision = null;
-  }
-  const size = autoApplyBuildSize(decision, item);
-  if (!size || !decision) return "left-for-operator";
-
-  // Ledger BEFORE mutating (BI-BB2E585C). Fail-closed: an unrecordable decision
-  // is not applied, so the ledger can never understate what the drain changed.
-  if (deps.recordDecision) {
-    let recorded = false;
-    try {
-      recorded = await deps.recordDecision(item, decision, size);
-    } catch {
-      recorded = false;
-    }
-    if (!recorded) return "left-for-operator";
-  } else {
-    console.warn(
-      `[backlog-triage-drain] ${item.itemId}: applying a build decision with NO governance ledger — ` +
-        "recordDecision dep is missing (BI-BB2E585C)",
-    );
-  }
-
-  try {
-    await deps.applyBuild(
-      item.itemId,
-      size,
-      `Auto-triaged by scheduled drain: ${(decision.rationale ?? "confident build").slice(0, 400)}`,
-    );
-    return "auto-built";
-  } catch {
-    return "left-for-operator";
-  }
+  const { assessTriageItem } = await import("./backlog-triage-assessment");
+  const result = await assessTriageItem(item, {
+    ...deps,
+    // Compatibility for pure legacy callers. The scheduled runner always
+    // supplies its fail-closed governance writer.
+    recordDecision: deps.recordDecision ?? (async () => {
+      console.warn("[backlog-triage-drain] Legacy caller omitted the governance writer");
+      return true;
+    }),
+  });
+  return result.outcome === "auto-built" ? "auto-built" : "left-for-operator";
 }
-
 /**
  * Drain the triaging queue: for each item, get a decision and auto-apply only
  * confident BUILD outcomes. Everything else is left for a human. Never throws

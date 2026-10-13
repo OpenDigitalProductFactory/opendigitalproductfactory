@@ -1,6 +1,6 @@
 import React from "react";
 import { Text, Pressable, StyleSheet, View } from "react-native";
-import { colors, spacing, borderRadius } from "@/src/lib/theme";
+import { colors, spacing } from "@/src/lib/theme";
 import type { Notification } from "@dpf/types";
 
 export interface NotificationItemProps {

@@ -87,3 +87,29 @@ describe("POST /api/business-context/setup", () => {
     expect(mockApplyOrgCountry).not.toHaveBeenCalled();
   });
 });
+
+describe("offer positioning (BI-C1E83871)", () => {
+  it("writes the value proposition and customer groups when sent", async () => {
+    const res = await POST(
+      makeReq({ valueProposition: " Keep doing the paid work. ", customerSegments: ["Owner-operators", "MSP partners", ""] }),
+    );
+    expect(res.status).toBe(200);
+    const call = mockBusinessContext.upsert.mock.calls[0]?.[0];
+    expect(call?.update.valueProposition).toBe("Keep doing the paid work.");
+    expect(call?.update.customerSegments).toEqual(["Owner-operators", "MSP partners"]);
+  });
+
+  it("leaves both untouched when a save does not send them", async () => {
+    await POST(makeReq({ description: "Hello" }));
+    const call = mockBusinessContext.upsert.mock.calls[0]?.[0];
+    expect(call?.update).not.toHaveProperty("valueProposition");
+    expect(call?.update).not.toHaveProperty("customerSegments");
+  });
+
+  it("refuses an invalid value with the canonical error envelope and writes nothing", async () => {
+    const res = await POST(makeReq({ customerSegments: "MSPs" }));
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { code: string }).code).toBe("INVALID_OFFER_POSITIONING");
+    expect(mockBusinessContext.upsert).not.toHaveBeenCalled();
+  });
+});

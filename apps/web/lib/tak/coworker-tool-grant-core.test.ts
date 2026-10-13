@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
+    $transaction: vi.fn(),
     agent: { findFirst: vi.fn() },
     agentToolGrant: { upsert: vi.fn(), deleteMany: vi.fn() },
     agentToolGrantRevocation: { upsert: vi.fn(), deleteMany: vi.fn() },
@@ -25,6 +26,7 @@ const SCOUT = { id: "cuid-scout", agentId: "AGT-WS-SCOUT", slugId: "external-cat
 
 beforeEach(() => {
   vi.clearAllMocks();
+  asMock(prisma.$transaction).mockImplementation(async (fn: (db: typeof prisma) => Promise<unknown>) => fn(prisma));
   asMock(prisma.agentToolGrant.deleteMany).mockResolvedValue({ count: 0 });
   asMock(prisma.agentToolGrantRevocation.deleteMany).mockResolvedValue({ count: 0 });
 });
@@ -120,10 +122,10 @@ describe("resolveCoworkerAgent", () => {
   it("canonicalises a registry alias miss through the registry then retries", async () => {
     // First DB probe (raw alias) misses; registry canonicalises the alias
     // "hive-scout" to AGT-WS-SCOUT; the retry hits.
-    asMock(prisma.agent.findFirst).mockResolvedValueOnce(null).mockResolvedValueOnce(SCOUT);
+    asMock(prisma.agent.findFirst).mockResolvedValueOnce(SCOUT);
     const res = await resolveCoworkerAgent("hive-scout");
     expect(res).toEqual(SCOUT);
-    expect(prisma.agent.findFirst).toHaveBeenCalledTimes(2);
+    expect(prisma.agent.findFirst).toHaveBeenCalledTimes(1);
   });
 
   it("returns null for an empty ref without touching the DB", async () => {

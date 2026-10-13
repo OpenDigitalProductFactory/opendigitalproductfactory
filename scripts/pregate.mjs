@@ -15,6 +15,7 @@
 // focused debugging. This keeps lease/fence safety in one implementation.
 
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { spawnSync } from "node:child_process";
 import { gitTextOrNull } from "./lib/git.mjs";
 import { readFileSync } from "node:fs";
@@ -22,6 +23,7 @@ import { dirname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
 import { resolveMcpCredential } from "./lib/mcp-credential.mjs";
+import { readEarlyQuiescenceStatus, quiescenceBlocksWrites, quiescenceWait } from "./lib/gate-quiescence.mjs";
 
 // BI-78B653D5: the interrupted-gate recovery path releases a lease with
 // whatever credential the gate itself would use; none configured is "cannot
@@ -198,7 +200,7 @@ const DEFAULT_LEASE_WAIT_SECONDS = 7200;
 // evidence replays (--finalize-evidence) change nothing about the tree and
 // skip it; DPF_SKIP_PREGATE_PREFLIGHT_REASON is the recorded emergency skip.
 export function shouldRunPreflight(args, env = process.env) {
-  if (args.includes("--dry-run") || args.includes("--finalize-evidence")) return false;
+  if (isRecordExemptInvocation(args)) return false;
   if (env.DPF_SKIP_PREGATE_PREFLIGHT_REASON) return false;
   return true;
 }
@@ -224,7 +226,7 @@ export function shouldUseShell({ env = process.env, cwd = process.cwd(), spawnSy
 function argValue(args, flag) {
   // strict: false keeps the old tolerance: flags pregate does not read are ignored.
   const { values } = utilParseArgs({
-    args,
+    args: scriptArgv(args),
     strict: false,
     allowPositionals: true,
     options: Object.fromEntries(["lease-wait-seconds", "worktree", "branch", "sha"].map((name) => [name, { type: "string" }])),
@@ -831,43 +833,8 @@ async function main() {
     process.exit(0); // exit-0: a PASS record bound to current HEAD already exists; this run reused it and gated nothing
   }
 
-  if (shouldRunPreflight(args)) {
-    // BI-B1065D41: the guard-parity preflight is loud and, on a passing run,
-    // uninteresting — including a TOLERATED GuardRuntimeEnvironmentError that
-    // prints `Error:` and a red cross on runs that PASS, which is exactly the
-    // text a log-tail reader mistakes for a failure. Capture it and replay it
-    // only when it actually fails.
-    const verbose = isVerboseGateConsole();
-    const preflight = spawnSync(
-      process.execPath,
-      [join(SCRIPT_DIR, "pregate-preflight.mjs")],
-      verbose ? { stdio: "inherit" } : { encoding: "utf8" },
-    );
-    if (preflight.error || (preflight.status ?? 1) !== 0) {
-      if (!verbose) {
-        process.stderr.write(String(preflight.stdout || ""));
-        process.stderr.write(String(preflight.stderr || ""));
-      }
-      // BI-AA2EE621: the preflight process itself being killed or failing to
-      // spawn (taskkill /T during an eviction leaves status === null) is a
-      // runner failure, not a deterministic guard violation — say so, or the
-      // reader audits an innocent guard the loop never even reported on.
-      const preflightKilled = Boolean(preflight.error) || preflight.status === null;
-      process.stderr.write(
-        preflightKilled
-          ? "pregate: guard parity preflight could not RUN on this host (killed or failed to spawn — host under pressure, not a guard violation) — retry on a quieter host (no lease was claimed).\n"
-          : "pregate: guard parity preflight failed — fix the deterministic guard failures above before the sandbox gate runs (no lease was claimed).\n",
-      );
-      process.exit(preflight.status ?? 1);
-    }
-    if (!verbose) {
-      process.stdout.write("pregate: guard parity preflight passed.\n");
-    }
-  } else if (process.env.DPF_SKIP_PREGATE_PREFLIGHT_REASON) {
-    process.stderr.write(
-      `pregate: guard parity preflight SKIPPED — DPF_SKIP_PREGATE_PREFLIGHT_REASON=${process.env.DPF_SKIP_PREGATE_PREFLIGHT_REASON}\n`,
-    );
-  }
+  const preflightStatus = await runHostPreflight({ args });
+  if (preflightStatus !== 0) process.exit(preflightStatus);
 
   const useShell = shouldUseShell();
   const { result, timedOut } = await runGateWithQueuedRevival({ args: stripForceRerunFlag(args), useShell });
@@ -892,6 +859,59 @@ async function main() {
     );
   }
   process.exit(exitCode);
+}
+
+export async function runHostPreflight({
+  args = [], env = process.env, spawnSyncImpl = spawnSync,
+  readStatusImpl = readEarlyQuiescenceStatus,
+  stdout = (text) => process.stdout.write(text),
+  stderr = (text) => process.stderr.write(text),
+} = {}) {
+  if (shouldRunPreflight(args, env)) {
+    const quiescence = await readStatusImpl({ args, env, warn: stderr });
+    if (quiescenceBlocksWrites(quiescence)) {
+      // No gate record, lease, observer or pending-evidence mutation on this path.
+      stderr(JSON.stringify(quiescenceWait(quiescence)) + "\n");
+      return EXIT_DURABLE_QUEUE_WAIT;
+    }
+    // BI-B1065D41: the guard-parity preflight is loud and, on a passing run,
+    // uninteresting — including a TOLERATED GuardRuntimeEnvironmentError that
+    // prints `Error:` and a red cross on runs that PASS, which is exactly the
+    // text a log-tail reader mistakes for a failure. Capture it and replay it
+    // only when it actually fails.
+    const verbose = isVerboseGateConsole();
+    const preflight = spawnSyncImpl(
+      process.execPath,
+      [join(SCRIPT_DIR, "pregate-preflight.mjs")],
+      verbose ? { stdio: "inherit" } : { encoding: "utf8" },
+    );
+    if (preflight.error || (preflight.status ?? 1) !== 0) {
+      if (!verbose) {
+        stderr(String(preflight.stdout || ""));
+        stderr(String(preflight.stderr || ""));
+      }
+      // BI-AA2EE621: the preflight process itself being killed or failing to
+      // spawn (taskkill /T during an eviction leaves status === null) is a
+      // runner failure, not a deterministic guard violation — say so, or the
+      // reader audits an innocent guard the loop never even reported on.
+      const preflightKilled = Boolean(preflight.error) || preflight.status === null;
+      stderr(
+        preflightKilled
+          ? "pregate: guard parity preflight could not RUN on this host (killed or failed to spawn — host under pressure, not a guard violation) — retry on a quieter host (no lease was claimed).\n"
+          : "pregate: guard parity preflight failed — fix the deterministic guard failures above before the sandbox gate runs (no lease was claimed).\n",
+      );
+      return preflight.status ?? 1;
+    }
+    if (!verbose) {
+      stdout("pregate: guard parity preflight passed.\n");
+    }
+  } else if (env.DPF_SKIP_PREGATE_PREFLIGHT_REASON) {
+    stderr(
+      `pregate: guard parity preflight SKIPPED — DPF_SKIP_PREGATE_PREFLIGHT_REASON=${env.DPF_SKIP_PREGATE_PREFLIGHT_REASON}\n`,
+    );
+  }
+
+  return 0;
 }
 
 // Read the same SHA-bound slot records pregate:status reads, reduced to the

@@ -31,7 +31,8 @@
 // than a missed one.
 
 import { spawnSync } from "node:child_process";
-import { scrubGitRepoLocationEnv } from "./git-hook-env.mjs";
+import { guardGitEnv } from "./git-hook-env.mjs";
+import { guardShellEnv } from "./guard-bash.mjs";
 
 import {
   POLICY_GUARD_PROFILES,
@@ -164,11 +165,18 @@ export function buildPreflightPlan({ profiles = POLICY_GUARD_PROFILES, changeSco
  * GIT_DIR, and a guard that builds a temp git fixture would otherwise commit
  * to the REAL repository — which is how a 15,511-file deletion landed on a
  * pushing branch. Guards resolve their repository from cwd, never from the
- * hook's environment.
+ * hook's environment. Git's automatic maintenance is off for the same
+ * children, so a fixture's commits never race a background repack
+ * (BI-E0FEB8E9).
  */
 export function createDefaultExecute(env = process.env) {
-  const guardEnv = scrubGitRepoLocationEnv(env);
+  let guardEnv;
   return function defaultExecute(command, args) {
+    try {
+      guardEnv ??= guardShellEnv(guardGitEnv(env));
+    } catch (error) {
+      return { exitCode: 1, output: `${error.name}: ${error.message}`, runnerFailure: false };
+    }
     const invocation = resolvePolicyGuardInvocation(command, args, { env: guardEnv });
     const result = spawnSync(invocation.command, invocation.args, {
       cwd: process.cwd(),

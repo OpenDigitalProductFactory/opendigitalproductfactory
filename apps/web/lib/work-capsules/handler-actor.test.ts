@@ -20,3 +20,9 @@ it("fails closed when the authorizing human cannot be resolved", async () => {
 it("preserves the existing in-platform coworker actor", async () => {
   expect(await workCapsuleActor("alice", { agentId: "AGT-INTERNAL" })).toEqual({ userId: "alice", agentId: "AGT-INTERNAL", principalId: "assistant" });
 });
+it("carries the authenticated OAuth token row for lazy scoped recovery", async () => {
+  expect(await workCapsuleActor("alice", { agentId: "AGT-EXT-CLAUDE", authSource: "oauth", apiTokenId: "token-row" }))
+    .toMatchObject({ taskAuthorityTokenId: "token-row" });
+  expect(await workCapsuleActor("alice", { agentId: "AGT-INTERNAL", apiTokenId: "token-row" }))
+    .not.toHaveProperty("taskAuthorityTokenId");
+});

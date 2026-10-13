@@ -30,6 +30,7 @@
 // Exit 0 = honest, 1 = violation, 2 = could not evaluate (missing base ref).
 
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -149,7 +150,7 @@ function resolveBaseRef(explicit) {
 function main(argv) {
   const asJson = argv.includes("--json");
   // strict: false keeps the old tolerance: flags this script does not read are ignored.
-  const { values } = utilParseArgs({ args: argv, strict: false, allowPositionals: true, options: { base: { type: "string" } } });
+  const { values } = utilParseArgs({ args: scriptArgv(argv), strict: false, allowPositionals: true, options: { base: { type: "string" } } });
   const baseRef = resolveBaseRef(typeof values.base === "string" ? values.base : undefined);
 
   if (!baseRef) {

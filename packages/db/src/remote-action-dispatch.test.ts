@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  DEFAULT_CLAIM_TIMEOUT_MS,
+  DOCKER_VM_RESTART_ACTION_TYPE,
   canTransitionDispatch,
+  claimTimeoutMsForActionType,
   claimableActionsForNode,
   isClaimableByNode,
   isDispatchActionType,
@@ -74,6 +77,38 @@ describe("founder-approved organization join dispatch", () => {
     expect(isClaimableByNode({ ...issue, edgeNodeId: null }, authority).claimable).toBe(false);
     expect(isClaimableByNode({ ...issue, changeRequestApproved: false }, authority).claimable).toBe(false);
     expect(isClaimableByNode({ ...issue, riskClass: "read-only" }, authority).claimable).toBe(false);
+  });
+});
+
+// BI-F8F8C383: an operator-approved Docker VM (WSL) restart, run by the native
+// Edge agent on the Windows host. It stops the portal and every container, so it
+// rides the strictest privileged gate and never needs an organization trust role.
+describe("operator-approved Docker VM restart dispatch (BI-F8F8C383)", () => {
+  const restart = action({
+    actionType: DOCKER_VM_RESTART_ACTION_TYPE,
+    riskClass: "high",
+    edgeNodeId: "node_1",
+    changeRequestApproved: true,
+  });
+  const host = node({ allowedActionTypes: [DOCKER_VM_RESTART_ACTION_TYPE], organizationTrustRole: null });
+
+  it("is a closed privileged type", () => {
+    expect(DOCKER_VM_RESTART_ACTION_TYPE).toBe("substrate.docker-vm.restart");
+    expect(isDispatchActionType(DOCKER_VM_RESTART_ACTION_TYPE)).toBe(true);
+    expect(isReadonlyDispatchActionType(DOCKER_VM_RESTART_ACTION_TYPE)).toBe(false);
+  });
+
+  it("is claimable only when high risk, machine bound, change-approved and allowlisted, with no trust role needed", () => {
+    expect(isClaimableByNode(restart, host)).toEqual({ claimable: true });
+    expect(isClaimableByNode({ ...restart, changeRequestApproved: false }, host).claimable).toBe(false);
+    expect(isClaimableByNode({ ...restart, edgeNodeId: null }, host).claimable).toBe(false);
+    expect(isClaimableByNode({ ...restart, riskClass: "read-only" }, host).claimable).toBe(false);
+    expect(isClaimableByNode(restart, node({ allowedActionTypes: ["inventory.collect"] })).claimable).toBe(false);
+  });
+
+  it("gets a claim timeout long enough for the VM to stop and Docker to come back", () => {
+    expect(claimTimeoutMsForActionType(DOCKER_VM_RESTART_ACTION_TYPE)).toBe(30 * 60 * 1000);
+    expect(claimTimeoutMsForActionType("inventory.collect")).toBe(DEFAULT_CLAIM_TIMEOUT_MS);
   });
 });
 

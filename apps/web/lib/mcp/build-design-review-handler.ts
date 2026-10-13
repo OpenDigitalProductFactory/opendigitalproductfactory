@@ -1,3 +1,4 @@
+import { readReviewHistory, assembleReviewPanel, finishReviewIteration } from "@/lib/build/review-history";
 // Design-review gate handler — Simplify & Strengthen W9 (BI-0E7B0953).
 //
 // The reviewDesignDoc executeTool case from the mcp-tools.ts legacy monolith,
@@ -14,7 +15,6 @@ import { prisma } from "@dpf/db";
 import { ENTERPRISE_ARCHITECT_DISPLAY_NAME } from "@dpf/db/agent-identity";
 
 import type { ToolResult } from "@/lib/mcp-tool-types";
-import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { ToolPackHandler } from "./tool-pack";
 import {
   logBuildActivity,
@@ -70,7 +70,7 @@ async function reviewDesignDocInner(params: Record<string, unknown>, userId: str
           await triggerDesignReviewAutoRepair(buildId, userId, context);
           return { success: true, message: `Fix review FAILED. ${review.issues[0]?.description ?? review.summary}`, data: { review, blocked: true, action: "revise_and_resubmit" } };
         }
-        await attestIdeateResearch(buildId, build.designDoc, userId, context?.agentId ?? null);
+        await attestIdeateResearch(buildId, build.designDoc, userId, context?.agentId ?? null, context);
         let fixPhaseGateBlocker: string | null = null;
         try {
           const fixPlan = (build.plan as Record<string, unknown> | null);
@@ -118,25 +118,19 @@ async function reviewDesignDocInner(params: Record<string, unknown>, userId: str
       }
 
       if (!build?.designDoc) return { success: false, error: "No design document saved yet.", message: "Save designDoc first." };
-      const { buildDesignReviewPrompt, buildArchitectureReviewPrompt, finalizeArchitectureAdvisory, parseReviewResponse, mergeReviews, collectReviewerVerdicts } = await import("@/lib/build-reviewers");
+      const { buildDesignReviewPrompt, buildArchitectureReviewPrompt, finalizeArchitectureAdvisory, parseReviewResponse, collectReviewerVerdicts } = await import("@/lib/build-reviewers");
       const { ownerAskContext } = await import("@/lib/build/owner-ask-context");
       const designDocTyped = build.designDoc as Parameters<typeof buildDesignReviewPrompt>[0];
       // BI-CE49D82E — Compute the iteration context up front so we can
       // (a) feed prior issues into the reviewer prompt and (b) populate
       // ReviewResult.iteration on the output. Round is 1-based: first
-      // review = 1, every subsequent reviewDesignDoc call increments.
+      // review = 1; only a completed panel increments the round.
       const priorDesignReview = (build.designReview ?? null) as
         | { issues?: Array<{ severity?: string; description?: string }>; iteration?: { round?: number } }
         | null;
-      const priorRound = priorDesignReview?.iteration?.round ?? 0;
-      const priorIssues = Array.isArray(priorDesignReview?.issues)
-        ? priorDesignReview!.issues!
-            .filter((i): i is { severity: string; description: string } =>
-              typeof i?.severity === "string" && typeof i?.description === "string",
-            )
-            .map((i) => ({ severity: i.severity, description: i.description }))
-        : [];
-      const currentRound = priorRound + 1;
+      const history = readReviewHistory(priorDesignReview);
+      const priorRound = history.round;
+      const priorIssues = history.issues;
       const priorContext = priorIssues.length > 0
         ? { round: priorRound, issues: priorIssues }
         : null;
@@ -204,34 +198,12 @@ async function reviewDesignDocInner(params: Record<string, unknown>, userId: str
       const r2 = r2settled.status === "fulfilled" ? parseReviewResponse(r2settled.value.content) : null;
       const archReview = archSettled.status === "fulfilled" ? parseReviewResponse(archSettled.value.content) : null;
       const architectureAdvisory = await finalizeArchitectureAdvisory(prisma, archReview, userId, context?.agentId, context?.threadId, "reviewDesignDoc");
-      const reviewBase = r1 && r2 ? mergeReviews(r1, r2) : r1 ?? r2 ?? {
-        decision: "fail" as const,
-        issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
-        summary: "Review could not be completed — retry.",
-        // BI-D33F968A: nobody read the work. `fail` is the safe default, not a
-        // verdict — mark it so a repair loop does not spend rounds "fixing"
-        // something no reviewer looked at.
-        reviewIncomplete: true,
-      };
+      const reviewBase = assembleReviewPanel(r1, r2);
       // BI-CE49D82E — Compute the iteration delta against the prior round and
       // attach to the ReviewResult. computeReviewDelta + isOscillating live in
       // feature-build-types so they're independently unit-testable and shared
       // with the plan path.
-      const { computeReviewDelta, isOscillating } = await import("@/lib/feature-build-types");
-      const reviewWithIteration = (() => {
-        if (priorIssues.length === 0) {
-          return { ...reviewBase, iteration: { round: currentRound } };
-        }
-        const delta = computeReviewDelta(priorIssues, reviewBase.issues);
-        return {
-          ...reviewBase,
-          iteration: {
-            round: currentRound,
-            prior: delta,
-            oscillating: isOscillating(delta, reviewBase.issues.length),
-          },
-        };
-      })();
+      const reviewWithIteration = finishReviewIteration(reviewBase, history);
       let review = architectureAdvisory ? { ...reviewWithIteration, architectureAdvisory } : reviewWithIteration;
       // A3 (BI-D506598C): governed Data Architect consultation, flag-gated
       // default-off. Unlike the anonymous `architect` routeAndCall above, this is
@@ -324,6 +296,14 @@ async function reviewDesignDocInner(params: Record<string, unknown>, userId: str
       } catch (err) {
         console.warn("[deliberation] failed to record build review trail: %s",
           err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)));
+      }
+
+      if (review.reviewIncomplete) {
+        return {
+          success: true,
+          message: review.summary,
+          data: { review, blocked: true, action: "retry_review" },
+        };
       }
 
       // Failed review → structured recovery instructions, no auto-advance
@@ -615,7 +595,7 @@ async function reviewDesignDocInner(params: Record<string, unknown>, userId: str
             }
           }
 
-          await attestIdeateResearch(buildId, build.designDoc, userId, context?.agentId ?? null);
+          await attestIdeateResearch(buildId, build.designDoc, userId, context?.agentId ?? null, context);
           const idpPlan = (updatedBuild.plan as Record<string, unknown> | null);
           const gate = await checkBuildPhaseGate({
             buildId,

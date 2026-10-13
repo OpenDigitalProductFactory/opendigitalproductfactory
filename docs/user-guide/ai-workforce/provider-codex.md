@@ -41,9 +41,24 @@ Note: The OAuth callback uses a dedicated port (1455) on localhost. This is requ
 
 Codex is categorized as an "agent" provider, which means it behaves differently from standard LLM providers:
 
-- **Model discovery**: Models cannot be discovered via the standard /v1/models API when using OAuth subscription. Models are defined in the platform registry and updated when OpenAI announces changes.
-- **Save & ready provider**: Saves settings, prepares the model catalog, and sends a small inference request using an active model. OAuth checks use the subscription backend. Only a completed response verifies readiness and clears a previously recorded capacity cooldown for this provider. Account and data-use rules still determine which work can route there.
+- **Model discovery**: DPF automatically reads the connected sandbox's Codex model list. New models enter the catalog when that account and execution channel list them. A desktop client can show a different list because its version or account access differs. Saved profiles include history and do not prove current availability.
+- **Save & verify connection**: Saves settings, prepares the model catalog, and sends a small inference request using an active model. OAuth checks use the subscription backend. Only a completed response verifies the connection and clears a previously recorded capacity cooldown for this provider. Account and data-use rules still determine which work can route there.
+- **Advanced diagnostics**: Opens model history, routing details and a manual refresh for troubleshooting. A failed refresh retains the previous catalog; results report models returned by that refresh and genuinely new records separately.
 - **MCP service**: Codex has a linked MCP (Model Context Protocol) service called "OpenAI Codex Agent" that provides two tools: `codex` (start a coding session) and `codex-reply` (continue a thread). This service activates automatically when you connect via OAuth and deactivates when you disconnect.
+
+Discovery for a selected Codex or ChatGPT account reads that account's subscription
+CLI catalog. It uses a private CLI state directory and memory-only authentication;
+simultaneous catalog reads do not replace each other's credentials. Missing,
+disabled, or changed accounts fail without using another account. A failed read
+preserves the last successful model-access result, and models absent from one
+account are not retired for another account. Signing in or discovering models
+does not establish permission to send sensitive data, and adding an account alone
+does not enable account-aware execution routing.
+
+The catalog process has a container-owned watchdog and removes its private state
+after exit, including when the client disconnects. Credentials travel over process
+stdin, not command arguments, shared auth files, or provider error logs. External
+token login follows the [OpenAI app-server protocol](https://learn.chatgpt.com/docs/app-server).
 
 ## Linked MCP Service
 
@@ -60,7 +75,7 @@ You can view the MCP service status on the External Services page under "Activat
 
 ## ChatGPT Provider (Automatic)
 
-When you connect Codex via OAuth, the platform automatically activates a second provider called "ChatGPT (OpenAI Subscription)". This gives the AI coworker access to GPT chat models (currently GPT-5.4) using your same ChatGPT subscription -- no separate configuration needed.
+When you connect Codex via OAuth, the platform automatically activates a second provider called "ChatGPT (OpenAI Subscription)". This gives the AI coworker access to models available through your same ChatGPT subscription -- no separate configuration needed.
 
 The ChatGPT provider uses a different backend endpoint (`chatgpt.com/backend-api`) and the OpenAI Responses API format. This is necessary because ChatGPT subscription tokens cannot access the standard OpenAI platform API (`api.openai.com`).
 
@@ -74,8 +89,8 @@ The ChatGPT/Codex integration has several non-obvious requirements:
 - **API format**: The backend uses the OpenAI Responses API (not Chat Completions). Request format: `{ model, input, instructions, store: false, stream: true }`.
 - **Streaming mandatory**: The backend requires `stream: true`. The platform collects the SSE stream and extracts the `response.completed` event.
 - **Store must be false**: The backend requires `store: false` for subscription tokens.
-- **Model IDs**: Only Codex-supported model IDs work (`gpt-5.4`, `gpt-5.3-codex`, etc.). Standard model names like `gpt-4o` or `codex-mini-latest` are rejected.
-- **No model discovery**: The backend has no `/v1/models` equivalent. Models are seeded by the platform, not discovered.
+- **Model IDs**: Use IDs returned for the connected account and execution channel. A model name in another client or public documentation does not establish access here.
+- **Model discovery**: Codex reads the sandbox CLI catalog. ChatGPT attempts its backend catalog and falls back to the shared account's Codex catalog. Empty or failed inventories preserve the last good state. Two successful inventories that omit a cloud model retire its profile; local providers retain their exception for engine interruptions.
 - **Credential sync**: Both providers share one OAuth token. Token refresh on either side syncs to the other.
 - **Greenfield install**: The `docker-entrypoint.sh` runs `sync-provider-registry.ts` before `seed.ts` to ensure the chatgpt provider row exists before model seeding.
 
@@ -84,7 +99,8 @@ The ChatGPT/Codex integration has several non-obvious requirements:
 - A failed readiness check shows the endpoint actually attempted. A network error, rejected request, or incomplete response leaves the existing capacity restriction in place. Retry after resolving the reported problem; signing in alone does not prove inference capacity.
 
 - "HTTP 403 on Test Connection with API Key" -- your OpenAI API account needs funding. The ChatGPT subscription does not fund API access.
-- "HTTP 403 on Sync Models" -- model discovery is not available with OAuth subscription tokens. Models are managed via the platform registry.
+- "Model missing from diagnostics" -- compare the connected account and sandbox catalog with the other client. Automatic discovery cannot add access that the serving channel does not report.
+- "Refresh failed" -- DPF keeps the last good catalog. Resolve the reported connection or service error and retry; there is no need to rebuild model profiles by hand.
 - "Provider shows Expired, or disables itself with Re-authentication required" -- the token ran out and there was no renewal token to replace it. Sign in again from the Codex or ChatGPT provider page; both providers pick up the new token.
 - "Organization and project prompt" -- you must select these during OAuth sign-in. Skipping causes the flow to fail.
 - "Port 1455 unreachable" -- ensure the platform's Docker container has port 1455 mapped (this is configured in docker-compose.yml).

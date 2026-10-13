@@ -18,20 +18,24 @@ packages:
 # below, so the deployed service trees carry plain ranges. How to add one:
 # docs/architecture/dependency-reduction-routine.md.
 catalog:
-  "@axe-core/playwright": ^4.12.1
-  "@types/node": ^26.6.2
+  "@axe-core/playwright": ^4.13.0
+  "@types/node": ^26.6.4
   "@types/pg": ^8.23.1
-  "@vitest/coverage-v8": ^4.1.11
+  "@vitest/coverage-v8": ^5.0.1
   bcryptjs: ^3.0.3
   dotenv: ^17.4.2
   net-snmp: ^3.26.3
-  pg: ^8.23.0
+  pg: ^8.23.1
   prom-client: ^15.1.3
   tsx: ^4.23.15
   typescript: ^6.0.3
   undici: ^8.10.0
   vite: ^8.2.0
-  vitest: ^4.1.11
+  vitest: ^5.0.1
+  # yaml is the platform frontmatter parser (apps/web user guide and the
+  # integration-test harness). One catalog range so the two declarations
+  # cannot drift (plan 2026-09-08 S11).
+  yaml: ^2.9.1
   zod: ^4.6.5
 overrides:
   # One React for the platform tree. apps/web declares ^19.2.8; the Prisma CLI's
@@ -72,6 +76,14 @@ overrides:
   # leaks plaintext credentials (high, BI-6B317EFA). Optional transitive of prisma;
   # this workspace runs PostgreSQL, but the package is in the tree. Floor to 3.24.3.
   mysql2: '>=3.24.3'
+  # fast-uri >= 3.0.0 < 3.1.8: GHSA-hrr3-gc8f-f4qj / Dependabot #211 (medium).
+  # Percent-encoded host octets normalize to a different case than the raw host.
+  # ajv@8.20.0 resolved 3.1.7. Stay on the 3.x line; 4.x is a separate major.
+  'fast-uri@>=3.0.0 <3.1.8': '3.1.8'
+  # source-map-js >= 1.0.0 < 1.2.2: GHSA-68fv-2mgg-jv7q / CVE-2026-93749
+  # (Dependabot #221, high). Indexed source-map section offsets can stall the
+  # event loop. css-tree and @tailwindcss/node resolve 1.2.1. Patch floor.
+  'source-map-js@<1.2.2': '1.2.2'
   # @floating-ui/* exact pins. Introduced with the diagram-stack pin set
   # (BI-72E0A27B); the mermaid/zenuml members left with the workspace's
   # mermaid-cli dependency (BI-DBDB8C6D — rendering now runs from the pinned

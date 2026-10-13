@@ -185,7 +185,30 @@ export async function runPreAdmissionDocumentationLane({
     return { handled: false, plan, gateIdentity };
   }
 
+  const producerEvidence = {
+    schemaVersion: 1,
+    producer: "documentation-evidence-lane",
+    candidateSha: sha,
+    candidateBranch: branch,
+    headTreeSha: gitOutput(gitBin, ["rev-parse", `${sha}^{tree}`], worktreePath),
+    integrationTreeSha: plan.headTreeSha,
+    evidencePlanDigest: plan.digest,
+  };
+  const writeState = (result) => writeLocalCiGateState(stateFile, {
+    branch, sha, leaseId: "", resilience: null, executionLane: "documentation",
+    leaseEvents: [{ type: "documentation-lane", at: new Date().toISOString() }],
+    ...result,
+    producerEvidence: { ...producerEvidence, evidenceRecordId: result.evidenceId || "" },
+  });
+  // A crash or publication outage must leave an unfinished attempt, never a
+  // newly successful local projection. Completed server evidence is retained.
+  writeState({ gatePassed: false, evidenceId: "", status: "running", expiresAt: "" });
   const execution = runDocumentationCommands(worktreePath, env);
+  const failureSummary = { failedCommand: execution.failedCommand, output: execution.output };
+  if (!exactCandidateIsEligible({ gitBin, worktreePath, sha })) {
+    writeState({ gatePassed: false, evidenceId: "", status: "blocked_source_changed", expiresAt: "", failureReason: "Documentation source changed during verification.", failureSummary });
+    return { handled: true, status: 1, plan, gateIdentity, evidenceId: "" };
+  }
   const passed = execution.exitCode === 0;
   const issuedAt = new Date().toISOString();
   const evidenceValidity = passed
@@ -228,32 +251,31 @@ export async function runPreAdmissionDocumentationLane({
       output: execution.output,
     },
   };
+  writeState({ gatePassed: false, evidenceId: "", status: passed ? "running" : "failed", expiresAt: evidenceValidity?.expiresAt || issuedAt, evidencePending: true, evidencePendingReason: "documentation-publication", failureReason: execution.failedCommand || "", failureSummary });
   const evidenceResponse = await mcpCall(
     "record_local_integration_result",
     evidenceArgs,
     { mcpUrl, bearerToken },
   );
-  if (evidenceResponse?.success !== true) {
+  if (evidenceResponse?.success !== true || typeof evidenceResponse.entityId !== "string" || !evidenceResponse.entityId.trim()) {
     throw new Error(`failed to record documentation evidence: ${JSON.stringify(evidenceResponse)}`);
   }
 
   const evidenceId = evidenceResponse.entityId || "";
-  writeLocalCiGateState(stateFile, {
-    branch,
-    sha,
-    gatePassed: passed,
-    leaseId: "",
+  const sourceUnchanged = exactCandidateIsEligible({ gitBin, worktreePath, sha });
+  writeState({
+    gatePassed: passed && sourceUnchanged,
     evidenceId,
-    status: passed ? "passed" : "failed",
+    status: sourceUnchanged ? (passed ? "passed" : "failed") : "blocked_source_changed",
     expiresAt: evidenceValidity?.expiresAt || issuedAt,
     evidenceValidity,
-    resilience: null,
-    leaseEvents: [{ type: "documentation-lane", at: issuedAt }],
     evidencePending: false,
+    failureSummary,
+    failureReason: sourceUnchanged ? execution.failedCommand || "" : "Documentation source changed during evidence publication.",
   });
   return {
     handled: true,
-    status: passed ? 0 : execution.exitCode,
+    status: !sourceUnchanged ? 1 : passed ? 0 : execution.exitCode,
     plan,
     gateIdentity,
     evidenceId,

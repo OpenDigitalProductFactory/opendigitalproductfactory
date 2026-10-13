@@ -425,7 +425,7 @@ async function stepGenerateCode(
   const { prisma } = await import("@dpf/db");
   const { runAgenticLoop } = await import("@/lib/agentic-loop");
   const { getAvailableTools, toolsToOpenAIFormat } = await import("@/lib/mcp-tools");
-  const { getBuildPhasePrompt, getBuildContextSection } = await import("./build-agent-prompts");
+  const { getBuildContextSection } = await import("./build-agent-prompts");
   const { agentEventBus } = await import("@/lib/agent-event-bus");
 
   const build = await prisma.featureBuild.findUniqueOrThrow({ where: { buildId } });

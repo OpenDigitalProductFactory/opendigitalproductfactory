@@ -129,6 +129,8 @@
 
 services:
   edge-node:
+    labels:
+      dpf.recreate-class: stateless
     image: ghcr.io/${GHCR_OWNER:-opendigitalproductfactory}/dpf-edge-node:${DPF_IMAGE_TAG:-latest}
     restart: unless-stopped
 

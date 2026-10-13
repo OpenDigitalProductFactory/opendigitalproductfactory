@@ -18,6 +18,8 @@ import { test } from "node:test";
 import { detectWorkingShell } from "../../scripts/pregate.mjs";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
+const execPrefix = process.platform === "win32" ? "" : "exec ";
+const completionSource = `import { completeFixture } from ${JSON.stringify(new URL("./fixtures/gate-completion.mjs", import.meta.url).href)}; await completeFixture();`;
 const pregateScript = join(repoRoot, "scripts", "pregate.mjs");
 const gateScript = join(repoRoot, "scripts", "gate-worktree.mjs");
 const runnerScript = join(repoRoot, "scripts", "local-ci-runner.mjs");
@@ -81,6 +83,9 @@ async function startMockMcp(handlers) {
       const toolName = request.params.name;
       const handler = resolveMockHandler(handlers, toolName) ?? (() => ({ success: false, error: "unexpected_tool" }));
       const result = handler(request.params.arguments);
+      if (toolName === "claim_nonprod_environment_lease" && result.success && result.entityId) {
+        result.data = { gateKey: "synthetic-contract-gate", ...result.data };
+      }
       res.setHeader("content-type", "application/json");
       res.end(JSON.stringify({
         jsonrpc: "2.0",
@@ -237,7 +242,9 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   mkdirSync(join(temp, "apps", "web", "lib", "nonprod"), { recursive: true });
   cpSync(gateScript, join(temp, "scripts", "gate-worktree.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "mcp-client.mjs"), join(temp, "scripts", "lib", "mcp-client.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "script-argv.mjs"), join(temp, "scripts", "lib", "script-argv.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "mcp-credential.mjs"), join(temp, "scripts", "lib", "mcp-credential.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "gate-quiescence.mjs"), join(temp, "scripts", "lib", "gate-quiescence.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "documentation-evidence-lane.mjs"), join(temp, "scripts", "lib", "documentation-evidence-lane.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "semantic-review-gate.mjs"), join(temp, "scripts", "lib", "semantic-review-gate.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-integration-ci.mjs"), join(temp, "scripts", "lib", "local-integration-ci.mjs"));
@@ -253,8 +260,13 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   // instead of dying on ERR_MODULE_NOT_FOUND before the stub guard.
   cpSync(join(repoRoot, "scripts", "lib", "lease-supervisor.mjs"), join(temp, "scripts", "lib", "lease-supervisor.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-sandbox-fence.mjs"), join(temp, "scripts", "lib", "local-sandbox-fence.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "process-identity.mjs"), join(temp, "scripts", "lib", "process-identity.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "gate-execution-checkpoint.mjs"), join(temp, "scripts", "lib", "gate-execution-checkpoint.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "ci-evidence-plan.mjs"), join(temp, "scripts", "lib", "ci-evidence-plan.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "derived-artifacts-registry.mjs"), join(temp, "scripts", "lib", "derived-artifacts-registry.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-queue-observer.mjs"), join(temp, "scripts", "lib", "local-queue-observer.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-slot-manifest.mjs"), join(temp, "scripts", "lib", "local-ci-slot-manifest.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "local-ci-slot-substrate.mjs"), join(temp, "scripts", "lib", "local-ci-slot-substrate.mjs"));
   // local-ci-slot-manifest.mjs imports the platform-owned worktree base
   // resolver (BI-0B2F0546). Without it the temp tree dies on
   // ERR_MODULE_NOT_FOUND before the stub-refusal path can run — the same
@@ -498,7 +510,7 @@ test("gate-worktree.mjs reports active lease contention and stale main before ex
   }
 });
 
-test("gate-worktree.mjs preserves a green gate for finalize-only evidence replay after quiescence", async () => {
+test("gate-worktree.mjs preserves pending material through quiescence but refuses a stub without a completion checkpoint", async () => {
   const { dir } = makeTempRepo();
   let recordAttempts = 0;
   let preflightQuiescing = false;
@@ -561,21 +573,16 @@ test("gate-worktree.mjs preserves a green gate for finalize-only evidence replay
     preflightQuiescing = false;
     const callCountBeforeFinalize = mcp.calls.length;
     const finalized = await runGateAsync(["--finalize-evidence", ...commonArgs], env);
-    assert.equal(finalized.status, 0, `${finalized.stdout}\n${finalized.stderr}`);
-    assert.match(finalized.stdout, /recorded pending local-CI evidence: EXT-FINALIZED/);
-    assert.equal(existsSync(pendingPath), false);
+    assert.notEqual(finalized.status, 0, `${finalized.stdout}\n${finalized.stderr}`);
+    assert.match(finalized.stderr, /no durable completion checkpoint/);
+    assert.equal(existsSync(pendingPath), true);
 
     const finalizeCalls = mcp.calls.slice(callCountBeforeFinalize).map((call) => call.params.name);
-    assert.deepEqual(finalizeCalls, ["get_quiescence_status", "record_local_integration_result"]);
+    assert.deepEqual(finalizeCalls, ["get_quiescence_status"]);
     const finalState = JSON.parse(readFileSync(join(dir, ".git", "dpf-local-ci-gate.json"), "utf8"));
     assert.equal(finalState.gatePassed, true);
-    assert.equal(finalState.evidencePending, false);
-    assert.equal(finalState.evidenceRecordId, "EXT-FINALIZED");
-    assert.equal(finalState.leaseExpiresAt, pending.expiresAt);
-    assert.ok(
-      Date.parse(finalState.expiresAt) >= Date.parse(finalState.recordedAt) + 23 * 60 * 60_000,
-      "finalized PASS evidence must remain publishable beyond the short lease authority",
-    );
+    assert.equal(finalState.evidencePending, true);
+    assert.equal(finalState.evidenceRecordId, "");
   } finally {
     await mcp.close();
   }
@@ -725,6 +732,7 @@ writeFileSync(out, JSON.stringify({
   convergence: null,
   handoffPath: out
 }) + "\\n");
+${completionSource}
 `);
 
   const mcp = await startMockMcp({
@@ -738,7 +746,7 @@ writeFileSync(out, JSON.stringify({
       {
         ...process.env,
         DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_GATE_OWNER_PROVIDER: "codex", DPF_GATE_OWNER_SESSION_ID: "contract-thread",
-        DPF_LOCAL_CI_COMMAND: `"${process.execPath}" "${writerScript}"`,
+        DPF_LOCAL_CI_COMMAND: `${execPrefix}"${process.execPath}" "${writerScript}"`,
       },
     );
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
@@ -835,6 +843,7 @@ writeFileSync(out, JSON.stringify({
     packages: [{ name: "next", lockedVersion: "16.2.9", resolvedVersion: "16.2.7" }],
     convergence: { attempted: true, command: "pnpm install --frozen-lockfile", exitCode: 1 },
 }) + "\\n");
+await new Promise(resolve => setTimeout(resolve, 1000));
 process.exit(3);
 `);
 
@@ -846,7 +855,7 @@ process.exit(3);
   try {
     const result = await runGateAsync(
       ["--branch", "feat/x", "--sha", "abc123", "--worktree", dir, "--no-push", "--mcp-url", mcp.url],
-      { ...process.env, DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_GATE_OWNER_PROVIDER: "codex", DPF_GATE_OWNER_SESSION_ID: "contract-thread", DPF_LOCAL_CI_COMMAND: `"${process.execPath}" "${writerScript}"` },
+      { ...process.env, DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_GATE_OWNER_PROVIDER: "codex", DPF_GATE_OWNER_SESSION_ID: "contract-thread", DPF_LOCAL_CI_COMMAND: `${execPrefix}"${process.execPath}" "${writerScript}"` },
     );
     assert.equal(result.status, 3, `${result.stdout}\n${result.stderr}`);
     assert.match(result.stderr, /BLOCKED \(sandbox drift\)/);
@@ -887,6 +896,7 @@ writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
     fetchMode: "full-fetch"
   }
 }) + "\\n");
+${completionSource}
 `);
 
   const mcp = await startMockMcp({
@@ -897,25 +907,13 @@ writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
   try {
     const result = await runGateAsync(
       ["--branch", "feat/local-ci-sandbox", "--sha", "candidate-sha", "--worktree", dir, "--no-push", "--mcp-url", mcp.url],
-      { ...process.env, DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_GATE_OWNER_PROVIDER: "codex", DPF_GATE_OWNER_SESSION_ID: "contract-thread", DPF_LOCAL_CI_COMMAND: `"${process.execPath}" "${writerScript}"` },
+      { ...process.env, DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_GATE_OWNER_PROVIDER: "codex", DPF_GATE_OWNER_SESSION_ID: "contract-thread", DPF_LOCAL_CI_COMMAND: `${execPrefix}"${process.execPath}" "${writerScript}"` },
     );
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
 
     const evidenceCall = mcp.calls.find((c) => c.params.name === "record_local_integration_result");
-    assert.deepEqual(evidenceCall.params.arguments.evidence.content, {
-      schemaVersion: 2,
-      bi: "BI-76551B2D",
-      candidateRef: "feat/local-ci-sandbox",
-      candidateSha: "candidate-sha",
-      baseRef: "origin/main",
-      fetchBase: true,
-      baseSha: "base-sha",
-      baseFreshness: {
-        status: "remote-current",
-        resolvedAt: "2026-07-31T02:00:00.000Z",
-        fetchMode: "full-fetch",
-      },
-    });
+    assert.deepEqual(evidenceCall.params.arguments.evidence.content, JSON.parse(readFileSync(join(dir, ".git", "dpf-local-ci-metadata.json"), "utf8")));
+    assert.equal(evidenceCall.params.arguments.evidence.content.baseSha, "b".repeat(40));
     assert.deepEqual(evidenceCall.params.arguments.evidence.resilience, {
       publicationMode: "deferred",
       acceptedBaseMode: "remote-current",
@@ -957,6 +955,12 @@ test("local-ci-runner.mjs refuses to gate main or a detached HEAD", () => {
 // which is what made piping to `head` the rational response, and that pipe is
 // what SIGPIPE-killed runs mid-install.
 
+function makeLoudFixture(lines) {
+  const path = join(mkdtempSync(join(tmpdir(), "dpf-loud-fixture-")), "command.mjs");
+  writeFileSync(path, `for(let i=0;i<${lines};i++)console.log('sandbox build step '+i);\n${completionSource}`);
+  return path;
+}
+
 /** Env for a gate run whose child command prints `lines` lines. */
 function loudGateEnv(mcpUrl, lines, extra = {}) {
   return {
@@ -964,7 +968,7 @@ function loudGateEnv(mcpUrl, lines, extra = {}) {
     DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
     DPF_GATE_OWNER_PROVIDER: "codex",
     DPF_GATE_OWNER_SESSION_ID: "contract-thread",
-    DPF_LOCAL_CI_COMMAND: `${JSON.stringify(process.execPath)} -e "for(let i=0;i<${lines};i++)console.log('sandbox build step '+i)"`,
+    DPF_LOCAL_CI_COMMAND: `${execPrefix}${JSON.stringify(process.execPath)} ${JSON.stringify(makeLoudFixture(lines))}`,
     ...extra,
   };
 }

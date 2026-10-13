@@ -283,7 +283,7 @@ describe.skipIf(!GIT_AVAILABLE)("prepareUpgradeSource — workspace-isolated (BI
     // histories — git refuses with "refusing to merge unrelated histories"
     // and produces zero U-state files. The pre-fix failureLog was literally
     // "merge-conflict:" with no detail. After the fix, stderr is captured.
-    const { upstream, install, workspace, root } = makeWorld();
+    const { install, workspace, root } = makeWorld();
     cleanup.push(root);
     // Reset the install branch to a freshly orphan-branched tree so it shares
     // NO history with upstream.

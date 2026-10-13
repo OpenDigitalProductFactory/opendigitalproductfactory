@@ -9,7 +9,6 @@ import {
 import { evaluateWorkroomLifecycleConformance } from "./workroom-shape-conformance";
 import {
   parseStoredWorkroomCycle,
-  parseStoredWorkroomOutcome,
   WORKROOM_CYCLE_EVIDENCE_KIND,
   WORKROOM_OUTCOME_MESSAGE_TYPE,
   type WorkroomCycleWorkItemRecord,
@@ -42,10 +41,20 @@ export interface WorkroomCycleStoreTx {
   getRoom(workItemId: string): Promise<WorkroomCycleParentRecord | null>;
   listCycles(workItemId: string): Promise<WorkroomCycleWorkItemRecord[]>;
   listMessages(workItemId: string): Promise<WorkroomCycleStoreMessage[]>;
+  findOutcome(workItemId: string, cycleKey: string, carrierId: string): Promise<WorkroomCycleStoreMessage | null>;
+  findCycle(workItemId: string, lookup: { carrierId: string } | { cycleKey: string } | { active: true }): Promise<WorkroomCycleWorkItemRecord | null>;
   findWorkItemBySource(sourceType: string, sourceId: string): Promise<WorkroomCycleWorkItemRecord | null>;
   createWorkItem(data: Record<string, unknown>): Promise<WorkroomCycleWorkItemRecord>;
   completeCycle(itemId: string, completedAt: Date): Promise<void>;
   appendMessage(data: Record<string, unknown>): Promise<{ messageId: string }>;
+}
+
+export function workroomCycleSourceKey(roomId: string, cycleKey: string): string {
+  return `workroom-cycle:${JSON.stringify([roomId, cycleKey])}`;
+}
+
+export function workroomOutcomeMessageId(roomId: string, cycleKey: string, carrierId: string): string {
+  return `workroom-outcome:${JSON.stringify([roomId, cycleKey, carrierId])}`;
 }
 
 export interface WorkroomCycleStoreDb {
@@ -161,10 +170,9 @@ export async function openWorkroomCycle(input: OpenWorkroomCycleInput): Promise<
     });
     if (!policy.ok) throw new WorkroomCycleStoreError("policy_denied", policy.message, policy);
 
-    const cycles = await tx.listCycles(room.id);
-    const existing = cycles.find((item) => parseStoredWorkroomCycle(item.evidence)?.cycleKey === input.cycleKey);
+    const existing = await tx.findCycle(room.id, { cycleKey: input.cycleKey });
     if (existing) return { cycle: existing, messageId: null, idempotent: true };
-    const active = cycles.find((item) => !["completed", "cancelled"].includes(item.status) && parseStoredWorkroomCycle(item.evidence));
+    const active = await tx.findCycle(room.id, { active: true });
     if (active) {
       throw new WorkroomCycleStoreError("active_cycle_exists", `Cycle '${parseStoredWorkroomCycle(active.evidence)?.cycleKey}' is already active.`);
     }
@@ -189,6 +197,7 @@ export async function openWorkroomCycle(input: OpenWorkroomCycleInput): Promise<
     const cycle = await tx.createWorkItem({
       sourceType: room.sourceType,
       sourceId: room.sourceId ?? room.itemId,
+      sourceKey: workroomCycleSourceKey(room.id, input.cycleKey),
       title: `${room.title} — ${input.cycleKey}`,
       description: input.objective,
       urgency: room.urgency,
@@ -241,7 +250,6 @@ export async function applyWorkroomCarryOver(input: {
     if (!conformance.ok) {
       throw new WorkroomCycleStoreError("policy_denied", conformance.message, conformance);
     }
-    const cycles = await tx.listCycles(room.id);
     const createdItemIds: string[] = [];
     const reusedItemIds: string[] = [];
 
@@ -252,7 +260,7 @@ export async function applyWorkroomCarryOver(input: {
         continue;
       }
       const target = command.kind === "attach-to-cycle"
-        ? cycles.find((cycle) => parseStoredWorkroomCycle(cycle.evidence)?.cycleKey === command.targetCycleKey)
+        ? await tx.findCycle(room.id, { cycleKey: command.targetCycleKey! })
         : null;
       if (command.kind === "attach-to-cycle" && !target) {
         throw new WorkroomCycleStoreError("cycle_not_found", `Target cycle '${command.targetCycleKey}' was not found.`);
@@ -317,16 +325,11 @@ export async function completeWorkroomCycle(input: {
   return input.db.withinRoomLock(input.roomWorkItemId, async (tx) => {
     const room = await tx.getRoom(input.roomWorkItemId);
     if (!room) throw new WorkroomCycleStoreError("room_not_found", "Work Room was not found.");
-    const cycles = await tx.listCycles(room.id);
-    const cycle = cycles.find((item) => item.itemId === input.carrierId);
+    const cycle = await tx.findCycle(room.id, { carrierId: input.carrierId });
     if (!cycle) throw new WorkroomCycleStoreError("cycle_not_found", "Work Room cycle was not found.");
     const boundary = parseStoredWorkroomCycle(cycle.evidence);
     if (!boundary) throw new WorkroomCycleStoreError("cycle_not_found", "Work Item is not a Work Room cycle carrier.");
-    const messages = await tx.listMessages(room.id);
-    const existing = messages.find((message) => {
-      const stored = parseStoredWorkroomOutcome(message.structuredPayload);
-      return stored?.cycleKey === boundary.cycleKey && stored.carrierId === cycle.itemId;
-    });
+    const existing = await tx.findOutcome(room.id, boundary.cycleKey, cycle.itemId);
     if (existing) return { messageId: existing.messageId, idempotent: true };
 
     const view = buildWorkroomCycle(cycleCandidate(cycle)!);
@@ -343,6 +346,7 @@ export async function completeWorkroomCycle(input: {
       workItemId: room.id,
       ...actorData(input.actor),
       messageType: WORKROOM_OUTCOME_MESSAGE_TYPE,
+      messageId: workroomOutcomeMessageId(room.id, boundary.cycleKey, cycle.itemId),
       body: input.packet.summary,
       structuredPayload: {
         kind: WORKROOM_OUTCOME_MESSAGE_TYPE,

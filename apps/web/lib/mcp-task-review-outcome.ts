@@ -3,23 +3,39 @@ import { prisma, type Prisma } from "@dpf/db";
 import { projectBacklogItemReadiness } from "./backlog/initiative-readiness/entry-adapter";
 import { loadInheritedInitiativeScope } from "./backlog/initiative-readiness/parent-scope-inheritance";
 import type { InitiativeReviewBinding } from "./mcp-task-review-contract";
+import { TASK_IN_FLIGHT_STATES } from "./tak/task-states";
 
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown> : null;
 }
 
-export async function reconcilePersistedReviewStatus(
-  taskRunId: string, progressPayload: unknown,
-  outcome: NonNullable<Awaited<ReturnType<typeof loadInitiativeReviewOutcome>>>,
-) {
+type PersistedReviewOutcome = NonNullable<Awaited<ReturnType<typeof loadInitiativeReviewOutcome>>>;
+
+/** The completed-TaskRun write a verified receipt settles a review to; waits and stale approvals are dropped. */
+export function persistedReviewCompletionData(progressPayload: unknown, outcome: PersistedReviewOutcome) {
   const progress = { ...record(progressPayload) };
   for (const key of ["terminalWriterWait", "terminalWriterDispatchFailure", "terminalWriterEscalation", "terminalWriterContextFailure", "resourceWait", "approvalEnvelopeId"])
     delete progress[key];
-  await prisma.taskRun.update({ where: { taskRunId }, data: {
+  return {
     status: "completed", completedAt: new Date(),
     progressPayload: { ...progress, summary: outcome.summary, reviewOutcome: outcome, requiresApproval: false } as Prisma.InputJsonValue,
-  } });
+  };
+}
+
+/** A receipt completes the review, but cannot revive cancellation or displace a newer attempt. */
+export async function reconcilePersistedReviewStatus(
+  taskRunId: string,
+  progressPayload: unknown,
+  outcome: PersistedReviewOutcome,
+  expected: { status: string; updatedAt: Date },
+): Promise<boolean> {
+  if (expected.status !== "completed" && !(TASK_IN_FLIGHT_STATES as readonly string[]).includes(expected.status)) return false;
+  const written = await prisma.taskRun.updateMany({
+    where: { taskRunId, status: expected.status, updatedAt: expected.updatedAt },
+    data: persistedReviewCompletionData(progressPayload, outcome),
+  });
+  return written.count === 1;
 }
 
 export async function loadTaskInitiativeReviewOutcome(taskRunId: string, binding: InitiativeReviewBinding) {

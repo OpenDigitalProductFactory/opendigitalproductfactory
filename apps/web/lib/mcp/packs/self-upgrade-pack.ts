@@ -5,7 +5,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "request_self_upgrade",
     description:
-      "Request the governed portal self-upgrade pipeline. Queues the same run path as the operator control when the install is inside its allowed off-hours window; outside that window it returns a human-override-required result and does not queue a run. Routine requests also wait for the release batch: when fewer merged updates have accumulated than the batch threshold, it returns a batch-below-threshold result with the pending tally instead of queueing — wait for the batch to deploy before validating live.",
+      "Request the governed portal self-upgrade pipeline. Inside the maintenance window it queues the same run path as the operator control; outside the window, or during an operator blackout, nothing runs now — the request is deferred to the next window (status deferred_to_window, with runAt saying when the scheduled upgrade picks it up). An operator can still deploy immediately from /ops/self-upgrade. Routine requests also wait for the release batch: when fewer merged updates have accumulated than the batch threshold, it returns a batch-below-threshold result with the pending tally instead of queueing — wait for the batch to deploy before validating live.",
     inputSchema: {
       type: "object",
       properties: {
@@ -19,8 +19,22 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "manage_provider_connections",
     executionMode: "immediate",
     sideEffect: true,
-    // destroys state → consult-gated (TAK §8.4.1).
+    // Execution retains its controls; a delegated DEV agent may request admission.
     consequence: "irreversible",
+    consequenceForCall: async ({ params }) => {
+      if (Object.keys(params).some((key) => key !== "reason") ||
+          (params["reason"] !== undefined && typeof params["reason"] !== "string")) {
+        return { consequence: "irreversible", reason: "non-routine-upgrade-request" };
+      }
+      const [{ prisma }, { loadInstanceStance, prismaInstanceStanceStore }] = await Promise.all([
+        import("@dpf/db"),
+        import("@/lib/install/instance-stance"),
+      ]);
+      const stance = await loadInstanceStance(prismaInstanceStanceStore(prisma));
+      return stance.environmentClass === "development" && stance.primaryPurpose === "evolve-dpf"
+        ? { consequence: null, reason: "governed-development-upgrade-request" }
+        : { consequence: "irreversible", reason: "upgrade-request-outside-development" };
+    },
   },
   {
     name: "repair_promoter_image",
@@ -96,6 +110,14 @@ async function requestSelfUpgradeTool(
     return {
       success: true,
       message: `Self-upgrade ${result.runId} is already active.`,
+      data: result as unknown as Record<string, unknown>,
+    };
+  }
+
+  if (result.status === "deferred_to_window") {
+    return {
+      success: true,
+      message: result.message,
       data: result as unknown as Record<string, unknown>,
     };
   }
@@ -206,11 +228,13 @@ async function getSelfUpgradeQueueStatusTool(): Promise<ToolResult> {
   const { getLastCheckedAt } = await import("@/lib/self-upgrade/last-check");
   const { declineIsCurrent, nextScheduledCheckAt } = await import("@/lib/self-upgrade/scheduled-gate");
   const { getScheduledDecline } = await import("@/lib/self-upgrade/scheduled-gate");
-  const [batch, latestRun, lastCheckedAt, decline] = await Promise.all([
+  const { getDeferredUpgradeRequest, isDeferredRequestPending } = await import("@/lib/self-upgrade/deferred-request");
+  const [batch, latestRun, lastCheckedAt, decline, deferred] = await Promise.all([
     resolveReleaseBatchStatus({ fresh: true, config }),
     getLatestRun(),
     getLastCheckedAt(),
     getScheduledDecline(),
+    getDeferredUpgradeRequest(),
   ]);
   const support = batch.support;
   // BI-3CA18934: the unattended path is throttled by checkIntervalHours and
@@ -237,6 +261,8 @@ async function getSelfUpgradeQueueStatusTool(): Promise<ToolResult> {
       checkIntervalHours: config.checkIntervalHours,
       nextScheduledCheckAt: nextScheduledCheck?.toISOString() ?? null,
       scheduledGate: scheduledGate ? { reason: scheduledGate.reason, at: scheduledGate.at } : null,
+      // BI-2128872C: an agent request waiting for the next maintenance window.
+      deferredRequest: isDeferredRequestPending(deferred, lastCheckedAt) ? deferred : null,
       reason: support.supported ? batch.reason : support.reason,
       pendingPrCount: batch.pendingCount,
       batchMinPendingPrs: batch.minPendingPrs,

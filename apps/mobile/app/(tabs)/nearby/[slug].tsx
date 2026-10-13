@@ -6,6 +6,7 @@
 import React, { useEffect, useMemo } from "react";
 import {
   ActivityIndicator,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -51,6 +52,16 @@ export default function NearbyMenuScreen(): React.JSX.Element {
         <Text style={styles.error} testID="menu-error">
           {menuError}
         </Text>
+        <Pressable
+          style={styles.retry}
+          onPress={() => {
+            if (slug) void fetchMenu(slug);
+          }}
+          accessibilityRole="button"
+          testID="menu-retry"
+        >
+          <Text style={styles.retryText}>Try again</Text>
+        </Pressable>
       </View>
     );
   }
@@ -125,6 +136,8 @@ function makeStyles({ colors, spacing, borderRadius }: ReturnType<typeof useThem
     itemPrice: { color: colors.textMuted, fontSize: 14 },
     error: { color: colors.error, fontSize: 13, textAlign: "center" },
     muted: { color: colors.textMuted, fontSize: 14, textAlign: "center" },
+    retry: { backgroundColor: colors.primary, borderRadius: borderRadius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, marginTop: spacing.md },
+    retryText: { color: colors.white, fontSize: 15, fontWeight: "600" },
     phase2: {
       marginTop: spacing.lg,
       padding: spacing.md,

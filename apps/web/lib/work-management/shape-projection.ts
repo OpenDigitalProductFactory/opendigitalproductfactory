@@ -241,6 +241,10 @@ export function projectRoomShape(
   const candidate = check?.shapeKey ? getWorkShape(check.shapeKey) : null;
   const definition = candidate?.version === check?.shapeVersion ? candidate : null;
   const currentStageKey = definition ? check.currentStageKey : STAGES[currentIndex]?.key ?? null;
+  // A graph room can hold several current stages at once (GPP Phase 3c
+  // PR-3c-2): each one the marking holds reads "current". A sequential room
+  // has only currentStageKey, exactly as before.
+  const isCurrent = (key: string) => key === currentStageKey || (definition !== null && (check.currentStageKeys ?? []).includes(key));
   const affected = view.sourceRefs.filter((ref) => ref.kind === "work-capsule" || ref.kind === "work-item" || ref.kind === "task-run");
   const ownerName = (ref: string | null | undefined) => view.participants.find((person) => person.principalRef === ref)?.displayName ?? ref ?? "Owner not recorded";
   const gaps = [...(check?.deviations ?? []).map((deviation) => deviation.summary)];
@@ -265,15 +269,15 @@ export function projectRoomShape(
       });
       return {
         key: stage.key, label: stage.title, parallel: false, rows,
-        state: stage.key !== currentStageKey ? rows.length ? "observed" : "unknown"
+        state: !isCurrent(stage.key) ? rows.length ? "observed" : "unknown"
           : view.state === "cancelled" ? "cancelled"
           : check.disposition === "pause" || check.disposition === "escalate" ? "holding"
           : check.disposition === "stop" ? "denied" : "observed",
         inspection: {
-          position: stage.key === currentStageKey ? "Current stage reported by the process check" : "Intended step; execution not verified",
-          reason: stage.key === currentStageKey ? check.interventionReason ?? view.work.attentionReason ?? "The process check reports this stage."
+          position: isCurrent(stage.key) ? "Current stage reported by the process check" : "Intended step; execution not verified",
+          reason: isCurrent(stage.key) ? check.interventionReason ?? view.work.attentionReason ?? "The process check reports this stage."
             : rows.length ? "Current-source evidence matches this requirement; stage completion is not recorded." : "No step-linked execution receipt is available.",
-          next: stage.key === currentStageKey
+          next: isCurrent(stage.key)
             ? `${permission}${recordedAction}`
             : `Intended advance condition: ${stage.advance.condition} ${permission}`,
           owner: ownerName(stage.accountablePrincipalRef), expectedEvidence: stage.evidence, affected,

@@ -1105,7 +1105,7 @@
       "services": [
         {
           "backupPolicy": "separate-required",
-          "boundaryReason": "Separate dpf-tts runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
+          "boundaryReason": "Docker speech runtime for Windows/Linux; macOS uses the host-native Chatterbox service declared by its platform overlay.",
           "canonicalDataOwner": "tts-voices",
           "capability": "runtime:local-speech",
           "class": "capability-activated",
@@ -1114,7 +1114,6 @@
           "healthSemantics": "compose-healthcheck",
           "hostPlatforms": [
             "linux",
-            "macos",
             "windows"
           ],
           "ports": [
@@ -1136,7 +1135,7 @@
       ]
     }
   ],
-  "catalogHash": "5d02492cdd7aca8bca37dd5291129bb30816c94ce35922d5fdd0ed2041cb502a",
+  "catalogHash": "52358eb9e4f8442f3b870a37ed46e9cba184e04ad811520842858d0833f2b6d9",
   "catalogVersion": 1,
   "substrateManifestVersion": 2
 }

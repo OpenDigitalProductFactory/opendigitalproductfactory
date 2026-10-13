@@ -5,7 +5,6 @@ import {
   AWAITING_ACCEPTANCE_BACKLOG_STATUSES,
   PARKED_BACKLOG_STATUSES,
   TERMINAL_BACKLOG_STATUSES,
-  isTerminalBacklogItemStatus,
   visibleUnderActiveOnly,
 } from "./backlog-visibility";
 

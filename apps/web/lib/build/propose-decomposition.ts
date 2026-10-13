@@ -361,12 +361,9 @@ export function buildDecompositionPrompt(
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function appendPriorRound(prior: unknown, now: Date): unknown[] {
-  if (
-    typeof prior !== "object" ||
-    prior === null ||
-    !("latest" in prior)
-  ) {
+function appendPriorRound(prior: object, now: Date): unknown[] {
+  // Caller already requires a truthy object, so null is not a possible value.
+  if (!("latest" in prior)) {
     return [];
   }
   const p = prior as {

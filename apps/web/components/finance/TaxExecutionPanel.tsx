@@ -43,13 +43,6 @@ type Props = {
   handoffMode: string;
 };
 
-function toDateTimeLocal(value: Date | string | null | undefined) {
-  if (!value) return "";
-  const date = new Date(value);
-  const pad = (part: number) => String(part).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
 function formatDateTime(value: Date | string | null | undefined) {
   if (!value) return "Not scheduled";
   return new Date(value).toLocaleString("en-US", {

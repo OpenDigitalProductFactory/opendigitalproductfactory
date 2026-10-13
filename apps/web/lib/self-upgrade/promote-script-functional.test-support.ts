@@ -68,6 +68,7 @@ export function gitInit(dir: string): string {
   mkdirSync(join(dir, "scripts", "lib"), { recursive: true });
   copyFileSync(join(REPO_ROOT, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), join(dir, "scripts", "lib", "resolve-capability-compose-profiles.mjs"));
   copyFileSync(join(REPO_ROOT, "scripts", "lib", "govern-capability-compose-args.mjs"), join(dir, "scripts", "lib", "govern-capability-compose-args.mjs"));
+  copyFileSync(join(REPO_ROOT, "scripts", "lib", "script-argv.mjs"), join(dir, "scripts", "lib", "script-argv.mjs"));
   copyFileSync(join(REPO_ROOT, "scripts", "lib", "capability-state-hash.mjs"), join(dir, "scripts", "lib", "capability-state-hash.mjs"));
   copyFileSync(join(REPO_ROOT, "scripts", "capability-service-catalog.generated.json"), join(dir, "scripts", "capability-service-catalog.generated.json"));
   execFileSync("git", ["-C", dir, "add", "-A"], { env });
@@ -92,20 +93,65 @@ for arg in "$@"; do
   if [ "$arg" = "--env-file" ]; then take_env_file=1; fi
 done
 [ -n "$DOCKER_LOG" ] && printf '%s\\n' "$*" >> "$DOCKER_LOG"
-case "$*" in
-  *".Id"*) printf "%s" "\${DPF_TEST_RELEASE_ENGINE_ID:-$DPF_TEST_RELEASE_CONFIG_DIGEST}" ;;
-  *".RepoDigests"*) printf "%s@%s\n" "$DPF_TEST_RELEASE_REPO" "\${DPF_TEST_RELEASE_REPO_ID:-$DPF_TEST_RELEASE_ENGINE_ID}" ;;
-  *".Os"*) printf "%s" "\${DPF_TEST_RELEASE_OS:-linux}" ;;
-  *".Architecture"*) printf "%s" "\${DPF_TEST_RELEASE_ARCHITECTURE:-amd64}" ;;
-  *"buildx imagetools inspect"*"--raw"*) case "$*" in *"@$DPF_TEST_RELEASE_PLATFORM_MANIFEST_DIGEST"*) printf '{"config":{"digest":"%s"}}' "\${DPF_TEST_RELEASE_REGISTRY_CONFIG_DIGEST:-$DPF_TEST_RELEASE_CONFIG_DIGEST}" ;; *) if [ "\${DPF_TEST_DUPLICATE_PLATFORM:-no}" = yes ]; then printf '{"manifests":[{"digest":"%s","platform":{"os":"%s","architecture":"%s"}},{"digest":"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","platform":{"os":"%s","architecture":"%s"}}]}' "$DPF_TEST_RELEASE_PLATFORM_MANIFEST_DIGEST" "$DPF_TEST_RELEASE_OS" "$DPF_TEST_RELEASE_ARCHITECTURE" "$DPF_TEST_RELEASE_OS" "$DPF_TEST_RELEASE_ARCHITECTURE"; else printf '{"manifests":[{"digest":"%s","platform":{"os":"%s","architecture":"%s"}}]}' "$DPF_TEST_RELEASE_PLATFORM_MANIFEST_DIGEST" "$DPF_TEST_RELEASE_OS" "$DPF_TEST_RELEASE_ARCHITECTURE"; fi ;; esac ;;
-  *"org.opencontainers.image.version"*) printf "%s" "$DPF_TEST_RELEASE_TAG" ;;
-  *"org.opencontainers.image.revision"*) printf "%s" "$DPF_TEST_RELEASE_SHA" ;;
-  "create "*) printf "candidate-container" ;;
-  "cp candidate-container:/dpf-release-assets/. "*)
-    for destination in "$@"; do :; done
-    # Match Docker's directory-copy semantics on both platforms.
-    mkdir -p "$destination"; cp -R "$DPF_TEST_RELEASE_ASSETS"/. "$destination/"
+# Operation and format are argv fields, never substrings of a temporary path.
+case "\${1-}" in
+  create) printf "candidate-container"; exit 0 ;;
+  rm) printf 'reconcile-remove %s\\n' "$*" >> "$DOCKER_LOG"; exit 0 ;;
+  cp)
+    [ "$#" = 3 ] && [ "$2" = "candidate-container:/dpf-release-assets/." ] || exit 1
+    mkdir -p "$3" && cp -R "$DPF_TEST_RELEASE_ASSETS"/. "$3/"
+    exit "$?"
     ;;
+esac
+if [ "\${1-}" = inspect ] || { [ "\${1-}" = image ] && [ "\${2-}" = inspect ]; }; then
+  inspect_format=
+  inspect_target=
+  take_format=0
+  for arg in "$@"; do
+    if [ "$take_format" = 1 ]; then inspect_format="$arg"; take_format=0; continue; fi
+    case "$arg" in
+      --format|-f) take_format=1 ;;
+      --format=*) inspect_format="\${arg#--format=}" ;;
+      image|inspect) ;;
+      *) inspect_target="$arg" ;;
+    esac
+  done
+  case "$inspect_format" in
+    "{{.Id}}")
+      if [ "$inspect_target" = dpf-sandbox:target ]; then printf 'sha256:sandbox-target'
+      else printf "%s" "\${DPF_TEST_RELEASE_ENGINE_ID:-$DPF_TEST_RELEASE_CONFIG_DIGEST}"; fi
+      exit 0 ;;
+    "{{range .RepoDigests}}{{println .}}{{end}}")
+      printf "%s@%s\\n" "$DPF_TEST_RELEASE_REPO" "\${DPF_TEST_RELEASE_REPO_ID:-$DPF_TEST_RELEASE_ENGINE_ID}"; exit 0 ;;
+    "{{.Os}}") printf "%s" "\${DPF_TEST_RELEASE_OS:-linux}"; exit 0 ;;
+    "{{.Architecture}}") printf "%s" "\${DPF_TEST_RELEASE_ARCHITECTURE:-amd64}"; exit 0 ;;
+    *"org.opencontainers.image.version"*) printf "%s" "$DPF_TEST_RELEASE_TAG"; exit 0 ;;
+    *"org.opencontainers.image.revision"*) printf "%s" "$DPF_TEST_RELEASE_SHA"; exit 0 ;;
+  esac
+fi
+case "$*" in
+  *"ps -q sandbox"*) printf 'sandbox-container' ;;
+  *"config --images sandbox"*) printf 'dpf-sandbox:target\\n' ;;
+  *"{{.State.Running}} {{.Image}}"*)
+    case "\${DPF_TEST_SANDBOX_STATE:-running}" in
+      exited) printf 'false sha256:sandbox-target' ;;
+      stale) printf 'true sha256:sandbox-old' ;;
+      *) printf 'true sha256:sandbox-target' ;;
+    esac
+    ;;
+  *"config --format json"*) printf '{"services":{}}' ;;
+  *"ps -a -q "*) for service in "$@"; do :; done; printf '%s' "$service" ;;
+  *".State.Status"*)
+    for service in "$@"; do :; done
+    if [ "$service" = "$DPF_TEST_CREATED_SERVICE" ]; then
+      printf 'created 0001-01-01T00:00:00Z'
+    elif [ "$service" = "$DPF_TEST_INSPECT_FAIL_SERVICE" ]; then
+      exit 1
+    else
+      printf 'exited 2026-09-01T00:00:00Z'
+    fi
+    ;;
+  *"buildx imagetools inspect"*"--raw"*) case "$*" in *"@$DPF_TEST_RELEASE_PLATFORM_MANIFEST_DIGEST"*) printf '{"config":{"digest":"%s"}}' "\${DPF_TEST_RELEASE_REGISTRY_CONFIG_DIGEST:-$DPF_TEST_RELEASE_CONFIG_DIGEST}" ;; *) if [ "\${DPF_TEST_DUPLICATE_PLATFORM:-no}" = yes ]; then printf '{"manifests":[{"digest":"%s","platform":{"os":"%s","architecture":"%s"}},{"digest":"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","platform":{"os":"%s","architecture":"%s"}}]}' "$DPF_TEST_RELEASE_PLATFORM_MANIFEST_DIGEST" "$DPF_TEST_RELEASE_OS" "$DPF_TEST_RELEASE_ARCHITECTURE" "$DPF_TEST_RELEASE_OS" "$DPF_TEST_RELEASE_ARCHITECTURE"; else printf '{"manifests":[{"digest":"%s","platform":{"os":"%s","architecture":"%s"}}]}' "$DPF_TEST_RELEASE_PLATFORM_MANIFEST_DIGEST" "$DPF_TEST_RELEASE_OS" "$DPF_TEST_RELEASE_ARCHITECTURE"; fi ;; esac ;;
   *"recover-human-principal-backfill-migration.mjs --verify-rolled-back"*)
     [ "\${DPF_TEST_PRINCIPAL_VERIFY_FAIL:-no}" = "yes" ] && exit 1
     printf "verified"
@@ -131,6 +177,7 @@ case "$*" in
     fi
     ;;
   *"up -d --no-deps --force-recreate portal"*|*"up -d --no-deps --force-recreate sandbox"*)
+    case "$*" in *"force-recreate sandbox"*) [ "\${DPF_TEST_SANDBOX_RECREATE_FAILS:-0}" = "1" ] && exit 1 ;; esac
     service=
     for service in "$@"; do :; done
     effective_state_dir="$(sed -n 's/^DPF_STATE_DIR=//p' "$env_file" | tail -n 1)"
@@ -182,6 +229,12 @@ export function runPromote(opts: {
   principalRecoveryDecision?: "recover" | "not-needed" | "blocked";
   /** Services the fake install has ever created (any state), for service-reconcile. */
   existingServices?: string[];
+  createdService?: string;
+  inspectFailService?: string;
+  /** What the sandbox reads as after its recreate (BI-547B788D). Default: running on the target image. */
+  sandboxState?: "running" | "exited" | "stale";
+  /** Make `up -d --no-deps --force-recreate sandbox` itself fail (BI-547B788D AC-3). */
+  sandboxRecreateFails?: boolean;
   /** Make the reconcile `up -d --no-recreate` fail, to prove it never aborts the upgrade. */
   reconcileFails?: boolean;
   /** Make only `up` of this one service fail (its image tag no longer resolves). */
@@ -227,6 +280,9 @@ export function runPromote(opts: {
       ? `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`).join(",")}}`
       : JSON.stringify(value) ?? "null";
   const signature = createHmac("sha256", secret).update(canonical(envelope)).digest("hex");
+  // Keep large inventories out of the Windows shell command-line limit.
+  const inventoryPath = join(opts.backup, "existing-services.txt");
+  if (opts.existingServices) writeFileSync(inventoryPath, opts.existingServices.join("\n"));
   const exports = [
     "unset DPF_STATE_DIR",
     // promote.sh writes `git config --global`; confine it to a scratch file so
@@ -252,8 +308,12 @@ export function runPromote(opts: {
       ? [`export DPF_TEST_PRINCIPAL_RECOVERY_DECISION=${shellQuote(opts.principalRecoveryDecision)}`]
       : []),
     ...(opts.existingServices
-      ? [`export DPF_TEST_EXISTING_SERVICES=${shellQuote(opts.existingServices.join("\n"))}`]
+      ? [`export DPF_TEST_EXISTING_SERVICES="$(cat ${shellQuote(toBashPath(inventoryPath))})"`]
       : []),
+    ...(opts.createdService ? [`export DPF_TEST_CREATED_SERVICE=${shellQuote(opts.createdService)}`] : []),
+    ...(opts.inspectFailService ? [`export DPF_TEST_INSPECT_FAIL_SERVICE=${shellQuote(opts.inspectFailService)}`] : []),
+    ...(opts.sandboxState ? [`export DPF_TEST_SANDBOX_STATE=${shellQuote(opts.sandboxState)}`] : []),
+    ...(opts.sandboxRecreateFails ? ["export DPF_TEST_SANDBOX_RECREATE_FAILS=1"] : []),
     ...(opts.reconcileFails ? ["export DPF_TEST_RECONCILE_FAILS=1"] : []),
     ...(opts.reconcileFailService
       ? [`export DPF_TEST_RECONCILE_FAIL_SERVICE=${shellQuote(opts.reconcileFailService)}`]

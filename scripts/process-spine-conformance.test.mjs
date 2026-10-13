@@ -204,14 +204,17 @@ test("protected terminal success rows are written only by initiative terminal re
     "apps/web/lib/mcp/packs/backlog-pack.ts",
     "apps/web/lib/backlog/mcp-epic-tools.ts",
     "apps/web/lib/build-flow-state.ts",
+    // BI-BDB63485: build.ts completes through completeBuildWhenDelivered
+    // (build-flow-state.ts, delivery preconditions first), and
+    // save_phase_handoff no longer completes builds at all (it is scoped to
+    // ideate..review), so build-evidence-extra-pack.ts is not a terminal surface.
     "apps/web/lib/actions/build.ts",
-    "apps/web/lib/mcp/packs/build-evidence-extra-pack.ts",
     "apps/web/lib/work-capsules/work-capsule-store.ts",
   ];
   for (const path of routedSurfaces) {
     assert.match(
       readFileSync(join(repoRoot, path), "utf8"),
-      /(?:complete(?:BacklogItem|Epic|FeatureBuild|WorkCapsule)Transition|assertFeatureBuildCompletion|completeGovernedWorkCapsuleStatus)/,
+      /(?:complete(?:BacklogItem|Epic|FeatureBuild|WorkCapsule)Transition|completeBuildWhenDelivered|completeGovernedWorkCapsuleStatus)/,
       `${path} must route terminal success through the canonical repository`,
     );
   }

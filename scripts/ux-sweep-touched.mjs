@@ -22,6 +22,7 @@
 // edit points you at CI rather than sweeping 600 routes locally.
 
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -82,7 +83,7 @@ export function touchedRoutes(changed, manifestRoutes, { read, resolveImport = r
 function parseArgs(argv) {
   // strict: false keeps the old tolerance: unknown flags are ignored.
   const { values } = utilParseArgs({
-    args: argv,
+    args: scriptArgv(argv),
     strict: false,
     allowPositionals: true,
     options: { run: { type: "boolean" }, "base-url": { type: "string" }, "max-routes": { type: "string" } },

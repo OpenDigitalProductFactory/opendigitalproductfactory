@@ -26,6 +26,7 @@ import { useMetricQuery } from "./useMetricQuery";
 
 import type { ReleaseHealthCardData } from "./health-summary";
 import type { CapabilityServiceHealthProjection } from "@/lib/platform-runtime/service-health";
+import { inactiveCapabilityServices } from "@/lib/platform-runtime/inactive-scrape-targets";
 
 type ServiceHealthDashboardProps = {
   capabilityHealth: CapabilityServiceHealthProjection | null;
@@ -90,6 +91,10 @@ function ServiceHealthContent({
       };
   const suppressBannerSummaries =
     platform.tone === "critical" ? [platform.detail] : [];
+  // BI-36DE938C — scrape targets owned by an inactive runtime capability are
+  // intentionally absent; the banner and tiles defer to the capability
+  // projection instead of reporting them down.
+  const inactiveServices = inactiveCapabilityServices(capabilityHealth);
 
   const showHostResources = isHostTelemetryConfigured(upTargets);
 
@@ -107,12 +112,15 @@ function ServiceHealthContent({
       <CapabilityAuthoritySection capabilityHealth={capabilityHealth} />
 
       {/* Active alerts (deduped against the Platform Status StatCard above) */}
-      <AlertBanner suppressSummaries={suppressBannerSummaries} />
+      <AlertBanner
+        suppressSummaries={suppressBannerSummaries}
+        inactiveServices={inactiveServices}
+      />
 
       {/* Service status — targets-driven, so adding a Prometheus scrape job
           automatically adds a tile (no UI change required) and three sandbox
           targets render as three tiles instead of collapsing onto one row. */}
-      <ServiceStatusGrid />
+      <ServiceStatusGrid inactiveServices={inactiveServices} />
 
       {/* Platform resource utilization — only rendered on substrates that ship
           a host telemetry exporter (Linux node-exporter, Windows windows_exporter).

@@ -21,6 +21,15 @@ import { getProviderDisplayNameForSpend } from "./ai-provider-cost-view";
 import { rollUpProviderModels, type ProfileForRollup } from "./provider-routing-rollup";
 import { resolveCredentialProviderId } from "./ai-provider-internals";
 import { parseAsyncInferenceOperationStatus } from "./async-operation-contract";
+import { getProviderControlState, getProviderControlStates } from "./provider-operator-pause";
+
+const getOperatorControls = cache(async (providerId: string) => {
+  const state = await getProviderControlState(providerId);
+  return {
+    defaultConnectionStatus: state.connectionStatus,
+    operatorPause: state.pause ? { resumeAt: state.pause.resumeAt, pausedAt: state.pause.pausedAt } : null,
+  };
+});
 
 /** Mask a secret to `••••••1234` (last 4 chars visible). */
 function maskSecret(value: string | null): string | null {
@@ -33,7 +42,7 @@ function maskSecret(value: string | null): string | null {
 
 /** Strip secrets before sending credential data to the client. */
 function maskCredential(cred: {
-  providerId: string;
+  providerId: string | null;
   secretRef: string | null;
   clientId: string | null;
   clientSecret: string | null;
@@ -43,9 +52,9 @@ function maskCredential(cred: {
   status: string;
   tokenExpiresAt?: Date | null;
   refreshToken?: string | null;
-}): CredentialRow {
+}, providerId: string): CredentialRow {
   return {
-    providerId:       cred.providerId,
+    providerId,
     secretHint:       maskSecret(cred.secretRef),
     clientId:         cred.clientId,
     clientSecretHint: maskSecret(cred.clientSecret),
@@ -71,11 +80,15 @@ export const getProviders = cache(async (opts?: { includeHidden?: boolean }): Pr
     },
   });
   const credMap = new Map(credentials.map((c) => [c.providerId, c]));
-  return providers.map((p) => {
+  const controls = await getProviderControlStates(providers.map(p => p.providerId));
+  return Promise.all(providers.map(async (p) => {
     const raw = credMap.get(p.providerId) ?? credMap.get(resolveCredentialProviderId(p.providerId));
+    const state = controls.get(p.providerId);
     return {
       provider: {
         ...p,
+        defaultConnectionStatus: state?.connectionStatus ?? null,
+        operatorPause: state?.pause ? { resumeAt: state.pause.resumeAt, pausedAt: state.pause.pausedAt } : null,
         families:             p.families as string[],
         enabledFamilies:      p.enabledFamilies as string[],
         supportedAuthMethods: p.supportedAuthMethods as string[],
@@ -94,9 +107,9 @@ export const getProviders = cache(async (opts?: { includeHidden?: boolean }): Pr
         oauthClientId:        p.oauthClientId,
         oauthRedirectUri:     p.oauthRedirectUri,
       } satisfies ProviderRow,
-      credential: raw ? maskCredential(raw) : null,
+      credential: raw ? maskCredential(raw, p.providerId) : null,
     };
-  });
+  }));
 });
 
 export const getProviderById = cache(async (providerId: string): Promise<ProviderWithCredential | null> => {
@@ -108,6 +121,7 @@ export const getProviderById = cache(async (providerId: string): Promise<Provide
   return {
     provider: {
       ...provider,
+      ...await getOperatorControls(providerId),
       families:             provider.families as string[],
       enabledFamilies:      provider.enabledFamilies as string[],
       supportedAuthMethods: provider.supportedAuthMethods as string[],
@@ -126,9 +140,30 @@ export const getProviderById = cache(async (providerId: string): Promise<Provide
       oauthClientId:        provider.oauthClientId,
       oauthRedirectUri:     provider.oauthRedirectUri,
     } satisfies ProviderRow,
-    credential: credential ? maskCredential(credential) : null,
+    credential: credential ? maskCredential(credential, providerId) : null,
   };
 });
+
+/** Account read model uses the same masking boundary as legacy provider reads. */
+export const getProviderAccounts = cache(async (providerId?: string, page?: { limit: number; cursor?: string }) => {
+  const connections = await prisma.aiProviderConnection.findMany({
+    where: providerId === undefined ? {} : { providerId },
+    include: { credentialEntry: true },
+    orderBy: [{ providerId: "asc" }, { createdAt: "asc" }, { connectionId: "asc" }],
+    ...(page ? { take: Math.min(101, Math.max(1, page.limit)), ...(page.cursor ? { cursor: { connectionId: page.cursor }, skip: 1 } : {}) } : {}),
+  });
+  return connections.map(({ credentialEntry, ...connection }) => ({
+    ...connection,
+    createdAt: connection.createdAt.toISOString(),
+    updatedAt: connection.updatedAt.toISOString(),
+    lastReviewedAt: connection.lastReviewedAt?.toISOString() ?? null,
+    modelsVerifiedAt: connection.modelsVerifiedAt?.toISOString() ?? null,
+    credential: credentialEntry ? maskCredential(credentialEntry, connection.providerId) : null,
+    isDefault: connection.connectionId === `provider-default-${connection.providerId}`,
+  }));
+});
+
+export type ProviderAccountRow = Awaited<ReturnType<typeof getProviderAccounts>>[number];
 
 function monthRange(month: { year: number; month: number }): { gte: Date; lt: Date } {
   const gte = new Date(Date.UTC(month.year, month.month - 1, 1));
@@ -395,12 +430,15 @@ export const getToolInventory = cache(
       },
       include: { server: { select: { name: true, serverId: true } } },
     });
+    // BI-8B7B2FE9: discovered tools are default-deny. This inventory shows the
+    // review state only; the authority decision is resolveDiscoveredToolPolicy
+    // (lib/tak/mcp-tool-policy.ts) at listing and call time.
     const mcpItems: ToolInventoryItem[] = mcpTools.map((t) => ({
       name: `${t.server.serverId}__${t.toolName}`,
       source: t.server.name,
       type: "mcp" as const,
-      enabled: t.isEnabled,
-      gating: null,
+      enabled: t.isEnabled && t.policyStatus === "approved",
+      gating: t.policyStatus === "approved" ? t.policyGrantKey : `review: ${t.policyStatus}`,
       originalName: t.toolName,
     }));
 

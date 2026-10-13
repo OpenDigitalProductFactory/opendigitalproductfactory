@@ -193,12 +193,17 @@ export type AttentionEnvelopeApproval = {
   /** True only while the envelope is `proposed` AND unexpired at the projected
    *  moment. False hides every decision control. */
   actionable: boolean;
+  /** The window closed with nobody answering (BI-0012E6CA). The card offers
+   *  "Ask again" instead of decision controls. */
+  expiredUnanswered?: boolean;
   reviewBinding?: AttentionEnvelopeReviewBinding;
   /** Decision-first owner summary (BI-F95B0795). Always present; unknown shapes fail closed. */
   decision: EnvelopeDecisionSummary;
   /** The authenticated envelope state-machine routes (lib/coworker/envelope-routes). */
   approveHref: string;
   declineHref: string;
+  /** POST target that raises an expired, unanswered request again. */
+  reraiseHref?: string;
 };
 
 export type AttentionItem = {

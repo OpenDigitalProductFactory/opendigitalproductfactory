@@ -26,6 +26,7 @@ import {
   matchingRemoteTaskRequestDigest,
   remoteTaskRequestDigest,
   remoteTaskRequestMatches,
+  reconcileReviewReplayScope,
 } from "./mcp-task-capacity-contract";
 import { executeRemoteTaskAttempt } from "./mcp-task-execution";
 import { dispatchIdentity, settleRemoteTask } from "./mcp-task-attempt-state";
@@ -232,6 +233,7 @@ export async function submitRemoteCoworkerTask(input: {
       status: true,
       progressPayload: true,
       a2aMetadata: true,
+      authorityScope: true,
       lastHeartbeatAt: true,
       completedAt: true,
       updatedAt: true,
@@ -247,6 +249,8 @@ export async function submitRemoteCoworkerTask(input: {
   }
   const existing = await prisma.taskRun.findFirst(existingQuery);
   if (existing) {
+    const savedReviewScope = reconcileReviewReplayScope(existing.a2aMetadata, existing.authorityScope, parsed);
+    if (savedReviewScope) parsed.authorityScope = savedReviewScope;
     const replayRefusal = await revalidateRemoteObjectiveMappingReplay(
       objectiveMappingAdmission.data.admission,
     );
@@ -256,11 +260,19 @@ export async function submitRemoteCoworkerTask(input: {
     if (requestMatches && parsed.initiativeReviewBinding) {
       const outcome = await loadTaskInitiativeReviewOutcome(existing.taskRunId, parsed.initiativeReviewBinding);
       if (outcome) {
-        await reconcilePersistedReviewStatus(existing.taskRunId, existing.progressPayload, outcome);
-        return { kind: "result", result: {
+        const settled = await reconcilePersistedReviewStatus(existing.taskRunId, existing.progressPayload, outcome, existing);
+        if (settled) return { kind: "result", result: {
         taskRunId: existing.taskRunId, status: "completed", idempotentReplay: true,
         requiresApproval: false, resumable: false, content: remoteTaskContent(outcome.summary),
         structuredContent: outcome, isError: false,
+        } };
+        // A cancellation, takeover or newer wait won the conditional write.
+        // Read back that state instead of reporting completion or rerunning inference.
+        const current = await prisma.taskRun.findFirst(existingQuery);
+        return current ? replayOrConflict(current, parsed) : { kind: "result", result: {
+          taskRunId: existing.taskRunId, status: "unknown", idempotentReplay: true,
+          resumable: false, requiresApproval: false, isError: true,
+          content: remoteTaskContent("The review task could not be read after concurrent settlement."),
         } };
       }
     }

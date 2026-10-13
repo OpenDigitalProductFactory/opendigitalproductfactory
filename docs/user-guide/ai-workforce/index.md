@@ -6,6 +6,11 @@ order: 1
 
 ## Overview
 
+Administrators manage saved tool permissions on the coworker record. Known names
+and aliases share one authority owner. When legacy rows disagree, use
+[permission reconciliation](../coworker-permission-reconciliation.md) to preview
+each difference and explicitly approve the desired state.
+
 AI Workforce is the directory and management home for the people-like AI roles that work in DPF. Start here to find who can help, what work they offer, whether that work is available for the current business type, and how much approval or review it requires.
 
 Coworkers are grouped from customer-facing work inward:
@@ -128,7 +133,7 @@ The drift detail, along with route-level skills, observability, and the curator 
 
 ## Reading Runtime Health
 
-Runtime Health explains infrastructure in terms of enabled capabilities. **Required — unavailable** needs attention because an enabled capability depends on that local service. **Optional — inactive** is expected when its capability is disabled and does not make the platform unhealthy. **Optional — degraded** means the capability is enabled but its local service is unavailable. **External — provider managed** reports reconciled provider evidence rather than pretending the provider is a local container. Each state includes text and an action; color is supplementary.
+Runtime Health explains infrastructure in terms of enabled capabilities. **Required — unavailable** needs attention because an enabled capability depends on that local service. **Optional — inactive** is expected when its capability is disabled and does not make the platform unhealthy. **Optional — degraded** means the capability is enabled but its local service is unavailable. **External — provider managed** reports reconciled provider evidence rather than pretending the provider is a local container. Each state includes text and an action; color is supplementary. Services that only run on some host systems are judged against your install's own host: on a Mac, the `dpf-tts` voice container (Linux and Windows only, because macOS speaks through the host-native Chatterbox service) shows as optional and inactive, not degraded.
 
 ### Coworker routing
 

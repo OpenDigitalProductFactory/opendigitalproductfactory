@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { TONE_COLOR, getActiveAlerts } from "./health-summary";
+import { TONE_COLOR, getActiveAlerts, isInactiveCapabilityTargetAlert } from "./health-summary";
 import {
   HEALTH_COWORKER_ROUTE_CONTEXT,
   buildHealthAlertCoworkerPrompt,
@@ -16,15 +16,26 @@ type Props = {
   // Platform Status StatCard). The banner suppresses any matching alert so the
   // user doesn't see "Service sandbox is down" twice on the same screen.
   suppressSummaries?: string[];
+  // Services whose runtime capability is inactive (BI-36DE938C). A
+  // ContainerDown alert for one of their scrape targets is an intentional
+  // absence, so the banner does not raise it.
+  inactiveServices?: ReadonlySet<string>;
 };
 
-export function AlertBanner({ className = "", suppressSummaries = [] }: Props) {
+const NO_INACTIVE_SERVICES: ReadonlySet<string> = new Set();
+
+export function AlertBanner({
+  className = "",
+  suppressSummaries = [],
+  inactiveServices = NO_INACTIVE_SERVICES,
+}: Props) {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const { alerts, offline } = useAlertQuery();
 
   const suppressed = new Set(suppressSummaries.filter(Boolean));
   const visibleAlerts = getActiveAlerts(alerts).filter((a) => {
     if (dismissed.has(a.labels.alertname ?? "")) return false;
+    if (isInactiveCapabilityTargetAlert(a, inactiveServices)) return false;
     const summary = a.annotations.summary ?? a.labels.alertname ?? "";
     return !suppressed.has(summary);
   });

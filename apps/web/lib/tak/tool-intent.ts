@@ -28,15 +28,19 @@ export function tokenizeIntent(text: string): Set<string> {
   return tokens;
 }
 
-/** Distinct intent tokens found in a tool's name and description. */
+/** Favor the named capability over incidental words in explanatory prose. */
 export function scoreToolIntentRelevance(
   tool: ToolIntentCandidate,
   intentTokens: ReadonlySet<string>,
 ): number {
   if (intentTokens.size === 0) return 0;
-  const toolTokens = tokenizeIntent(`${tool.name} ${tool.description ?? ""}`);
+  const nameTokens = tokenizeIntent(tool.name);
+  const descriptionTokens = tokenizeIntent(tool.description ?? "");
   let score = 0;
-  for (const token of intentTokens) if (toolTokens.has(token)) score += 1;
+  for (const token of intentTokens) {
+    if (nameTokens.has(token)) score += 4;
+    else if (descriptionTokens.has(token)) score += 1;
+  }
   return score;
 }
 
@@ -58,9 +62,11 @@ export function selectLoadableTools<T extends ToolIntentCandidate>(
   );
   const selected = new Map<string, T>();
 
-  for (const candidate of candidates) {
+  const byName = new Map(candidates.map((candidate) => [candidate.name, candidate]));
+  for (const name of requestedNames) {
     if (selected.size >= batchMax) break;
-    if (requestedNames.has(candidate.name)) selected.set(candidate.name, candidate);
+    const candidate = byName.get(name);
+    if (candidate) selected.set(name, candidate);
   }
 
   const queryTokens =
@@ -76,7 +82,11 @@ export function selectLoadableTools<T extends ToolIntentCandidate>(
     .filter(({ candidate, score }) => score > 0 && !selected.has(candidate.name))
     .sort((a, b) => b.score - a.score || a.index - b.index);
 
-  for (const { candidate } of ranked) {
+  // A weak prose overlap must not pad a specific capability search. Preserve
+  // single-term searches and exact names, including names outside this floor.
+  const relevanceFloor = (ranked[0]?.score ?? 0) / 2;
+  for (const { candidate, score } of ranked) {
+    if (score < relevanceFloor) break;
     if (selected.size >= batchMax) break;
     selected.set(candidate.name, candidate);
   }

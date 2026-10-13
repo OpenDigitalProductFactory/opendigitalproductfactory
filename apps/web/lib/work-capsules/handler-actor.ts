@@ -11,16 +11,18 @@
 
 // Callers pass an optional tool context, so the parameter admits undefined —
 // narrowing it here was the one behaviour change the extraction nearly made.
-type ActorContext = { agentId?: string; authSource?: string } | undefined;
+import type { WorkCapsuleActor } from "./work-capsule-store-types";
+type ActorContext = { agentId?: string; authSource?: string; apiTokenId?: string } | undefined;
 
-export async function workCapsuleActor(userId: string, context: ActorContext) {
+export async function workCapsuleActor(userId: string, context: ActorContext): Promise<WorkCapsuleActor> {
   const { ensureAgentPrincipalIdentity, syncUserPrincipal } = await import("@/lib/identity/principal-linking");
   const agentId = context?.agentId ?? null;
   if (context?.authSource === "oauth") {
     const human = await syncUserPrincipal(userId);
     const agent = agentId ? await ensureAgentPrincipalIdentity(agentId) : null;
     if (!human?.id || !agent?.id) throw new Error("Your assistant connection could not be verified. Please try again shortly.");
-    return { userId, agentId, principalId: human.id, agentPrincipalId: agent.id };
+    return { userId, agentId, principalId: human.id, agentPrincipalId: agent.id,
+      ...(context.apiTokenId ? { taskAuthorityTokenId: context.apiTokenId } : {}) };
   }
   let principalId: string | null = null;
 

@@ -65,9 +65,77 @@ type RegistryAgent = {
   capability_domain?: string;
   escalates_to?: string;
   value_stream?: string;
+  /**
+   * Per-axis waivers: "this axis does not apply to this role, for this reason,
+   * and the decision expires on this date".
+   *
+   * WHY THIS EXISTS. The contract has defined `{ state: "waived", reason,
+   * reviewBy }` since its first slice, and establish_coworker honours it — but
+   * this audit read NO waiver input, deriving every axis from planes and
+   * registry fields alone. So a role that is genuinely event-triggered rather
+   * than standing could never be anything but OPEN on the cadence axis, however
+   * carefully anyone reasoned about it. There was nowhere to record the answer.
+   *
+   * Same shape and same discipline as `staffing_posture` (BI-4CE4F52F): one
+   * home, two readers, a reason a person can argue with, and a review date the
+   * build FAILS on once it passes. A waiver is a decision with an expiry, not
+   * amnesia.
+   */
+  job_definition_waivers?: Partial<Record<JobDefinitionAxis, { reason: string; reviewBy: string }>>;
 };
 
-type AxisStatus = "answered" | "open";
+/** A waiver's reason must be arguable; the contract's own floor (MIN_JUSTIFICATION). */
+const MIN_WAIVER_REASON = 40;
+
+export type WaiverProblem = { agentId: string; axis: string; code: string; detail: string };
+
+/**
+ * Validate every declared waiver. Returns problems rather than throwing so the
+ * audit can report all of them at once.
+ *
+ * The expiry check is the point: a waiver whose date has passed is not a waiver,
+ * it is an unanswered axis wearing one. Re-decide it; never extend it because the
+ * build is red.
+ */
+export function validateWaivers(
+  rows: readonly RegistryAgent[],
+  now: Date = new Date(),
+): WaiverProblem[] {
+  const problems: WaiverProblem[] = [];
+  for (const row of rows) {
+    for (const [axis, waiver] of Object.entries(row.job_definition_waivers ?? {})) {
+      if (!JOB_DEFINITION_AXES.includes(axis as JobDefinitionAxis)) {
+        problems.push({
+          agentId: row.agent_id, axis, code: "unknown-axis",
+          detail: `"${axis}" is not a job-definition axis.`,
+        });
+        continue;
+      }
+      if ((waiver?.reason ?? "").trim().length < MIN_WAIVER_REASON) {
+        problems.push({
+          agentId: row.agent_id, axis, code: "thin-justification",
+          detail: `${axis} is waived with ${(waiver?.reason ?? "").trim().length} characters of reason; `
+            + "a waiver a reader cannot disagree with is a blank.",
+        });
+      }
+      const due = new Date(waiver?.reviewBy ?? "");
+      if (Number.isNaN(due.getTime())) {
+        problems.push({
+          agentId: row.agent_id, axis, code: "unparseable-review-date",
+          detail: `${axis} waiver has an unparseable reviewBy (${waiver?.reviewBy}).`,
+        });
+      } else if (due.getTime() <= now.getTime()) {
+        problems.push({
+          agentId: row.agent_id, axis, code: "expired-waiver",
+          detail: `${axis} waiver expired on ${waiver?.reviewBy} — re-decide it rather than extending it.`,
+        });
+      }
+    }
+  }
+  return problems;
+}
+
+type AxisStatus = "answered" | "waived" | "open";
 
 type AuditRow = {
   key: string;
@@ -108,6 +176,14 @@ export function auditAgent(agent: MeasuredAgent, registry: Map<string, RegistryA
     ?? (agent.handles ?? []).map((h) => registry.get(h)).find(Boolean);
 
   for (const axis of JOB_DEFINITION_AXES) {
+    // A declared waiver answers the axis — and stays VISIBLE as "waived" rather
+    // than being folded into "answered", because a reader must be able to tell a
+    // role that satisfied an axis from one that decided it does not apply.
+    const waiver = reg?.job_definition_waivers?.[axis];
+    if (waiver) {
+      axes[axis] = "waived";
+      continue;
+    }
     const plane = AXIS_TO_CAPABILITY_PLANE[axis];
     if (plane) {
       const state = agent.planes?.[plane];
@@ -147,6 +223,24 @@ function main(): void {
   const agents = loadMeasure();
   const registry = loadRegistry();
 
+  // Validate every waiver BEFORE reporting anything. An expired or thin waiver
+  // must not quietly answer an axis — that would make this store the gap-hiding
+  // mechanism it exists to not be. Reported and non-zero exit, so the build
+  // notices on the day a review date passes rather than whenever someone looks.
+  const waiverProblems = validateWaivers([...registry.values()]);
+  if (waiverProblems.length > 0) {
+    process.stderr.write("job-definition waivers FAILED:\n\n");
+    for (const p of waiverProblems) {
+      process.stderr.write(`  - ${p.agentId} ${p.axis} [${p.code}]: ${p.detail}\n`);
+    }
+    process.stderr.write(
+      "\nA waiver carries a reason a reader can disagree with and a review date. When the date "
+        + "falls due the axis is RE-DECIDED, never extended.\n",
+    );
+    process.exitCode = 1;
+    return;
+  }
+
   // Postured roles are excluded for the same reason the ratchet excludes them:
   // a decision already recorded, with a reason and an expiry, is not a hire
   // waiting to be written up.
@@ -160,6 +254,10 @@ function main(): void {
     byAxis.set(axis, rows.filter((r) => r.axes[axis] === "open").length);
   }
   const complete = rows.filter((r) => r.openAxes.length === 0);
+  const waivedCount = rows.reduce(
+    (n, r) => n + JOB_DEFINITION_AXES.filter((a) => r.axes[a] === "waived").length,
+    0,
+  );
 
   if (json) {
     process.stdout.write(
@@ -180,6 +278,11 @@ function main(): void {
   console.log(`[job-definition-audit] ${rows.length} coworker(s) in scope; `
     + `${agents.length - rows.length} postured and excluded.`);
   console.log(`  complete job definitions: ${complete.length}/${rows.length}`);
+  if (waivedCount > 0) {
+    // Named separately on purpose: a waived axis is a recorded decision with an
+    // expiry, not a satisfied one, and a reader must be able to tell them apart.
+    console.log(`  of which waived axes: ${waivedCount} (each with a reason and a review date)`);
+  }
   console.log("\n  open by axis — the worklist, as job questions:");
   const QUESTION: Record<JobDefinitionAxis, string> = {
     purpose: "why does this role exist?",

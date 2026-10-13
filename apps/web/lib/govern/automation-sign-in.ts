@@ -39,6 +39,7 @@ import {
   type EnvironmentClassStore,
 } from "@/lib/install/environment-class";
 import { isRecord } from "@/lib/shared/coerce";
+import type { FixtureActor, FixtureRequest } from "./automation-fixture";
 
 export const AUTOMATION_PERSONA_EMAIL = "automation@dpf.local";
 export const AUTOMATION_PERSONA_DISPLAY_NAME = "Platform automation";
@@ -50,12 +51,20 @@ export const AUTOMATION_SIGN_IN_TOKEN_TTL_SECONDS = 10 * 60;
 /** How long the resulting browser session lasts. */
 export const AUTOMATION_SESSION_MAX_AGE_SECONDS = 2 * 60 * 60;
 const TOKEN_PURPOSE = "dpf.automation-sign-in/1";
+/**
+ * Audience of the one-time link token (BI-7B4B5F5D). Other tokens share
+ * AUTH_SECRET, so the exchange requires this audience as well as `purpose`, and
+ * the mobile API verifier refuses this token because it lacks the mobile one.
+ */
+export const AUTOMATION_SIGN_IN_AUDIENCE = "dpf-automation-sign-in";
 const ENVIRONMENT_CLASSES_PERMITTED_BY_DEFAULT = new Set(["development", "test"]);
 
 type PlatformConfigRow = { value: unknown };
 
 /** The slice of Prisma this module touches, so tests can inject a fake. */
 export interface AutomationSignInDb {
+  $transaction<T>(body: (db: AutomationSignInDb) => Promise<T>): Promise<T>;
+  $executeRaw(query: TemplateStringsArray, ...values: unknown[]): Promise<unknown>;
   user: {
     findUnique(args: unknown): Promise<
       | { id: string; email: string; isActive: boolean; isSuperuser: boolean; groups: Array<{ platformRole: { roleId: string } | null }> }
@@ -167,7 +176,7 @@ export async function ensureAutomationPersona(
 }
 
 export type MintAutomationSignInResult =
-  | { issued: true; url: string; path: string; expiresAt: string; persona: string; because: string }
+  | { issued: true; url: string; path: string; expiresAt: string; persona: string; because: string; runId?: string }
   | { issued: false; reason: string };
 
 /**
@@ -175,7 +184,7 @@ export type MintAutomationSignInResult =
  * browser lands once the session cookie is set (a path on this portal only).
  */
 export async function mintAutomationSignIn(
-  input: { nextPath?: string; baseUrl: string; requestedBy: string },
+  input: { nextPath?: string; baseUrl: string; requestedBy: string; fixture?: FixtureRequest; actor?: FixtureActor },
   deps: AutomationSignInDeps = {},
 ): Promise<MintAutomationSignInResult> {
   const env = deps.env ?? process.env;
@@ -183,12 +192,16 @@ export async function mintAutomationSignIn(
   const permission = await resolveAutomationSignInPermission(deps);
   if (!permission.permitted) return { issued: false, reason: permission.because };
   const nextPath = sanitizeNextPath(input.nextPath);
-  const persona = await ensureAutomationPersona(deps);
+  if (input.fixture && !input.actor) return { issued: false, reason: "An authenticated verification owner is required." };
+  const fixture = input.fixture ? await (await import("./automation-fixture")).prepareFixture(input.fixture, input.actor!, input.baseUrl) : null;
+  const persona = fixture ?? await ensureAutomationPersona(deps);
   const jti = randomUUID();
-  const expiresAt = new Date(now.getTime() + AUTOMATION_SIGN_IN_TOKEN_TTL_SECONDS * 1000);
-  const token = await new SignJWT({ purpose: TOKEN_PURPOSE, next: nextPath, requestedBy: input.requestedBy })
+  const expiresAt = new Date(Math.min(now.getTime() + AUTOMATION_SIGN_IN_TOKEN_TTL_SECONDS * 1000, fixture?.expiresAt.getTime() ?? Infinity));
+  const token = await new SignJWT({ purpose: TOKEN_PURPOSE, next: nextPath, requestedBy: fixture?.requestedBy ?? input.requestedBy,
+    ...(fixture ? { fixture: { runId: fixture.runId, profile: fixture.profile, slot: fixture.slot, requestedBy: fixture.requestedBy } } : {}) })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(persona.userId)
+    .setAudience(AUTOMATION_SIGN_IN_AUDIENCE)
     .setJti(jti)
     .setIssuedAt(Math.floor(now.getTime() / 1000))
     .setExpirationTime(Math.floor(expiresAt.getTime() / 1000))
@@ -202,6 +215,7 @@ export async function mintAutomationSignIn(
     expiresAt: expiresAt.toISOString(),
     persona: persona.email,
     because: permission.because,
+    ...(fixture ? { runId: fixture.runId } : {}),
   };
 }
 
@@ -232,7 +246,7 @@ export interface AutomationSignInReplay {
 }
 
 export type ConsumeAutomationSignInResult =
-  | { accepted: true; claims: AutomationSessionClaims; nextPath: string }
+  | { accepted: true; claims: AutomationSessionClaims; nextPath: string; maxAge?: number }
   | { accepted: false; reason: string; replay?: AutomationSignInReplay };
 
 /**
@@ -251,7 +265,11 @@ export async function consumeAutomationSignIn(
 
   let payload: Record<string, unknown>;
   try {
-    const verified = await jwtVerify(token, secretFor(env), { currentDate: now });
+    const verified = await jwtVerify(token, secretFor(env), {
+      currentDate: now,
+      audience: AUTOMATION_SIGN_IN_AUDIENCE,
+      algorithms: ["HS256"],
+    });
     payload = verified.payload as Record<string, unknown>;
   } catch {
     return { accepted: false, reason: "token-invalid-or-expired" };
@@ -264,6 +282,20 @@ export async function consumeAutomationSignIn(
 
   const permission = await resolveAutomationSignInPermission(deps);
   if (!permission.permitted) return { accepted: false, reason: permission.because };
+
+  let fixtureExpiry: Date | null = null;
+  if (payload["fixture"] !== undefined) {
+    const fixture = payload["fixture"];
+    if (!isRecord(fixture) || typeof fixture.runId !== "string" || typeof fixture.profile !== "string"
+      || typeof fixture.slot !== "number" || typeof fixture.requestedBy !== "string") return { accepted: false, reason: "token-malformed" };
+    const { getPortalUrl } = await import("@/lib/portal-url");
+    try {
+      fixtureExpiry = await (await import("./automation-fixture")).validateFixtureExchange(userId,
+        { runId: fixture.runId, profile: fixture.profile, slot: fixture.slot, requestedBy: fixture.requestedBy }, await getPortalUrl());
+    } catch {
+      return { accepted: false, reason: "This verification sign-in is no longer authorized. Start a new run with current permissions and an active lease." };
+    }
+  }
 
   const consumed = await markConsumed(db, jti, exp, now);
   if (!consumed) {
@@ -278,7 +310,7 @@ export async function consumeAutomationSignIn(
     where: { id: userId },
     select: { id: true, email: true, isActive: true, isSuperuser: true, groups: { select: { platformRole: { select: { roleId: true } } } } },
   });
-  if (!user || !user.isActive || user.email !== AUTOMATION_PERSONA_EMAIL) {
+  if (!user || !user.isActive || (!fixtureExpiry && user.email !== AUTOMATION_PERSONA_EMAIL)) {
     return { accepted: false, reason: "persona-not-signable" };
   }
   const spine = await authorizeSession(user.id);
@@ -289,6 +321,7 @@ export async function consumeAutomationSignIn(
   console.info("[automation-sign-in] consumed", { persona: user.email, requestedBy: payload["requestedBy"] ?? null, next: payload["next"] ?? "/" });
   return {
     accepted: true,
+    ...(fixtureExpiry ? { maxAge: Math.max(0, Math.floor((fixtureExpiry.getTime() - Date.now()) / 1000)) } : {}),
     nextPath: sanitizeNextPath(typeof payload["next"] === "string" ? payload["next"] : undefined),
     claims: {
       sub: user.id,
@@ -318,6 +351,14 @@ export function sanitizeNextPath(candidate: string | undefined): string {
  * of links issued in a ten-minute window. Returns false when already present.
  */
 async function markConsumed(db: AutomationSignInDb, jti: string, exp: number, now: Date): Promise<boolean> {
+  return db.$transaction(async tx => {
+    // One lock protects the existing consumed map, including links minted before this release.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(731094281)`;
+    return markConsumedInTransaction(tx, jti, exp, now);
+  });
+}
+
+async function markConsumedInTransaction(db: AutomationSignInDb, jti: string, exp: number, now: Date): Promise<boolean> {
   const row = await db.platformConfig.findUnique({ where: { key: AUTOMATION_SIGN_IN_CONSUMED_KEY } });
   const nowSeconds = Math.floor(now.getTime() / 1000);
   const current: Record<string, number> = {};

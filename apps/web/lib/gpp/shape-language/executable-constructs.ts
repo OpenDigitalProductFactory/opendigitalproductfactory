@@ -19,15 +19,23 @@
 // draft.
 //
 // §5 lists 15 constructs. Construct 11 (Timer) has two compile targets with
-// different answers — the shape's review point (executed) and a stage deadline
-// (not executed) — so it is two keys here, `review-point` and
+// different answers — the shape's review point and a stage deadline (implemented
+// in Phase 3c PR-3c-4, executed since BI-086DC167) — so it is two keys here, `review-point` and
 // `stage-deadline`. Construct 13 (Rework edge) has two notations — a
 // `flow.edges[].rework` edge and a gate's `onRefuse` route — and both are
 // `rework-edge`. "Recorded only" (advisory consult) and "Declared only"
 // (environment boundary) compile: what the document says is exactly what the
 // runtime does with it.
 //
-// OFFLINE TOOLING in Phase 3b: nothing in the running app imports this module.
+// ONE SWITCH, READ BY THE RUNTIME (Phase 3c, BI-8875C9DF). From PR-3c-1 the
+// work-shape drive reads this table at runtime: a room whose pinned shape uses
+// a construct whose flag is off pauses with `construct_not_executable`, naming
+// the construct and element (lib/work-management/drive-resolution-graph.ts,
+// through constructsUsedBy in constructs-used-by.ts). Setting a flag back to
+// false is therefore also the kill switch: the compiler refuses new documents
+// and the drive pauses rooms that use the construct, visibly, never running it
+// some other way. Design: docs/superpowers/specs/
+// 2026-10-02-gpp-phase-3c-drive-graph-execution-design.md §5, §7.1.
 
 /** The §5 constructs, in catalog order (construct 11 split into its two compile targets). Closed. */
 export const GPP_CONSTRUCTS = [
@@ -52,8 +60,28 @@ export type GppConstruct = (typeof GPP_CONSTRUCTS)[number];
 
 /**
  * Whether the runtime executes each construct today (spec §5, Exec column).
- * Off: stage deadline, parallel split/join, rework edge (incl. `gate.onRefuse`),
- * sub-shape — each waits for its Phase 3c PR (BI-8875C9DF).
+ *
+ * | Construct                    | Executable | Since, or the PR that enables it (BI-8875C9DF) |
+ * |------------------------------|------------|------------------------------------------------|
+ * | parallel-split-join          | yes        | PR-3c-2 (drive-parity-parallel.test.ts)        |
+ * | rework-edge (incl. onRefuse) | yes        | PR-3c-3 (drive-parity-rework.test.ts)          |
+ * | stage-deadline               | yes        | PR-3c-4 (drive-parity-deadline.test.ts), on with BI-086DC167 |
+ * | sub-shape                    | yes        | PR-3c-5 (drive-parity-sub-shape.test.ts), on with BI-086DC167 |
+ *
+ * Every other construct has been executable since Phase 3b.
+ *
+ * STAGE DEADLINE AND SUB-SHAPE ARE ON SINCE BI-086DC167. Both were held off
+ * (founder/coordinator decision 2026-10-07: a construct whose semantics are
+ * known to be wrong for real use is not enabled) because a graph room's
+ * marking was discarded at every UTC midnight, so a deadline of a day or more
+ * never came due and a sub-shape child running at midnight was abandoned. A
+ * marking is now one run that crosses calendar boundaries (drive-marking.ts),
+ * so a deadline of any length comes due once and a child keeps running across
+ * midnight. Each was turned on in its own change with its parity proof.
+ *
+ * No construct is off: setting one back to false is the kill switch (§5 of the
+ * Phase 3c design), never a second runtime flag. D-9 and D-10 check every
+ * sub-shape document whatever its flag says.
  */
 export const CONSTRUCT_EXECUTABLE: Readonly<Record<GppConstruct, boolean>> = Object.freeze({
   trigger: true,
@@ -67,9 +95,9 @@ export const CONSTRUCT_EXECUTABLE: Readonly<Record<GppConstruct, boolean>> = Obj
   stop: true,
   "escalation-boundary": true,
   "review-point": true,
-  "stage-deadline": false,
-  "parallel-split-join": false,
-  "rework-edge": false,
-  "sub-shape": false,
+  "stage-deadline": true,
+  "parallel-split-join": true,
+  "rework-edge": true,
+  "sub-shape": true,
   "environment-boundary": true,
 });

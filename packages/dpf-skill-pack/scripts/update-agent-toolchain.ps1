@@ -1,8 +1,11 @@
 param(
     [string]$SkillPackPath = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
-    [string]$McpUrl = $(if ($env:DPF_MCP_URL) { $env:DPF_MCP_URL } else { "http://127.0.0.1:3000/api/mcp/v1" }),
+    # Empty means "not named here": update_agent_toolchain.py owns the default
+    # (DPF_MCP_URL, else its canonical https origin) and the OAuth auth mode.
+    [string]$McpUrl = "",
     [switch]$CodexOnly,
     [switch]$CodexPluginOnly,
+    [switch]$PrintExistingCodexMcpUrl,
     [switch]$ClaudeOnly,
     [switch]$SkipClaudeCliInstall,
     [switch]$DryRun
@@ -20,11 +23,12 @@ if (-not $python) {
 
 $argsList = @(
     (Join-Path $PSScriptRoot "update_agent_toolchain.py"),
-    "--skill-pack-path", $SkillPackPath,
-    "--mcp-url", $McpUrl
+    "--skill-pack-path", $SkillPackPath
 )
+if ($McpUrl) { $argsList += @("--mcp-url", $McpUrl) }
 if ($CodexOnly) { $argsList += "--codex-only" }
 if ($CodexPluginOnly) { $argsList += "--codex-plugin-only" }
+if ($PrintExistingCodexMcpUrl) { $argsList += "--print-existing-codex-mcp-url" }
 if ($ClaudeOnly) { $argsList += "--claude-only" }
 if ($SkipClaudeCliInstall) { $argsList += "--skip-claude-cli-install" }
 if ($DryRun) { $argsList += "--dry-run" }

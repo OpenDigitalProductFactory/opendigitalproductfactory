@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { guardShellEnv } from "./guard-bash.mjs";
 import { resolveHostCommandInvocation } from "./host-command-invocation.mjs";
 
 /**
@@ -89,6 +90,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("scripts/check-guards.mjs"),
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
       node("scripts/check-capability-compose-profiles.mjs"),
+      // BI-22A2CA0D: every compose service declares dpf.recreate-class, so the
+      // self-upgrade knows which services it may converge (BI-C54E691E).
+      node("--test", "scripts/check-no-unclassified-compose-services.test.mjs"),
       // BI-334CB7DE: doc-diagram fence extraction must stay line-ending
       // invariant. A CRLF working copy re-hashed every fence in a page and
       // demanded a re-render no diagram needed — invisible in `git diff`
@@ -118,6 +122,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // A real pending PASS on slot-1 was unfinalizable. Registered here for the
       // same reason as the tests above: in the allowlist it would never run.
       node("--test", "scripts/gate-worktree-finalize-slot.test.mjs"),
+      node("--test", "scripts/gate-worktree-process-identity.test.mjs"),
+      node("--test", "scripts/gate-stdin-regression.test.mjs"),
+      node("--test", "scripts/lib/gate-execution-checkpoint.test.mjs"),
       // BI-24D5D7C2: the control-plane watchdog aborts a 13-minute build after
       // two consecutive probe failures, and an inner mcpCall deadline was
       // classified as "request-failed" — an operator reads that as a broken
@@ -167,7 +174,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("scripts/check-no-hand-rolled-mcp-jsonrpc.mjs"),
       // One argument parser for every script: node:util parseArgs
       // (plan 2026-09-08 §10.5 S2).
-      conformanceTest("scripts/check-no-hand-rolled-argv.test.mjs"),
+      conformanceTest("scripts/check-no-hand-rolled-argv.test.mjs", "scripts/lib/script-argv.test.mjs"),
       node("scripts/check-no-hand-rolled-argv.mjs"),
       // Raw control bytes make a source file binary to grep (BI-899122C5).
       node("--test", "scripts/check-no-raw-control-bytes.test.mjs"),
@@ -258,6 +265,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "scripts/installer/lib/state-cleanup-temps.test.mjs",
+        "scripts/installer/lib/docker.test.mjs",
         "scripts/installer/lib/state-lock-timeout.test.mjs",
         "scripts/installer/lib/doctor-redaction.test.mjs",
         "scripts/installer/install-release-assets.test.mjs",
@@ -275,6 +283,15 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-8541D491: every install path provisions the GPP permit signing key
       // and a self-upgrade never rotates it.
       conformanceTest("scripts/installer/gpp-permit-secret-contract.test.mjs"),
+      // BI-F6929F50: every install path provisions the reach-link and
+      // delegation-receipt signing keys and a self-upgrade never rotates them.
+      conformanceTest("scripts/installer/dedicated-signing-keys-contract.test.mjs"),
+      // BI-F1C680C7: the Build Studio sandbox, where agent CLIs run unprompted,
+      // never receives the portal's AUTH_SECRET / NEXTAUTH_SECRET.
+      conformanceTest("scripts/installer/sandbox-auth-secret-isolation-contract.test.mjs"),
+      // BI-231A4BC7: the self-upgrade target-binding and delivery task cursor
+      // keys never reach the sandbox either.
+      conformanceTest("scripts/installer/self-upgrade-binding-and-cursor-keys-contract.test.mjs"),
     ]),
     guard("fresh-install-reliability", "Fresh Install Reliability", [
       conformanceTest("scripts/installer/powershell-compose-chain.test.mjs"),
@@ -305,6 +322,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "scripts/check-doc-links.test.mjs",
+        "scripts/gen-doc-index.test.mjs",
         "scripts/public-docs-rendering.test.mjs",
       ),
       node("scripts/check-doc-links.mjs"),
@@ -358,8 +376,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/git-shallow-preflight.test.mjs",
         "scripts/lib/ensure-compile-ready.test.mjs",
         "scripts/pregate-preflight.test.mjs",
+        "scripts/pregate.test.mjs",
+        "scripts/lib/pregate-preflight-receipt.test.mjs",
         "scripts/gate-context.test.mjs",
         "scripts/gate-wait.test.mjs",
+        // The landing orchestrator and the obligation banner that replaced a
+        // pointer nobody followed. Listed here so CI runs them: an automation
+        // whose own test does not run is the manual process with extra steps.
+        "scripts/land-branch.test.mjs",
         "scripts/gate-local.test.mjs",
         "scripts/pre-push-dco-check.test.mjs",
       ),
@@ -382,6 +406,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // first, PAT until retirement, actionable refusal) against a loopback
       // stub authorization server.
       node("--test", "scripts/lib/mcp-credential.test.mjs"),
+      // BI-5BCDB07C: the Grok refresher writes bearer_token_file and stops
+      // when the credentials client is refused. Listed here so CI runs it.
+      node("--test", "scripts/lib/grok-credential.test.mjs"),
       node("scripts/check-authoring-cost-dimensions.mjs"),
       node("scripts/check-ci-policy-test-inventory.mjs"),
     ]),
@@ -484,6 +511,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("compose-resource-budgets-guard", "Compose Resource Budgets Guard", [
       node("--test", "scripts/check-compose-resource-budgets.test.mjs"),
       node("scripts/check-compose-resource-budgets.mjs"),
+    ], { inputs: ["code"] }),
+    // BI-95BB9CB1: a service whose PID 1 does not reap children (a shell
+    // entrypoint, caddy) leaked tens of thousands of zombies until Docker
+    // could not fork. Those services run Docker's init.
+    guard("compose-init-reaping-guard", "Compose Init Reaping Guard", [
+      conformanceTest("scripts/compose-init-reaping.test.mjs"),
     ], { inputs: ["code"] }),
     guard("n-minus-one-caller-honesty", "N-1 Caller Honesty", [
       node("--test", "scripts/check-n-minus-one-caller-honesty.test.mjs"),
@@ -616,7 +649,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     // Plane 4 — the standing TOOL registry, same soft shape and reusing plane 3's claim
     // review. Dispatch-time caps are governed elsewhere; this is the part that accretes.
     guard("tool-surface-guard", "Tool Surface Guard", [
-      node("--test", "scripts/check-tool-surface.test.mjs"),
+      node("--test", "scripts/check-tool-surface.test.mjs", "scripts/provider-management-grant-audit.test.mjs"),
       node("scripts/check-tool-surface.mjs"),
     ], { inputs: ["code"] }),
     // A coworker's standing rhythm is declared twice on purpose — the registry
@@ -712,6 +745,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       conformanceTest("scripts/check-no-local-canonical-json.test.mjs"),
       node("scripts/check-no-local-canonical-json.mjs"),
     ]),
+    // One home for the dpf-platform pack version (BI-52934B3E): every client
+    // manifest and the marketplace entry are generated from toolchain-version.json.
+    guard("toolchain-version-guard", "Toolchain Version Guard", [
+      conformanceTest("scripts/sync-toolchain-version.test.mjs"),
+      node("scripts/sync-toolchain-version.mjs", "--check"),
+    ]),
     guard("package-boundary-guard", "Package Boundary Guard", [
       node("scripts/check-package-boundaries.mjs"),
       // One home for the shared wire types (plan 2026-09-08 §10.5 S9).
@@ -779,6 +818,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // GIT_DIR; runs the janitor freshness fixture under one, against the live
       // tree, and proves the inherited repository is untouched.
       conformanceTest("scripts/lib/git-hook-env.test.mjs"),
+      conformanceTest("scripts/lib/guard-bash.test.mjs"),
       node(
         "--test",
         "scripts/lib/runtime-artifact-janitor.test.mjs",
@@ -811,8 +851,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-1229E42C: the installed plugin descriptor carries a literal URL so
         // the desktop app can start sign-in.
         "scripts/hooks/pin-plugin-mcp-url.test.mjs",
+        // BI-16EAAB62: SessionStart names an installed plugin copy that drifted
+        // from the root clone's pack (version, content, loaded connector).
+        "scripts/hooks/plugin-copy-freshness.test.mjs",
         "scripts/lib/root-clone-refresh.test.mjs",
         "scripts/lib/compose-safety.test.mjs",
+        "scripts/lib/promoter-compose-mounts.test.mjs",
+        "scripts/sandbox-entrypoint.test.mjs",
         "scripts/lib/local-integration-ci.test.mjs",
         // BI-ECAE03F7: the supervisor that fences a long gate run was
         // allowlisted OUT of CI, so nothing enforced its behaviour while it
@@ -853,6 +898,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // nothing about it.
         "scripts/lib/pregate-console.test.mjs",
         "scripts/lib/pregate-status.test.mjs",
+        // BI-A9031FF3: the CLI hands a superseded record its winner's current record.
+        "scripts/pregate-status-superseded.test.mjs",
+        // BI-277ECBDB: the pre-claim slot PostgreSQL probe.
+        "scripts/lib/local-ci-slot-substrate.test.mjs",
         // Symlink-robust entry guard shared by the pregate script family: a
         // guard that misses makes the gate exit 0 silently (false pass).
         "scripts/lib/entry-module.test.mjs",
@@ -923,6 +972,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // broken gate cannot manufacture its own all-clear.
         "scripts/measure-capability-completeness.test.mjs",
         "scripts/check-agent-capability-integrity.test.mjs",
+        // The job-definition axis-waiver store. Listed here so CI actually runs
+        // its EXPIRY assertion: a waiver store whose guard is unrun is the
+        // gap-hiding mechanism it was built not to be.
+        "scripts/audit-coworker-job-definitions.test.mjs",
         // Archetype obligation coverage: same rule again, plus a lockstep check
         // that this measure classifies a frequency exactly as the runtime sweep
         // does — a report that disagrees with the ledger it reports on is worse
@@ -1100,18 +1153,18 @@ export function formatRunSummary(profile, result) {
 
 export async function runPolicyProfile({
   entries,
-  execute = (command, args) => {
-    const invocation = resolvePolicyGuardInvocation(command, args);
-    return spawnSync(invocation.command, invocation.args, {
-      cwd: process.cwd(),
-      env: process.env,
-      stdio: "inherit",
-      shell: false,
-    }).status ?? 1;
-  },
+  execute,
   logger = () => {},
   now = () => Date.now(),
 }) {
+  let env;
+  const run = execute ?? ((command, args) => {
+    env ??= guardShellEnv();
+    const invocation = resolvePolicyGuardInvocation(command, args, { env });
+    return spawnSync(invocation.command, invocation.args, {
+      cwd: process.cwd(), env, stdio: "inherit", shell: false,
+    }).status ?? 1;
+  });
   const results = [];
 
   for (const entry of entries) {
@@ -1121,7 +1174,7 @@ export async function runPolicyProfile({
     logger({ type: "start", entry });
 
     for (const [command, args] of entry.commands) {
-      const exitCode = execute(command, args);
+      const exitCode = run(command, args);
       if (exitCode !== 0) {
         status = "failed";
         failedCommand = [command, ...args].join(" ");

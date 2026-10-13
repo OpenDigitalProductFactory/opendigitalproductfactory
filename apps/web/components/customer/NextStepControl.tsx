@@ -4,6 +4,27 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setOpportunityNextStep } from "@/lib/actions/opportunity-next-step";
 
+/**
+ * Date-only next steps are stored as exact UTC midnight (older rows) or exact
+ * UTC noon (rows saved after BI-954B4FA7). Those format as that civil day.
+ * Any other instant is a real timestamp and formats in the viewer zone.
+ * A genuine event that lands on exactly midnight or noon UTC is treated as
+ * date-only; the date input does not send those instants as timestamps.
+ */
+export function formatOpportunityNextStepDay(when: Date, timeZone?: string, locale?: string): string {
+  const dateOnly =
+    when.getUTCMilliseconds() === 0 &&
+    when.getUTCSeconds() === 0 &&
+    when.getUTCMinutes() === 0 &&
+    (when.getUTCHours() === 0 || when.getUTCHours() === 12);
+  return new Intl.DateTimeFormat(locale, {
+    timeZone: dateOnly ? "UTC" : timeZone,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).format(when);
+}
+
 // The activity-based-selling loop: one small control to plan the deal's next
 // step. Renders the current plan (or an "overdue"/"none" nudge) + a date and
 // optional note; saving logs a task on the timeline and clears dormancy.
@@ -23,6 +44,7 @@ export function NextStepControl({
 
   const planned = nextActivityAt ? new Date(nextActivityAt) : null;
   const overdue = planned !== null && planned.getTime() < Date.now();
+  const plannedLabel = planned ? formatOpportunityNextStepDay(planned) : null;
 
   function save() {
     if (!date) {
@@ -48,7 +70,7 @@ export function NextStepControl({
       <div className="flex flex-wrap items-center gap-2 text-xs">
         {planned ? (
           <span className={overdue ? "text-red-400" : "text-[var(--dpf-muted)]"}>
-            Next step {overdue ? "was due" : "planned"} {planned.toLocaleDateString()}
+            Next step {overdue ? "was due" : "planned"} {plannedLabel}
           </span>
         ) : (
           <span className="text-amber-400">No next step planned</span>

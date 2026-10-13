@@ -108,7 +108,6 @@ export function deriveSourceKeyFromPath(filePath: string): string {
  * is not recognisable — the caller must supply `sourceType` explicitly.
  */
 export function deriveSourceTypeFromPath(filePath: string): RawSourceType | null {
-  const path = lazyPath();
   const segments = filePath.split(PATH_SEPARATOR).filter(Boolean);
   const parent = segments.at(-2);
   if (!parent) return null;

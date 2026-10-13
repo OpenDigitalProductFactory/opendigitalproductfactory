@@ -3,9 +3,7 @@ import {
   createInvoiceSchema,
   recordPaymentSchema,
   INVOICE_TYPES,
-  INVOICE_STATUSES,
   PAYMENT_METHODS,
-  PAYMENT_DIRECTIONS,
 } from "./finance-validation";
 
 describe("createInvoiceSchema", () => {

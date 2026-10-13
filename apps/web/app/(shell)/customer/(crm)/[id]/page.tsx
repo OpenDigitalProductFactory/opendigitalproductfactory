@@ -64,7 +64,7 @@ export default async function AccountDetailPage({
 }) {
   const { id } = await params;
 
-  const [account, activities, opportunities, engagements, estateSummary, storefrontConfig] = await Promise.all([
+  const [account, activities, opportunities, _engagements, estateSummary, storefrontConfig] = await Promise.all([
     prisma.customerAccount.findUnique({
       where: { id },
       include: {

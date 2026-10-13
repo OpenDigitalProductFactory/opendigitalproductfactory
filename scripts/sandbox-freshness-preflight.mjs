@@ -28,6 +28,7 @@
 //     [--sha SHA] [--converge] [--report PATH] [--quiet]
 
 import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -56,7 +57,7 @@ import { gitTextOrNull } from "./lib/git.mjs";
 function valueAfter(flag) {
   // strict: false keeps the old tolerance: flags this script does not read are ignored.
   const { values } = utilParseArgs({
-    args: process.argv.slice(2),
+    args: scriptArgv(),
     strict: false,
     allowPositionals: true,
     options: { "branch": { type: "string" }, "sha": { type: "string" }, "slot-key": { type: "string" }, "dir": { type: "string" }, "report": { type: "string" } },

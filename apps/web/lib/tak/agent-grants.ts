@@ -1,5 +1,6 @@
 // Direct JSON import — bundler resolves this at build time, works in both dev and Docker standalone
 import agentRegistryData from "../../../../packages/db/data/agent_registry.json";
+import { coworkerAuthorityWhere } from "@/lib/coworker-identity";
 import { AUTHORIZED_SURFACE_TOOL_GRANTS } from "@/lib/coworker/authorized-surface-coworker-contract";
 import { PRODUCT_MANAGEMENT_TOOL_GRANTS } from "./product-management-tool-grants";
 import { INITIATIVE_READINESS_TOOL_GRANTS } from "./initiative-readiness-tool-grants";
@@ -8,6 +9,7 @@ import { DOCUMENT_TOOL_GRANTS } from "./document-tool-grants";
 import { CHANGE_REVIEW_TOOL_GRANTS } from "./change-review-tool-grants";
 import { CONTRIBUTOR_INVENTORY_TOOL_GRANTS } from "./contributor-inventory-tool-grants";
 import { PAYABLES_TOOL_GRANTS } from "./payables-tool-grants";
+import { PROVIDER_MANAGEMENT_TOOL_GRANTS } from "./provider-management-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 /**
  * Implications between agent grant categories. A grant on the left of the
@@ -217,12 +219,12 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Work Capsule control harness (spec 2026-05-14)
   list_workrooms: ["work_capsule_read"],
   get_workroom: ["work_capsule_read"],
-  // EP-WORKROOM-COMMS (BI-3F21C4D5): read/post a Work Room's message feed. Room
-  // admission is enforced separately (room-agent-access); these are the coarse caps.
+  review_workroom_sensitivity: ["admin_read"],
+  correct_workroom_sensitivity: ["admin_write"],
+  // Room admission and coordinator rights are checked separately from these
+  // communication grants (EP-WORKROOM-COMMS, BI-3F21C4D5).
   read_room_messages: ["work_room_read"],
   post_room_message: ["work_room_write"],
-  // EP-WORKROOM-COMMS: invite a participant on demand (write); 360 coworker
-  // room-engagement (read). Room admission/coordinator right enforced separately.
   invite_room_participant: ["work_room_write"],
   appoint_room_coordinator: ["work_room_write"],
   plan_account_handover: ["work_room_write"],
@@ -269,6 +271,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   record_surface_readiness: ["work_capsule_write"],
   get_fleet_readiness: ["work_capsule_read"],
   register_runtime_target: ["work_capsule_write"],
+  verify_archetype_projection: ["sandbox_execute"],
   heartbeat_runtime_target: ["work_capsule_write"],
   release_runtime_target: ["work_capsule_write"],
   record_runtime_verification: ["work_capsule_write"],
@@ -307,11 +310,11 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // it reports gaps and never changes authority.
   get_capability_completeness: ["registry_read"],
 
-  // Independent re-verification of a recorded decision's cited evidence
-  // (BI-8192557E phase 2b). Same `registry_read` tier as its siblings: auditing
-  // the evidence behind a decision must not need a higher grant than making the
-  // decision did, or the check is less reachable than the thing it checks.
+  // Re-verifying a decision's cited evidence (BI-8192557E) and reading the report-only
+  // decision trust measurement (BI-7D1E43DE): `registry_read`, as their siblings —
+  // auditing a decision must not need a higher grant than making it did.
   reverify_decision_evidence: ["registry_read"],
+  report_decision_trust_state: ["registry_read"],
   // BI-F302B80E: appends what the caller did with a kernel recommendation.
   // Same grant as propose_improvement — it records, it never re-decides.
   record_decision_outcome: ["decision_record_create"],
@@ -584,10 +587,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   find_related_tests: ["code_graph_read"],
 
   // Provider management
-  add_provider: ["agent_control_read"],
-  update_provider_category: ["agent_control_read"],
-  // Read-only AI-layer state aggregation for the posture-article refresh task
-  // (BI-5903D447) — same tier as the sibling provider-management tools.
+  ...PROVIDER_MANAGEMENT_TOOL_GRANTS,
+  // Read-only AI posture uses the same grant as provider management.
   get_ai_platform_posture: ["agent_control_read"],
   run_endpoint_tests: ["agent_control_read"],
   activity_harness_confidence_override: ["agent_control_read"],
@@ -718,6 +719,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   create_marketing_campaign_brief: ["marketing_write"],
   create_marketing_asset_task:   ["marketing_write"],
   record_marketing_grounding:    ["marketing_write"],
+  retire_marketing_work:         ["marketing_write"],
   record_marketing_kpi_checkpoint: ["marketing_write"],
   create_marketing_automation_candidate: ["marketing_write"],
   draft_marketing_asset:         ["marketing_write"],
@@ -858,7 +860,7 @@ export function knownGrantKeys(): string[] {
   return Array.from(keys).sort();
 }
 
-const grantCache = new Map<string, string[]>();
+const registryGrantCache = new Map<string, string[]>();
 
 type AgentEntry = {
   agent_id: string;
@@ -873,47 +875,45 @@ type AgentEntry = {
 };
 
 /**
- * Load tool_grants for an agent (cached).
- * EP-AI-WORKFORCE-001: First tries DB (AgentToolGrant table), falls back to
- * agent_registry.json for agents not yet migrated.
+ * Load static agent_registry.json grants (cached). Runtime authorization must
+ * use getAgentToolGrantsAsync so stored additions and revocations take effect.
  */
 export function getAgentToolGrants(agentId: string): string[] | null {
-  if (grantCache.has(agentId)) return grantCache.get(agentId)!;
-  // Fallback: JSON registry lookup (synchronous, always available)
+  if (registryGrantCache.has(agentId)) return registryGrantCache.get(agentId)!;
   const agent = (agentRegistry.agents as AgentEntry[]).find(
     (a) => a.agent_id === agentId || a.agent_name === agentId,
   );
   if (!agent) return null;
   const grants = agent.config_profile.tool_grants;
-  grantCache.set(agentId, grants);
+  registryGrantCache.set(agentId, grants);
   return grants;
 }
 
 /**
  * EP-AI-WORKFORCE-001: Async DB-backed grant resolution.
- * Resolves grants from AgentToolGrant table, falling back to JSON registry.
+ * Reads current AgentToolGrant rows on every lookup, including an empty set.
+ * Missing authoritative records grant nothing; registry defaults are not authority.
+ * Failed authoritative reads grant nothing and recover on the next lookup.
  * Use this in async contexts (API routes, server actions).
  */
 export async function getAgentToolGrantsAsync(agentId: string): Promise<string[]> {
-  if (grantCache.has(agentId)) return grantCache.get(agentId)!;
-
   try {
     const { prisma } = await import("@dpf/db");
     const agent = await prisma.agent.findFirst({
-      where: { OR: [{ agentId }, { slugId: agentId }] },
-      include: { toolGrants: true },
+      where: coworkerAuthorityWhere(agentId),
+      include: { toolGrants: true, toolGrantRevocations: true },
     });
-    if (agent && agent.toolGrants.length > 0) {
-      const grants = agent.toolGrants.map((g) => g.grantKey);
-      grantCache.set(agentId, grants);
-      return grants;
+    if (agent) {
+      const revoked = new Set(agent.toolGrantRevocations.map((g) => g.grantKey));
+      return agent.toolGrants.map((g) => g.grantKey).filter((key) => !revoked.has(key));
     }
   } catch {
-    // DB unavailable — fall through to JSON
+    // An unavailable authority cannot establish permission, even from defaults.
+    return [];
   }
 
-  // Fallback to JSON registry
-  return getAgentToolGrants(agentId) ?? [];
+  // Missing persisted authority cannot establish access from seed defaults.
+  return [];
 }
 
 /** Check if a tool is allowed by an agent's grants (expanded, so a coarse legacy grant such as

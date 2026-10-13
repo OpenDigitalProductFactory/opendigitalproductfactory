@@ -40,6 +40,7 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 vi.mock("@/lib/self-upgrade/quiescence", () => ({
+  reconcileTerminalBuildPhaseRuns: vi.fn(async () => 0),
   transitionState: (...a: unknown[]) => transitionStateMock(...a),
   setQuiescenceLevel: (...a: unknown[]) => setQuiescenceLevelMock(...a),
 }));

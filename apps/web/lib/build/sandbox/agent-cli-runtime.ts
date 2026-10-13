@@ -132,6 +132,10 @@ export function buildSpecialistTaskPrompt(params: {
     instructions,
     "",
     `CRITICAL: This is a pnpm monorepo. The Next.js app is at apps/web/. All file paths MUST use the full monorepo-relative path (e.g. apps/web/lib/... not lib/..., apps/web/app/... not app/...). The FILES section below has the authoritative paths — use those exactly. Working directory is ${workdir} (the monorepo root).`,
+    // BI-C36D23B9: the build runs in its own clone. The repo's shared-clone
+    // hook reads that clone as the root clone and tells the agent to take a
+    // worktree; an agent that obeys edits a tree nobody collects.
+    `This directory is this build's own checkout, already on its build branch. Edit the files here, in place. Do not create another git worktree, clone, or branch, and do not switch branches: Build Studio collects the change from this directory only. Ignore any startup notice that says this is a shared clone.`,
     "",
     `TASK: ${task.title}`,
     "",

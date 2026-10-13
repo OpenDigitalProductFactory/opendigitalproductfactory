@@ -71,7 +71,6 @@ export function MicButton(props: MicButtonProps) {
   const isRecording = state === "recording" || state === "permission_check";
   const isTranscribing = state === "transcribing";
   const isError = state === "error";
-  const isIdle = state === "idle" || state === "result";
 
   // ── Click handler routes by state ────────────────────────────────────────
   function handleClick() {

@@ -17,7 +17,7 @@ import {
   buildStageDecisionEvidence,
   governedDecisionStage,
   priorStageFindings,
-  readPendingGovernedDecision,
+  readPendingGovernedDecisions,
   resolveStageDecider,
   stageDeciderRefusal,
   validateStageDecision,
@@ -65,8 +65,14 @@ async function loadDecisionContext(
     select: { id: true, capsuleId: true, scopeClaims: true, workspaceState: true, archivedAt: true },
   }) as RoomRow | null;
   if (!room || room.archivedAt) return err("That room could not be found.");
-  const pending = readPendingGovernedDecision(room.workspaceState);
-  if (!pending || (input.stageKey !== undefined && pending.stageKey !== input.stageKey)) {
+  // Several parallel branches may wait on decisions at once (GPP Phase 3c
+  // PR-3c-2): the stage the control posts must be one of them. Without a stage
+  // key, the first is read, as for a sequential room.
+  const waiting = readPendingGovernedDecisions(room.workspaceState);
+  const pending = input.stageKey !== undefined
+    ? waiting.find((entry) => entry.stageKey === input.stageKey)
+    : waiting[0];
+  if (!pending) {
     return err("This room is not waiting on a decision for that stage.");
   }
   const shape = resolveWorkShapeClaim(room.scopeClaims);

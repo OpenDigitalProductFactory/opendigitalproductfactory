@@ -1,3 +1,19 @@
+/** Share in-flight cleanup, and remember only confirmed completion. */
+export function createRetryableRelease(release) {
+  let completed = false;
+  let inFlight = null;
+  return () => {
+    if (completed) return Promise.resolve();
+    if (inFlight) return inFlight;
+    inFlight = Promise.resolve().then(release).then(() => {
+      completed = true;
+    }).finally(() => {
+      inFlight = null;
+    });
+    return inFlight;
+  };
+}
+
 export function heartbeatIntervalMs(ttlMs) {
   if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
     throw new Error("lease TTL must be a positive number");

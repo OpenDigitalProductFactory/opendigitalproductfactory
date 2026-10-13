@@ -33,7 +33,6 @@ import { OPERATING_CONTRACT_LINES } from "./operating-contract.generated.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const defaultSkillPackRoot = resolve(here, "..");
-const contractPath = join(defaultSkillPackRoot, "process-spine-replacements.json");
 
 export function loadReplacementContract(skillPackRoot = defaultSkillPackRoot) {
   const raw = readFileSync(join(skillPackRoot, "process-spine-replacements.json"), "utf8");

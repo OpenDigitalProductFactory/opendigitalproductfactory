@@ -18,5 +18,8 @@
   "discovery": {
     "deviceCatalog": "Device Catalog",
     "promotionAudit": "Promotion Audit"
+  },
+  "nav": {
+    "moreTools": "More tools"
   }
 }

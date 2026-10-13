@@ -6,8 +6,6 @@ import type {
   InitiativeReviewerRecovery,
 } from "@/lib/tak/initiative-readiness-tool-grants";
 
-import { projectBacklogItemReadiness } from "./entry-adapter";
-import { loadInheritedInitiativeScope } from "./parent-scope-inheritance";
 import type { TerminalRecoveryPorts } from "./terminal-recovery";
 import type { InitiativeReadinessDecision } from "./types";
 
@@ -94,7 +92,22 @@ export function decisionForIndependentReview(
   if (writerToolName === "record_initiative_design_review"
     || writerToolName === "record_initiative_architecture_review") {
     const decision = decisions.implementation ?? decisions.plan;
-    return decision ? designPhaseReviewDecision(decision) : null;
+    if (!decision) return null;
+    const owed = designPhaseReviewDecision(decision);
+    if (owed) return owed;
+    // BI-EE99767C: the claim issuer sequences spec approval before plan coverage
+    // when coverage needs a baseline. A fix carries only PLAN_REQUIRED here;
+    // completion names its baseline owner. Route that prerequisite, not every
+    // completion review, and never revive it once coverage is no longer owed.
+    const needsCoverage = [...decision.blockers, ...decision.unmet].some((entry) =>
+      entry.code === "PLAN_REQUIRED" && entry.state === "missing");
+    if (writerToolName !== "record_initiative_design_review" || !needsCoverage) return null;
+    const isMissingReviewBaseline = (entry: InitiativeReadinessDecision["unmet"][number]) =>
+      entry.code === "OBJECTIVE_BASELINE_REQUIRED" && entry.state === "missing"
+      && entry.accountableRole === "design-checklist-reviewer";
+    const blockers = decisions.completion?.blockers.filter(isMissingReviewBaseline) ?? [];
+    const unmet = decisions.completion?.unmet.filter(isMissingReviewBaseline) ?? [];
+    return blockers.length || unmet.length ? { ...decision, blockers, unmet } : null;
   }
   if (writerToolName === "record_initiative_archetype_review") {
     const preDelivery = decisions.implementation ?? decisions.plan;
@@ -138,31 +151,4 @@ export async function routeDesignReviewsBeforeBaseline(args: {
   });
 }
 
-const PLAN_UNAVAILABLE: InitiativeRecoveryCanonicalArtifact = {
-  resolved: false,
-  nextAction: "Record valid plan coverage for the current baseline and this Workroom repository, including the immutable plan commit and blob, then retry plan review.",
-};
-
-/** The same baseline-validated plan the implementation claim hands its reviewer. */
-export async function loadPlanReviewArtifact(args: {
-  itemId: string;
-  repositoryFullName: string;
-}): Promise<InitiativeRecoveryCanonicalArtifact> {
-  const item = await prisma.backlogItem.findUnique({
-    where: { itemId: args.itemId },
-    include: { activeBuild: { select: { kind: true } }, activities: { orderBy: [{ recordedAt: "asc" }, { id: "asc" }] } },
-  });
-  if (!item) return PLAN_UNAVAILABLE;
-  const inheritedScope = await loadInheritedInitiativeScope(prisma, { childItemId: item.itemId, childRowId: item.id });
-  const { planArtifact } = projectBacklogItemReadiness({
-    item: { ...item, activeBuildKind: item.activeBuild?.kind ?? null },
-    activities: item.activities,
-    inheritedScope,
-    target: "implementation",
-    transitionObject: { kind: "backlog-item", id: item.itemId, expectedVersion: "read-projection", targetState: "implementation" },
-    authorization: "pass", capsuleIdentity: "pass", evaluatedAt: new Date().toISOString(),
-  });
-  return planArtifact && planArtifact.repositoryFullName.toLowerCase() === args.repositoryFullName.toLowerCase()
-    ? { resolved: true, path: planArtifact.path, commitSha: planArtifact.commitSha, providerBlobId: planArtifact.providerBlobId }
-    : PLAN_UNAVAILABLE;
-}
+export { loadPlanReviewArtifact } from "./canonical-plan-source";

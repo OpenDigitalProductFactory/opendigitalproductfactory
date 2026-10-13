@@ -250,6 +250,36 @@ export const SHAPE_SOURCE_FILES = [
   "apps/web/lib/work-management/orchestration-shapes.ts",
 ];
 
+/**
+ * A shape compiled from a GPP shape document (GPP notation Phase 3b, BI-6DA17863)
+ * is declared in its generated module, not in a family file: the family file
+ * only references the generated constant. Every such module is a shape source,
+ * found by directory listing so a later migration needs no edit here.
+ */
+export const GENERATED_SHAPE_DIR = "apps/web/lib/work-management/generated";
+export const GENERATED_SHAPE_SUFFIX = ".shape.generated.ts";
+
+/** SHAPE_SOURCE_FILES, then every generated shape module under `root`, in code-unit order. */
+export function shapeSourceFiles(root = REPO_ROOT) {
+  const dir = path.join(root, GENERATED_SHAPE_DIR);
+  const generated = fs.existsSync(dir)
+    ? fs.readdirSync(dir).filter((name) => name.endsWith(GENERATED_SHAPE_SUFFIX)).sort().map((name) => `${GENERATED_SHAPE_DIR}/${name}`)
+    : [];
+  return [...SHAPE_SOURCE_FILES, ...generated];
+}
+
+/** Accountable agents named by `agent:` principals across the given shape source texts. */
+export function scanShapeAgents(sources) {
+  const shapesSrc = sources.map((src) => stripLineComments(src)).join("\n");
+  const shapeAgents = new Map();
+  for (const m2 of shapesSrc.matchAll(/accountablePrincipalRef:\s*"agent:([a-z0-9-]+)"/g)) {
+    const stagesDeclared = /stages:\s*\[/.test(shapesSrc);
+    const gatesDeclared = /kind:\s*"governed-decision"/.test(shapesSrc);
+    shapeAgents.set(m2[1], { stagesDeclared, gatesDeclared });
+  }
+  return shapeAgents;
+}
+
 /** Identity classes. Expectations differ by class; none is excluded. */
 export const IDENTITY_CLASSES = {
   "active-roster": "Active in the canonical registry and seeded onto the workforce roster.",
@@ -545,13 +575,9 @@ export function loadSubstrate() {
   // explicit. SHAPE_SOURCE_FILES is exported and guarded by a test that fails
   // when a work-management file declares an accountable agent and is not listed
   // here, so a third shape file cannot go unread the way the second one did.
-  const shapesSrc = SHAPE_SOURCE_FILES.map((file) => stripLineComments(read(file))).join("\n");
-  const shapeAgents = new Map();
-  for (const m2 of shapesSrc.matchAll(/accountablePrincipalRef:\s*"agent:([a-z0-9-]+)"/g)) {
-    const stagesDeclared = /stages:\s*\[/.test(shapesSrc);
-    const gatesDeclared = /kind:\s*"governed-decision"/.test(shapesSrc);
-    shapeAgents.set(m2[1], { stagesDeclared, gatesDeclared });
-  }
+  // Generated shape modules (a shape compiled from its GPP document) are read
+  // too, by directory listing (shapeSourceFiles).
+  const shapeAgents = scanShapeAgents(shapeSourceFiles().map((file) => read(file)));
 
   // ── Cadence sources.
   const selfTaskAgents = new Set(

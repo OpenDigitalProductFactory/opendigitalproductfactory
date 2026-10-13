@@ -116,8 +116,9 @@ async function accountabilityNames(db: RoomWorkforceDb, accountabilities: readon
  * following one would inherit an owner from a room that never owned this work.
  */
 export async function loadAncestorClosure(
-  db: RoomWorkforceDb,
+  db: Pick<RoomWorkforceDb, "workroomRelation">,
   workroomId: string | readonly string[],
+  canReadRoom?: (roomId: string) => Promise<boolean>,
 ): Promise<{ roomIds: string[]; edges: AccountabilityEdge[]; unresolvedRoomIds: string[] }> {
   const roomIds = new Set<string>(typeof workroomId === "string" ? [workroomId] : workroomId);
   const edges: AccountabilityEdge[] = [];
@@ -143,6 +144,10 @@ export async function loadAncestorClosure(
         toWorkroomId: to,
         relation: RELATION_VALUE_BY_CLIENT[raw] ?? raw,
       });
+      // Containment does not grant access to a parent's contents or relations.
+      if (!roomIds.has(from) && canReadRoom && !await canReadRoom(from)) {
+        return { roomIds: [...roomIds], edges, unresolvedRoomIds: [to] };
+      }
       // A cycle stops the walk here; the resolver reports it rather than looping.
       if (!roomIds.has(from)) {
         roomIds.add(from);

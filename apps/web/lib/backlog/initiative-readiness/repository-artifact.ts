@@ -12,6 +12,8 @@ import {
 import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 import type { InitiativeArtifactRef } from "./receipt-schema";
 import type { InitiativeSubject } from "./types";
+import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
+import { canonicalPlanMatchesArtifact, type CanonicalPlanSourceProof } from "./canonical-plan-source";
 
 type RepositoryLocator = Extract<InitiativeArtifactRef, { kind: "repo-blob-at-commit" }>;
 
@@ -298,6 +300,10 @@ function describeCapsuleHead(capsule: { capsuleId: string; headBranch: string | 
 export async function resolveRepositoryArtifact(args: {
   locator: RepositoryLocator;
   subject: InitiativeSubject;
+  /** Internal context from the accepted TaskRun; never a caller-selected head. */
+  workroomRef?: InitiativeReviewBinding["workroomRef"];
+  /** Current baseline/coverage proof resolved internally by the receipt writer. */
+  canonicalPlanProof?: CanonicalPlanSourceProof;
   db?: RepositoryArtifactDb;
   fetchImpl?: typeof fetch;
   transportFactory?: () => GithubReadTransport;
@@ -353,9 +359,22 @@ export async function resolveRepositoryArtifact(args: {
       },
     },
   });
-  const capsules = candidates.filter(
-    (candidate) => (candidate.headSha ?? "").toLocaleLowerCase("en-US") === args.locator.commitSha.toLocaleLowerCase("en-US"),
-  );
+  const boundRoom = args.workroomRef;
+  const planProof = args.canonicalPlanProof;
+  if (planProof && (!boundRoom || args.subject.kind !== "backlog-item" || planProof.itemId !== args.subject.id
+    || !planProof.baselineId || !planProof.scopeOwnerItemId || !/^sha256:[a-f0-9]{64}$/i.test(planProof.digest)
+    || !canonicalPlanMatchesArtifact(planProof, args.locator))) {
+    return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "The canonical plan proof does not match this accepted review's subject and immutable artifact." };
+  }
+  if (boundRoom && (boundRoom.kind !== "workroom-head"
+    || boundRoom.repositoryFullName !== args.locator.repositoryFullName
+    || !/^[a-f0-9]{40}$/i.test(boundRoom.headSha))) {
+    return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "The accepted review's workroom binding is invalid for this repository artifact." };
+  }
+  const capsules = candidates.filter((candidate) => boundRoom
+    ? candidate.capsuleId === boundRoom.workroomId && candidate.headBranch === boundRoom.branchName
+      && candidate.headSha?.toLowerCase() === boundRoom.headSha.toLowerCase()
+    : (candidate.headSha ?? "").toLowerCase() === args.locator.commitSha.toLowerCase());
   if (capsules.length > 1) {
     return {
       ok: false,
@@ -366,11 +385,17 @@ export async function resolveRepositoryArtifact(args: {
     };
   }
   if (capsules.length === 0) {
+    if (boundRoom) {
+      return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
+        error: "The accepted review's exact live workroom, subject, branch or head changed. Reconcile the review packet with the actual workroom; do not rewrite the head to the historical artifact commit." };
+    }
     return {
       ok: false,
       code: "CANONICAL_DESIGN_AMBIGUOUS",
       error: candidates.length === 0
-        ? `No live workroom for this subject is bound to ${args.locator.repositoryFullName}. Claim or adopt the branch first (claim_backlog_item_for_work or adopt_worktree), then retry.`
+        // BI-77C600B2: a plain implementation claim can be refused at the very
+        // research gate this receipt satisfies; a design-intent claim cannot.
+        ? `No live workroom for this subject is bound to ${args.locator.repositoryFullName}. Bind one first: claim_backlog_item_for_work with workIntent "design" (it does not owe research), or adopt_worktree; then retry.`
         : `No live workroom for this subject records head ${args.locator.commitSha}: ${
           candidates.map(describeCapsuleHead).join("; ")
         }${candidates.length === CAPSULE_CANDIDATE_LIMIT ? ` (first ${CAPSULE_CANDIDATE_LIMIT} shown)` : ""}. Sync the branch head with adopt_worktree(headBranch, headSha=${args.locator.commitSha}) — an amend, rebase, or squash after adoption rewrites the sha — then retry.`,
@@ -396,6 +421,17 @@ export async function resolveRepositoryArtifact(args: {
   }
   const fetchImpl = args.fetchImpl ?? transport!.fetch;
   try {
+    if (boundRoom && !planProof && boundRoom.headSha.toLowerCase() !== args.locator.commitSha.toLowerCase()) {
+      // The review retains the immutable original locator. A later branch head
+      // may own it only when the provider proves the same path/blob is present.
+      const currentBlob = await fetchRepositoryProviderBlob({
+        owner: expectedRepo.owner, repo: expectedRepo.name, token, commitSha: boundRoom.headSha,
+        path: args.locator.path, expectedBlobId: args.locator.providerBlobId, fetchImpl,
+      });
+      if (!currentBlob.ok) return { ok: false,
+        code: currentBlob.code === "IMMUTABLE_BLOB_MISMATCH" ? "CANONICAL_DESIGN_AMBIGUOUS" : "CANONICAL_DESIGN_REQUIRED",
+        error: currentBlob.error };
+    }
     const commitResult = await fetchGithubJson({
       url: `https://api.github.com/repos/${encodeURIComponent(expectedRepo.owner)}/${encodeURIComponent(expectedRepo.name)}/commits/${encodeURIComponent(args.locator.commitSha)}`,
       token,
@@ -488,10 +524,14 @@ export async function resolveRepositoryArtifact(args: {
       error: providerBlob.error,
     };
   }
+    const digest = `sha256:${createHash("sha256").update(providerBlob.data).digest("hex")}`;
+    if (planProof && digest !== planProof.digest) {
+      return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "The verified immutable plan bytes do not match the current coverage digest." };
+    }
     return {
       ok: true,
       artifact: {
-        digest: `sha256:${createHash("sha256").update(providerBlob.data).digest("hex")}`,
+        digest,
         bytes: providerBlob.data,
         authorPrincipalId,
         authorAgentId,

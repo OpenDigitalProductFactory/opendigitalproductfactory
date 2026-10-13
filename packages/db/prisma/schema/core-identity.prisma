@@ -5,12 +5,25 @@ enum PrincipalSensitivity {
   restricted
 }
 
+enum AutomationPersonaProfile {
+  platform_manager
+  developer
+  backlog_manager
+  employee
+  developer_backlog_manager
+}
+
 model User {
   id                               String                              @id @default(cuid())
   email                            String                              @unique
   passwordHash                     String
   isActive                         Boolean                             @default(true)
   isSuperuser                      Boolean                             @default(false)
+  automationVerificationId         String?
+  automationProfile                AutomationPersonaProfile?
+  automationSlot                   Int?
+  automationExpiresAt              DateTime?
+  automationVerification           RuntimeVerification? @relation(fields: [automationVerificationId], references: [id], onDelete: Restrict)
   createdAt                        DateTime                            @default(now())
   /// Last time this person used the workforce portal: stamped at sign-in and,
   /// at most hourly, on shell renders. Null = not seen since tracking began.
@@ -96,6 +109,9 @@ model User {
   workbookRowsCreated              WorkbookRow[]                       @relation("WorkbookRowCreatedBy")
   workbookViewsCreated             WorkbookView[]                      @relation("WorkbookViewCreatedBy")
   payrollTaxRulesRatified          PayrollTaxRule[]                    @relation("PayrollTaxRuleRatifiedBy")
+
+  @@unique([automationVerificationId, automationProfile, automationSlot], map: "User_automation_fixture_key")
+  @@index([automationExpiresAt, id])
 }
 
 model UserGroup {
@@ -217,6 +233,7 @@ model Principal {
   // host-attributes side table keyed by `principalId`. 1:1 cardinality.
   edgeNode                            EdgeNode?                           @relation("EdgeNodeIdentity")
   edgeNodesApproved                   EdgeNode[]                          @relation("EdgeNodeApprover")
+  mcpServerToolsApproved              McpServerTool[]                     @relation("McpServerToolApprover")
   // EP-MSP-FEDERATION · B1 — a federated peer (another DPF deployment) is a
   // Principal(kind="federated-peer") with FederationLink as its side table,
   // exactly as EdgeNode is for an edge agent. No parallel identity table.

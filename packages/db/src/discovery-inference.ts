@@ -291,7 +291,6 @@ function normalizeName(name: string): string {
  * - No match → 0.0
  */
 function nameMatchScore(a: string, b: string): number {
-  if (!a || !b) return 0;
   if (a === b) return 1.0;
   if (a.includes(b) || b.includes(a)) return 0.8;
 

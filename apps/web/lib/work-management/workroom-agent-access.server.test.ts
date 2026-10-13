@@ -2,11 +2,27 @@ import { beforeEach, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ human: vi.fn(), alias: vi.fn(), agent: vi.fn(), room: vi.fn(), item: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: { principalAlias: { findFirst: m.alias }, agent: { findUnique: m.agent }, workroom: { findUnique: m.room }, backlogItem: { findFirst: m.item } } }));
 vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: m.human }));
-import { resolveAgentWorkroomAccess } from "./workroom-agent-access.server";
+import { resolveAgentWorkroomAccess, resolveHumanWorkroomAccess } from "./workroom-agent-access.server";
 const human = { id: "human-row", principalId: "PRN-human", kind: "human", status: "active", sensitivityClearance: ["internal"] };
 const agent = { id: "agent-row", principalId: "PRN-agent", kind: "agent", status: "active", sensitivityClearance: ["internal"] };
 const room = () => ({ id: "selected", requestedByPrincipalId: human.id, createdByPrincipalId: agent.id, leaseHolderPrincipalId: human.id, scopeClaims: [], participants: [], workItem: null });
 const input = { userId: "alice", agentId: "codex", workroomId: "selected", requested: "action" as const };
+it("a portal person reads only a room they are admitted to, without borrowing an assistant", async () => {
+  expect((await resolveHumanWorkroomAccess({ userId: "alice", workroomId: "selected", requested: "content" })).decision.level).toBe("content");
+  expect(m.agent).not.toHaveBeenCalled();
+  expect(m.alias.mock.calls).toHaveLength(1);
+  m.room.mockResolvedValue({ ...room(), requestedByPrincipalId: "bob", leaseHolderPrincipalId: "bob" });
+  expect((await resolveHumanWorkroomAccess({ userId: "alice", workroomId: "parent", requested: "content" })).decision.level).toBe("none");
+});
+it("a portal person's removal and clearance still fail closed, regardless of administrator context", async () => {
+  m.room.mockResolvedValue({ ...room(), participants: [{ principalId: human.id, lifecycle: "removed", roles: ["coordinator"] }] });
+  expect((await resolveHumanWorkroomAccess({ userId: "alice", workroomId: "parent", requested: "content" })).decision.level).toBe("none");
+  m.room.mockResolvedValue({ ...room(), scopeClaims: [{ workroomBoundary: { sensitivityCeiling: "restricted" } }] });
+  expect((await resolveHumanWorkroomAccess({ userId: "alice", workroomId: "parent", requested: "content" })).decision).toMatchObject({ level: "discover", reason: "insufficient-clearance" });
+});
+it("an empty assistant identity cannot use the human-only browser path", async () => {
+  expect((await resolveAgentWorkroomAccess({ ...input, agentId: "" })).decision.level).toBe("none");
+});
 beforeEach(() => {
   vi.resetAllMocks();
   m.human.mockResolvedValue({ userId: "alice", isSuperuser: true });
@@ -133,4 +149,23 @@ it("lets a legacy holder hand over a room nobody oversees, and still checks the 
   expect((await resolveAgentWorkroomAccess({ ...input, handover: true })).decision.level).toBe("action");
   m.room.mockResolvedValue({ ...ownedRoom([]), requestedByPrincipalId: "bob", leaseHolderPrincipalId: "bob" });
   expect((await resolveAgentWorkroomAccess({ ...input, handover: true })).decision.level).toBe("none");
+});
+// BI-F4EB23C1 — a refused handover says why, but only to a person admitted to the room.
+it("reports not-owner when the person created the room but another person oversees it (WC-D72FAD2A)", async () => {
+  asReplacement();
+  m.room.mockResolvedValue({ ...room(), createdByPrincipalId: human.id, requestedByPrincipalId: null, leaseHolderPrincipalId: "bob",
+    participants: [{ principalId: "bob", lifecycle: "active", roles: ["coordinator"], principal: { kind: "human" } }] });
+  expect(await resolveAgentWorkroomAccess({ ...input, handover: true })).toMatchObject({ decision: { level: "none" }, handoverRefusal: "not-owner" });
+});
+it("reports assistant-in-room when the owner's assistant was removed or narrowed", async () => {
+  asReplacement();
+  m.room.mockResolvedValue(ownedRoom([{ principalId: human.id, lifecycle: "active", roles: ["coordinator"] }, { principalId: replacement.id, lifecycle: "removed", roles: ["contributor"] }]));
+  expect(await resolveAgentWorkroomAccess({ ...input, handover: true })).toMatchObject({ decision: { level: "none" }, handoverRefusal: "assistant-in-room" });
+});
+it("tells a person outside the room nothing about why", async () => {
+  asReplacement();
+  m.room.mockResolvedValue({ ...ownedRoom([{ principalId: "bob", lifecycle: "active", roles: ["coordinator"] }]), requestedByPrincipalId: "bob", createdByPrincipalId: "bob", leaseHolderPrincipalId: "bob" });
+  const refused = await resolveAgentWorkroomAccess({ ...input, handover: true });
+  expect(refused.decision.level).toBe("none");
+  expect(refused).not.toHaveProperty("handoverRefusal");
 });

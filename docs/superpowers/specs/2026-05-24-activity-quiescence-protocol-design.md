@@ -587,6 +587,20 @@ The signal therefore excludes tool names whose canonical `resolveAnnotations().r
 
 Proxy reads the Node state path with a 50ms timeout and 1s module-level cache. On timeout, it fails open for idempotent GETs and fails closed for mutation POSTs only when the last cached state was non-normal; this keeps the platform usable during transient state-route hiccups while preserving the drain once observed.
 
+**Existing OAuth connection continuity (BI-B986A18B).** The exact token POST
+at `/api/oauth/token` reaches its Node route during a known drain, where the
+canonical cached quiescence reader permits only `refresh_token`. Existing
+client authentication, resource binding, consent, scope narrowing, rotation
+and revocation checks remain mandatory. New authorization-code and
+client-credentials exchanges stay refused. Swapping or an unknown state
+refuses token exchanges with an OAuth `temporarily_unavailable` response and
+`Retry-After: 30`. Unknown means an unavailable proxy state or a failed Node
+state read. The canonical Node parser still uses its existing normal default
+for missing or malformed stored configuration; this repair does not redefine
+that shared policy. The token path is not a prefix allow-list, and this changes
+no application tool's read/write policy. An expired connection can renew to
+observe a drain without gaining permission to start new business work.
+
 Per-request decision:
 
 ```ts
@@ -995,6 +1009,12 @@ The protocol is complete when:
 `QUIESCENCE_RUN_STATUSES` gains `awaiting-operator`. The column is a code-typed string by design (§5.1, no DB constraint); AGENTS.md §8 prefers a Prisma enum for closed sets, and that conversion is tracked separately rather than folded into this change.
 
 **Delivery:** docs/superpowers/plans/2026-09-30-upgrade-waits-for-work-plan.md.
+
+**Amendment 2026-10-07 — a parked build resumes when the pause clears (BI-E9DAA23F).** Point 1's "resumed after the swap" had no trigger of its own: a parked build waited for the 10-minute stranded-build tick, and a build parked that way for a week was aged out by the 7-day cap (59 of 126 plan-parked builds on 2026-10-07 last stopped on the wait). Now:
+- A build is *held by the pause* while the `phase:upgrade-wait` row is the last activity on it. Any later row means an attempt was made after the wait, and its outcome, not the platform, explains the build.
+- `build/resume-after-upgrade-pause` subscribes to `platform.quiescence-cleared` (emitted on every way a pause ends) and re-fires the canonical pre-build resume for each held build, one durable step per build. It does nothing if a new pause has already begun.
+- The stranded-build resumer skips pre-build resumes and age-outs while the level is not `normal`; a resume during a pause only records another wait. The `build`-phase step-machine resume is unchanged, and the 10-minute tick remains the backstop.
+- The 7-day age-out skips a held build. The wait marker no longer counts as liveness, so the tick does not hold a waiting build back for 15 minutes after the clear.
 
 ## 12. Operator Decisions (Locked Defaults)
 

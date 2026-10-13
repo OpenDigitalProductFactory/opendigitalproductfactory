@@ -5,7 +5,6 @@ import type { Prisma } from "@dpf/db";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import {
   authorizeObjectiveMappingRequestKeyEvolution,
-  validateObjectiveMappingRequestKey,
   objectiveMappingHistoricalProviderProofDigest,
   type ObjectiveMappingRequestHistory,
 } from "@/lib/mcp-task-objective-mapping-request-key";
@@ -403,7 +402,8 @@ async function defaultLoadObjectiveMappingHistory(args: {
   return loadObjectiveMappingHistoryFromDb(prisma, args);
 }
 
-const DEFAULT_PORTS: TerminalRecoveryPorts = {
+/** Production ports; a caller overrides only the ports it must (the acceptance sweep excludes the author, BI-DF255666). */
+export const DEFAULT_TERMINAL_RECOVERY_PORTS: TerminalRecoveryPorts = {
   loadLiveRooms: defaultLoadLiveRooms,
   loadBaselinePayloads: defaultLoadBaselinePayloads,
   loadEligibleEvidenceActivityIds: defaultLoadEligibleEvidenceActivityIds,
@@ -546,9 +546,15 @@ export async function resolveTerminalInitiativeRecovery(args: {
   decision: InitiativeReadinessDecision;
   currentAgentId: string | null;
   refusedWorkroomId: string | null;
+  taskAuthority?: import("./exhausted-plan-review").PlanReviewTaskAuthority | null;
   ports?: TerminalRecoveryPorts;
 }): Promise<TerminalInitiativeRecovery> {
-  const ports = args.ports ?? DEFAULT_PORTS;
+  const suppliedPorts = args.ports ?? DEFAULT_TERMINAL_RECOVERY_PORTS;
+  const ports = args.taskAuthority ? { ...suppliedPorts, resolveRecovery:
+    async (input: Parameters<typeof resolveInitiativeReviewerRecovery>[0]) => suppliedPorts.resolveRecovery({
+      ...input, isPlanReviewExhausted: (await import("./exhausted-plan-review"))
+        .createExhaustedPlanReviewPredicate(args.taskAuthority!, prisma),
+    }) } : suppliedPorts;
   const acceptanceLane = [...args.decision.blockers, ...args.decision.unmet]
     .find((entry) => entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED");
   if (acceptanceLane && acceptanceLane.accountableRole === "delivery-coordinator") {
@@ -627,6 +633,20 @@ export async function resolveTerminalInitiativeRecovery(args: {
   }
 
   const decision = designPhase ?? args.decision;
+  // A plan-only review reads the baseline-validated covered plan, exactly as
+  // the claim issuer does. An unchanged branch need not author a new design.
+  // Other design and acceptance lanes retain their own artifact resolution.
+  if (designPhase && [...designPhase.blockers, ...designPhase.unmet]
+    .every((entry) => entry.code === "PLAN_REVIEW_REQUIRED")) {
+    return ports.resolveRecovery({
+      decision,
+      currentAgentId: args.currentAgentId,
+      db: prisma as never,
+      dispatchContext,
+      planArtifact: await ports.loadPlanArtifact({ itemId: decision.subject.id, repositoryFullName: room.repositoryFullName }),
+      expectedCurrentBaselineId: baseline.baselineId,
+    });
+  }
   const needsObjectiveMapping = [...decision.blockers, ...decision.unmet]
     .some((entry) => entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED"
       || entry.code === "OBJECTIVE_RECONCILIATION_REQUIRED");
@@ -692,6 +712,10 @@ export async function resolveTerminalInitiativeRecovery(args: {
   const packet = recovery.reviewerRoutes.find((route) => route.gate === "objective-mapping")?.requestCoworker;
   const binding = packet?.initiativeReviewBinding;
   const requiredToolNames = packet?.requiredToolNames;
+  // No packet because the resolver said why (no eligible reviewer, no artifact,
+  // no evidence): that reason is the true one. "Refresh readiness" would send
+  // the reader after the wrong remedy (BI-DF255666 found this through the sweep).
+  if (!packet && (recovery.escalations.length > 0 || recovery.unroutable.length > 0)) return recovery;
   if (!packet || !binding || !requiredToolNames) {
     return escalation(
       "objective-mapping-history-unavailable",

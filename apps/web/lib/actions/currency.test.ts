@@ -17,7 +17,6 @@ vi.mock("@dpf/db", () => ({
 import { prisma } from "@dpf/db";
 import {
   getOrgSettings,
-  updateBaseCurrency,
   getExchangeRate,
   convertAmountSync,
   convertAmount,

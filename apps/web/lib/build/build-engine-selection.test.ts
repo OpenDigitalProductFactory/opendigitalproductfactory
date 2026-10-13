@@ -49,6 +49,16 @@ function route(
 }
 
 describe("selectBuildEngineFromCandidates", () => {
+  it("excludes a paused local account even if background recovery marked its provider active", () => {
+    const result = selectBuildEngineFromCandidates({
+      policy: { mode: "auto", pinnedEngine: null },
+      candidates: [candidate("opencode", "local", { providerConnectionStatus: "paused" }), candidate("codex", "codex")],
+      route: route("codex", ["local"]), localOnly: false, nowMs: NOW,
+    });
+    expect(result.selected?.engine).toBe("codex");
+    expect(result.fallbackChain.map(row => row.providerId)).not.toContain("local");
+    expect(result.rejected).toContainEqual(expect.objectContaining({ providerId: "local", code: "provider-disabled" }));
+  });
   it("selects healthy Codex before dispatch when Claude OAuth is expired", () => {
     const result = selectBuildEngineFromCandidates({
       policy: { mode: "auto", pinnedEngine: null },

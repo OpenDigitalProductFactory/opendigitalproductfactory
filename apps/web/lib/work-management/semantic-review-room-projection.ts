@@ -5,7 +5,7 @@ import { SEMANTIC_REVIEW_HEARTBEAT_STALE_MS } from "@/lib/change-review/semantic
 import { CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION } from "@/lib/change-review/semantic-change-review";
 import type { ReceiptEnvelope } from "./receipt-envelope";
 import type { WorkCaseSourceRef } from "./case-types";
-import { isSemanticReviewRecoveryWait, readSemanticReviewBudget, type SemanticReviewBudgetSnapshot } from "@/lib/change-review/semantic-review-recovery-policy";
+import { isSemanticReviewRecoveryWait, semanticReviewRecoveryObservation, readSemanticReviewBudget, type SemanticReviewBudgetSnapshot } from "@/lib/change-review/semantic-review-recovery-policy";
 
 /** Read-only facts from existing tasks; neither a verdict nor a new execution ledger. */
 export type ReviewerExecutionObservation = {
@@ -122,6 +122,9 @@ export async function loadSemanticReviewRoomProjection(db: ReviewerRoomClient, c
       : state === "waiting" ? "The requester must inspect the wait and current recovery authority."
         : state === "unknown" ? "Reconcile the unknown task state before acting."
           : "The server owns continuation; await its next recorded result.";
+    const recovery = semanticReviewRecoveryObservation(row.status, row.progressPayload, now.getTime());
+    const recoveryAction = recovery.successorTaskRunId ? `Read successor review ${recovery.successorTaskRunId}.`
+      : isSemanticReviewRecoveryWait(row.status) && recovery.budget === "expired" ? recovery.nextAction : null;
     const heartbeat = row.lastHeartbeatAt ? row.lastHeartbeatAt.toISOString() : "unknown";
     const age = row.lastHeartbeatAt ? now.getTime() - row.lastHeartbeatAt.getTime() : null;
     const freshness = state === "terminal" ? "historical" : age === null || age < 0 ? "unknown" : age >= SEMANTIC_REVIEW_HEARTBEAT_STALE_MS ? "stale" : "recent";
@@ -133,8 +136,8 @@ export async function loadSemanticReviewRoomProjection(db: ReviewerRoomClient, c
         ? { receipt: { id: identity.receiptId, decision: identity.receiptDecision,
           summary: identity.receiptSummary ?? "No receipt summary recorded." } } : {}),
       reason: recordedReason,
-      nextAction: row.status === "working" || row.status === "submitted" ? next : typeof progress.action === "string" ? progress.action
-        : typeof progress.nextAction === "string" ? progress.nextAction : next,
+      nextAction: recoveryAction ?? (row.status === "working" || row.status === "submitted" ? next : typeof progress.action === "string" ? progress.action
+        : typeof progress.nextAction === "string" ? progress.nextAction : next),
       readAt: now.toISOString(), lastHeartbeatAt: row.lastHeartbeatAt?.toISOString() ?? null,
       heartbeat: freshness, recoveryWait: isSemanticReviewRecoveryWait(row.status),
       budget: readSemanticReviewBudget(row.progressPayload),
