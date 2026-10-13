@@ -1,11 +1,17 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render as testingRender, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { configureProvider, testProviderAuth, discoverModels, profileModels } from "@/lib/actions/ai-providers";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import type { ProviderWithCredential } from "@/lib/ai-provider-types";
 import { ProviderDetailForm } from "./ProviderDetailForm";
+const render = (ui: ReactNode) => testingRender(
+  <MessagesProvider locale="en-US" messages={{ setup: namespaceMessages("en-US", "setup") }}>{ui}</MessagesProvider>,
+);
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
