@@ -1,0 +1,27 @@
+{
+  "version": "1",
+  "decidedOption": "compact-account-disclosure",
+  "decisionInteractionId": "DI-BE29BCA0E998",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/platform/ai/providers/page.tsx",
+      "apps/web/app/(shell)/platform/ai/providers/[providerId]/page.tsx",
+      "apps/web/components/platform/ProviderAccountConnectionForm.tsx",
+      "apps/web/components/platform/ProviderAccountsOverview.tsx",
+      "apps/web/components/platform/ProviderDetailSections.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["compact-account-disclosure", "expanded-provider-catalog"]
+  },
+  "sourceDecision": {
+    "owningProfile": "mark-dpf-platform",
+    "verdict": "proceed",
+    "confidence": "high",
+    "structuredCoverage": "strong",
+    "autonomyEligible": true,
+    "resolvedBy": "agent",
+    "evidenceClass": "Recorded comparative choice following the founder-approved provider-account prototype and 2026-10-04 design. Compact report-kit account rows, persisted setup/catalog disclosure and scoped controls preserve the existing function inventory. This source choice is not served UX acceptance or runtime-routing completion."
+  }
+}

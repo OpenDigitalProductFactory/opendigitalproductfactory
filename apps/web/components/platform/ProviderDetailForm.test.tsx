@@ -77,6 +77,12 @@ const providerFixture: ProviderWithCredential = {
 
 describe("ProviderDetailForm", () => {
   afterEach(() => { cleanup(); vi.clearAllMocks(); });
+  it("keeps OAuth mutations disabled for a read-only viewer while retaining diagnostics", () => {
+    const fixture: ProviderWithCredential = { ...providerFixture, provider: { ...providerFixture.provider, providerId: "codex", authMethod: "oauth2_authorization_code", supportedAuthMethods: ["oauth2_authorization_code"] } };
+    render(<ProviderDetailForm pw={fixture} canWrite={false} models={[]} profiles={[]} hasActiveProvider />);
+    expect((screen.getByRole("button", { name: "Sign in with Z.ai" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Advanced diagnostics" }) as HTMLButtonElement).disabled).toBe(false);
+  });
   it("keeps ChatGPT shared authentication changes in the Codex management page", () => {
     const fixture: ProviderWithCredential = { ...providerFixture, provider: { ...providerFixture.provider, providerId: "chatgpt", authMethod: "oauth2_authorization_code", supportedAuthMethods: ["oauth2_authorization_code"], authorizeUrl: "https://auth.openai.com/oauth/authorize" } };
     render(<ProviderDetailForm pw={fixture} canWrite models={[]} profiles={[]} hasActiveProvider />);

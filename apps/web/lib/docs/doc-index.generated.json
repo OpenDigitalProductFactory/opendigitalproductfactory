@@ -2372,6 +2372,7 @@
         "provider-account-identity",
         "governed-controls",
         "provider-ui-preservation-contract",
+        "account-presentation-boundaries",
         "migration-and-verification"
       ]
     },

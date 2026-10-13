@@ -2,18 +2,15 @@
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
-import { getProviders, getTokenSpendByProvider, getTokenSpendByAgent, getScheduledJobs, groupByEndpointTypeAndCategory, getProviderModelSummaries } from "@/lib/ai-provider-data";
+import { getProviders, getTokenSpendByProvider, getTokenSpendByAgent, getScheduledJobs, getProviderModelSummaries } from "@/lib/ai-provider-data";
 import { syncProviderRegistry, detectMcpServers, runProviderCatalogReconciliationIfDue } from "@/lib/actions/ai-providers";
 import { DetectedServicesBanner } from "@/components/platform/DetectedServicesBanner";
 import { AskCoworkerButton } from "@/components/agent/AskCoworkerButton";
 import { checkBundledProviders } from "@/lib/ollama";
 import { TokenSpendPanel } from "@/components/platform/TokenSpendPanel";
 import { ScheduledJobsTable } from "@/components/platform/ScheduledJobsTable";
-import { ServiceSection } from "@/components/platform/ServiceSection";
-import { ServiceRow } from "@/components/platform/ServiceRow";
 import { getAllCliPoolStatuses } from "@/lib/routing/cli-pool-status";
 import { CliPoolStatusPanel } from "@/components/platform/CliPoolStatusPanel";
-import { type RoutingEligibility } from "@/lib/routing/provider-routing-eligibility";
 import { getRecentBudgetEvents, countRecentRejections } from "@/lib/inference/budget-events-data";
 import { AgentBudgetEventsPanel } from "@/components/platform/AgentBudgetEventsPanel";
 import { LocalOnlyInferenceToggle } from "@/components/platform/LocalOnlyInferenceToggle";
@@ -26,6 +23,11 @@ import { ProviderSuitabilityGuide } from "@/components/platform/ProviderSuitabil
 import { loadProviderOnboardingRecommendation } from "@/lib/routing/provider-suitability/provider-onboarding-data";
 import { loadProviderRoutingControls } from "@/lib/inference/provider-routing-control-data";
 import { getProviderSuitabilityTelemetryRollup } from "@/lib/actions/route-decision-logs";
+import { ProviderAccountsOverview } from "@/components/platform/ProviderAccountsOverview";
+import { getProviderAccountCopy, loadProviderAccountOverview } from "@/lib/inference/provider-account-overview.server";
+import { getProviderAccountSetupState } from "@/lib/actions/provider-account-setup";
+import { Notice } from "@/components/ui/report-kit";
+import { Surface } from "@/components/ui/Surface";
 
 
 export default async function ProvidersPage() {
@@ -67,19 +69,13 @@ export default async function ProvidersPage() {
     getAllCliPoolStatuses(),
     getRecentBudgetEvents(),
     countRecentRejections(),
-    getLocalOnlyInference(),
+    getLocalOnlyInference().catch(() => null),
     loadProviderOnboardingRecommendation(),
     getProviderSuitabilityTelemetryRollup(),
   ]);
   const aiProviders = providers.filter((pw) => pw.provider.endpointType !== "service");
 
-  const routingControls = await loadProviderRoutingControls(aiProviders, new Map([...modelSummaries].map(([id, summary]) => [id, summary.totalModels])), now);
-  const eligibilityById: Record<string, RoutingEligibility> = {};
-  const weeklyHintById: Record<string, string | null> = {};
-  for (const [id, view] of routingControls) {
-    eligibilityById[id] = view.eligibility;
-    weeklyHintById[id] = view.weeklyHint;
-  }
+  const routingControls = localOnlyInference === null ? new Map() : await loadProviderRoutingControls(aiProviders, new Map([...modelSummaries].map(([id, summary]) => [id, summary.totalModels])), now).catch(() => new Map());
 
   const lastSync = freshJobs.find((j) => j.jobId === "provider-registry-sync")?.lastRunAt;
   const lastCatalogRefresh = freshJobs.find((j) => j.jobId === "model-discovery-refresh")?.lastRunAt;
@@ -103,6 +99,8 @@ export default async function ProvidersPage() {
   } catch {
     // Leave the map empty — badges simply don't render.
   }
+  const [copy, setup] = await Promise.all([getProviderAccountCopy(), getProviderAccountSetupState()]);
+  const accountRows = await loadProviderAccountOverview({ providers: aiProviders, modelSummaries, controls: routingControls, resolvesPhases: resolvesPhasesById, copy, now });
 
   return (
     <div>
@@ -119,7 +117,10 @@ export default async function ProvidersPage() {
 
       <DetectedServicesBanner detected={detected} />
 
-      <ProviderSuitabilityGuide recommendation={onboardingRecommendation} telemetry={suitabilityTelemetry} />
+      <section className="mb-3" aria-label={copy.whereAiMayRun}>
+        {localOnlyInference === null ? <Notice variant="error">{copy.policyUnavailable}</Notice>
+          : <LocalOnlyInferenceToggle initialEnabled={localOnlyInference} canWrite={canWrite} />}
+      </section>
 
       <div
         style={{
@@ -139,7 +140,7 @@ export default async function ProvidersPage() {
       </div>
 
       {/* Section 1: Provider catalog */}
-      <div style={{ marginBottom: 32 }}>
+      <div style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
           <div style={{ color: "var(--dpf-accent)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
             Providers
@@ -147,35 +148,15 @@ export default async function ProvidersPage() {
           <ProviderCatalogStatus lastSyncAt={lastCatalogRefresh ?? null} />
         </div>
 
-        {aiProviders.length === 0 ? (
-          <p style={{ color: "var(--dpf-muted)", fontSize: 11 }}>
-            No providers are registered yet. The provider catalog loads automatically; setup actions appear only when a provider needs credentials or review.
-          </p>
-        ) : (
-          groupByEndpointTypeAndCategory(aiProviders).map((group) => (
-            <ServiceSection
-              key={`${group.endpointType}:${group.category}`}
-              endpointType={group.endpointType}
-              displayName={group.displayName}
-              providers={group.providers}
-              eligibilityById={eligibilityById}
-              hasResolver={group.providers.some((pw) => resolvesPhasesById.has(pw.provider.providerId))}
-            >
-              {group.providers.map((pw) => (
-                <ServiceRow
-                  key={pw.provider.providerId}
-                  pw={pw}
-                  canWrite={canWrite}
-                  eligibility={eligibilityById[pw.provider.providerId]!}
-                  weeklyAllocationHint={weeklyHintById[pw.provider.providerId] ?? null}
-                  {...(modelSummaries.has(pw.provider.providerId) ? { modelSummary: modelSummaries.get(pw.provider.providerId)! } : {})}
-                  {...(resolvesPhasesById.has(pw.provider.providerId) ? { resolvesPhases: resolvesPhasesById.get(pw.provider.providerId)! } : {})}
-                />
-              ))}
-            </ServiceSection>
-          ))
-        )}
+        <ProviderAccountsOverview rows={accountRows} catalog={aiProviders.map(({ provider }) => ({ providerId: provider.providerId,
+          name: provider.name, summary: provider.costPerformanceNotes ?? provider.billingLabel ?? "", supportedAuthMethods: provider.supportedAuthMethods }))}
+          firstRun={setup.showCatalog} canWrite={canWrite} copy={copy} />
       </div>
+
+      <Surface className="mb-3" padding="sm"><details>
+        <summary className="cursor-pointer py-2 text-sm font-semibold">{copy.allowedWork}</summary>
+        <ProviderSuitabilityGuide recommendation={onboardingRecommendation} telemetry={suitabilityTelemetry} />
+      </details></Surface>
 
       <details
         style={{
@@ -207,7 +188,6 @@ export default async function ProvidersPage() {
           <AgentBudgetEventsPanel events={budgetEvents} recentRejections={recentRejections} />
 
           {/* Local-only inference (cloud-disabled) guarantee — BI-594E8782 */}
-          <LocalOnlyInferenceToggle initialEnabled={localOnlyInference} canWrite={canWrite} />
         </div>
       </details>
 

@@ -115,6 +115,32 @@ Collapse optional detail rather than deleting it. A local-only setup completion
 must persist independently of account count. Removing the final remote account
 must not reopen the full catalog or hide existing disabled accounts.
 
+### Account presentation boundaries
+
+The account overview consumes the masked canonical account read model. Untouched
+seed defaults are catalog choices after setup; Local, explicitly added accounts,
+saved credentials, reviewed accounts, paused accounts and disconnected accounts
+remain discoverable. Disabled configured accounts stay visible. First-run catalog
+disclosure follows persisted setup progress, never the number of remote accounts.
+
+Default provider links keep their existing credential-sharing behavior. An
+explicit `account` query selects that connection only and must reject a missing
+or foreign connection rather than render default credentials. Additional account
+connection controls call the existing scoped server actions; account declarations
+also submit the selected connection identity. Provider endpoint, model families,
+catalog profiles and existing finance diagnostics keep their provider ownership.
+
+A label-only update omits unchanged credential fields so it preserves reviewed
+data terms and model access. Secrets remain write-only and clear from the form
+after a successful save. Authentication and catalog inventory do not establish
+Allowed work; that summary comes from the existing suitability compiler. Missing
+model or capacity evidence stays unknown. The global inference policy must show
+an unavailable state when its read fails, never imply cloud permission.
+
+These are source integration requirements. Colocated tests exercise account
+selection, credential-preserving rename, scoped actions, read-only controls and
+disclosure retention; they are not deployed UI or full delivery acceptance proof.
+
 ## Migration and verification
 
 The migration attaches an existing default connection only when its credential

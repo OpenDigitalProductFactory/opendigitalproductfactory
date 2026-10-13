@@ -474,7 +474,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
                   </span>
                   <button
                     type="button"
-                    disabled={isPending}
+                    disabled={!canWrite || isPending}
                     onClick={() => startTransition(async () => {
                       const result = await disconnectProviderOAuth(provider.providerId);
                       if (result.error) {
@@ -499,7 +499,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
               ) : (
                 <button
                   type="button"
-                  disabled={isPending}
+                  disabled={!canWrite || isPending}
                   onClick={() => setDisconnectConfirm(true)}
                   style={{ background: "transparent", border: "1px solid var(--dpf-error)", color: "var(--dpf-error)", padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontSize: 12 }}
                 >
@@ -517,7 +517,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
               </div>
               <button
                 type="button"
-                disabled={isPending}
+                disabled={!canWrite || isPending}
                 onClick={() => startTransition(async () => {
                   const result = await startProviderOAuth(provider.providerId);
                   if ("authorizeUrl" in result) {
@@ -526,7 +526,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
                     setTestResult({ ok: false, message: result.error });
                   }
                 })}
-                style={{ background: "var(--dpf-accent)", color: "#fff", border: "none", padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}
+                style={{ background: "var(--dpf-accent)", color: "var(--dpf-on-accent)", border: "none", padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}
               >
                 Sign in with {provider.name}
               </button>
@@ -538,7 +538,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
               </div>
               <button
                 type="button"
-                disabled={isPending}
+                disabled={!canWrite || isPending}
                 onClick={() => startTransition(async () => {
                   const result = await startProviderOAuth(provider.providerId);
                   if ("authorizeUrl" in result) {
@@ -547,7 +547,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
                     setTestResult({ ok: false, message: result.error });
                   }
                 })}
-                style={{ background: "var(--dpf-accent)", color: "#fff", border: "none", padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}
+                style={{ background: "var(--dpf-accent)", color: "var(--dpf-on-accent)", border: "none", padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}
               >
                 Sign in with {provider.name}
               </button>
