@@ -65,6 +65,16 @@
       "implies": []
     },
     {
+      "key": "approval_probe_read",
+      "description": "Read the approval-convergence dry run: what converting each pending proposal to an approval request would hit. Read-only; the tool also requires platform administration.",
+      "category": "governance",
+      "sensitivity": "confidential",
+      "honored_by_tools": [
+        "probe_pending_approval_conversion"
+      ],
+      "implies": []
+    },
+    {
       "key": "architecture_guardrail_read",
       "description": "Read architecture guardrail.",
       "category": "explore",

@@ -20,7 +20,7 @@ vi.mock("@/lib/mcp/external-coworker-task-adapter", () => ({
 import { coworkerPack } from "./coworker-pack";
 import { TOOL_TO_GRANTS, isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 
-const EXPECTED_TOOLS = ["request_coworker", "summon_coworker", "find_coworker", "get_my_approval_status"];
+const EXPECTED_TOOLS = ["request_coworker", "summon_coworker", "find_coworker", "get_my_approval_status", "probe_pending_approval_conversion"];
 
 const initiativeReviewBinding = {
   writerToolName: "record_initiative_evidence",
