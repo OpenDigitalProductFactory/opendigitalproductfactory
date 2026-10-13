@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Local-only inference policy repair
 
 Backlog: BI-157696F8. Workroom: WC-46FC9F51. Shape: small fix.
@@ -36,4 +40,4 @@ Policy read failure now stops a request instead of silently using cloud. The UI 
 
 ## Backlog coverage
 
-BI-157696F8 is the sole deliverable. Coverage receipt is recorded against this immutable ordered fix design before implementation; adjacent UI/layout changes remain in their existing BIs.
+BI-157696F8 is the sole deliverable. Coverage receipt `cmv67neud1g9k01o7gqm7dyhw` records atomic coverage against design commit `67aa1fb2636ade9a18e6503cc3a6e77aee4f9262`; research receipt `initiative-4cd087d4-36cf-46d4-b53b-6cc747c11fd1` precedes allowed implementation decision `IRD-05F0561E6AFC`. Adjacent UI/layout changes remain in their existing BIs.
