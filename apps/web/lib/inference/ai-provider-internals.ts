@@ -917,6 +917,7 @@ export async function profileModelsInternal(
     // Don't overwrite admin-set tier on re-sync
     const shouldWriteTier = !existingFull?.qualityTierSource || existingFull.qualityTierSource !== "admin";
 
+    // Source is creation-only: an intervening admin row must retain ownership.
     const scoreFields = shouldWriteScores ? {
       reasoning: ds.reasoning,
       codegen: ds.codegen,
@@ -925,7 +926,6 @@ export async function profileModelsInternal(
       structuredOutputScore: ds.structuredOutput,
       conversational: ds.conversational,
       contextRetention: ds.contextRetention,
-      profileSource: "seed" as const,
       profileConfidence: card.metadataConfidence,
     } : {
       // Only update confidence from metadata, don't touch scores or source

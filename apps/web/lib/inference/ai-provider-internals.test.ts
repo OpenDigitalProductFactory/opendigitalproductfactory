@@ -725,5 +725,10 @@ describe("provider-reported output capacity", () => {
     modelProfileMock.upsert.mockImplementation(async ({ update }) => { Object.assign(row, update); return row; });
     await profileModelsInternal("anthropic", ["claude-future"]);
     expect(row.maxOutputTokens).toBe(32_768);
+    expect(row.profileSource).toBe("admin");
+    modelProfileMock.findUnique.mockResolvedValue(row);
+    await profileModelsInternal("anthropic", ["claude-future"]);
+    expect(row.maxOutputTokens).toBe(32_768);
+    expect(row.profileSource).toBe("admin");
   });
 });
