@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Verification recovery safeguards
 
 Operator objective: implement safeguards observed during BI-CAP-437F7745, separately from canonical identity repair and BI-56E9CEC2 authority configuration.

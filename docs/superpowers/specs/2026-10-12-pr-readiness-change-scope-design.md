@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # PR readiness change scope — BI-D27ADE59
 
 ## Problem and reproduction
