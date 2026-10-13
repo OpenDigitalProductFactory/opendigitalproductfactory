@@ -244,6 +244,7 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   cpSync(join(repoRoot, "scripts", "lib", "mcp-client.mjs"), join(temp, "scripts", "lib", "mcp-client.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "script-argv.mjs"), join(temp, "scripts", "lib", "script-argv.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "mcp-credential.mjs"), join(temp, "scripts", "lib", "mcp-credential.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "gate-quiescence.mjs"), join(temp, "scripts", "lib", "gate-quiescence.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "documentation-evidence-lane.mjs"), join(temp, "scripts", "lib", "documentation-evidence-lane.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "semantic-review-gate.mjs"), join(temp, "scripts", "lib", "semantic-review-gate.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-integration-ci.mjs"), join(temp, "scripts", "lib", "local-integration-ci.mjs"));
