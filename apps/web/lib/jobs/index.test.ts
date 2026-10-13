@@ -41,6 +41,13 @@ describe("jobs facade over the Inngest adapter", () => {
     spy.mockRestore();
   });
 
+  it("does not hand the Postgres-only recovery option to Inngest (BI-4FA0EFEB)", () => {
+    const spy = vi.spyOn(inngestClient, "createFunction").mockReturnValue({} as never);
+    jobs.createFunction({ id: "test/recovery", retries: 0, recovery: "process-bound", triggers: [{ event: "test/run" }] }, async () => null);
+    expect(spy.mock.calls[0]![0]).toEqual({ id: "test/recovery", retries: 0, triggers: [{ event: "test/run" }] });
+    spy.mockRestore();
+  });
+
   it("registers a real Inngest function with the facade's id and cron trigger", () => {
     const fn = jobs.createFunction(
       { id: "test/facade-real", retries: 1, triggers: [cron("5 4 * * *")] },
