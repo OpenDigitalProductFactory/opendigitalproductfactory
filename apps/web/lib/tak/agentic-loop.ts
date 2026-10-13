@@ -1011,6 +1011,7 @@ export type RunAgenticLoopParams = {
    * PlatformIssueReport rows. Caller should look this up alongside buildPhase.
    */
   featureBuildId?: string | null;
+  coworkerMode?: "advise" | "act"; // BI-FAD98137: reaches tool context so delegates never run wider
   /** EP-31815F97 S2 (BI-F82F4E04): active DelegationChain grouping id when this
    *  loop runs a delegated coworker, so each ToolExecution joins its
    *  chain-of-custody back to the human origin. Omitted for direct turns. */
@@ -2437,11 +2438,10 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
               ? (toolDef.requiresExternalAccess ? params.externalAccessEnabled : undefined)
               : (toolDef.requiresExternalAccess || undefined),
             ...(params.roomAuthority ? { roomAuthority: params.roomAuthority } : {}),
-            // BI-F4A30FCB (Dale dogfood 2026-05-24): plumb the build the
-            // user is messaging from into tool context so phase-scoped
-            // tools (start_ideate_research, start_scout_research) can
-            // target the correct build instead of "latest in phase".
+            // BI-F4A30FCB: the build the user is messaging from, so phase-scoped tools
+            // (start_ideate_research, start_scout_research) target it, not "latest in phase".
             featureBuildId: params.featureBuildId ?? undefined,
+            coworkerMode: params.coworkerMode,
             // EP-31815F97 S2 (BI-F82F4E04): when this loop runs a delegated
             // coworker, carry the active DelegationChain grouping id so each
             // ToolExecution joins its chain-of-custody back to the human origin.

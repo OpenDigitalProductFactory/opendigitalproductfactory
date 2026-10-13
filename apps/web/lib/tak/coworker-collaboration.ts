@@ -155,6 +155,8 @@ export type RequestCoworkerInput = {
   callerAgentId?: string | null;
   questionPacketSummary?: string;
   routeContext?: string;
+  /** The delegating turn's mode; the child never runs wider (BI-FAD98137). */
+  runtimeMode?: "advise" | "act";
 };
 
 export type SummonCoworkerInput = {
@@ -166,6 +168,7 @@ export type SummonCoworkerInput = {
   callerAgentId?: string | null;
   byUserId?: string;
   routeContext?: string;
+  runtimeMode?: "advise" | "act";
 };
 
 /**
@@ -280,6 +283,7 @@ export async function requestCoworker(
     enteredVia,
     tier,
     summary: input.questionPacketSummary,
+    ...(input.runtimeMode === "advise" ? { runtimeMode: "advise" as const } : {}),
     ...(delegationLinkId ? { delegationLinkId } : {}),
   });
 
@@ -331,6 +335,7 @@ export async function summonCoworker(
     enteredVia: "summon",
     tier,
     byUserId,
+    ...(input.runtimeMode === "advise" ? { runtimeMode: "advise" as const } : {}),
   });
 
   agentEventBus.emit(input.parentThreadId, {

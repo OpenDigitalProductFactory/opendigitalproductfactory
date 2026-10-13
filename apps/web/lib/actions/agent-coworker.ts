@@ -1952,6 +1952,7 @@ export async function sendMessage(input: {
         agentDisplayName: agent.agentName,
         buildPhase: activeBuild?.phase ?? null,
         featureBuildId: activeBuild?.id ?? null,
+        coworkerMode: input.coworkerMode ?? "advise",
         activeSkillId,
         agentMessageId: pendingAgentMessageId,
         // sendMessage is the user-typed-a-question path. Chat mode disables the

@@ -595,3 +595,31 @@ describe("a cancelled child stays cancelled", () => {
     });
   });
 });
+
+// BI-FAD98137: a child never runs wider than the turn that delegated it.
+describe("child runtime mode follows the delegating turn", () => {
+  const ctx = { threadId: "child-1", taskRunId: "TR-CHILD-1", userId: "user-1", agentId: "agent-mkt", routeContext: "/coworker" };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.agentThread.findUnique.mockResolvedValue({ parentThreadId: "parent-1" });
+    mockPrisma.agent.findFirst.mockResolvedValue({ name: "Marketing Specialist" });
+    mockPrisma.agentMessage.findFirst.mockResolvedValue(null);
+    mockPrisma.agentMessage.findMany.mockResolvedValue([{ role: "user", content: "Draft the post." }]);
+    mockPrisma.taskRun.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.user.findUnique.mockResolvedValue({ isSuperuser: false });
+    mockResolveAgent.mockResolvedValue({ agentId: "agent-mkt", systemPrompt: "x", sensitivity: "internal" });
+    mockResolveTools.mockResolvedValue({ tools: [], toolsForProvider: [], deferredTools: [] });
+    mockExecuteLoop.mockResolvedValue({ content: "Done.", executedTools: [] });
+  });
+
+  it.each([
+    [{ collaboration: { kind: "handoff", toAgentId: "agent-mkt", runtimeMode: "advise" } }, "advise"],
+    [{ collaboration: { kind: "handoff", toAgentId: "agent-mkt" } }, "act"],
+    [null, "act"],
+  ])("provenance %j resolves tools in %s mode", async (a2aMetadata, mode) => {
+    mockPrisma.taskRun.findUnique.mockResolvedValue({ a2aMetadata, currentAgentId: "agent-mkt", status: "working" });
+    await runChildThreadExecution(ctx);
+    expect(mockResolveTools).toHaveBeenCalledWith(expect.objectContaining({ mode }));
+  });
+});
