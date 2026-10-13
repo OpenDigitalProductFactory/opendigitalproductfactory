@@ -1,10 +1,45 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, readFile, writeFile, mkdir, stat, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, mkdir, rm, open, rename, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { stagingScript, stageCaPassword } from './stage-ca-password.mjs';
+
+test('password validation and reading retain the opened file when its name is replaced', async () => {
+  const { readCaPassword } = await import('./stage-ca-password.mjs');
+  const root = await mkdtemp(join(tmpdir(), 'dpf-ca-race-'));
+  try {
+    const file = join(root, 'password');
+    await writeFile(file, 'original-private-value', { mode: 0o600 });
+    const reading = readCaPassword(file, async (...args) => {
+      const handle = await open(...args);
+      await rename(file, join(root, 'original'));
+      await writeFile(file, 'replacement-value', { mode: 0o600 });
+      return handle;
+    });
+    if (process.platform === 'win32') await assert.rejects(reading, /ca_password_file_changed/);
+    else assert.equal(await reading, 'original-private-value');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+async function inspectFile(path) {
+  const handle = await open(path, 'r');
+  try { return { content: await handle.readFile('utf8'), mode: (await handle.stat()).mode & 0o777 }; }
+  finally { await handle.close(); }
+}
+
+test('password loader refuses symlinks and non-private files', { skip: process.platform === 'win32' }, async () => {
+  const { readCaPassword } = await import('./stage-ca-password.mjs');
+  const root = await mkdtemp(join(tmpdir(), 'dpf-ca-private-'));
+  try {
+    const file = join(root, 'password');
+    await writeFile(file, 'private-value', { mode: 0o644 });
+    await assert.rejects(readCaPassword(file), /ca_password_file_not_private/);
+    await symlink(file, join(root, 'link'));
+    await assert.rejects(readCaPassword(join(root, 'link')));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
 
 test('CA custody is private, idempotent, refuses mismatch and hides upstream output', { skip: process.platform === 'win32' }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'dpf-ca-stage-'));
@@ -15,15 +50,14 @@ test('CA custody is private, idempotent, refuses mismatch and hides upstream out
     const secret = 'a'.repeat(64) + '\n';
     const first = run(secret); assert.equal(first.status, 0, first.stderr); assert.equal(first.stdout, '');
     const target = join(root, 'secrets/password');
-    assert.equal(await readFile(target, 'utf8'), secret);
-    assert.equal((await stat(target)).mode & 0o777, 0o600);
+    assert.deepEqual(await inspectFile(target), { content: secret, mode: 0o600 });
     assert.equal(run(secret).status, 0);
     await writeFile(target, secret.trim()); // Windows previously wrote no newline.
     assert.equal(run(secret).status, 0);
-    assert.equal(await readFile(target, 'utf8'), secret.trim());
+    assert.equal((await inspectFile(target)).content, secret.trim());
     await writeFile(target, secret);
     assert.notEqual(run('b'.repeat(64) + '\n').status, 0);
-    assert.equal(await readFile(target, 'utf8'), secret);
+    assert.equal((await inspectFile(target)).content, secret);
     await mkdir(join(root, 'secrets/.dpf-password-stage.lock'));
     assert.notEqual(run(secret).status, 0);
   } finally { await rm(root, { recursive: true, force: true }); }

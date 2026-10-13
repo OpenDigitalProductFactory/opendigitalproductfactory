@@ -178,3 +178,12 @@ and the saved edits reapplied. Conflict resolution retains main's release-asset
 helpers and its distinction between operating and development hardware sizing.
 The installer repairs and public assisted-pilot guidance remain one clean
 revert. Verification is rerun against this reconciled source before publication.
+
+CodeQL on PR #6266 found a check/read race in the host password loader and
+the test fixture inspections. Refine password loading to open once, inspect
+that handle and read through it, with no-follow/nonblocking flags where the
+host exposes them. On Windows, also reject symlinks or a pathname whose
+identity differs from the opened handle. The regression fixture replaces the
+pathname after open and proves the loader reads the original safe handle or
+refuses the changed path. Fixture permission/content assertions use one handle
+as well. Rerun the affected tests and exact-tree review/gates for this repair.
