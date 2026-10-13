@@ -311,9 +311,10 @@ export type SandboxTestResult = {
   testOutput: string;
   typeCheckOutput: string;
   /**
-   * "scoped" when only the build's own feature tests ran; "none" when the build
-   * named its changed files and no test file covers them, so no suite ran;
-   * "full" for the legacy whole-suite run (no changed-file hint).
+   * "scoped" when only the build's own feature tests ran; "none" when no suite
+   * ran, because no test file covers the changed files or the changed files are
+   * unknown. "full" is the retired whole-suite run (BI-F5D4FA50): it is no
+   * longer produced, and is kept only so records written before it still type.
    */
   scope?: "scoped" | "full" | "none";
   /** Number of feature test files run when scope === "scoped". */
@@ -466,10 +467,11 @@ export async function runSandboxTests(
   // now run ONLY the feature's test files: (a) the feature's tests actually GATE
   // the build, and (b) the output stays small so a real failure is never
   // truncated behind hundreds of unrelated monorepo tests. With no changed-file
-  // hint we fall back to the legacy full-suite run, recorded but typecheck-gated.
+  // hint no suite runs (BI-F5D4FA50): the whole suite belongs to cloud CI and
+  // the merge queue, and in the sandbox it took most of the host.
   let testOutput = "";
   let testPassed = true;
-  let scope: "scoped" | "full" | "none" = "full";
+  let scope: "scoped" | "full" | "none" = "none";
   let scopedTestsRun = 0;
 
   const candidates = deriveScopedTestFiles(opts?.changedFiles ?? []);
@@ -523,18 +525,15 @@ export async function runSandboxTests(
     scope = "none";
     testOutput = "No test file covers the changed files; no tests ran.";
   } else {
-    try {
-      testOutput = await execInSandbox(containerId, `cd ${workdir} && pnpm test 2>&1 || true`);
-      testPassed = testOutput.includes("Tests  ") && !testOutput.includes("FAIL");
-    } catch (e) {
-      testOutput = getErrorMessage(e);
-      testPassed = false;
-    }
+    // BI-F5D4FA50: the changed files are unknown, so nothing can be scoped. The
+    // old fallback ran `pnpm test` (the whole suite) here; it is never run in
+    // the sandbox now, and the result says plainly that no tests ran.
+    testOutput = "The build's changed files are unknown, so no tests ran. The whole suite runs in cloud CI and the merge queue.";
   }
 
   return {
     // Gate on typecheck AND — when feature tests were scoped and run — those
-    // tests. The legacy full-suite path stays typecheck-gated (informational).
+    // tests. When none ran, typecheck alone gates, and the record says so.
     passed: typeCheckPassed && (scope === "scoped" ? testPassed : true),
     typeCheckPassed,
     testOutput,

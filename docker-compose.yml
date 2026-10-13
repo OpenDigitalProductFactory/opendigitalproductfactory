@@ -554,6 +554,13 @@ services:
     # sandbox instead of the engine (BI-95BB9CB1).
     init: true
     pids_limit: 4096
+    # BI-F5D4FA50: a CPU ceiling, so one build's test or type-check burst cannot
+    # take the host. Unbounded, one agent's whole-suite vitest run reached ~920%
+    # CPU (about 9 of 32 cores) and closed the local-CI pool for `host-cpu-high`.
+    # Budget: config/install-resource-budgets.json optionalProfileServices.sandbox.
+    # Service-level `cpus` rather than deploy.resources.limits: compose refuses
+    # a deploy limits block beside `pids_limit` above.
+    cpus: "4.0"
     logging: *default-logging
     ports:
       - "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:3035:3000"
@@ -572,6 +579,15 @@ services:
       NODE_ENV: development
       DPF_ENVIRONMENT: sandbox
       DPF_BUILD_WORKTREE_ISOLATION: ${DPF_BUILD_WORKTREE_ISOLATION:-1}
+      # BI-F5D4FA50: agent CLIs inherit this environment through `docker exec`.
+      # DPF_SANDBOX_TEST_SCOPE=enforce makes apps/web/vitest.config.ts and
+      # apps/mobile/jest.config.js refuse a test run that names no test files
+      # (the whole suite runs in cloud CI and the merge queue). The worker caps
+      # keep a scoped run inside the CPU ceiling above; VITEST_MAX_WORKERS is
+      # read by Vitest itself.
+      DPF_SANDBOX_TEST_SCOPE: enforce
+      VITEST_MAX_WORKERS: "2"
+      DPF_JEST_MAX_WORKERS: "2"
     extra_hosts:
       - "host.docker.internal:host-gateway"   # required on native Linux Docker; harmless on Docker Desktop
     # Without this healthcheck the sandbox process can wedge (e.g. on a
