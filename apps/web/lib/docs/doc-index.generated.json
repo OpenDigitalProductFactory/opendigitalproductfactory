@@ -11603,6 +11603,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "routing-status-and-temporary-pauses",
         "authentication-methods",
         "api-key",
         "oauth-sign-in",
