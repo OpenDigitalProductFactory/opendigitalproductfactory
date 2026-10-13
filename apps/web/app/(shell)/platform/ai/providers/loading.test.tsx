@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import ProvidersLoading from "./loading";
@@ -10,17 +10,26 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 
 describe("ProvidersLoading", () => {
   beforeEach(() => refresh.mockClear());
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => { cleanup(); vi.useRealTimers(); });
 
-  it("turns an indefinite skeleton into an actionable dependency failure", () => {
+  it("reports delayed loading without fabricating a dependency failure", () => {
     vi.useFakeTimers();
     render(<ProvidersLoading />);
     expect(screen.getByRole("status", { name: /loading provider data/i })).toBeTruthy();
 
     act(() => vi.advanceTimersByTime(15_000));
 
-    expect(screen.getByRole("alert").textContent).toMatch(/couldn.t load provider data/i);
-    fireEvent.click(screen.getByRole("button", { name: /try again/i }));
+    expect(screen.getByRole("status", { name: /loading provider data/i }).textContent).toMatch(/still loading your connections/i);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText(/service unavailable|couldn.t load|job service/i)).toBeNull();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("refreshes only on an explicit action and starts a new pending cycle", () => {
+    vi.useFakeTimers();
+    render(<ProvidersLoading />);
+    act(() => vi.advanceTimersByTime(15_000));
+    fireEvent.click(screen.getByRole("button", { name: /refresh page/i }));
 
     expect(refresh).toHaveBeenCalledOnce();
     expect(screen.getByRole("status", { name: /loading provider data/i })).toBeTruthy();
@@ -29,6 +38,8 @@ describe("ProvidersLoading", () => {
     expect(screen.getByRole("status", { name: /loading provider data/i })).toBeTruthy();
 
     act(() => vi.advanceTimersByTime(1));
-    expect(screen.getByRole("alert").textContent).toMatch(/couldn.t load provider data/i);
+    expect(screen.getByRole("status", { name: /loading provider data/i }).textContent).toMatch(/still loading your connections/i);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(refresh).toHaveBeenCalledOnce();
   });
 });
