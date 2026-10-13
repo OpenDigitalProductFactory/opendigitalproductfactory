@@ -1048,6 +1048,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "packages/dpf-skill-pack/hooks/plugin-hooks-wired.test.mjs",
       ),
+      // BI-E5C45F61: the SessionStart self-test that reports an inert
+      // PreToolUse guard plane. Unlisted = unrun.
+      node(
+        "--test",
+        "packages/dpf-skill-pack/hooks/pretooluse-guard-selftest.test.mjs",
+      ),
       // BI-0B292D84: AGENTS.md 12 requires a Workroom claim before work on
       // every surface. It was prose - 30 of 79 live worktree branches carried
       // no WorkCapsule binding when measured 2026-08-26. Hand-enumerated like
