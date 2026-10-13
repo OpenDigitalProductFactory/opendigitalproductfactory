@@ -2,6 +2,6 @@
   "version": "1",
   "decidedOption": "optional-disclosure",
   "decisionInteractionId": "DI-BCDE1809D902",
-  "scope": { "files": ["apps/web/components/platform/ProviderDetailForm.tsx", "apps/web/components/platform/ProviderWorkspaceField.tsx"] },
+  "scope": { "files": ["apps/web/components/platform/ProviderWorkspaceField.tsx"] },
   "evidence": { "kind": "propose-n-pick", "consideredOptions": ["optional-disclosure", "always-visible"] }
 }

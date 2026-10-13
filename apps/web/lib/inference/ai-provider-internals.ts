@@ -24,6 +24,7 @@ import { persistDiscoveredInventory } from "./discovered-model-inventory";
 import { findProviderCredential, resolveCredentialProviderId } from "./provider-account-credentials";
 export { resolveCredentialProviderId } from "./provider-account-credentials";
 import { supportsTextGeneration } from "@/lib/routing/model-classifier";
+import { providerWorkspaceHeaders } from "./provider-workspace";
 
 /**
  * Resolve the `supportsToolUse` value a metadata-sync should persist for a model,
@@ -509,7 +510,6 @@ export async function discoverModelsInternal(
   const testUrl = getTestUrl(providerRow);
   if (!testUrl) return { discovered: 0, newCount: 0, error: "No base URL configured" };
 
-  // Build auth headers (same logic as testProviderAuth)
   const headers: Record<string, string> = {
     ...getProviderExtraHeaders(providerId),
   };
@@ -518,6 +518,7 @@ export async function discoverModelsInternal(
     if (cred?.secretRef && provider.authHeader) {
       headers[provider.authHeader] = provider.authHeader === "Authorization"
         ? `Bearer ${cred.secretRef}` : cred.secretRef;
+      Object.assign(headers, providerWorkspaceHeaders(providerId, cred.providerWorkspaceId));
     }
   } else if (provider.authMethod === "oauth2_client_credentials") {
     const tokenResult = await getProviderBearerToken(providerId);
