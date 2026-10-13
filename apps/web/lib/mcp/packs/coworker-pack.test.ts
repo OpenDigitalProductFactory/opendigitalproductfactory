@@ -6,8 +6,8 @@ const collab = vi.hoisted(() => ({
 }));
 const external = vi.hoisted(() => ({ dispatch: vi.fn() }));
 const authority = vi.hoisted(() => ({ authorize: vi.fn() }));
-const approvalStatus = vi.hoisted(() => ({ read: vi.fn() }));
-vi.mock("@/lib/coworker/approval-outcome-store", () => ({ readApprovalOutcome: approvalStatus.read }));
+const approvalStatus = vi.hoisted(() => ({ read: vi.fn(), list: vi.fn() }));
+vi.mock("@/lib/coworker/approval-outcome-store", () => ({ readApprovalOutcome: approvalStatus.read, listPendingApprovalOutcomes: approvalStatus.list }));
 vi.mock("@/lib/mcp/independent-review-request", () => ({ authorizeCoworkerRequest: authority.authorize }));
 vi.mock("@/lib/tak/coworker-collaboration", () => ({
   requestCoworker: (...a: unknown[]) => collab.requestCoworker(...a),
@@ -53,6 +53,29 @@ beforeEach(() => {
 });
 
 describe("coworker pack — registration", () => {
+  it("discovers pending requests without an ID using only authenticated identity", async () => {
+    approvalStatus.list.mockResolvedValue({ approvals: [{ envelopeId: "e1" }], hasMore: false });
+    const result = await coworkerPack.handlers.get_my_approval_status(
+      { mode: "pending", userId: "victim", agentId: "other" }, "u1", { agentId: "a1" },
+    );
+    expect(result.success).toBe(true);
+    expect(approvalStatus.list).toHaveBeenCalledWith("u1", "a1");
+    expect(approvalStatus.read).not.toHaveBeenCalled();
+    expect(result.data).toMatchObject({ approvals: [{ envelopeId: "e1" }], hasMore: false });
+  });
+  it.each([{ mode: "pending", envelopeId: "e1" }, { mode: "unknown" }, {}])(
+    "refuses ambiguous discovery parameters %j", async (params) => {
+      expect(await coworkerPack.handlers.get_my_approval_status(params, "u1", { agentId: "a1" }))
+        .toMatchObject({ success: false, error: "invalid_params" });
+      expect(approvalStatus.list).not.toHaveBeenCalled();
+      expect(approvalStatus.read).not.toHaveBeenCalled();
+    },
+  );
+  it("does not discover requests without a verified assistant", async () => {
+    expect(await coworkerPack.handlers.get_my_approval_status({ mode: "pending" }, "u1", {}))
+      .toMatchObject({ success: false, error: "approval_identity_required" });
+    expect(approvalStatus.list).not.toHaveBeenCalled();
+  });
   it("reads an exact approval using verified user and assistant, ignoring supplied identity", async () => {
     approvalStatus.read.mockResolvedValue({ state: "expired", label: "Approval window closed" });
     const handler = coworkerPack.handlers.get_my_approval_status;
