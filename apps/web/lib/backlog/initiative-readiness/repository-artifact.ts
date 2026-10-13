@@ -364,8 +364,8 @@ export async function resolveRepositoryArtifact(args: {
   }
   const capsules = candidates.filter((candidate) => boundRoom
     ? candidate.capsuleId === boundRoom.workroomId && candidate.headBranch === boundRoom.branchName
-      && candidate.headSha?.toLocaleLowerCase("en-US") === boundRoom.headSha.toLocaleLowerCase("en-US")
-    : (candidate.headSha ?? "").toLocaleLowerCase("en-US") === args.locator.commitSha.toLocaleLowerCase("en-US"));
+      && candidate.headSha?.toLowerCase() === boundRoom.headSha.toLowerCase()
+    : (candidate.headSha ?? "").toLowerCase() === args.locator.commitSha.toLowerCase());
   if (capsules.length > 1) {
     return {
       ok: false,
@@ -412,7 +412,7 @@ export async function resolveRepositoryArtifact(args: {
   }
   const fetchImpl = args.fetchImpl ?? transport!.fetch;
   try {
-    if (boundRoom && boundRoom.headSha.toLocaleLowerCase("en-US") !== args.locator.commitSha.toLocaleLowerCase("en-US")) {
+    if (boundRoom && boundRoom.headSha.toLowerCase() !== args.locator.commitSha.toLowerCase()) {
       // The review retains the immutable original locator. A later branch head
       // may own it only when the provider proves the same path/blob is present.
       const currentBlob = await fetchRepositoryProviderBlob({

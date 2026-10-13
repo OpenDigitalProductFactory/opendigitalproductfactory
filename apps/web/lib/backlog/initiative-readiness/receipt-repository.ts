@@ -168,7 +168,7 @@ export async function recordInitiativeGateReceipt(args: {
       } });
       if (!room || room.archivedAt || ["abandoned", "cancelled"].includes(room.status)
         || room.backlogItemId !== item.itemId || room.repositoryFullName !== ref.repositoryFullName
-        || room.headBranch !== ref.branchName || room.headSha?.toLocaleLowerCase("en-US") !== ref.headSha.toLocaleLowerCase("en-US")
+        || room.headBranch !== ref.branchName || room.headSha?.toLowerCase() !== ref.headSha.toLowerCase()
         || room.createdByPrincipalId !== artifact.artifact.authorPrincipalId) {
         return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
           error: "The accepted review's workroom or accountable owner changed before receipt publication. Reconcile the actual workroom and review packet." };
