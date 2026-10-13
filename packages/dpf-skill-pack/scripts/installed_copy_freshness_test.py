@@ -151,6 +151,16 @@ class InstalledCopyFreshnessTest(unittest.TestCase):
         self.assertEqual(len(lines), 1, lines)
         self.assertIn("connector", lines[0])
 
+    def test_a_poisoned_shared_endpoint_does_not_outrank_claudes_own(self):
+        # BI-D6A6462A: stale checkouts set the shared DPF_MCP_URL to
+        # http://[::1]:3000. Claude's connector reads DPF_CLAUDE_MCP_URL, so a
+        # current copy stays quiet instead of being called stale against the
+        # poisoned value ("expected http://[::1]:3000 with a bearer header").
+        install_copy(self.reference, updater.shared_managed_plugin_path(self.home))
+        env = {"DPF_MCP_URL": "http://[::1]:3000/api/mcp/v1?tier=full",
+               "DPF_CLAUDE_MCP_URL": "https://localhost/api/mcp/v1?tier=full"}
+        self.assertEqual(self.assess(env), [])
+
     def test_cli_warns_on_a_stale_copy_and_always_exits_zero(self):
         shared = install_copy(self.reference, updater.shared_managed_plugin_path(self.home))
         make_stale(shared)

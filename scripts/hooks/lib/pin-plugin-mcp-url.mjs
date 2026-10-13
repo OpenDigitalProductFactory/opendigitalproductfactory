@@ -3,7 +3,7 @@
 //
 // SessionStart step after the plugin reconcile (BI-5201141C follow-up). The
 // checked-in plugin descriptor names the endpoint as
-// `${DPF_MCP_URL:-https://localhost/api/mcp/v1?tier=full}` so one file serves
+// `${DPF_CLAUDE_MCP_URL:-https://localhost/api/mcp/v1?tier=full}` so one file serves
 // every install. Claude Code expands that, but the Claude desktop app checks a
 // plugin connector's URL before it starts sign-in and cannot parse a variable:
 // its log reads `verifyPluginMcpBinding ... URL mismatch; expected=<unparseable>`
@@ -11,8 +11,11 @@
 // different server URL". So the per-machine installed copy (the plugin cache
 // the reconcile step materializes) gets this machine's literal endpoint.
 //
-// The target is DPF_MCP_URL when it is a parseable https URL whose host is not
-// an IPv6 literal, else the template's own default. An inherited plain-http or
+// The target is DPF_CLAUDE_MCP_URL when it is a parseable https URL whose host
+// is not an IPv6 literal, else the template's own default. The shared
+// DPF_MCP_URL is never read: every client, gate and stale checkout can set it,
+// and Claude's connector does not read it (BI-D6A6462A). A copy still on the
+// legacy `${DPF_MCP_URL:-...}` template is pinned from its own default. An inherited plain-http or
 // [::1] value (BI-8FD7C0C9: a test once wrote http://[::1]:3000 into launchd,
 // and Docker publishes the portal on IPv4 only) never becomes the connector,
 // and an OAuth descriptor already holding a plain-http literal -- which cannot
@@ -39,7 +42,7 @@ export const EXIT_NOTHING = 10;
 export const EXIT_LEFT_ALONE = 11;
 
 const PLUGIN_KEY = "dpf-platform@dpf-platform-local";
-const TEMPLATE_RE = /^\$\{DPF_MCP_URL:-([^}]+)\}$/;
+const TEMPLATE_RE = /^\$\{DPF_(?:CLAUDE_)?MCP_URL:-([^}]+)\}$/;
 // The checked-in descriptor's default (packages/dpf-skill-pack/claude.mcp.json).
 export const CANONICAL_MCP_URL = "https://localhost/api/mcp/v1?tier=full";
 
@@ -72,7 +75,7 @@ function httpsUrl(value) {
 
 /** The literal endpoint this machine's descriptor should carry, or null. */
 export function resolvePinTarget(currentUrl, env = process.env) {
-  const fromEnv = httpsUrl(env.DPF_MCP_URL);
+  const fromEnv = httpsUrl(env.DPF_CLAUDE_MCP_URL);
   if (fromEnv) return fromEnv;
   const template = typeof currentUrl === "string" ? currentUrl.match(TEMPLATE_RE) : null;
   if (template) return httpsUrl(template[1]);

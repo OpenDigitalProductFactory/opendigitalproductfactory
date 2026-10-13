@@ -880,6 +880,13 @@ def mcp_client_bearer_header_required(endpoint: str, client: str = "claude", aut
 # Keep the two in lockstep, like the predicate above.
 MCP_CLIENT_OAUTH_SCOPE_PIN = "dpf.read dpf.work dpf.build"
 
+# Claude's connector reads its own variable, never the shared DPF_MCP_URL that
+# Codex, Grok, gates and scripts read: any of those (and a test in stale
+# checkouts) could set the shared one to an address Claude's OAuth client
+# refuses (BI-D6A6462A). Only scripts/installer/lib/mcp-client-env.{sh,ps1}
+# write it, and only for https.
+CLAUDE_MCP_URL_ENV_VAR = "DPF_CLAUDE_MCP_URL"
+
 
 def ensure_claude_repo_mcp_config(skill_pack_path: Path, mcp_url: str, dry_run: bool) -> bool:
     """Keep the packaged Claude MCP descriptor current for standalone installs.
@@ -897,7 +904,7 @@ def ensure_claude_repo_mcp_config(skill_pack_path: Path, mcp_url: str, dry_run: 
     lazy_host_mcp_url = with_mcp_catalog_tier(mcp_url, "full")
     server: dict[str, object] = {
         "type": "http",
-        "url": "${DPF_MCP_URL:-" + lazy_host_mcp_url + "}",
+        "url": "${" + CLAUDE_MCP_URL_ENV_VAR + ":-" + lazy_host_mcp_url + "}",
     }
     if mcp_client_bearer_header_required(lazy_host_mcp_url):
         server["headers"] = {"Authorization": "Bearer ${DPF_MCP_BEARER_TOKEN:-}"}
@@ -1026,7 +1033,7 @@ def converge_claude_project_plugins(home: Path, version: str, dry_run: bool) -> 
     return result
 
 
-_MCP_URL_TEMPLATE = re.compile(r"^\$\{DPF_MCP_URL:-([^}]+)\}$")
+_MCP_URL_TEMPLATE = re.compile(r"^\$\{DPF_(?:CLAUDE_)?MCP_URL:-([^}]+)\}$")
 
 
 def _dpf_endpoint_path(url: object) -> Optional[str]:
