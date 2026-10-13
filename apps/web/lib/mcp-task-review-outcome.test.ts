@@ -82,6 +82,11 @@ describe("receipt artifact identity (BI-2E479619 follow-up)", () => {
     db.item.mockResolvedValue(item({ ...receipt, artifactRef: { ...storedRevision, valueDigest: "sha256:other" } }));
     expect(await loadInitiativeReviewOutcome(revisionBinding, "receipt")).toBeNull();
   });
+  it("matches a document-version receipt that stores only the version identity", async () => {
+    const documentBinding = { ...binding, artifactRef: { kind: "document-version" as const, repositoryFullName: "owner/repo", versionId: "ver-1", valueDigest: "sha256:abc" } };
+    db.item.mockResolvedValue(item({ ...receipt, artifactRef: { kind: "document-version", versionId: "ver-1" } }));
+    expect((await loadInitiativeReviewOutcome(documentBinding, "receipt"))?.receiptId).toBe("receipt");
+  });
   it("still requires every identity key of a repo blob", async () => {
     const { path: _omitted, ...withoutPath } = artifactRef;
     db.item.mockResolvedValue(item({ ...receipt, artifactRef: withoutPath }));
