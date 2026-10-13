@@ -76,3 +76,14 @@ Coverage receipt pending; this draft is not implementation admission or approval
 
 Traceability: requirement AC-OC-1/3/7; contract current-account-equality;
 flow named-account-submit; verification first-connect-and-reconnect.
+
+## Historical acceptance-linked failure
+
+The backlog parser also treats the following historical AC-OC-7 note as a
+criterion. Preserve it verbatim as a regression context, not the desired outcome:
+
+> live first-connect, administrator, DCR probe named Codex, scopes read/work/build: one Connect button, no checkboxes, but kind=choice with Mailroom coordinator (3 permissions) preselected; reaching Codex costs 2 operations and 1 decision. Recorded as functional failure ac-oc-7-live-first-connect-admin. Cause: administrator eligible set spans every room-write coworker (signatures differ) and the prior-consent rule ran only after the equality check. Probe consent declined; probe client dpfoc_1009… revoked.
+
+Verification must establish that the current personal account resolves Codex
+without a new role choice. Reuse prior role-default repair evidence only where
+its exact behavior remains unchanged; remeasure the named-account click path.
