@@ -108,6 +108,24 @@ export async function refreshDivergedShipBuild(
   return "returned-to-review";
 }
 
+/**
+ * The ship reconciler's step for a build not yet deployed: a diverged build is
+ * refreshed first (and leaves ship for review), anything else gets the hourly
+ * PR retry. Returns true when the build left ship, so the caller skips it.
+ */
+export async function refreshOrRetryShipBuildPr(
+  buildId: string,
+  logger: Pick<Console, "log" | "error">,
+): Promise<boolean> {
+  if ((await refreshDivergedShipBuild(buildId)) === "returned-to-review") {
+    logger.log(`[auto-complete] ${buildId} refreshed onto upstream main and returned to review`);
+    return true;
+  }
+  const { retryPrForShipBuild } = await import("./auto-open-build-pr");
+  await retryPrForShipBuild(buildId, logger);
+  return false;
+}
+
 function defaultDeps(): ShipSourceRefreshDeps {
   return {
     async loadBuild(buildId) {
