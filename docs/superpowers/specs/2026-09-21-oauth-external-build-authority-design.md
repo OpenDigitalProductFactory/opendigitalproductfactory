@@ -525,6 +525,10 @@ ordered fix design at commit `27f704ebf57381557cc3c780375c5955dcccb9eb`, blob
 `c8d696c1904c64a76c1c70723b47365c858d79e8`. The complete-proposal deliverable
 maps to BI-12E5DD91. There are no independent child deliverables or dependencies.
 BI-872069BE remains a coordinated separate race correction, not this patch.
+After the human-approved scope release executed, coverage was refreshed as
+`cmv69j8g302me01qpts7obtp5` against the same immutable design and the complete
+projection/card edit scope. The shared disclosure now renders complete literal
+input for routine, research and handover cards; decision buttons stay outside it.
 
 #### Design grounding and risk
 

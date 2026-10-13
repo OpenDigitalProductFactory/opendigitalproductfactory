@@ -1,0 +1,12 @@
+{
+  "version": "1",
+  "decidedOption": "bounded-summary-complete-disclosure",
+  "decisionInteractionId": "DI-A314C6DEDDF5",
+  "scope": {
+    "files": ["apps/web/components/attention/CoworkerEnvelopeApproval.tsx"]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["bounded-summary-complete-disclosure", "full-inline"]
+  }
+}
