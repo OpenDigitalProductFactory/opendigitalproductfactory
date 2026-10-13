@@ -9,11 +9,17 @@
  *   scheduled:workroom-<capsuleId>-<shapeKey>          the drive's dispatched stage work
  *   coworker:/workspace/cases/<the room's case key>        the room's own conversation
  *
- * Every inference on those threads is already costed in AdapterRunTelemetry
- * (the per-thread ledger, BI-CCF1ACBB). Joining the two attributes spend to a
- * room exactly — no schema change, and no estimate from time overlap. Spend on
+ * Every inference on those threads is already recorded in AdapterRunTelemetry
+ * (the per-thread ledger, BI-CCF1ACBB). Joining the two attributes AI use to a
+ * room exactly — no schema change, and no estimate from time overlap. Use on
  * threads that name no room stays unattributed and is reported as such.
+ *
+ * The figure is the shared AiUse (lib/portfolio/ai-resource.ts): runs, tokens,
+ * recorded dollars, and subscription tokens. A subscription records no
+ * per-call cost, so its use reads as subscription tokens, never as $0.
  */
+import { addAiUse, type AiUse } from "@/lib/portfolio/ai-resource";
+
 const SCHEDULED = /^scheduled:workroom-(WC-[A-Z0-9]+)-/;
 const ROOM_CHAT = /^coworker:\/workspace\/cases\/work-capsule(?:%3A|:)(WC-[A-Z0-9]+)$/i;
 
@@ -23,17 +29,18 @@ export function roomOfThreadContext(contextKey: string | null | undefined): stri
   return SCHEDULED.exec(contextKey)?.[1] ?? ROOM_CHAT.exec(contextKey)?.[1]?.toUpperCase() ?? null;
 }
 
-/** Fold per-thread spend into per-room spend. */
-export function sumSpendByRoom(
+/** Fold per-thread AI use into per-room AI use. */
+export function sumAiUseByRoom(
   threads: readonly { id: string; contextKey: string | null }[],
-  spendByThread: ReadonlyMap<string, number>,
-): Map<string, number> {
-  const out = new Map<string, number>();
+  useByThread: ReadonlyMap<string, AiUse>,
+): Map<string, AiUse> {
+  const out = new Map<string, AiUse>();
   for (const thread of threads) {
     const room = roomOfThreadContext(thread.contextKey);
-    const usd = spendByThread.get(thread.id);
-    if (!room || !usd) continue;
-    out.set(room, (out.get(room) ?? 0) + usd);
+    const use = useByThread.get(thread.id);
+    if (!room || !use || use.runs === 0) continue;
+    const prior = out.get(room);
+    out.set(room, prior ? addAiUse(prior, use) : use);
   }
   return out;
 }
