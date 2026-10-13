@@ -209,7 +209,7 @@ test("a claim that succeeded but could not be cached still reports bound", async
 // required sessionRef for exactly this reason; adopt_worktree omitted it.
 
 test("a host-provided session id is preferred over the fallback", () => {
-  for (const key of ["DPF_SESSION_REF", "CLAUDE_SESSION_ID", "CODEX_SESSION_ID", "GROK_SESSION_ID"]) {
+  for (const key of ["DPF_SESSION_REF", "CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID", "CODEX_SESSION_ID", "GROK_SESSION_ID"]) {
     assert.equal(resolveSessionRef({ worktreePath: "/wt/a", env: { [key]: "sess-1" } }), "sess-1", key);
   }
 });
@@ -239,4 +239,57 @@ test("binding threads the resolved session ref through to adopt_worktree", async
     call: async (_tool, args) => { sent = args; return capsule(); },
   });
   assert.equal(sent.sessionRef, "sess-xyz");
+});
+
+// ── BI-144E4F92 / BI-4BEEC539: re-caching the caller's own claim ─────────────
+//
+// Claude Code exports CLAUDE_CODE_SESSION_ID, not CLAUDE_SESSION_ID. The bind
+// sent `worktree:<path>` as the session, so adopt_worktree saw a different
+// session from the one that claimed the branch (claim_backlog_item_for_work
+// stores the real session id) and refused it as occupied. A correctly claimed
+// worktree, or one whose lease heartbeat_workroom renewed, could not be
+// re-cached, and the claim guard denied every edit.
+
+/** adopt_worktree as the server decides it: reuse a live capsule for the same session. */
+function serverWithCapsuleOwnedBy(ownerSession) {
+  return async (_tool, args) => {
+    if (args.sessionRef !== ownerSession) {
+      return {
+        success: false,
+        error: "branch_occupied",
+        message: `Branch ${args.headBranch} is already bound to Work Capsule WC-OWNED1 (ready, BI-OWNED1). Resume BI-OWNED1 on that capsule, or use a different branch.`,
+      };
+    }
+    return capsule({ capsuleId: "WC-OWNED1" });
+  };
+}
+
+test("a Claude session re-caches the claim it already holds, so the guard can allow", async () => {
+  const gitDir = mkdtempSync(join(tmpdir(), "dpf-bind-own-"));
+  try {
+    const r = await bindWorktreeToWorkroom({
+      branch: "fix/a", worktreePath: "/wt/a", gitDir, repositoryFullName: REPO,
+      env: { DPF_MCP_BEARER_TOKEN: "t", CLAUDE_CODE_SESSION_ID: "sess-claude" },
+      call: serverWithCapsuleOwnedBy("sess-claude"),
+    });
+    assert.equal(r.status, "bound", r.reason);
+    assert.equal(JSON.parse(readFileSync(join(gitDir, "dpf-workroom-claim.json"), "utf8")).capsuleId, "WC-OWNED1");
+  } finally {
+    rmSync(gitDir, { recursive: true, force: true });
+  }
+});
+
+test("another session's claim is still refused and no marker is written", async () => {
+  const gitDir = mkdtempSync(join(tmpdir(), "dpf-bind-foreign-"));
+  try {
+    const r = await bindWorktreeToWorkroom({
+      branch: "fix/a", worktreePath: "/wt/a", gitDir, repositoryFullName: REPO,
+      env: { DPF_MCP_BEARER_TOKEN: "t", CLAUDE_CODE_SESSION_ID: "sess-other" },
+      call: serverWithCapsuleOwnedBy("sess-claude"),
+    });
+    assert.equal(r.status, "refused");
+    assert.throws(() => readFileSync(join(gitDir, "dpf-workroom-claim.json"), "utf8"));
+  } finally {
+    rmSync(gitDir, { recursive: true, force: true });
+  }
 });
