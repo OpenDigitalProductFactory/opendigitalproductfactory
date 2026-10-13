@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { resolveGuardBash } from "../lib/guard-bash.mjs";
 
 const read = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 
@@ -202,7 +203,7 @@ test("Bash join rejects an expired package before Docker is invoked", MODE_GATED
     ].join("\n"), { mode: 0o600 });
     await chmod(packagePath, 0o600);
 
-    const result = spawnSync("bash", [script, "--mode", "join", "--hostname", "peer.local", "--join-package", packagePath], { encoding: "utf8" });
+    const result = spawnSync(resolveGuardBash(), [script, "--mode", "join", "--hostname", "peer.local", "--join-package", packagePath], { encoding: "utf8" });
     assert.equal(result.status, 77);
     assert.match(result.stderr, /expired/i);
     assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /Docker is required/i);
@@ -230,7 +231,7 @@ test("Bash join rejects a package intended for a different installation", MODE_G
     ].join("\n"), { mode: 0o600 });
     await chmod(packagePath, 0o600);
 
-    const result = spawnSync("bash", [script, "--mode", "join", "--hostname", "peer.local", "--join-package", packagePath], { encoding: "utf8" });
+    const result = spawnSync(resolveGuardBash(), [script, "--mode", "join", "--hostname", "peer.local", "--join-package", packagePath], { encoding: "utf8" });
     assert.equal(result.status, 77);
     assert.match(result.stderr, /intended for another installation/i);
   } finally {
@@ -257,7 +258,7 @@ test("Bash join rejects a public CA origin before Docker is invoked", MODE_GATED
     ].join("\n"), { mode: 0o600 });
     await chmod(packagePath, 0o600);
 
-    const result = spawnSync("bash", [script, "--mode", "join", "--join-package", packagePath], { encoding: "utf8" });
+    const result = spawnSync(resolveGuardBash(), [script, "--mode", "join", "--join-package", packagePath], { encoding: "utf8" });
     assert.equal(result.status, 77);
     assert.match(result.stderr, /private or local/i);
     assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /Docker is required/i);
@@ -340,11 +341,12 @@ test("Caddy exposes a dedicated verified-client action listener and strips spoof
 
 test("Bash bootstrap rejects public binds and argument injection before Docker", () => {
   const script = fileURLToPath(new URL("../bootstrap-organization-pki.sh", import.meta.url));
-  const publicBind = spawnSync("bash", [script, "--hostname", "dpf.local", "--bind-address", "8.8.8.8"], { encoding: "utf8" });
+  const bash = resolveGuardBash();
+  const publicBind = spawnSync(bash, [script, "--hostname", "dpf.local", "--bind-address", "8.8.8.8"], { encoding: "utf8" });
   assert.equal(publicBind.status, 64);
   assert.match(publicBind.stderr, /private IPv4/i);
 
-  const injected = spawnSync("bash", [script, "--hostname", "dpf.local;touch-bad"], { encoding: "utf8" });
+  const injected = spawnSync(bash, [script, "--hostname", "dpf.local;touch-bad"], { encoding: "utf8" });
   assert.equal(injected.status, 64);
   assert.match(injected.stderr, /unsupported characters/i);
 });

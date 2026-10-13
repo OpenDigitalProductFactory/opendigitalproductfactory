@@ -25,7 +25,9 @@ When DPF needs a capability an open-source project already implements, the answe
 
 **The dependency surface only shrinks.** Every package, container image, always-on service and vendor subscription is a dependency. A proposal that adds one must name what it retires, and should leave the platform with fewer dependencies than before. When an option adds a dependency and another option absorbs the capability into substrate the platform already owns, the absorbing option is the default. The adding option has to make its case.
 
-The refactor budget follows from this. The standing convention was 80% feature work to 20% substrate refactor. **It is inverted: roughly 80% refactor and integration, 20% new feature.**
+The refactor budget follows from this. **Founder-funded shared platform work allocates roughly 80% to refactoring, integration and reliability repair, 20% to new capability.** Founder direction reconfirmed 2026-10-11: execution reliability is the primary investment until a maturity review explicitly changes it. Measure progress through fewer broken-tool retries, lower time/token waste and reliable completion.
+
+This is a cumulative planning target, not a per-task quota. Funding owner and work purpose govern it, not the install, executor or administrator's token. Organization/archetype work retains its owning scope's policy (default 20% refactoring / 80% new capability). Unknown funding scope remains unresolved; do not assign the founder's budget by guessing. Current explicit owner direction supersedes older guidance in that scope; identify overlapping plans and record their reconciliation before executing conflicting work.
 
 ## Why
 
@@ -54,7 +56,7 @@ A third-party stack beside the platform is an appendage. The failure this preven
 
 Analysis tools can help recover the business behavior an organization needs from existing software. Treat their findings as evidence for the existing intake, coverage assessment, and delivery process. Observed behavior, inferred behavior, and verified DPF coverage remain distinct. Discovery does not authorize migration or establish product coverage.
 
-Apply the existing 80% refactor and integration allocation to canonical identity, evidence, governed execution, inference, and shared human/coworker surfaces. Absorb selected implementation behind replaceable platform contracts; qualify underlying engines separately. A fast model or a broad tool catalog does not justify a parallel business model, duplicate assessor, or permanent adjacent stack.
+Apply the owner-scoped investment allocation above to canonical identity, evidence, governed execution, inference, and shared human/coworker surfaces. Absorb selected implementation behind replaceable platform contracts; qualify underlying engines separately. A fast model or a broad tool catalog does not justify a parallel business model, duplicate assessor, or permanent adjacent stack.
 
 WWMD sets platform direction. The organization decides adoption and accepted dependencies in WWWD; profession standards and qualification belong to WSID. Customer artifacts stay within the organization's data boundary. Share only permitted, sanitized requirements and verified reusable methods.
 

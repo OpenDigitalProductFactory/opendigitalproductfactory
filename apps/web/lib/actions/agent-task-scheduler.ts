@@ -18,6 +18,7 @@ import { runArchitectureParitySteward } from "@/lib/ea/architecture-parity-stewa
 import { runConsolidationParitySteward } from "@/lib/ea/consolidation-parity-steward";
 import { computeNextCronRun, isOneShotCron } from "@/lib/operate/cron-next-run";
 import { extractScheduledTaskSummary } from "./agent-task-scheduler-summary";
+import { formatScheduledTurnPrompt } from "./scheduled-turn-prompt";
 import {
   classifyScheduledRequiredTools, scheduledToolsNeedingPin, scheduledRunLastStatus,
   createTaskRunForScheduledTask,
@@ -47,9 +48,10 @@ import { proposeProductIntelligenceWatch } from "@/lib/product-management/produc
 import {
   PRODUCT_MANAGEMENT_PLAYBOOK_TASK_KIND,
 } from "@/lib/product-management/product-management-playbook";
-import { BUSINESS_ANALYSIS_WATCH_TASK_KIND } from "@/lib/operate/scheduled-jobs/agent-task-kind";
+import { ACCEPTANCE_SWEEP_TASK_KIND, BUSINESS_ANALYSIS_WATCH_TASK_KIND } from "@/lib/operate/scheduled-jobs/agent-task-kind";
 import { executeBusinessAnalysisWatchRun } from "@/lib/performance/business-analysis-watch-run";
 import { runDeterministicScheduledTaskKind } from "./agent-task-scheduler-deterministic";
+import { claimScheduledTaskCadence } from "./agent-task-claim";
 import {
   completeProductManagementPlaybookRun,
   prepareProductManagementPlaybookRun,
@@ -145,37 +147,14 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
   });
   if (!task || !task.isActive) return;
 
-  // BI-D1CD3A11: idempotent claim BEFORE execution. The 5-min dispatch poll
-  // selects every task whose nextRunAt is due; an agent run routinely exceeds
-  // 5 minutes, so without advancing nextRunAt first the NEXT poll re-selects the
-  // still-running task and dispatches it a SECOND time (duplicate autonomous
-  // runs, doubled spend, racing writes). Atomically move nextRunAt forward here,
-  // guarded on it still being due — exactly ONE caller wins the claim; a
-  // concurrent poll (or an Inngest step retry) that loses gets count 0 and
-  // returns without re-running. The per-branch post-run updates below refine
-  // lastRunAt/lastStatus (and re-stamp the same nextRunAt) once work completes.
-  {
-    const claimNow = new Date();
-    // Mirror the terminal scheduling the post-run branches apply: a one-shot
-    // ("Once") task deactivates instead of re-arming (BI-D72CC945); a recurring
-    // task advances to its next cron time.
-    const oneShot = isOneShotCron(task.schedule);
-    const claimedNextRunAt = oneShot ? null : computeNextCronRun(task.schedule, claimNow);
-    const claim = await prisma.scheduledAgentTask.updateMany({
-      where: { taskId, isActive: true, nextRunAt: { lte: claimNow } },
-      data: oneShot ? { nextRunAt: null, isActive: false } : { nextRunAt: claimedNextRunAt },
-    });
-    if (claim.count === 0) {
-      // Already claimed by another dispatch of this due tick, or no longer due.
-      return;
-    }
-    await prisma.scheduledJob
-      .updateMany({
-        where: { jobId: taskId },
-        data: oneShot ? { nextRunAt: null } : { nextRunAt: claimedNextRunAt },
-      })
-      .catch(() => {});
+  // Acceptance owns a task-row lease and preserves upgrade wakeups while it
+  // runs. The generic cadence claim below must not consume its due time first.
+  if (task.taskKind === ACCEPTANCE_SWEEP_TASK_KIND) {
+    await runDeterministicScheduledTaskKind(task);
+    return;
   }
+
+  if (!await claimScheduledTaskCadence(prisma, task)) return;
 
   // Phase 7 product-intelligence watches are deterministic proposal producers.
   // A cadence tick creates (or deduplicates to) a PENDING ResearchProposal and
@@ -417,13 +396,13 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       update: {},
       create: { userId: task.ownerUserId, contextKey },
     });
-
+    const scheduledPrompt = formatScheduledTurnPrompt(task.title, executionPrompt);
     // Persist the user prompt as a message
     await prisma.agentMessage.create({
       data: {
         threadId: thread.id,
         role: "user",
-        content: `[Scheduled task: ${task.title}]\n\n${executionPrompt}`,
+        content: scheduledPrompt,
         agentId: task.agentId,
         routeContext: task.routeContext,
       },
@@ -467,7 +446,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       taskRunRecordId: taskRunRef.id,
       contextId: taskRunRef.contextId,
       role: "user",
-      content: `[Scheduled task: ${task.title}]\n\n${executionPrompt}`,
+      content: scheduledPrompt,
       metadata: {
         source: "scheduled",
         taskId: task.taskId,
@@ -492,7 +471,6 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       userContext,
     });
 
-    const scheduledPrompt = `[Scheduled task: ${task.title}]\n\n${executionPrompt}`;
     const chatHistory = [
       {
         role: "user" as const,

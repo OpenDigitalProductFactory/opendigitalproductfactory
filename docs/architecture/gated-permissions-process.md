@@ -4,6 +4,13 @@
 **Placement decision:** DI-5E0B3CA09D27 (WWMD, high confidence). GPP is the fourth member of the
 [standards family](agent-standards-family.md) and owns the binding semantic only.
 
+**Build review implementation:** an incomplete reviewer panel leaves its gate
+closed without rejecting the document or requesting a new human approval.
+Saved design and plan artifacts, completed semantic rounds and individual
+reviewer evidence survive the execution wait. The browser presents that wait as
+an incomplete review; recovery retains the existing authority boundaries. See
+the [MCP recovery contract](mcp-tool-authorization-runbook.md).
+
 ## Abstract
 
 The Gated Permissions Process (`GPP`) is a modeling standard for governing which tools an AI

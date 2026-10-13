@@ -1,7 +1,6 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 736,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1185,6 +1184,10 @@
       "publishedPortal": false,
       "anchors": [
         "build-gate-runbook",
+        "recovering-an-interrupted-gate-publication",
+        "isolated-verification-users",
+        "semantic-review-publication-and-infrastructure-recovery",
+        "published-corrections-and-host-guard-reuse",
         "auto-merge-armed-is-not-auto-merge-happening-bi-53be1c77",
         "the-room-follows-its-pr-through-ci-bi-88341b5d",
         "a-merged-pull-request-is-delivered-not-discovered-bi-a6e4d205",
@@ -1343,6 +1346,7 @@
         "7-subagent-dispatch-discipline",
         "14-release-testing",
         "15-communication",
+        "ending-an-unfinished-thread",
         "8a-advise-safe-tools-server-action-exports-coworker-coordination-pointers",
         "task-specific-operating-rules"
       ]
@@ -1538,7 +1542,8 @@
       "publishedPortal": false,
       "anchors": [
         "design-research-runbook",
-        "task-specific-operating-rules"
+        "task-specific-operating-rules",
+        "research-receipt-recovery"
       ]
     },
     "docs/architecture/document-generation-facility.md": {
@@ -1987,6 +1992,18 @@
         "revision-history"
       ]
     },
+    "docs/architecture/improvement-signal-intake.md": {
+      "publicHref": "/architecture/improvement-signal-intake/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "improvement-signal-intake",
+        "source-identity-and-recurrence",
+        "concurrent-delivery-and-failure",
+        "remaining-learning-qualification"
+      ]
+    },
     "docs/architecture/initiative-readiness-runbook.md": {
       "publicHref": "/architecture/initiative-readiness-runbook/",
       "portalHref": null,
@@ -2127,6 +2144,7 @@
       "publishedPortal": false,
       "anchors": [
         "mcp-tool-authorization-runbook",
+        "reading-an-owned-semantic-reviews-recovery-state",
         "discovered-external-mcp-tools-are-default-deny-bi-8b7b2fe9",
         "protocol-version-window-mechanics-landed-contract-pending-ratification",
         "gpp-permit-handles-phase-2",
@@ -2338,6 +2356,32 @@
         "fleet-safe-evolution",
         "derived-roadmap-boundary",
         "product-management-playbook-boundary"
+      ]
+    },
+    "docs/architecture/provider-accounts.md": {
+      "publicHref": "/architecture/provider-accounts/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "provider-account-identity",
+        "governed-controls",
+        "provider-ui-preservation-contract",
+        "migration-and-verification"
+      ]
+    },
+    "docs/architecture/review-reliability-recovery.md": {
+      "publicHref": "/architecture/review-reliability-recovery/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "review-reliability-and-aligned-execution",
+        "objective-and-authority",
+        "existing-substrate-and-plan",
+        "conflicting-and-overlapping-work",
+        "evidence-and-recovery-boundary",
+        "public-development-routing"
       ]
     },
     "docs/architecture/section-navigation.md": {
@@ -2738,6 +2782,30 @@
         "decision-rules",
         "links-to-live-work",
         "maintenance"
+      ]
+    },
+    "docs/architecture/workroom-cycle-continuity.md": {
+      "publicHref": "/architecture/workroom-cycle-continuity/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "workroom-cycle-continuity",
+        "existing-persistence-and-bounded-reads",
+        "recovery-integration-still-required",
+        "verification-and-rollback-boundary"
+      ]
+    },
+    "docs/architecture/workroom-review-profile-contract.md": {
+      "publicHref": "/architecture/workroom-review-profile-contract/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "workroom-review-profile-read-contract",
+        "common-requirements-and-extensions",
+        "coverage-and-representative-domains",
+        "verification-and-recovery"
       ]
     },
     "docs/architecture/workroom-vocabulary-boundary.md": {
@@ -5550,13 +5618,15 @@
       "anchors": [
         "choosing-hardware-for-dpf",
         "the-short-recommendation",
+        "a-mac-mini-for-everyday-business-operations",
+        "local-ai-for-professional-firms",
         "machines-available-now",
         "provider-assisted-operations",
         "local-first-windows-with-nvidia",
         "local-first-apple-unified-memory",
         "why-unified-memory-changes-the-calculation",
         "model-and-context-sizing",
-        "shared-memory-systems-not-yet-in-the-standard-profile",
+        "compact-linux-candidates-qualification-required",
         "before-ordering"
       ]
     },
@@ -5624,6 +5694,7 @@
       "publishedPortal": false,
       "anchors": [
         "platform-support-watch-list-living-document",
+        "windows-host-guard-interpreters-bi-ba5f777a",
         "target-environments",
         "how-to-use-this-file",
         "1-monitoring-telemetry",
@@ -11534,6 +11605,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "routing-status-and-temporary-pauses",
         "authentication-methods",
         "api-key",
         "oauth-sign-in",
@@ -11681,6 +11753,7 @@
         "how-models-enter-the-system",
         "path-1-static-seed-install-time",
         "path-2-dynamic-discovery-runtime",
+        "when-the-connections-page-takes-longer-to-load",
         "quality-tiers",
         "agent-model-configuration",
         "default-agent-tiers",
@@ -11778,6 +11851,7 @@
         "overview",
         "how-it-works",
         "setup",
+        "pausing-local-ai",
         "pulling-models",
         "model-discovery-and-profiling",
         "local-multimodal-input-vision-audio",
@@ -12675,6 +12749,7 @@
         "workflow",
         "read-the-routing-picture",
         "architecture-and-evidence",
+        "understanding-background-inference",
         "when-a-coworker-says-it-used-the-backup-model",
         "what-to-watch",
         "defaults-for-work-rooms"
@@ -13083,6 +13158,7 @@
         "overview",
         "what-you-see-first",
         "activity-and-participants",
+        "delegation-and-recovery",
         "inspecting-the-process",
         "reading-the-flow-map",
         "how-work-flows-in-each-area",

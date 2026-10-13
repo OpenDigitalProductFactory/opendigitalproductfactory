@@ -1,3 +1,4 @@
+import { resolveLocalServedContextTokens } from "@/lib/inference/local-model-context-reconcile";
 import { prisma } from "@dpf/db";
 
 import {
@@ -118,11 +119,11 @@ export async function loadCoworkerRoutingReadinessSnapshot(
       localOnlyInference,
       postureByAgent,
     ] = await Promise.all([
-      loadEndpointManifests(),
+      loadEndpointManifests(Date.now(), resolveLocalServedContextTokens),
       loadPolicyRules(),
       prisma.providerCapacityStatus
         .findMany({
-          select: { providerId: true, state: true, retryAt: true },
+          select: { providerId: true, state: true, retryAt: true, lastObservedAt: true },
         }),
       getLocalOnlyInference(),
       resolveDispatchPostures(agentIds),
@@ -153,11 +154,13 @@ export async function loadCoworkerRoutingReadinessSnapshot(
             providerId: string;
             state: string;
             retryAt: Date | null;
+            lastObservedAt: Date | null;
           }) => [
           row.providerId,
           {
             state: row.state,
             retryAtMs: row.retryAt?.getTime() ?? null,
+            observedAtMs: row.lastObservedAt?.getTime() ?? null,
           },
         ]),
       ),

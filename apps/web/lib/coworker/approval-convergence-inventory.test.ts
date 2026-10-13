@@ -38,7 +38,8 @@ function hasWriteOnlyInput(schema: unknown): boolean {
 }
 
 /** Spec D7: the declared consequence of each tool the live pending rows name, and its window. */
-const D7_TABLE: Array<[string, "outward" | null, number]> = [
+const D7_TABLE: Array<[string, "outward" | "authority" | null, number]> = [
+  ["correct_workroom_sensitivity", "authority", DURABLE_APPROVAL_LIFETIME_MS],
   ["run_hive_scout_ingest", "outward", APPROVAL_DECISION_WINDOW_MS],
   ["contribute_to_hive", "outward", APPROVAL_DECISION_WINDOW_MS],
   ["contribute_finding_to_hive", "outward", APPROVAL_DECISION_WINDOW_MS],
@@ -60,6 +61,7 @@ describe("approval convergence inventory — the live registry", () => {
     expect(PROPOSAL_MODE.map((tool) => tool.name).sort()).toEqual([
       "contribute_finding_to_hive",
       "contribute_to_hive",
+      "correct_workroom_sensitivity",
       "propose_improvement",
       "propose_skill_improvement",
       "publish_wiki_overlay_pages",
@@ -83,7 +85,7 @@ describe("approval convergence inventory — the live registry", () => {
   it("knows exactly which reachable tools take a secret (writeOnly) input", () => {
     expect(
       PROPOSAL_REACHABLE.filter((tool) => hasWriteOnlyInput(tool.inputSchema)).map((tool) => tool.name).sort(),
-    ).toEqual(["configure_and_test_discovery_connection", "configure_gateway_scan"]);
+    ).toEqual(["configure_and_test_discovery_connection", "configure_gateway_scan", "manage_provider_account"]);
   });
 
   it("keeps the arguments of every reachable tool on its audit row", () => {

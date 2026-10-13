@@ -18,6 +18,7 @@ import { withInferenceOrigin } from "@/lib/inference/inference-admission";
 
 import { SEMANTIC_REVIEW_HEARTBEAT_STALE_MS as STALE_MS } from "./semantic-review-request";
 import { SEMANTIC_REVIEW_MAX_ATTEMPTS as MAX_DISPATCH_ATTEMPTS, semanticReviewRecoveryBudget, isSemanticReviewRecoveryWait } from "./semantic-review-recovery-policy";
+import { readSemanticReviewRemediation } from "./semantic-review-remediation";
 const json = (value: unknown) => value as Prisma.InputJsonValue;
 function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -276,14 +277,9 @@ async function admitReviewSuccessor(row: Run, packet: SemanticReviewRequest, ope
   const newTaskRunId = deterministicTaskRunId(packet.gateKey, attempt + 1);
   const publication = await prisma.$transaction(async tx => {
     const verification = await tx.runtimeVerification.findUnique({ where: { verificationId: recovery.remediationVerificationId } });
-    const proof = object(object(verification?.result).semanticReviewRecovery);
-    const completed = verification?.completedAt?.getTime() ?? NaN;
-    if (!verification || verification.kind !== "health" || verification.status !== "passed"
-      || verification.workCapsuleId !== capsule.id || !verification.runtimeTargetId || !verification.command?.trim()
-      || !Number.isFinite(completed) || completed < row.updatedAt.getTime() || completed > Date.now()
-      || Date.now() - completed > 30 * 60_000 || proof.taskRunId !== row.taskRunId || proof.requestDigest !== packet.digest
-      || proof.executionSettled !== true || typeof proof.observation !== "string" || !proof.observation.trim()
-      || !Array.isArray(proof.settledNodeIds) || proof.settledNodeIds.some(id => typeof id !== "string")) {
+    const proof = readSemanticReviewRemediation(verification, { capsuleId: capsule.id,
+      taskRunId: row.taskRunId, requestDigest: packet.digest, updatedAt: row.updatedAt });
+    if (!proof) {
       throw new Error("semantic-review-remediation-evidence-required");
     }
     // CAS fences every old writer before inspecting checkpoints in this transaction.

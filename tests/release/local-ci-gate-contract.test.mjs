@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { completeFixture } from "./fixtures/gate-completion.mjs";
+import { writeExecutionCheckpoint } from "../../scripts/lib/gate-execution-checkpoint.mjs";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +9,8 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
+const execPrefix = process.platform === "win32" ? "" : "exec ";
+const completionSource = `import { completeFixture } from ${JSON.stringify(new URL("./fixtures/gate-completion.mjs", import.meta.url).href)}; await completeFixture();`;
 const script = fileURLToPath(new URL("../../scripts/gate-worktree.sh", import.meta.url));
 const nativeShellProbe = spawnSync("sh", ["-c", "printf ok"], { encoding: "utf8" });
 const shellContractSkipReason = nativeShellProbe.error
@@ -187,6 +191,7 @@ printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\
   const driftCommand = join(temp, "write-drift-report.mjs");
   writeFileSync(driftCommand, `import { writeFileSync } from "node:fs";
 writeFileSync(process.env.DPF_LOCAL_CI_FRESHNESS_REPORT_FILE, ${JSON.stringify(freshnessReport)});
+await new Promise(resolve => setTimeout(resolve, 1000));
 process.exit(3);
 `);
 
@@ -206,7 +211,7 @@ process.exit(3);
       // and the gate refuses to claim a lease it cannot attribute.
       DPF_GATE_OWNER_PROVIDER: "codex",
       DPF_GATE_OWNER_SESSION_ID: "contract-thread",
-      DPF_LOCAL_CI_COMMAND: `"${process.execPath}" "${driftCommand}"`,
+      DPF_LOCAL_CI_COMMAND: `${execPrefix}"${process.execPath}" "${driftCommand}"`,
       DPF_GATE_GIT_BIN: gitStub,
       DPF_GATE_CURL_BIN: curlStub,
     },
@@ -267,7 +272,7 @@ EOF
 )"
 case "$tool" in
   claim_nonprod_environment_lease)
-    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"data\\":{\\"gateKey\\":\\"synthetic-contract-gate\\"},\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
     ;;
   renew_nonprod_environment_lease)
     printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
@@ -359,7 +364,7 @@ EOF
 )"
 case "$tool" in
   claim_nonprod_environment_lease)
-    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"data\\":{\\"gateKey\\":\\"synthetic-contract-gate\\"},\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
     ;;
   renew_nonprod_environment_lease)
     printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
@@ -416,6 +421,7 @@ esac
 
 shellContractTest("gate-worktree.sh preserves a passed gate when evidence recording is quiescence-blocked", () => {
   const temp = mkdtempSync(join(tmpdir(), "dpf-local-ci-quiescence-"));
+  writeFileSync(join(temp, "complete.mjs"), completionSource);
   const callsFile = join(temp, "calls.ndjson");
   const gitStub = join(temp, "git");
   const curlStub = join(temp, "curl");
@@ -453,7 +459,7 @@ case "$tool" in
     printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"data\\":{\\"level\\":\\"normal\\",\\"writesRefused\\":false}}"}]}}'
     ;;
   claim_nonprod_environment_lease)
-    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-Q\\"}"}]}}'
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"data\\":{\\"gateKey\\":\\"synthetic-contract-gate\\"},\\"entityId\\":\\"NPEL-Q\\"}"}]}}'
     ;;
   renew_nonprod_environment_lease)
     printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-Q\\"}"}]}}'
@@ -488,7 +494,7 @@ esac
       // and the gate refuses to claim a lease it cannot attribute.
       DPF_GATE_OWNER_PROVIDER: "codex",
       DPF_GATE_OWNER_SESSION_ID: "contract-thread",
-      DPF_LOCAL_CI_COMMAND: "exit 0",
+      DPF_LOCAL_CI_COMMAND: `${execPrefix}"${process.execPath}" "${join(temp, "complete.mjs")}"`,
       DPF_GATE_GIT_BIN: gitStub,
       DPF_GATE_CURL_BIN: curlStub,
     },
@@ -517,7 +523,7 @@ esac
   assert.ok(existsSync(join(temp, "dpf-local-ci-pending-evidence.json")));
 });
 
-shellContractTest("gate-worktree.sh --finalize-evidence records pending evidence without rerunning the expensive gate", () => {
+shellContractTest("gate-worktree.sh --finalize-evidence records pending evidence without rerunning the expensive gate", async () => {
   const temp = mkdtempSync(join(tmpdir(), "dpf-local-ci-finalize-"));
   const callsFile = join(temp, "calls.ndjson");
   const gitStub = join(temp, "git");
@@ -563,17 +569,23 @@ esac
   chmodSync(gitStub, 0o755);
   chmodSync(curlStub, 0o755);
 
+  const context = {
+    path: join(temp, "output.log.NPEL-REPLAY.execution.json"), metadataFile: join(temp, "metadata.json"), artifactFile: join(temp, "artifact.json"),
+    branch: "feat/local-ci-sandbox", sha: "abc123", leaseId: "NPEL-REPLAY", gateKey: "fixture-gate", provider: "codex", ownerSessionId: "contract-thread",
+  };
+  const stateFile = join(temp, "fixture-state.json");
+  writeFileSync(stateFile, JSON.stringify({ branch: context.branch, sha: context.sha }));
+  const content = await completeFixture({ DPF_LOCAL_CI_GATE_STATE_FILE: stateFile, DPF_LOCAL_CI_METADATA_FILE: context.metadataFile,
+    DPF_LOCAL_CI_ARTIFACT_FILE: context.artifactFile, DPF_NONPROD_LEASE_ID: context.leaseId });
+  writeExecutionCheckpoint(context, 0);
   writeFileSync(join(temp, "dpf-local-ci-pending-evidence.json"), JSON.stringify({
-    schema: "dpf-local-ci-pending-evidence/v1",
-    branch: "feat/local-ci-sandbox",
-    sha: "abc123",
+    schema: "dpf-local-ci-pending-evidence/v1", branch: context.branch, sha: context.sha,
     expiresAt: new Date(Date.now() + 60_000).toISOString(),
     recordArgs: {
-      branch: "feat/local-ci-sandbox",
-      sha: "abc123",
-      status: "passed",
-      summary: "local-CI passed; evidence replay",
-      evidence: { gatePassed: true },
+      candidateBranch: context.branch, externalSessionId: context.ownerSessionId, provider: context.provider,
+      leaseId: context.leaseId, gateKey: context.gateKey, status: "passed",
+      summary: "synthetic local-CI completion; evidence replay",
+      evidence: { sha: context.sha, gatePassed: true, buildExitCode: 0, content, fullLogFile: join(temp, "output.log") },
     },
   }));
 
@@ -647,7 +659,7 @@ EOF
 )"
 case "$tool" in
   claim_nonprod_environment_lease)
-    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"data\\":{\\"gateKey\\":\\"synthetic-contract-gate\\"},\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
     ;;
   renew_nonprod_environment_lease)
     printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
@@ -678,6 +690,7 @@ writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
   toolchainFingerprint: "toolchain-sha",
   toolchain: { nodeVersion: "v24.0.0" }
 }) + "\\n");
+${completionSource}
 `);
   chmodSync(gitStub, 0o755);
   chmodSync(curlStub, 0o755);
@@ -697,7 +710,7 @@ writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
       // and the gate refuses to claim a lease it cannot attribute.
       DPF_GATE_OWNER_PROVIDER: "codex",
       DPF_GATE_OWNER_SESSION_ID: "contract-thread",
-      DPF_LOCAL_CI_COMMAND: `"${process.execPath}" "${writerScript}"`,
+      DPF_LOCAL_CI_COMMAND: `${execPrefix}"${process.execPath}" "${writerScript}"`,
       DPF_GATE_GIT_BIN: gitStub,
       DPF_GATE_CURL_BIN: curlStub,
     },
@@ -707,19 +720,8 @@ writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
   const calls = readFileSync(callsFile, "utf8").trim().split("\n").map((line) => JSON.parse(line));
   const evidenceCall = calls.find((call) => call.params.name === "record_local_integration_result");
   assert.ok(evidenceCall, "expected evidence to be recorded");
-  assert.deepEqual(evidenceCall.params.arguments.evidence.content, {
-    schemaVersion: 1,
-    bi: "BI-76551B2D",
-    candidateRef: "feat/local-ci-sandbox",
-    candidateSha: "candidate-sha",
-    baseRef: "origin/main",
-    fetchBase: false,
-    baseSha: "base-sha",
-    integrationCommitSha: "integration-sha",
-    synthesizedTreeSha: "tree-sha",
-    toolchainFingerprint: "toolchain-sha",
-    toolchain: { nodeVersion: "v24.0.0" },
-  });
+  assert.deepEqual(evidenceCall.params.arguments.evidence.content, JSON.parse(readFileSync(join(temp, "dpf-local-ci-metadata.json"), "utf8")));
+  assert.equal(evidenceCall.params.arguments.evidence.content.baseSha, "b".repeat(40));
   assert.deepEqual(evidenceCall.params.arguments.evidence.resilience, {
     publicationMode: "deferred",
     acceptedBaseMode: "local-ref",
@@ -784,7 +786,7 @@ EOF
 )"
 case "$tool" in
   claim_nonprod_environment_lease)
-    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-OFFLINE\\"}"}]}}'
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"data\\":{\\"gateKey\\":\\"synthetic-contract-gate\\"},\\"entityId\\":\\"NPEL-OFFLINE\\"}"}]}}'
     ;;
   renew_nonprod_environment_lease)
     printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-OFFLINE\\"}"}]}}'
@@ -814,6 +816,7 @@ writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
   synthesizedTreeSha: "tree-sha",
   toolchainFingerprint: "toolchain-sha"
 }) + "\\n");
+${completionSource}
 `);
   chmodSync(gateGitStub, 0o755);
   chmodSync(curlStub, 0o755);
@@ -834,7 +837,7 @@ writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
       // and the gate refuses to claim a lease it cannot attribute.
       DPF_GATE_OWNER_PROVIDER: "codex",
       DPF_GATE_OWNER_SESSION_ID: "contract-thread",
-      DPF_LOCAL_CI_COMMAND: `"${process.execPath}" "${writerScript}"`,
+      DPF_LOCAL_CI_COMMAND: `${execPrefix}"${process.execPath}" "${writerScript}"`,
       DPF_GATE_GIT_BIN: gateGitStub,
       DPF_GATE_CURL_BIN: curlStub,
     },

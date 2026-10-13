@@ -648,7 +648,16 @@ export const cliAdapter: ExecutionAdapterHandler = {
       const parsed = parseCliJsonOutput(stdout);
       const inferenceMs = Date.now() - startMs;
 
-      assertCliResultSucceeded(stdout, parsed, providerId);
+      try {
+        assertCliResultSucceeded(stdout, parsed, providerId);
+      } catch (error) {
+        if (error instanceof InferenceError && error.code === "rate_limit") {
+          // Publish exhaustion before fallback can select another model on the
+          // same account. The recorder contains persistence failures itself.
+          await recordCliRateLimit("claude-cli", providerId, parsed.text);
+        }
+        throw error;
+      }
       console.log(
         `[cli-adapter] Completed: thread=${mcpSession?.threadId ?? "—"}, ${parsed.text.length} chars, ` +
         `${parsed.toolCalls.length} tool calls, ${inferenceMs}ms`,

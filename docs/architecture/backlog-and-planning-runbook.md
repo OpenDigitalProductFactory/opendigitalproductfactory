@@ -2,6 +2,17 @@
 
 Plan-review recovery binds the immutable plan recorded in valid coverage for the current scope baseline and Workroom repository. Design approval continues to bind the canonical design. If the plan commit, blob, or safe `docs/superpowers/plans/*.md` path is missing, stale, or belongs to another repository, record complete current plan coverage and retry readiness; a design cannot substitute for a plan. The plan-specific request key prevents replay of a historical review routed to the design. Historical receipts remain available for audit.
 
+A plan-only review can start from an unchanged source branch. Request authorization resolves the same baseline-validated plan as the claim issuer; it does not require a changed design file. Exact packet identity, current Workroom head, independent reviewer and caller authority checks still apply.
+
+When an exact plan-review task exhausts its terminal-writer attempts, refresh
+the governed claim. For that user and current OAuth task family, the issuer
+skips only the recorded exhausted packet and selects the next currently
+eligible independent reviewer using the existing target-bound plan key.
+Submit the newly issued packet unchanged. Other task states, writer refusals,
+capacity waits and human approvals do not authorize replacement. If every
+eligible reviewer is exhausted, recovery reports that bounded condition;
+do not reset attempts, replay exhausted tasks or invent a caller key.
+
 **Status:** procedure reference. The *rules* — backlog lives in Postgres, plan before build, check epic overlap — live in [`AGENTS.md`](../../AGENTS.md) §6 and stay always-on. This file holds the tooling detail, hygiene cadence and enforced-gate list. Relocated by BI-0020D511 Phase 1; no rule was dropped.
 
 - **Backlog lives in PostgreSQL** (`Epic`, `BacklogItem`). Always query live state before planning or changing backlog work. → [kernel principle](../professions/portfolio-management/wiki/backlog-lives-in-postgresql.md)

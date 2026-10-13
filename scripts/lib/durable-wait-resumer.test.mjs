@@ -35,6 +35,35 @@ import {
 
 const GATE_ARGV = ["/usr/bin/node", "/repo/scripts/gate-worktree.mjs", "--branch", "fix/x"];
 
+test("host-runner pins are inserted before the child separator without changing child argv", () => {
+  const { args } = buildResumerInvocation({
+    runnerPath: "/resumer.mjs",
+    gateArgv: ["node", "/host.mjs", "--class", "vitest", "--", "node", "test.mjs", "--", "value"],
+    gateFlags: ["--resume-pin", "pin"],
+    gateFlagsBeforeTerminator: true,
+  });
+  assert.deepEqual(args.slice(args.indexOf("--") + 1),
+    ["/host.mjs", "--class", "vitest", "--resume-pin", "pin", "--", "node", "test.mjs", "--", "value"]);
+});
+
+test("resumer retains actual child PID and bounded stdout/stderr", async () => {
+  const events = [];
+  await resumeUntilAdmitted({
+    gateArgv: ["fake"], intervalMs: 1, deadlineMs: 10, now: () => 0,
+    log: (event, detail) => events.push({ event, ...detail }),
+    spawnFn: () => ({
+      pid: 456,
+      stdout: { on(event, fn) { if (event === "data") fn(Buffer.from("test passed")); } },
+      stderr: { on(event, fn) { if (event === "data") fn(Buffer.from("x".repeat(100000))); } },
+      once(event, fn) { if (event === "exit") queueMicrotask(() => fn(0)); },
+    }),
+  });
+  assert.ok(events.some(e => e.event === "gate-start" && e.pid === 456));
+  const output = events.filter(e => e.event === "gate-output");
+  assert.ok(output.some(e => e.stream === "stdout" && e.text === "test passed"));
+  assert.ok(output.reduce((n, e) => n + e.text.length, 0) <= 65536);
+});
+
 function stubChild(pid = 4242) {
   return { pid, unref() { this.unrefCalled = true; }, unrefCalled: false };
 }

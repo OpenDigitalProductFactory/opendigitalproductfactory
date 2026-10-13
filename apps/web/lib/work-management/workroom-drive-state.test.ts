@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 
 import { readStoredWorkroomDriveState, projectStoredWorkroomDriveObservation } from "./workroom-drive-state";
+import { buildDispatchCheckpoint } from "./workroom-drive-checkpoint";
+
+it("projects only a validated enqueue checkpoint without treating it as a completing receipt", () => {
+  const checkpoint = buildDispatchCheckpoint(null, {
+    taskId: "task", roomId: "room", objective: null,
+    stage: { shapeKey: "watch", shapeVersion: "1", stageKey: "review", tools: [] },
+    holderPrincipalId: null, now: "2026-10-07T23:00:00Z", leaseExpiresAt: "2026-10-07T23:05:00Z",
+  });
+  expect(projectStoredWorkroomDriveObservation({ workroomDispatchCheckpoint: checkpoint }))
+    .toMatchObject({ dispatchCheckpoint: checkpoint, receipts: [] });
+  expect(projectStoredWorkroomDriveObservation({ workroomDispatchCheckpoint: { ...checkpoint, version: 99 } }))
+    .not.toHaveProperty("dispatchCheckpoint");
+});
 
 // GPP Phase 3c PR-3c-2: a graph room's marking reaches the room view as currentStageKeys.
 describe("projectStoredWorkroomDriveObservation: several current stages", () => {

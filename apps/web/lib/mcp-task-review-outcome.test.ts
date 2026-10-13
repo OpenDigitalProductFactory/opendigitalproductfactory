@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const db = vi.hoisted(() => ({ item: vi.fn(), execution: vi.fn(), update: vi.fn() }));
-vi.mock("@dpf/db", () => ({ prisma: { backlogItem: { findUnique: db.item }, toolExecution: { findFirst: db.execution }, taskRun: { update: db.update } } }));
+const db = vi.hoisted(() => ({ item: vi.fn(), execution: vi.fn(), update: vi.fn(), updateMany: vi.fn() }));
+vi.mock("@dpf/db", () => ({ prisma: { backlogItem: { findUnique: db.item }, toolExecution: { findFirst: db.execution }, taskRun: { update: db.update, updateMany: db.updateMany } } }));
 vi.mock("./backlog/initiative-readiness/parent-scope-inheritance", () => ({ loadInheritedInitiativeScope: vi.fn(async () => null) }));
 import { loadInitiativeReviewOutcome, loadTaskInitiativeReviewOutcome, reconcilePersistedReviewStatus } from "./mcp-task-review-outcome";
 
@@ -14,16 +14,31 @@ function item(payload: unknown = receipt) {
   return { id: "item", itemId: "BI-TEST", type: "product", workType: "bug", scopeKind: "platform", source: "user-request", activeBuild: null,
     activities: [{ id: "receipt", kind: "initiative_gate_receipt", gateKey: "design_spec", recordedAt: new Date(), payload }] };
 }
-beforeEach(() => { vi.resetAllMocks(); db.item.mockResolvedValue(item()); });
+const snapshot = { taskRunId: "TR-1", status: "input-required", updatedAt: new Date("2026-10-11T12:00:00Z"), progressPayload: { auditMarker: "retain", terminalWriterWait: {}, approvalEnvelopeId: "stale" } };
+beforeEach(() => { vi.resetAllMocks(); db.item.mockResolvedValue(item()); db.updateMany.mockResolvedValue({ count: 1 }); });
 describe("persisted initiative review outcome", () => {
   it("reconciles stale status from a verified receipt while preserving unrelated progress", async () => {
     const outcome = await loadInitiativeReviewOutcome(binding, "receipt");
-    await reconcilePersistedReviewStatus("TR-1", { auditMarker: "retain", terminalWriterWait: {}, approvalEnvelopeId: "stale" }, outcome!);
-    const data = db.update.mock.calls[0][0].data;
+    expect(await reconcilePersistedReviewStatus(snapshot.taskRunId, snapshot.progressPayload, outcome!, snapshot)).toBe(true);
+    expect(db.update).not.toHaveBeenCalled();
+    expect(db.updateMany.mock.calls[0][0].where).toEqual({ taskRunId: snapshot.taskRunId, status: snapshot.status, updatedAt: snapshot.updatedAt });
+    const data = db.updateMany.mock.calls[0][0].data;
     expect(data.status).toBe("completed");
     expect(data.progressPayload).toMatchObject({ auditMarker: "retain", reviewOutcome: { receiptId: "receipt" }, requiresApproval: false });
     expect(data.progressPayload).not.toHaveProperty("terminalWriterWait");
     expect(data.progressPayload).not.toHaveProperty("approvalEnvelopeId");
+  });
+  it.each(["canceled", "failed", "rejected", "archived", "quiescing", "unknown"])("does not revive a %s task from a receipt", async status => {
+    const outcome = await loadInitiativeReviewOutcome(binding, "receipt");
+    expect(await reconcilePersistedReviewStatus(snapshot.taskRunId, snapshot.progressPayload, outcome!, { ...snapshot, status })).toBe(false);
+    expect(db.update).not.toHaveBeenCalled();
+    expect(db.updateMany).not.toHaveBeenCalled();
+  });
+  it("yields when cancellation or a newer attempt wins during receipt lookup", async () => {
+    db.updateMany.mockResolvedValue({ count: 0 });
+    const outcome = await loadInitiativeReviewOutcome(binding, "receipt");
+    expect(await reconcilePersistedReviewStatus(snapshot.taskRunId, snapshot.progressPayload, outcome!, snapshot)).toBe(false);
+    expect(db.update).not.toHaveBeenCalled();
   });
   it("reports the matching receipt while preserving unmet implementation gates", async () => {
     const result = await loadInitiativeReviewOutcome(binding, "receipt");

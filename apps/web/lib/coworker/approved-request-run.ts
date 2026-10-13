@@ -106,7 +106,7 @@ export async function runApprovedExternalRequest(
   });
   if (!pending?.apiTokenId) return notRun("no-pending-call");
   const params = originalToolParameters(pending.parameters) ?? {};
-  if (fingerprintCoworkerInput(params) !== binding.inputFingerprint) return notRun("arguments-not-provable");
+  if (fingerprintCoworkerInput(params, binding.authorResearchBinding) !== binding.inputFingerprint) return notRun("arguments-not-provable");
 
   const credential = await verifyApprovalCredential(db, pending.apiTokenId, {
     delegatingUserId: envelope.delegatingUserId,
@@ -275,7 +275,7 @@ export async function runApprovedPlatformRequest(
   const binding = storedBinding(envelope.argsJson);
   if (!binding) return notRun("arguments-not-provable");
   const params = originalToolParameters(park.parameters) ?? {};
-  if (fingerprintCoworkerInput(params) !== binding.inputFingerprint) return notRun("arguments-not-provable");
+  if (fingerprintCoworkerInput(params, binding.authorResearchBinding) !== binding.inputFingerprint) return notRun("arguments-not-provable");
 
   const userContext = await currentUserContext(envelope.delegatingUserId).catch(() => null)
     ?? { userId: envelope.delegatingUserId, platformRole: null, isSuperuser: false };

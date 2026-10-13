@@ -121,7 +121,6 @@ scripts/measure-platform-substrate.test.mjs
 scripts/merge-readiness-policy.test.mjs
 scripts/nonprod-environment-admission.test.mjs
 scripts/pr-readiness.test.mjs
-scripts/pregate.test.mjs
 scripts/probes/marketing-media/gemini-tts-response.test.mjs
 scripts/promote-compose-activation-overlays.test.mjs
 scripts/promote-host-bind-address.test.mjs

@@ -16,7 +16,7 @@ import {
 import type { EffectiveHumanAccountability } from "@/lib/work-management/human-accountability";
 
 import { NOT_ASKED_ACCOUNTABILITY, resolveAccountabilityForConclusion } from "./workroom-drive-accountability";
-import type { Prisma, PrismaClient } from "@dpf/db";
+import type { PrismaClient } from "@dpf/db";
 import { jobs } from "@/lib/jobs";
 import {
   jsiSchemePresent,
@@ -24,7 +24,7 @@ import {
 } from "@/lib/work-management/coordinator-eligibility";
 import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-nesting";
 import { buildStageBrief, stageBriefInputFromDefinition, stageEvidenceKinds } from "@/lib/work-management/stage-briefing";
-import { withWorkroomStageTaskConfig, type WorkroomStageTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
+import { type WorkroomStageTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
 import { driveTickIsNews, nextDriveHold, readDriveHold, stallNoticeDue, type WorkroomDriveHold } from "@/lib/work-management/workroom-drive-hold";
 
 import {
@@ -78,6 +78,7 @@ import {
 } from "@/lib/work-management/workroom-drive-state";
 import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workroom-drive-receipts";
 import { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
+import { scheduleWorkroomAgentTask } from "./workroom-drive-scheduling";
 export { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
 import { repairUnownedDeliveryRooms, ROOM_OWNER_USER_INCLUDE, roomOwnerUserId } from "@/lib/work-management/delivery-room-ownership";
 
@@ -152,6 +153,7 @@ export type WorkroomDriveEffects = SubShapeChildEffects & {
     taskId: string;
     agentId: string;
     ownerUserId: string;
+    dispatchScope?: import("@/lib/work-management/workroom-drive-checkpoint").DispatchScope;
     title: string;
     prompt: string;
     /** Stage + declared tools, written to taskConfig.workroomStage for the scheduler's pin (BI-43C3E914). */
@@ -354,6 +356,7 @@ export async function applyDrivePlan(input: {
       // to leave; send it.
       prompt: buildStageBrief(brief),
       stage: { shapeKey: brief.shapeKey, shapeVersion: brief.shapeVersion, stageKey: brief.stageKey, tools: [...(brief.stageTools ?? [])] },
+      ...(plan.cycle ? { dispatchScope: { runKey: runKey ?? plan.cycle.cycleKey, cycleKey: plan.cycle.cycleKey, iteration: 0 } } : {}),
       now,
       lease: { roomId: room.id, expiresAt, holderPrincipalId: room.leaseHolderPrincipalId },
     });
@@ -696,48 +699,7 @@ export function createWorkroomDriveEffects(
     },
     async upsertAgentTask(input) {
       const prisma = await loadDb();
-      return prisma.$transaction(async (tx) => {
-        // Lock the room through the scheduling write. An expired or superseded
-        // driver cannot reactivate a task after another owner takes over.
-        const owned = await tx.workroom.updateMany({
-          where: {
-            id: input.lease.roomId, archivedAt: null, status: { notIn: [...TERMINAL] },
-            leaseExpiresAt: input.lease.expiresAt,
-            leaseHolderPrincipalId: input.lease.holderPrincipalId,
-            AND: [{ leaseExpiresAt: { gt: clock() } }],
-          },
-          data: { leaseExpiresAt: input.lease.expiresAt },
-        });
-        if (owned.count !== 1) return false;
-        // Merge, never replace: taskConfig is shared JSON; only workroomStage is this writer's.
-        const current = await tx.scheduledAgentTask.findUnique({ where: { taskId: input.taskId }, select: { taskConfig: true } });
-        const taskConfig = withWorkroomStageTaskConfig(current?.taskConfig ?? null, input.stage) as Prisma.InputJsonValue;
-        await tx.scheduledAgentTask.upsert({
-          where: { taskId: input.taskId },
-          create: {
-            taskId: input.taskId,
-            agentId: input.agentId,
-            title: input.title,
-            prompt: input.prompt,
-            routeContext: "/ops/workrooms",
-            schedule: WORKROOM_DRIVE_CRON,
-            timezone: "UTC",
-            ownerUserId: input.ownerUserId,
-            nextRunAt: input.now,
-            isActive: true,
-            taskConfig,
-          },
-          update: {
-            agentId: input.agentId,
-            title: input.title,
-            prompt: input.prompt,
-            taskConfig,
-            nextRunAt: input.now,
-            isActive: true,
-          },
-        });
-        return true;
-      });
+      return scheduleWorkroomAgentTask(prisma, input, clock);
     },
     async deactivateAgentTask(taskId) {
       const prisma = await loadDb();

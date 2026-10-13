@@ -8,6 +8,7 @@
 
 import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
+import { withInferenceOrigin } from "@/lib/inference/inference-admission";
 
 // BI-C8164664: how long a "running" eval slot blocks a duplicate GPU eval for
 // the same model. runDimensionEval already skips when the model was EVALUATED
@@ -44,12 +45,17 @@ export async function claimEvalSlot(modelId: string, now: Date = new Date()): Pr
   // No row yet (first-ever eval for this model) → create and claim it.
   const existing = await prisma.scheduledJob.findUnique({ where: { jobId }, select: { jobId: true } });
   if (existing) return false; // row exists with a fresh lastRunAt → claim lost.
-  await prisma.scheduledJob
-    .create({
+  try {
+    await prisma.scheduledJob.create({
       data: { jobId, name: `Eval: ${modelId}`, schedule: "manual", lastStatus: "running", lastRunAt: now, nextRunAt: null },
-    })
-    .catch(() => {});
-  return true;
+    });
+    return true;
+  } catch (error) {
+    // Another worker created the unique job row after our read. Only the
+    // successful creator owns the reservation; storage failures stop work.
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") return false;
+    throw error;
+  }
 }
 
 /**
@@ -85,7 +91,9 @@ export const evalBackground = jobs.createFunction(
 
     const result = await step.run("run-dimension-eval", async () => {
       const { runDimensionEval } = await import("@/lib/routing/eval-runner");
-      return runDimensionEval(endpointId, modelId, userId, { force: force === true });
+      return withInferenceOrigin("autonomous", () =>
+        runDimensionEval(endpointId, modelId, userId, { force: force === true }),
+      );
     });
 
     // BI-C8164664: don't stamp ScheduledJob as completed when the eval was
@@ -136,12 +144,12 @@ export const probeBackground = jobs.createFunction(
 
     const results = await step.run("run-endpoint-tests", async () => {
       const { runEndpointTests } = await import("@/lib/operate/endpoint-test-runner");
-      return runEndpointTests({
+      return withInferenceOrigin("autonomous", () => runEndpointTests({
         endpointId,
         modelId,
         probesOnly,
         triggeredBy: userId,
-      });
+      }));
     });
 
     await step.run("record-completion", async () => {

@@ -20,7 +20,7 @@ const commit = (cwd: string, file: string, msg: string) => {
 
 let root: string;
 let repo: string;
-// The log command is POSIX for the Linux sandbox; `sh` gets forward-slash paths on a Windows host.
+// Run the POSIX sandbox command from the fixture directory with a relative path.
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "dpf-commit-list-"));
@@ -54,7 +54,7 @@ describe("the build's own commits", () => {
     git(repo, "checkout", "-q", "build/FB-1");
     git(repo, "merge", "-q", "--no-edit", "origin/main");
 
-    const out = spawnSync("sh", ["-c", buildOwnCommitsLogCommand(repo.replace(/\\/g, "/"), "client/c1")], { encoding: "utf8" });
+    const out = spawnSync("sh", ["-c", buildOwnCommitsLogCommand(".", "client/c1")], { cwd: repo, encoding: "utf8" });
     expect(out.status).toBe(0);
     expect(new Set(ownBuildCommitHashes(out.stdout))).toEqual(new Set([agent, wip]));
   });
@@ -63,7 +63,8 @@ describe("the build's own commits", () => {
     git(repo, "remote", "remove", "origin");
     git(repo, "checkout", "-q", "-b", "build/FB-2", "client/c1");
     const agent = commit(repo, "x.ts", "feat: x");
-    const out = spawnSync("sh", ["-c", buildOwnCommitsLogCommand(repo.replace(/\\/g, "/"), "client/c1")], { encoding: "utf8" });
+    const out = spawnSync("sh", ["-c", buildOwnCommitsLogCommand(".", "client/c1")], { cwd: repo, encoding: "utf8" });
+    expect(out.status).toBe(0);
     expect(ownBuildCommitHashes(out.stdout)).toEqual([agent]);
   });
 });

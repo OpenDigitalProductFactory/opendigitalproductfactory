@@ -1,0 +1,23 @@
+import { jobs } from "@/lib/jobs";
+import { PROVIDER_PAUSE_EXPIRY_EVENT } from "@/lib/inference/provider-operator-pause";
+
+export const providerPauseExpiry = jobs.createFunction(
+  { id: "ops/provider-pause-expiry", retries: 2, triggers: [{ event: PROVIDER_PAUSE_EXPIRY_EVENT }] },
+  async ({ event, step }) => {
+    const { providerId, operationId, resumeAt } = event.data as { providerId: string; operationId: string; resumeAt: string };
+    if (typeof providerId !== "string" || !/^[a-zA-Z0-9_-]+$/.test(providerId) || !operationId || !Number.isFinite(Date.parse(resumeAt))) return { outcome: "invalid-event" };
+    await step.sleepUntil("pause-expiry", resumeAt);
+    return step.run("expire-current-pause", async () => {
+      const { resumeOperatorProvider } = await import("@/lib/inference/provider-operator-pause");
+      return resumeOperatorProvider({ providerId, operationId, automatic: true });
+    });
+  },
+);
+
+export const providerPauseReconcile = jobs.createFunction(
+  { id: "ops/provider-pause-reconcile", retries: 1, triggers: [{ cron: "1,6,11,16,21,26,31,36,41,46,51,56 * * * *" }] },
+  async ({ step }) => step.run("resume-overdue-pauses", async () => {
+    const { reconcileOverdueProviderPauses } = await import("@/lib/inference/provider-operator-pause");
+    return { resumed: await reconcileOverdueProviderPauses() };
+  }),
+);

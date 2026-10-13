@@ -71,5 +71,12 @@ export function validateLocalSemanticReviewGate(state, current, nowMs = Date.now
   const stale = IDENTITY_FIELDS.some((field) => state[field] !== current[field]) ||
     JSON.stringify(normalizedIds(state.specialistIds)) !== JSON.stringify(normalizedIds(current.specialistIds));
   if (stale || !String(state.evidenceId ?? "").trim()) return { valid: false, reason: "stale-receipt" };
+  if (state.receiptDisposition === "policy-exemption") {
+    const valid = state.exemptionSchemaVersion === "semantic-change-review-exemption.v1" && state.nativeReview === "UNRUN"
+      && state.reviewBasis === "operator-accepted-client-assessment" && state.independentReview === "UNVERIFIED"
+      && Boolean(state.expiresAt && String(state.approvedByUserId ?? "").trim() && String(state.reason ?? "").trim())
+      && /^[a-f0-9]{64}$/.test(state.bindingDigest ?? "") && state.receiptDecision == null;
+    return { valid, reason: valid ? "policy-exemption" : "invalid-exemption" };
+  }
   return { valid: true, reason: "fresh-receipt" };
 }
