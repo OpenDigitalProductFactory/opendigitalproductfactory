@@ -33,3 +33,19 @@ Extend the July 26 Work Rooms collaboration design, sections 7.1 and 7.2. Reuse 
 ## Risk and rollback
 
 Classification correction can widen room access, so it remains an authority-consequential operation requiring exact approval. Server validation is mandatory independently of the UI. Rollback reverts the code; audited correction history remains and may support a separate authorized reversal. Never erase history, fabricate target classification, or claim target acceptance from source-local tests.
+
+## Administrator dispatch recovery
+
+Follow-up for the same BI: native OAuth `review_workroom_sensitivity` succeeds on the admitted implementation room but returns `workroom_data_access_required` for WC-9CECAF46 before its masked handler runs. The target's actual classification remains unknown. At source 8156f50dc5b1670f2e5405aeee6a5eb309ac25fa, `workroomTargetAccessRefusal` applies content admission to the two administrative recovery tools. An invalid historical label cannot satisfy that admission, so the repair can be unreachable.
+
+WWMD DI-0CED98BA4777 selected the narrow administrative control-plane route. Its feature scores are comparative design judgments, not measured risk probabilities. The earlier DI-F7A41D44EF89 lacked scoreable features and supplied no decision.
+
+Ordered follow-up plan (one atomic correction of AC-3):
+
+1. Reuse the existing Workroom and normal exclusive claims for the OAuth room-access module, its tests and the governed dispatch integration tests. Preserve the current tool registry, grants, roles, data clearance and approval policy.
+2. Add failing regressions showing that a current platform administrator can reach only `review_workroom_sensitivity` and `correct_workroom_sensitivity` without content admission. Prove that nonadministrators, revoked administrators, forged parameter tool names and ordinary reads/evidence writes remain denied.
+3. Authorize those two exact tool names through the current human's `manage_platform` check. The masked reader's transaction repeats that check; the correction retains trusted exact approval, verified classification, invalid-only input, revision/JSON compare-and-swap and audit. Never return room contents or confer room admission.
+4. Verify governed execution still requires approval for correction and allows only the read-shaped metadata call without another approval. Run the existing correction permission, forged approval, stale revision and rollback tests alongside the access regressions and both TypeScript programs.
+5. Freeze the assembled change, run the canonical shared gate, obtain independent review, and publish through DCO and the protected merge queue. Coordinate the canonical release with its existing owner. After deployment, exercise the masked review through the same OAuth assistant, confirm ordinary room content remains denied where appropriate, then determine the supported remedy from the actual classification state. Do not infer or mutate WC-9CECAF46's classification from its title, DEV posture or this source diagnosis.
+
+Coverage: BI-CAP-1774FB7A AC-3, quoted from the live item: "A supported exact-room administrator review/correction path records the original declaration, reviewed classification, actor and rationale with concurrency protection, without global clearance changes." AC-4 remains the regression contract; AC-5 still requires actual authorized classification review before any historical correction. Dispatch and its negative controls cannot ship independently; they form one revertible fix. No new UI control, schema, tool or automatic backfill is introduced.
