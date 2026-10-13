@@ -1,10 +1,17 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render as renderView, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const save = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/actions/build-studio", () => ({ setLocalOnlyInferenceSetting: save }));
 import { LocalOnlyInferenceToggle } from "./LocalOnlyInferenceToggle";
+
+function render(node: ReactNode) {
+  return renderView(node, { wrapper: ({ children }) => <MessagesProvider locale="en-US" messages={{ setup: namespaceMessages("en-US", "setup") }}>{children}</MessagesProvider> });
+}
 
 beforeEach(() => { save.mockReset(); });
 afterEach(cleanup);

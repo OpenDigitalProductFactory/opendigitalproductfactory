@@ -1,4 +1,14 @@
 {
+  "localInferencePolicy": {
+    "heading": "Where AI may run",
+    "cloud": "Local and allowed cloud providers",
+    "local": "Local only",
+    "help": "Applies to DPF coding and coworker tasks. Local only is not required for coding. It blocks cloud providers and stops work when no local model fits. Other routing rules still apply.",
+    "saving": "Saving…",
+    "savedLocal": "Saved: Local only",
+    "savedCloud": "Saved: Cloud allowed",
+    "saveUnconfirmed": "Could not confirm the save. The last confirmed setting is shown. Try again."
+  },
   "progress": {
     "label": "Setup progress",
     "stepAria": "Step {$index} of {$total}: {$label}, {$state}",
