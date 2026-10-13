@@ -3,11 +3,17 @@
 # Bash 3.2 compatible (macOS).
 #
 # The rule, in one place for the installer and the agent-toolchain bootstrap:
-#   DPF_MCP_URL         = <PUBLIC_URL>/api/mcp/v1?tier=full when the install's
-#                         .env names an https PUBLIC_URL; otherwise an explicit
-#                         DPF_MCP_URL already in the environment; then the saved
-#                         user endpoint; otherwise none
-#                         (the client plugin's loopback default applies).
+#   DPF_MCP_URL         = an explicit DPF_MCP_URL already in the environment;
+#                         then a saved https user endpoint; then
+#                         <PUBLIC_URL>/api/mcp/v1?tier=full when the install's
+#                         .env names an https PUBLIC_URL; otherwise none
+#                         (the client plugin's https default applies).
+#   Only an https endpoint whose host is a name or IPv4 address is ever
+#   persisted. The persisted DPF_MCP_URL is what Claude desktop and Claude Code
+#   expand into their OAuth connector, and OAuth refuses plain http
+#   (BI-46B636B0); Docker publishes the portal on IPv4 only, so an IPv6
+#   literal such as [::1] refuses the connection. A loopback-http choice for
+#   Codex or Grok lives in that client's own config, never here (BI-8FD7C0C9).
 #   NODE_EXTRA_CA_CERTS = the organization root bundle, for an https endpoint
 #                         only: DPF_PKI_TRUST_BUNDLE, then the install's .env,
 #                         then saved NODE_EXTRA_CA_CERTS, then ~/.dpf/pki/root_ca.crt.
@@ -61,14 +67,23 @@ dpf_mcp_saved_env_value() {
 # Usage: dpf_resolve_mcp_client_env INSTALL_DIR
 # Sets DPF_MCP_CLIENT_URL and DPF_MCP_CLIENT_CA_BUNDLE (either may be empty).
 dpf_resolve_mcp_client_env() {
-  local install_dir="$1" public candidate
+  local install_dir="$1" public candidate saved
   DPF_MCP_CLIENT_URL=""
   DPF_MCP_CLIENT_CA_BUNDLE=""
   public="$(dpf_mcp_install_env_value "$install_dir" PUBLIC_URL)"
-  case "$public" in
-    https://*) DPF_MCP_CLIENT_URL="${public%/}/api/mcp/v1?tier=full" ;;
-    *) DPF_MCP_CLIENT_URL="${DPF_MCP_URL:-$(dpf_mcp_saved_env_value DPF_MCP_URL)}" ;;
-  esac
+  if [ -n "${DPF_MCP_URL:-}" ]; then
+    DPF_MCP_CLIENT_URL="$DPF_MCP_URL"
+  else
+    saved="$(dpf_mcp_saved_env_value DPF_MCP_URL)"
+    # A saved value this module would refuse to write is a leftover leak.
+    if [ -n "$saved" ] && dpf_mcp_client_endpoint_can_persist "$saved"; then
+      DPF_MCP_CLIENT_URL="$saved"
+    else
+      case "$public" in
+        https://*) DPF_MCP_CLIENT_URL="${public%/}/api/mcp/v1?tier=full" ;;
+      esac
+    fi
+  fi
   case "$DPF_MCP_CLIENT_URL" in
     https://*)
       for candidate in "${DPF_PKI_TRUST_BUNDLE:-}" \
@@ -133,10 +148,22 @@ dpf_launchd_setenv() {
   "$launchctl_cmd" setenv "$1" "$2" 2>/dev/null || true
 }
 
+# Usage: dpf_mcp_client_endpoint_can_persist URL -- true only for an https URL
+# with no userinfo whose host is a name or IPv4 address. Checks the transport
+# only; it neither authenticates nor creates credentials.
+dpf_mcp_client_endpoint_can_persist() {
+  local authority
+  case "$1" in https://*) ;; *) return 1 ;; esac
+  authority="${1#https://}"; authority="${authority%%[/?#]*}"
+  case "$authority" in ''|*@*|\[*) return 1 ;; esac
+  return 0
+}
+
 # Usage: dpf_persist_mcp_client_env (after dpf_resolve_mcp_client_env)
-# Returns 1 and writes nothing when the endpoint is not https.
+# Returns 1 and writes nothing -- env file, profiles or launchd -- for an
+# endpoint dpf_mcp_client_endpoint_can_persist refuses.
 dpf_persist_mcp_client_env() {
-  case "${DPF_MCP_CLIENT_URL:-}" in https://*) ;; *) return 1 ;; esac
+  dpf_mcp_client_endpoint_can_persist "${DPF_MCP_CLIENT_URL:-}" || return 1
   dpf_set_client_env_export DPF_MCP_URL "$DPF_MCP_CLIENT_URL" || return $?
   dpf_set_client_env_export NODE_EXTRA_CA_CERTS "${DPF_MCP_CLIENT_CA_BUNDLE:-}" || return $?
   dpf_source_client_env_from_profiles

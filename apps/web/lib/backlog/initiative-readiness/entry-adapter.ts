@@ -60,6 +60,7 @@ export function readinessShapeFromWorkShape(ref: string | null | undefined): Rea
 }
 
 type Baseline = {
+  origin?: string;
   baselineId: string;
   supersedesBaselineId: string | null;
   artifactDigest: string;
@@ -95,6 +96,7 @@ function parseBaselines(activities: readonly InitiativeReadinessActivity[], item
       return { current: null, malformed: true, ambiguous: true };
     }
     parsed.push({
+      origin: typeof payload.origin === "string" ? payload.origin : undefined,
       baselineId: payload.baselineId,
       supersedesBaselineId: payload.supersedesBaselineId as string | null,
       artifactDigest: payload.artifactDigest,
@@ -445,6 +447,8 @@ export function projectBacklogItemReadiness(args: {
   governed: boolean;
   baselineId: string | null;
   planArtifact: InitiativePlanArtifact | null;
+  /** Additive projection evidence; legacy projection ports may omit it. */
+  planArtifactDigest?: string | null;
   /** Parent item whose scope this projection borrowed, or null when the item stands alone. */
   inheritedFrom: string | null;
   artifactHints: { hasSpec: boolean; hasPlan: boolean };
@@ -456,7 +460,9 @@ export function projectBacklogItemReadiness(args: {
     : null;
   const inherited = parent?.current ? args.inheritedScope! : null;
   const baseline = inherited ? parent! : own;
-  const digest = baseline.current?.artifactDigest ?? null;
+  // A body snapshot versions acceptance, not the research artifact. It cannot
+  // retroactively stale author research against the previously recorded source.
+  const digest = baseline.current?.origin === "item-body" ? null : baseline.current?.artifactDigest ?? null;
   const projectedCoverage = projectPlanCoverage(inherited ? inherited.activities : args.activities, baseline.current);
   const digests: AcceptedDigests = { canonical: digest, plan: projectedCoverage.planDigest };
   const ownReceipts = latestGateStates(args.activities, digests, args.item.itemId);
@@ -606,6 +612,7 @@ export function projectBacklogItemReadiness(args: {
     governed,
     baselineId: baseline.current?.baselineId ?? null,
     planArtifact: projectedCoverage.planArtifact,
+    planArtifactDigest: projectedCoverage.planDigest,
     inheritedFrom: inherited?.parentItemId ?? null,
     artifactHints: args.artifactHints ?? { hasSpec: false, hasPlan: false },
     decision: evaluateInitiativeReadiness(facts, args.target),

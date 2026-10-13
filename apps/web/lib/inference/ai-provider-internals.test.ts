@@ -15,13 +15,19 @@ const discoveredModelMock = vi.hoisted(() => ({
 }));
 const modelProfileMock = vi.hoisted(() => ({
   findMany: vi.fn(),
+  findUnique: vi.fn(),
+  upsert: vi.fn(),
+  update: vi.fn().mockResolvedValue({}),
   updateMany: vi.fn<(args: Record<string, any>) => Promise<{ count: number }>>(async () => ({ count: 0 })),
 }));
 const modelProviderMock = vi.hoisted(() => ({ findUnique: vi.fn() }));
 const agentModelConfigMock = vi.hoisted(() => ({ updateMany: vi.fn() }));
 const seedKnownModelsMock = vi.hoisted(() => vi.fn());
 const discoverCodexCliModelsMock = vi.hoisted(() => vi.fn());
+const authEligibilityMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock("@/lib/routing/model-auth-eligibility", () => ({ recordDiscoveredAuthEligibility: authEligibilityMock }));
 vi.mock("@dpf/db", () => ({
+  Prisma: { AnyNull: "any-null" },
   prisma: {
     credentialEntry: {
       findUnique: vi.fn(async (args: { where?: { providerId?: string } } | undefined) => {
@@ -37,7 +43,7 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 vi.mock("@/lib/inference/known-model-seeding", () => ({ seedKnownModels: seedKnownModelsMock }));
-vi.mock("@/lib/routing/codex-cli-model-catalog", () => ({
+vi.mock("./codex-cli-catalog-auth", () => ({
   discoverCodexCliModels: discoverCodexCliModelsMock,
 }));
 
@@ -52,7 +58,20 @@ import {
   PERMANENT_RETIRE_REASONS,
   autoDiscoverAndProfile,
   clearStaleCodexPins,
+  profileModelsInternal,
+  discoverChatGptBackendModels,
 } from "./ai-provider-internals";
+import { persistDiscoveredInventory } from "./discovered-model-inventory";
+
+describe("ChatGPT inventory validation", () => {
+  it("rejects a partly malformed response instead of treating a partial list as authoritative", async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ models: [{ slug: "future-model" }, {}] }))) as typeof fetch;
+    try {
+      expect(await discoverChatGptBackendModels("chatgpt", {})).toMatchObject({ models: [], error: expect.stringContaining("Malformed") });
+    } finally { globalThis.fetch = realFetch; }
+  });
+});
 
 describe("Codex authoritative discovery", () => {
   beforeEach(() => {
@@ -78,6 +97,56 @@ describe("Codex authoritative discovery", () => {
     });
     expect(seedKnownModelsMock).not.toHaveBeenCalled();
     expect(discoveredModelMock.createMany).not.toHaveBeenCalled();
+  });
+
+  it("preserves the last good inventory when the CLI returns an empty or malformed inventory", async () => {
+    discoveredModelMock.update.mockClear();
+    discoveredModelMock.createMany.mockClear();
+    authEligibilityMock.mockClear();
+    discoverCodexCliModelsMock.mockResolvedValue([]);
+    expect(await autoDiscoverAndProfile("codex")).toMatchObject({ discovered: 0, error: expect.stringContaining("retained") });
+    discoverCodexCliModelsMock.mockRejectedValue(new Error("Malformed Codex model/list response"));
+    expect(await autoDiscoverAndProfile("codex")).toMatchObject({ discovered: 0, error: expect.stringContaining("Malformed") });
+    expect(discoveredModelMock.update).not.toHaveBeenCalled();
+    expect(discoveredModelMock.createMany).not.toHaveBeenCalled();
+    expect(authEligibilityMock).not.toHaveBeenCalled();
+  });
+
+  it("admits an unknown model and profiles only the returned IDs, preserving history", async () => {
+    authEligibilityMock.mockClear();
+    discoveredModelMock.findMany.mockReset();
+    discoveredModelMock.createMany.mockResolvedValue({ count: 1 });
+    discoveredModelMock.update.mockResolvedValue({});
+    modelProfileMock.updateMany.mockResolvedValue({ count: 0 });
+    modelProfileMock.findMany.mockResolvedValue([]);
+    modelProfileMock.findUnique.mockResolvedValue(null);
+    modelProfileMock.upsert.mockResolvedValue({});
+    const lastSeenAt = new Date("2026-09-01T00:00:00Z");
+    discoveredModelMock.findMany.mockImplementation(async (args) => args.select?.modelId && !args.select?.id
+      ? [] : args.where.modelId
+      ? [{ id: "new-model", modelId: "future-model-without-code-change", rawMetadata: {} }]
+      : [{ id: "history", modelId: "historical-model", missedDiscoveryCount: 0, lastSeenAt }]);
+    discoverCodexCliModelsMock.mockResolvedValue([{ modelId: "future-model-without-code-change", rawMetadata: {} }]);
+    expect(await autoDiscoverAndProfile("codex")).toMatchObject({ discovered: 1, newCount: 1, profiled: 1 });
+    expect(authEligibilityMock).toHaveBeenCalledWith(expect.anything(), { providerId: "codex", authMethod: "oauth2_authorization_code", modelIds: ["future-model-without-code-change"] });
+    expect(discoveredModelMock.findMany).toHaveBeenCalledWith({ where: { providerId: "codex", modelId: { in: ["future-model-without-code-change"] } } });
+    expect(discoveredModelMock.update).toHaveBeenCalledWith({ where: { id: "history" }, data: { missedDiscoveryCount: 1, lastSeenAt } });
+    expect(authEligibilityMock.mock.invocationCallOrder.at(-1)).toBeGreaterThan(modelProfileMock.upsert.mock.invocationCallOrder.at(-1)!);
+  });
+
+  it("preserves evaluated scores and retirement state while refreshing known pricing metadata", async () => {
+    discoveredModelMock.findMany.mockResolvedValue([{ modelId: "gpt-5.6-sol", rawMetadata: {} }]);
+    modelProfileMock.findUnique.mockResolvedValue({ rawMetadataHash: null, profileSource: "evaluated", qualityTierSource: "admin", supportsToolUse: true, capabilityOverrides: {} });
+    modelProfileMock.upsert.mockClear();
+    modelProfileMock.upsert.mockResolvedValue({});
+    expect(await profileModelsInternal("codex", ["gpt-5.6-sol"])).toMatchObject({ profiled: 1 });
+    const update = modelProfileMock.upsert.mock.calls[0][0].update;
+    expect(update.inputPricePerMToken).toBe(4);
+    expect(update.outputPricePerMToken).toBe(20);
+    expect(update.reasoning).toBeUndefined();
+    expect(update.profileSource).toBeUndefined();
+    expect(update.qualityTier).toBeUndefined();
+    expect(update.modelStatus).toBeUndefined();
   });
 });
 
@@ -201,6 +270,12 @@ describe("extractTokenUsage", () => {
 });
 
 describe("buildAutoDiscoveryEvalEvents", () => {
+  it("never queues chat evaluations for an embedding model", () => {
+    expect(buildAutoDiscoveryEvalEvents("local", [
+      { modelId: "nomic-embed-text-v1.5", modelClass: "embedding", outputModalities: ["embeddings"] },
+      { modelId: "qwen", modelClass: "reasoning", outputModalities: ["text"] },
+    ]).map((e) => e.data.modelId)).toEqual(["qwen"]);
+  });
   it("uses the provider id as endpointId, not the ModelProfile row id", () => {
     const events = buildAutoDiscoveryEvalEvents("anthropic-sub", [
       { id: "cmogs56yp00018xqagh6iq4px", modelId: "claude-sonnet-4-6" },
@@ -381,7 +456,7 @@ describe("upsertDiscoveredModels (model-discovery N+1 batching — BI-OPT-DB-HOT
     discoveredModelMock.createMany.mockReset();
     discoveredModelMock.findMany.mockResolvedValue([]);
     discoveredModelMock.update.mockResolvedValue({});
-    discoveredModelMock.createMany.mockResolvedValue({ count: 0 });
+    discoveredModelMock.createMany.mockImplementation(async (args) => ({ count: args.data.length }));
   });
 
   it("reads existing models with ONE findMany keyed on providerId + modelId IN [...]", async () => {
@@ -437,6 +512,17 @@ describe("upsertDiscoveredModels (model-discovery N+1 batching — BI-OPT-DB-HOT
     expect(newCount).toBe(0);
     expect(discoveredModelMock.findMany).not.toHaveBeenCalled();
     expect(discoveredModelMock.createMany).not.toHaveBeenCalled();
+    expect(discoveredModelMock.update).not.toHaveBeenCalled();
+  });
+
+  it("reports actual inserts when a concurrent discovery already created a model", async () => {
+    discoveredModelMock.createMany.mockResolvedValue({ count: 0 });
+    expect(await upsertDiscoveredModels("p", [{ modelId: "arrived-concurrently", rawMetadata: {} }])).toBe(0);
+  });
+
+  it("does not reconcile an empty serving inventory", async () => {
+    expect(await persistDiscoveredInventory("codex", "oauth2_authorization_code", [])).toMatchObject({ discovered: 0, error: expect.stringContaining("retained") });
+    expect(discoveredModelMock.findMany).not.toHaveBeenCalled();
     expect(discoveredModelMock.update).not.toHaveBeenCalled();
   });
 });
@@ -506,19 +592,20 @@ describe("reconcileDiscoveredModelPresence (retire-forever trap — BI-B6B8C1F9)
 
   it("cloud: absent model increments the missed counter and retires after 2 misses", async () => {
     discoveredModelMock.findMany.mockResolvedValue([
-      { id: "dm1", modelId: "gone-model", missedDiscoveryCount: 1 },
+      { id: "dm1", modelId: "gone-model", missedDiscoveryCount: 1, lastSeenAt: new Date("2026-09-01T00:00:00Z") },
     ]);
 
     await reconcileDiscoveredModelPresence("anthropic-sub", new Set(["other-model"]));
 
     expect(discoveredModelMock.update).toHaveBeenCalledWith({
       where: { id: "dm1" },
-      data: { missedDiscoveryCount: 2 },
+      data: { missedDiscoveryCount: 2, lastSeenAt: new Date("2026-09-01T00:00:00Z") },
     });
     const retireCall = modelProfileMock.updateMany.mock.calls.find(
       (c) => c[0]?.data?.modelStatus === "retired",
     );
     expect(retireCall).toBeDefined();
+    expect(retireCall?.[0].where.OR).toEqual([{ retiredReason: null }, { retiredReason: { notIn: PERMANENT_RETIRE_REASONS } }]);
   });
 
   it("local: absent model is NOT counted or retired (an engine hiccup must not strand the bundled fallback)", async () => {
@@ -530,5 +617,118 @@ describe("reconcileDiscoveredModelPresence (retire-forever trap — BI-B6B8C1F9)
 
     expect(discoveredModelMock.update).not.toHaveBeenCalled();
     expect(modelProfileMock.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("provider-reported output capacity", () => {
+  beforeEach(() => {
+    modelProviderMock.findUnique.mockReset();
+    modelProviderMock.findUnique.mockResolvedValue({ providerId: "anthropic", name: "Anthropic", modelRestrictions: [], supportsToolUse: true });
+    discoveredModelMock.findMany.mockReset();
+    discoveredModelMock.findMany.mockResolvedValue([{ modelId: "claude-future", rawMetadata: { max_input_tokens: 48_000, max_tokens: 64_000 } }]);
+    modelProfileMock.findUnique.mockReset();
+    modelProfileMock.findUnique.mockResolvedValue(null);
+    modelProfileMock.upsert.mockReset();
+    modelProfileMock.upsert.mockResolvedValue({});
+    modelProfileMock.update.mockClear();
+    modelProfileMock.updateMany.mockReset();
+    modelProfileMock.updateMany.mockResolvedValue({ count: 1 });
+  });
+
+  it.each([
+    { name: "eligible", restrictions: [] },
+    { name: "credential-restricted", restrictions: ["permitted-*"] },
+  ])("persists the real adapter output limit on $name create and update", async ({ restrictions }) => {
+    modelProviderMock.findUnique.mockResolvedValue({ providerId: "anthropic", name: "Anthropic", modelRestrictions: restrictions, supportsToolUse: true });
+
+    await profileModelsInternal("anthropic", ["claude-future"]);
+
+    const write = modelProfileMock.upsert.mock.calls[0][0];
+    expect(write.create.maxOutputTokens).toBe(64_000);
+    expect(write.update).not.toHaveProperty("maxOutputTokens");
+    expect(write.create.maxInputTokens).toBe(48_000);
+    expect(write.update.maxInputTokens).toBe(restrictions.length ? undefined : 48_000);
+  });
+
+  it.each([null, 0, -1, 1.5, NaN, Infinity, 2_147_483_648])("does not erase previous capacity for invalid or unknown output %s", async (maxTokens) => {
+    discoveredModelMock.findMany.mockResolvedValue([{ modelId: "claude-future", rawMetadata: { max_tokens: maxTokens } }]);
+    modelProfileMock.findUnique.mockResolvedValue({ rawMetadataHash: null, profileSource: "evaluated", capabilityOverrides: {}, maxOutputTokens: 32_768 });
+
+    await profileModelsInternal("anthropic", ["claude-future"]);
+
+    expect(modelProfileMock.upsert.mock.calls[0][0].update).not.toHaveProperty("maxOutputTokens");
+  });
+
+  it.each([
+    { profileSource: "seed", capabilityOverrides: null, equals: "any-null" },
+    { profileSource: "evaluated", capabilityOverrides: {}, equals: {} },
+    { profileSource: "admin", capabilityOverrides: { supportsToolUse: false }, equals: { supportsToolUse: false } },
+  ])("refreshes an existing unlocked output limit using atomic $profileSource ownership", async (owner) => {
+    modelProfileMock.findUnique.mockResolvedValue({ rawMetadataHash: null, ...owner });
+    await profileModelsInternal("anthropic", ["claude-future"]);
+    expect(modelProfileMock.updateMany).toHaveBeenCalledWith({
+      where: { providerId: "anthropic", modelId: "claude-future", profileSource: owner.profileSource, capabilityOverrides: { equals: owner.equals } },
+      data: { maxOutputTokens: 64_000 },
+    });
+    expect(modelProfileMock.upsert.mock.calls[0][0].update).not.toHaveProperty("maxOutputTokens");
+  });
+
+  it.each([
+    { profileSource: "admin", capabilityOverrides: null },
+    { profileSource: "seed", capabilityOverrides: { maxOutputTokens: true } },
+  ])("preserves an admin output lock %j", async (owner) => {
+    modelProfileMock.findUnique.mockResolvedValue({ rawMetadataHash: null, maxOutputTokens: 32_768, ...owner });
+
+    await profileModelsInternal("anthropic", ["claude-future"]);
+
+    expect(modelProfileMock.upsert.mock.calls[0][0].update).not.toHaveProperty("maxOutputTokens");
+  });
+
+  it.each(["seed", "evaluated"])("retains one drift marker while refreshing %s metadata", async (profileSource) => {
+    modelProfileMock.findUnique.mockResolvedValue({ rawMetadataHash: "old-card-metadata", profileSource, capabilityOverrides: {} });
+
+    await profileModelsInternal("anthropic", ["claude-future"]);
+
+    expect(modelProfileMock.update).toHaveBeenCalledExactlyOnceWith({
+      where: { providerId_modelId: { providerId: "anthropic", modelId: "claude-future" } },
+      data: { driftDetectedAt: expect.any(Date) },
+    });
+    expect(modelProfileMock.updateMany).toHaveBeenCalledWith({
+      where: { providerId: "anthropic", modelId: "claude-future", profileSource, capabilityOverrides: { equals: {} } },
+      data: { maxOutputTokens: 64_000 },
+    });
+  });
+
+  it.each([
+    { name: "eligible", restrictions: [] },
+    { name: "credential-restricted", restrictions: ["permitted-*"] },
+  ])("preserves a concurrent admin edit during $name refresh", async ({ restrictions }) => {
+    modelProviderMock.findUnique.mockResolvedValue({ name: "Anthropic", modelRestrictions: restrictions, supportsToolUse: true });
+    const previous = { rawMetadataHash: null, profileSource: "seed", capabilityOverrides: {} };
+    const row = { profileSource: "admin", capabilityOverrides: { maxOutputTokens: true }, maxOutputTokens: 32_768 };
+    modelProfileMock.findUnique.mockResolvedValueOnce(previous).mockResolvedValue(row);
+    modelProfileMock.updateMany.mockImplementation(async ({ where, data }) => {
+      if (where.profileSource === row.profileSource && JSON.stringify(where.capabilityOverrides?.equals) === JSON.stringify(row.capabilityOverrides)) Object.assign(row, data);
+      return { count: 0 };
+    });
+    modelProfileMock.upsert.mockImplementation(async ({ update }) => { Object.assign(row, update); return row; });
+
+    await profileModelsInternal("anthropic", ["claude-future"]);
+
+    expect(row.maxOutputTokens).toBe(32_768);
+    expect(row.capabilityOverrides).toEqual({ maxOutputTokens: true });
+  });
+
+  it("preserves a locked row inserted after discovery saw no profile", async () => {
+    const row = { profileSource: "admin", capabilityOverrides: null, maxOutputTokens: 32_768 };
+    modelProfileMock.findUnique.mockResolvedValue(null);
+    modelProfileMock.upsert.mockImplementation(async ({ update }) => { Object.assign(row, update); return row; });
+    await profileModelsInternal("anthropic", ["claude-future"]);
+    expect(row.maxOutputTokens).toBe(32_768);
+    expect(row.profileSource).toBe("admin");
+    modelProfileMock.findUnique.mockResolvedValue(row);
+    await profileModelsInternal("anthropic", ["claude-future"]);
+    expect(row.maxOutputTokens).toBe(32_768);
+    expect(row.profileSource).toBe("admin");
   });
 });

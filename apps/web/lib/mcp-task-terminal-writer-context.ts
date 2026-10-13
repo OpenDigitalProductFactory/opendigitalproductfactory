@@ -185,6 +185,7 @@ function assessPageSet(
 function validateReaderExecutions(
   policy: TerminalToolPolicy,
   executions: readonly PersistedTerminalReaderExecution[],
+  requireSuccessfulReader = true,
 ): ActionSuccess<{ ids: string[]; contentfulAttempts: HydrationPageEvidence[][] }> | TerminalWriterContextFailure {
   if (!policy.immutableReaderArguments) {
     return hydrationFailure(
@@ -201,6 +202,7 @@ function validateReaderExecutions(
 
   const ids: string[] = [];
   const contentfulAttempts: HydrationPageEvidence[][] = [];
+  let requiresFreshRead = false;
   const seenIds = new Set<string>();
   let priorCreatedAt = Number.NEGATIVE_INFINITY;
   for (const execution of executions) {
@@ -220,7 +222,19 @@ function validateReaderExecutions(
         "Persisted immutable reader parameters are unavailable.",
       );
     }
-    const normalized = normalizeTerminalToolArguments(policy, execution.toolName, parameters);
+    // Historical audit records contain the provider's requested page controls,
+    // which can exceed a later reader ceiling. They never authorize a fresh read
+    // at that size or make cached source reusable. Validate a narrowed copy and
+    // require a complete current-bound reread; preserve identity and audit bytes.
+    const historicalParameters = { ...parameters };
+    for (const [name, ceiling] of [["maxChars", SOURCE_READ_MAX_CHARS], ["maxLines", SOURCE_READ_MAX_LINES]] as const) {
+      const value = parameters[name];
+      if (execution.success && typeof value === "number" && Number.isSafeInteger(value) && value > ceiling) {
+        historicalParameters[name] = ceiling;
+        requiresFreshRead = true;
+      }
+    }
+    const normalized = normalizeTerminalToolArguments(policy, execution.toolName, historicalParameters);
     if (normalized.kind === "refuse") {
       return hydrationFailure(normalized.result.error, normalized.result.message);
     }
@@ -285,13 +299,32 @@ function validateReaderExecutions(
       );
     }
   }
-  if (ids.length === 0) {
+  if (ids.length === 0 && requireSuccessfulReader) {
     return hydrationFailure(
       "terminal_writer_context_reader_count_invalid",
       "No successful exact-bound immutable reader execution is available for terminal-writer hydration.",
     );
   }
-  return ok({ ids, contentfulAttempts });
+  return ok({ ids, contentfulAttempts: requiresFreshRead ? [] : contentfulAttempts });
+}
+
+/** Failed cursors permit a new governed read, never writer evidence. */
+export function needsTerminalReaderBootstrap(
+  policy: TerminalToolPolicy,
+  executions: readonly PersistedTerminalReaderExecution[],
+): boolean {
+  if (executions.length === 0) return true;
+  if (executions.some((execution) => execution.success)) return false;
+  if (!validateReaderExecutions(policy, executions, false).ok) return false;
+  return executions.every((execution) => {
+    const parameters = record(execution.parameters)!;
+    const result = record(execution.result);
+    return result?.["error"] === "invalid_cursor" && result["success"] !== true
+      && typeof parameters["cursor"] === "string"
+      && (parameters["startLine"] === undefined || parameters["startLine"] === 1)
+      && (result["data"] === undefined || record(result["data"]) !== null)
+      && record(result["data"])?.["content"] === undefined;
+  });
 }
 
 function selectCompletePersistedAttempt(

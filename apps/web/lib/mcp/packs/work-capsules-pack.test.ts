@@ -12,6 +12,7 @@ const mockPrisma = {
   },
   workroomActivity: {
     create: vi.fn(),
+    findMany: vi.fn(),
   },
   // adopt_worktree resolves a supplied backlogItemId before binding it, so an
   // unknown id is refused rather than silently dropped (BI-D526F72C).
@@ -32,6 +33,14 @@ vi.mock("@/lib/identity/principal-linking", () => ({
 
 describe("work capsule MCP tools", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("keeps classification correction behind administrator grants and authority governance", async () => {
+    const { workCapsulesPack } = await import("./work-capsules-pack");
+    const correction = workCapsulesPack.definitions.find(tool => tool.name === "correct_workroom_sensitivity");
+    expect(correction).toMatchObject({ requiredCapability: "manage_platform", executionMode: "proposal", sideEffect: true, consequence: "authority" });
+    expect(workCapsulesPack.grants.correct_workroom_sensitivity).toEqual(["admin_write"]);
+    expect(workCapsulesPack.grants.review_workroom_sensitivity).toEqual(["admin_read"]);
+  });
 
   it("imports mcp-tools without runtime error under the @dpf/db mock", async () => {
     await expect(import("@/lib/mcp-tools")).resolves.toBeDefined();
@@ -113,6 +122,30 @@ describe("work capsule MCP tools", () => {
         portfolioRole: "productsAndServicesSold",
       }),
     ]);
+  });
+
+  // BI-62514632: read the room's ordered log from a position the caller holds.
+  it("get_workroom returns the log after afterSequence, oldest first", async () => {
+    mockPrisma.workroom.findUnique.mockResolvedValue({ id: "row-1", capsuleId: "WC-LOG", title: "Log", activities: [] });
+    mockPrisma.workroomActivity.findMany.mockResolvedValue([{ id: "a5", sequence: 5 }, { id: "a6", sequence: 6 }]);
+
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const result = await executeTool("get_workroom", { capsuleId: "WC-LOG", afterSequence: 4 }, "user-1", { agentId: "codex" });
+
+    expect(result).toMatchObject({
+      success: true,
+      data: { log: { afterSequence: 4, activity: [{ sequence: 5 }, { sequence: 6 }], hasMore: false } },
+    });
+    expect(mockPrisma.workroomActivity.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { workCapsuleId: "row-1", sequence: { gt: 4 } },
+      orderBy: { sequence: "asc" },
+    }));
+  });
+
+  it("get_workroom refuses a malformed afterSequence", async () => {
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const result = await executeTool("get_workroom", { capsuleId: "WC-LOG", afterSequence: -3 }, "user-1", { agentId: "codex" });
+    expect(result).toMatchObject({ success: false, error: "invalid_input" });
   });
 
   it("get_workroom does not renew leases for read-only hydration", async () => {
@@ -203,7 +236,29 @@ describe("work capsule MCP tools", () => {
     expect(mockPrisma.workroom.create).not.toHaveBeenCalled();
   });
 
+  it("heartbeat_workroom refuses while another principal holds a live lease (BI-A7601AED)", async () => {
+    mockPrisma.workroom.findUnique.mockResolvedValue({
+      id: "row-1",
+      capsuleId: "WC-1",
+      leaseHolderPrincipalId: "principal-someone-else",
+      leaseExpiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    });
+
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const result = await executeTool("heartbeat_workroom", { capsuleId: "WC-1" }, "user-1", {
+      agentId: "codex",
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      error: "lease_held_by_other",
+      data: { holderPrincipalId: "principal-someone-else" },
+    });
+    expect(mockPrisma.workroom.update).not.toHaveBeenCalled();
+  });
+
   it("heartbeat_workroom renews a lease", async () => {
+    mockPrisma.workroom.findUnique.mockResolvedValue({ id: "row-1", capsuleId: "WC-1", leaseHolderPrincipalId: null });
     mockPrisma.workroom.update.mockResolvedValue({ id: "row-1", capsuleId: "WC-1" });
     mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
 

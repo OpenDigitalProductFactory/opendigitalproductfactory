@@ -1,9 +1,24 @@
 # Durable Long-Running Agentic Processes — architecture assessment
 
+**Operator provider pauses:** optional expiry runs through the existing jobs
+facade, with `ScheduledJob` holding the operation identity and resume time.
+A five-minute reconciliation job repairs overdue timers after restart or event
+delivery failure. A matching timer checks health and the current operation
+inside the serialized resume path; it cannot lift a newer or indefinite pause.
+See the [provider control guide](../user-guide/ai-workforce/provider-ollama.md).
+
 **Current authority implementation:** durable process reconnects read tool grants
 from the canonical coworker Agent row on each request, with revocation tombstones
 taking precedence. Known alias rows are not an alternate authority source.
 Administrator reconciliation of legacy differences requires explicit approval.
+
+**Review execution recovery:** an incomplete design or plan reviewer panel keeps
+the saved artifact and last completed semantic round. Missing or inconclusive
+reviewers do not approve work, create document findings, consume revision rounds,
+or trigger document regeneration. The review panel and readiness strip show the
+execution wait separately from completed individual verdicts. Retry only after
+reviewer execution recovers; original execution records remain intact. See the
+[MCP recovery contract](mcp-tool-authorization-runbook.md).
 
 **Date:** 2026-06-09
 **Status:** Assessment / direction-setting. Not a build spec. The phased recommendations in §8 become backlog items, each promoted through Build Studio in the normal way.
@@ -35,7 +50,7 @@ This assessment respects [`verify-substrate-before-proposing-new`](../founder-ke
 
 ## 1. The problem, stated precisely
 
-Build Studio is a five-phase agentic pipeline (`ideate → plan → build → review → ship`, plus terminal `complete`/`failed`) defined in [`apps/web/lib/explore/feature-build-types.ts:441`](../../apps/web/lib/explore/feature-build-types.ts) with the transition matrix at [`feature-build-types.ts:657`](../../apps/web/lib/explore/feature-build-types.ts). The build phase is driven by `runBuildOrchestrator()` at [`apps/web/lib/build/build-orchestrator.ts:951`](../../apps/web/lib/build/build-orchestrator.ts), entered fire-and-forget via `autoExecuteBuild()` (defined at [`apps/web/lib/actions/build.ts:735`](../../apps/web/lib/actions/build.ts), called at `:710`/`:876`/`:908`/`:1149`).
+Build Studio is a five-phase agentic pipeline (`ideate → plan → build → review → ship`, plus terminal `complete`/`failed`; a build rebased onto main at ship returns to `review` to re-earn its evidence on the new tree, BI-76BD65E6) defined in [`apps/web/lib/explore/feature-build-types.ts:441`](../../apps/web/lib/explore/feature-build-types.ts) with the transition matrix at [`feature-build-types.ts:657`](../../apps/web/lib/explore/feature-build-types.ts). The build phase is driven by `runBuildOrchestrator()` at [`apps/web/lib/build/build-orchestrator.ts:951`](../../apps/web/lib/build/build-orchestrator.ts), entered fire-and-forget via `autoExecuteBuild()` (defined at [`apps/web/lib/actions/build.ts:735`](../../apps/web/lib/actions/build.ts), called at `:710`/`:876`/`:908`/`:1149`).
 
 We have spent months hardening it and it remains fragile. The concrete, observed failure modes:
 

@@ -24,6 +24,10 @@ scripts/installer/lib/platform.sh
 scripts/installer/lib/preflight.sh
 scripts/installer/lib/prompts.sh
 
+# macOS-only Docker Desktop settings adapter; Windows memory belongs to WSL
+# and must never execute this Mac settings-store/shutdown policy.
+scripts/installer/lib/macos-memory.sh
+
 # ps1-only compose invocation chain; no compose-chain.sh existed at guard
 # introduction.
 scripts/installer/lib/compose-chain.ps1

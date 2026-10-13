@@ -54,6 +54,7 @@ describe("inference origin (AsyncLocalStorage)", () => {
 describe("engineKeyForProvider", () => {
   it("maps the local provider to the local engine, all else to remote", () => {
     expect(engineKeyForProvider("local")).toBe("local");
+    expect(engineKeyForProvider("ollama")).toBe("local");
     expect(engineKeyForProvider("anthropic")).toBe("remote");
     expect(engineKeyForProvider("openai")).toBe("remote");
   });
@@ -194,5 +195,24 @@ describe("acquireInferenceSlot", () => {
     const r2 = await waiting;
     expect(getInferenceAdmissionSnapshot().local.autonomousWaiting).toBe(0);
     r2();
+  });
+});
+
+describe("parent cancellation during inference admission", () => {
+  it("drops canceled queued work without leaking or releasing the occupied slot", async () => {
+    process.env.DPF_INFERENCE_MAX_CONCURRENCY_LOCAL = "1";
+    const release = await acquireInferenceSlot("local", "autonomous");
+    const controller = new AbortController();
+    const queued = acquireInferenceSlot("local", "autonomous", { signal: controller.signal })
+      .then(free => { free(); return "dispatched"; }, error => error);
+    try {
+      controller.abort(new Error("parent expired"));
+      await tick();
+      expect(getInferenceAdmissionSnapshot().local).toMatchObject({ active: 1, autonomousWaiting: 0 });
+    } finally {
+      release();
+    }
+    expect(await queued).toMatchObject({ message: "parent expired" });
+    expect(getInferenceAdmissionSnapshot().local.active).toBe(0);
   });
 });

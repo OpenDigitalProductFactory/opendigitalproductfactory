@@ -9,8 +9,12 @@ const {
   mockAiInferenceTokensInc,
   mockAiInferenceErrorsInc,
   mockProviderFetch,
+  mockGpuFree,
+  mockAcquireSlot,
+  mockReleaseSlot,
 } = vi.hoisted(() => ({
   mockPrisma: {
+    aiProviderConnection: { findUnique: vi.fn() },
     modelProvider: {
       findUnique: vi.fn(),
     },
@@ -22,6 +26,17 @@ const {
   mockAiInferenceTokensInc: vi.fn(),
   mockAiInferenceErrorsInc: vi.fn(),
   mockProviderFetch: vi.fn(),
+  mockGpuFree: vi.fn(),
+  mockAcquireSlot: vi.fn(),
+  mockReleaseSlot: vi.fn(),
+}));
+
+vi.mock("./host-gpu-admission", () => ({ assertLocalGpuFree: mockGpuFree }));
+vi.mock("@/lib/routing/local-provider-capacity", () => ({ assertProviderDispatchCapacity: vi.fn() }));
+vi.mock("./inference-admission", () => ({
+  acquireInferenceSlot: mockAcquireSlot,
+  currentInferenceOrigin: () => "interactive",
+  engineKeyForProvider: (id: string) => id === "local" ? "local" : "remote",
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -44,7 +59,7 @@ vi.mock("@/lib/metrics", () => ({
 }));
 
 vi.mock("../routing/execution-adapter-registry", () => ({
-  getExecutionAdapter: vi.fn(() => ({ execute: mockAdapterExecute })),
+  getExecutionAdapter: vi.fn(() => ({ type: "chat", execute: mockAdapterExecute })),
   registerExecutionAdapter: vi.fn(),
 }));
 
@@ -65,6 +80,9 @@ import { _setAdapterTelemetryWriteOverrideForTests } from "../routing/adapter-te
 describe("callProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGpuFree.mockReset().mockResolvedValue(undefined);
+    mockAcquireSlot.mockResolvedValue(mockReleaseSlot);
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ status: "active" });
     mockStartTimer.mockReturnValue(vi.fn());
     mockAdapterExecute.mockResolvedValue({
       text: "ok",
@@ -75,9 +93,56 @@ describe("callProvider", () => {
     });
   });
 
+  it("waits for admission before inspecting the GPU and releases on deferral", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "openai", status: "active", authMethod: "api_key", authHeader: "Authorization",
+      baseUrl: "https://api.openai.com/v1", endpoint: null,
+    });
+    mockGetDecryptedCredential.mockResolvedValue({ secretRef: "test-key" });
+    const busy = new Error("GPU busy");
+    mockGpuFree.mockRejectedValueOnce(busy);
+    await expect(callProvider("openai", "model", [{ role: "user", content: "Hi" }], "Help"))
+      .rejects.toBe(busy);
+    expect(mockAcquireSlot.mock.invocationCallOrder[0]).toBeLessThan(mockGpuFree.mock.invocationCallOrder[0]);
+    expect(mockReleaseSlot).toHaveBeenCalledOnce();
+    expect(mockAdapterExecute).not.toHaveBeenCalled();
+  });
+
+  it("delegates local chat host checks to the shared lane instead of rejecting an active build", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "local", status: "active", authMethod: "none", authHeader: null,
+      baseUrl: "http://localhost:12434/v1", endpoint: null,
+    });
+    await expect(callProvider("local", "local-model", [{ role: "user", content: "Hi" }], "Help"))
+      .resolves.toMatchObject({ content: "ok" });
+    expect(mockGpuFree).not.toHaveBeenCalled();
+    expect(mockAcquireSlot.mock.invocationCallOrder[0]).toBeLessThan(mockAdapterExecute.mock.invocationCallOrder[0]);
+    expect(mockReleaseSlot).toHaveBeenCalledOnce();
+  });
+
+  it.each(["active", "degraded"])("preserves %s legacy activation while its default account is unconfigured", async status => {
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ status: "unconfigured" });
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({ providerId: "openai", status, authMethod: "api_key", authHeader: "Authorization", baseUrl: "https://api.openai.com/v1", endpoint: null });
+    mockGetDecryptedCredential.mockResolvedValue({ secretRef: "test-key" });
+    await expect(callProvider("openai", "model-under-test", [], "system")).resolves.toMatchObject({ content: "ok" });
+    expect(mockAdapterExecute).toHaveBeenCalledOnce();
+  });
+  it("keeps an unconfigured provider blocked when its default account is unconfigured", async () => {
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ status: "unconfigured" });
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({ status: "unconfigured" });
+    await expect(callProvider("openai", "model-under-test", [], "system")).rejects.toThrow("not enabled for routing");
+    expect(mockAdapterExecute).not.toHaveBeenCalled();
+  });
+  it("does not dispatch a cloud provider while its account is paused", async () => {
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ status: "paused" });
+    await expect(callProvider("chatgpt", "model-under-test", [], "system")).rejects.toThrow("not enabled for routing");
+    expect(mockAdapterExecute).not.toHaveBeenCalled();
+  });
+
   it("omits async-operation metadata for a synchronous adapter result", async () => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
       providerId: "openai",
+      status: "active",
       authMethod: "api_key",
       authHeader: "Authorization",
       baseUrl: "https://api.openai.com/v1",
@@ -103,6 +168,7 @@ describe("callProvider", () => {
       if (where.providerId === "codex") {
         return Promise.resolve({
           providerId: "codex",
+          status: "active",
           authMethod: "oauth2_authorization_code",
           authHeader: "Authorization",
           baseUrl: "https://api.openai.com/v1",
@@ -156,6 +222,7 @@ describe("callProvider", () => {
   it("projects typed async-operation start metadata from the adapter", async () => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
       providerId: "gemini",
+      status: "active",
       authMethod: "api_key",
       authHeader: "x-goog-api-key",
       baseUrl: "https://generativelanguage.googleapis.com/v1beta",
@@ -206,6 +273,7 @@ describe("callProvider", () => {
     // call sites (success + error).
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
       providerId: "anthropic",
+      status: "active",
       authMethod: "oauth2_authorization_code",
       authHeader: "Authorization",
       baseUrl: "https://api.anthropic.com",
@@ -244,6 +312,7 @@ describe("callProvider", () => {
   it("fails closed when a CLI adapter cannot enforce required tool choice", async () => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
       providerId: "anthropic-sub",
+      status: "active",
       authMethod: "oauth2_authorization_code",
       authHeader: "Authorization",
       baseUrl: null,
@@ -285,6 +354,7 @@ describe("callProvider", () => {
   ) => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
       providerId,
+      status: "active",
       authMethod: "oauth2_authorization_code",
       authHeader: "Authorization",
       baseUrl: providerId === "codex" ? "https://api.openai.com/v1" : null,
@@ -334,6 +404,7 @@ describe("callProvider", () => {
   it("keeps a sole required writer available to a provider-native HTTP adapter", async () => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
       providerId: "openai",
+      status: "active",
       authMethod: "api_key",
       authHeader: "Authorization",
       baseUrl: "https://api.openai.com/v1",
@@ -372,6 +443,7 @@ describe("callProvider", () => {
   it("rejects a terminal-writer marker when more than one tool is attached", async () => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
       providerId: "codex",
+      status: "active",
       authMethod: "oauth2_authorization_code",
       authHeader: "Authorization",
       baseUrl: "https://api.openai.com/v1",
@@ -407,6 +479,7 @@ describe("callProvider", () => {
   it("rejects a terminal-writer marker that does not exactly match the sole tool", async () => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
       providerId: "anthropic-sub",
+      status: "active",
       authMethod: "oauth2_authorization_code",
       authHeader: "Authorization",
       baseUrl: null,
@@ -437,6 +510,7 @@ describe("callProvider", () => {
   it("rejects a matching terminal-writer marker without a governed MCP session", async () => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
       providerId: "anthropic-sub",
+      status: "active",
       authMethod: "oauth2_authorization_code",
       authHeader: "Authorization",
       baseUrl: null,
@@ -463,4 +537,21 @@ describe("callProvider", () => {
     )).rejects.toThrow(/cannot enforce required tool choice/i);
     expect(mockAdapterExecute).not.toHaveBeenCalled();
   });
+});
+
+import { withGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
+
+it("blocks every paid fallback before adapter dispatch when parent authority is lost", async () => {
+  vi.clearAllMocks();
+  let valid = true;
+  await withGovernedInferenceDeadline({ deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+    verifyAuthority: async () => valid }, async () => {
+    valid = false;
+    for (const provider of ["openai", "anthropic-sub", "codex"]) {
+      await expect(callProvider(provider, "review-model", [], "Review the diff"))
+        .rejects.toThrow("authority-lost");
+    }
+  });
+  expect(mockAdapterExecute).not.toHaveBeenCalled();
+  expect(mockPrisma.modelProvider.findUnique).not.toHaveBeenCalled();
 });

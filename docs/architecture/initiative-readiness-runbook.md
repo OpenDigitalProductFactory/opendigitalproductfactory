@@ -11,6 +11,37 @@
 
 ## 0. Two "shapes" — do not conflate them
 
+### Medium body criteria and independent acceptance
+
+Effective medium work, including product-linked work, can satisfy its objective
+baseline from an Acceptance heading with criterion bullets, or explicit
+`AC-<id>:` bullets. It does not owe a separate spec approval for that baseline.
+After delivery passes and acceptance remains unmet, the existing authorized,
+serialized completion mutation retains a DocumentVersion and baseline activity.
+Approved and inherited baselines retain precedence. The retained version binds
+criteria and anchors, item/organization, author provenance and delivered source
+identity; it creates no approval or acceptance receipt.
+
+Recovery requires one current source Workroom, fresh post-baseline passing
+evidence, and an independent reviewer with the existing reader/writer grants
+and room admission. `get_backlog_item` and completion refusals return the exact
+server-issued packet. Its existing `read_source_at_version` reader hydrates the
+bound retained criteria only for that authorized TaskRun. Room admission is
+checked before reading and again before receipt writing. Automatic reviewer
+dispatch carries the recorded requesting person into these checks.
+
+Changed criteria, source identity, organization or eligible evidence reject old
+requests. Refresh recovery for a current successor; unchanged retries reuse the
+TaskRun and proposal. Historical authority stays auditable. Research and
+dependency-disposition remain author lanes; only the acceptance mapping lane
+becomes independent. Missing prerequisites are reported as recovery actions,
+without unlinking the product, lowering shape or weakening completion gates.
+
+Implementation: [body baseline retention](../../apps/web/lib/backlog/initiative-readiness/body-baseline-persistence.ts),
+[terminal recovery](../../apps/web/lib/backlog/initiative-readiness/terminal-recovery.ts),
+and [objective mapping writer](../../apps/web/lib/backlog/initiative-readiness/objective-mapping-repository.ts).
+Operator procedure: [acceptance sweep](../operations/acceptance-sweep.md).
+
 The word *shape* is overloaded across the platform. Two distinct machines:
 
 1. **The initiative-readiness gate machine** (this runbook). Decides whether a backlog item / epic / build may transition `design → plan → implementation → completion`, by checking that the required **evidence receipts** exist and passed review. Roles are *governance accountabilities* (design-author, design-checklist-reviewer, …).
@@ -72,7 +103,7 @@ You do **not** choose the reviewer or hand-build the review call. The server iss
 1. **Bind a Workroom to the item, with a real base *and* head.** `adopt_worktree(title, objective, repositoryFullName, headBranch, headSha, baseBranch, baseSha, worktreePath, backlogItemId)`. Without **both** an immutable `baseSha` and `headSha`, no reviewer binding can be issued (`no-canonical-artifact`) — the review has nothing immutable to pin. The artifact commit must be **resolvable on the provider** (a squash-merged, deleted branch will not resolve — re-publish it).
 2. **Attempt the governed claim.** `claim_backlog_item_for_work(itemId, worktreePath, branchName, provider, sessionRef)`. When the item is not ready it *refuses* and returns `data.recovery`:
    - `reviewerRoutes[]` — per gate: `accountableRole`, `gate`, `targetAgentId`, `independent`, and a ready `requestCoworker` packet with `requiredToolNames` + `initiativeReviewBinding` (the writer tool + the immutable `artifactRef` — repo, commitSha, path, providerBlobId).
-   - `escalations[]` — `no-eligible-reviewer` (activate a production reviewer holding the grant) / `no-canonical-artifact` (fix the base/head per step 1) / `dispatch-context-required` / `research-evidence-required` (a **small or medium** shape's research is the author's reproduction plus failing-to-passing proof, recorded with `record_initiative_evidence(gate:"research")`; no spec is owed and none is demanded — BI-3B323B6A. For a **small fix** the reproduction itself satisfies research at claim: `record_execution_evidence` with kind `source_verified` (the defect on a named ref, with its URL) and kind `test_pass` (the failing-to-passing test, not superseded by a later `test_fail`), which an external session can reach without `initiative_evidence_write` — BI-6EB2DBBB. The claim loads those `evidence` rows alongside its receipts, so recording them and claiming again is admitted — BI-5C992261. Build Studio's entry gate (`build-entry-gate.ts`) reads the same activity kinds, so a small fix advanced out of ideate without a design review is admitted to plan on the same reproduction — BI-7027C26E. Medium shapes and net-new work still need the recorded research receipt. A development connection includes `initiative_evidence_write` and no other initiative grant (BI-B9B196FD). A write connection already in use whose stored grants are an earlier prefix of that template gains the grants added later on its next use, without a new secret (BI-E9F1C116). A read connection, an admin connection, an OAuth connection, and a custom set with a hole keep the grants they already have).
+   - `escalations[]` — `no-eligible-reviewer` (activate a production reviewer holding the grant) / `no-canonical-artifact` (fix the base/head per step 1) / `dispatch-context-required` / `research-evidence-required` (a **small or medium** shape's research is the author's reproduction plus failing-to-passing proof, recorded with `record_initiative_evidence(gate:"research")`; no spec is owed and none is demanded — BI-3B323B6A. For a **small fix** the reproduction itself satisfies research at claim: `record_execution_evidence` with kind `source_verified` (the defect on a named ref, with its URL) and kind `test_pass` (the failing-to-passing test, not superseded by a later `test_fail`), which an external session can reach without `initiative_evidence_write` — BI-6EB2DBBB. The claim loads those `evidence` rows alongside its receipts, so recording them and claiming again is admitted — BI-5C992261. Build Studio's entry gate (`build-entry-gate.ts`) reads the same activity kinds, so a small fix advanced out of ideate without a design review is admitted to plan on the same reproduction — BI-7027C26E. Medium shapes and net-new work still need the recorded research receipt. That receipt cites a commit on a live workroom, and a refused implementation claim binds none, so the order is: claim with `workIntent: "design"` (it does not owe research and binds the room), record the receipt, then claim with `workIntent: "implementation"` again. Both the claim's research escalation and the no-workroom artifact refusal name this step — BI-77C600B2. A development connection includes `initiative_evidence_write` and no other initiative grant (BI-B9B196FD). A write connection already in use whose stored grants are an earlier prefix of that template gains the grants added later on its next use, without a new secret (BI-E9F1C116). A read connection, an admin connection, an OAuth connection, and a custom set with a hole keep the grants they already have).
    - `unroutable[]` — gates whose role owns no writer lane (e.g. `ARTIFACT_AUTHOR` — you push a signed commit; nobody records it for you).
 
    The refusal also carries `data.governingPrinciples`: for each unmet or blocking code whose rule a principle page states, the page's slug (`{ "CAPSULE_IDENTITY_MISMATCH": "claim-a-workroom-before-you-work" }`). The message ends with the same list as a `Governing rules:` line. Look a slug up with `wiki_query` before inferring the rule from code. The completion refusal (`update_backlog_item_status` to `done`) carries the same field, and `get_backlog_item` / `list_backlog_items` return `readiness.governingPrinciples` keyed by target. A code with no page cites nothing; the table and its unwritten-rule inventory live in [`apps/web/lib/kernel/governing-principles.ts`](../../apps/web/lib/kernel/governing-principles.ts) (BI-DEDAC950).
@@ -82,6 +113,19 @@ You do **not** choose the reviewer or hand-build the review call. The server iss
 **Claim identity, when a room was owned by a prior session.** The claim matches the Workroom's recorded executor identity and lease-holder. A room left by a dead session (idle-stale, no live signal) can refuse a fresh claim with `capsule_identity_mismatch` even after `adopt_worktree`, and `force` does **not** override an identity mismatch (only live-ownership conflict). Take the room over with `reassign_workroom_executor(capsuleId, toExecutorKind, toExecutorRef, reason)` — it transfers the lease to the caller and sets the executor — then re-claim. Renew a still-owned but expiring lease with `heartbeat_workroom`; do not thrash heartbeat on an already-expired lease.
 
 ## 4. The reviewer roster (who holds which grant)
+
+**Exhausted plan review.** If the exact plan-review task reports
+`terminal-writer-retry-exhausted`, refresh the governed claim instead of
+replaying that task. For the same user and current OAuth task family, the
+server excludes only that recorded exhausted packet and issues the next
+currently eligible independent reviewer with both writer and reader grants.
+The plan, baseline and Workroom binding stay fixed; the existing plan key
+includes the new target. Submit the newly issued packet unchanged. Issuance
+and authorization use the same exact task-history check. Writer refusals,
+capacity or approval waits, active tasks and uncertain provider outcomes do
+not authorize replacement. If all eligible reviewers are exhausted, the
+server returns a bounded escalation; attempts, grants and receipts are never
+reset or synthesized. This recovery applies to the external OAuth plan lane.
 
 Live assignment in [`packages/db/data/agent_registry.json`](../../packages/db/data/agent_registry.json); the recovery packet resolves the current holder, so prefer the packet over this table.
 

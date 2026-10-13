@@ -93,14 +93,20 @@ export function collectSlotVerdicts(context, { now = Date.now(), readJsonImpl = 
   } catch {
     queuedWaiter = null;
   }
+  const manifests = new Map(LOCAL_CI_SLOT_KEYS.map((slotKey) => [slotKey, createLocalCiSlotManifest({
+    slotKey,
+    rootClone: context.rootClone,
+    gitCommonDir: context.gitCommonDir,
+    candidateGitDir: context.candidateGitDir,
+  })]));
+  const states = new Map([...manifests].map(([slotKey, manifest]) => [slotKey, readJsonImpl(manifest.evidence.state)]));
   return LOCAL_CI_SLOT_KEYS.map((slotKey) => {
-    const manifest = createLocalCiSlotManifest({
-      slotKey,
-      rootClone: context.rootClone,
-      gitCommonDir: context.gitCommonDir,
-      candidateGitDir: context.candidateGitDir,
-    });
-    const state = readJsonImpl(manifest.evidence.state);
+    const manifest = manifests.get(slotKey);
+    const state = states.get(slotKey);
+    // BI-A9031FF3: re-read the winner a superseded record names, so a pass that
+    // was later rewritten (late lease loss) is not reported as a pass.
+    const winnerKey = state?.supersededBy?.slotKey;
+    const supersedingWinner = winnerKey && states.has(winnerKey) ? (states.get(winnerKey) ?? null) : undefined;
     // No state at all means this slot never ran here — it is absent, not failing.
     // Only slots with a record participate, so an unused slot cannot drag the
     // reconciled verdict down to NO-RECORD while the other slot holds a PASS.
@@ -115,9 +121,30 @@ export function collectSlotVerdicts(context, { now = Date.now(), readJsonImpl = 
         headBranch: context.headBranch,
         now,
         queuedWaiter,
+        supersedingWinner,
       }),
     };
   }).filter(Boolean);
+}
+
+export function projectGateStatus(result, context) {
+  return {
+      verdict: result.verdict,
+      reason: result.reason,
+      headBranch: context.headBranch,
+      headSha: context.headSha,
+      boundSha: result.boundSha ?? "",
+      boundBranch: result.boundBranch ?? "",
+      candidateSha: result.candidateSha ?? "",
+      staleness: result.staleness ?? "",
+      gateStatus: result.gateStatus ?? "",
+      testStub: result.testStub === true,
+      evidenceId: result.evidenceId ?? "",
+      recordedAt: result.recordedAt ?? "",
+      slot: result.slot,
+      logFile: result.logFile ?? "",
+      worktreePath: context.worktreePath,
+  };
 }
 
 function main() {
@@ -140,22 +167,7 @@ function main() {
     };
 
   if (asJson) {
-    process.stdout.write(`${JSON.stringify({
-      verdict: result.verdict,
-      reason: result.reason,
-      headBranch: context.headBranch,
-      headSha: context.headSha,
-      boundSha: result.boundSha ?? "",
-      boundBranch: result.boundBranch ?? "",
-      candidateSha: result.candidateSha ?? "",
-      staleness: result.staleness ?? "",
-      testStub: result.testStub === true,
-      evidenceId: result.evidenceId ?? "",
-      recordedAt: result.recordedAt ?? "",
-      slot: result.slot,
-      logFile: result.logFile ?? "",
-      worktreePath: context.worktreePath,
-    }, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify(projectGateStatus(result, context), null, 2)}\n`);
   } else {
     process.stdout.write(`${formatStatusReport(result, {
       headBranch: context.headBranch,

@@ -3848,7 +3848,9 @@
           "decision_record_create",
           "backlog_triage",
           "document_write",
-          "ea_graph_read"
+          "ea_graph_read",
+          "coworker_catalog_read",
+          "coworker_engagement_write"
         ]
       }
     },
@@ -3908,7 +3910,9 @@
           "decision_record_create",
           "backlog_triage",
           "document_write",
-          "ea_graph_read"
+          "ea_graph_read",
+          "coworker_catalog_read",
+          "coworker_engagement_write"
         ]
       }
     },
@@ -3968,7 +3972,9 @@
           "decision_record_create",
           "backlog_triage",
           "document_write",
-          "ea_graph_read"
+          "ea_graph_read",
+          "coworker_catalog_read",
+          "coworker_engagement_write"
         ]
       }
     },

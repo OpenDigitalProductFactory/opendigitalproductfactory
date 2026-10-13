@@ -84,7 +84,12 @@ function deps(rooms = [room], baselines: unknown[] = [{ baselineId: "baseline-cu
           branchName: dispatch.branchName,
           headSha: dispatch.headSha,
         },
-        artifactRef: {
+        artifactRef: artifact.kind === "document-version" ? {
+          kind: "document-version" as const,
+          repositoryFullName: dispatch.repositoryFullName,
+          versionId: artifact.versionId,
+          valueDigest: artifact.valueDigest,
+        } : {
           kind: "repo-blob-at-commit" as const,
           repositoryFullName: dispatch.repositoryFullName,
           commitSha: (artifact.kind !== "feature-build-revision" ? artifact.commitSha : undefined) ?? dispatch.headSha,
@@ -158,8 +163,9 @@ describe("terminal initiative recovery", () => {
     expect(unavailable.escalations).toEqual([expect.objectContaining({ reason: "no-canonical-artifact", nextAction: "The source provider is unavailable." })]);
   });
 
-  it("BI-817556D8: a pre-delivery plan review routes on its own instead of dying on the acceptance lanes", async () => {
-    const ports = deps();
+  it.each([false, true])("a covered pre-delivery plan routes independently of design changes (unchanged branch: %s)", async (unchanged) => {
+    const ports = deps([{ ...room, baseSha: unchanged ? headSha : baseSha }]);
+    if (unchanged) ports.discoverArtifact.mockResolvedValue({ resolved: false, nextAction: "No changed design on this branch." });
     const reviewer = { agentId: "AGT-REVIEW", displayName: "Independent reviewer", status: "active", archived: false, lifecycleStage: "production" };
     ports.resolveRecovery.mockImplementation((input) => resolveInitiativeReviewerRecovery({
       ...input,
@@ -192,6 +198,7 @@ describe("terminal initiative recovery", () => {
     expect(ports.loadPlanArtifact).toHaveBeenCalledWith({ itemId: "BI-TERMINAL", repositoryFullName: room.repositoryFullName });
     expect(ports.loadEligibleEvidenceActivityIds).not.toHaveBeenCalled();
     expect(ports.loadObjectiveMappingHistory).not.toHaveBeenCalled();
+    if (unchanged) expect(ports.discoverArtifact).not.toHaveBeenCalled();
 
     // Without a baseline-valid plan the route stays unroutable with a named next step, never a guessed artifact.
     ports.loadPlanArtifact.mockResolvedValue({ resolved: false, nextAction: "Record valid plan coverage." });
@@ -752,7 +759,7 @@ describe("terminal initiative recovery", () => {
     expect(next).not.toMatch(/cannot close|satisfies its baseline/i);
   });
 
-  it("tells a medium item whose acceptance is unmet that merged platform work is accepted on its merge", async () => {
+  it("names authorized body-version capture without offering a product-linked item the platform shortcut", async () => {
     const ports = deps([room], []);
     const result = await resolveTerminalInitiativeRecovery({
       decision: { ...decision, policyVersion: "initiative-readiness.v3", shapeDecision: { declared: "medium", effective: "medium", sensitivity: null, raised: false } },
@@ -760,8 +767,9 @@ describe("terminal initiative recovery", () => {
       refusedWorkroomId: room.capsuleId,
       ports,
     });
-    expect(result.escalations).toMatchObject([{ reason: "body-baseline-unpersisted", toolName: "record_execution_evidence" }]);
-    expect(String(result.escalations[0]?.nextAction)).toMatch(/merge through branch protection/);
+    expect(result.escalations).toMatchObject([{ reason: "body-baseline-unpersisted", toolName: "update_backlog_item_status" }]);
+    expect(String(result.escalations[0]?.nextAction)).toMatch(/Product-linked work still requires independent acceptance/);
+    expect(String(result.escalations[0]?.nextAction)).toMatch(/one current Workroom/);
   });
 
   it("still asks a large shape with no baseline for spec approval", async () => {

@@ -3,6 +3,7 @@ import { prisma, type Prisma } from "@dpf/db";
 import { projectBacklogItemReadiness } from "./backlog/initiative-readiness/entry-adapter";
 import { loadInheritedInitiativeScope } from "./backlog/initiative-readiness/parent-scope-inheritance";
 import type { InitiativeReviewBinding } from "./mcp-task-review-contract";
+import { TASK_IN_FLIGHT_STATES } from "./tak/task-states";
 
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -22,8 +23,19 @@ export function persistedReviewCompletionData(progressPayload: unknown, outcome:
   };
 }
 
-export async function reconcilePersistedReviewStatus(taskRunId: string, progressPayload: unknown, outcome: PersistedReviewOutcome) {
-  await prisma.taskRun.update({ where: { taskRunId }, data: persistedReviewCompletionData(progressPayload, outcome) });
+/** A receipt completes the review, but cannot revive cancellation or displace a newer attempt. */
+export async function reconcilePersistedReviewStatus(
+  taskRunId: string,
+  progressPayload: unknown,
+  outcome: PersistedReviewOutcome,
+  expected: { status: string; updatedAt: Date },
+): Promise<boolean> {
+  if (expected.status !== "completed" && !(TASK_IN_FLIGHT_STATES as readonly string[]).includes(expected.status)) return false;
+  const written = await prisma.taskRun.updateMany({
+    where: { taskRunId, status: expected.status, updatedAt: expected.updatedAt },
+    data: persistedReviewCompletionData(progressPayload, outcome),
+  });
+  return written.count === 1;
 }
 
 export async function loadTaskInitiativeReviewOutcome(taskRunId: string, binding: InitiativeReviewBinding) {
@@ -34,6 +46,26 @@ export async function loadTaskInitiativeReviewOutcome(taskRunId: string, binding
   const result = record(execution?.result);
   const data = record(result?.data);
   return typeof data?.receiptId === "string" ? loadInitiativeReviewOutcome(binding, data.receiptId) : null;
+}
+
+/** The keys that name an immutable artifact. A receipt may omit the others. */
+const ARTIFACT_IDENTITY_KEYS: Record<InitiativeReviewBinding["artifactRef"]["kind"], readonly string[]> = {
+  "repo-blob-at-commit": ["kind", "commitSha", "path", "providerBlobId"],
+  "feature-build-revision": ["kind", "revisionId"],
+  "document-version": ["kind", "versionId"],
+};
+
+/**
+ * A receipt matches its binding when every identity key is equal and no key
+ * the receipt does store contradicts the binding. Revision and document receipts keep
+ * only kind + their version id, while the binding also carries
+ * repositoryFullName and valueDigest (BI-2E479619).
+ */
+function receiptArtifactMatches(bound: InitiativeReviewBinding["artifactRef"], stored: Record<string, unknown>): boolean {
+  const boundFields = bound as Record<string, unknown>;
+  const identity = ARTIFACT_IDENTITY_KEYS[bound.kind] ?? Object.keys(boundFields);
+  if (identity.some((key) => stored[key] !== boundFields[key])) return false;
+  return Object.entries(boundFields).every(([key, value]) => !(key in stored) || stored[key] === value);
 }
 
 /** Read the canonical receipt, never infer one from model prose or tool success. */
@@ -50,7 +82,7 @@ export async function loadInitiativeReviewOutcome(binding: InitiativeReviewBindi
   if (!receipt || receipt.receiptId !== receiptId || receipt.gate !== binding.gate
     || (receipt.decision !== "pass" && receipt.decision !== "fail" && receipt.decision !== "not-applicable")
     || subject?.id !== binding.itemId || subject.kind !== "backlog-item"
-    || !artifact || Object.entries(binding.artifactRef).some(([key, value]) => artifact[key] !== value)) return null;
+    || !artifact || !receiptArtifactMatches(binding.artifactRef, artifact)) return null;
   const inheritedScope = await loadInheritedInitiativeScope(prisma, { childItemId: item.itemId, childRowId: item.id });
   const readiness = projectBacklogItemReadiness({
     item: { ...item, activeBuildKind: item.activeBuild?.kind ?? null },

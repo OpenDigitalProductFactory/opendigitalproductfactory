@@ -9,6 +9,7 @@ import { DOCUMENT_TOOL_GRANTS } from "./document-tool-grants";
 import { CHANGE_REVIEW_TOOL_GRANTS } from "./change-review-tool-grants";
 import { CONTRIBUTOR_INVENTORY_TOOL_GRANTS } from "./contributor-inventory-tool-grants";
 import { PAYABLES_TOOL_GRANTS } from "./payables-tool-grants";
+import { PROVIDER_MANAGEMENT_TOOL_GRANTS } from "./provider-management-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 /**
  * Implications between agent grant categories. A grant on the left of the
@@ -218,12 +219,12 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Work Capsule control harness (spec 2026-05-14)
   list_workrooms: ["work_capsule_read"],
   get_workroom: ["work_capsule_read"],
-  // EP-WORKROOM-COMMS (BI-3F21C4D5): read/post a Work Room's message feed. Room
-  // admission is enforced separately (room-agent-access); these are the coarse caps.
+  review_workroom_sensitivity: ["admin_read"],
+  correct_workroom_sensitivity: ["admin_write"],
+  // Room admission and coordinator rights are checked separately from these
+  // communication grants (EP-WORKROOM-COMMS, BI-3F21C4D5).
   read_room_messages: ["work_room_read"],
   post_room_message: ["work_room_write"],
-  // EP-WORKROOM-COMMS: invite a participant on demand (write); 360 coworker
-  // room-engagement (read). Room admission/coordinator right enforced separately.
   invite_room_participant: ["work_room_write"],
   appoint_room_coordinator: ["work_room_write"],
   plan_account_handover: ["work_room_write"],
@@ -270,6 +271,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   record_surface_readiness: ["work_capsule_write"],
   get_fleet_readiness: ["work_capsule_read"],
   register_runtime_target: ["work_capsule_write"],
+  verify_archetype_projection: ["sandbox_execute"],
   heartbeat_runtime_target: ["work_capsule_write"],
   release_runtime_target: ["work_capsule_write"],
   record_runtime_verification: ["work_capsule_write"],
@@ -585,10 +587,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   find_related_tests: ["code_graph_read"],
 
   // Provider management
-  add_provider: ["agent_control_read"],
-  update_provider_category: ["agent_control_read"],
-  // Read-only AI-layer state aggregation for the posture-article refresh task
-  // (BI-5903D447) — same tier as the sibling provider-management tools.
+  ...PROVIDER_MANAGEMENT_TOOL_GRANTS,
+  // Read-only AI posture uses the same grant as provider management.
   get_ai_platform_posture: ["agent_control_read"],
   run_endpoint_tests: ["agent_control_read"],
   activity_harness_confidence_override: ["agent_control_read"],

@@ -134,6 +134,17 @@ its own lazy module (`work-capsules/workroom-shape-rebind-handler.ts`), so
 `workShape` pin to a newer version. The rule it carries is in
 [work shapes and the decision gate](work-shapes-and-the-decision-gate.md).
 
+The pack also owns bounded classification recovery. `review_workroom_sensitivity`
+requires `manage_platform` and `admin_read`, returning only classification state
+and an exact revision digest, never room contents or historical prose.
+`correct_workroom_sensitivity` requires `manage_platform` and `admin_write`,
+declares an authority consequence and proposal execution, and uses the existing
+governed approval path. Its lazy handler rechecks administration permission,
+refuses stale digests or already valid classifications, and commits the correction
+with an audit retaining the original declaration and trusted approval reference.
+It changes no principal clearance or membership. The operator workflow is in
+[Work rooms](../user-guide/workspace/work-rooms.md).
+
 `work-capsules-pack` shares one `scopeProperties` block across `create_workroom` and
 `adopt_worktree`, so a field added there reaches both convene paths at once. That is how
 `workroomShape` landed ⟦runtime: 2026-08-23⟧ — the room's collaboration

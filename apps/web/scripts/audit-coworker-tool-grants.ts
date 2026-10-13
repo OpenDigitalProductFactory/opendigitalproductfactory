@@ -149,6 +149,11 @@ function loadToolToGrants(): Record<string, string[]> {
       path: "apps/web/lib/tak/payables-tool-grants.ts",
       pattern: /PAYABLES_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
     },
+    {
+      // Provider controls retain their shared management grant after extraction.
+      path: "apps/web/lib/tak/provider-management-tool-grants.ts",
+      pattern: /PROVIDER_MANAGEMENT_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
+    },
   ];
 
   for (const source of sources) {

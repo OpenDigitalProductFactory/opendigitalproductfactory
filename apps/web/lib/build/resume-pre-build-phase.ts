@@ -46,7 +46,8 @@ import { closeOpenBuildPhaseRunsForTerminalBuild } from "@/lib/build/close-termi
 
 export type ResumePreBuildOutcome =
   | { kind: "resumed"; phase: string; via: string; detail: string }
-  | { kind: "skipped"; phase: string; reason: string }
+  /** `quiet`: nothing changed since the last identical refusal; write no activity (BI-6F2872FC). */
+  | { kind: "skipped"; phase: string; reason: string; quiet?: boolean }
   | { kind: "failed"; phase: string; error: string };
 
 /**
@@ -226,6 +227,80 @@ export const REVIEW_INCOMPLETE_BACKOFF_MAX_MS = 6 * 60 * 60 * 1000;
 const REVIEW_INCOMPLETE_ACTIVITY_RE = /^No reviewer could complete a design review/;
 /** The fix loop's intermediate retry line — part of the same attempt, not a new outcome. */
 const REVIEW_INCOMPLETE_RETRY_RE = /^Design review could not be completed — re-reviewing/;
+
+// ─── Unchanged plan→build refusals (BI-6F2872FC) ─────────────────────────────
+//
+// A build whose plan review passed is re-run through plan→build on every
+// 10-minute resume tick. When initiative readiness refuses it, nothing about
+// the refusal changes until a receipt, baseline, coverage or evidence row lands
+// on the item, or the platform itself changes (a deploy restarts this
+// process). On the live install 113 such builds wrote ~460k activity rows in a
+// month, each tick re-running the full readiness projection for an identical
+// verdict. An identical refusal with no new input backs off: 10m → 20m → … →
+// 6h, and any new input or a restart makes the next tick due at once.
+
+export const UNCHANGED_REFUSAL_BACKOFF_BASE_MS = 10 * 60 * 1000;
+export const UNCHANGED_REFUSAL_BACKOFF_MAX_MS = 6 * 60 * 60 * 1000;
+const PROCESS_STARTED_AT = new Date();
+
+/** Count the newest run of identical `phase:gate-blocked` refusals. Rows newest-first. */
+export function countUnchangedRefusalStreak(
+  rows: ReadonlyArray<{ summary: string | null; createdAt: Date }>,
+): { streak: number; lastAt: Date | null } {
+  const first = rows[0];
+  if (!first?.summary) return { streak: 0, lastAt: null };
+  let streak = 0;
+  for (const row of rows) {
+    if (row.summary !== first.summary) break;
+    streak += 1;
+  }
+  return { streak, lastAt: first.createdAt };
+}
+
+/** Pure: is a re-run due? Any input newer than the last refusal makes it due. */
+export function unchangedRefusalBackoff(args: {
+  streak: number;
+  lastAt: Date | null;
+  inputsChangedAt: Date | null;
+  now: Date;
+}): { due: true } | { due: false; nextAt: Date; waitMs: number } {
+  const { streak, lastAt, inputsChangedAt, now } = args;
+  if (streak <= 0 || !lastAt) return { due: true };
+  if (inputsChangedAt && inputsChangedAt.getTime() >= lastAt.getTime()) return { due: true };
+  const delayMs = Math.min(UNCHANGED_REFUSAL_BACKOFF_MAX_MS, UNCHANGED_REFUSAL_BACKOFF_BASE_MS * 2 ** (streak - 1));
+  const nextAt = new Date(lastAt.getTime() + delayMs);
+  if (now.getTime() >= nextAt.getTime()) return { due: true };
+  return { due: false, nextAt, waitMs: nextAt.getTime() - now.getTime() };
+}
+
+/** The receipt-bearing activity kinds a readiness verdict can change on. */
+const READINESS_INPUT_KINDS = [
+  "initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage",
+  "initiative_objective_mapping", "evidence", "dependency_disposition",
+] as const;
+
+async function unchangedRefusalHold(buildId: string, originatorRowId: string | null) {
+  const [refusals, input] = await Promise.all([
+    prisma.buildActivity.findMany({
+      where: { buildId, tool: "phase:gate-blocked" },
+      orderBy: { createdAt: "desc" },
+      take: 40,
+      select: { summary: true, createdAt: true },
+    }),
+    originatorRowId
+      ? prisma.backlogItemActivity.findFirst({
+          where: { backlogItemId: originatorRowId, kind: { in: [...READINESS_INPUT_KINDS] } },
+          orderBy: { recordedAt: "desc" },
+          select: { recordedAt: true },
+        })
+      : Promise.resolve(null),
+  ]);
+  const { streak, lastAt } = countUnchangedRefusalStreak(refusals);
+  const inputsChangedAt = [input?.recordedAt ?? null, PROCESS_STARTED_AT]
+    .filter((at): at is Date => at instanceof Date)
+    .reduce<Date | null>((latest, at) => (!latest || at > latest ? at : latest), null);
+  return { streak, ...unchangedRefusalBackoff({ streak, lastAt, inputsChangedAt, now: new Date() }) };
+}
 
 export type ReviewIncompleteStreak = { streak: number; lastAt: Date | null };
 
@@ -676,6 +751,9 @@ export async function resumePreBuildPhase(params: {
         const outcome = await dispatchPlanForApprovedBuild({ buildId, userId });
         return { kind: "resumed", phase, via: "dispatchPlanForApprovedBuild", detail: outcome.kind };
       }
+      if ((build.planReview as { reviewIncomplete?: boolean } | null)?.reviewIncomplete) {
+        return { kind: "skipped", phase, reason: "Plan review incomplete; preserve the plan and retry review after reviewer execution recovers." };
+      }
       // Plan exists. If its last review FAILED, REGENERATE via the fix loop —
       // re-reviewing the same bad plan just re-fails forever (the live jam: a plan
       // that "points at files that do not exist" stays stuck every resume). The
@@ -703,6 +781,15 @@ export async function resumePreBuildPhase(params: {
       const planReviewPassed =
         (build.planReview as { decision?: string } | null)?.decision === "pass";
       if (planReviewPassed) {
+        const hold = await unchangedRefusalHold(buildId, build.originatingBacklogItemId ?? null);
+        if (!hold.due) {
+          return {
+            kind: "skipped",
+            phase,
+            quiet: true,
+            reason: `plan → build refused ${hold.streak}x unchanged; next check ${hold.nextAt.toISOString()}`,
+          };
+        }
         const { performPlanToBuildTransition } = await import("@/lib/build/plan-to-build-transition");
         const outcome = await performPlanToBuildTransition({ buildId, userId });
         switch (outcome.kind) {
@@ -740,7 +827,9 @@ export async function resumePreBuildPhase(params: {
             // try the transition once more; anything else stays a skip.
             if (isResearchReceiptGateBlock(outcome.reason) && hasDesignDoc(build.designDoc)) {
               const { attestIdeateResearch } = await import("@/lib/build/record-ideate-research-receipt");
-              await attestIdeateResearch(buildId, build.designDoc, userId, null);
+              const research = await attestIdeateResearch(buildId, build.designDoc, userId, null);
+              if (!research.recorded) return { kind: "skipped", phase,
+                reason: `Research attestation held; no transition retry: ${research.reason}` };
               const retried = await performPlanToBuildTransition({ buildId, userId });
               if (retried.kind === "advanced") {
                 return {

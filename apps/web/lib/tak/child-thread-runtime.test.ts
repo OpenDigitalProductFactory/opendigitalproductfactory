@@ -10,15 +10,21 @@ const {
     agentThread: {
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     taskRun: {
       findFirst: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     agentMessage: {
       findMany: vi.fn(),
+      findFirst: vi.fn(),
       create: vi.fn(),
+    },
+    agent: {
+      findFirst: vi.fn(),
     },
     user: {
       findUnique: vi.fn(),
@@ -28,6 +34,9 @@ const {
     },
     professionCorpusUsageStat: {
       upsert: vi.fn(),
+    },
+    delegationChain: {
+      updateMany: vi.fn(),
     },
   },
   mockResolveAgent: vi.fn(),
@@ -44,9 +53,10 @@ vi.mock("@/lib/tak/autonomous-work-run", () => ({
 }));
 
 import {
+  failInterruptedChildThread,
   prepareChildExecution,
   runChildThreadExecution,
-} from "./agent-thread-dispatcher-runtime";
+} from "./child-thread-runtime";
 import {
   buildProviderReviewPacket,
   formatProviderReviewObjective,
@@ -91,6 +101,7 @@ describe("prepareChildExecution", () => {
       routeContext: "/coworker",
     });
     mockPrisma.taskRun.update.mockResolvedValue({});
+    mockPrisma.taskRun.updateMany.mockResolvedValue({ count: 1 });
   });
 
   it("transitions submitted task run to working and returns context", async () => {
@@ -189,6 +200,7 @@ describe("runChildThreadExecution", () => {
     mockPrisma.agentMessage.create.mockResolvedValue({});
     mockPrisma.user.findUnique.mockResolvedValue({ isSuperuser: true });
     mockPrisma.taskRun.update.mockResolvedValue({});
+    mockPrisma.taskRun.updateMany.mockResolvedValue({ count: 1 });
     mockPrisma.agentThread.update.mockResolvedValue({});
     mockPrisma.agentThread.findUnique.mockResolvedValue(null);
     mockPrisma.taskRun.findUnique.mockResolvedValue(null);
@@ -228,8 +240,8 @@ describe("runChildThreadExecution", () => {
         content: "Segment A analysis complete.",
       }),
     });
-    expect(mockPrisma.taskRun.update).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-CHILD-1" },
+    expect(mockPrisma.taskRun.updateMany).toHaveBeenCalledWith({
+      where: { taskRunId: "TR-CHILD-1", status: { notIn: expect.any(Array) } },
       data: expect.objectContaining({
         status: "completed",
         currentAgentId: "agent-mkt",
@@ -247,8 +259,8 @@ describe("runChildThreadExecution", () => {
 
     await runChildThreadExecution(ctx);
 
-    expect(mockPrisma.taskRun.update).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-CHILD-1" },
+    expect(mockPrisma.taskRun.updateMany).toHaveBeenCalledWith({
+      where: { taskRunId: "TR-CHILD-1", status: { notIn: expect.any(Array) } },
       data: expect.objectContaining({
         status: "failed",
         progressPayload: { error: "provider unavailable" },
@@ -268,8 +280,8 @@ describe("runChildThreadExecution", () => {
     await runChildThreadExecution(ctx);
 
     expect(mockExecuteLoop).not.toHaveBeenCalled();
-    expect(mockPrisma.taskRun.update).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-CHILD-1" },
+    expect(mockPrisma.taskRun.updateMany).toHaveBeenCalledWith({
+      where: { taskRunId: "TR-CHILD-1", status: { notIn: expect.any(Array) } },
       data: expect.objectContaining({ status: "failed" }),
     });
   });
@@ -282,9 +294,40 @@ describe("runChildThreadExecution", () => {
     expect(mockPrisma.agentMessage.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ content: "(no response)" }),
     });
-    expect(mockPrisma.taskRun.update).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-CHILD-1" },
+    expect(mockPrisma.taskRun.updateMany).toHaveBeenCalledWith({
+      where: { taskRunId: "TR-CHILD-1", status: { notIn: expect.any(Array) } },
       data: expect.objectContaining({ status: "completed" }),
+    });
+  });
+
+  // BI-A0BFA63E: an accepted handoff's chain link closes with the child's outcome.
+  it.each([
+    ["completed", () => mockExecuteLoop.mockResolvedValue({ content: "Done.", executedTools: [] }),
+      { status: "completed", completedAt: expect.any(Date) }],
+    ["failed", () => mockExecuteLoop.mockRejectedValue(new Error("provider down")),
+      { status: "failed", completedAt: expect.any(Date), reason: "child failed" }],
+  ])("closes the handoff's delegation link when the child %s", async (_outcome, arrange, data) => {
+    arrange();
+    mockPrisma.agentThread.findUnique.mockResolvedValue({ parentThreadId: "parent-1" });
+    mockPrisma.taskRun.findUnique.mockResolvedValue({
+      a2aMetadata: {
+        collaboration: {
+          kind: "handoff",
+          fromAgentId: "coo",
+          toAgentId: "agent-mkt",
+          enteredVia: "handoff",
+          tier: 2,
+          delegationLinkId: "link-1",
+        },
+      },
+    });
+    mockPrisma.agentMessage.findMany.mockResolvedValue([{ role: "user", content: "Draft the post." }]);
+
+    await runChildThreadExecution(ctx).catch(() => undefined);
+
+    expect(mockPrisma.delegationChain.updateMany).toHaveBeenCalledWith({
+      where: { id: "link-1", status: "active" },
+      data,
     });
   });
 
@@ -371,8 +414,8 @@ describe("runChildThreadExecution", () => {
         content: expect.stringMatching(/insufficient-evidence[\s\S]*connected account/i),
       }),
     });
-    expect(mockPrisma.taskRun.update).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-CHILD-1" },
+    expect(mockPrisma.taskRun.updateMany).toHaveBeenCalledWith({
+      where: { taskRunId: "TR-CHILD-1", status: { notIn: expect.any(Array) } },
       data: expect.objectContaining({
         status: "completed",
         progressPayload: expect.objectContaining({
@@ -408,8 +451,8 @@ describe("runChildThreadExecution", () => {
     await runChildThreadExecution({ ...ctx, agentId: "AGT-902", routeContext: "/workspace" });
 
     expect(mockPrisma.agentThread.update).not.toHaveBeenCalled();
-    expect(mockPrisma.taskRun.update).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-CHILD-1" },
+    expect(mockPrisma.taskRun.updateMany).toHaveBeenCalledWith({
+      where: { taskRunId: "TR-CHILD-1", status: { notIn: expect.any(Array) } },
       data: expect.objectContaining({
         status: "completed",
         progressPayload: expect.objectContaining({
@@ -423,5 +466,160 @@ describe("runChildThreadExecution", () => {
         content: expect.stringMatching(/insufficient-evidence.*References/s),
       }),
     });
+  });
+});
+
+// BI-287E1DD0: the durable job's failure path fails an interrupted child once,
+// tells its parent, and leaves a child that already finished alone.
+describe("failInterruptedChildThread", () => {
+  const ctx = { threadId: "child-1", taskRunId: "TR-CHILD-1", userId: "user-1", agentId: "agent-mkt", routeContext: "/coworker" };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.taskRun.update.mockResolvedValue({});
+    mockPrisma.taskRun.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.agentThread.update.mockResolvedValue({});
+  });
+
+  it("fails a still-working child with a plain interruption reason", async () => {
+    mockPrisma.taskRun.findUnique.mockResolvedValueOnce({ status: "working" });
+    mockPrisma.agentThread.findUnique.mockResolvedValue({ parentThreadId: null });
+
+    await failInterruptedChildThread(ctx, "lease_expired_exhausted");
+
+    expect(mockPrisma.taskRun.updateMany).toHaveBeenCalledWith({
+      where: { taskRunId: "TR-CHILD-1", status: { notIn: expect.any(Array) } },
+      data: expect.objectContaining({
+        status: "failed",
+        progressPayload: { error: expect.stringContaining("not re-run automatically") },
+      }),
+    });
+    expect(mockPrisma.agentThread.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "child-1" },
+      data: { terminalError: expect.objectContaining({ message: expect.stringContaining("lease_expired_exhausted") }) },
+    }));
+  });
+
+  it("leaves a child that already reached a terminal state", async () => {
+    mockPrisma.taskRun.findUnique.mockResolvedValueOnce({ status: "completed" });
+
+    await failInterruptedChildThread(ctx, "engine gave up");
+
+    expect(mockPrisma.taskRun.update).not.toHaveBeenCalled();
+    expect(mockPrisma.agentThread.update).not.toHaveBeenCalled();
+  });
+});
+
+// BI-B3194260: a child's result lands in its parent conversation, once.
+describe("child result posted to the parent", () => {
+  const ctx = { threadId: "child-1", taskRunId: "TR-CHILD-1", userId: "user-1", agentId: "agent-mkt", routeContext: "/coworker" };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.agentThread.findUnique.mockResolvedValue({ parentThreadId: "parent-1" });
+    mockPrisma.taskRun.findUnique.mockResolvedValue({ a2aMetadata: null, currentAgentId: "agent-mkt", status: "working" });
+    mockPrisma.agent.findFirst.mockResolvedValue({ name: "Marketing Specialist" });
+    mockPrisma.agentMessage.findFirst.mockResolvedValue(null);
+    mockPrisma.agentMessage.findMany.mockResolvedValue([{ role: "user", content: "Draft the post." }]);
+    mockPrisma.taskRun.update.mockResolvedValue({});
+    mockPrisma.taskRun.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.agentThread.update.mockResolvedValue({});
+  });
+
+  it("posts a completed child's reply to the parent thread, keyed on the child's TaskRun", async () => {
+    mockExecuteLoop.mockResolvedValue({ content: "Here is the draft.", executedTools: [] });
+    await runChildThreadExecution(ctx);
+
+    expect(mockPrisma.agentMessage.create).toHaveBeenCalledWith({
+      data: {
+        threadId: "parent-1",
+        taskRunId: "TR-CHILD-1",
+        role: "assistant",
+        content: "Marketing Specialist finished the delegated work.\n\nHere is the draft.",
+        agentId: "agent-mkt",
+        routeContext: "/coworker",
+      },
+    });
+  });
+
+  it("posts a failed child's reason, even without collaboration provenance", async () => {
+    await failInterruptedChildThread(ctx, "lease_expired_exhausted");
+    expect(mockPrisma.agentMessage.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        threadId: "parent-1",
+        taskRunId: "TR-CHILD-1",
+        content: expect.stringMatching(/^Marketing Specialist could not finish the delegated work\. Interrupted before it finished/),
+      }),
+    });
+  });
+
+  it("never posts a second result for the same child", async () => {
+    mockPrisma.agentMessage.findFirst.mockResolvedValue({ id: "already" });
+    mockExecuteLoop.mockResolvedValue({ content: "Again.", executedTools: [] });
+    await runChildThreadExecution(ctx);
+    expect(mockPrisma.agentMessage.create).not.toHaveBeenCalledWith({ data: expect.objectContaining({ threadId: "parent-1" }) });
+  });
+});
+
+// BI-259F6743: a child cancelled while it ran keeps `canceled` and tells its parent so.
+describe("a cancelled child stays cancelled", () => {
+  const ctx = { threadId: "child-1", taskRunId: "TR-CHILD-1", userId: "user-1", agentId: "agent-mkt", routeContext: "/coworker" };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.agentThread.findUnique.mockResolvedValue({ parentThreadId: "parent-1" });
+    mockPrisma.taskRun.findUnique.mockResolvedValue({ a2aMetadata: null, currentAgentId: "agent-mkt", status: "canceled" });
+    mockPrisma.agent.findFirst.mockResolvedValue({ name: "Marketing Specialist" });
+    mockPrisma.agentMessage.findFirst.mockResolvedValue(null);
+    mockPrisma.agentMessage.findMany.mockResolvedValue([{ role: "user", content: "Draft the post." }]);
+    mockPrisma.taskRun.updateMany.mockResolvedValue({ count: 0 }); // already canceled
+    mockPrisma.agentThread.update.mockResolvedValue({});
+  });
+
+  it("does not rewrite a cancelled run to completed, and reports it cancelled", async () => {
+    mockExecuteLoop.mockResolvedValue({ content: "Partial draft.", executedTools: [] });
+    await runChildThreadExecution(ctx);
+
+    expect(mockPrisma.taskRun.update).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "completed" }) }));
+    expect(mockPrisma.agentMessage.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ threadId: "parent-1", content: "Marketing Specialist was cancelled." }),
+    });
+  });
+
+  it("does not rewrite a cancelled run to failed when the loop then throws", async () => {
+    mockExecuteLoop.mockRejectedValue(new Error("aborted"));
+    await runChildThreadExecution(ctx);
+    expect(mockPrisma.agentThread.update).not.toHaveBeenCalled(); // no terminalError for a cancel
+    expect(mockPrisma.agentMessage.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ threadId: "parent-1", content: "Marketing Specialist was cancelled." }),
+    });
+  });
+});
+
+// BI-FAD98137: a child never runs wider than the turn that delegated it.
+describe("child runtime mode follows the delegating turn", () => {
+  const ctx = { threadId: "child-1", taskRunId: "TR-CHILD-1", userId: "user-1", agentId: "agent-mkt", routeContext: "/coworker" };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.agentThread.findUnique.mockResolvedValue({ parentThreadId: "parent-1" });
+    mockPrisma.agent.findFirst.mockResolvedValue({ name: "Marketing Specialist" });
+    mockPrisma.agentMessage.findFirst.mockResolvedValue(null);
+    mockPrisma.agentMessage.findMany.mockResolvedValue([{ role: "user", content: "Draft the post." }]);
+    mockPrisma.taskRun.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.user.findUnique.mockResolvedValue({ isSuperuser: false });
+    mockResolveAgent.mockResolvedValue({ agentId: "agent-mkt", systemPrompt: "x", sensitivity: "internal" });
+    mockResolveTools.mockResolvedValue({ tools: [], toolsForProvider: [], deferredTools: [] });
+    mockExecuteLoop.mockResolvedValue({ content: "Done.", executedTools: [] });
+  });
+
+  it.each([
+    [{ collaboration: { kind: "handoff", toAgentId: "agent-mkt", runtimeMode: "advise" } }, "advise"],
+    [{ collaboration: { kind: "handoff", toAgentId: "agent-mkt" } }, "act"],
+    [null, "act"],
+  ])("provenance %j resolves tools in %s mode", async (a2aMetadata, mode) => {
+    mockPrisma.taskRun.findUnique.mockResolvedValue({ a2aMetadata, currentAgentId: "agent-mkt", status: "working" });
+    await runChildThreadExecution(ctx);
+    expect(mockResolveTools).toHaveBeenCalledWith(expect.objectContaining({ mode }));
   });
 });

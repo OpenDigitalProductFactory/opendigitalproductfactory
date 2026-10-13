@@ -67,6 +67,12 @@ naming the substrate it ran on (AGENTS.md §15).
 
 ## Which gate runs where
 
+`pnpm pr:readiness` selects policy guards using the same changed-file
+classification as CI and host pregate. For documentation-only changes, it
+omits only guards explicitly declared code-only. Documentation guards and
+guards without input declarations still run. Mixed and unknown changes retain
+all guards; scope selection never substitutes for required publication proof.
+
 This is the single biggest source of drift, so it gets the decision table. A
 worktree is **source-control isolation, not a second DPF install**
 ([kernel principle](../founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md)).
@@ -377,7 +383,11 @@ writes the latest gate result to Git-local state
 pass on one slot retires any non-passing sibling-slot record for the same
 branch and SHA as `superseded`, and every reader of that state (`pregate:status`,
 the pre-push hook, `pr:health`, the PreToolUse publish guard) consults all
-slots, so an earlier attempt on another slot cannot shadow a real pass. It
+slots, so an earlier attempt on another slot cannot shadow a real pass.
+`pregate:status` re-reads the winner a superseded record names. If that record
+no longer passed the same branch and SHA (a late lease loss can rewrite it
+after the fact), it names the winner's actual status and says no slot holds a
+pass, instead of repeating "passed" (BI-A9031FF3). It
 overwrites stale state with `admitted` and then `running` as soon as it owns the
 sandbox, before the expensive command mutates the runtime. If the child wrapper
 exits before a terminal record is written, `pregate` reads that running state,
@@ -846,12 +856,22 @@ through the platform shell. The three `local-ci-runner.mjs` unshallow tests
 skip on Windows: they stub git with a POSIX script on `PATH`, and Windows only
 ever resolves `git.exe`.
 
-**Quiescence-aware evidence recovery.** `pnpm run pregate` now preflights
-`get_quiescence_status` once before the expensive gate. If the portal is actively
-draining or swapping, the gate records `blocked_quiescence`, emits
-`local_ci_quiescence_wait`, and parks with exit 75 before claiming the lease or
-running the full local-CI command. It does not poll: rerun pregate after the
-server-owned quiescence coordinator completes. If the expensive gate already passed but
+**Quiescence-aware evidence recovery.** After checking for a reusable PASS,
+`pnpm run pregate` reads `get_quiescence_status` before running host preflight.
+Confirmed draining or swapping emits `local_ci_quiescence_wait` and exits 75
+without executing guards, claiming a lease, spawning a waiter or changing gate
+and pending-evidence files. The early probe bounds each credential exchange and
+status request to 2.5 seconds. An unavailable, refused or malformed read is
+inconclusive, not PASS or FAIL, and continues the existing preflight/admission
+path. Record-exempt invocations and an audited preflight skip do not run this
+early probe. The standalone `pregate:preflight` remains a source-only check.
+
+The gate still rechecks quiescence immediately before admission: the early read
+does not reserve capacity or authorize a later claim. That late check records
+`blocked_quiescence` for an ordinary run and parks with the same exit 75, while
+preserving existing evidence on `--finalize-evidence`. Neither check polls:
+resume after the server-owned quiescence coordinator completes.
+If the expensive gate already passed but
 `record_local_integration_result` is refused with `portal_quiescing`, the gate
 writes `.git/dpf-local-ci-pending-evidence.json`, attempts
 `release_nonprod_environment_lease`, and records
@@ -1059,6 +1079,13 @@ It does **not** run vitest/jest — that's CI's job. The hook path is auto-wired
 `postinstall` (`scripts/set-hooks-path.mjs` sets `core.hooksPath`). Emergency
 bypasses exist for verified false positives only: `DPF_SKIP_SECRET_SCAN=1` and
 `DPF_SKIP_TYPECHECK=1`. CI still gates the PR regardless of local bypass.
+
+Every package `typecheck` script goes through `scripts/run-tsc.mjs`, which
+checks with TypeScript 7, the native compiler (BI-2B8D67A9). The web production
+program takes seconds instead of minutes. TypeScript 6 remains the workspace's
+`typescript` library. `DPF_TSC=6` runs it as the checker instead, for comparing
+verdicts. The non-blocking CI job "Typecheck (TS6 reference, advisory)" does
+the same on every pull request.
 
 The local feedback loop is therefore:
 

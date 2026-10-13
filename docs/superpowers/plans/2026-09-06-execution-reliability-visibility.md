@@ -4,6 +4,28 @@ status: active
 
 # Execution reliability and process visibility
 
+## October 11 owned review recovery readback (BI-CAP-3147C64B)
+
+WC-502E167E repairs the missing observation path for expired semantic reviews.
+On source 03372734, tasks/get and tasks/result disclose the recovery budget but
+omit the node identities required by the existing bounded-successor admission.
+The original task TR-GATE-4D5BC04629BEAEEE9E15D172 demonstrates the gap.
+
+Extend both existing owner-bound reads with at most 100 node identities, recorded
+statuses and digest binding, plus current task/digest/room-scoped remediation
+evidence. Read no other caller's detail and return no raw provider output or
+diagnostic text. Unknown provider execution remains unknown; inactive and failed
+statuses do not establish settlement. Truncation cannot establish full coverage.
+Extract the existing remediation predicate so readback and retry share freshness,
+identity and proof rules. This consolidation is the refactoring portion of the
+repair. No schema, grant, reviewer dispatch or approval-policy change is needed.
+
+Verify owner isolation, omitted identities, uncertain outcomes, proof freshness,
+node coverage and bounded output with source regressions, then run the shared
+gate. After deployment, read the original task and digest and reconcile actual
+provider execution before requesting a successor. This repair is observation,
+not evidence that AC6 or the original review has passed.
+
 ## September 27 cancellation settlement repair (BI-06AE6833, WC-C9B549CC)
 
 Runtime evidence cmuke4i3b0biz01qs0vq0zpim records a cancelled TaskRun becoming

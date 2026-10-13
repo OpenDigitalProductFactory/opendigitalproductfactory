@@ -58,7 +58,7 @@ function normalizeJson(value: unknown): unknown {
   return value;
 }
 
-function digestValue(value: unknown): string {
+export function digestBuildArtifactValue(value: unknown): string {
   return createHash("sha256")
     .update(JSON.stringify(normalizeJson(value)))
     .digest("hex");
@@ -228,7 +228,7 @@ async function persistWithDb(
       status,
       threadId: args.threadId ?? null,
       value: args.value as Prisma.InputJsonValue,
-      valueDigest: digestValue(args.value),
+      valueDigest: digestBuildArtifactValue(args.value),
     },
     select: {
       id: true,

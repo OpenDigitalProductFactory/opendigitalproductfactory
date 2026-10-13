@@ -3,9 +3,8 @@
 // oversized module) when the acceptance sweep joined (BI-DF255666), so the
 // dispatcher stays a thin discriminator and the branches are tested alone.
 //
-// Runs after the scheduler's guarded claim (BI-D1CD3A11), which is what makes
-// each of these single-flight: only the dispatcher that advanced nextRunAt
-// reaches this function for a given due tick.
+// Acceptance claims its own fenced lease before cadence changes. Other task
+// kinds reach this function after the generic cadence claim (BI-D1CD3A11).
 
 import {
   ACCEPTANCE_SWEEP_TASK_KIND,

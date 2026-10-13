@@ -1,30 +1,30 @@
 {
   "note": "Drift anchor for scripts/check-sbom-drift.mjs. `firstPartyDivergent` lists the accepted set of packages whose own workspace declarations resolve to >1 version; the guard fails when a NEW name appears. `acceptedSpecifierDrift` maps each registry package that two or more workspaces declare other than through one shared `catalog:` specifier (pnpm-workspace.yaml `catalog`) to the reason; unlisted drift fails, and a listed name that no longer drifts fails as stale. `budgets` are ceilings on the dependency shape; the guard fails when a total exceeds its budget. --update-baseline only lowers budgets. Raising one needs --raise-budget \"<reason>\", which records the reason in `lastBudgetRaise` for review. Never raise a budget to absorb growth that `pnpm dedupe` or a removal would clear. See docs/architecture/dependency-reduction-routine.md.",
   "totals": {
-    "resolvedComponents": 879,
-    "uniqueNames": 820,
+    "resolvedComponents": 889,
+    "uniqueNames": 831,
     "duplicatedNames": 56,
-    "excessInstances": 59,
+    "excessInstances": 58,
     "multiMajorNames": 26,
     "firstPartyDivergentNames": 0,
-    "directButTransitiveNames": 2,
+    "directButTransitiveNames": 3,
     "dedupeCandidateNames": 30,
-    "directProdNames": 55,
-    "directDevNames": 29,
+    "directProdNames": 54,
+    "directDevNames": 30,
     "workspaces": 16
   },
   "budgets": {
-    "resolvedComponents": 879,
+    "resolvedComponents": 889,
     "duplicatedNames": 56,
-    "excessInstances": 59,
+    "excessInstances": 58,
     "multiMajorNames": 26
   },
   "lastBudgetRaise": {
-    "reason": "Vitest 5 and its mocker require magic-string ^1.2.3, while @tailwindcss/node 4.3.3 requires the incompatible 0.30.x line. The reviewed lock confirms both consumers; deduplication cannot satisfy both major ranges. The migration retires obsolete Vitest and Istanbul packages, leaving 879 total components with one additional development-only version instance.",
+    "reason": "BI-2B8D67A9: TypeScript 7 (typescript7 alias) becomes the type checker while TypeScript 6 remains the library for Next.js, ESLint and the code-graph extractors, so typescript resolves at two majors. The 21 new components are typescript@7.0.2 and its 20 per-platform native binaries, of which one installs per host. BI-B63B3E51 (retire TS6 as a checker) removes the duplicate.",
     "budgets": {
-      "resolvedComponents": 879,
+      "resolvedComponents": 889,
       "duplicatedNames": 56,
-      "excessInstances": 59,
+      "excessInstances": 58,
       "multiMajorNames": 26
     }
   },
@@ -36,11 +36,11 @@
     "mobile": {
       "lockfile": "apps/mobile/pnpm-lock.yaml",
       "totals": {
-        "resolvedComponents": 951,
-        "uniqueNames": 848,
-        "duplicatedNames": 87,
-        "excessInstances": 103,
-        "multiMajorNames": 47,
+        "resolvedComponents": 949,
+        "uniqueNames": 847,
+        "duplicatedNames": 86,
+        "excessInstances": 102,
+        "multiMajorNames": 46,
         "firstPartyDivergentNames": 0,
         "directButTransitiveNames": 0,
         "dedupeCandidateNames": 40,
@@ -49,10 +49,10 @@
         "workspaces": 1
       },
       "budgets": {
-        "resolvedComponents": 951,
-        "duplicatedNames": 87,
-        "excessInstances": 103,
-        "multiMajorNames": 47
+        "resolvedComponents": 949,
+        "duplicatedNames": 86,
+        "excessInstances": 102,
+        "multiMajorNames": 46
       }
     }
   }

@@ -1,5 +1,122 @@
 # Build gate runbook
 
+## Recovering an interrupted gate publication
+
+The controller retains `<full-log>.<lease-id>.execution.json` before descendant
+cleanup. It binds the observed command result to its original owner, lease, gate,
+candidate, merged tree, evidence plan, toolchain and artifact. This checkpoint is
+execution material; it is not a canonical pass. Termination decisions remain in
+the adjacent `.termination.jsonl` journal, including the Windows owned-job close
+policy recorded before launch.
+
+Before sending a completed result, the controller atomically saves the exact
+request in the existing slot's pending-evidence file. If acknowledgement is lost,
+run `pnpm run pregate -- --finalize-evidence` from the original governed worktree
+with its original provider/session attribution. Recovery validates the checkpoint,
+current evidence policy and original completion time, then uses the normal
+authenticated recorder. Publication and lease binding share a transaction; replay
+returns the existing receipt only for matching content and actor. A recovered
+failure stays failed. Recovery never extends the evidence lifetime.
+
+Missing checkpoints, changed identities/content, expired evidence and leases
+outside the recorder's active/released contract are refused. Preserve those files
+as inconclusive material and obtain a newly admitted run with the repaired
+controller. Do not edit a lease, invent a pass file or turn a timeline note into
+local-CI evidence. The September 12 profile execution predates this checkpoint
+contract and is outside the evidence freshness window.
+
+Windows commands run in a kernel Job Object before starting descendants; closing
+the owned handle fences that membership without traversing recycled parent PIDs.
+The wrapper watches its owned input pipe, so loss of its controller also closes
+the job. This uses the documented
+[Windows Job Object contract](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects).
+Normal Windows gates use job membership alone. The shared individual-cleanup
+helper also supports a bound Windows handle and creation-time comparison.
+Linux observations reuse the shared fence reader's kernel start ticks. Other
+POSIX hosts use process start time; a fresh identity check precedes signalling,
+but separate observation and signal calls retain a race and second-resolution
+start times on those hosts cannot prove same-second PID reuse impossible.
+Unreadable or inconsistent ownership never authorizes individual termination.
+These protections do not establish the cause of historical executor losses.
+
+Completion requires a validated packet from the current command, not merely a
+wrapper exit code. A missing executable, wrapper startup failure, missing or
+invalid packet, or unreadable cleanup identity produces an infrastructure
+inconclusive result. An unknown process is never killed to obtain a clean result.
+
+The server admits gate client revision 2 or newer. After the canonical release
+deploys this floor, refresh the governed source checkout before starting a new
+gate; a revision refusal names that refresh, not a permission override. Preserve
+older completed material and pending requests. Refreshing a client does not
+extend an expired lease or convert old unqualified material into a pass.
+
+
+## Isolated verification users
+
+For permission-removal and concurrent-user tests, `issue_ux_verification_sign_in`
+accepts an optional `fixture` with the owning `capsuleId`, active `leaseId`,
+role `profile`, and `slot` (0 or 1). Reuse the returned `runId` for that run.
+This creates ordinary users on development or test installations only, through
+the existing signed-link exchange. It requires current user permissions,
+assistant grants, and admission to the exact workroom. A fixture never grants
+access to another room.
+
+Renewing a link preserves role removals, disabled state, and absolute expiry.
+Five profiles and two slots bound a run to ten accounts; one lease owns one run.
+Sessions end no later than the lease and the original two-hour limit. Fixture
+expiry is checked at current-user authorization even if cleanup has not run.
+
+After testing, cancel and settle the run's tasks and close its rooms through
+their normal actions, then call the same tool with `retireRunId`. Pending work
+is returned explicitly. Completed retirement revokes the fixture connections,
+disables only those accounts, and retains provenance and audit. The existing
+retention sweep provides bounded expiry cleanup. Retire fixtures before rolling
+back code that enforces their expiry. The legacy shared persona remains the
+default when `fixture` is omitted.
+
+Fixture retirement records its own completion in the run's result; it never
+earns a passing UX verdict. A running run without a completed verdict closes
+as skipped. Existing verification outcomes remain intact, and a passed run
+still revokes its fixture users and credentials before cleanup is complete.
+
+## Semantic review publication and infrastructure recovery
+
+The publication adapter reads [semantic-review-policy.json](../../scripts/semantic-review-policy.json).
+Its mode is the source of truth for receipt enforcement; a skill must not present
+a shadow observation as an enforced refusal. This procedure applies to external
+Claude, Codex and Grok delivery. Build Studio keeps its own transition contract.
+
+1. Freeze a clean DCO-signed commit and produce its required gate evidence.
+   Call `review_semantic_change` with the governing Workroom, immutable base/head
+   trees, committed diff digest and failure analysis bound to that evidence.
+   Source-local test prose does not replace executed gate evidence.
+2. Repair blocking code findings. Re-review a changed tree; stop after two failed
+   repair rounds. A changed diff, policy, reviewer or specialist set invalidates
+   a receipt. An infrastructure refusal or uncertain execution is not a finding.
+3. Record a returned native receipt with
+   `pnpm review:semantic-gate -- record --receipt-file <tool-result.json> --evidence-id <id>`.
+   Then run `pnpm review:semantic-gate -- validate` for the current commit.
+   In enforced mode an unavailable or stale receipt blocks publication. Follow
+   the returned remedy; never change mode or forge a receipt to pass the check.
+4. If infrastructure cannot run the native review, use
+   `node scripts/gate-context.mjs --situation review-infrastructure-unavailable`.
+   Do not repeatedly submit an unchanged request to unavailable capacity or poll
+   a task whose execution has stopped. Use the existing review recovery contract
+   after a verified remediation.
+5. In shadow mode the adapter may allow publication with a missing receipt.
+   For a bounded DEV repair under explicit operator authorization, preserve an
+   independent assessment of the exact change, record the native review as unrun
+   or inconclusive, and proceed through passing source checks and the protected
+   PR/merge queue. Reuse authorization already granted for that scope; a phase
+   change does not require a new exception question. Shadow alone grants no
+   authority and does not excuse ignoring a completed review's blocking findings.
+
+Independent client reviews are valid assessments with their own author, source
+identity, findings and outcome. Cite them separately in the Workroom and PR;
+they are not native receipts. Publication permission, passing review, merge and
+live verification remain separate facts. DCO, grant intersection, ownership and
+production integrity remain mandatory throughout recovery.
+
 CI scopes a pull request from its source head and that head's merge-base with `origin/main`. GitHub's checkout may be a synthetic merge; using its base with the source head includes unrelated main changes as reverse diffs and can turn documentation into exhaustive work. Both comparison endpoints must describe the same source history. Merge-group and other non-PR events retain exhaustive verification.
 
 **Public documentation publication.** CI's `Documentation Publication Build` builds `docs/` with the same [GitHub Pages Jekyll action](https://github.com/actions/jekyll-build-pages) used by legacy Pages publication. It runs for changed documentation or CI configuration on PRs, merge candidates and main; missing comparison history runs the build. Unchanged publication inputs produce a terminal no-build result. The job also checks that malformed Liquid is rejected, and feeds the required `Merge Readiness` aggregate. It only builds: the existing Pages channel still owns deployment. A green build is not evidence that the public site has deployed. Jekyll processes Liquid inside code fences; protect literal examples using its [raw tag guidance](https://jekyllrb.com/docs/liquid/tags/#jekyll-processes-all-liquid-filters-in-code-blocks).
@@ -22,7 +139,7 @@ TypeScript errors only surface in `next build`, not in `vitest` or IDE checks. R
 
 **Step zero for live-install functional verification.** Before driving any feature's happy path on the live install (gate #3 above for a runtime-bound change), run the preflight — `pnpm verify:preflight [-- --feature-sha <sha>] [-- --portal-url <url>]` — and follow its verdict via the `dpf-verify-on-live-install` skill. The preflight returns one deterministic verdict (`CAN-TEST` / `MUST-ADVANCE` / `BLOCKED`) and one next action, replacing the hand-rolled `git rev-parse` + `curl /api/platform/version` skew check. **The BLOCKED stop-rule is binding:** when the governed advance is blocked by an unrelated defect (e.g. main does not build in Docker), file a BI for that blocker and STOP the verification task — do not let it silently become a multi-hour build-infra fix. Single source of truth: [`docs/superpowers/specs/2026-06-06-procedural-functional-verification-design.md`](../superpowers/specs/2026-06-06-procedural-functional-verification-design.md).
 
-**Waiting for a queued gate: read the verdict before you re-run.** `pregate` exits 75 when the pool queues the claim, and the obvious loop — invoke `pregate`, then read `pregate:status` — is unsafe. Once the gate passes, the next iteration claims a fresh lease and starts a second run of the identical tree, and that run's verdict supersedes the pass. On 2026-09-10 a second run died 7 ms in when the host could not launch `git merge` (exit `0xC0000142`), and a genuine PASS from a minute earlier was replaced by a `failed` record (BI-1669E08A). Read the status first and invoke `pregate` only while no verdict exists. A queued row still needs a live local waiter - its heartbeat only advances while some local process keeps re-claiming - but that waiter is no longer you. On exit 75 the gate hands the claim to a detached resumer and says so: `resumeOwner: "detached-resumer"` means stop polling and read `pregate:status` later, while `resumeOwner: "caller"` (a resumer that could not start, or `DPF_DURABLE_RESUMER=off`) means the old rule applies and the row dies if you walk away (BI-D35B85BF). And read a FAIL before you believe it: a vitest child killed mid-run leaves its stage receipt at `status: "running"` and the gate records `failed with NO recorded reason`, which the exact-tree reuse then replays on every later attempt until the diff changes (BI-ED53E13A). Open the slot log and confirm a named failing test before treating a FAIL as a verdict against the diff; two concurrent gates on one host produce this shape regularly.
+**Waiting for a queued gate: resume its durable identity.** A queue admission is pending evidence. Exit 75 hands the same lease, candidate SHA, worktree and owner session to the canonical detached resumer when available. Observe the recorded task and `pregate:status`; do not loop over fresh `pregate` claims. If the resumer could not start, retain the recorded resume identity and report recovery unavailable instead of abandoning the request or making a new claim. Terminal claims stop. A new attempt follows reconciliation and has its own explicit identity. The current wrapper exits 7 for abandoned admission or an uncorroborated zero runner exit; only a SHA-bound PASS is a pass. A killed test child or missing failure receipt is inconclusive: read the slot log and stage receipt before calling it a product failure.
 
 **Local pre-commit gates.** Pre-commit hook at `.githooks/pre-commit` runs a staged Gitleaks secret scan before bytes enter Git history, then runs `pnpm --filter <affected> typecheck` on `.ts`/`.tsx`/`.mts`/`.cts` commits and rejects on failure. For `apps/web` that script checks the **production program** (`tsconfig.json`, which excludes `*.test.ts(x)`, `e2e/`, `tests/`, `test-support/` and the vitest setup files); the test files are their own program, `tsconfig.test.json`, checked by `pnpm --filter web typecheck:tests` and by the required `Typecheck (web tests)` CI job. **Staging a web test file runs `typecheck:all`** (both programs), and the local-CI gate always runs `typecheck:all` — a gate that checked only the production program let three test-only type errors through to CI on PR #5285. Splitting them keeps the gate every push pays at the size of the shipped code, not the shipped code plus 3,300 test files (plan 2026-09-08 M11). Set once: `git config core.hooksPath .githooks` (auto for new clones via `postinstall`). Manual scans: `pnpm security:secrets:staged` for staged content and `pnpm security:secrets` for the current tree. Emergency bypasses exist for verified false positives only: `DPF_SKIP_SECRET_SCAN=1` and `DPF_SKIP_TYPECHECK=1`; CI still gates the PR.
 
@@ -58,7 +175,7 @@ TypeScript errors only surface in `next build`, not in `vitest` or IDE checks. R
 
 **A build decision counts wherever it is recorded.** Readiness also fails closed on an *unclassified* build script, and DPF records those decisions in the top-level `allowBuilds:` block of `pnpm-workspace.yaml` — the canonical policy home, where every entry must carry an explicit boolean (enforced by `scripts/check-build-script-policy.mjs`). pnpm reports a package denied there under **"Automatically ignored builds during installation"**, because it is simply absent from the allowlist; only a package in `package.json`'s `pnpm.ignoredBuiltDependencies` reaches the "Explicitly ignored" section. To a stdout-only parser those two states are indistinguishable, so `puppeteer`, `protobufjs` and `unrs-resolver` read as undecided despite each carrying a deliberate `false`, and every worktree created off `main` sat `source-only` and unpushable with no way to converge (BI-6945BEEF). `classifyIgnoredBuilds` now takes the policy-denied set from `policyDeniedBuilds()`, so a recorded decision counts. It stays strict where it matters: an unreadable or malformed workspace file yields an empty set rather than passing everything, and a package with no recorded decision is still flagged even when its siblings are decided. **Do not "fix" this class by adding `pnpm.onlyBuiltDependencies` to `package.json`** — that flips pnpm into allowlist mode and silently denies `esbuild`, `msw`, `prisma` and `@prisma/engines`, which breaks Prisma.
 
-**The hook asks for the verdict; it does not look for the file.** `pregate` writes **slot-scoped** gate records (`dpf-local-ci-gate-slot-N.json`). The pre-push hook used to stat an unslotted `dpf-local-ci-gate.json` — which is written by exactly one path, the override branch, as `{gatePassed:false, skipped:true}`. So the file it consulted for a PASS could never contain one: a genuine, evidence-backed `pregate` PASS was invisible to the hook, `pnpm run pregate:status` and `git push` disagreed about the same fact, and the only way past a mandatory gate was the override — which is how a gate decays into a formality (BI-A167CF8A). The hook now delegates to `scripts/pregate-status.mjs`, the canonical slot-aware reader, which already applies the branch/sha, evidence-pending and expiry checks and exits 0 only on a PASS for the current HEAD. The unslotted record remains the **override receipt**, never a pass channel. `scripts/pre-push-gate-slot-contract.test.mjs` holds writer and reader together so they cannot drift apart again. The two other readers of that record — `pnpm pr:health` and the skill-pack PreToolUse hook `pregate-evidence-guard.mjs`, which fires on `git push` / `gh pr create` — consult every slot too (BI-5529B5AC): `pr:health` selects across slots the way the reader does, and the hook runs `scripts/pregate-status.mjs --json` when it is present and falls back to every `dpf-local-ci-gate*.json` beside the slot-0 path when it is not (the plugin ships to installs with no `scripts/` tree). A PASS also **retires the losers**: once a slot passes a branch+SHA, any sibling slot record for the same branch+SHA that is not a pass is rewritten as `status: superseded` naming the winner, so no reader that opens one file can mistake the earlier queued, blocked or overridden attempt for a verdict.
+**The hook asks for the verdict; it does not look for the file.** `pregate` writes **slot-scoped** gate records (`dpf-local-ci-gate-slot-N.json`). The pre-push hook used to stat an unslotted `dpf-local-ci-gate.json` — which is written by exactly one path, the override branch, as `{gatePassed:false, skipped:true}`. So the file it consulted for a PASS could never contain one: a genuine, evidence-backed `pregate` PASS was invisible to the hook, `pnpm run pregate:status` and `git push` disagreed about the same fact, and the only way past a mandatory gate was the override — which is how a gate decays into a formality (BI-A167CF8A). The hook now delegates to `scripts/pregate-status.mjs`, the canonical slot-aware reader, which already applies the branch/sha, evidence-pending and expiry checks and exits 0 only on a PASS for the current HEAD. The unslotted record remains the **override receipt**, never a pass channel. `scripts/pre-push-gate-slot-contract.test.mjs` holds writer and reader together so they cannot drift apart again. The two other readers of that record — `pnpm pr:health` and the skill-pack PreToolUse hook `pregate-evidence-guard.mjs`, which fires on `git push` / `gh pr create` — consult every slot too (BI-5529B5AC): `pr:health` selects across slots the way the reader does, and the hook runs `scripts/pregate-status.mjs --json` when it is present and falls back to every `dpf-local-ci-gate*.json` beside the slot-0 path when it is not (the plugin ships to installs with no `scripts/` tree). A PASS also **retires the losers**: once a slot passes a branch+SHA, any sibling slot record for the same branch+SHA that is not a pass is rewritten as `status: superseded` naming the winner, so no reader that opens one file can mistake the earlier queued, blocked or overridden attempt for a verdict. `pregate:status` re-reads the winner a superseded record names. If that record no longer holds a pass for the same branch and SHA (a late lease loss can rewrite it after it superseded its sibling), the reason names the winner's actual status and says no slot holds a pass, so a superseded record can never manufacture one (BI-A9031FF3).
 
 **A push is not "done".** Every gate path that lets a push through now prints an explicit reminder that a PR is complete only when its required checks are GREEN — verify with `pnpm pr:health <PR#>` after CI starts and do not leave a red PR unattended (the abandonment behind PR #4172). `pnpm pr:health` remains the authoritative green-checks completion verdict.
 
@@ -71,17 +188,44 @@ TypeScript errors only surface in `next build`, not in `vitest` or IDE checks. R
 5. **The managed bootstrap can perturb `packages/db/package.json` + `pnpm-lock.yaml`** (observed: an `@prisma/adapter-pg` patch downgrade). Strip those from a docs-only PR before committing — they are not your change.
 6. **Preflight and the trailer gates read the COMMITTED diff + commit/PR-body trailers**, not the working tree — a clean pre-commit `pregate-preflight.mjs` run does not prove the committed state passes; the design-grounding / docs-impact / seed-fit gates read `PR_BODY`. **The fast loop is `pnpm gate:local` (BI-85270E96):** it runs the deterministic diff-scoped gates (ux-fit, docs-impact, design-grounding, spec-plan-doc, data-impact, convergence, seed-fit, clock-bombs, module-size, one-action-result, prose-lint) with `DPF_GATE_INCLUDE_WORKING_TREE=1`, so staged, unstaged and untracked files count BEFORE the first commit, and `--message-file <path>` feeds the planned commit message as `PR_BODY` so the trailer gates judge the text the commit will carry. `--committed` restores CI's view; `--only a,b` narrows the list. Exit 1 is a failing gate; exit 7 means a gate could not run here and CI still owns it. Run it once with the message drafted, commit once, push once. The pre-commit typecheck gate is content-hash cached under `.git/dpf-typecheck-ok` for the same reason: an amend that changes nothing TypeScript sees no longer pays `typecheck:all` again.
 7. **A fake cuid or other high-entropy token in a test trips gitleaks `generic-api-key`.** Use an obviously-fake hyphenated placeholder (e.g. `user-cuid-placeholder`), not a realistic-looking id.
-8. **A rerun replays the ORIGINAL webhook payload, so editing a PR body cannot fix a PR-body gate.** Following on from 6: `ci.yml` triggers on `pull_request` with the DEFAULT activity types (`opened` / `synchronize` / `reopened`) — **not `edited`** — and `gh run rerun` replays the payload the run started with. Adding the missing `Seed-Fit-Decision:` / `Docs-Impact-Decision:` trailer to the PR body and re-running therefore fails identically, however many times you retry; a label has the same problem, because labels are in the payload too. Only a fresh `synchronize` event — a new push — carries the corrected body. Amend the commit (put the trailer there as well, so the decision travels with the change), re-gate for the new SHA, then `--force-with-lease`. **A force-push also clears auto-merge**: re-arm with `gh pr merge <n> --squash --auto`, and read "already queued to merge" as success, not failure — a queued PR reports a null `autoMergeRequest`. Reproduce any PR-profile guard *before* pushing, since local `pregate` structurally cannot see it: `BASE_SHA=$(git merge-base origin/main HEAD) PR_BODY="$(gh pr view <n> --json body -q .body)" PR_LABELS_JSON='[]' GITHUB_EVENT_NAME=pull_request node scripts/ci-policy-guards.mjs --profile pull-request`.
+8. **A rerun replays the original webhook payload.** Editing PR body/labels does not update a running workflow's event data. Diagnose the named failure with `pnpm pr:health <n>` and reproduce its affected guard with the corrected metadata. If the workflow requires a new synchronize event, push a signed correction carrying the required trailer; use `--force-with-lease` only when intentionally amending published history. A metadata-only correction does not automatically require another full local integration gate. Recheck auto-merge after any force-push; re-arm it when necessary. A queued PR is waiting, not a failed build.
+
+### Published corrections and host guard reuse
+
+For an unchanged published PR, inspect health/status and preserve valid executed
+evidence; a queue delay or failed GitHub job is not a command to rerun the whole
+local gate. For changed source or a main refresh, run affected source tests and
+reproduce the named failure, obtain independent review of changed code, and leave
+final main+PR integration to required GitHub checks and the protected merge queue.
+Never relabel an earlier full local PASS as covering a changed tree.
+
+The current pre-push hook supports exact PASS or an audited override, not a
+native cloud-delegation receipt. Where explicit scoped operator recovery
+authorization exists, use the documented override route above and record local
+integration as **unrun/delegated**, not passed. This is not a blanket override,
+an authorization grant, or permission to disable protected checks. The native
+post-publication delegation policy remains tracked in BI-25CB699C.
+
+`pregate:preflight` and `pr:ready` reuse wholly successful local guard results
+for at most one hour when the clean worktree, HEAD/tree, main, command plan,
+toolchain and environment still match. Readiness also binds PR body and labels.
+Identity is re-read before returning a cache hit and after execution. Dirty
+files, skips, failures, expired receipts and missing identity never yield a
+cached PASS. Commit-message changes invalidate host guard results because some
+guards read those messages. Reuse prints the original execution time and does
+not create canonical integration evidence. These per-worktree receipts extend
+the existing stage writer and owner-fenced lock; stale owners use its existing
+reconciliation, while live/unmeasurable owners are not displaced.
 9. **"Sandbox drift" from `pnpm install already running` means an install in the gate's own sandbox outlived the wait, not a broken environment.** Since BI-8DC6F267 an install in another worktree no longer counts; `sandbox-freshness-preflight` waits up to 10 minutes for an install running in the sandbox itself (or one whose working directory it cannot read), and only then reports `SANDBOX_NOT_READY: pnpm install already running (pid N, …)`, which `gate-worktree` reports as `BLOCKED (sandbox drift) … This is a sandbox defect, NOT product build evidence`. That wording invites a hunt for an environment fault; check the named pid first (`ps -p N -o command=`, `lsof -a -p N -d cwd`) — a hung install in the sandbox is the usual cause. The aborted attempt leaves a released lease bound to the gate key, so the immediate retry fails *differently*, as `gate_evidence_blocked` / `mismatched-evidence`. Recover with `node scripts/local-ci-slot-cleanup.mjs --slot-key <slot>` — the lease payload names the exact `cleanupCommand` — then re-run. Serialize installs against the gate; never gate two branches at once (the gate holds one slot anyway).
 10. **Run `pnpm run pregate` in the FOREGROUND, UNPIPED, as the sole command.** Backgrounding it with output redirected produced the record status `blocked_child_signal_death with NO recorded reason`, whose own text says it *is not evidence the diff is bad*. The exit code lied; the record did not. `pnpm run pregate:status` is the verdict — read it before treating any gate failure as a finding about the change.
 
-**Build Studio mirrors this gate.** Per-task and pre-ship verification in the sandbox runs typecheck + production build. A Build-Studio-produced PR cannot fail CI typecheck — if it would, it never leaves the sandbox. Implementation status: landed ⟦runtime: dated snapshot, not doctrine — re-audited 2026-06-19; re-confirm against the cited files⟧ — the sandbox shells `npx tsc --noEmit` and `npx vitest run` (`apps/web/lib/build/coding-agent.ts`), the specialist/review prompts require `NODE_ENV=production pnpm --filter web build` before ship (`apps/web/lib/build/build-agent-prompts.ts`), and the orchestrator scopes the verdict to the build's own diff and gates the build→review transition on it (`apps/web/lib/build/build-orchestrator.ts`, `apps/web/lib/queue/functions/build-review-verification.ts`).
+**Build Studio mirrors this gate.** Per-task and pre-ship verification in the sandbox runs typecheck + production build. A Build-Studio-produced PR cannot fail CI typecheck — if it would, it never leaves the sandbox. Implementation status: landed ⟦runtime: dated snapshot, not doctrine — re-audited 2026-06-19; re-confirm against the cited files⟧ — the sandbox shells `npx tsc --noEmit` and `npx vitest run` (`apps/web/lib/build/coding-agent.ts`), the specialist/review prompts require `NODE_ENV=production pnpm --filter web build` before ship (`apps/web/lib/build/build-agent-prompts.ts`), and the orchestrator scopes the verdict to the build's own diff and gates the build→review transition on it (`apps/web/lib/build/build-orchestrator.ts`, `apps/web/lib/queue/functions/build-review-verification.ts`). **Agents run scoped tests only (BI-F5D4FA50).** Verification runs the test files for the build's changed files; the whole suite runs in cloud CI and the merge queue. An agent's own unscoped run (`vitest run`, `pnpm test` or `jest` with no test files) is refused, by `run_sandbox_command` and, for CLI agents that use their own shell, by the runner configs when the sandbox env sets `DPF_SANDBOX_TEST_SCOPE=enforce`. Each decision is recorded. The sandbox service is CPU-bounded and caps vitest and jest workers, so one build cannot close the local-CI pool for `host-cpu-high` (`apps/web/lib/build/sandbox/test-scope-guard.ts`; design: `docs/superpowers/specs/2026-10-08-sandbox-scoped-agent-tests-design.md`).
 
 **Review never repeats a verdict it already has** (BI-FBA2FDBE). The review job's finalize stage records each guard-gauntlet run under its gate identity: repository, tree, guard plan and toolchain. When the same identity already has a recorded failure, finalize reuses it instead of re-running the gauntlet. A guard that printed "the guard did not run" makes the run inconclusive (`gauntlet-not-run`); it is never a failing verdict and is never reused. The semantic change review runs only after a finished finalize, because it needs the failure analysis that finalize writes. Any other finalize outcome stops the job, and that outcome is on the build's trail (`apps/web/lib/build/finalize-stage-runner.ts`).
 
 **A build's own guard failures go back to its coding agent** (BI-B2EEA6DE). When finalize ends `gauntlet-failed`, the review job hands the build back from review to build. It records `verificationOut.gauntletRepair` (tree, evidence record, failing guards, attempt) and queues `build/gauntlet.repair`. That job dispatches one repair task through the orchestrator's specialist dispatch: the brief names each failing guard, carries the guard output clipped to its tail, and forbids weakening, skipping or editing any guard or its baseline. The build then returns to review, and finalize re-evaluates the new tree. A build gets at most two hand-backs; after that it escalates to the operator once (`escalateBuildToHuman`), and nothing more is dispatched (`apps/web/lib/build/gauntlet-repair.ts`). A semantic change review whose next action is "repair" takes the same path (BI-50E8802C): its blocking findings (critical and important, with location and suggestion) become the brief, and guard and review hand-backs share the two-attempt bound. An inconclusive review is retried, not repaired.
 
-**Two failures only CI used to see now have local guards (BI-25EF1456).** A `"use client"` component that reaches `@dpf/db`, `server-only` or a Node built-in through a lib import passes vitest and tsc and fails only `next build` ("Module not found: fs"); `scripts/check-no-server-imports-in-client.mjs` (in the guard loop, `pnpm check:guards`) walks value imports from every affected client module and prints the exact chain in under a second — the fix is the `*-vocabulary.ts` split. And a route over its field budget is measured only by the CI sweep; `pnpm ux:sweep-touched -- --run --base-url <served portal>` maps the changed files to the page routes that render them (route manifest plus the same import walk, ancestor layouts included) and runs the existing `ux:sweep` ratchet on exactly those routes. Static routes only; a change under a shared layout that touches more than 40 routes is handed to CI's exhaustive sweep rather than measured locally.
+**Two failures only CI used to see now have local guards (BI-25EF1456).** A `"use client"` component that reaches `@dpf/db`, `server-only` or a Node built-in through a lib import passes vitest and tsc and fails only `next build` ("Module not found: fs"); `scripts/check-no-server-imports-in-client.mjs` (in the guard loop, `pnpm check:guards`) walks value imports from every affected client module and prints the exact chain in under a second — the fix is the `*-vocabulary.ts` split. And a route over its field budget is measured only by the CI sweep; `pnpm ux:sweep-touched -- --run --base-url <served portal>` maps the changed files to the page routes that render them (route manifest plus the same import walk, ancestor layouts included) and runs the existing `ux:sweep` ratchet on exactly those routes. The default feedback run covers static routes with a 40-route cap. Shared-layout acceptance uses the complete touched inventory: `--exhaustive --fixture-map <admitted-preview-map>` includes dynamic routes and requires concrete fixtures, source/lease binding and complete accounting. Desktop/mobile and normal/Simple contexts are selected explicitly; missing fixtures never lower the denominator.
 
 ## Auto-merge armed is not auto-merge happening (BI-53BE1C77)
 

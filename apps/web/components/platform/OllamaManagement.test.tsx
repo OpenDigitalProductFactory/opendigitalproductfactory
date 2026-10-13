@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render as renderComponent, screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalModelStatusSnapshot } from "@/lib/inference/local-model-operations";
 
@@ -7,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   pull: vi.fn(),
   remove: vi.fn(),
   refresh: vi.fn(),
+  observe: vi.fn(),
   observer: null as null | {
     snapshot: LocalModelStatusSnapshot;
     refresh: () => Promise<void>;
@@ -20,10 +24,21 @@ vi.mock("@/lib/actions/ollama-management", () => ({
   deleteOllamaModel: mocks.remove,
 }));
 vi.mock("@/lib/hooks/useBackgroundOperationObserver", () => ({
-  useBackgroundOperationObserver: () => mocks.observer,
+  useBackgroundOperationObserver: () => {
+    mocks.observe();
+    return mocks.observer;
+  },
 }));
 
 import { OllamaManagement } from "./OllamaManagement";
+
+function render(element: ReactElement) {
+  return renderComponent(
+    <MessagesProvider locale="en-US" messages={{ errors: namespaceMessages("en-US", "errors") }}>
+      {element}
+    </MessagesProvider>,
+  );
+}
 
 const baseModel = {
   comparisonKey: "",
@@ -72,6 +87,46 @@ describe("OllamaManagement", () => {
   });
 
   afterEach(cleanup);
+
+  it("shows restricted inventory without mounting the management observer", () => {
+    render(<OllamaManagement canWrite={false} />);
+    expect(screen.getByText("Provider management access required.")).toBeTruthy();
+    expect(mocks.observe).not.toHaveBeenCalled();
+    expect(screen.queryByText(/0 installed|No models are installed/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
+  });
+
+  it("keeps first-load inventory unknown even before the initial request starts", () => {
+    mocks.observer!.snapshot = { observedAt: "", models: [], operations: [] };
+    render(<OllamaManagement canWrite />);
+    expect(screen.getByText("Checking inventory…")).toBeTruthy();
+    expect(screen.queryByText(/0 installed|No models are installed/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /Install / })).toBeNull();
+  });
+
+  it("does not turn a failed first read into an empty inventory or reinstall action", () => {
+    mocks.observer!.snapshot = { observedAt: "", models: [], operations: [] };
+    mocks.observer!.error = "Status refresh failed (503)";
+    render(<OllamaManagement canWrite />);
+    expect(screen.getByText("Inventory unavailable")).toBeTruthy();
+    expect(screen.queryByText(/0 installed|No models are installed/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /Install / })).toBeNull();
+  });
+
+  it("retains known inventory after a refresh failure and labels it stale", () => {
+    mocks.observer!.error = "Status refresh failed (503)";
+    render(<OllamaManagement canWrite />);
+    expect(screen.getByText(/Last known inventory/)).toBeTruthy();
+    expect(screen.getByText("17.66 GiB")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Remove / })).toBeNull();
+  });
+
+  it("shows an empty state only after a successful empty inventory read", () => {
+    mocks.observer!.snapshot = { observedAt: "2026-10-12T19:00:00Z", models: [], operations: [] };
+    render(<OllamaManagement canWrite />);
+    expect(screen.getByText(/0 installed/)).toBeTruthy();
+    expect(screen.getByText("No models installed.")).toBeTruthy();
+  });
 
   it("shows authoritative disk sizes and no command-copy workflow", () => {
     const { container } = render(<OllamaManagement canWrite vramGb={24} providerId="local" />);

@@ -54,6 +54,9 @@ export type DeliveryShapeKey = (typeof DELIVERY_SHAPE_KEYS)[number];
 
 export const DELIVERY_SHAPE_VERSION = "1.0.0";
 
+/** The role that answers for the author's stages (`role:author`). */
+export const DELIVERY_AUTHOR_ROLE = "author";
+
 /** `key@version` references a claim may declare. */
 export const DELIVERY_SHAPE_REFS = DELIVERY_SHAPE_KEYS.map((key) => `${key}@${DELIVERY_SHAPE_VERSION}`);
 

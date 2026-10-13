@@ -2,6 +2,21 @@
 
 Plan-review recovery binds the immutable plan recorded in valid coverage for the current scope baseline and Workroom repository. Design approval continues to bind the canonical design. If the plan commit, blob, or safe `docs/superpowers/plans/*.md` path is missing, stale, or belongs to another repository, record complete current plan coverage and retry readiness; a design cannot substitute for a plan. The plan-specific request key prevents replay of a historical review routed to the design. Historical receipts remain available for audit.
 
+Scope documents use `**OBJ-ID:** statement` objectives and a Markdown table with acceptance ID, objective IDs and statement as its first three columns. Objective paragraphs may wrap; acceptance rows must fit on one source line. Bare three-cell rows remain compatible with legacy scope. Additional columns (such as evidence) need a declared table header and remain metadata. Escape literal pipes in cells as `\|` and literal backslashes as `\\`; Build Studio does this when projecting structured criteria. The parser checks row width, identifiers and links, reports malformed rows by line number, and excludes code examples and quotations. It preserves the complete normalized statement in its semantic digest and the exact source bytes in the artifact digest. Existing baseline receipts remain immutable.
+
+Before admitting a new consent-bound independent spec-approval request, the server checks authorization and exact packet issuance, then resolves the bound immutable artifact and validates its scope with the baseline parser. A malformed or unavailable document returns a diagnostic with the review gate **unrun**, before creating the reviewer task or consuming model capacity. Correct the source and obtain a request bound to its new identity; for a provider outage, restore access and retry the same request. Matching existing requests join their recorded work without requiring another provider read. This check does not approve the design, replace independent review, or impose scope notation on ordinary documents and plans.
+
+A plan-only review can start from an unchanged source branch. Request authorization resolves the same baseline-validated plan as the claim issuer; it does not require a changed design file. Exact packet identity, current Workroom head, independent reviewer and caller authority checks still apply.
+
+When an exact plan-review task exhausts its terminal-writer attempts, refresh
+the governed claim. For that user and current OAuth task family, the issuer
+skips only the recorded exhausted packet and selects the next currently
+eligible independent reviewer using the existing target-bound plan key.
+Submit the newly issued packet unchanged. Other task states, writer refusals,
+capacity waits and human approvals do not authorize replacement. If every
+eligible reviewer is exhausted, recovery reports that bounded condition;
+do not reset attempts, replay exhausted tasks or invent a caller key.
+
 **Status:** procedure reference. The *rules* — backlog lives in Postgres, plan before build, check epic overlap — live in [`AGENTS.md`](../../AGENTS.md) §6 and stay always-on. This file holds the tooling detail, hygiene cadence and enforced-gate list. Relocated by BI-0020D511 Phase 1; no rule was dropped.
 
 - **Backlog lives in PostgreSQL** (`Epic`, `BacklogItem`). Always query live state before planning or changing backlog work. → [kernel principle](../professions/portfolio-management/wiki/backlog-lives-in-postgresql.md)

@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { guardShellEnv } from "./guard-bash.mjs";
 import { resolveHostCommandInvocation } from "./host-command-invocation.mjs";
 
 /**
@@ -86,6 +87,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-903FB5F9: no checked-in recipe may drop the Docker VM page cache by hand.
       node("--test", "scripts/check-no-manual-vm-cache-drop.test.mjs"),
       node("--test", "scripts/host-resource-runner.test.mjs"),
+      node("--test", "scripts/lib/semantic-review-artifact.test.mjs", "scripts/semantic-review-gate.test.mjs"),
+      // BI-2B8D67A9: run-tsc selects TS7 by default and TS6 under DPF_TSC=6,
+      // and a signal-killed native compiler still exits 88 (BI-27D3DCCD).
+      node("--test", "scripts/lib/tsc-compiler.test.mjs"),
       node("scripts/check-guards.mjs"),
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
       node("scripts/check-capability-compose-profiles.mjs"),
@@ -121,6 +126,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // A real pending PASS on slot-1 was unfinalizable. Registered here for the
       // same reason as the tests above: in the allowlist it would never run.
       node("--test", "scripts/gate-worktree-finalize-slot.test.mjs"),
+      node("--test", "scripts/gate-worktree-process-identity.test.mjs"),
+      node("--test", "scripts/gate-stdin-regression.test.mjs"),
+      node("--test", "scripts/lib/gate-execution-checkpoint.test.mjs"),
       // BI-24D5D7C2: the control-plane watchdog aborts a 13-minute build after
       // two consecutive probe failures, and an inner mcpCall deadline was
       // classified as "request-failed" — an operator reads that as a broken
@@ -262,6 +270,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "scripts/installer/lib/state-cleanup-temps.test.mjs",
         "scripts/installer/lib/docker.test.mjs",
+        "scripts/installer/lib/macos-memory.test.mjs",
+        "scripts/installer/macos-docker-memory.test.mjs",
+        "scripts/installer/lib/pnpm.test.mjs",
+        "scripts/installer/prepare-runtime-state.test.mjs",
+        "scripts/installer/stage-ca-password.test.mjs",
         "scripts/installer/lib/state-lock-timeout.test.mjs",
         "scripts/installer/lib/doctor-redaction.test.mjs",
         "scripts/installer/install-release-assets.test.mjs",
@@ -318,6 +331,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "scripts/check-doc-links.test.mjs",
+        "scripts/gen-doc-index.test.mjs",
         "scripts/public-docs-rendering.test.mjs",
       ),
       node("scripts/check-doc-links.mjs"),
@@ -355,6 +369,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/ci-observation.test.mjs",
         "scripts/ci-shadow-selection.test.mjs",
         "scripts/ci-change-scope.test.mjs",
+        "scripts/pr-readiness-scope.test.mjs",
         "scripts/ci-evidence-plan.test.mjs",
         "scripts/ci-build-artifact-discovery.test.mjs",
         "scripts/lib/ci-build-artifact.test.mjs",
@@ -371,6 +386,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/git-shallow-preflight.test.mjs",
         "scripts/lib/ensure-compile-ready.test.mjs",
         "scripts/pregate-preflight.test.mjs",
+        "scripts/pregate.test.mjs",
+        "scripts/lib/pregate-preflight-receipt.test.mjs",
         "scripts/gate-context.test.mjs",
         "scripts/gate-wait.test.mjs",
         // The landing orchestrator and the obligation banner that replaced a
@@ -399,6 +416,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // first, PAT until retirement, actionable refusal) against a loopback
       // stub authorization server.
       node("--test", "scripts/lib/mcp-credential.test.mjs"),
+      // BI-5BCDB07C: the Grok refresher writes bearer_token_file and stops
+      // when the credentials client is refused. Listed here so CI runs it.
+      node("--test", "scripts/lib/grok-credential.test.mjs"),
       node("scripts/check-authoring-cost-dimensions.mjs"),
       node("scripts/check-ci-policy-test-inventory.mjs"),
     ]),
@@ -434,6 +454,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // the image — so it reaches main green and breaks the release chain.
       node("scripts/check-dockerfile-copied-script-imports.mjs"),
       node("--test", "scripts/check-dockerfile-copied-script-imports.test.mjs"),
+      // The package-resolution twin (BI-PIR-53d2c42d): scripts the image runs
+      // from /app/apps/web-src resolve bare imports from the `@dpf/db...`
+      // runtime set, not the web app's deps. A web-only package anywhere in
+      // their graph (prom-client via lib/operate/metrics) killed the boot-time
+      // wiki re-embed with "Cannot find module". Static graph walk, no install.
+      node("scripts/check-web-src-script-imports.mjs"),
+      node("--test", "scripts/check-web-src-script-imports.test.mjs"),
       // The test-fixture twin: a contract test that cpSync's modules into a temp
       // tree one at a time dies on ERR_MODULE_NOT_FOUND when a copied module
       // gains a static import the fixture never copies. Hit twice on 2026-09-25
@@ -639,7 +666,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     // Plane 4 — the standing TOOL registry, same soft shape and reusing plane 3's claim
     // review. Dispatch-time caps are governed elsewhere; this is the part that accretes.
     guard("tool-surface-guard", "Tool Surface Guard", [
-      node("--test", "scripts/check-tool-surface.test.mjs"),
+      node("--test", "scripts/check-tool-surface.test.mjs", "scripts/provider-management-grant-audit.test.mjs"),
       node("scripts/check-tool-surface.mjs"),
     ], { inputs: ["code"] }),
     // A coworker's standing rhythm is declared twice on purpose — the registry
@@ -808,6 +835,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // GIT_DIR; runs the janitor freshness fixture under one, against the live
       // tree, and proves the inherited repository is untouched.
       conformanceTest("scripts/lib/git-hook-env.test.mjs"),
+      conformanceTest("scripts/lib/guard-bash.test.mjs"),
       node(
         "--test",
         "scripts/lib/runtime-artifact-janitor.test.mjs",
@@ -887,6 +915,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // nothing about it.
         "scripts/lib/pregate-console.test.mjs",
         "scripts/lib/pregate-status.test.mjs",
+        // BI-A9031FF3: the CLI hands a superseded record its winner's current record.
+        "scripts/pregate-status-superseded.test.mjs",
         // BI-277ECBDB: the pre-claim slot PostgreSQL probe.
         "scripts/lib/local-ci-slot-substrate.test.mjs",
         // Symlink-robust entry guard shared by the pregate script family: a
@@ -1025,6 +1055,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "packages/dpf-skill-pack/hooks/plugin-hooks-wired.test.mjs",
       ),
+      // BI-E5C45F61: the SessionStart self-test that reports an inert
+      // PreToolUse guard plane. Unlisted = unrun.
+      node(
+        "--test",
+        "packages/dpf-skill-pack/hooks/pretooluse-guard-selftest.test.mjs",
+      ),
       // BI-0B292D84: AGENTS.md 12 requires a Workroom claim before work on
       // every surface. It was prose - 30 of 79 live worktree branches carried
       // no WorkCapsule binding when measured 2026-08-26. Hand-enumerated like
@@ -1140,18 +1176,18 @@ export function formatRunSummary(profile, result) {
 
 export async function runPolicyProfile({
   entries,
-  execute = (command, args) => {
-    const invocation = resolvePolicyGuardInvocation(command, args);
-    return spawnSync(invocation.command, invocation.args, {
-      cwd: process.cwd(),
-      env: process.env,
-      stdio: "inherit",
-      shell: false,
-    }).status ?? 1;
-  },
+  execute,
   logger = () => {},
   now = () => Date.now(),
 }) {
+  let env;
+  const run = execute ?? ((command, args) => {
+    env ??= guardShellEnv();
+    const invocation = resolvePolicyGuardInvocation(command, args, { env });
+    return spawnSync(invocation.command, invocation.args, {
+      cwd: process.cwd(), env, stdio: "inherit", shell: false,
+    }).status ?? 1;
+  });
   const results = [];
 
   for (const entry of entries) {
@@ -1161,7 +1197,7 @@ export async function runPolicyProfile({
     logger({ type: "start", entry });
 
     for (const [command, args] of entry.commands) {
-      const exitCode = execute(command, args);
+      const exitCode = run(command, args);
       if (exitCode !== 0) {
         status = "failed";
         failedCommand = [command, ...args].join(" ");

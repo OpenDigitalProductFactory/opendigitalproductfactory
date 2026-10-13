@@ -31,6 +31,7 @@ import {
 import AxeBuilder from "@axe-core/playwright";
 
 import { measureUxBudget } from "../lib/ux-budget/measure";
+import { collectSpeedEntries, readSpeedCounters } from "../lib/ux-budget/speed-counters";
 import { MEASUREMENT_NOW_ENV } from "../lib/runtime/measurement-runtime";
 import { recordVisibleText } from "./ux-sweep-visible-text";
 import { confirmBlockingRoutes } from "./ux-sweep-reproducibility";
@@ -42,9 +43,11 @@ import {
   type BaselineFile,
   type RouteMeasurement,
 } from "../lib/ux-budget/ratchet";
+import { NAV_MODE_COOKIE } from "../lib/navigation/nav-mode";
 import type { UxShell } from "../lib/ux-budget/budgets";
 import type { RouteAudience } from "../lib/navigation/route-audience";
-import { loadRouteParams, resolveSweepPath } from "./ux-sweep-route-params";
+import { sweepContextOptions, prepareSweepInventory, excludedSweepRoutes, assertResolvedSweepPaths } from "./ux-sweep-preview-context";
+import { resolveSweepPath } from "./ux-sweep-route-params";
 import type {
   ExemptCheck,
   RouteSweepExclusionReason,
@@ -412,8 +415,7 @@ async function measureRoute(
     waitUntil: "domcontentloaded",
     timeout: 30_000,
   });
-  // Give client components a beat to hydrate; the whole point is the served DOM.
-  await page.waitForLoadState("load", { timeout: 15_000 }).catch(() => {});
+  await page.waitForLoadState("load", { timeout: 15_000 }).catch(() => {}); // let client components hydrate
   await waitForRouteDomToSettle(page);
 
   // A route that errors or redirects to auth is not a surface to budget; recording a
@@ -430,6 +432,8 @@ async function measureRoute(
     throw new Error(`redirected to ${landed}`);
   }
   phases.navigationAndSettleMs = Math.round(performance.now() - phaseStartedAt);
+  await page.evaluate(BROWSER_EVALUATION_RUNTIME); // the collector's nested callbacks need tsx's __name
+  const speedCounters = readSpeedCounters(await page.evaluate(collectSpeedEntries)); // BI-BDB43823, before axe
 
   phaseStartedAt = performance.now();
   const html = await page.evaluate(pruneInvisible);
@@ -481,6 +485,7 @@ async function measureRoute(
     ariaSnapshot,
     axeViolations,
     exemptChecks: row.exemptChecks,
+    speedCounters,
   };
   phases.budgetMeasurementMs = Math.round(performance.now() - phaseStartedAt);
   recordVisibleText(ROOT, row.routePath, normalisedHtml);
@@ -541,6 +546,7 @@ export function executionOutcome(
   durationMs: number;
   phases?: RoutePhaseTimings;
   axeViolations?: number;
+  speedCounters?: RouteMeasurement["speedCounters"];
   reason?: string;
 } {
   return outcome.status === "measured"
@@ -550,6 +556,7 @@ export function executionOutcome(
         durationMs: outcome.durationMs,
         phases: outcome.value.phases,
         axeViolations: outcome.value.measurement.axeViolations,
+        speedCounters: outcome.value.measurement.speedCounters,
       }
     : {
         routePath: outcome.routePath,
@@ -565,20 +572,20 @@ async function main(): Promise<void> {
   const workerCount = parseSweepWorkerCount(
     arg("workers", process.env.UX_SWEEP_WORKERS ?? "2"),
   );
+  const sourceRoot = resolve(arg("source-root", ROOT));
   const routeSelector = arg("routes", process.env.UX_SWEEP_ROUTES ?? "");
   const updateBaseline = process.argv.includes("--update-baseline");
 
+  const { exhaustive, viewport, navMode, colorScheme } = sweepContextOptions(arg, process.argv);
   const inventory = (
-    JSON.parse(readFileSync(join(ROOT, SHELLS_REL), "utf8")) as { routes: ShellRow[] }
+    JSON.parse(readFileSync(join(sourceRoot, SHELLS_REL), "utf8")) as { routes: ShellRow[] }
   ).routes;
-  const rows = selectSweepRows(inventory, routeSelector);
-  const routeParams = loadRouteParams(ROOT);
-  const excluded = inventory
-    .filter((row) => !row.sweepEligible)
-    .map((row) => ({
-      routePath: row.routePath,
-      reason: row.sweepExclusionReason ?? "missing-generated-exclusion-reason",
-    }));
+  const { routeParams, servedSourceSha, servedLeaseId, selectedInventory } = await prepareSweepInventory({
+    root: ROOT, sourceRoot, fixturePath: arg("fixture-map", ""), baseUrl, exhaustive, inventory,
+  });
+  const rows = selectSweepRows(selectedInventory, routeSelector);
+  assertResolvedSweepPaths(rows, routeParams);
+  const excluded = excludedSweepRoutes(inventory);
 
   const statePath = join(ROOT, storageState);
   let browser: Browser | undefined;
@@ -586,23 +593,20 @@ async function main(): Promise<void> {
   let routeRun: RouteWorkResult<MeasuredRoute> | undefined;
   /** Routes whose blocking verdict did not reproduce on a second measurement (BI-69FE5504). */
   let notReproducible: string[] = [];
-  if (!existsSync(statePath)) {
-    console.error(
-      `[ux-sweep] WARNING: no storage state at ${storageState} — authenticated route measurement will fail.`,
-    );
-  }
+  if (!existsSync(statePath)) throw new Error("UX sweep requires authenticated browser storage state");
 
   try {
     browser = await chromium.launch();
     contexts = await Promise.all(
       Array.from({ length: workerCount }, () =>
         browser!.newContext({
-          viewport: { width: 1280, height: 900 },
+          viewport, colorScheme,
           ...(existsSync(statePath) ? { storageState: statePath } : {}),
         }),
       ),
     );
 
+    for (const context of contexts) await context.addCookies([{ name: NAV_MODE_COOKIE, value: navMode, url: baseUrl }]);
     routeRun = await runBoundedRouteWork(
       rows,
       workerCount,
@@ -621,7 +625,7 @@ async function main(): Promise<void> {
     // block if it reproduces (BI-69FE5504 — see findNotReproducibleBlocking).
     if (!updateBaseline && routeRun) {
       const firstPass = routeRun.outcomes.flatMap((o) => (o.status === "measured" ? [o.value.measurement] : []));
-      const provisional = evaluateSweep(firstPass, loadBaseline(join(ROOT, BASELINE_REL)));
+      const provisional = evaluateSweep(firstPass, loadBaseline(join(sourceRoot, BASELINE_REL)));
       notReproducible = await confirmBlockingRoutes({
         rows,
         firstPassBlocking: provisional.blocked ? provisional.verdicts.filter((v) => !v.ok).map((v) => v.routePath) : [],
@@ -634,7 +638,7 @@ async function main(): Promise<void> {
             async (row, workerIndex) =>
               withIsolatedSweepPage(contexts[workerIndex], async (page) => {
                 const result = await measureRoute(page, row, baseUrl, routeParams);
-                if (evaluateSweep([result.measurement], loadBaseline(join(ROOT, BASELINE_REL))).blocked) {
+                if (evaluateSweep([result.measurement], loadBaseline(join(sourceRoot, BASELINE_REL))).blocked) {
                   await captureFailureScreenshot(page, row.routePath);
                 }
                 return result;
@@ -642,7 +646,7 @@ async function main(): Promise<void> {
           );
           const measured = run.outcomes.flatMap((o) => (o.status === "measured" ? [o.value.measurement] : []));
           return {
-            blocking: evaluateSweep(measured, loadBaseline(join(ROOT, BASELINE_REL))).verdicts.filter((v) => !v.ok).map((v) => v.routePath),
+            blocking: evaluateSweep(measured, loadBaseline(join(sourceRoot, BASELINE_REL))).verdicts.filter((v) => !v.ok).map((v) => v.routePath),
             unmeasured: run.outcomes.filter((o) => o.status !== "measured").map((o) => o.routePath),
           };
         },
@@ -659,15 +663,16 @@ async function main(): Promise<void> {
   );
   const executionReport = {
     schemaVersion: 2,
-    sourceSha: process.env.GITHUB_SHA ?? process.env.UX_SWEEP_SOURCE_SHA ?? "unknown",
+    exhaustive, viewport, navMode, colorScheme, servedLeaseId,
+    sourceSha: servedSourceSha ?? process.env.GITHUB_SHA ?? process.env.UX_SWEEP_SOURCE_SHA ?? "unknown",
     measurementNow: process.env[MEASUREMENT_NOW_ENV] ?? null, // pinned portal clock (BI-99909E53)
     workerCount,
     durationMs: routeRun.durationMs,
     inventory: {
       totalRouteCount: inventory.length,
       eligibleRouteCount: rows.length,
-      excludedRouteCount: excluded.length,
-      excluded,
+      excludedRouteCount: exhaustive ? 0 : excluded.length,
+      excluded: exhaustive ? [] : excluded,
     },
     accounting: routeRun.accounting,
     // Recorded so an unreliable gate cannot hide: these routes produced a
@@ -677,11 +682,7 @@ async function main(): Promise<void> {
   };
   const executionPath = join(ROOT, EXECUTION_REL);
   mkdirSync(dirname(executionPath), { recursive: true });
-  writeFileSync(
-    executionPath,
-    `${JSON.stringify(executionReport, null, 2)}\n`,
-    "utf8",
-  );
+  writeFileSync(executionPath, `${JSON.stringify(executionReport, null, 2)}\n`, "utf8");
 
   console.error(
     `[ux-sweep] measured ${measurements.length}/${rows.length} eligible routes with ${workerCount} worker(s); ${excluded.length} explicitly excluded from this fixture context`,
@@ -720,7 +721,6 @@ async function main(): Promise<void> {
     // ratchets for routes the sweep failed to measure (timeout, error, auth).
     // Read once (no existsSync→write TOCTOU; CodeQL js/file-system-race).
     const baselinePath = join(ROOT, BASELINE_REL);
-    const frozen = freezeBaseline(measurements, GENERATOR);
     let committed: BaselineFile | null = null;
     try {
       committed = JSON.parse(readFileSync(baselinePath, "utf8")) as BaselineFile;
@@ -728,6 +728,7 @@ async function main(): Promise<void> {
       const code = err && typeof err === "object" && "code" in err ? String((err as { code?: unknown }).code) : "";
       if (code !== "ENOENT") throw err;
     }
+    const frozen = freezeBaseline(measurements, GENERATOR, committed ?? undefined); // speed ceilings only fall
     if (committed) {
       const dropped = findDroppedBaselineRoutes(committed, frozen);
       if (dropped.length > 0) {
@@ -752,7 +753,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const sweep = evaluateSweep(measurements, loadBaseline(join(ROOT, BASELINE_REL)));
+  const sweep = evaluateSweep(measurements, loadBaseline(join(sourceRoot, BASELINE_REL)));
   writeFileSync(join(ROOT, REPORT_REL), `${JSON.stringify(sweep, null, 2)}\n`, "utf8");
   console.error(formatSweepReport(sweep));
 

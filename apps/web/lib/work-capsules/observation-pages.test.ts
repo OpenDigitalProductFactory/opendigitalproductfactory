@@ -9,6 +9,21 @@ const rows = (count: number) => Array.from({ length: count }, (_, i) => ({
 const identity = { principal: "user-1", authority: "read-grant", filters: {} };
 
 describe("bounded Workroom observations", () => {
+  it("preserves exact ownership identity in normal and minimal pages", () => {
+    const store = new WorkroomObservations();
+    const source = [{ ...rows(1)[0], worktreePath: "D:/wt/" + "long".repeat(25) }];
+    const normal = store.capture(source, identity, { ownershipScope: "installation" });
+    expect(normal.data.capsules[0]).toMatchObject({ status: "ready", worktreePath: source[0]!.worktreePath });
+    expect(normal.data.page.ownershipScope).toBe("installation");
+    const row = normal.data.capsules[0]!;
+    const compactRow = { capsuleId: row.capsuleId, status: row.status, worktreePath: row.worktreePath,
+      detail: row.detail, liveness: row.liveness, isLive: row.isLive, isReapable: row.isReapable, shortenedFields: ["summary"] };
+    const budget = Buffer.byteLength(JSON.stringify({ ...normal, data: { ...normal.data, capsules: [compactRow] } }, null, 2));
+    const minimal = store.capture(source, identity, { maxChars: budget, ownershipScope: "installation" });
+    expect(minimal.data.capsules[0]).toMatchObject({ status: "ready", worktreePath: source[0]!.worktreePath });
+    expect(minimal.data.capsules[0]!.shortenedFields).toContain("summary");
+    expect(() => store.capture([{ ...source[0], worktreePath: "x".repeat(5000) }], identity)).toThrow("page_budget_too_small");
+  });
   it("traverses 251 observed IDs once, preserving typed rows and continuation within the actual envelope budget", () => {
     const store = new WorkroomObservations();
     const source = rows(251);

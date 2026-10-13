@@ -17,6 +17,26 @@ type LeaseModel = typeof prisma.nonProductionEnvironmentLease;
 type LeaseRow = NonNullable<Awaited<ReturnType<LeaseModel["findUnique"]>>>;
 type ResumeTx = Pick<typeof prisma, "nonProductionEnvironmentLease">;
 
+/** Process handoff never changes the resource or owner contract. */
+export function validateHostResourceClaim(lease: LeaseRow, input: {
+  environmentKey: string; resumeLeaseId?: string; resourceClass?: string;
+  expectedMemoryBytes?: number; ownerProvider: string; ownerProcessId?: number;
+  ownerProcessIdentity?: string; worktreePath?: string; branchName?: string; purpose: string;
+}): boolean {
+  if (input.environmentKey !== "host-heavy-resource") return false;
+  const resuming = input.resumeLeaseId === lease.leaseId && lease.status === "queued";
+  if (lease.resourceClass !== input.resourceClass
+    || Number(lease.expectedMemoryBytes ?? 0) !== input.expectedMemoryBytes
+    || lease.ownerProvider !== input.ownerProvider
+    || (resuming && (lease.worktreePath !== (input.worktreePath ?? null)
+      || lease.branchName !== (input.branchName ?? null) || lease.purpose !== input.purpose))
+    || (!resuming && (lease.ownerPid !== input.ownerProcessId
+      || lease.ownerProcessIdentity !== input.ownerProcessIdentity))) {
+    throw new Error("host_resource_claim_contract_mismatch");
+  }
+  return resuming;
+}
+
 /** Phase written on a queued wait retired by its own owner's replacement claim. */
 export const SUPERSEDED_PHASE = "superseded";
 
@@ -41,12 +61,25 @@ export async function resolveResumeClaim(input: {
   claimLease: LeaseRow | null;
   environmentKey: string;
   ownerSessionId: string;
+  ownerProvider?: string;
   now: Date;
 }): Promise<ResumeClaimDecision> {
   if (!input.resumeLeaseId) return { kind: "proceed", superseded: null };
   const pinned = await input.tx.nonProductionEnvironmentLease.findUnique({
     where: { leaseId: input.resumeLeaseId },
   });
+  // A host attempt pins one invocation, not an integration tree that can be
+  // superseded. Never create a replacement row or acquire another run's slot.
+  if (input.environmentKey === "host-heavy-resource") {
+    if (!pinned || pinned.environmentKey !== input.environmentKey
+      || pinned.id !== input.claimLease?.id) throw new Error("nonprod_resume_identity_mismatch");
+    if (pinned.ownerSessionId !== input.ownerSessionId
+      || pinned.ownerProvider !== input.ownerProvider) throw new Error("nonprod_resume_not_owner");
+    if (pinned.status === "active") throw new Error("nonprod_resume_lease_active");
+    if (pinned.status !== "queued") return { kind: "terminal", lease: pinned };
+    if (pinned.expiresAt <= input.now) throw new Error("nonprod_resume_lease_expired");
+    return { kind: "proceed", superseded: null };
+  }
   if (!pinned || pinned.environmentKey !== input.environmentKey) {
     return { kind: "proceed", superseded: null };
   }

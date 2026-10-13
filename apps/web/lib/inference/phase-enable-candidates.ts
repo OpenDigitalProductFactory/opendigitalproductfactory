@@ -15,6 +15,7 @@
 // "active"). No new heuristic: a candidate is "eligible-if-enabled" iff the real
 // routing filter would admit it once its provider is active.
 
+import { resolveLocalServedContextTokens } from "@/lib/inference/local-model-context-reconcile";
 import type { EndpointManifest } from "@/lib/routing/types";
 import type { RequestContract } from "@/lib/routing/request-contract";
 import { getExclusionReasonV2 } from "@/lib/routing/pipeline-v2";
@@ -148,7 +149,7 @@ export function selectEnableCandidatesForContract(
  * re-querying. Returns [] when no off-provider has a usable model.
  */
 export async function loadPhaseEnableCandidateProviders(): Promise<EnableCandidateProvider[]> {
-  const manifests = await loadEnableCandidateManifests();
+  const manifests = await loadEnableCandidateManifests(resolveLocalServedContextTokens);
   if (manifests.length === 0) return [];
 
   const byProvider = new Map<string, EndpointManifest[]>();

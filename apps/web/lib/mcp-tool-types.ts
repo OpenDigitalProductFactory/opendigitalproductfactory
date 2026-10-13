@@ -20,6 +20,8 @@ export type ToolExecutionContext = AuthorizedSurfaceToolExecutionContext & {
   agentId?: string;
   threadId?: string;
   taskRunId?: string;
+  /** The calling coworker turn's mode; a delegate never runs wider (BI-FAD98137). */
+  coworkerMode?: "advise" | "act";
   /**
    * Caller attribution for the decision ledger (BI-0EEBA669). The MCP route
    * derives `callerClient` from the request User-Agent product token (e.g.

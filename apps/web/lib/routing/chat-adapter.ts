@@ -24,11 +24,13 @@ import {
   formatMessageForResponses,
 } from "./provider-message-format";
 import { isAnthropic } from "./provider-utils";
+import { isLocalProviderId } from "./provider-locality";
 import { formatMessagesForGemini } from "./gemini-messages";
 import { captureAnthropicWeeklyQuota } from "./cli-pool-status";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { extractToolCalls as extractTextualToolUse } from "./extract-tool-calls";
 import { toWireSampling } from "./sampling-profile";
+import { localToolThinkingKwargs } from "./local-tool-thinking";
 // BI-98572A51: the single-GPU admission lane is canonical in resource-lane.ts so
 // chat AND the local build engine share ONE gate. Re-exported below for callers
 // (and tests) that import it from here.
@@ -41,11 +43,12 @@ import {
   resolveInferenceRuntimePolicy,
 } from "./local-inference-runtime-policy";
 import { isRecord } from "@/lib/shared/coerce";
+import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
 
 // ─── Inference HTTP timeouts ──────────────────────────────────────────────────
 // The runtime-policy module separates the governed, deliberately slower 27B
 // reviewer from generic local models. Both operator overrides and defaults stay
-// bounded, while the reviewer always receives its approved ten-minute window.
+// bounded; a server-bound parent deadline supplies the governed exception.
 
 // A single-GPU local endpoint (Docker Model Runner / Ollama) serves ONE request
 // at a time. The platform routinely fires inference concurrently — reviewBuildPlan
@@ -464,6 +467,12 @@ export const chatAdapter: ExecutionAdapterHandler = {
           }
           return t;
         });
+        // A local tool turn that opens <think> spends the answer budget before
+        // the tool call. The template only skips that when the request says so.
+        const thinkingKwargs = localToolThinkingKwargs(providerId, tools.length);
+        if (thinkingKwargs) {
+          (body as Record<string, unknown>).chat_template_kwargs = thinkingKwargs;
+        }
       }
     }
 
@@ -471,25 +480,29 @@ export const chatAdapter: ExecutionAdapterHandler = {
     const startMs = Date.now();
     let res: Response;
     try {
-      // The AbortSignal is created inside the thunk so, for serialized local
-      // calls, the timeout clock starts when the call actually dispatches — not
-      // while it waits its turn in the local-inference lock.
-      const doFetch = () => request.fetchImpl(chatUrl, {
-        method: "POST",
-        headers: requestHeaders,
-        body: JSON.stringify(body),
-        signal: createInferenceTimeoutSignal(resolveInferenceRuntimePolicy(providerId, modelId, {
+      // Generic calls start their per-call clock after admission. Governed
+      // calls use the absolute parent deadline, so queue wait consumes it.
+      const doFetch = async () => {
+        await assertGovernedInferenceAuthority();
+        const execution = currentGovernedInferenceDeadline();
+        const timeout = createInferenceTimeoutSignal(resolveInferenceRuntimePolicy(providerId, modelId, {
           defaultTimeoutMs: process.env.DPF_INFERENCE_TIMEOUT_MS,
           localTimeoutMs: process.env.DPF_LOCAL_INFERENCE_TIMEOUT_MS,
-        }).effectiveTimeoutMs),
-      });
-      res = providerId === "local"
-        ? await withLocalInferenceLock(doFetch, { modelId })
+        }, execution ? { deadlineAt: execution.deadlineAt, now: Date.now() } : undefined).effectiveTimeoutMs);
+        return request.fetchImpl(chatUrl, {
+          method: "POST",
+          headers: requestHeaders,
+          body: JSON.stringify(body),
+          signal: execution ? AbortSignal.any([timeout, execution.signal]) : timeout,
+        });
+      };
+      res = isLocalProviderId(providerId)
+        ? await withLocalInferenceLock(doFetch, { modelId, signal: currentGovernedInferenceDeadline()?.signal })
         : await doFetch();
     } catch (e) {
       // A busy GPU is a capacity deferral. Wrapping it as "network" makes the
       // fallback chain treat the local model as broken instead of waiting.
-      if (e instanceof Error && e.name === "LocalProviderCapacityDeferredError") throw e;
+      if (e instanceof Error && ["LocalProviderCapacityDeferredError", "GovernedInferenceDeadlineError"].includes(e.name)) throw e;
       throw new InferenceError(
         `Network error calling ${providerId}: ${e instanceof Error ? e.message : String(e)}`,
         "network",
@@ -661,10 +674,9 @@ export const chatAdapter: ExecutionAdapterHandler = {
       // other OpenAI-compatible providers emit `reasoning`.
       reasoning = msg?.reasoning_content || msg?.reasoning || undefined;
 
-      // The answer is `content`. Falling back to reasoning is a LAST resort for a
-      // provider that returns only a thinking channel — without it such a turn
-      // renders blank. When content exists, reasoning must never displace it.
-      text = msg?.content || reasoning || "";
+      // Thinking without an answer is incomplete work. Keep it available for
+      // progress disclosure, but never promote scratchpad into a conclusion.
+      text = msg?.content ?? "";
       truncated = choice?.finish_reason === "length";
 
       if (msg?.tool_calls && msg.tool_calls.length > 0) {

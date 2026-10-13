@@ -121,7 +121,6 @@ scripts/measure-platform-substrate.test.mjs
 scripts/merge-readiness-policy.test.mjs
 scripts/nonprod-environment-admission.test.mjs
 scripts/pr-readiness.test.mjs
-scripts/pregate.test.mjs
 scripts/probes/marketing-media/gemini-tts-response.test.mjs
 scripts/promote-compose-activation-overlays.test.mjs
 scripts/promote-host-bind-address.test.mjs
@@ -139,7 +138,6 @@ scripts/runtime-transition-authority.test.mjs
 scripts/sbom/check-lockfile-release-age.test.mjs
 scripts/security/run-gitleaks-local.test.mjs
 scripts/self-upgrade-sensitive-paths.test.mjs
-scripts/semantic-review-gate.test.mjs
 scripts/test-n-minus-one-upgrade.test.mjs
 scripts/ux-archetype-audit-rubric.contract.test.mjs
 scripts/workos-iam-scorecard.contract.test.mjs

@@ -1,6 +1,6 @@
 // packages/db/src/index.ts
-export { prisma } from "./client";
-export { ensureDefaultProviderConnection, refreshDefaultProviderConnectionOwners } from "./provider-connection";
+export { prisma, createDatabaseClient } from "./client";
+export { ensureDefaultProviderConnection, refreshDefaultProviderConnectionOwners, setProviderStatusWithDefaultConnection } from "./provider-connection";
 export {
   PROVIDER_COMPLIANCE_SOURCE_REGISTRY,
   validateProviderComplianceSourceRegistry,
@@ -13,6 +13,7 @@ export {
 // Prisma.DbNull) and a type (for input/output type aliases).
 export { Prisma } from "../generated/client/client";
 export type {
+  AutomationPersonaProfile,
   PrismaClient,
   PayRunStatus,
   PayslipDisbursementStatus,

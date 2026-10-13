@@ -39,6 +39,8 @@ export interface ResourceLaneRunOptions {
   maxQueueDepth?: number | null;
   /** Correlation id for the telemetry rows; defaults to a per-lane sequence. */
   itemId?: string;
+  /** Parent cancellation removes waiting work; active work retains its slot until settled. */
+  signal?: AbortSignal;
 }
 
 export interface ResourceLaneDeps {
@@ -79,6 +81,7 @@ export class ResourceLane {
    * otherwise queues (unbounded) exactly like the promise chain it replaces.
    */
   async run<T>(fn: () => Promise<T>, opts: ResourceLaneRunOptions = {}): Promise<T> {
+    opts.signal?.throwIfAborted();
     const maxQueueDepth = opts.maxQueueDepth ?? null;
     if (maxQueueDepth != null && this.waiting >= maxQueueDepth) {
       throw new LaneBusyError(this.laneKey, this.waiting);
@@ -88,11 +91,28 @@ export class ResourceLane {
     const enqueuedAt = this.now();
     this.waiting += 1;
     this.emit({ itemId, transition: "enqueued", occurredAt: new Date(enqueuedAt), depth: this.waiting });
+    let queued = true;
+    let rejectCanceled: (reason: unknown) => void = () => undefined;
+    const canceled = new Promise<never>((_resolve, reject) => { rejectCanceled = reject; });
+    const cancel = () => {
+      if (!queued) return;
+      queued = false;
+      this.waiting -= 1;
+      this.emit({ itemId, transition: "finished", outcome: "failed", depth: this.waiting,
+        durations: { waitMs: this.now() - enqueuedAt } });
+      rejectCanceled(opts.signal?.reason ?? new Error("inference-parent-canceled"));
+    };
+    opts.signal?.addEventListener("abort", cancel, { once: true });
 
     // Run the body whether the previous link resolved OR rejected (mirrors the
     // original `chain.then(fn, fn)`), so one failure never wedges the lane.
     const body = async (): Promise<T> => {
+      // A canceled chain link is a tombstone, not another provider dispatch.
+      if (!queued) throw opts.signal?.reason ?? new Error("inference-parent-canceled");
+      queued = false;
+      opts.signal?.removeEventListener("abort", cancel);
       this.waiting -= 1;
+      opts.signal?.throwIfAborted();
       const startedAt = this.now();
       this.emit({
         itemId,
@@ -126,7 +146,7 @@ export class ResourceLane {
       () => undefined,
       () => undefined,
     );
-    return run;
+    return Promise.race([run, canceled]).finally(() => opts.signal?.removeEventListener("abort", cancel));
   }
 
   private emit(
@@ -199,22 +219,27 @@ const localInferenceLane = getResourceLane(LOCAL_INFERENCE_LANE_KEY, {
  *  local-inference caller (chat + build) must acquire so the single GPU is
  *  never double-subscribed (BI-98572A51).
  *
- *  The lane only sees this process. Before taking it, ask whether the card is
- *  free at all (another process, another app, a game). Unit tests skip that
+ *  The lane only sees this process. After waiting, check the host lease and
+ *  whether the card is free (another process, another app, a game). Unit tests skip that
  *  import: it reaches the lease registry, and the suite must not touch the GPU. */
 export function withLocalInferenceLock<T>(
   fn: () => Promise<T>,
-  options?: { modelId?: string | null },
+  options?: { modelId?: string | null; signal?: AbortSignal },
 ): Promise<T> {
   const vitest = process.env.VITEST === "true" || process.env.VITEST === "1";
   if (vitest) {
-    return localInferenceLane.run(fn, { maxQueueDepth: localInferenceMaxQueueDepth() });
+    return localInferenceLane.run(fn, { maxQueueDepth: localInferenceMaxQueueDepth(), signal: options?.signal });
   }
-  return admitLocalGpuThenRun(fn, options?.modelId ?? null);
+  return admitLocalGpuThenRun(fn, options?.modelId ?? null, options?.signal);
 }
 
-async function admitLocalGpuThenRun<T>(fn: () => Promise<T>, modelId: string | null): Promise<T> {
+async function admitLocalGpuThenRun<T>(fn: () => Promise<T>, modelId: string | null, signal?: AbortSignal): Promise<T> {
+  signal?.throwIfAborted();
   const { assertLocalGpuFree } = await import("@/lib/inference/host-gpu-admission");
-  await assertLocalGpuFree({ modelId });
-  return localInferenceLane.run(fn, { maxQueueDepth: localInferenceMaxQueueDepth() });
+  return localInferenceLane.run(async () => {
+    const { assertLocalProviderCapacityAvailable } = await import("@/lib/routing/local-provider-capacity");
+    await assertLocalProviderCapacityAvailable();
+    await assertLocalGpuFree({ modelId });
+    return fn();
+  }, { maxQueueDepth: localInferenceMaxQueueDepth(), signal });
 }

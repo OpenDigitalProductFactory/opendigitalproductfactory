@@ -46,9 +46,27 @@ status: active
 - **AC-F2-3:** live depth and WIP per stage come from the rooms currently in it.
 - **AC-F2-4:** replaying the 23 September drive log names the missing-coordinator hold at its stage for every room in the pile. The replay is idempotent and stops at the first live event.
 
+### Acceptance as filed on BI-4ADFFEDB
+
+- Snapshots exist for `wr:` keys.
+- `/api/metrics` exposes them.
+- The coworker queue pack reads them.
+- Replaying the drive log for 2026-09-23 shows about 200 rooms held at one stage with the cause `missing_explicit_coordinator`.
+
+**How each one is met**
+
+| Criterion | How it is met |
+|---|---|
+| Snapshots for `wr:` keys | `aggregateQueueMetrics` writes them. |
+| `/api/metrics` | `recordQueueTransition` mirrors every transition into the existing `dpf_queue_*` series. |
+| Coworker queue pack | The queue-awareness pack reads `QueueMetricSnapshot` and picks up the new rows with no change. |
+| 23 September replay | The hold cause carries the conformance deviation: `conformance_pause:missing_explicit_coordinator`. The live drive writes the code in its `ledger`, and those rooms never entered a stage, so a stage-less hold sits at the shape's first stage. The first replay (`backfill:drive-log`) dropped both. Replay v2 (`backfill:drive-log:v2`) replaces it. Against the live 22–25 September log, v2 holds 64 rooms at delivery-medium `design-note`, 57 at delivery-small `reproduce` and 48 at delivery-large `spec` by the end of 23 September. That is the pile at each shape's first stage, rather than at one stage overall. `workroom-stage-backfill.test.ts` replays the rows as the drive wrote them. |
+
 ## Recorded limitations
 
 - **Graph rooms are not measured yet.** Parallel branches are deferred until a graph shape is live.
+- **Run identity (replay v3).** The drive stamps every room with a daily cycle key. Only a shape that recurs on a cadence has cycles, so a finite room is one item, `<capsuleId>:run`. A recurring cycle that is still open when the next one begins is `cancelled`, which counts as abandonment. It is excluded from flow time and throughput, as the shared queue math already treats cancelled items. Before v3, every day boundary closed the open item as a success. Flow time sat at about 24h in every portfolio, and throughput counted day rollovers. Replay v3 rebuilds every stage row up to the moment it runs from the drive trail, live rows included. Against the live trail for the 28 days to 2026-10-13, v3 gives 287 recurring cycles: 7 completed (median 1.5h), 268 abandoned and 12 open. It also gives 583 finite runs, none of which reached a stop the drive recorded.
+- **The replay is bounded in memory.** The portal heap is about 1.5 GB (BI-927FF076). The replay works through 25 rooms at a time and inserts each page before reading the next. Each drive row carries only the five fields the planner reads, about 18 MB across all 90 days against 117 MB for the full snapshots. It re-aggregates past days from stage rows only, selected in the query. Pages land under a staging actor (`backfill:drive-log:v2:partial`) that becomes final only after the last page. If a run dies part-way, the next run clears it and starts again.
 - **Replayed history is coarse.** It has drive-tick resolution and uses each room's current shape claim. Live events have neither limitation.
 - **Human touch time is not captured.** It counts as wait.
 

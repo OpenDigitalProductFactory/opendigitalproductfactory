@@ -27,6 +27,7 @@ export type LoopToolContextInput = {
   requiresExternalAccess?: boolean;
   roomAuthority?: GovernedExecuteContext["roomAuthority"] | null;
   featureBuildId?: string | null;
+  coworkerMode?: GovernedExecuteContext["coworkerMode"];
   delegationChainId?: string | null;
 };
 
@@ -65,11 +66,11 @@ export function loopToolContext(
       ? (input.requiresExternalAccess ? input.externalAccessEnabled : undefined)
       : (input.requiresExternalAccess || undefined),
     ...(input.roomAuthority ? { roomAuthority: input.roomAuthority } : {}),
-    // BI-F4A30FCB (Dale dogfood 2026-05-24): plumb the build the
-    // user is messaging from into tool context so phase-scoped
-    // tools (start_ideate_research, start_scout_research) can
-    // target the correct build instead of "latest in phase".
+    // BI-F4A30FCB: the build the user is messaging from, so phase-scoped tools
+    // (start_ideate_research, start_scout_research) target it, not "latest in phase".
     featureBuildId: input.featureBuildId ?? undefined,
+    // BI-FAD98137: reaches tool context so delegates never run wider.
+    coworkerMode: input.coworkerMode,
     // EP-31815F97 S2 (BI-F82F4E04): when this loop runs a delegated
     // coworker, carry the active DelegationChain grouping id so each
     // ToolExecution joins its chain-of-custody back to the human origin.

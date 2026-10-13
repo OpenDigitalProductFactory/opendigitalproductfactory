@@ -23,9 +23,7 @@ function fakeDb(rows: Row[]): AcceptanceSweepPageDb & { calls: unknown[] } {
       findMany: async (args) => {
         calls.push(args);
         const { where, take } = args;
-        let out = rows.filter((entry) => where.status === "awaiting-acceptance");
-        if ("none" in where.activities) out = out.filter((entry) => !entry.snapshotted);
-        if ("some" in where.activities) out = out.filter((entry) => entry.snapshotted);
+        let out = [...rows];
         if (where.id && "gt" in where.id) out = out.filter((entry) => entry.id > (where.id as { gt: string }).gt);
         if (where.id && "lte" in where.id) {
           const { lte, notIn } = where.id;
@@ -34,27 +32,28 @@ function fakeDb(rows: Row[]): AcceptanceSweepPageDb & { calls: unknown[] } {
         out = [...out].sort((a, b) => ("createdAt" in args.orderBy[0]!
           ? a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id)
           : a.id.localeCompare(b.id)));
-        return out.slice(0, take).map(({ snapshotted: _s, createdAt: _c, ...rest }) => rest);
+        return out.slice(0, take).map(({ snapshotted, createdAt: _c, ...rest }) => ({
+          ...rest, status: "awaiting-acceptance", _count: { activities: snapshotted ? 1 : 0 },
+        }));
       },
     },
   };
 }
 
 describe("selectAcceptanceSweepPage", () => {
-  it("takes unsnapshotted items first, oldest created first, up to the page size", async () => {
+  it("bounds fresh and snapshotted items together so fresh arrivals cannot starve old work", async () => {
     const db = fakeDb([row("a", true), row("b", false, 9), row("c", false, 2), row("d", true)]);
     const page = await selectAcceptanceSweepPage(db, { pageSize: 2, cursor: null });
-    expect(page.items.map((item) => item.itemId)).toEqual(["BI-c", "BI-b"]);
-    expect(page.unsnapshotted).toBe(2);
-    // No snapshotted item was visited, so the cursor does not move.
-    expect(page.nextCursor).toBeNull();
+    expect(page.items.map((item) => item.itemId)).toEqual(["BI-a", "BI-b"]);
+    expect(page.unsnapshotted).toBe(1);
+    expect(page.nextCursor).toBe("b");
   });
 
   it("fills the rest of the page from snapshotted items after the cursor", async () => {
     const db = fakeDb([row("a", true), row("b", true), row("c", true), row("d", false)]);
     const page = await selectAcceptanceSweepPage(db, { pageSize: 3, cursor: "a" });
-    expect(page.items.map((item) => item.itemId)).toEqual(["BI-d", "BI-b", "BI-c"]);
-    expect(page.nextCursor).toBe("c");
+    expect(page.items.map((item) => item.itemId)).toEqual(["BI-b", "BI-c", "BI-d"]);
+    expect(page.nextCursor).toBe("d");
   });
 
   it("wraps around so every snapshotted item is revisited", async () => {
@@ -72,11 +71,11 @@ describe("selectAcceptanceSweepPage", () => {
     expect(page.items.map((item) => item.itemId)).toEqual(["BI-b", "BI-a"]);
   });
 
-  it("asks only for awaiting-acceptance items and bounds every read by the page", async () => {
+  it("includes only awaiting or historically deployment-closed candidates and bounds every read", async () => {
     const db = fakeDb([row("a", false)]);
     await selectAcceptanceSweepPage(db, { pageSize: 5, cursor: null });
-    for (const call of db.calls as Array<{ where: { status: string }; take: number }>) {
-      expect(call.where.status).toBe("awaiting-acceptance");
+    for (const call of db.calls as Array<{ where: { OR: unknown[] }; take: number }>) {
+      expect(call.where.OR).toHaveLength(2);
       expect(call.take).toBeLessThanOrEqual(5);
     }
     expect(JSON.stringify(db.calls)).not.toContain("updatedAt");

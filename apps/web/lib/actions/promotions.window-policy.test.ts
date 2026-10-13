@@ -298,6 +298,9 @@ describe("triggerSelfUpgrade – automation persona (BI-2128872C)", () => {
   });
 
   it("AC-1: queues an agent-driven click outside the window for the next window instead of running it", async () => {
+    // Keep the fixture window in the future regardless of the host's clock.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-07T21:00:00.000Z"));
     vi.mocked(isUpgradeWindowOpen).mockReturnValue(false);
     // The next window is always in the future relative to the run; a fixed
     // instant expires and fails every branch once the clock passes it (BI-DC870F3E).

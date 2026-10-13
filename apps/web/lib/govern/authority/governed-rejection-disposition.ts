@@ -56,6 +56,19 @@ export const GOVERNED_REJECTION_DISPOSITION: Record<
   permit_required: "awaiting-input",
 };
 
+/** Older executors may omit disposition; keep their typed rejection semantics. */
+export function isGovernedToolRefusal(result: {
+  success: boolean;
+  error?: string;
+  disposition?: OutcomeDisposition;
+}): boolean {
+  if (result.success) return false;
+  if (result.disposition) return result.disposition === "refused";
+  return typeof result.error === "string"
+    && Object.hasOwn(GOVERNED_REJECTION_DISPOSITION, result.error)
+    && GOVERNED_REJECTION_DISPOSITION[result.error as GovernedExecuteRejection] === "refused";
+}
+
 
 /**
  * How a rejection is worded to the model.

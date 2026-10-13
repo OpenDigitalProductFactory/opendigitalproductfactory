@@ -54,7 +54,7 @@ const GOVERNED_MARKERS = [
 
 const GUIDANCE =
   "Ungoverned dev-server launch blocked (BI-4043A64B). On the single shared nonprod instance this is how rogue background servers pile up and exhaust the machine. " +
-  "Use a governed path: claim_nonprod_environment_lease (MCP) then run on the leased runtime, or scripts/dev-portal-lease.sh, or run long-lived work in an isolated worktree compose stack. " +
+  "Use scripts/dev-portal-lease.sh up in the foreground for a supervised contributor preview. A claim alone does not start a verified preview. Resume queued claims through their durable taskRunId; stop on terminal claims instead of retrying them. " +
   "Emergency bypass: prefix the command with DPF_ALLOW_UNGATED_SERVER=1.";
 
 /**
@@ -87,7 +87,7 @@ function main() {
   const verdict = decide(command, process.env);
   if (!verdict.block) process.exit(0);
 
-  emitDeny(verdict.reason); // dual-envelope deny — blocks on every surface
+  emitDeny(verdict.reason); // deny in the envelope the sending surface honours
 }
 
 // Run only when invoked directly (not when imported by the test).

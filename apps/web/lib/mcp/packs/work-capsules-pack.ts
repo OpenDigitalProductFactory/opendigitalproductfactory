@@ -8,10 +8,19 @@
 // context). Definitions were moved verbatim out of the inline PLATFORM_TOOLS
 // array; grants mirror agent-grants.ts TOOL_TO_GRANTS.
 
-import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import { workCapsuleToolEnums } from "@/lib/work-capsules/mcp-handlers";
 import { DELIVERY_SHAPE_REFS } from "@/lib/work-management/delivery-shapes";
+import { PRINCIPAL_SENSITIVITIES } from "@dpf/db/principal-sensitivity";
 import type { ToolPack } from "../tool-pack";
+
+// BI-763D6E01: optional on every receipted Workroom write.
+const COMMAND_ID_PROPERTY = {
+  type: "string",
+  description:
+    "Optional idempotency key you choose for this exact call. Retrying with the same commandId returns the first result " +
+    "(or the same refusal) without doing the work twice; reusing it for a different room or tool is refused with command_id_conflict.",
+} as const;
 
 const ENUMS = workCapsuleToolEnums();
 
@@ -57,6 +66,22 @@ const scopeProperties = {
 
 const definitions: ToolDefinition[] = [
   {
+    name: "review_workroom_sensitivity",
+    description: "Read exact-room administrative classification state and a revision digest. Returns no room content or historical prose. Use before an administrator verifies an invalid declaration.",
+    inputSchema: { type: "object", properties: { capsuleId: { type: "string" } }, required: ["capsuleId"] },
+    requiredCapability: "manage_platform", sideEffect: false,
+  },
+  {
+    name: "correct_workroom_sensitivity",
+    description: "Correct one invalid Workroom sensitivity declaration after an administrator verifies actual classification. Requires the exact review digest and rationale; retains the original in an audit. Cannot lower a valid classification or widen global clearance. Governed approval still applies.",
+    inputSchema: { type: "object", properties: {
+      capsuleId: { type: "string" }, expectedDigest: { type: "string" },
+      sensitivity: { type: "string", enum: [...PRINCIPAL_SENSITIVITIES] },
+      classificationReviewed: { type: "boolean", const: true }, rationale: { type: "string", minLength: 20, maxLength: 2000 },
+    }, required: ["capsuleId", "expectedDigest", "sensitivity", "classificationReviewed", "rationale"] },
+    requiredCapability: "manage_platform", executionMode: "proposal", sideEffect: true, consequence: "authority",
+  },
+  {
     name: "list_workrooms",
     description:
       "List Workroom coordination records for active portal, Build Studio, and external agent work, each annotated with its TRUE liveness (live | lease-expired | build-terminal | idle-stale | no-signal). Liveness is derived from lease expiry, the linked build's phase, an open PR, and last sync — NOT from updatedAt, which a daily heartbeat freezes for Build Studio capsules, so a `working` status is not proof of life. Includes a livenessSummary (live vs reap-candidate counts). Pass staleOnly=true for just the not-live reap candidates. Read-only.",
@@ -78,11 +103,12 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "get_workroom",
-    description: "Fetch one Workroom with its recent activity timeline. Read-only.",
+    description: "Fetch one Workroom with its recent activity timeline. Pass afterSequence to read the room's ordered log from a position you already hold: every later activity exactly once, in order (the room's activitySequence is the latest). Read-only.",
     inputSchema: {
       type: "object",
       properties: {
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
+        afterSequence: { type: "integer", minimum: 0, description: "Return data.log.activity: rows with sequence greater than this, oldest first, up to 200 (data.log.hasMore says when to read again)." },
       },
       required: ["capsuleId"],
     },
@@ -201,6 +227,7 @@ const definitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
+        commandId: COMMAND_ID_PROPERTY,
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
         claims: {
           type: "array",
@@ -233,10 +260,12 @@ const definitions: ToolDefinition[] = [
     description:
       "Renew the active lease for a Workroom so other agents can see that work is in flight. " +
       "Heartbeat on a human-scale cadence (between stages / few minutes), not every tool call. " +
-      "If the lease is already expired, re-claim or abandon — do not thrash heartbeat.",
+      "If the lease is already expired, re-claim or abandon — do not thrash heartbeat. " +
+      "Refused with lease_held_by_other while another principal holds a live lease; ask the room's owner to hand it over instead.",
     inputSchema: {
       type: "object",
       properties: {
+        commandId: COMMAND_ID_PROPERTY,
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
       },
       required: ["capsuleId"],
@@ -293,6 +322,7 @@ const definitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
+        commandId: COMMAND_ID_PROPERTY,
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
         claims: {
           type: "array",
@@ -320,6 +350,7 @@ const definitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
+        commandId: COMMAND_ID_PROPERTY,
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
         kind: {
           type: "string",
@@ -362,11 +393,13 @@ const definitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
+        commandId: COMMAND_ID_PROPERTY,
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
         toExecutorKind: { type: "string", enum: ENUMS.executors, description: "Executor taking over the work." },
         toExecutorRef: { type: "string", description: "Optional session/owner id for the receiving executor." },
         reason: { type: "string", description: "Why the handoff is happening." },
         handoffManifest: { type: "object", description: "Optional handoff context: next action, open risks, evidence digest, branch/worktree, suggested receiver." },
+        expectedLeaseHolderPrincipalId: { type: ["string", "null"], description: "The lease holder you read from get_workroom. When given, the handoff is refused with lease_holder_changed if someone else now holds the lease." },
       },
       required: ["capsuleId", "toExecutorKind"],
     },
@@ -405,6 +438,7 @@ const definitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
+        commandId: COMMAND_ID_PROPERTY,
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
         type: { type: "string", enum: ENUMS.agentActivityKinds, description: "Activity type: thought | action | question | response | error." },
         body: { type: "string", description: "Human-legible one-line description of the activity." },
@@ -418,32 +452,40 @@ const definitions: ToolDefinition[] = [
 ];
 
 const HANDLERS = () => import("@/lib/work-capsules/mcp-handlers");
+// BI-763D6E01: a call carrying `commandId` runs once; see receipted-tool.ts.
+type WorkroomHandlers = Awaited<ReturnType<typeof HANDLERS>>;
+type WorkroomHandler = (params: Record<string, unknown>, userId: string, context: ToolExecutionContext | undefined) => Promise<ToolResult>;
+const receipted = (commandType: string, pick: (m: WorkroomHandlers) => WorkroomHandler) =>
+  (params: Record<string, unknown>, userId: string, context: ToolExecutionContext | undefined) => Promise.all([HANDLERS(), import("@/lib/work-capsules/receipted-tool")])
+    .then(([m, r]) => r.receiptedWorkroomTool(commandType, pick(m) as never)(params, userId, context as never));
 
 export const workCapsulesPack: ToolPack = {
   packId: "work-capsules",
   definitions,
   handlers: {
+    review_workroom_sensitivity: (params, userId) => import("@/lib/work-management/workroom-sensitivity-review.server").then(m => m.reviewWorkroomSensitivityTool(params, userId)),
+    correct_workroom_sensitivity: (params, userId, context) => import("@/lib/work-management/workroom-sensitivity-review.server").then(m => m.correctWorkroomSensitivityTool(params, userId, context)),
     list_workrooms: (params, userId, context) => HANDLERS().then((m) => m.listWorkCapsulesTool(params, userId, context)),
-    get_workroom: (params) => HANDLERS().then((m) => m.getWorkCapsuleTool(params)),
+    get_workroom: (params, userId, context) => HANDLERS().then((m) => m.getWorkCapsuleTool(params, userId, context)),
     create_workroom: (params, userId, context) => HANDLERS().then((m) => m.createWorkCapsuleTool(params, userId, context)),
     plan_workroom_worktree: (params, userId, context) => HANDLERS().then((m) => m.planCapsuleWorktreeTool(params, userId, context)),
     adopt_worktree: (params, userId, context) => HANDLERS().then((m) => m.adoptWorktreeTool(params, userId, context)),
     claim_backlog_item_for_work: (params, userId, context) => HANDLERS().then((m) => m.claimBacklogItemForWorkTool(params, userId, context)),
     declare_break_fix: (params, userId, context) =>
       import("@/lib/work-capsules/declare-break-fix-tool").then((m) => m.declareBreakFixTool(params, userId, context)),
-    claim_workroom_scope: (params, userId, context) => HANDLERS().then((m) => m.claimCapsuleScopeTool(params, userId, context)),
-    heartbeat_workroom: (params, userId, context) => HANDLERS().then((m) => m.heartbeatCapsuleTool(params, userId, context)),
+    claim_workroom_scope: (params, userId, context) => receipted("claim-scope", (m) => m.claimCapsuleScopeTool)(params, userId, context),
+    heartbeat_workroom: (params, userId, context) => receipted("heartbeat", (m) => m.heartbeatCapsuleTool)(params, userId, context),
     update_workroom_status: (params, userId, context) => HANDLERS().then((m) => m.updateWorkCapsuleStatusTool(params, userId, context)),
-    release_workroom_scope: (params, userId, context) => HANDLERS().then((m) => m.releaseCapsuleScopeTool(params, userId, context)),
+    release_workroom_scope: (params, userId, context) => receipted("release-scope", (m) => m.releaseCapsuleScopeTool)(params, userId, context),
     rebind_workroom_shape: (params, userId, context) =>
       import("@/lib/work-capsules/workroom-shape-rebind-handler").then((m) => m.rebindWorkroomShapeTool(params, userId, context)),
-    record_workroom_evidence: (params, userId, context) => HANDLERS().then((m) => m.recordCapsuleEvidenceTool(params, userId, context)),
-    reassign_workroom_executor: (params, userId, context) => HANDLERS().then((m) => m.reassignCapsuleExecutorTool(params, userId, context)),
+    record_workroom_evidence: (params, userId, context) => receipted("record-evidence", (m) => m.recordCapsuleEvidenceTool)(params, userId, context),
+    reassign_workroom_executor: (params, userId, context) => receipted("reassign-executor", (m) => m.reassignCapsuleExecutorTool)(params, userId, context),
     start_external_work: (params, userId, context) => HANDLERS().then((m) => m.startExternalWorkTool(params, userId, context)),
-    record_agent_activity: (params, userId, context) => HANDLERS().then((m) => m.recordAgentActivityTool(params, userId, context)),
+    record_agent_activity: (params, userId, context) => receipted("record-activity", (m) => m.recordAgentActivityTool)(params, userId, context),
     // Legacy workroom names — callable, deliberately NOT advertised in `definitions`.
     list_work_capsules: (params, userId, context) => HANDLERS().then((m) => m.listWorkCapsulesTool(params, userId, context)),
-    get_work_capsule: (params) => HANDLERS().then((m) => m.getWorkCapsuleTool(params)),
+    get_work_capsule: (params, userId, context) => HANDLERS().then((m) => m.getWorkCapsuleTool(params, userId, context)),
     create_work_capsule: (params, userId, context) => HANDLERS().then((m) => m.createWorkCapsuleTool(params, userId, context)),
     plan_capsule_worktree: (params, userId, context) => HANDLERS().then((m) => m.planCapsuleWorktreeTool(params, userId, context)),
     claim_capsule_scope: (params, userId, context) => HANDLERS().then((m) => m.claimCapsuleScopeTool(params, userId, context)),
@@ -454,6 +496,8 @@ export const workCapsulesPack: ToolPack = {
     reassign_capsule_executor: (params, userId, context) => HANDLERS().then((m) => m.reassignCapsuleExecutorTool(params, userId, context)),
   },
   grants: {
+    review_workroom_sensitivity: ["admin_read"],
+    correct_workroom_sensitivity: ["admin_write"],
     list_workrooms: ["work_capsule_read"],
     get_workroom: ["work_capsule_read"],
     create_workroom: ["work_capsule_write"],

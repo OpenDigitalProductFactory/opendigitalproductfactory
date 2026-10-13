@@ -145,6 +145,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse-guard-selftest.mjs\"",
+            "statusMessage": "Check the safety guards can block in this session"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/governance-freshness-check.mjs\"",
             "statusMessage": "Check this checkout has current process guards"
           }

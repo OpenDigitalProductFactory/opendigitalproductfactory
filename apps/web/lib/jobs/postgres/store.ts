@@ -28,6 +28,7 @@ export type JobRunRow = {
   status: string;
   attempt: number;
   maxAttempts: number;
+  error: string | null;
 };
 
 export type FanOutTarget = {
@@ -188,7 +189,7 @@ export async function claimRuns(pool: Pool, options: ClaimOptions): Promise<JobR
   if (options.functionIds.length === 0 || options.limit < 1) return [];
   return withTransaction(pool, async (client) => {
     const { rows: candidates } = await client.query<JobRunRow>(
-      `SELECT id, "functionKey", "eventId", event, status, attempt, "maxAttempts" FROM "JobRun"
+      `SELECT id, "functionKey", "eventId", event, status, attempt, "maxAttempts", error FROM "JobRun"
        WHERE status IN ('queued', 'sleeping') AND "runAfter" <= now() AND "functionKey" = ANY($1)
        ORDER BY "runAfter", id LIMIT $2 FOR UPDATE SKIP LOCKED`,
       [options.functionIds, Math.max(options.limit * 4, 16)],
@@ -353,12 +354,22 @@ export function releaseRun(pool: Pool, runId: string, owner: string): Promise<bo
 
 // ─── Maintenance ───────────────────────────────────────────────────────────
 
-/** A run whose lease expired goes back to the queue; its slots are freed. */
+export const LEASE_EXPIRED_ERROR = "lease_expired: the worker stopped renewing its lease";
+export const PROCESS_LOSS_ERROR = "cancelled_after_process_loss: a process-bound run is not replayed after its worker died";
+
+/**
+ * A run whose lease expired goes back to the queue; its slots are freed. The
+ * lost attempt COUNTS (BI-6BB830E4): a run that kills its worker every time
+ * would otherwise requeue forever. The next claim of a run with no attempts
+ * left fails it through onFailure (`executeRun`).
+ */
 export async function recoverExpiredLeases(pool: Pool): Promise<number> {
   return withTransaction(pool, async (client) => {
     const { rows } = await client.query<{ id: string }>(
-      `UPDATE "JobRun" SET status = 'queued', "runAfter" = now(), "leaseOwner" = NULL, "leaseExpiresAt" = NULL, "updatedAt" = now()
+      `UPDATE "JobRun" SET status = 'queued', "runAfter" = now(), attempt = attempt + 1, error = $1,
+         "leaseOwner" = NULL, "leaseExpiresAt" = NULL, "updatedAt" = now()
        WHERE status = 'running' AND "leaseExpiresAt" < now() RETURNING id`,
+      [LEASE_EXPIRED_ERROR],
     );
     await releaseRunResources(client, rows.map((row) => row.id));
     return rows.length;

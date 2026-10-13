@@ -259,3 +259,40 @@ describe("runSandboxTests installs a separately-locked package before checking i
     expect(install).toBeLessThan(jest);
   });
 });
+
+// BI-F5D4FA50: in FB-86FAED68 an unscoped whole-suite run took ~920% CPU in
+// the sandbox. Verification never runs the whole suite there, and a scoped run
+// still gates on a failing test related to a changed file.
+describe("runSandboxTests stays scoped (BI-F5D4FA50)", () => {
+  async function run(changedFiles: string[] | undefined, vitestOutput = "Test Files  1 passed (1)", exit = 0) {
+    const { execInSandbox } = await import("@/lib/sandbox");
+    const exec = vi.mocked(execInSandbox);
+    exec.mockReset();
+    exec.mockImplementation(async (_id: string, cmd: string) => {
+      if (cmd.startsWith("test -f")) return cmd.includes('coding-agent.test.ts"') ? "__yes__" : "__no__";
+      if (/cat "[^"]+\/package\.json"/.test(cmd)) return JSON.stringify({ scripts: { test: "vitest run" }, devDependencies: { vitest: "5.0.3" } });
+      if (/pnpm exec vitest run/.test(cmd)) return `${vitestOutput}\n__dpf_exit=${exit}`;
+      return "";
+    });
+    const { runSandboxTests } = await import("./coding-agent");
+    const result = await runSandboxTests("c1", { changedFiles, workdir: "/workspace/.builds/FB-1" });
+    return { result, commands: exec.mock.calls.map(([, cmd]) => cmd) };
+  }
+
+  it("fails the build when the related test of a changed file fails", async () => {
+    const { result, commands } = await run(["apps/web/lib/build/coding-agent.ts"], " FAIL  lib/build/coding-agent.test.ts > derive\n Test Files  1 failed (1)", 1);
+    expect(result.scope).toBe("scoped");
+    expect(result.scopedTestsRun).toBe(1);
+    expect(result.passed).toBe(false);
+    const testRuns = commands.filter((cmd) => /vitest run|jest|pnpm test/.test(cmd));
+    expect(testRuns).toHaveLength(1);
+    expect(testRuns[0]).toMatch(/pnpm exec vitest run "lib\/build\/coding-agent\.test\.ts"/);
+  });
+
+  it("runs no whole suite when the changed files are unknown, and says so", async () => {
+    const { result, commands } = await run(undefined);
+    expect(result.scope).toBe("none");
+    expect(result.testOutput).toMatch(/no tests ran/);
+    expect(commands.some((cmd) => /pnpm test|vitest run|jest/.test(cmd))).toBe(false);
+  });
+});

@@ -130,7 +130,8 @@ COPY scripts/installer/install-state.schema.json ./scripts/installer/
 COPY scripts/installer/install-state.v1.schema.json ./scripts/installer/
 COPY scripts/installer/install-state.v2.schema.json ./scripts/installer/
 COPY scripts/installer/native-edge-host.ps1 ./scripts/installer/
-COPY scripts/bootstrap-organization-pki.ps1 ./scripts/
+COPY scripts/bootstrap-organization-pki.ps1 scripts/rotate-runtime-transition-secret.mjs ./scripts/
+COPY scripts/installer/prepare-runtime-state.mjs scripts/installer/stage-ca-password.mjs ./scripts/installer/
 COPY scripts/publish-host-gpu.ps1 ./scripts/
 COPY scripts/installer/lib/state.ps1 ./scripts/installer/lib/
 COPY scripts/installer/lib/compose-chain.ps1 ./scripts/installer/lib/
@@ -192,6 +193,8 @@ COPY scripts/lib/junction-safe-worktree-remove.mjs ./scripts/lib/
 COPY scripts/lib/pr-trailer-contract.mjs ./scripts/lib/
 COPY scripts/lib/module-size-scope.mjs ./scripts/lib/
 COPY scripts/lib/ci-policy-guards.mjs ./scripts/lib/
+COPY scripts/lib/guard-bash.mjs ./scripts/lib/
+COPY scripts/lib/load-pinned-guard-typescript.mjs ./scripts/lib/
 COPY scripts/lib/host-command-invocation.mjs ./scripts/lib/
 COPY scripts/lib/git-fetch-shared-safe.mjs ./scripts/lib/
 # check-design-grounding-decision and check-data-impact import the shared
@@ -282,9 +285,10 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     cp docker-compose.yml docker-compose.release.yml docker-compose.pki.yml docker-compose.organization-trust.yml docker-compose.tls.yml docker-compose.edge-actions.yml /dpf-release-assets/ && \
     mkdir -p /dpf-release-assets/scripts/pki && cp scripts/pki/edge-client.tpl /dpf-release-assets/scripts/pki/ && \
     cp uninstall-dpf.sh uninstall-dpf.ps1 uninstall-dpf.bat /dpf-release-assets/ && \
-    cp scripts/bootstrap-organization-pki.ps1 scripts/publish-host-gpu.ps1 /dpf-release-assets/scripts/ && \
+    cp scripts/bootstrap-organization-pki.ps1 scripts/publish-host-gpu.ps1 scripts/rotate-runtime-transition-secret.mjs /dpf-release-assets/scripts/ && \
     cp scripts/lib/resolve-capability-compose-profiles.mjs scripts/lib/govern-capability-compose-args.mjs scripts/lib/script-argv.mjs scripts/lib/git.mjs scripts/lib/capability-state-hash.mjs /dpf-release-assets/scripts/lib/ && \
     cp scripts/capability-service-catalog.generated.json /dpf-release-assets/scripts/ && \
+    cp scripts/installer/prepare-runtime-state.mjs scripts/installer/stage-ca-password.mjs /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/local-model-policy.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/validate-install-state.mjs /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state-transaction.mjs scripts/installer/install-release-assets.mjs scripts/installer/install-state-lock-contract.json /dpf-release-assets/scripts/installer/ && \

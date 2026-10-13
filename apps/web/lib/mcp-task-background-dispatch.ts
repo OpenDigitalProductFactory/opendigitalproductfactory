@@ -22,9 +22,9 @@ import { ensureDurableInferenceTaskRecipes } from "./mcp-task-durable-inference-
 import { mcpTaskNotificationBus } from "./mcp-task-notification-bus";
 import { parseResourceWaitProjection, resourceWaitDue } from "./mcp-task-capacity-contract";
 import { parseTerminalWriterWait } from "./mcp-task-replay-projection";
-import { recoverTerminalWriterEscalation, TERMINAL_WRITER_MAX_ATTEMPTS } from "./mcp-task-terminal-writer-escalation";
+import { recoverTerminalWriterEscalation, terminalWriterRetryIsExhausted, TERMINAL_WRITER_MAX_ATTEMPTS } from "./mcp-task-terminal-writer-escalation";
 import { parseInitiativeReviewBinding } from "./mcp-task-review-contract";
-import { loadTaskInitiativeReviewOutcome, persistedReviewCompletionData } from "./mcp-task-review-outcome";
+import { loadTaskInitiativeReviewOutcome, reconcilePersistedReviewStatus } from "./mcp-task-review-outcome";
 
 export { REMOTE_TASK_EXECUTION_EVENT };
 
@@ -40,7 +40,8 @@ export async function automaticReviewerRecoveryWait(row: {
   const wait = parseTerminalWriterWait(row.progressPayload);
   if (!binding || !wait || wait.noncompliance !== "prose-without-required-writer"
     || binding.writerToolName !== wait.writerToolName
-    || wait.validationFailure || recoverTerminalWriterEscalation(row.progressPayload)) return null;
+    || wait.validationFailure || wait.writerRejection || terminalWriterRetryIsExhausted(wait.attempt)
+    || recoverTerminalWriterEscalation(row.progressPayload)) return null;
   const observedAt = Date.parse(wait.observedAt);
   if (!Number.isFinite(observedAt) || now.getTime() - observedAt < DISPATCH_STALE_MS) return null;
   const [writer, envelope] = await Promise.all([
@@ -66,20 +67,17 @@ export async function automaticReviewerRecoveryWait(row: {
 export async function healParkedReviewFromReceipt(row: {
   taskRunId: string; status: string; updatedAt: Date; progressPayload: unknown; a2aMetadata: unknown;
 }): Promise<boolean> {
-  if (row.status !== "input-required") return false;
+  if (row.status !== "input-required" && row.status !== "submitted") return false;
   const metadata = record(row.a2aMetadata);
   if (metadata?.["trigger"] !== "external-mcp") return false;
   const binding = parseInitiativeReviewBinding(metadata["initiativeReviewBinding"]);
   const wait = parseTerminalWriterWait(row.progressPayload);
-  if (!binding || !wait || wait.writerToolName !== binding.writerToolName) return false;
+  if (!binding || (wait && wait.writerToolName !== binding.writerToolName)) return false;
   const outcome = await loadTaskInitiativeReviewOutcome(row.taskRunId, binding);
   if (!outcome) return false;
-  const settled = await prisma.taskRun.updateMany({
-    where: { taskRunId: row.taskRunId, status: "input-required", updatedAt: row.updatedAt },
-    data: persistedReviewCompletionData(row.progressPayload, outcome),
-  });
-  if (settled.count === 1) console.info(`[mcp-task-dispatch] settled ${row.taskRunId} to its recorded ${outcome.gate} receipt ${outcome.receiptId}`);
-  return settled.count === 1;
+  const settled = await reconcilePersistedReviewStatus(row.taskRunId, row.progressPayload, outcome, row);
+  if (settled) console.info(`[mcp-task-dispatch] settled ${row.taskRunId} to its recorded ${outcome.gate} receipt ${outcome.receiptId}`);
+  return settled;
 }
 
 export type RemoteTaskDispatchProjection = {

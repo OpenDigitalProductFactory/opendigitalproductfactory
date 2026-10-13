@@ -21,12 +21,25 @@ export function toDistEntry(path) {
   return path.replace(/^\.\/src\//, "./dist/").replace(/\.ts$/, ".js");
 }
 
+/**
+ * One export target: a TypeScript path compiles to dist/; a conditional export
+ * (BI-D560D82A) is mapped condition by condition; hand-written files tsc never
+ * emits (.cjs, .d.cts) stay at their source path, which the deploy still ships.
+ */
+function toDistExport(value) {
+  if (typeof value === "string") return value.endsWith(".ts") ? toDistEntry(value) : value;
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, inner]) => [key, toDistExport(inner)]));
+  }
+  return value;
+}
+
 /** A copy of the manifest with main, types and exports pointing at dist/. */
 export function rewriteManifest(pkg) {
   const next = { ...pkg, main: toDistEntry(pkg.main) };
   next.types = next.main.replace(/\.js$/, ".d.ts");
   if (pkg.exports) {
-    next.exports = Object.fromEntries(Object.entries(pkg.exports).map(([key, value]) => [key, toDistEntry(value)]));
+    next.exports = toDistExport(pkg.exports);
   }
   return next;
 }

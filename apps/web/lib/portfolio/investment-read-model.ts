@@ -18,8 +18,18 @@ export type InvestmentItemRow = BudgetAttributionInput & {
   jobSize: number | null;
   estimateAgreed: boolean | null;
   activeBuildId: string | null;
-  /** A non-terminal Workroom is bound to the item (design §5.6: in flight). */
-  hasLiveWorkroom: boolean;
+  /**
+   * A Workroom bound to the item has something running: its drive last
+   * dispatched an agent, or a principal holds an unexpired lease on it. A room
+   * parked on attention with nothing running is not active (BI-77313ADD).
+   */
+  hasActiveWorkroom: boolean;
+  /**
+   * When the work was delivered: the latest move into awaiting-acceptance (the
+   * merge / PR-submit transition). Null when none is recorded; done work then
+   * falls back to completedAt.
+   */
+  deliveredAt: Date | null;
   /** Where the item was delivered: Build Studio, an external coding agent, or other (design §5.5). */
   deliverySurface: DeliverySurface;
   /** The item carries Workroom or pull-request evidence (design §5.7: traced share). */
@@ -53,18 +63,36 @@ export type PortfolioInvestmentSummary = {
   totals: { liveItems: number; deliveredThisQuarterItems: number; unsizedItems: number };
 };
 
-const CLOSED_STATUSES = new Set(["done", "retired"]);
-const IN_FLIGHT_STATUSES = new Set(["in-progress", "awaiting-acceptance"]);
+// The spend rule (BI-77313ADD, WWMD DI-A54504784480). A period is charged for
+// work DELIVERED in it, by delivery date rather than acceptance date, plus work
+// ACTIVELY in progress. Delivered work still awaiting acceptance is delivered,
+// never in flight, so an earlier quarter's delivery consumes nothing now. A room
+// parked on attention with nothing running leaves its item ready. The budget
+// proposal, points-in-flight admission and the author-stage check all read this.
+const DELIVERED_STATUSES = new Set(["done", "awaiting-acceptance"]);
 
 type InvestmentClass = "ready" | "inFlight" | "delivered";
 
+/** When the item was delivered: its move into awaiting-acceptance, else (done work) completedAt. */
+export function deliveryDateOf(item: Pick<InvestmentItemRow, "status" | "deliveredAt" | "completedAt">): Date | null {
+  if (!DELIVERED_STATUSES.has(item.status)) return null;
+  const at = item.deliveredAt ?? (item.status === "done" ? item.completedAt : null);
+  return at ? new Date(at) : null;
+}
+
+/** Work actively in progress: in-progress status, an active build, or a room with something running. */
+export function isActivelyInProgress(item: Pick<InvestmentItemRow, "status" | "activeBuildId" | "hasActiveWorkroom">): boolean {
+  if (DELIVERED_STATUSES.has(item.status) || item.status === "retired") return false;
+  return item.status === "in-progress" || Boolean(item.activeBuildId) || item.hasActiveWorkroom;
+}
+
 function classify(item: InvestmentItemRow, period: { start: Date; end: Date }): InvestmentClass | null {
-  if (item.status === "done") {
-    const at = item.completedAt ? new Date(item.completedAt) : null;
+  if (DELIVERED_STATUSES.has(item.status)) {
+    const at = deliveryDateOf(item);
     return at && at >= period.start && at < period.end ? "delivered" : null;
   }
-  if (CLOSED_STATUSES.has(item.status)) return null;
-  return IN_FLIGHT_STATUSES.has(item.status) || item.activeBuildId || item.hasLiveWorkroom ? "inFlight" : "ready";
+  if (item.status === "retired") return null;
+  return isActivelyInProgress(item) ? "inFlight" : "ready";
 }
 
 /** One item's portfolio (with path) and investment class for a period; null class = outside it. */
@@ -121,8 +149,8 @@ export function summarizePortfolioInvestment(
 type Db = { $queryRaw: <T>(query: TemplateStringsArray, ...values: unknown[]) => Promise<T> };
 
 /**
- * Live items (every status but done and retired) plus items done inside the
- * period, each with the links attribution reads (budget-attribution.ts). The epic's portfolio is the
+ * Live items (every status but done and retired) plus items done whose delivery
+ * date falls inside the period, each with the links attribution reads (budget-attribution.ts). The epic's portfolio is the
  * lowest id when an epic names several, so the choice is stable.
  *
  * With `itemId`, only that item is loaded, whatever its status: funding
@@ -131,9 +159,10 @@ type Db = { $queryRaw: <T>(query: TemplateStringsArray, ...values: unknown[]) =>
 export async function loadInvestmentItems(
   db: Db,
   period: { start: Date; end: Date },
-  options: { itemId?: string } = {},
+  options: { itemId?: string; now?: Date } = {},
 ): Promise<InvestmentItemRow[]> {
   const itemId = options.itemId ?? null;
+  const asOf = options.now ?? new Date();
   const rows = await db.$queryRaw<InvestmentItemRow[]>`
     SELECT
       b."itemId"         AS "itemId",
@@ -156,7 +185,10 @@ export async function loadInvestmentItems(
       b."activeBuildId"  AS "activeBuildId",
       EXISTS (SELECT 1 FROM "WorkCapsule" w
                WHERE w."backlogItemId" IN (b."itemId", b."id") AND w."archivedAt" IS NULL
-                 AND w."status" NOT IN ('complete', 'abandoned', 'archived')) AS "hasLiveWorkroom",
+                 AND w."status" NOT IN ('complete', 'abandoned', 'archived')
+                 AND (w."workspaceState"->'workroomDrive'->>'action' = 'dispatch_agent'
+                      OR w."leaseExpiresAt" > ${asOf})) AS "hasActiveWorkroom",
+      d."deliveredAt"    AS "deliveredAt",
       CASE
         WHEN EXISTS (SELECT 1 FROM "FeatureBuild" fb WHERE fb."originatingBacklogItemId" = b."id")
           OR EXISTS (SELECT 1 FROM "WorkCapsule" w WHERE w."backlogItemId" IN (b."itemId", b."id") AND w."executorKind" = 'build-studio')
@@ -173,14 +205,27 @@ export async function loadInvestmentItems(
     FROM "BacklogItem" b
     LEFT JOIN "DigitalProduct" dp ON dp."id" = b."digitalProductId"
     LEFT JOIN "TaxonomyNode" tn ON tn."id" = b."taxonomyNodeId"
+    -- Delivery date: the latest move into awaiting-acceptance. An awaiting-acceptance
+    -- item with none recorded (set before the transition was logged) falls back to
+    -- updatedAt, the latest the move can have happened; done work to completedAt.
+    LEFT JOIN LATERAL (
+      SELECT CASE
+        WHEN b."status" = 'awaiting-acceptance' THEN COALESCE(t."at", b."updatedAt")
+        ELSE t."at"
+      END AS "deliveredAt"
+      FROM (SELECT MAX(a."recordedAt") AS "at" FROM "BacklogItemActivity" a
+             WHERE a."backlogItemId" = b."id" AND a."kind" = 'status_change'
+               AND a."payload"->>'to' = 'awaiting-acceptance') t
+    ) d ON true
     WHERE CASE WHEN ${itemId}::text IS NOT NULL THEN b."itemId" = ${itemId}::text
           ELSE b."status" NOT IN ('done', 'retired')
-            OR (b."status" = 'done' AND b."completedAt" >= ${period.start} AND b."completedAt" < ${period.end})
+            OR (b."status" = 'done' AND COALESCE(d."deliveredAt", b."completedAt") >= ${period.start}
+                AND COALESCE(d."deliveredAt", b."completedAt") < ${period.end})
           END
   `;
   return rows.map((r) => ({ ...r, jobSize: r.jobSize === null ? null : Number(r.jobSize) }));
 }
 
 export async function loadPortfolioInvestment(db: Db, now: Date = new Date()): Promise<PortfolioInvestmentSummary> {
-  return summarizePortfolioInvestment(await loadInvestmentItems(db, quarterBounds(now)), now);
+  return summarizePortfolioInvestment(await loadInvestmentItems(db, quarterBounds(now), { now }), now);
 }

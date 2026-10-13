@@ -29,8 +29,10 @@ type InngestSendPayload = Parameters<typeof inngestClient.send>[0];
 
 export const inngestJobsClient: JobsClient = {
   createFunction(options, handler) {
+    // `recovery` is enforced by the Postgres engine only; Inngest has no such option.
+    const { recovery, ...inngestOptions } = options;
     return inngestClient.createFunction(
-      options as unknown as InngestCreateFunctionArgs[0],
+      (recovery === undefined ? options : inngestOptions) as unknown as InngestCreateFunctionArgs[0],
       handler as unknown as InngestCreateFunctionArgs[1],
     ) as unknown as JobFunction;
   },

@@ -125,3 +125,33 @@ test("the SessionStart reconcile hook pins the URL even with no claude CLI on PA
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+// BI-8FD7C0C9: the desktop app inherited DPF_MCP_URL=http://[::1]:3000/... from
+// launchd. Neither an inherited plain-http value nor an IPv6 literal (Docker
+// publishes the portal on IPv4 only) may become the pinned connector.
+test("an inherited plain-http or IPv6-literal DPF_MCP_URL pins the template's https default", () => {
+  for (const DPF_MCP_URL of ["http://[::1]:3000/api/mcp/v1?tier=full", "https://[::1]/api/mcp/v1?tier=full"]) {
+    const sb = sandbox(oauthServer(TEMPLATE));
+    try {
+      const result = pinPluginMcpUrl({ installedPath: sb.installedPath, root: sb.root, env: { DPF_MCP_URL } });
+      assert.equal(result.code, EXIT_PINNED, DPF_MCP_URL);
+      assert.equal(sb.descriptor().url, "https://localhost/api/mcp/v1?tier=full");
+    } finally {
+      sb.cleanup();
+    }
+  }
+});
+
+test("an OAuth descriptor already holding a plain-http literal is repinned to https", () => {
+  // OAuth over http cannot authenticate by any path (BI-46B636B0), so a
+  // literal http OAuth descriptor is never a choice worth keeping.
+  const sb = sandbox(oauthServer("http://[::1]:3000/api/mcp/v1?tier=full"));
+  try {
+    const env = { DPF_MCP_URL: "http://[::1]:3000/api/mcp/v1?tier=full" };
+    assert.equal(pinPluginMcpUrl({ installedPath: sb.installedPath, root: sb.root, env }).code, EXIT_PINNED);
+    assert.equal(sb.descriptor().url, "https://localhost/api/mcp/v1?tier=full");
+    assert.deepEqual(sb.descriptor().oauth, { scopes: "dpf.read dpf.work dpf.build" });
+  } finally {
+    sb.cleanup();
+  }
+});

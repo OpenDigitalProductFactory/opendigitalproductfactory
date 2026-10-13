@@ -39,6 +39,7 @@ describe("backlog terminal MCP recovery projection", () => {
     });
 
     expect(mocks.resolveRecovery).toHaveBeenCalledWith({
+      currentUserId: "USR-ONE",
       decision,
       currentAgentId: "AGT-ONE",
       refusedWorkroomId: null,

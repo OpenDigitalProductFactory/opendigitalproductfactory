@@ -102,6 +102,27 @@ test("parseExtendedDiagnostics keeps the recorded keys as numbers", () => {
   assert.deepEqual(parsed, { Files: 8223, "Lines of TypeScript": 2591410, "Memory used": 5483611, "Check time": 140.85 });
 });
 
+test("TypeScript 7's lib, shipped in its platform package, counts as library (BI-2B8D67A9)", () => {
+  const lines = {
+    "node_modules/.pnpm/@typescript+typescript-linux-x64@7.0.2/node_modules/@typescript/typescript-linux-x64/lib/lib.es5.d.ts": 100,
+    "node_modules/.pnpm/@typescript+typescript-linux-x64@7.0.2/node_modules/@typescript/typescript-linux-x64/lib/other.d.ts": 3,
+  };
+  const r = analyzeProgram({ files: Object.keys(lines), linesOf: (f) => lines[f], excludePatterns: EXCLUDE });
+  assert.equal(r.totals.library, 100);
+  assert.equal(r.totals.external, 3);
+  assert.deepEqual(r.externalPackages, { "@typescript/typescript-linux-x64": 3 });
+});
+
+test("parseExtendedDiagnostics records TypeScript 7's single Lines total", () => {
+  const parsed = parseExtendedDiagnostics([
+    "Files:            8273",
+    "Lines:         3058649",
+    "Memory used:   2950000K",
+    "Total time:      9.12s",
+  ]);
+  assert.deepEqual(parsed, { Files: 8273, Lines: 3058649, "Memory used": 2950000, "Total time": 9.12 });
+});
+
 test("only the lines no diff explains are budgeted", () => {
   assert.deepEqual(BUDGETED, ["dependencyLines", "excludedLines"]);
 });
