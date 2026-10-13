@@ -195,6 +195,11 @@ export async function getWorkCapsuleTool(params: Record<string, unknown>, userId
   if (!capsuleId) {
     return { success: false, error: "missing_capsuleId", message: "capsuleId is required." };
   }
+  const { parseAfterSequence, readActivityAfter } = await import("./activity-log-read");
+  const afterSequence = parseAfterSequence(params["afterSequence"]);
+  if (afterSequence === null) {
+    return { success: false, error: "invalid_input", message: "afterSequence must be a non-negative integer." };
+  }
   const capsule = await prisma.workroom.findUnique({
     where: { capsuleId },
     include: {
@@ -222,11 +227,14 @@ export async function getWorkCapsuleTool(params: Record<string, unknown>, userId
     }).catch(() => ({ delegations: [], escalation: {
       state: "setup-required" as const, reason: "coordination-read-unavailable", steps: [],
     } })) : null;
+  // BI-62514632: the room's log from a position the caller already holds.
+  const log = afterSequence === undefined ? null
+    : { afterSequence, ...(await readActivityAfter(prisma as never, { workCapsuleId: capsule.id, afterSequence })) };
   return {
     success: true,
     entityId: capsule.capsuleId,
     message: `Loaded ${capsule.capsuleId}.`,
-    data: { capsule: { ...capsule, recovery: projectWorkroomRecovery(capsule), nestedCoordination } },
+    data: { capsule: { ...capsule, recovery: projectWorkroomRecovery(capsule), nestedCoordination }, ...(log ? { log } : {}) },
   };
 }
 
