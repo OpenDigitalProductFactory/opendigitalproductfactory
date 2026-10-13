@@ -414,6 +414,7 @@ describe("reconcileBuildCompletion", () => {
     expect(terminalTransition.completeFeatureBuildTransition).toHaveBeenCalledWith({
       buildId: "FB-TEST-001",
       expectedPhase: "ship",
+      deliveryProven: true,
     });
   });
 
@@ -453,6 +454,7 @@ describe("reconcileBuildCompletion", () => {
     expect(terminalTransition.completeFeatureBuildTransition).toHaveBeenCalledWith({
       buildId: "FB-TEST-001",
       expectedPhase: "ship",
+      deliveryProven: true,
     });
   });
 });
@@ -505,7 +507,7 @@ describe("completeBuildWhenDelivered", () => {
     mockPack({ packId: "FP-1", prUrl: "https://github.com/org/repo/pull/42", prNumber: 42 });
     terminalTransition.completeFeatureBuildTransition.mockResolvedValueOnce({ ok: true });
     await expect(completeBuildWhenDelivered("FB-TEST-001")).resolves.toEqual({ ok: true });
-    expect(terminalTransition.completeFeatureBuildTransition).toHaveBeenCalledWith({ buildId: "FB-TEST-001", expectedPhase: "ship" });
+    expect(terminalTransition.completeFeatureBuildTransition).toHaveBeenCalledWith({ buildId: "FB-TEST-001", expectedPhase: "ship", deliveryProven: true });
   });
 });
 
@@ -531,6 +533,7 @@ describe("completeLocalDeliveryBuild", () => {
     expect(terminalTransition.completeFeatureBuildTransition).toHaveBeenCalledWith({
       buildId: "FB-TEST-001",
       expectedPhase: "ship",
+      deliveryProven: true,
     });
   });
 

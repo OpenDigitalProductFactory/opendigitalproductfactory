@@ -496,7 +496,7 @@ export async function evaluateBuildCompletionPreconditions(buildId: string): Pro
 export async function completeBuildWhenDelivered(buildId: string): Promise<ActionResult> {
   const preconditions = await evaluateBuildCompletionPreconditions(buildId);
   if (!preconditions.satisfied) return err(preconditions.message);
-  const terminal = await completeFeatureBuildTransition({ buildId, expectedPhase: "ship" });
+  const terminal = await completeFeatureBuildTransition({ buildId, expectedPhase: "ship", deliveryProven: true });
   if (!terminal.ok) {
     const codes = [...terminal.decision.blockers, ...terminal.decision.unmet].map((entry) => entry.code);
     return err(`Cannot complete this build: ${codes.join(", ")}.`);
@@ -517,7 +517,7 @@ export async function completeBuildWhenDelivered(buildId: string): Promise<Actio
 export async function reconcileBuildCompletion(buildId: string): Promise<boolean> {
   const preconditions = await evaluateBuildCompletionPreconditions(buildId);
   if (!preconditions.satisfied) return false;
-  const readiness = await completeFeatureBuildTransition({ buildId, expectedPhase: "ship" });
+  const readiness = await completeFeatureBuildTransition({ buildId, expectedPhase: "ship", deliveryProven: true });
   if (!readiness.ok) return false;
   await recordReadyDependentsAfterCompletion({ db: prisma, buildId }).catch((err) => {
     console.error("[reconcileBuildCompletion] dependency readiness check failed:", err);
