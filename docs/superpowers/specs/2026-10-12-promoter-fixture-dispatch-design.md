@@ -83,3 +83,6 @@ design are internal sequencing, not independently shippable changes.
 References: AC-1, AC-2, AC-3; CT-DISPATCH, CT-COPY; FLOW-RED, FLOW-FIX,
 FLOW-VERIFY; VC-DISPATCH, VC-COPY, VC-MATRIX. Live coverage is recorded against
 the immutable artifact before implementation; this text is not a receipt.
+Native coverage `cmv5xhux20ovn01mr7habw65v` binds the ordered design at
+`df7807b1811dc4ba6ac3184d028a0cba6f76ffbb`; research receipt
+`initiative-df0acf81-13e0-4fae-b474-b92f071bd1f6` records the reproduction.
