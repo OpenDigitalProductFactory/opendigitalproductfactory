@@ -467,6 +467,13 @@ export async function reconcileDeployedShipBuilds(
     for (const build of shipBuilds) {
       try {
         if (!(await isFeatureBuildDeployed(build.buildId))) {
+          // A build that went behind main is refused at publication until it
+          // is rebased and re-verified (BI-76BD65E6); refresh first, then retry.
+          const refreshed = await (await import("@/lib/build/ship-source-refresh")).refreshDivergedShipBuild(build.buildId);
+          if (refreshed === "returned-to-review") {
+            logger.log(`[auto-complete] ${build.buildId} refreshed onto upstream main and returned to review`);
+            continue;
+          }
           await (await import("@/lib/build/auto-open-build-pr")).retryPrForShipBuild(build.buildId, logger); // refused PR, hourly retry
           // A fully-local install treats ProductVersion registration as delivery.
           // Upstream builds no-op here and keep waiting for deployed evidence.
