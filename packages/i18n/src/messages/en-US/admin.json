@@ -126,5 +126,13 @@
     "allow": "Allow agents",
     "stop": "Stop agents",
     "saving": "Saving…"
+  },
+  "runtimeHealth": {
+    "intro": "Live model selection and unresolved build phases, using the build's own routing logic.",
+    "unavailableTitle": "Phase routing unavailable",
+    "unavailableDetail": "No phase evidence returned. Retry diagnostics.",
+    "unresolvedTitle": "{$unresolved} of {$total} phases unresolved",
+    "attentionTitle": "Phase routing needs attention",
+    "resolvedSummary": "{$resolved} resolved: {$local} local, {$cloud} cloud."
   }
 }

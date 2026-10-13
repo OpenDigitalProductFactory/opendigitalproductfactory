@@ -7,6 +7,8 @@
 // serving config) so a fresh operator can answer in ONE place rather than
 // grepping code or clicking two admin pages. See BI-768AFB99 / EP-FULL-OBS.
 import { auth } from "@/lib/auth";
+import { getT } from "@/lib/i18n/t.server";
+import type { MessageArgs, MessageKey } from "@dpf/i18n";
 import {
   resolveModelSelectionByPhase,
   type ModelSelectionOverview,
@@ -42,10 +44,12 @@ const SEVERITY_STYLE: Record<FlagSeverity, { bg: string; fg: string; label: stri
 
 // Server-composed handoff prompt: carries the error flags' own messages and
 // remediations so the coworker starts from the facts, not a screenshot.
-function buildRuntimeHealthPrompt(overview: ModelSelectionOverview): string {
+type RuntimeHealthTranslator = (key: MessageKey<"admin">, args?: MessageArgs) => string;
+
+function buildRuntimeHealthPrompt(overview: ModelSelectionOverview, t: RuntimeHealthTranslator): string {
   const errors = overview.flags.filter((f) => f.severity === "error").slice(0, 8);
   return [
-    `I'm on the AI Runtime Health page. Verdict: "${overview.summary}" with ${errors.length} error flag(s):`,
+    `I'm on the AI Runtime Health page. Verdict: "${buildRuntimeHealthPresentation(overview, t).summary}" with ${errors.length} error flag(s):`,
     ...errors.map((f) => `- [${f.phase}] ${f.code}: ${f.message} (suggested: ${f.remediation})`),
     "Please diagnose what's actually wrong, explain the impact in plain language, and either fix it if you have a safe way to do so or walk me through the exact next step.",
   ].join("\n");
@@ -57,6 +61,27 @@ const VERDICT_COPY: Record<ModelSelectionOverview["verdict"], { tone: string; ti
   mixed: { tone: "var(--dpf-warning)", title: "Mixed: local + cloud" },
   unconfigured: { tone: "var(--dpf-error)", title: "Not configured" },
 };
+
+function buildRuntimeHealthPresentation(overview: ModelSelectionOverview, t: RuntimeHealthTranslator) {
+  const total = overview.phases.length;
+  if (total === 0) {
+    return {
+      tone: "var(--dpf-warning)", title: t("runtimeHealth.unavailableTitle"),
+      summary: t("runtimeHealth.unavailableDetail"),
+    };
+  }
+  const unresolved = overview.phases.filter((phase) => phase.isLocal === null).length;
+  const local = overview.phases.filter((phase) => phase.isLocal === true).length;
+  const cloud = total - unresolved - local;
+  if (unresolved > 0 || overview.flags.some((flag) => flag.severity === "error")) {
+    return {
+      tone: "var(--dpf-error)",
+      title: unresolved > 0 ? t("runtimeHealth.unresolvedTitle", { unresolved, total }) : t("runtimeHealth.attentionTitle"),
+      summary: t("runtimeHealth.resolvedSummary", { resolved: total - unresolved, local, cloud }),
+    };
+  }
+  return { ...VERDICT_COPY[overview.verdict], summary: overview.summary };
+}
 
 function Chip({ children, bg, fg }: { children: React.ReactNode; bg: string; fg: string }) {
   return (
@@ -154,7 +179,7 @@ export default async function RuntimeHealthPage() {
       return null;
     });
 
-  const [overviewResult, capabilityResult, queueSnapshots, jobEngineHealth, contextTraceHealth, coworkerReachability] =
+  const [overviewResult, capabilityResult, queueSnapshots, jobEngineHealth, contextTraceHealth, coworkerReachability, t] =
     await Promise.all([
       overviewPromise,
       capabilityPromise,
@@ -162,11 +187,13 @@ export default async function RuntimeHealthPage() {
       jobEnginePromise,
       contextTracePromise,
       coworkerReachabilityPromise,
+      getT("admin"),
     ]);
   const overview: ModelSelectionOverview | null = overviewResult.value;
   const capabilityHealth: CapabilityServiceHealthProjection | null = capabilityResult.value;
   const loadError = overviewResult.unavailable;
   const errorCount = overview?.flags.filter((f) => f.severity === "error").length ?? 0;
+  const presentation = overview ? buildRuntimeHealthPresentation(overview, t) : null;
 
   return (
     <div>
@@ -176,10 +203,7 @@ export default async function RuntimeHealthPage() {
             Model Selection &amp; Runtime Health
           </h1>
           <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2, maxWidth: 760 }}>
-            One authoritative view of which model, provider, and engine will run each
-            build phase <em>right now</em> — and where live config contradicts platform
-            guidance. Resolved before a build runs, using the same routing logic the
-            build uses.
+            {t("runtimeHealth.intro")}
           </p>
         </div>
         <AiReadinessHeaderLink />
@@ -295,13 +319,13 @@ export default async function RuntimeHealthPage() {
         </div>
       )}
 
-      {overview && (
+      {overview && presentation && (
         <>
           {/* Verdict banner */}
           <div
             style={{
-              border: `1px solid ${VERDICT_COPY[overview.verdict].tone}`,
-              borderLeft: `4px solid ${VERDICT_COPY[overview.verdict].tone}`,
+              border: `1px solid ${presentation.tone}`,
+              borderLeft: `4px solid ${presentation.tone}`,
               background: "var(--dpf-surface-1)",
               borderRadius: 8,
               padding: 14,
@@ -309,8 +333,8 @@ export default async function RuntimeHealthPage() {
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: VERDICT_COPY[overview.verdict].tone }}>
-                {VERDICT_COPY[overview.verdict].title}
+              <span style={{ fontSize: 14, fontWeight: 700, color: presentation.tone }}>
+                {presentation.title}
               </span>
               <Chip bg="var(--dpf-surface-2)" fg="var(--dpf-muted)">
                 Build engine: {overview.buildEngineLabel}
@@ -322,7 +346,7 @@ export default async function RuntimeHealthPage() {
               )}
               {errorCount > 0 && (
                 <AskCoworkerButton
-                  prompt={buildRuntimeHealthPrompt(overview)}
+                  prompt={buildRuntimeHealthPrompt(overview, t)}
                   routeContext="/platform"
                   label="Ask coworker to investigate"
                   className="text-[var(--dpf-accent)] hover:underline underline-offset-2 text-xs"
@@ -330,7 +354,7 @@ export default async function RuntimeHealthPage() {
               )}
             </div>
             <p style={{ fontSize: 12, color: "var(--dpf-text)", marginTop: 8, marginBottom: 0 }}>
-              {overview.summary}
+              {presentation.summary}
             </p>
           </div>
 
