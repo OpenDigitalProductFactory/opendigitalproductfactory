@@ -279,3 +279,12 @@ before runtime mutation until canonical delivery installs this repair. Preview
 initialization, passwordless browser consumption, all dynamic fixtures and the
 full served UX matrix remain unrun. Missing actor grants and live upgrade
 authority remain separate boundaries; the source repair never self-grants.
+
+The continuation found a remaining R5 defect in `gate:wait`: its finite watch
+window re-claimed durable requests, and it parsed only the first line of the
+multiline status report. The wrapper now observes at most one attempt, exposes
+the recorded gate state, and stops on terminal, pending or unreadable evidence.
+Eighty-two targeted tests pass, including long waits, existing admitted claims,
+terminal stops and the actual status projection. Adding this repair fenced the
+queued candidate as source drift before CI ran; its claim is unrun, not passed.
+The final committed repair needs a distinct exact-tree gate.

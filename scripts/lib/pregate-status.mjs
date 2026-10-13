@@ -238,7 +238,7 @@ function classifyUnpassedRecord({ state, metadata, base, headSha, candidateSha, 
     return {
       ...base,
       verdict: "STALE",
-      reason: `metadata record gated ${candidateSha.slice(0, 12)}, not HEAD ${headSha.slice(0, 12)} — re-run pregate`,
+      reason: `metadata record gated ${candidateSha.slice(0, 12)}, not HEAD ${headSha.slice(0, 12)} — read the current durable task and reconcile before a new attempt`,
       staleness: "metadata-mismatch",
     };
   }
@@ -370,7 +370,7 @@ export function classifySlotRecord({ state, metadata, headSha, headBranch = "", 
   const evidenceId = String(state?.evidenceRecordId || "");
   const recordedAt = String(state?.recordedAt || "");
   const expiresAt = String(state?.expiresAt || "");
-  const base = { boundSha, boundBranch, candidateSha, evidenceId, recordedAt, expiresAt, staleness: "" };
+  const base = { boundSha, boundBranch, candidateSha, evidenceId, recordedAt, expiresAt, gateStatus: String(state?.status || ""), staleness: "" };
 
   if (!state) {
     return { ...base, verdict: "NO-RECORD", reason: "no gate record for this worktree — pregate has not run here" };
@@ -455,7 +455,7 @@ export function classifySlotRecord({ state, metadata, headSha, headBranch = "", 
     return {
       ...base,
       verdict: "STALE",
-      reason: `metadata record gated ${candidateSha.slice(0, 12)}, not HEAD ${headSha.slice(0, 12)} — re-run pregate`,
+      reason: `metadata record gated ${candidateSha.slice(0, 12)}, not HEAD ${headSha.slice(0, 12)} — read the current durable task and reconcile before a new attempt`,
       staleness: "metadata-mismatch",
     };
   }
@@ -529,7 +529,11 @@ export function formatStatusReport(result, { headBranch, headSha, now = Date.now
   if (result.rerun === false) {
     lines.push(`  next        ${result.remedy || "restore the gate substrate"}`);
   } else if (result.verdict !== "PASS") {
-    lines.push("  next        pnpm run pregate   (foreground, unpiped, as the sole command)");
+    if (result.gateStatus && result.boundSha === headSha) {
+      lines.push(["queued", "admitted", "running"].includes(result.gateStatus)
+        ? "  next        observe the existing durable task; do not re-claim"
+        : "  next        reconcile this terminal claim before an explicitly new attempt");
+    } else lines.push("  next        pnpm run pregate   (foreground, unpiped, as the sole command)");
   }
   return lines;
 }

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { worktreeContextFromGit } from "../pregate-status.mjs";
+import { projectGateStatus, worktreeContextFromGit } from "../pregate-status.mjs";
 import { readLocalCiGateState, writeLocalCiGateState } from "./local-ci-gate-state.mjs";
 
 import {
@@ -969,4 +969,21 @@ test("an unavailable slot substrate is BLOCKED, names the container, and does no
   const lines = formatStatusReport(r, { headBranch: "topic", headSha: HEAD, now: NOW });
   assert.ok(!lines.some((l) => l.includes("pnpm run pregate")), "a substrate block must not advise a re-run");
   assert.ok(lines.some((l) => /next\s+.*dpf-local-ci-postgres-1/.test(l)), "it names the remedy instead");
+});
+
+test("raw gate state remains visible while metadata belongs to an older run", () => {
+  const result = classifySlotRecord({ state: { sha: HEAD, branch: "codex/topic", status: "admitted" },
+    metadata: { candidateSha: OLD }, headSha: HEAD, headBranch: "codex/topic", now: NOW });
+  assert.equal(result.verdict, "STALE");
+  assert.equal(result.gateStatus, "admitted");
+});
+
+test("status JSON carries the active claim through stale metadata and names durable observation", () => {
+  const result = classifySlotRecord({ state: { sha: HEAD, branch: "codex/topic", status: "admitted" },
+    metadata: { candidateSha: OLD }, headSha: HEAD, headBranch: "codex/topic", now: NOW });
+  const report = projectGateStatus(result, { headSha: HEAD, headBranch: "codex/topic", worktreePath: "/source" });
+  assert.equal(JSON.parse(JSON.stringify(report, null, 2)).gateStatus, "admitted");
+  const lines = formatStatusReport(result, { headSha: HEAD, headBranch: "codex/topic", now: NOW });
+  assert.ok(lines.some(line => line.includes("durable")));
+  assert.ok(!lines.some(line => line.includes("pnpm run pregate ")));
 });
