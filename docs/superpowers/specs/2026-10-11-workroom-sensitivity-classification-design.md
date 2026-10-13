@@ -49,3 +49,14 @@ Ordered follow-up plan (one atomic correction of AC-3):
 5. Freeze the assembled change, run the canonical shared gate, obtain independent review, and publish through DCO and the protected merge queue. Coordinate the canonical release with its existing owner. After deployment, exercise the masked review through the same OAuth assistant, confirm ordinary room content remains denied where appropriate, then determine the supported remedy from the actual classification state. Do not infer or mutate WC-9CECAF46's classification from its title, DEV posture or this source diagnosis.
 
 Coverage: BI-CAP-1774FB7A AC-3, quoted from the live item: "A supported exact-room administrator review/correction path records the original declaration, reviewed classification, actor and rationale with concurrency protection, without global clearance changes." AC-4 remains the regression contract; AC-5 still requires actual authorized classification review before any historical correction. Dispatch and its negative controls cannot ship independently; they form one revertible fix. No new UI control, schema, tool or automatic backfill is introduced.
+
+Live item acceptance criteria retained by this atomic follow-up:
+
+- AC-1: New boundary sensitivity inputs accept only the canonical public, internal, confidential and restricted values, or an explicit unset value.
+- AC-2: Historical unknown labels remain recorded and fail closed; ordinary edits cannot silently erase or reclassify them.
+- AC-3: A supported exact-room administrator review/correction path records the original declaration, reviewed classification, actor and rationale with concurrency protection, without global clearance changes.
+- AC-4: Tests prove invalid writes refused, legacy declarations preserved, unauthorized/stale corrections refused and valid audited corrections applied.
+- AC-5: Live WC-9CECAF46 is corrected only after its administrator verifies actual classification; original acceptance records remain intact.
+
+Contract and flow references: `workroomTargetAccessRefusal`, `review_workroom_sensitivity`, `correct_workroom_sensitivity`.
+Verification references: `apps/web/lib/work-capsules/oauth-workroom-ownership.test.ts`, `apps/web/lib/mcp-governed-execute-room-access.test.ts`, `apps/web/lib/work-management/workroom-sensitivity-review.test.ts`.
