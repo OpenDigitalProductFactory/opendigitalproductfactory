@@ -422,7 +422,7 @@ test("failing record says outright that no reason was recorded", () => {
   assert.match(out.reason, /NO recorded reason/);
 });
 
-test("a started-then-released run with no failing command is a retry, not a verdict", () => {
+test("a started-then-released run requires reconciliation and has no product verdict", () => {
   // The observed shape: the run held the slot, ended early, recorded nothing.
   // local-integration-ci runs at effectiveCapacity 1 and several sessions on
   // this host gate at once.
@@ -437,7 +437,7 @@ test("a started-then-released run with no failing command is a retry, not a verd
     }),
     metadata: null, ...atHead,
   });
-  assert.match(out.reason, /contended slot is a retry/);
+  assert.match(out.reason, /stop this attempt and reconcile/);
   assert.match(out.reason, /not a verdict on your diff/);
 });
 
@@ -715,7 +715,7 @@ test("a superseded record whose winner no longer holds a pass does not claim one
   assert.doesNotMatch(result.reason, /passed/);
   assert.match(result.reason, /slot-1/);
   assert.match(result.reason, /blocked_control_plane_starvation/);
-  assert.match(result.reason, /re-run pregate/i);
+  assert.match(result.reason, /reconcile/i);
 });
 
 test("a superseded record whose winner record is gone says so instead of claiming a pass", () => {
@@ -903,7 +903,7 @@ test("a queued claim with no live waiter says so instead of 'queued'", () => {
   assert.equal(r.verdict, "INCONCLUSIVE");
   assert.match(r.reason, /no waiter is alive/i);
   assert.match(r.reason, /53956/);
-  assert.match(r.reason, /re-run pregate/i);
+  assert.match(r.reason, /resume|reconcile/i);
 });
 
 test("a queued claim with a live waiter keeps the queued wording", () => {
@@ -986,4 +986,24 @@ test("status JSON carries the active claim through stale metadata and names dura
   const lines = formatStatusReport(result, { headSha: HEAD, headBranch: "codex/topic", now: NOW });
   assert.ok(lines.some(line => line.includes("durable")));
   assert.ok(!lines.some(line => line.includes("pnpm run pregate ")));
+});
+
+test('unfinished current claims consistently recommend durable observation or reconciliation', () => {
+  for (const status of ['queued', 'admitted', 'running']) {
+    for (const extra of [{}, { queuedWaiter: { checked: true, alive: false, pids: [1] } }, { stateExtra: { leaseEvents: [{ type: 'queued', poolClosedReason: 'host-memory-low' }] } }]) {
+      const result = classifySlotRecord({ state: passingState({ status, gatePassed: false, ...extra.stateExtra }), headSha: HEAD, headBranch: 'claude/topic', now: NOW, queuedWaiter: extra.queuedWaiter });
+      assert.doesNotMatch(result.reason, /re-run pregate|rerun pregate/i);
+      assert.match(result.reason, /observe|resume|reconcile|waiter runs/i);
+    }
+  }
+});
+
+test('terminal or uncertain current claims never recommend unqualified replacement', () => {
+  for (const status of ['failed', 'blocked_source_drift', 'blocked_control_plane_starvation', 'cancelled', 'released']) {
+    for (const metadata of [null, { candidateSha: OLD, execution: { status: 'passed' } }]) {
+      const result = classifySlotRecord({ state: passingState({ status, gatePassed: false, evidencePending: true }), metadata, headSha: HEAD, headBranch: 'claude/topic', now: NOW });
+      assert.doesNotMatch(result.reason, /re-run|rerun/i);
+      assert.match(result.reason, /stop.*reconcile/i);
+    }
+  }
 });

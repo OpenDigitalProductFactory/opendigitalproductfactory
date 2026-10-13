@@ -94,6 +94,37 @@ export function protectedServiceIdentity(containers) {
     .sort((left, right) => String(left.service).localeCompare(String(right.service)));
 }
 
+export async function stopOwnedPreviewContainers({ runner, leaseId, projectName, initName, ownedIds = new Set() }) {
+  const failures = [];
+  const candidates = new Set();
+  // Compose can create a portal before returning an error or being fenced.
+  // Discover it independently of the post-start inspection's recorded IDs.
+  const queries = [
+    ['ps', '-aq', '--no-trunc', '--filter', `label=dpf.preview.lease=${leaseId}`,
+      '--filter', `label=com.docker.compose.project=${projectName}`,
+      '--filter', 'label=com.docker.compose.service=dev-portal'],
+    ['ps', '-aq', '--no-trunc', '--filter', `name=^/${initName}$`],
+    ...[...ownedIds].map(id => ['ps', '-aq', '--no-trunc', '--filter', `id=${id}`]),
+  ];
+  for (const query of queries) {
+    try { for (const id of (await runner.run(query)).split(/\s+/).filter(Boolean)) candidates.add(id); }
+    catch (error) { failures.push(error); }
+  }
+  for (const id of candidates) {
+    try {
+      const [container] = JSON.parse(await runner.run(['inspect', id]));
+      if (!container || container.Id !== id) throw new Error('preview_cleanup_identity_unverified');
+      const labels = container.Config?.Labels || {};
+      const service = labels['com.docker.compose.service'];
+      if (labels['dpf.preview.lease'] !== leaseId || labels['com.docker.compose.project'] !== projectName) continue;
+      if (service === 'dev-portal' || (service === 'dev-init' && container.Name === `/${initName}`)) {
+        await runner.run(['stop', container.Id]);
+      }
+    } catch (error) { failures.push(error); }
+  }
+  if (failures.length) throw new AggregateError(failures, 'preview_owned_cleanup_failed');
+}
+
 export async function runPreviewLifecycle({ compose, inspect, verifySource, stopOwned, ready, wait, active }) {
   // Preparation/configuration/image admission is completed by the caller first.
   // A failed initialization can never reach the start operation.
@@ -166,16 +197,7 @@ async function runAdmittedPreview(env, cleanupState) {
   let finish;
   const wait = new Promise(resolveWait => { finish = resolveWait; });
   const stopOwned = async () => {
-    const failures = [];
-    for (const id of [initName, ...ownedIds]) {
-      try {
-        const present = await runner.run(['ps', '-aq', '--filter', ownedIds.has(id) ? `id=${id}` : `name=^/${id}$`]);
-        if (!present) continue;
-        const [container] = JSON.parse(await runner.run(['inspect', present]));
-        if (container.Config?.Labels?.['dpf.preview.lease'] === leaseId) await runner.run(['stop', container.Id]);
-      } catch (error) { failures.push(error); }
-    }
-    if (failures.length) throw new AggregateError(failures, 'preview_owned_cleanup_failed');
+    await stopOwnedPreviewContainers({ runner, leaseId, projectName: state.composeProjectName || 'dpf', initName, ownedIds });
   };
   const terminate = async () => { runner.terminate(); try { await stopOwned(); } finally { finish(); } };
   const mcpUrl = env.DPF_MCP_URL || 'http://127.0.0.1:3000/api/mcp/v1';

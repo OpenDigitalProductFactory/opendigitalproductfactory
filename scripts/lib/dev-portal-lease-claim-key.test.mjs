@@ -42,7 +42,7 @@ test("terminal keys are stopped instead of scanned or replaced", () => {
   assert.match(script, /terminal lease claim; stop/);
 });
 
-import { protectedServiceIdentity, REQUIRED_PREVIEW_DELIVERY_TOOLS, assertToolReadiness, assertPreviewConfig, assertPreviewContainer, previewOverride, runPreviewLifecycle } from './dev-preview-runtime.mjs';
+import { protectedServiceIdentity, REQUIRED_PREVIEW_DELIVERY_TOOLS, assertToolReadiness, assertPreviewConfig, assertPreviewContainer, previewOverride, runPreviewLifecycle, stopOwnedPreviewContainers } from './dev-preview-runtime.mjs';
 const identity = { worktree: '/feature/worktree', sha: 'a'.repeat(40), leaseId: 'NPEL-MINE' };
 const config = () => {
   const result = previewOverride(identity);
@@ -120,3 +120,31 @@ test('preserved feature initialization takes the bounded clone from the canonica
   assert.equal(override.services['dev-init'].volumes[0].source, identity.worktree);
   assert.equal(override.services['dev-portal'].volumes[0].source, identity.worktree);
 });
+
+for (const interruption of ['compose-error-after-start', 'lease-fence-before-inspect']) {
+  test(`cleanup finds an unrecorded portal after ${interruption} and preserves foreign/live containers`, async () => {
+    const labels = { 'dpf.preview.lease': identity.leaseId, 'com.docker.compose.project': 'dpf', 'com.docker.compose.service': 'dev-portal' };
+    const containers = [
+      { Id: 'mine', Config: { Labels: labels } },
+      { Id: 'foreign', Config: { Labels: { ...labels, 'dpf.preview.lease': 'NPEL-FOREIGN' } } },
+      { Id: 'other-project', Config: { Labels: { ...labels, 'com.docker.compose.project': 'other' } } },
+      { Id: 'live', Config: { Labels: { ...labels, 'com.docker.compose.service': 'portal' } } },
+    ];
+    let started = false;
+    const stopped = [];
+    const runner = { run: async args => {
+      if (args[0] === 'ps') return args.some(arg => arg.startsWith('name=')) ? '' : started ? containers.map(c => c.Id).join('\n') : '';
+      if (args[0] === 'inspect') return JSON.stringify(containers.filter(c => args.slice(1).includes(c.Id)));
+      if (args[0] === 'stop') { stopped.push(args[1]); return ''; }
+      assert.fail(`unexpected docker command ${args}`);
+    } };
+    const cleanup = () => stopOwnedPreviewContainers({ runner, leaseId: identity.leaseId, projectName: 'dpf', initName: 'unique-init', ownedIds: new Set() });
+    await assert.rejects(runPreviewLifecycle({
+      compose: async args => { if (args[0] === 'up' && args.at(-1) === 'dev-portal') { started = true; if (interruption.startsWith('compose-error')) throw new Error(interruption); await cleanup(); throw new Error(interruption); } },
+      inspect: async () => assert.fail('interruption precedes inspection'), verifySource: async () => {},
+      stopOwned: cleanup, ready: async () => assert.fail('must not serve'), wait: async () => {}, active: { initName: 'unique-init' },
+    }), new RegExp(interruption));
+    assert.ok(stopped.includes('mine'), 'partially started portal must be stopped even without a recorded ID');
+    assert.ok(stopped.every(id => id === 'mine'), 'cleanup must preserve foreign projects, leases and live services');
+  });
+}

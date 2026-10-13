@@ -288,3 +288,16 @@ Eighty-two targeted tests pass, including long waits, existing admitted claims,
 terminal stops and the actual status projection. Adding this repair fenced the
 queued candidate as source drift before CI ran; its claim is unrun, not passed.
 The final committed repair needs a distinct exact-tree gate.
+
+
+The operator-authorized independent client reviewer found two blocking source
+issues at c224872611: partially started portals escaped cleanup before recorded
+container inspection, and status reasons contradicted durable-claim guidance.
+Cleanup now discovers portals using exact lease/project/service labels and
+revalidates inspected ownership before stopping them. Init cleanup also requires
+its unique name and dev-init service. Tests reproduce Compose errors and lease
+fencing before inspection, preserving foreign leases/projects and live services.
+Status reasons now consistently require observation/resume for unfinished work
+and terminal reconciliation before a new authorized attempt. This assessment is
+client evidence, not a native certified review. The repaired commit requires
+re-review and fresh shared CI; served acceptance remains unrun.
