@@ -594,7 +594,10 @@ client authentication, resource binding, consent, scope narrowing, rotation
 and revocation checks remain mandatory. New authorization-code and
 client-credentials exchanges stay refused. Swapping or an unknown state
 refuses token exchanges with an OAuth `temporarily_unavailable` response and
-`Retry-After: 30`. The token path is not a prefix allow-list, and this changes
+`Retry-After: 30`. Unknown means an unavailable proxy state or a failed Node
+state read. The canonical Node parser still uses its existing normal default
+for missing or malformed stored configuration; this repair does not redefine
+that shared policy. The token path is not a prefix allow-list, and this changes
 no application tool's read/write policy. An expired connection can renew to
 observe a drain without gaining permission to start new business work.
 

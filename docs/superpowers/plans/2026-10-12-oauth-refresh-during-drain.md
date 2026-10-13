@@ -32,8 +32,11 @@ issuer, lease or runtime is needed.
 
 The exact POST /api/oauth/token may reach the existing route during a known
 drain. The route admits only refresh_token through its ordinary authentication;
-new code exchanges and client credentials remain refused. Swapping and unknown
-state remain closed. Token refusals use the existing OAuth error shape and
+new code exchanges and client credentials remain refused. Swapping, unknown
+proxy state and failed Node reads remain closed. The canonical Node parser's
+existing normal default for missing/malformed configuration is preserved and
+tested through the actual reader, rather than an impossible typed mock.
+Token refusals use the existing OAuth error shape and
 Retry-After. Other proxy and application mutation policy remains unchanged.
 
 ## Implementation and verification

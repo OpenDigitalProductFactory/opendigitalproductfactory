@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const mock = vi.hoisted(() => ({
-  client: vi.fn(), human: vi.fn(), agent: vi.fn(), issue: vi.fn(), rotate: vi.fn(), exchange: vi.fn(), quiescence: vi.fn(), matches: vi.fn(),
+  client: vi.fn(), human: vi.fn(), agent: vi.fn(), issue: vi.fn(), rotate: vi.fn(), exchange: vi.fn(), quiescence: vi.fn(), matches: vi.fn(), config: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({ prisma: { agent: { findUnique: mock.agent },
-  oAuthClient: { update: vi.fn().mockResolvedValue({}) } } }));
+  oAuthClient: { update: vi.fn().mockResolvedValue({}) }, platformConfig: { findUnique: mock.config } } }));
 vi.mock("@/lib/auth/oauth-clients", () => ({ findClientByClientId: mock.client, touchClient: vi.fn() }));
 vi.mock("@/lib/auth/oauth-identity-binding", () => ({ currentOAuthHuman: mock.human }));
 vi.mock("@/lib/auth/oauth-tokens", () => ({ issueAccessToken: mock.issue,
@@ -51,10 +51,22 @@ describe("OAuth continuity during quiescence", () => {
     expect(mock.rotate).not.toHaveBeenCalled();
   });
 
-  it.each(["swapping", "unknown"])("refuses refresh while %s", async level => {
+  it.each(["swapping"])("refuses refresh while %s", async level => {
     mock.quiescence.mockResolvedValue({ level });
     expect((await POST(request({ grant_type: "refresh_token", refresh_token: "dpfort_existing" }))).status).toBe(503);
     expect(mock.rotate).not.toHaveBeenCalled();
+  });
+
+  it.each([null, { value: { level: "panic" } }])("preserves the canonical reader's legacy normal default for %j", async row => {
+    const actual = await vi.importActual<typeof import("@/lib/self-upgrade/quiescence")>("@/lib/self-upgrade/quiescence");
+    actual.invalidateQuiescenceCache();
+    mock.config.mockResolvedValue(row);
+    mock.quiescence.mockImplementation(() => actual.getQuiescenceConfig());
+    const response = await POST(request({ grant_type: "refresh_token", refresh_token: "dpfort_existing" }));
+    expect(response.status).toBe(200);
+    expect(mock.config).toHaveBeenCalledWith({ where: { key: "portal.quiescence" } });
+    expect(mock.rotate).toHaveBeenCalled();
+    actual.invalidateQuiescenceCache();
   });
 
   it("fails closed if the canonical state read fails", async () => {
