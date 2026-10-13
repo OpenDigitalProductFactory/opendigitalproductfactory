@@ -1,4 +1,5 @@
 import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import { providerAccountConsequence } from "@/lib/mcp/provider-account-consequence";
 
 export const providerAccountDefinitions: ToolDefinition[] = [
   {
@@ -10,7 +11,7 @@ export const providerAccountDefinitions: ToolDefinition[] = [
   },
   {
     name: "manage_provider_account",
-    description: "Add, configure, enable, disable, sign in, disconnect, test or discover models for a provider account. Every operation except add requires an explicit account identity. Discovery uses existing credentials to synchronize model availability. Credential and account-activation changes retain approval checks; authentication never grants data clearance.",
+    description: "Add, configure, enable, disable, sign in, disconnect, test or discover models for a provider account. Every operation except add requires an explicit account identity. Discovery uses existing credentials to synchronize model availability. Delegated development maintenance may disable credentialless default local runtimes. Credential and account-activation changes retain approval checks; authentication never grants data clearance.",
     inputSchema: { type: "object", properties: {
       operation: { type: "string", enum: ["add", "configure", "enable", "disable", "sign-in", "disconnect", "test", "discover"] },
       providerId: { type: "string", description: "Required for add; otherwise checked against the selected account" },
@@ -24,13 +25,6 @@ export const providerAccountDefinitions: ToolDefinition[] = [
       scope: { type: "string" },
     }, required: ["operation"] },
     requiredCapability: "manage_provider_connections", sideEffect: true, consequence: "authority",
-    consequenceForCall: async ({ params }) => {
-      const catalogOnly = params.operation === "discover"
-        && typeof params.connectionId === "string" && Boolean(params.connectionId.trim())
-        && Object.keys(params).every((key) => ["operation", "connectionId", "providerId"].includes(key));
-      return catalogOnly
-        ? { consequence: null, reason: "existing-account-catalog-discovery" }
-        : { consequence: "authority", reason: "account-authority-or-unclassified-operation" };
-    },
+    consequenceForCall: providerAccountConsequence,
   },
 ];

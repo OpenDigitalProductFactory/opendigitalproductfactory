@@ -46,6 +46,45 @@ beforeEach(() => {
   executeAdapter.mockReset().mockResolvedValue({ text: "done", toolCalls: [], inferenceMs: 1, usage: { inputTokens: 1, outputTokens: 1 } });
 });
 
+it("rechecks setup removal after a cloud selection waits for admission", async () => {
+  vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "active", baseUrl: "http://provider.test/v1", authMethod: "none" } as any);
+  const release = vi.fn();
+  vi.mocked(acquireInferenceSlot).mockImplementationOnce(async () => {
+    vi.mocked(prisma.aiProviderConnection.findUnique).mockResolvedValue({ status: "unconfigured" } as any);
+    vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "unconfigured" } as any);
+    return release;
+  });
+  await expect(callProvider("openai", "model-test", [], "system")).rejects.toThrow("not enabled for routing");
+  expect(executeAdapter).not.toHaveBeenCalled();
+  expect(release).toHaveBeenCalledOnce();
+});
+
+it.each(["disabled", "inactive", "unconfigured"])("blocks a %s cloud provider even when its connection is active", async status => {
+  vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status, baseUrl: "https://provider.example/v1", authMethod: "none" } as any);
+  await expect(callProvider("openai", "model-test", [], "system")).rejects.toThrow("not enabled for routing");
+  expect(executeAdapter).not.toHaveBeenCalled();
+  expect(acquireInferenceSlot).not.toHaveBeenCalled();
+});
+
+it.each(["active", "degraded"])("preserves %s legacy cloud dispatch without a default account", async status => {
+  vi.mocked(prisma.aiProviderConnection.findUnique).mockResolvedValue(null);
+  vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status, baseUrl: "https://provider.example/v1", authMethod: "none" } as any);
+  await expect(callProvider("openai", "model-test", [], "system")).resolves.toMatchObject({ content: "done" });
+  expect(executeAdapter).toHaveBeenCalledOnce();
+});
+
+it.each(["disabled", "inactive", "unconfigured"])("blocks a cloud provider that becomes %s during admission and releases its slot", async status => {
+  vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "active", baseUrl: "https://provider.example/v1", authMethod: "none" } as any);
+  const release = vi.fn();
+  vi.mocked(acquireInferenceSlot).mockImplementationOnce(async () => {
+    vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status } as any);
+    return release;
+  });
+  await expect(callProvider("openai", "model-test", [], "system")).rejects.toThrow("not enabled for routing");
+  expect(executeAdapter).not.toHaveBeenCalled();
+  expect(release).toHaveBeenCalledOnce();
+});
+
 describe("InferenceError", () => {
   it("has correct code and providerId", () => {
     const err = new InferenceError("test", "network", "ollama");
@@ -128,6 +167,25 @@ describe("callProvider host-capacity boundary", () => {
     await expect(callProvider("local", "qwen", [{ role: "user", content: "triage" }], "system"))
       .rejects.toMatchObject({ code: "provider_error", message: "Local provider is not enabled for routing" });
     expect(assertProviderDispatchCapacity).not.toHaveBeenCalled();
+  });
+  it("rejects a cloud request paused while it waits for an inference slot", async () => {
+    vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "active", baseUrl: "https://provider.example/v1", authMethod: "none" } as any);
+    const release = vi.fn();
+    let wake!: () => void;
+    let entered!: () => void;
+    const waiting = new Promise<void>(resolve => { entered = resolve; });
+    vi.mocked(acquireInferenceSlot).mockImplementationOnce(() => {
+      entered();
+      return new Promise<() => void>(resolve => { wake = () => resolve(release); });
+    });
+    const pending = callProvider("openai", "model-test", [], "system");
+    const rejected = expect(pending).rejects.toThrow("Provider account is not enabled for routing");
+    await waiting;
+    vi.mocked(prisma.aiProviderConnection.findUnique).mockResolvedValue({ status: "paused" } as any);
+    wake();
+    await rejected;
+    expect(executeAdapter).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalledOnce();
   });
 
   it("rejects a disabled local provider even if its connection still appears active", async () => {

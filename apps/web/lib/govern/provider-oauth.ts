@@ -88,6 +88,18 @@ function defaultOAuthScope(authorizeUrl: string): string | null {
 // codex and chatgpt share one OpenAI OAuth token.
 const OPENAI_PAIR: Record<string, string> = { codex: "chatgpt", chatgpt: "codex" };
 
+class DefaultAccountOwnerConflict extends Error {}
+
+/** Translate only a conditional owner write's expected conflicts; other DB failures stay failures. */
+function rethrowDefaultAccountOwnerConflict(error: unknown): never {
+  const failure = error as { code?: unknown; meta?: { target?: unknown } } | null;
+  const target = failure?.meta?.target;
+  const aliasConflict = failure?.code === "P2002" &&
+    (Array.isArray(target) ? target.length === 1 && target[0] === "providerId" : target === "CredentialEntry_providerId_key");
+  if (failure?.code === "P2025" || aliasConflict) throw new DefaultAccountOwnerConflict();
+  throw error;
+}
+
 // ─── PKCE ─────────────────────────────────────────────────────────────────────
 
 function base64url(buffer: Buffer): string {
@@ -272,17 +284,48 @@ export async function exchangeOAuthCode(
       return true;
     });
     if (!written) return { error: "account_changed" };
-  } else await prisma.credentialEntry.upsert({
-    where: { providerId: flow.providerId },
-    create: {
-      providerId: flow.providerId,
-      cachedToken: encryptSecret(tokenResponse.access_token),
-      refreshToken: newRefreshToken,
-      tokenExpiresAt: expiresAt,
-      status: "ok",
-    },
-    update: credentialUpdate,
-  });
+  } else {
+    const siblingId = OPENAI_PAIR[flow.providerId];
+    const sibling = siblingId && await prisma.modelProvider.findUnique({ where: { providerId: siblingId } });
+    const providerIds = sibling ? [flow.providerId, siblingId] : [flow.providerId];
+    const written = await prisma.$transaction(async (tx) => {
+      // Validate every owner before replacing either shared default token.
+      const owners = await Promise.all(providerIds.map(async (providerId) => {
+        const connectionId = `provider-default-${providerId}`;
+        const [connection, credential] = await Promise.all([
+          tx.aiProviderConnection.findUnique({ where: { connectionId } }),
+          tx.credentialEntry.findUnique({ where: { providerId }, select: { id: true, providerConnection: { select: { connectionId: true } } } }),
+        ]);
+        return { providerId, connectionId, connection, credential };
+      }));
+      if (owners.some(({ providerId, connectionId, connection, credential }) =>
+        (connection && connection.providerId !== providerId) ||
+        (credential?.providerConnection && credential.providerConnection.connectionId !== connectionId) ||
+        (connection?.credentialEntryId && connection.credentialEntryId !== credential?.id))) return false;
+      for (const { providerId, connectionId, connection, credential } of owners) {
+        if (connection) {
+          await invalidateProviderAccountProofs(tx, connection.id);
+          await tx.aiProviderConnection.update({
+            where: { connectionId, providerId, AND: { credentialEntryId: connection.credentialEntryId } },
+            data: ACCOUNT_ACCESS_RESET,
+          }).catch(rethrowDefaultAccountOwnerConflict);
+        }
+        await tx.credentialEntry.upsert({
+          where: {
+            providerId, ...(credential ? { id: credential.id } : {}),
+            AND: { providerConnection: { is: credential?.providerConnection ? { connectionId } : null } },
+          },
+          create: { providerId, ...credentialUpdate, refreshToken: newRefreshToken },
+          update: credentialUpdate,
+        }).catch(rethrowDefaultAccountOwnerConflict);
+      }
+      return true;
+    }).catch((error: unknown) => {
+      if (error instanceof DefaultAccountOwnerConflict) return false;
+      throw error;
+    });
+    if (!written) return { error: "account_changed" };
+  }
 
   // Activate the provider: set status/clearance/authMethod, run model discovery,
   // activate linked MCP services, and sync the codex↔chatgpt sibling.
@@ -292,28 +335,6 @@ export async function exchangeOAuthCode(
     authMethod: "oauth2_authorization_code",
     activateLinked: true,
   });
-
-  // Bidirectional credential sync: codex and chatgpt share the same OpenAI OAuth
-  // token. The credential upsert stays here because activateProvider doesn't
-  // handle credential storage (that's the caller's responsibility).
-  const sibling = !flow.connectionId && OPENAI_PAIR[flow.providerId];
-  if (sibling) {
-    const siblingProvider = await prisma.modelProvider.findUnique({ where: { providerId: sibling } });
-    if (siblingProvider) {
-      await prisma.credentialEntry.upsert({
-        where: { providerId: sibling },
-        create: {
-          providerId: sibling,
-          cachedToken: encryptSecret(tokenResponse.access_token),
-          refreshToken: newRefreshToken,
-          tokenExpiresAt: expiresAt,
-          status: "ok",
-        },
-        update: credentialUpdate,
-      });
-      // Sibling's status/clearance/discovery already handled by activateLinked
-    }
-  }
 
   return { providerId: flow.providerId, ...(flow.connectionId ? { connectionId: flow.connectionId } : {}) };
 }

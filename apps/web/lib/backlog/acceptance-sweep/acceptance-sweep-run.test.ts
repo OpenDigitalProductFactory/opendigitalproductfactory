@@ -159,7 +159,7 @@ describe("runAcceptanceSweep", () => {
     expect(summary.routing).toMatchObject({ enabled: false, routed: 0, rooms: [] });
     expect(summary.cursor).toBe("c");
     expect(summary.ranAt).toBe(NOW.toISOString());
-    expect(summary.headline).toContain("4 awaiting acceptance");
+    expect(summary.headline).toContain("4 acceptance obligations");
     expect(summary.headline).toContain("2 over 30 days");
   });
 

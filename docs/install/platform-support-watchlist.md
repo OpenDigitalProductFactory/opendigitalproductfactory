@@ -84,6 +84,14 @@ roadmap before touching any host exporter.
 
 ## 2. Shell scripts (BSD vs GNU coreutils)
 
+Local-CI cleanup must never traverse a recycled PID tree. Revision 2 uses an
+owned Windows Job Object, process creation identity checks, and durable execution
+checkpoints. Parent-pipe loss closes the owned job; other process identities are
+never inferred from a matching command line. Windows loss and exact-handle tests
+cover the implementation. POSIX identity/signal races remain explicitly bounded
+in the [recovery procedure](../architecture/build-gate-runbook.md#recovering-an-interrupted-gate-publication).
+The admission floor retires older gate clients after the server is upgraded.
+
 macOS ships BSD userland; Linux ships GNU. The installer targets **bash 3.2**
 and **python3 3.9** (stock macOS) — no associative arrays, `mapfile`, or
 `${var^^}` in bash; no Python-3.10+-only stdlib kwargs or syntax in scripts the

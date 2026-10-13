@@ -16,7 +16,8 @@ describe("Workroom observation loading and transport", () => {
   it("constrains OAuth observations and their totals to the human and assistant", async () => {
     const tx = { $executeRawUnsafe: vi.fn(), workroom: { findMany: vi.fn().mockResolvedValue([]) }, featureBuild: { findMany: vi.fn().mockResolvedValue([]) } };
     const db = { $transaction: vi.fn(async (fn: (arg: typeof tx) => Promise<unknown>) => fn(tx)) };
-    await listWorkroomObservation(db as never, {}, "u", { ...context, authSource: "oauth", agentId: "claude" }, new WorkroomObservations());
+    const result = await listWorkroomObservation(db as never, {}, "u", { ...context, authSource: "oauth", agentId: "claude" }, new WorkroomObservations());
+    expect((result.data as any).page.ownershipScope).toBe("caller-visible");
     expect(tx.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { AND: [
       { OR: [{ leaseHolderPrincipalId: "human-u" }, { createdByPrincipalId: "human-u" }, { requestedByPrincipalId: "human-u" }] },
       { OR: [{ leaseHolderPrincipalId: "assistant" }, { createdByPrincipalId: "assistant" }, { requestedByPrincipalId: "assistant" }] },
@@ -29,7 +30,7 @@ describe("Workroom observation loading and transport", () => {
     const result = await listWorkroomObservation(db as never, { staleOnly: true, limit: 1 }, "u", context, new WorkroomObservations());
     expect(result.success).toBe(true);
     expect((result.data as any).capsules.map((r: any) => r.capsuleId)).toEqual(["WC-200"]);
-    expect((result.data as any).page).toMatchObject({ populationCount: 1, nextCursor: null });
+    expect((result.data as any).page).toMatchObject({ populationCount: 1, nextCursor: null, ownershipScope: "installation" });
     expect(tx.$executeRawUnsafe).toHaveBeenCalledWith("SET TRANSACTION READ ONLY");
     expect(db.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "RepeatableRead", timeout: 5000, maxWait: 1000 });
     expect(tx.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 10001, orderBy: [{ updatedAt: "desc" }, { capsuleId: "asc" }] }));

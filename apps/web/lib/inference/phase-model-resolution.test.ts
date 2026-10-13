@@ -34,6 +34,9 @@ vi.mock("@/lib/build/opencode-dispatch", () => ({
 }));
 
 import { resolveModelSelectionByPhase } from "./phase-model-resolution";
+import { inferContract } from "@/lib/routing/request-contract";
+import { getExclusionReasonV2 } from "@/lib/routing/pipeline-v2";
+import { makeEndpoint } from "@/lib/routing/__fixtures__/pipeline-v2-fixtures";
 
 // ── Fixtures ───────────────────────────────────────────────────────────────────
 const OPENCODE_CONFIG = {
@@ -167,6 +170,63 @@ beforeEach(() => {
 });
 
 describe("resolveModelSelectionByPhase — the local-but-cloud blind spot", () => {
+  it.each([null, false])("routes background reviews without asserting streaming support (%s)", async (streaming) => {
+    mockGetConfig.mockResolvedValue({ ...OPENCODE_CONFIG, provider: "codex", codexProviderId: "codex" });
+    const endpoint = makeEndpoint({
+      id: "codex-review", providerId: "codex", modelId: "gpt-5.6-sol",
+      reasoning: 90, codegen: 90, toolFidelity: 90,
+      maxContextTokens: null, maxOutputTokens: null,
+      capabilities: { ...makeEndpoint().capabilities, streaming, structuredOutput: null },
+    });
+    mockPreviewRoute.mockImplementation(async (messages, sensitivity, options) => {
+      const contract = await inferContract(options.taskType, messages, undefined, undefined, options, null);
+      expect(contract.sensitivity).toBe(sensitivity);
+      const excludedReason = getExclusionReasonV2(endpoint, contract);
+      return {
+        ...cloudWinner(), contract,
+        selectedManifest: excludedReason ? null : endpoint,
+        decision: { ...cloudWinner().decision, selectedEndpoint: excludedReason ? null : endpoint.id,
+          selectedModelId: excludedReason ? null : endpoint.modelId,
+          excludedCount: excludedReason ? 1 : 0, excludedReasons: excludedReason ? [excludedReason] : [],
+          reason: excludedReason ?? "Existing internally-cleared Codex endpoint is eligible." },
+      };
+    });
+
+    const overview = await resolveModelSelectionByPhase();
+    for (const name of ["plan", "design-review", "plan-review"]) {
+      expect(overview.phases.find(phase => phase.phase === name)?.providerId).toBe("codex");
+    }
+    expect(endpoint.capabilities.streaming).toBe(streaming);
+    // Interactive requests still demand real streaming capability.
+    const interactive = await inferContract("analysis", [], undefined, undefined, undefined, null);
+    expect(getExclusionReasonV2(endpoint, interactive)).toBe("Missing required capability: streaming");
+  });
+
+  it("keeps internal-data clearance required for non-streaming background reviews", async () => {
+    mockGetConfig.mockResolvedValue({ ...OPENCODE_CONFIG, provider: "codex", codexProviderId: "codex" });
+    const endpoint = makeEndpoint({
+      providerId: "chatgpt", sensitivityClearance: ["public"],
+      reasoning: 90, codegen: 90, toolFidelity: 90,
+      capabilities: { ...makeEndpoint().capabilities, streaming: null },
+    });
+    mockPreviewRoute.mockImplementation(async (messages, sensitivity, options) => {
+      const contract = await inferContract(options.taskType, messages, undefined, undefined, options, null);
+      expect(sensitivity).toBe("internal");
+      expect(contract.sensitivity).toBe("internal");
+      const excludedReason = getExclusionReasonV2(endpoint, contract);
+      expect(excludedReason).toBe("Sensitivity clearance missing for 'internal'");
+      return { ...cloudWinner(), contract, selectedManifest: null,
+        decision: { ...cloudWinner().decision, selectedEndpoint: null,
+          excludedCount: 1, excludedReasons: [excludedReason], reason: excludedReason } };
+    });
+    const overview = await resolveModelSelectionByPhase();
+    for (const name of ["plan", "design-review", "plan-review"]) {
+      const phase = overview.phases.find(phase => phase.phase === name);
+      expect(phase?.providerId).toBeNull();
+      expect(phase?.flags.some(flag => flag.code === "no-eligible-endpoint")).toBe(true);
+    }
+  });
+
   it("passes activity-derived route context into routed phase previews", async () => {
     mockGetConfig.mockResolvedValue(OPENCODE_CONFIG);
     mockPreviewRoute.mockResolvedValue(cloudWinner());

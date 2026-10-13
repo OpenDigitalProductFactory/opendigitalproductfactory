@@ -436,6 +436,8 @@ export async function persistPolicyAuthorityProjection(input: {
           issuedAt: input.projection.issuedAt.toISOString(),
           expiresAt: input.projection.expiresAt.toISOString(),
           maxUses: input.projection.maxUses,
+          ...(input.approvalBinding.authorResearchBinding
+            ? { authorResearchBinding: input.approvalBinding.authorResearchBinding } : {}),
         },
         endpointUsed: "policy-authority-projector",
         mode: "immediate",

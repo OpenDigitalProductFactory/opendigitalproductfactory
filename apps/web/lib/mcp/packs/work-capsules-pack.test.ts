@@ -33,6 +33,14 @@ vi.mock("@/lib/identity/principal-linking", () => ({
 describe("work capsule MCP tools", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it("keeps classification correction behind administrator grants and authority governance", async () => {
+    const { workCapsulesPack } = await import("./work-capsules-pack");
+    const correction = workCapsulesPack.definitions.find(tool => tool.name === "correct_workroom_sensitivity");
+    expect(correction).toMatchObject({ requiredCapability: "manage_platform", executionMode: "proposal", sideEffect: true, consequence: "authority" });
+    expect(workCapsulesPack.grants.correct_workroom_sensitivity).toEqual(["admin_write"]);
+    expect(workCapsulesPack.grants.review_workroom_sensitivity).toEqual(["admin_read"]);
+  });
+
   it("imports mcp-tools without runtime error under the @dpf/db mock", async () => {
     await expect(import("@/lib/mcp-tools")).resolves.toBeDefined();
   });

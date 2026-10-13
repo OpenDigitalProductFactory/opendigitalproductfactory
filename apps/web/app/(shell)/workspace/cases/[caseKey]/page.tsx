@@ -15,6 +15,8 @@ import { resolveWorkroomStructureForCase } from "@/lib/work-management/room-stru
 import { decodeWorkCaseKey } from "@/lib/work-management/case-key";
 import { canonicalWorkCaseHref, resolveCanonicalWorkCaseKey } from "@/lib/work-management/canonical-case-key";
 import { loadRoomWorkforce } from "@/lib/work-management/room-workforce.server";
+import { loadNestedRoomCoordination } from "@/lib/work-management/nested-room-coordination.server";
+import { resolveHumanWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
 import { loadWorkspaceWorkCaseDetail } from "@/lib/work-management/workspace-case-loader";
 import { loadWorkroomOnlyCaseDetail } from "@/lib/work-management/workroom-only-case-projection";
 import { loadWorkroomStageDecisionView } from "@/lib/work-management/workroom-stage-decision.server";
@@ -80,6 +82,14 @@ export default async function WorkspaceCaseDetailPage({ params, searchParams }: 
   const workforce = detailOrRoom.workroomRowId
     ? await loadRoomWorkforce(prisma as never, { workroomId: detailOrRoom.workroomRowId })
     : null;
+  const coordination = detailOrRoom.workroomRowId ? await loadNestedRoomCoordination(prisma as never, {
+    roomId: detailOrRoom.workroomRowId,
+    canReadRoom: async workroomId => (await resolveHumanWorkroomAccess({
+      userId: session.user.id, workroomId, requested: "content",
+    })).decision.level === "content",
+  }).catch(() => ({ delegations: [], escalation: {
+    state: "setup-required" as const, reason: "coordination-read-unavailable", steps: [],
+  } })) : null;
   // The governed decision this room waits on, if a person records it here. A
   // failed read hides the control (the room still says it is waiting) rather
   // than taking the page down.
@@ -115,13 +125,16 @@ export default async function WorkspaceCaseDetailPage({ params, searchParams }: 
       )}
       {workforce ? (
         <div className="mt-4">
+          <MessagesProvider locale={locale.language} messages={{ workrooms: namespaceMessages(locale.language, "workrooms") }}>
           <RoomWorkforcePanel
             accountability={workforce.accountability}
             accountableDisplayName={workforce.accountableDisplayName}
             groups={workforce.groups}
             matched={workforce.matched}
             partial={workforce.partial}
+            coordination={coordination}
           />
+          </MessagesProvider>
         </div>
       ) : null}
     </>

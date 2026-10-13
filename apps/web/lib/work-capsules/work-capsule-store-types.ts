@@ -6,6 +6,8 @@ export type WorkCapsuleActor = {
   principalId: string | null;
   /** Server-resolved attribution for an OAuth actor; principalId remains human. */
   agentPrincipalId?: string;
+  /** Authenticated OAuth token row; resolve its current task family only for recovery. */
+  taskAuthorityTokenId?: string;
 };
 
 /** Input for claimBacklogItemWorkspace (moved here: the store sits at its size ceiling). */

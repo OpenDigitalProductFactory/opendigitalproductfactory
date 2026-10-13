@@ -77,6 +77,11 @@ const providerFixture: ProviderWithCredential = {
 
 describe("ProviderDetailForm", () => {
   afterEach(() => { cleanup(); vi.clearAllMocks(); });
+  it("keeps ChatGPT shared authentication changes in the Codex management page", () => {
+    const fixture: ProviderWithCredential = { ...providerFixture, provider: { ...providerFixture.provider, providerId: "chatgpt", authMethod: "oauth2_authorization_code", supportedAuthMethods: ["oauth2_authorization_code"], authorizeUrl: "https://auth.openai.com/oauth/authorize" } };
+    render(<ProviderDetailForm pw={fixture} canWrite models={[]} profiles={[]} hasActiveProvider />);
+    expect(screen.queryByRole("button", { name: /sign in|disconnect/i })).toBeNull();
+  });
   it("recovers the ready button after a rejected save", async () => {
     vi.mocked(configureProvider).mockRejectedValue(new Error("network failure"));
     render(<ProviderDetailForm pw={providerFixture} canWrite models={[]} profiles={[]} hasActiveProvider />);

@@ -1,4 +1,5 @@
 import type { GoldenTriangleReceipt } from "@/lib/golden-triangle/receipt";
+import { readStageEvidenceBinding } from "./workroom-stage-evidence-binding";
 
 import type {
   WorkCaseActionVerb,
@@ -277,8 +278,11 @@ export function fromToolExecutionReceipt(
   };
 }
 
-export function fromWorkCapsuleActivity(row: WorkCapsuleActivityRow, options: { capsuleId?: string } = {}): ReceiptEnvelope {
-  return observedEnvelope({
+export function fromWorkCapsuleActivity(row: WorkCapsuleActivityRow, options: {
+  capsuleId?: string;
+  room?: Parameters<typeof readStageEvidenceBinding>[1];
+} = {}): ReceiptEnvelope {
+  const receipt = observedEnvelope({
     receiptId: `work-capsule-activity:${row.id}`,
     sourceRef: {
       kind: "work-capsule",
@@ -294,6 +298,8 @@ export function fromWorkCapsuleActivity(row: WorkCapsuleActivityRow, options: { 
       actorId: row.recordedByAgentId ?? row.recordedById ?? undefined,
     },
   });
+  const binding = row.kind === "evidence-recorded" ? readStageEvidenceBinding(row.payload, options.room) : undefined;
+  return binding ? { ...receipt, processEvidence: binding } : receipt;
 }
 
 export function fromWorkItemMessage(row: WorkItemMessageRow): ReceiptEnvelope {

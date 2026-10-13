@@ -23,6 +23,7 @@ import { prisma } from "@dpf/db";
 import { findClientByClientId, touchClient } from "@/lib/auth/oauth-clients";
 import { canonicalResourceUri, resolveResourceOrigin, resourceMatches } from "@/lib/auth/oauth-metadata";
 import { clientCredentialsTtlSeconds } from "@/lib/auth/oauth-policy";
+import { getQuiescenceConfig } from "@/lib/self-upgrade/quiescence";
 import {
   exchangeOAuthCode,
   rotateOAuthRefreshToken,
@@ -50,6 +51,18 @@ function tokenResponse(body: Record<string, unknown>): Response {
     status: 200,
     headers: { "Cache-Control": "no-store", Pragma: "no-cache" },
   });
+}
+
+async function quiescenceRefusal(grantType: string): Promise<Response | null> {
+  try {
+    const { level } = await getQuiescenceConfig();
+    if (level === "normal" || (level === "draining" && grantType === "refresh_token")) return null;
+  } catch {
+    // Unknown state cannot admit a token exchange.
+  }
+  const response = oauthError("temporarily_unavailable", "Platform upgrade in progress.", 503);
+  response.headers.set("Retry-After", "30");
+  return response;
 }
 
 /** Client authentication: `client_secret_basic` (Authorization header) or
@@ -94,6 +107,8 @@ export async function POST(request: Request) {
   }
 
   const grantType = form.get("grant_type")?.trim() ?? "";
+  const refusal = await quiescenceRefusal(grantType);
+  if (refusal) return refusal;
   const { clientId, clientSecret } = readClientCredentials(request, form);
   if (!clientId) return oauthError("invalid_client", "client_id is required.");
 

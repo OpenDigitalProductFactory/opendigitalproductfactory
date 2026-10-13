@@ -587,6 +587,20 @@ The signal therefore excludes tool names whose canonical `resolveAnnotations().r
 
 Proxy reads the Node state path with a 50ms timeout and 1s module-level cache. On timeout, it fails open for idempotent GETs and fails closed for mutation POSTs only when the last cached state was non-normal; this keeps the platform usable during transient state-route hiccups while preserving the drain once observed.
 
+**Existing OAuth connection continuity (BI-B986A18B).** The exact token POST
+at `/api/oauth/token` reaches its Node route during a known drain, where the
+canonical cached quiescence reader permits only `refresh_token`. Existing
+client authentication, resource binding, consent, scope narrowing, rotation
+and revocation checks remain mandatory. New authorization-code and
+client-credentials exchanges stay refused. Swapping or an unknown state
+refuses token exchanges with an OAuth `temporarily_unavailable` response and
+`Retry-After: 30`. Unknown means an unavailable proxy state or a failed Node
+state read. The canonical Node parser still uses its existing normal default
+for missing or malformed stored configuration; this repair does not redefine
+that shared policy. The token path is not a prefix allow-list, and this changes
+no application tool's read/write policy. An expired connection can renew to
+observe a drain without gaining permission to start new business work.
+
 Per-request decision:
 
 ```ts

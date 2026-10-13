@@ -30,9 +30,9 @@
 // declared, and the whole point of the notice is to distinguish a room somebody
 // has bounded from one nobody has.
 
-/** The fields an operator can declare. Free text by design — a boundary is a
- *  statement of intent, and forcing it into enums before anyone has written one
- *  would constrain the vocabulary before we know what people say. */
+import { isPrincipalSensitivity, type PrincipalSensitivity } from "@dpf/db/principal-sensitivity";
+
+/** Historical reads retain unknown labels; admission still fails closed. */
 export type WorkroomBoundaryClaim = {
   /** What this room is for. */
   purpose?: string | null;
@@ -59,6 +59,12 @@ export type WorkroomBoundaryClaim = {
 export type WorkroomBoundaryClaimEntry = {
   workroomBoundary: WorkroomBoundaryClaim;
   recordedAt: string;
+};
+
+export type WorkroomBoundaryInput = Omit<WorkroomBoundaryClaim, "sensitivityCeiling"> & {
+  sensitivityCeiling?: PrincipalSensitivity | null;
+  /** Preserve the server's stored label without trusting a client copy. */
+  preserveSensitivity?: boolean;
 };
 
 const TEXT_FIELDS = [
@@ -134,7 +140,7 @@ export function readWorkroomBoundaryClaim(scopeClaims: unknown): WorkroomBoundar
  */
 export function withWorkroomBoundaryClaim(
   scopeClaims: unknown,
-  claim: WorkroomBoundaryClaim,
+  claim: WorkroomBoundaryInput,
   now: Date = new Date(),
 ): unknown[] {
   const existing = Array.isArray(scopeClaims)
@@ -144,8 +150,20 @@ export function withWorkroomBoundaryClaim(
       : [];
   const others = existing.filter((entry) => claimFrom(entry) === null);
 
+  const priorEntry = existing.find((entry) => claimFrom(entry) !== null) as WorkroomBoundaryClaimEntry | undefined;
+  const prior = priorEntry?.workroomBoundary.sensitivityCeiling;
+  if (claim.sensitivityCeiling != null && typeof claim.sensitivityCeiling !== "string") {
+    throw new Error("Choose a valid sensitivity classification.");
+  }
+  const sensitivity = cleanText(claim.sensitivityCeiling);
+  if (sensitivity && !isPrincipalSensitivity(sensitivity)) throw new Error("Choose a valid sensitivity classification.");
+  if (cleanText(prior) && !isPrincipalSensitivity(cleanText(prior)!) && !claim.preserveSensitivity) {
+    throw new Error("This stored sensitivity needs an administrator classification review.");
+  }
+
   const normalized: WorkroomBoundaryClaim = {};
   for (const field of TEXT_FIELDS) normalized[field] = cleanText(claim[field]);
+  normalized.sensitivityCeiling = claim.preserveSensitivity ? prior ?? null : sensitivity;
   for (const field of LIST_FIELDS) normalized[field] = cleanList(claim[field]);
 
   const declaredSomething =

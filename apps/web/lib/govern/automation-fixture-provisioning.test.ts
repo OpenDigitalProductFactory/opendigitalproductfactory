@@ -154,6 +154,23 @@ describe("isolated verification provisioning", () => {
     expect(await retireFixtureRun(first.runId, actor)).toMatchObject({ retired: false, pendingRoomIds: ["open-room"] });
     expect(mocks.db.user.updateMany).not.toHaveBeenCalled();
   });
+  it("explains an owned active lease origin mismatch without changing the MCP connection", async () => {
+    lease.url = "http://127.0.0.1:3000";
+    await expect(prepareFixture(request, actor, "http://localhost:3000")).rejects.toThrow(
+      "Verification uses http://localhost:3000. Claim a matching lease and retry; keep your MCP connection unchanged.",
+    );
+    expect(mocks.db.runtimeVerification.create).not.toHaveBeenCalled();
+    expect(mocks.db.user.create).not.toHaveBeenCalled();
+  });
+  it("keeps the ordinary authority refusal for a foreign lease with a different origin", async () => {
+    lease.ownerSessionId = "another-session";
+    lease.url = "http://peer:3000";
+    await expect(prepareFixture(request, actor, "http://localhost:3000")).rejects.toThrow(
+      "Use an active verification lease owned by this workroom on this installation.",
+    );
+    expect(mocks.db.runtimeVerification.create).not.toHaveBeenCalled();
+    expect(mocks.db.user.create).not.toHaveBeenCalled();
+  });
   it.each(["room", "grant", "consent", "peer", "lease", "role"])("refuses loss of %s before creating a user", async boundary => {
     if (boundary === "room") mocks.access.mockResolvedValue({ decision: { level: "none" } });
     if (boundary === "grant") mocks.grants.mockResolvedValue([]);

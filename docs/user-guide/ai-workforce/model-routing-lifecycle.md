@@ -52,6 +52,14 @@ successful inventories that omit a cloud model retire its profile. Local-engine
 interruptions do not retire local models. Workload restrictions, learned auth
 eligibility and routing requirements still apply to listed models.
 
+### When the connections page takes longer to load
+
+After 15 seconds, the page shows **Still loading your connections**. This means
+the page request is still pending; elapsed time alone does not establish that a
+provider or local service failed. You can keep waiting or choose **Refresh page**
+to request the page again. The loading message does not change credentials,
+connection settings, model availability, or routing eligibility.
+
 ## Quality Tiers
 
 Every model is assigned a quality tier based on its model ID prefix. The tier system replaces opaque 0-100 scores as the primary configuration surface for admins.

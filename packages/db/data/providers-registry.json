@@ -213,7 +213,7 @@
     "consoleUrl": "https://chat.z.ai",
     "billingLabel": "Uses Z.ai account key",
     "costPerformanceNotes": "Uses the Z.ai GLM Coding OpenAI-compatible endpoint for OpenCode. Inherits the main Z.ai API key by default; use an override only if Z.ai issues a separate coding-plan key for the account.",
-    "catalogVisibility": "hidden",
+    "catalogVisibility": "visible",
     "userFacing": {
       "plainDescription": "Z.ai's OpenCode-compatible GLM coding endpoint for Build Studio code-writing tasks.",
       "authExplained": "Uses the main Z.ai API key by default. Configure a separate key only if Z.ai requires a distinct GLM Coding Plan key for your account.",
@@ -788,10 +788,10 @@
     "inputPricePerMToken": 0,
     "outputPricePerMToken": 0,
     "docsUrl": "https://platform.openai.com/docs",
-    "consoleUrl": "https://platform.openai.com/settings/organization/billing",
+    "consoleUrl": "https://chatgpt.com",
     "billingLabel": "Included with ChatGPT subscription",
-    "costPerformanceNotes": "GPT chat models accessed via ChatGPT subscription OAuth. Activated automatically when Codex (OpenAI) is connected.",
-    "catalogVisibility": "hidden",
+    "costPerformanceNotes": "ChatGPT and Codex share OpenAI sign-in. Connect through Codex; manage traffic on each provider's page.",
+    "catalogVisibility": "visible",
     "userFacing": {
       "plainDescription": "ChatGPT conversation models (GPT-4o) accessed through your OpenAI subscription. Activated automatically when you sign in to Codex.",
       "authExplained": "Uses the same sign-in as Codex — no separate configuration needed.",
