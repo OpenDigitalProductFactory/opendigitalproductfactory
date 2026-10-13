@@ -487,12 +487,18 @@ model WorkroomActivity {
   recordedById      String?
   recordedByAgentId String?
   toolExecutionId   String?
+  /// BI-763D6E01: set on a command receipt row (kind command-accepted |
+  /// command-rejected). A retry with the same (scope, command key) replays it. Named
+  /// commandKey, not commandId: it is the client's idempotency key, not a reference.
+  commandScopeKey   String?
+  commandKey        String?
   capsule           Workroom @relation(fields: [workCapsuleId], references: [id], onDelete: Cascade)
 
   @@index([workCapsuleId, recordedAt(sort: Desc)])
   @@index([workCapsuleId, kind, recordedAt(sort: Desc), id(sort: Desc)])
   @@index([kind, recordedAt(sort: Desc)])
   @@index([recordedAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
+  @@unique([commandScopeKey, commandKey]) // BI-763D6E01 command receipts; NULLs never collide
   @@map("WorkCapsuleActivity")
 }
 

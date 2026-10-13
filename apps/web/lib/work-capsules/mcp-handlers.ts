@@ -60,6 +60,7 @@ import { invalidScopeResult, scopeClaimRefusal } from "./mcp-result-errors";
 import { claimBacklogItemForWork } from "./claim-backlog-item-handler";
 import { createWorkroomBoundToBacklogItem } from "./create-workroom-binding";
 import { workCapsuleActor as actor } from "./handler-actor";
+import { commandDb } from "./receipted-tool";
 type ToolContext = {
   routeContext?: string;
   agentId?: string;
@@ -89,8 +90,9 @@ function stringParam(params: Record<string, unknown>, key: string): string | nul
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
+// Inside a receipted command (BI-763D6E01) this is the command's transaction.
 function workCapsuleDb(): CapsuleDb {
-  return prisma as unknown as CapsuleDb;
+  return commandDb();
 }
 // An ordinary write renews the writer's own lease; it never takes another
 // principal's live lease (BI-A7601AED).
