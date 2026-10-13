@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   STAGE_BACKFILL_ACTOR,
+  STAGE_BACKFILL_ROOM_PAGE,
+  STAGE_BACKFILL_STAGING_ACTOR,
   backfillWorkroomStageTelemetry,
   replayDriveLog,
   type StageBackfillDeps,
@@ -79,17 +81,19 @@ describe("backfillWorkroomStageTelemetry", () => {
       alreadyBackfilled: async () => false,
       clearSuperseded: async () => [],
       firstLiveEventAt: async () => t(26),
-      loadDriveLog: async () => [
+      listDriveLogRooms: async () => ["WC-1"],
+      loadDriveLog: async (ids) => ids.includes("WC-1") ? [
         {
           capsuleId: "WC-1",
           scopeClaims: [{ workShape: SHAPE }],
           rows: [tick(23, 1, "dispatch_agent", "agent_stage", "repair"), tick(24, 1, "stop", "success", null), tick(27, 1, "dispatch_agent", "agent_stage", "x")],
         },
-      ],
+      ] : [],
       insert: async (rows) => {
         inserted.push(...rows);
         return rows.length;
       },
+      commit: async () => {},
       aggregateDay: async (at) => {
         days.push(at.toISOString().slice(0, 10));
       },
@@ -109,7 +113,8 @@ describe("backfillWorkroomStageTelemetry", () => {
     const { d, inserted, days } = deps();
     const result = await backfillWorkroomStageTelemetry(d);
     expect(result).toMatchObject({ ran: true, transitions: 3, days: 2, until: t(26).toISOString() });
-    expect(inserted.every((row) => (row as { actorId: string }).actorId === STAGE_BACKFILL_ACTOR)).toBe(true);
+    // Written under the staging actor; commit renames them to the final one.
+    expect(inserted.every((row) => (row as { actorId: string }).actorId === STAGE_BACKFILL_STAGING_ACTOR)).toBe(true);
     expect(days).toEqual(["2026-09-23", "2026-09-24"]);
   });
 
@@ -129,5 +134,52 @@ describe("backfillWorkroomStageTelemetry", () => {
     expect(order).toEqual(["clear", "insert"]);
     expect(days).toEqual(["2026-09-20", "2026-09-23", "2026-09-24"]);
     expect(STAGE_BACKFILL_ACTOR).toBe("backfill:drive-log:v2");
+  });
+
+  it("replays a page of rooms at a time and inserts each page before reading the next", async () => {
+    const rooms = Array.from({ length: STAGE_BACKFILL_ROOM_PAGE * 2 + 3 }, (_, i) => `WC-${i}`);
+    const order: string[] = [];
+    const { d } = deps({
+      listDriveLogRooms: async () => rooms,
+      loadDriveLog: async (ids) => {
+        order.push(`load:${ids.length}`);
+        return ids.map((id) => ({ capsuleId: id, scopeClaims: [{ workShape: SHAPE }], rows: [tick(23, 1, "dispatch_agent", "agent_stage", "repair")] }));
+      },
+      insert: async (rows) => {
+        order.push(`insert:${rows.length}`);
+        return rows.length;
+      },
+      commit: async () => {
+        order.push("commit");
+      },
+    });
+    const result = await backfillWorkroomStageTelemetry(d);
+    expect(order).toEqual([
+      `load:${STAGE_BACKFILL_ROOM_PAGE}`, `insert:${STAGE_BACKFILL_ROOM_PAGE * 2}`,
+      `load:${STAGE_BACKFILL_ROOM_PAGE}`, `insert:${STAGE_BACKFILL_ROOM_PAGE * 2}`,
+      "load:3", "insert:6",
+      "commit",
+    ]);
+    expect(result).toMatchObject({ ran: true, transitions: rooms.length * 2 });
+  });
+
+  it("a run that dies part-way never commits, so it is not mistaken for a finished replay", async () => {
+    let committed = false;
+    let pages = 0;
+    const { d } = deps({
+      listDriveLogRooms: async () => Array.from({ length: STAGE_BACKFILL_ROOM_PAGE + 1 }, (_, i) => `WC-${i}`),
+      loadDriveLog: async (ids) => ids.map((id) => ({ capsuleId: id, scopeClaims: [{ workShape: SHAPE }], rows: [tick(23, 1, "dispatch_agent", "agent_stage", "repair")] })),
+      insert: async (rows) => {
+        pages += 1;
+        if (pages === 2) throw new Error("heap");
+        return rows.length;
+      },
+      commit: async () => {
+        committed = true;
+      },
+    });
+    await expect(backfillWorkroomStageTelemetry(d)).rejects.toThrow("heap");
+    expect(committed).toBe(false);
+    expect(STAGE_BACKFILL_STAGING_ACTOR.startsWith(STAGE_BACKFILL_ACTOR)).toBe(true);
   });
 });

@@ -19,7 +19,14 @@
  * - Resolution is the drive tick, and the shape is the room's current claim.
  *   Both are stated limitations; live events after deploy have neither.
  * - Past days are re-aggregated for `wr:` queues only, with no live counts, so
- *   no other queue's history is touched.
+ *   no other queue's history is touched. The day's events are read for stage
+ *   items only, in the query: the event table carries ~700k other rows a day.
+ * - Bounded memory (the portal's heap is ~1.5 GB, BI-927FF076): rooms are
+ *   replayed a page at a time, each drive row carries only the fields the
+ *   planner reads, and a page is inserted before the next is read. Pages land
+ *   under a staging actor that becomes the final one only after the last page,
+ *   so a run that dies part-way is not mistaken for a finished one; the next
+ *   run clears it and starts again.
  */
 import { aggregateQueueMetrics, type QueueTelemetryRow, type RollupDeps } from "@/lib/queue/queue-metrics-rollup";
 
@@ -42,6 +49,10 @@ import {
 export const STAGE_BACKFILL_ACTOR = "backfill:drive-log:v2";
 /** Every replay version, current and superseded. */
 export const STAGE_BACKFILL_ACTOR_PREFIX = "backfill:drive-log";
+/** Rows of a replay still in progress; renamed to the final actor when it completes. */
+export const STAGE_BACKFILL_STAGING_ACTOR = `${STAGE_BACKFILL_ACTOR}:partial`;
+/** Rooms replayed per page: one page's drive trails are all the replay holds. */
+export const STAGE_BACKFILL_ROOM_PAGE = 25;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type DriveLogRoom = {
@@ -76,12 +87,17 @@ export function replayDriveLog(rooms: readonly DriveLogRoom[], until: Date): Sta
 
 export type StageBackfillDeps = {
   alreadyBackfilled: () => Promise<boolean>;
-  /** Remove rows an earlier replay version wrote; returns the days they covered. */
+  /** Remove rows an earlier or unfinished replay wrote; returns the days they covered. */
   clearSuperseded: () => Promise<string[]>;
   /** Earliest live (non-backfill) stage event, or null when none yet. */
   firstLiveEventAt: () => Promise<Date | null>;
-  loadDriveLog: (since: Date, until: Date) => Promise<DriveLogRoom[]>;
+  /** Rooms with drive rows in the window, without their rows. */
+  listDriveLogRooms: (since: Date, until: Date) => Promise<string[]>;
+  /** The drive trails of these rooms, each row reduced to what the planner reads. */
+  loadDriveLog: (capsuleIds: readonly string[], since: Date, until: Date) => Promise<DriveLogRoom[]>;
   insert: (rows: readonly (StageTransition & { actorId: string })[]) => Promise<number>;
+  /** Rename the staging rows to the final actor: the replay is complete. */
+  commit: () => Promise<void>;
   /** Re-aggregate one past day for `wr:` queues only. */
   aggregateDay: (at: Date) => Promise<void>;
   now: () => Date;
@@ -100,24 +116,33 @@ export async function backfillWorkroomStageTelemetry(
   // The event table keeps 90 days; replaying further back is swept at once.
   const since = new Date(now.getTime() - (options.lookbackDays ?? 90) * DAY_MS);
   const until = (await deps.firstLiveEventAt()) ?? now;
-  const transitions = replayDriveLog(await deps.loadDriveLog(since, until), until);
-  const clearedDays = await deps.clearSuperseded();
-  const inserted = await deps.insert(transitions.map((t) => ({ ...t, actorId: STAGE_BACKFILL_ACTOR })));
+  const days = new Set(await deps.clearSuperseded());
+  const rooms = await deps.listDriveLogRooms(since, until);
+  let inserted = 0;
+  for (let i = 0; i < rooms.length; i += STAGE_BACKFILL_ROOM_PAGE) {
+    const transitions = replayDriveLog(await deps.loadDriveLog(rooms.slice(i, i + STAGE_BACKFILL_ROOM_PAGE), since, until), until);
+    inserted += await deps.insert(transitions.map((t) => ({ ...t, actorId: STAGE_BACKFILL_STAGING_ACTOR })));
+    for (const t of transitions) days.add(t.occurredAt.toISOString().slice(0, 10));
+  }
+  await deps.commit();
 
-  const days = new Set([...clearedDays, ...transitions.map((t) => t.occurredAt.toISOString().slice(0, 10))]);
   for (const day of [...days].sort()) await deps.aggregateDay(new Date(`${day}T12:00:00.000Z`));
   return { ran: true, transitions: inserted, days: days.size, until: until.toISOString() };
 }
 
 /** Deps bound to the live Prisma client. */
 export async function defaultStageBackfillDeps(): Promise<StageBackfillDeps> {
-  const { prisma } = await import("@dpf/db");
+  const { prisma, Prisma } = await import("@dpf/db");
   const { defaultRollupDeps } = await import("@/lib/queue/queue-metrics-rollup");
   const rollup = await defaultRollupDeps();
   const stageOnly: RollupDeps = {
     ...rollup,
+    // Stage rows only, in the query: the day holds ~700k rows of other queues.
     fetchEvents: async (start, end) =>
-      (await rollup.fetchEvents(start, end)).filter((row: QueueTelemetryRow) => row.queueKey.startsWith(WORKROOM_STAGE_QUEUE_PREFIX)),
+      (await prisma.queueTelemetryEvent.findMany({
+        where: { itemKind: WORKROOM_STAGE_ITEM_KIND, queueKey: { startsWith: WORKROOM_STAGE_QUEUE_PREFIX }, occurredAt: { gte: start, lt: end } },
+        select: { queueKey: true, itemKind: true, itemId: true, transition: true, outcome: true, occurredAt: true, laneKey: true },
+      })) as QueueTelemetryRow[],
     fetchLiveCounts: async () => new Map(),
   };
   return {
@@ -141,15 +166,48 @@ export async function defaultStageBackfillDeps(): Promise<StageBackfillDeps> {
         orderBy: { occurredAt: "asc" },
         select: { occurredAt: true },
       }))?.occurredAt ?? null,
-    loadDriveLog: async (since, until) => {
-      const rows = await prisma.workroomActivity.findMany({
-        where: { kind: { in: ["workroom-drive", "workroom-drive-attention"] }, recordedAt: { gte: since, lt: until } },
-        select: { recordedAt: true, payload: true, capsule: { select: { capsuleId: true, scopeClaims: true } } },
-      });
+    listDriveLogRooms: async (since, until) => {
+      const rows = await prisma.$queryRaw<{ capsuleId: string }[]>`
+        SELECT DISTINCT c."capsuleId"
+        FROM "WorkCapsuleActivity" a JOIN "WorkCapsule" c ON c.id = a."workCapsuleId"
+        WHERE a.kind IN ('workroom-drive', 'workroom-drive-attention')
+          AND a."recordedAt" >= ${since} AND a."recordedAt" < ${until}
+        ORDER BY c."capsuleId"`;
+      return rows.map((row) => row.capsuleId);
+    },
+    loadDriveLog: async (capsuleIds, since, until) => {
+      if (capsuleIds.length === 0) return [];
+      // Only the fields readDriveObservation reads: the snapshot's conclusion,
+      // receipts and full ledger text never leave the database.
+      const rows = await prisma.$queryRaw<{ capsuleId: string; scopeClaims: unknown; recordedAt: Date; payload: unknown }[]>`
+        SELECT c."capsuleId", c."scopeClaims", a."recordedAt",
+          jsonb_build_object(
+            'action', a.payload->'action',
+            'reason', a.payload->'reason',
+            'stageKey', a.payload->'stageKey',
+            'lastCycleKey', a.payload->'lastCycleKey',
+            'conformance', jsonb_build_object('deviations',
+              CASE WHEN jsonb_typeof(a.payload->'conformance'->'deviations') = 'array'
+                THEN jsonb_build_array(jsonb_build_object('code', a.payload->'conformance'->'deviations'->0->'code'))
+                ELSE '[]'::jsonb END),
+            'ledger', COALESCE((
+              SELECT jsonb_agg(substring(line FROM '^[a-z][a-z0-9_]*:'))
+              FROM (
+                SELECT line FROM jsonb_array_elements_text(
+                  CASE WHEN jsonb_typeof(a.payload->'ledger') = 'array' THEN a.payload->'ledger' ELSE '[]'::jsonb END
+                ) AS line
+                WHERE line ~ '^[a-z][a-z0-9_]*:'
+                LIMIT 1
+              ) first_code
+            ), '[]'::jsonb)
+          ) AS payload
+        FROM "WorkCapsuleActivity" a JOIN "WorkCapsule" c ON c.id = a."workCapsuleId"
+        WHERE a.kind IN ('workroom-drive', 'workroom-drive-attention')
+          AND a."recordedAt" >= ${since} AND a."recordedAt" < ${until}
+          AND c."capsuleId" IN (${Prisma.join(capsuleIds)})`;
       const byRoom = new Map<string, DriveLogRoom & { rows: { recordedAt: Date; payload: unknown }[] }>();
       for (const row of rows) {
-        const room = byRoom.get(row.capsule.capsuleId)
-          ?? { capsuleId: row.capsule.capsuleId, scopeClaims: row.capsule.scopeClaims, rows: [] };
+        const room = byRoom.get(row.capsuleId) ?? { capsuleId: row.capsuleId, scopeClaims: row.scopeClaims, rows: [] };
         room.rows.push({ recordedAt: row.recordedAt, payload: row.payload });
         byRoom.set(room.capsuleId, room);
       }
@@ -172,6 +230,12 @@ export async function defaultStageBackfillDeps(): Promise<StageBackfillDeps> {
         count += (await prisma.queueTelemetryEvent.createMany({ data: batch })).count;
       }
       return count;
+    },
+    commit: async () => {
+      await prisma.queueTelemetryEvent.updateMany({
+        where: { itemKind: WORKROOM_STAGE_ITEM_KIND, actorId: STAGE_BACKFILL_STAGING_ACTOR },
+        data: { actorId: STAGE_BACKFILL_ACTOR },
+      });
     },
     aggregateDay: async (at) => {
       await aggregateQueueMetrics(stageOnly, { at });
