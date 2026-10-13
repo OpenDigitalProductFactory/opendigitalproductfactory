@@ -1115,6 +1115,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "packages/dpf-skill-pack/hooks/process-spine-health.test.mjs",
         "packages/dpf-skill-pack/scripts/generate-operating-contract.test.mjs",
+        "packages/dpf-skill-pack/scripts/gen-client-capabilities.test.mjs",
       ),
       node(
         "--test",

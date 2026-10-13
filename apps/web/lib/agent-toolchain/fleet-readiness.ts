@@ -1,5 +1,6 @@
 import "server-only";
 
+import { capabilityDriftFromObservations, capabilityDriftFromReports, type CapabilityDrift } from "./client-capability-drift";
 import { resolveToolchainVerdict, type PublishedToolchain, type ToolchainVerdict } from "./toolchain-verdict";
 
 // BI-D6DFC0E7 (EP-COMPETENCE-FLYWHEEL, host-agent scope). Make agent-surface
@@ -61,6 +62,8 @@ export interface SurfaceReadinessRow {
   mcpOk: boolean;
   mcpReason: string | null;
   reportedAt: Date;
+  /** The report's extra facts, e.g. the updater's per-client CLI versions (BI-64795FD0). */
+  detail?: unknown;
 }
 
 /** Roll-up status for one surface. `stale` = the heartbeat went silent, so we do
@@ -169,14 +172,24 @@ type ToolchainObservationClient = {
   agentToolchainObservation: { findMany: (args?: unknown) => Promise<ToolchainObservationRow[]> };
 };
 
-/** One page of the newest connection observations, rolled up per credential. */
+/**
+ * One page of the newest connection observations, rolled up per credential.
+ * `capabilityDrift` names each client whose reported version is newer than the
+ * capability profile verified ("capabilities unverified for <version>",
+ * BI-64795FD0).
+ */
 export async function getToolchainCopies(
   db: ToolchainObservationClient,
   opts: { published: PublishedToolchain; mcpEndpoint: string; now: Date; staleAfterMs: number; limit?: number },
-): Promise<{ credentials: ToolchainCopyRollup[]; truncated: boolean }> {
+): Promise<{ credentials: ToolchainCopyRollup[]; truncated: boolean; capabilityDrift: CapabilityDrift[] }> {
   const limit = opts.limit ?? FLEET_PAGE_SIZE;
   const rows = (await db.agentToolchainObservation.findMany({ orderBy: { lastObservedAt: "desc" }, take: limit + 1 })) ?? [];
-  return { credentials: rollUpToolchainCopies(rows.slice(0, limit), opts), truncated: rows.length > limit };
+  const page = rows.slice(0, limit);
+  return {
+    credentials: rollUpToolchainCopies(page, opts),
+    truncated: rows.length > limit,
+    capabilityDrift: capabilityDriftFromObservations(page),
+  };
 }
 
 /** Upsert a surface's latest heartbeat, keyed by surfaceKey (one row per surface). */
@@ -191,13 +204,14 @@ export async function recordSurfaceReadiness(
     dpfPlatformVersion: input.dpfPlatformVersion ?? null,
     mcpOk: input.mcpOk,
     mcpReason: input.mcpReason ?? null,
-    detail: input.detail ?? null,
     reportedAt,
   };
+  // A heartbeat without detail keeps the last detail: the updater's CLI
+  // versions must survive the SessionStart heartbeats between updater runs.
   await db.agentSurfaceReadiness.upsert({
     where: { surfaceKey: input.surfaceKey },
-    create: { surfaceKey: input.surfaceKey, ...data },
-    update: data,
+    create: { surfaceKey: input.surfaceKey, ...data, detail: input.detail ?? null },
+    update: input.detail === undefined ? data : { ...data, detail: input.detail },
   });
 }
 
@@ -208,10 +222,16 @@ export const FLEET_PAGE_SIZE = 50;
 export async function getFleetReadiness(
   db: SurfaceReadinessClient,
   opts: EvaluateFleetReadinessOptions & { limit?: number },
-): Promise<FleetReadinessSummary & { truncated: boolean }> {
+): Promise<FleetReadinessSummary & { truncated: boolean; reportedCapabilityDrift: CapabilityDrift[] }> {
   const limit = opts.limit ?? FLEET_PAGE_SIZE;
   const rows = (await db.agentSurfaceReadiness.findMany({ orderBy: { reportedAt: "desc" }, take: limit + 1 })) ?? [];
-  return { ...evaluateFleetReadiness(rows.slice(0, limit), opts), truncated: rows.length > limit };
+  const page = rows.slice(0, limit);
+  return {
+    ...evaluateFleetReadiness(page, opts),
+    truncated: rows.length > limit,
+    // BI-64795FD0: CLI versions the updater reported, newer than the profile verified.
+    reportedCapabilityDrift: capabilityDriftFromReports(page),
+  };
 }
 
 // ── Connection-observed toolchain copies (BI-54469E18, design §5.2b) ─────────
