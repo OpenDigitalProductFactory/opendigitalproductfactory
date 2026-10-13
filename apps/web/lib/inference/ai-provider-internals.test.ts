@@ -41,7 +41,7 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 vi.mock("@/lib/inference/known-model-seeding", () => ({ seedKnownModels: seedKnownModelsMock }));
-vi.mock("@/lib/routing/codex-cli-model-catalog", () => ({
+vi.mock("./codex-cli-catalog-auth", () => ({
   discoverCodexCliModels: discoverCodexCliModelsMock,
 }));
 

@@ -7,6 +7,24 @@ const event = (id: string) => ({ id, workCapsuleId: "room-row", kind: "verificat
   summary: "Recorded check", recordedAt: now });
 
 describe("loadWorkroomExecutionEvidence", () => {
+  it("binds a journal record to its current versioned requirement without granting a verdict", async () => {
+    const room = { ...rooms[0], repositoryFullName: "org/repo", headSha: "a".repeat(40),
+      scopeClaims: [{ workShape: "delivery-medium@1.0.0" }] };
+    const row = { ...event("bound-1"), kind: "evidence-recorded", payload: {
+      kind: "pr-gate", stageKey: "implement", outcome: "completed",
+      sourceBinding: { version: 1, capsuleId: "WC-ROOM", repositoryFullName: "org/repo",
+        headSha: room.headSha, definitionRef: "delivery-medium@1.0.0", stageKey: "implement", evidenceKind: "pr-gate" },
+    } };
+    const db = { workroomActivity: { findMany: vi.fn().mockResolvedValue([row]) },
+      taskRun: { findMany: vi.fn().mockResolvedValue([]) } };
+    const result = await loadWorkroomExecutionEvidence(db, [room], now);
+    expect(result.receipts[0]).toMatchObject({ status: "observed", processEvidence: {
+      definitionRef: "delivery-medium@1.0.0", stageKey: "implement", evidenceKind: "pr-gate", relationship: "required-evidence",
+    } });
+    const stale = await loadWorkroomExecutionEvidence(db, [{ ...room, headSha: "b".repeat(40) }], now);
+    expect(stale.receipts[0].processEvidence).toBeUndefined();
+    expect(stale.receipts[0].status).toBe("observed");
+  });
   it("does not read unrelated execution when there are no rooms", async () => {
     const findMany = vi.fn();
     const result = await loadWorkroomExecutionEvidence({ workroomActivity: { findMany }, taskRun: { findMany } }, [], now);

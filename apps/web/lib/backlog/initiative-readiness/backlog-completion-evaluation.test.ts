@@ -96,6 +96,17 @@ function unmetCodes(decision: { unmet: { code: string }[]; blockers: { code: str
 }
 
 describe("the read projection evaluates completion as the completion gate does (BI-094B41AC)", () => {
+  it("independent acceptance cannot be discharged by merge recognition", async () => {
+    const { client, item } = fixture();
+    const result = await evaluateBacklogItemCompletion({
+      db: client as never, item: item as never, rawManifest: undefined,
+      transitionObject: { kind: "backlog-item", id: item.itemId, expectedVersion: "read", targetState: "completion" },
+      evaluatedAt: NOW, dependencies: deps("merged"),
+    });
+    expect(result.decision.verdict).toBe("allowed");
+    expect(result.independentAcceptanceDecision?.verdict).not.toBe("allowed");
+    expect(unmetCodes(result.independentAcceptanceDecision!)).toContain("ACCEPTANCE_EVIDENCE_REQUIRED");
+  });
   it("a merged direct-merge item the gate allows reads allowed", async () => {
     const { gate, read } = await bothViews("merged");
     expect(gate.ok).toBe(true);

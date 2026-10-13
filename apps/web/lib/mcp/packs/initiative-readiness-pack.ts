@@ -485,6 +485,7 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
       authorityDecisionId: context?.authorityDecisionId ?? null,
       tokenScope: context?.tokenScope ?? null,
       requiresIndependentReviewer: lane.independent,
+      authorizationParams: params,
       selectedProfile: gate === "classification" && decision === "pass" ? selectedProfile as never : undefined,
     });
     return result.ok

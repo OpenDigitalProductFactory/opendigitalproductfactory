@@ -188,7 +188,34 @@ TypeScript errors only surface in `next build`, not in `vitest` or IDE checks. R
 5. **The managed bootstrap can perturb `packages/db/package.json` + `pnpm-lock.yaml`** (observed: an `@prisma/adapter-pg` patch downgrade). Strip those from a docs-only PR before committing — they are not your change.
 6. **Preflight and the trailer gates read the COMMITTED diff + commit/PR-body trailers**, not the working tree — a clean pre-commit `pregate-preflight.mjs` run does not prove the committed state passes; the design-grounding / docs-impact / seed-fit gates read `PR_BODY`. **The fast loop is `pnpm gate:local` (BI-85270E96):** it runs the deterministic diff-scoped gates (ux-fit, docs-impact, design-grounding, spec-plan-doc, data-impact, convergence, seed-fit, clock-bombs, module-size, one-action-result, prose-lint) with `DPF_GATE_INCLUDE_WORKING_TREE=1`, so staged, unstaged and untracked files count BEFORE the first commit, and `--message-file <path>` feeds the planned commit message as `PR_BODY` so the trailer gates judge the text the commit will carry. `--committed` restores CI's view; `--only a,b` narrows the list. Exit 1 is a failing gate; exit 7 means a gate could not run here and CI still owns it. Run it once with the message drafted, commit once, push once. The pre-commit typecheck gate is content-hash cached under `.git/dpf-typecheck-ok` for the same reason: an amend that changes nothing TypeScript sees no longer pays `typecheck:all` again.
 7. **A fake cuid or other high-entropy token in a test trips gitleaks `generic-api-key`.** Use an obviously-fake hyphenated placeholder (e.g. `user-cuid-placeholder`), not a realistic-looking id.
-8. **A rerun replays the ORIGINAL webhook payload, so editing a PR body cannot fix a PR-body gate.** Following on from 6: `ci.yml` triggers on `pull_request` with the DEFAULT activity types (`opened` / `synchronize` / `reopened`) — **not `edited`** — and `gh run rerun` replays the payload the run started with. Adding the missing `Seed-Fit-Decision:` / `Docs-Impact-Decision:` trailer to the PR body and re-running therefore fails identically, however many times you retry; a label has the same problem, because labels are in the payload too. Only a fresh `synchronize` event — a new push — carries the corrected body. Amend the commit (put the trailer there as well, so the decision travels with the change), re-gate for the new SHA, then `--force-with-lease`. **A force-push also clears auto-merge**: re-arm with `gh pr merge <n> --squash --auto`, and read "already queued to merge" as success, not failure — a queued PR reports a null `autoMergeRequest`. Reproduce any PR-profile guard *before* pushing, since local `pregate` structurally cannot see it: `BASE_SHA=$(git merge-base origin/main HEAD) PR_BODY="$(gh pr view <n> --json body -q .body)" PR_LABELS_JSON='[]' GITHUB_EVENT_NAME=pull_request node scripts/ci-policy-guards.mjs --profile pull-request`.
+8. **A rerun replays the original webhook payload.** Editing PR body/labels does not update a running workflow's event data. Diagnose the named failure with `pnpm pr:health <n>` and reproduce its affected guard with the corrected metadata. If the workflow requires a new synchronize event, push a signed correction carrying the required trailer; use `--force-with-lease` only when intentionally amending published history. A metadata-only correction does not automatically require another full local integration gate. Recheck auto-merge after any force-push; re-arm it when necessary. A queued PR is waiting, not a failed build.
+
+### Published corrections and host guard reuse
+
+For an unchanged published PR, inspect health/status and preserve valid executed
+evidence; a queue delay or failed GitHub job is not a command to rerun the whole
+local gate. For changed source or a main refresh, run affected source tests and
+reproduce the named failure, obtain independent review of changed code, and leave
+final main+PR integration to required GitHub checks and the protected merge queue.
+Never relabel an earlier full local PASS as covering a changed tree.
+
+The current pre-push hook supports exact PASS or an audited override, not a
+native cloud-delegation receipt. Where explicit scoped operator recovery
+authorization exists, use the documented override route above and record local
+integration as **unrun/delegated**, not passed. This is not a blanket override,
+an authorization grant, or permission to disable protected checks. The native
+post-publication delegation policy remains tracked in BI-25CB699C.
+
+`pregate:preflight` and `pr:ready` reuse wholly successful local guard results
+for at most one hour when the clean worktree, HEAD/tree, main, command plan,
+toolchain and environment still match. Readiness also binds PR body and labels.
+Identity is re-read before returning a cache hit and after execution. Dirty
+files, skips, failures, expired receipts and missing identity never yield a
+cached PASS. Commit-message changes invalidate host guard results because some
+guards read those messages. Reuse prints the original execution time and does
+not create canonical integration evidence. These per-worktree receipts extend
+the existing stage writer and owner-fenced lock; stale owners use its existing
+reconciliation, while live/unmeasurable owners are not displaced.
 9. **"Sandbox drift" from `pnpm install already running` means an install in the gate's own sandbox outlived the wait, not a broken environment.** Since BI-8DC6F267 an install in another worktree no longer counts; `sandbox-freshness-preflight` waits up to 10 minutes for an install running in the sandbox itself (or one whose working directory it cannot read), and only then reports `SANDBOX_NOT_READY: pnpm install already running (pid N, …)`, which `gate-worktree` reports as `BLOCKED (sandbox drift) … This is a sandbox defect, NOT product build evidence`. That wording invites a hunt for an environment fault; check the named pid first (`ps -p N -o command=`, `lsof -a -p N -d cwd`) — a hung install in the sandbox is the usual cause. The aborted attempt leaves a released lease bound to the gate key, so the immediate retry fails *differently*, as `gate_evidence_blocked` / `mismatched-evidence`. Recover with `node scripts/local-ci-slot-cleanup.mjs --slot-key <slot>` — the lease payload names the exact `cleanupCommand` — then re-run. Serialize installs against the gate; never gate two branches at once (the gate holds one slot anyway).
 10. **Run `pnpm run pregate` in the FOREGROUND, UNPIPED, as the sole command.** Backgrounding it with output redirected produced the record status `blocked_child_signal_death with NO recorded reason`, whose own text says it *is not evidence the diff is bad*. The exit code lied; the record did not. `pnpm run pregate:status` is the verdict — read it before treating any gate failure as a finding about the change.
 

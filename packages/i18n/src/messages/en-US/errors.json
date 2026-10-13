@@ -1,4 +1,12 @@
 {
+  "localInventory": {
+    "restricted": "Provider management access required.",
+    "checking": "Checking inventory…",
+    "unavailable": "Inventory unavailable",
+    "stale": "Last known inventory · ",
+    "refreshFailed": "Refresh failed.",
+    "empty": "No models installed."
+  },
   "notFound": {
     "demoPending": {
       "heading": "This demo has not been generated yet",

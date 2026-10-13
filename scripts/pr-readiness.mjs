@@ -19,6 +19,7 @@ import { fetchOriginMainSharedSafe, isShallowRepository } from "./lib/git-fetch-
 import { isEnvironmentFailureOutput } from "./lib/pregate-preflight.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { GitCommandError, runGit } from "./lib/git.mjs";
+import { guardReceiptDirectory, identifyGuardExecution, runWithGuardReceipt } from "./lib/pregate-preflight-receipt.mjs";
 
 function git(args, { allowFail = false } = {}) {
   const result = runGit(args, { cwd: process.cwd(), maxBuffer: 32 * 1024 * 1024 });
@@ -158,7 +159,7 @@ export function runGate(gate) {
   };
 }
 
-function main() {
+async function main() {
   let args;
   try {
     args = parseArgs(process.argv);
@@ -181,12 +182,20 @@ function main() {
   }
 
   const gatePlan = buildGatePlan({ prBody: args.prBody, prLabelsJson: args.prLabelsJson });
-  const gateResults = args.runGates ? gatePlan.map(runGate) : [];
+  const execution = args.runGates ? await runWithGuardReceipt({
+    directory: guardReceiptDirectory(),
+    stage: "pr-readiness",
+    identify: () => identifyGuardExecution({ plan: gatePlan }),
+    execute: async () => gatePlan.map(runGate),
+    passed: results => Array.isArray(results) && results.length === gatePlan.length && results.every(result => result.ok && !result.skippedEnvironment),
+  }) : { result: [], reused: false };
+  const gateResults = execution.result;
   const gateContext = buildGateContext({
     changedFiles: repo.changedFileEntries,
     addedLinesByFile: repo.addedLinesByFile,
   });
   const verdict = evaluateReadiness({ repo, gateResults, prBody: args.prBody, gateContext });
+  if (execution.reused) verdict.notes.push(`Local guard results reused from ${execution.executedAt}; no guard scripts rerun. Repository and PR metadata inspected now. Protected GitHub checks remain the integration authority.`);
   process.stdout.write(formatReadinessReport(verdict));
   if (args.json) {
     process.stdout.write(`DPF_PR_READINESS_JSON=${JSON.stringify({
@@ -195,9 +204,15 @@ function main() {
       warnings: verdict.warnings,
       branch: verdict.branch,
       changedFiles: verdict.changedFiles,
+      localGuards: {
+        reused: execution.reused,
+        executedAt: execution.executedAt ?? null,
+        executedCount: execution.reused ? 0 : gateResults.length,
+        reusedCount: execution.reused ? gateResults.length : 0,
+      },
     })}\n`);
   }
   process.exit(verdict.ready ? 0 : 1);
 }
 
-if (isEntryModule(import.meta.url)) main();
+if (isEntryModule(import.meta.url)) await main();

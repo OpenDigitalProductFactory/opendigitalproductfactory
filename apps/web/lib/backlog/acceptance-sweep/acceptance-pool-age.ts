@@ -1,6 +1,7 @@
 import type { BacklogStatus } from "@/lib/backlog/transitions";
 
 import { acceptanceEnteredAt, type AcceptanceAgeBasis } from "./acceptance-age";
+import { ACCEPTANCE_CANDIDATE_WHERE, retainedDeploymentObligation } from "./acceptance-sweep-page";
 
 // The awaiting-acceptance pool's age, measured every sweep run (BI-DF255666).
 // Design: docs/superpowers/specs/2026-09-24-acceptance-accountability-design.md
@@ -24,6 +25,7 @@ export type AcceptancePoolAge = {
   ageBasis: AcceptanceAgeBasis;
   ageDays: number;
 };
+export type AcceptancePoolAges = Map<string, AcceptancePoolAge> & { candidateCount?: number };
 
 /** Whole days in the state. */
 export function acceptanceAgeDays(enteredAt: Date, now: Date): number {
@@ -41,9 +43,12 @@ export function acceptanceAgeBand(ageDays: number): AcceptanceAgeBand {
 export type AcceptancePoolAgeDb = {
   backlogItem: {
     findMany(args: {
-      where: { status: BacklogStatus };
-      select: { id: true; itemId: true; createdAt: true };
-    }): Promise<Array<{ id: string; itemId: string; createdAt: Date }>>;
+      where: typeof ACCEPTANCE_CANDIDATE_WHERE;
+      select: { id: true; itemId: true; createdAt: true; status: true;
+        activities: { where: { kind: "status_change" }; orderBy: [{ recordedAt: "desc" }, { id: "desc" }]; take: 1;
+          select: { kind: true; recordedAt: true; payload: true } } };
+    }): Promise<Array<{ id: string; itemId: string; createdAt: Date; status?: string;
+      activities?: Array<{ kind: string; recordedAt: Date; payload: unknown }> }>>;
   };
   backlogItemActivity: {
     findMany(args: {
@@ -58,10 +63,12 @@ export type AcceptancePoolAgeDb = {
 };
 
 /** Every awaiting-acceptance item's entry and age, keyed by row id. */
-export async function loadAcceptancePoolAges(db: AcceptancePoolAgeDb, now: Date): Promise<Map<string, AcceptancePoolAge>> {
+export async function loadAcceptancePoolAges(db: AcceptancePoolAgeDb, now: Date): Promise<AcceptancePoolAges> {
   const items = await db.backlogItem.findMany({
-    where: { status: AWAITING_ACCEPTANCE },
-    select: { id: true, itemId: true, createdAt: true },
+    where: ACCEPTANCE_CANDIDATE_WHERE,
+    select: { id: true, itemId: true, createdAt: true, status: true,
+      activities: { where: { kind: "status_change" }, orderBy: [{ recordedAt: "desc" }, { id: "desc" }], take: 1,
+        select: { kind: true, recordedAt: true, payload: true } } },
   });
   // Every candidate entry row, not just the newest: acceptance-miss rows also
   // carry to = awaiting-acceptance and S1's function skips them.
@@ -79,9 +86,15 @@ export async function loadAcceptancePoolAges(db: AcceptancePoolAgeDb, now: Date)
     list.push({ kind: "status_change", recordedAt: row.recordedAt, payload: row.payload });
     rowsByItem.set(row.backlogItemId, list);
   }
-  const ages = new Map<string, AcceptancePoolAge>();
+  const ages: AcceptancePoolAges = new Map<string, AcceptancePoolAge>();
+  // Pagination also visits historical candidates rejected by the latest-status
+  // predicate. Include that read cost in the revisit estimate, not pool.size.
+  ages.candidateCount = items.length;
   for (const item of items) {
-    const entry = acceptanceEnteredAt(rowsByItem.get(item.id) ?? [], item.createdAt);
+    if (item.status === "done" && !retainedDeploymentObligation({ ...item, agentId: null, claimedByAgentId: null })) continue;
+    const terminal = item.status === "done" ? item.activities?.[0] : null;
+    const entry = terminal ? { enteredAt: terminal.recordedAt, ageBasis: "entry" as const }
+      : acceptanceEnteredAt(rowsByItem.get(item.id) ?? [], item.createdAt);
     ages.set(item.id, {
       rowId: item.id,
       itemId: item.itemId,

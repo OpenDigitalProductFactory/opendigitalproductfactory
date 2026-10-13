@@ -22,6 +22,18 @@ superseded, preserving their history. A successful sign-in establishes
 authentication; it does not establish data clearance. Additional accounts start
 with unknown account class and unreviewed evidence.
 
+A legacy default OAuth exchange applies the same reset. The Codex/ChatGPT
+default pair validates both credential owners, supersedes their active proofs,
+and replaces both tokens in one transaction before activation derives data
+clearance or discovers models. A credential owned by another account refuses
+the exchange. Conditional token writes also refuse an owner change after that
+validation, including a previously unowned legacy credential. Expected ownership
+conflicts roll back and return the existing account-change setup redirect;
+unrelated database failures remain failures. Disabled defaults
+remain disabled. Routine token renewal and
+metadata reconciliation preserve reviewed trust; fresh sign-in requires a new
+review even when it retains the same credential row.
+
 Model discovery authenticates with the selected credential and records
 `accessibleModelIds` and `modelsVerifiedAt` on its connection. Discovery can add
 models to the shared catalog, but absence from one account never retires models

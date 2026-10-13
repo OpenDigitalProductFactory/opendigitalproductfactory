@@ -119,6 +119,8 @@ export async function resolveInitiativeArtifact(args: {
   resolveDocumentAuthorAgent?: (versionId: string, principalId: string) => Promise<string | null>;
   documentBelongsToSubject?: (versionId: string, subject: InitiativeSubject) => Promise<boolean>;
   organizationId?: string | null;
+  /** Server-only non-independent research lane; unknown agent stays unknown. */
+  allowHumanResearchAuthor?: boolean;
   resolveRepositoryBlob?: (locator: Extract<InitiativeArtifactRef, { kind: "repo-blob-at-commit" }>) => Promise<ProviderResolvedBlob | null>;
 }): Promise<InitiativeArtifactResolution> {
   const db = args.db ?? (prisma as unknown as InitiativeArtifactResolverDb);
@@ -160,7 +162,7 @@ export async function resolveInitiativeArtifact(args: {
       take: 2,
     });
     const authorPrincipalId = aliases.length === 1 ? aliases[0]?.principal?.principalId : null;
-    if (!authorPrincipalId || !revision.savedByAgentId) {
+    if (!authorPrincipalId || (!revision.savedByAgentId && !args.allowHumanResearchAuthor)) {
       return authorRequired("Build artifact author provenance is incomplete or ambiguous.");
     }
     if (!subjectOwnsBuild(args.subject, revision.build)) {
