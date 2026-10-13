@@ -1501,7 +1501,8 @@
       "publishedPortal": false,
       "anchors": [
         "delivery-surfaces-runbook",
-        "task-specific-operating-rules"
+        "task-specific-operating-rules",
+        "contributor-preview-binding-and-cleanup"
       ]
     },
     "docs/architecture/dependency-reduction-routine.md": {

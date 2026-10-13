@@ -31,3 +31,11 @@ it("rejects a mixed retirement and issuance request", async () => {
   expect(mocks.retire).not.toHaveBeenCalled();
   expect(mocks.mint).not.toHaveBeenCalled();
 });
+
+it.each(["fixture", "retireRunId"])("refuses mixing preview issuance with canonical %s", async key => {
+  const result = await call({ previewLeaseId: "NPEL-preview", [key]: key === "fixture" ? {} : "run" }, "human", context);
+  expect(result.success).toBe(false);
+  expect(mocks.mint).not.toHaveBeenCalled();
+  expect(mocks.retire).not.toHaveBeenCalled();
+  expect(mocks.parse).not.toHaveBeenCalled();
+});
