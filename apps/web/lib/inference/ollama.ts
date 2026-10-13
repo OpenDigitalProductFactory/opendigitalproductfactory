@@ -90,7 +90,7 @@ export function resetLocalProviderProbeState(): void {
  * reachable, not absent: /v1/models answers without loading a model, but the
  * runner can be busy enough during a load to exceed the short budget.
  */
-async function probeLocalRunner(baseUrl: string): Promise<boolean> {
+export async function probeLocalRunner(baseUrl: string): Promise<boolean> {
   const url = baseUrl.endsWith("/v1") ? `${baseUrl}/models` : `${baseUrl}/v1/models`;
   for (const timeoutMs of [LOCAL_PROBE_TIMEOUT_MS, LOCAL_PROBE_RETRY_TIMEOUT_MS]) {
     try {
@@ -121,7 +121,7 @@ export async function checkBundledProviders(): Promise<void> {
   });
   // An operator's routing veto survives a healthy runner and page refresh.
   // Health demotion leaves the connection active, so it can still recover.
-  if (connection?.status === "inactive" || connection?.status === "disabled") return;
+  if (connection?.status === "inactive" || connection?.status === "disabled" || connection?.status === "paused") return;
 
   const baseUrl = getOllamaBaseUrl(provider);
   const reachable = await probeLocalRunner(baseUrl);

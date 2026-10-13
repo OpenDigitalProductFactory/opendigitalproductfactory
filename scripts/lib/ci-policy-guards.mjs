@@ -122,6 +122,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // A real pending PASS on slot-1 was unfinalizable. Registered here for the
       // same reason as the tests above: in the allowlist it would never run.
       node("--test", "scripts/gate-worktree-finalize-slot.test.mjs"),
+      node("--test", "scripts/gate-worktree-process-identity.test.mjs"),
+      node("--test", "scripts/gate-stdin-regression.test.mjs"),
+      node("--test", "scripts/lib/gate-execution-checkpoint.test.mjs"),
       // BI-24D5D7C2: the control-plane watchdog aborts a 13-minute build after
       // two consecutive probe failures, and an inner mcpCall deadline was
       // classified as "request-failed" — an operator reads that as a broken
@@ -319,6 +322,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "scripts/check-doc-links.test.mjs",
+        "scripts/gen-doc-index.test.mjs",
         "scripts/public-docs-rendering.test.mjs",
       ),
       node("scripts/check-doc-links.mjs"),
@@ -372,6 +376,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/git-shallow-preflight.test.mjs",
         "scripts/lib/ensure-compile-ready.test.mjs",
         "scripts/pregate-preflight.test.mjs",
+        "scripts/pregate.test.mjs",
+        "scripts/lib/pregate-preflight-receipt.test.mjs",
         "scripts/gate-context.test.mjs",
         "scripts/gate-wait.test.mjs",
         // The landing orchestrator and the obligation banner that replaced a

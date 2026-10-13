@@ -234,3 +234,55 @@ models without turning catalog history into availability claims.
 | AC-REPAIR-3: misses preserve sighting time and established retirement policies | inventory lifecycle | two misses, permanent refusal, local exception, pin regression tests |
 | AC-REPAIR-4: refresh counts and profiling describe this refresh | discovery action/result → UI | existing/new count, fresh-ID-only and pricing tests |
 | AC-REPAIR-5: overview hides technical catalog and avoids availability claims | provider overview → diagnostics | UI regressions and measured served UX evidence |
+
+### Background phase forecast contract — 2026-10-12
+
+The Build Studio phase forecast must compose its preview options through the
+shared `backgroundRouteOptions` helper. The existing `buildPhaseRouteOptions`
+module re-exports this helper for background plan and review callers, preserving
+their imports while keeping inference independent of build orchestration. These
+phases consume a completed response and do not require
+token streaming. Leaving the preview on the interactive default incorrectly
+excludes otherwise eligible endpoints whose streaming capability is unknown or
+false, then reports a blocked phase that differs from the actual caller.
+
+This reuses the existing background contract; it does not assign streaming
+capability to a model or change provider clearance. Internal sensitivity and all
+other routing requirements remain enforced. Interactive requests still require
+streaming unless their own contract says otherwise. Regression verification
+uses real contract inference and endpoint exclusion logic for both unknown and
+false streaming, plus a public-only endpoint that remains excluded from internal
+reviews. Forecast correctness does not establish settlement of an earlier
+provider call or successful execution on the served runtime.
+
+### Startup capability reconciliation and lifecycle ownership — 2026-10-12
+
+`packages/db/scripts/reconcile-catalog-capabilities.ts` applies static capability
+metadata at portal startup. Catalog lifecycle defaults apply only when creating
+a missing profile. Existing active, degraded, retired and disabled states belong
+to discovery, runtime refusal and operator decisions; a capability repair must
+preserve those states and their retirement timestamps and reasons. A static
+catalog entry also cannot retire an existing active profile. This extends AC-2
+through the startup path as well as the authoritative inventory refresh path.
+
+Live evidence on October 12 confirmed that startup catalog writes changed the
+status of historical retired rows while retaining their retirement timestamps.
+The routing loader still excludes rows with a retirement timestamp, so this
+evidence establishes inconsistent lifecycle presentation rather than routing
+readmission. The earlier qualification above concerned historical profiling;
+this later startup finding is separate and now reproduced by regression tests.
+
+Every field compared by the reconciler must be selected from the persisted row.
+The typed selection covers the complete mapping, preventing missing reads from
+being mistaken for null drift or logged as false previous values. A stable
+profile and catalog hash produce no profile update or change-log append; a
+changed hash alone advances provenance once. The existing capability drift
+comparison remains necessary even when the catalog hash matches. Discovery and
+evaluated ownership, full admin protection and field-level overrides remain
+intact. Ninety-day change-log pruning retains its existing maintenance contract.
+
+Regression tests execute the real reconciliation loop with a select-aware DB
+fixture, covering lifecycle preservation during capability repair, metadata
+change logging, repeated boots, protected ownership, overrides, hash-only
+changes and all creation defaults. This source repair does not establish live
+discovery success, endpoint capacity evidence or completed model execution.

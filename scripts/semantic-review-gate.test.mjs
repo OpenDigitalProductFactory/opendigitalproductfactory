@@ -56,9 +56,12 @@ test("accepts an exact, unexpired completed receipt without network access", () 
 
 test("accepts an exact canonical exception while keeping native review UNRUN", () => {
   const exemption = { ...state, receiptDecision: undefined, receiptDisposition: "policy-exemption", nativeReview: "UNRUN",
-    exemptionSchemaVersion: "semantic-change-review-exemption.v1", approvedByUserId: "operator", reason: "Audited source publication exception", bindingDigest: "f".repeat(64) };
+    exemptionSchemaVersion: "semantic-change-review-exemption.v1", approvedByUserId: "operator", reason: "Audited source publication exception", bindingDigest: "f".repeat(64),
+    reviewBasis: "operator-accepted-client-assessment", independentReview: "UNVERIFIED" };
   assert.deepEqual(validateLocalSemanticReviewGate(exemption, current, Date.parse("2026-08-01T16:30:00Z")), { valid: true, reason: "policy-exemption" });
   assert.equal(validateLocalSemanticReviewGate({ ...exemption, nativeReview: "pass" }, current, Date.parse("2026-08-01T16:30:00Z")).valid, false);
+  assert.equal(validateLocalSemanticReviewGate({ ...exemption, reviewBasis: undefined }, current, Date.parse("2026-08-01T16:30:00Z")).valid, false);
+  assert.equal(validateLocalSemanticReviewGate({ ...exemption, independentReview: "pass" }, current, Date.parse("2026-08-01T16:30:00Z")).valid, false);
   assert.equal(validateLocalSemanticReviewGate({ ...exemption, receiptDecision: "fail" }, current, Date.parse("2026-08-01T16:30:00Z")).valid, false);
 });
 

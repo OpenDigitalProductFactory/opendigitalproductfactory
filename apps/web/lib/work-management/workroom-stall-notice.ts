@@ -1,31 +1,33 @@
 import "server-only";
 
-// A room stuck for an hour tells its owner, once (BI-E8C78E80).
+// A room stuck for an hour follows its recorded recovery route, once (BI-E8C78E80).
 //
 // The workroom-stall attention source already lists a stuck room in the inbox,
 // but only for someone who opens it; a room could refuse every wake for days
 // without anyone being told. The drive now pushes one notification per stuck
-// spell to the room's owner (the operator when the room has none), through the
-// existing attention notifier, which also skips a duplicate while one is unread.
+// spell to the route's named person through the existing attention notifier.
+// Missing recipients and failed writes throw so the drive keeps the notice unsent.
 
-import { notifyAttentionLive, resolveOperatorRecipient } from "@/lib/attention/notify-live";
+import { prisma } from "@dpf/db";
+import { notifyAttentionLiveOrThrow } from "@/lib/attention/notify-live";
 import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
 
 import { driveDeviationCodes, type WorkroomDriveHold } from "./workroom-drive-hold";
+import { resolveNestedRoomStallRecipient } from "./nested-room-coordination.server";
 
 export async function notifyWorkroomStall(input: {
-  room: { capsuleId: string; ownerUserId: string | null };
+  room: { id: string; capsuleId: string; ownerUserId: string | null };
   hold: WorkroomDriveHold;
   reason: string;
   conformance: unknown;
 }): Promise<void> {
-  const userId = input.room.ownerUserId ?? await resolveOperatorRecipient();
-  if (!userId) return;
+  const userId = await resolveNestedRoomStallRecipient(prisma as never, { roomId: input.room.id });
+  if (!userId) throw new Error("workroom-stall-recipient-not-recorded");
   const codes = driveDeviationCodes(input.conformance);
   const why = codes.length > 0 ? codes.join(", ") : input.reason;
   const since = input.hold.stuckSince ?? input.hold.since;
   const deepLink = `/workspace/cases/${encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: input.room.capsuleId })}`;
-  await notifyAttentionLive({
+  await notifyAttentionLiveOrThrow({
     source: "workroom-stall",
     itemKey: `${input.room.capsuleId}:${since}`,
     userId,

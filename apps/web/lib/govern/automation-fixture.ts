@@ -81,9 +81,12 @@ function isFixtureRetired(result: unknown): boolean {
 async function requireLease(leaseId: string, room: { executorRef: string | null; headBranch: string | null; leaseExpiresAt: Date | null }, baseUrl: string, db: Prisma.TransactionClient) {
   const lease = await db.nonProductionEnvironmentLease.findUnique({ where: { leaseId } });
   if (!lease || lease.status !== "active" || lease.ownerSessionId !== room.executorRef || lease.branchName !== room.headBranch
-    || !room.leaseExpiresAt || room.leaseExpiresAt <= new Date() || lease.expiresAt <= new Date()
-    || new URL(lease.url).origin !== new URL(baseUrl).origin) {
+    || !room.leaseExpiresAt || room.leaseExpiresAt <= new Date() || lease.expiresAt <= new Date()) {
     throw new Error("Use an active verification lease owned by this workroom on this installation.");
+  }
+  const origin = new URL(baseUrl).origin;
+  if (new URL(lease.url).origin !== origin) {
+    throw new Error(`Verification uses ${origin}. Claim a matching lease and retry; keep your MCP connection unchanged.`);
   }
   return new Date(Math.min(lease.expiresAt.getTime(), room.leaseExpiresAt.getTime()));
 }

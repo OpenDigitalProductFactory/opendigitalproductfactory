@@ -3,11 +3,12 @@
 import { prisma, setProviderStatusWithDefaultConnection } from "@dpf/db";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import { invalidateRoutingLoaderCache } from "@/lib/routing/loader";
+import { resolveRuntimeConnectionStatus } from "@/lib/routing/provider-suitability/onboarding-recommendation";
 
 export async function toggleProviderStatus(
   providerId: string,
 ): Promise<{ status: string; warning: string | null }> {
-  await requireCapability("manage_provider_connections");
+  const { userId } = await requireCapability("manage_provider_connections");
 
   const provider = await prisma.modelProvider.findUnique({
     where: { providerId },
@@ -15,7 +16,19 @@ export async function toggleProviderStatus(
   });
   if (!provider) throw new Error("Provider not found");
 
-  const newStatus = provider.status === "active" || provider.status === "degraded" ? "inactive" : "active";
+  const connection = provider.endpointType === "transcription" ? null
+    : await prisma.aiProviderConnection.findUnique({ where: { connectionId: `provider-default-${providerId}` }, select: { status: true } });
+  const effectiveStatus = connection?.status ? resolveRuntimeConnectionStatus(provider.status, connection.status) : provider.status;
+  const newStatus = effectiveStatus === "active" || effectiveStatus === "degraded" ? "inactive" : "active";
+  if (newStatus === "active") {
+    if (connection?.status === "paused") {
+      const { resumeOperatorProvider } = await import("@/lib/inference/provider-operator-pause");
+      const result = await resumeOperatorProvider({ providerId, actorId: userId });
+      if (result.outcome !== "resumed") throw new Error("The pause changed. Refresh before resuming.");
+      invalidateRoutingLoaderCache();
+      return { status: result.status ?? "inactive", warning: ["active", "degraded"].includes(result.status ?? "") ? null : "Pause ended. The provider is still unavailable." };
+    }
+  }
   if (provider.endpointType === "transcription") {
     // Transcription has no canonical model-routing connection.
     await prisma.modelProvider.update({ where: { providerId }, data: { status: newStatus } });

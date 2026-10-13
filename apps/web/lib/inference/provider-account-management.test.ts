@@ -11,6 +11,8 @@ vi.mock("@dpf/db", async (importOriginal) => ({
 }));
 import { setProviderAccountEnabled } from "./provider-account-management";
 import { reconcileProviderConnectionState } from "./provider-connection-reconcile";
+const pause = vi.hoisted(() => ({ resumeLocalProvider: vi.fn() }));
+vi.mock("./provider-operator-pause", () => pause);
 
 describe("local account operator intent", () => {
   let providerId: string;
@@ -49,6 +51,15 @@ describe("local account operator intent", () => {
     expect(await setProviderAccountEnabled(connectionId, true)).toEqual({ ok: true });
     expect(providerStatus).toBe("active");
     expect(connectionStatus).toBe("active");
+  });
+
+  it("does not bypass the pause health check when the native account control resumes", async () => {
+    providerStatus = "inactive";
+    connectionStatus = "paused";
+    pause.resumeLocalProvider.mockResolvedValue({ outcome: "resumed", status: "inactive" });
+    expect(await setProviderAccountEnabled(connectionId, true)).toEqual({ ok: true });
+    expect(pause.resumeLocalProvider).toHaveBeenCalledWith({ providerId: "local" });
+    expect(providerStatus).toBe("inactive");
   });
 
   it("disables a separate account without disabling its whole provider", async () => {

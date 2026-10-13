@@ -4,9 +4,9 @@
 #
 # The rule, in one place for the installer and the agent-toolchain bootstrap:
 #   DPF_MCP_URL         = an explicit DPF_MCP_URL already in the environment;
-#                         then <PUBLIC_URL>/api/mcp/v1?tier=full when the install's
-#                         .env names an https PUBLIC_URL; then the saved
-#                         User endpoint; otherwise none
+#                         then the saved user endpoint; then
+#                         <PUBLIC_URL>/api/mcp/v1?tier=full when the install's
+#                         .env names an https PUBLIC_URL; otherwise none
 #                         (the client plugin's loopback default applies).
 #   NODE_EXTRA_CA_CERTS = the organization root bundle, for an https endpoint
 #                         only: DPF_PKI_TRUST_BUNDLE, then the install's .env,
@@ -40,7 +40,8 @@ function Resolve-DpfMcpClientEnv {
         [scriptblock]$GetUserEnv = { param($name) [System.Environment]::GetEnvironmentVariable($name, 'User') }
     )
     $publicUrl = Get-DpfInstallEnvValue -InstallDir $InstallDir -Name "PUBLIC_URL"
-    $mcpUrl = if ($ExplicitUrl) { $ExplicitUrl } elseif ($publicUrl -like "https://*") { "$($publicUrl.TrimEnd('/'))/api/mcp/v1?tier=full" } else { [string](& $GetUserEnv "DPF_MCP_URL") }
+    $savedUrl = if (-not $ExplicitUrl) { [string](& $GetUserEnv "DPF_MCP_URL") } else { "" }
+    $mcpUrl = if ($ExplicitUrl) { $ExplicitUrl } elseif ($savedUrl) { $savedUrl } elseif ($publicUrl -like "https://*") { "$($publicUrl.TrimEnd('/'))/api/mcp/v1?tier=full" } else { "" }
     $bundle = ""
     if ($mcpUrl -like "https://*") {
         $defaultRoot = Join-Path (Join-Path (Join-Path $HomeDir ".dpf") "pki") "root_ca.crt"
@@ -60,11 +61,15 @@ function Set-DpfMcpClientEnv {
         [scriptblock]$GetUserEnv = { param($name) [System.Environment]::GetEnvironmentVariable($name, 'User') },
         [scriptblock]$SetUserEnv = { param($name, $value) [System.Environment]::SetEnvironmentVariable($name, $value, 'User') }
     )
-    if ($ClientEnv.McpUrl -notlike "https://*") { return "not-https" }
+    $isHttps = $ClientEnv.McpUrl -like "https://*"
+    $parsedEndpoint = $null
+    $isLoopbackHttp = [Uri]::TryCreate([string]$ClientEnv.McpUrl, [UriKind]::Absolute, [ref]$parsedEndpoint) `
+        -and $parsedEndpoint.Scheme -eq 'http' -and $parsedEndpoint.Host -in @('localhost', '127.0.0.1', '[::1]') -and -not $parsedEndpoint.UserInfo
+    if (-not $isHttps -and -not $isLoopbackHttp) { return "not-https" }
     $wanted = [ordered]@{ DPF_MCP_URL = $ClientEnv.McpUrl }
     # An empty bundle (a publicly trusted certificate) leaves NODE_EXTRA_CA_CERTS
     # alone: the variable may carry the operator's own bundle.
-    if ($ClientEnv.CaBundle) { $wanted["NODE_EXTRA_CA_CERTS"] = $ClientEnv.CaBundle }
+    if ($isHttps -and $ClientEnv.CaBundle) { $wanted["NODE_EXTRA_CA_CERTS"] = $ClientEnv.CaBundle }
     $changed = $false
     foreach ($name in $wanted.Keys) {
         $value = [string]$wanted[$name]

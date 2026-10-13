@@ -20,6 +20,7 @@ import { checkStaleRootClone } from "./lib/stale-root-clone.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { ensureCompileReady, getChangedFilesAgainstMain } from "./lib/ensure-compile-ready.mjs";
 import { buildGateContext } from "./lib/gate-context.mjs";
+import { guardReceiptDirectory, identifyGuardExecution, runWithGuardReceipt } from "./lib/pregate-preflight-receipt.mjs";
 
 /**
  * BI-8CDA7F95: classify the diff with the classifier the cloud trusts. When the
@@ -155,7 +156,12 @@ export async function main() {
   }
 
   const startedAt = Date.now();
-  const result = await runPreflight({
+  const execution = await runWithGuardReceipt({
+    directory: guardReceiptDirectory(),
+    stage: "pregate-preflight",
+    identify: () => process.env[PREFLIGHT_SKIP_ENV] ? null : identifyGuardExecution({ plan: planned.entries }),
+    passed: result => !result.skipped && result.entries.length === planned.entries.length && result.entries.every(entry => entry.status === "passed"),
+    execute: () => runPreflight({
     plan: planned.entries,
     // Failure lines are printed from the FINAL classified entries below —
     // an env-degraded guard transiently looks "failed" at finish-time and
@@ -165,7 +171,13 @@ export async function main() {
         process.stdout.write(`[pregate-preflight] ${event.entry.name}…\n`);
       }
     },
+    }),
   });
+  const { result } = execution;
+  if (execution.reused) {
+    process.stdout.write(`[pregate-preflight] REUSED ${result.entries.length} successful guards executed at ${execution.executedAt}; identical inputs, no guards rerun. Not integration evidence.\n`);
+    return;
+  }
 
   if (result.skipped) {
     process.stdout.write(

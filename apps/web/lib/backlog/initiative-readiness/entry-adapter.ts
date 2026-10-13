@@ -445,6 +445,8 @@ export function projectBacklogItemReadiness(args: {
   governed: boolean;
   baselineId: string | null;
   planArtifact: InitiativePlanArtifact | null;
+  /** Additive projection evidence; legacy projection ports may omit it. */
+  planArtifactDigest?: string | null;
   /** Parent item whose scope this projection borrowed, or null when the item stands alone. */
   inheritedFrom: string | null;
   artifactHints: { hasSpec: boolean; hasPlan: boolean };
@@ -606,6 +608,7 @@ export function projectBacklogItemReadiness(args: {
     governed,
     baselineId: baseline.current?.baselineId ?? null,
     planArtifact: projectedCoverage.planArtifact,
+    planArtifactDigest: projectedCoverage.planDigest,
     inheritedFrom: inherited?.parentItemId ?? null,
     artifactHints: args.artifactHints ?? { hasSpec: false, hasPlan: false },
     decision: evaluateInitiativeReadiness(facts, args.target),

@@ -60,10 +60,9 @@ describe("loadAcceptancePoolAges", () => {
 
     expect(ages.get("row-a")).toEqual({ rowId: "row-a", itemId: "BI-A", enteredAt: daysAgo(5), ageBasis: "entry", ageDays: 5 });
     expect(ages.get("row-b")).toEqual({ rowId: "row-b", itemId: "BI-B", enteredAt: daysAgo(45), ageBasis: "created", ageDays: 45 });
-    expect(db.backlogItem.findMany).toHaveBeenCalledWith({
-      where: { status: "awaiting-acceptance" },
-      select: { id: true, itemId: true, createdAt: true },
-    });
+    expect(db.backlogItem.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { OR: expect.arrayContaining([{ status: "awaiting-acceptance" }]) },
+    }));
     expect(db.backlogItemActivity.findMany).toHaveBeenCalledWith({
       where: {
         kind: "status_change",

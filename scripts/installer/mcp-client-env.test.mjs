@@ -129,7 +129,7 @@ test("macOS: both variables land in ~/.dpf/agent-toolchain.env and launchd; a re
     // An earlier token line is kept: the transport writer owns only its own lines.
     mkdirSync(join(home, ".dpf"), { recursive: true });
     writeFileSync(join(home, ".dpf", "agent-toolchain.env"), "# managed\nexport DPF_MCP_BEARER_TOKEN='dpfmcp_fixture'\nexport DPF_MCP_URL='http://127.0.0.1:3000/api/mcp/v1'\n");
-    const env = { INSTALL: posix(install), DPF_CLIENT_ENV_PLATFORM: "Darwin", DPF_LAUNCHCTL: fakeLaunchctl(home) };
+    const env = { INSTALL: posix(install), DPF_CLIENT_ENV_PLATFORM: "Darwin", DPF_LAUNCHCTL: fakeLaunchctl(home), DPF_MCP_URL: "https://desk.lan/api/mcp/v1?tier=full" };
 
     const first = bash(persistScript, { home, env });
     assert.equal(first.status, 0, first.stderr);
@@ -391,7 +391,7 @@ test("worktree recovers saved HTTPS endpoint and quoted CA without executing sav
   });
 });
 
-test("saved endpoint is below explicit process URL and canonical install origin", NEEDS_BASH, () => {
+test("saved endpoint follows explicit process URL and precedes the install default", NEEDS_BASH, () => {
   withHome(({ home, install }) => {
     const prepare = `. "$ENV_LIB"; dpf_set_client_env_export DPF_MCP_URL 'https://saved.lan/api/mcp/v1'; `;
     const out = bash(prepare + resolveScript, { home, env: { INSTALL: posix(install), DPF_MCP_URL: "http://explicit.lan/mcp" } });
@@ -400,7 +400,7 @@ test("saved endpoint is below explicit process URL and canonical install origin"
     const canonical = bash(resolveScript, { home, env: { INSTALL: posix(install), DPF_MCP_URL: "https://explicit.lan/mcp" } });
     assert.equal(canonical.stdout, "https://explicit.lan/mcp|");
     const implicit = bash(resolveScript, { home, env: { INSTALL: posix(install) } });
-    assert.equal(implicit.stdout, "https://install.lan/api/mcp/v1?tier=full|");
+    assert.equal(implicit.stdout, "https://saved.lan/api/mcp/v1|");
   });
 });
 
@@ -430,4 +430,92 @@ test("saved export parsing rejects executable assignments and leaves credential 
     assert.equal(secret.status, 64);
     assert.equal(secret.stdout, "");
   });
+});
+
+
+// Selected loopback transport is a preference, independent of credential state.
+test("saved loopback endpoint survives an HTTPS install default", NEEDS_BASH, () => {
+  withHome(({home, install}) => {
+    writeRoot(home);
+    writeFileSync(join(install, ".env"), "PUBLIC_URL=https://localhost\n");
+    const endpoint = "http://127.0.0.1:3000/api/mcp/v1?tier=full";
+    const out = bash(`. "$ENV_LIB"; dpf_set_client_env_export DPF_MCP_URL '${endpoint}'; dpf_resolve_mcp_client_env "$INSTALL"; printf '%s|%s' "$DPF_MCP_CLIENT_URL" "$DPF_MCP_CLIENT_CA_BUNDLE"`, {home, env:{INSTALL:posix(install)}});
+    assert.equal(out.status, 0, out.stderr);
+    assert.equal(out.stdout, `${endpoint}|`);
+  });
+});
+
+test("Windows: saved loopback endpoint survives an HTTPS install default", NEEDS_POWERSHELL, () => {
+  withHome(({home, install}) => {
+    writeRoot(home);
+    writeFileSync(join(install, ".env"), "PUBLIC_URL=https://localhost\n");
+    const endpoint = "http://127.0.0.1:3000/api/mcp/v1?tier=full";
+    const out = powershell(`. '${q(envLibPs)}'
+      $r = Resolve-DpfMcpClientEnv -InstallDir '${q(install)}' -ExplicitUrl '' -HomeDir '${q(home)}' -GetUserEnv {param($n) if($n -eq 'DPF_MCP_URL') {'${endpoint}'}}
+      "$($r.McpUrl)|$($r.CaBundle)"`);
+    assert.equal(out, `${endpoint}|`);
+  });
+});
+
+test("selected loopback endpoint persists without changing credentials or CA settings", NEEDS_BASH, () => {
+  withHome(({home, install}) => {
+    const endpoint = "http://127.0.0.1:3000/api/mcp/v1?tier=full";
+    const out = bash(`. "$ENV_LIB"; dpf_set_client_env_export NODE_EXTRA_CA_CERTS 'operator-root'; printf "export DPF_MCP_BEARER_TOKEN='fixture-secret'\\n" >> "$(dpf_mcp_client_env_file)"; DPF_MCP_CLIENT_URL='${endpoint}'; DPF_MCP_CLIENT_CA_BUNDLE='unused'; dpf_persist_mcp_client_env; printf 'first=%s|' "$?"; dpf_persist_mcp_client_env; printf 'second=%s|' "$?"; printf '%s' "$DPF_MCP_URL"`, {home, env:{INSTALL:posix(install),DPF_CLIENT_ENV_PLATFORM:'Linux'}});
+    assert.equal(out.status, 0, out.stderr);
+    assert.equal(out.stdout, `first=0|second=0|${endpoint}`);
+    const file=readFileSync(join(home,'.dpf','agent-toolchain.env'),'utf8');
+    assert.match(file, /^export NODE_EXTRA_CA_CERTS='operator-root'$/m);
+    assert.match(file, /^export DPF_MCP_BEARER_TOKEN='fixture-secret'$/m);
+    assert.equal((file.match(/^export DPF_MCP_URL=/gm)??[]).length,1);
+    assert.equal((readFileSync(join(home,'.profile'),'utf8').match(/dpf-mcp-token/g)??[]).length,1);
+  });
+});
+
+test("Windows: selected loopback endpoint persists once without changing CA settings", NEEDS_POWERSHELL, () => {
+  const endpoint = "http://127.0.0.1:3000/api/mcp/v1?tier=full";
+  const out = powershell(`. '${q(envLibPs)}'
+    $store = @{DPF_MCP_URL='https://localhost/api/mcp/v1?tier=full'; NODE_EXTRA_CA_CERTS='operator-root'}; $script:writes=0
+    $get={param($n) $store[$n]}; $set={param($n,$v) $script:writes++; $store[$n]=$v}
+    $client=[pscustomobject]@{McpUrl='${endpoint}'; CaBundle='unused'}
+    $first=Set-DpfMcpClientEnv -ClientEnv $client -GetUserEnv $get -SetUserEnv $set
+    $second=Set-DpfMcpClientEnv -ClientEnv $client -GetUserEnv $get -SetUserEnv $set
+    "$first|$second|$($script:writes)|$($store['DPF_MCP_URL'])|$($store['NODE_EXTRA_CA_CERTS'])|$env:DPF_MCP_URL"`);
+  assert.equal(out, `persisted|unchanged|1|${endpoint}|operator-root|${endpoint}`);
+});
+
+test("non-loopback HTTP endpoints remain excluded from persistence", NEEDS_BASH, () => {
+  for(const endpoint of ['http://192.168.1.5:3000/api/mcp/v1','http://127.0.0.1.evil.test:3000/api/mcp/v1','http://127.0.0.1:3000@evil.test/api/mcp/v1','http://127.0.0.2:3000/api/mcp/v1','http://localhost:99999/api/mcp/v1']) {
+    withHome(({home}) => {
+      const out=bash(`. "$ENV_LIB"; DPF_MCP_CLIENT_URL='${endpoint}'; dpf_persist_mcp_client_env; printf '%s' "$?"`,{home});
+      assert.equal(out.stdout,'1');
+      assert.equal(existsSync(join(home,'.dpf','agent-toolchain.env')),false);
+    });
+  }
+});
+
+test("Windows: non-loopback HTTP endpoints remain excluded from persistence", NEEDS_POWERSHELL, () => {
+  for(const endpoint of ['http://192.168.1.5:3000/api/mcp/v1','http://127.0.0.1.evil.test:3000/api/mcp/v1','http://127.0.0.1:3000@evil.test/api/mcp/v1','http://127.0.0.2:3000/api/mcp/v1','http://localhost:99999/api/mcp/v1']) {
+    const out=powershell(`. '${q(envLibPs)}'; $script:writes=0
+      $r=Set-DpfMcpClientEnv -ClientEnv ([pscustomobject]@{McpUrl='${endpoint}';CaBundle=''}) -GetUserEnv {param($n) ''} -SetUserEnv {param($n,$v) $script:writes++}; "$r|$($script:writes)"`);
+    assert.equal(out,'not-https|0');
+  }
+});
+
+
+test("loopback persistence accepts localhost and IPv6 without rewriting the selection", NEEDS_BASH, () => {
+  for(const endpoint of ['http://localhost:3000/api/mcp/v1?tier=full','http://[::1]:3000/api/mcp/v1?tier=full']) {
+    withHome(({home}) => {
+      const out=bash(`. "$ENV_LIB"; DPF_MCP_CLIENT_URL='${endpoint}'; dpf_persist_mcp_client_env; printf '%s|%s' "$?" "$DPF_MCP_URL"`,{home});
+      assert.equal(out.status,0,out.stderr);
+      assert.equal(out.stdout,`0|${endpoint}`);
+    });
+  }
+});
+
+test("Windows: loopback persistence accepts localhost and IPv6 without rewriting the selection", NEEDS_POWERSHELL, () => {
+  for(const endpoint of ['http://localhost:3000/api/mcp/v1?tier=full','http://[::1]:3000/api/mcp/v1?tier=full']) {
+    const out=powershell(`. '${q(envLibPs)}'; $store=@{}
+      $r=Set-DpfMcpClientEnv -ClientEnv ([pscustomobject]@{McpUrl='${endpoint}';CaBundle=''}) -GetUserEnv {param($n) $store[$n]} -SetUserEnv {param($n,$v) $store[$n]=$v}; "$r|$($store['DPF_MCP_URL'])"`);
+    assert.equal(out,`persisted|${endpoint}`);
+  }
 });

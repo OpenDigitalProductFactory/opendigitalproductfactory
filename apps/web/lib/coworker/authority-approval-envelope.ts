@@ -323,16 +323,21 @@ export async function findExecutedAuthorityOutcome(
   if (!envelope) return null;
   if (envelope.status === "executed") {
     const run = await db.toolExecution.findFirst({
-      where: { envelopeId: envelope.id, success: true },
+      where: { envelopeId: envelope.id, toolName: binding.toolName, success: true },
       orderBy: { createdAt: "desc" },
       select: { result: true },
     });
-    return run ? { envelopeId: envelope.id, status: "executed", result: run.result } : null;
+    // A settled approval without operation evidence must not mint another
+    // approval or replay the action merely to reconstruct its missing result.
+    return { envelopeId: envelope.id, status: "executed", result: run?.result ?? {
+      success: false, error: "approval_execution_unknown",
+      message: "The approved request's execution outcome could not be confirmed.",
+    } };
   }
   // The same envelope also carries the original approval_required row and the
   // approval_outcome receipt; the failure is the run that is neither.
   const runs = await db.toolExecution.findMany({
-    where: { envelopeId: envelope.id, success: false, toolName: { not: "approval_outcome" } },
+    where: { envelopeId: envelope.id, success: false, toolName: binding.toolName },
     orderBy: { createdAt: "desc" },
     take: 5,
     select: { result: true },

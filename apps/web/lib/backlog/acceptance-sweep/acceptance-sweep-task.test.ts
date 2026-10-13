@@ -10,7 +10,12 @@ vi.mock("@dpf/db", () => ({
   ACCEPTANCE_TREND_DAYS: 30,
 }));
 
-import { computeNextCronRun } from "@/lib/operate/cron-next-run";
+vi.mock("./acceptance-sweep-lease", () => ({
+  claimAcceptanceSweep: vi.fn().mockResolvedValue({ token: "owner-test", runId: null }),
+  finishAcceptanceSweep: vi.fn().mockResolvedValue(undefined),
+  renewAcceptanceSweep: vi.fn().mockResolvedValue(undefined),
+}));
+import { finishAcceptanceSweep } from "./acceptance-sweep-lease";
 
 import type { AcceptanceSweepSummary } from "./acceptance-sweep-run";
 import { emptyRouting } from "./acceptance-sweep-routing";
@@ -30,7 +35,6 @@ import {
 const NOW = new Date("2026-10-06T05:00:12.000Z");
 const TASK = { taskId: "acceptance-sweep-daily", schedule: "0 5 * * *", agentId: "AGT-WS-PORTFOLIO" };
 // The scheduler's own cron helper (it evaluates in the process time zone, UTC in the container).
-const NEXT_RUN_AT = computeNextCronRun(TASK.schedule, NOW);
 
 function summary(overrides: Partial<AcceptanceSweepSummary> = {}): AcceptanceSweepSummary {
   return {
@@ -134,25 +138,18 @@ describe("executeAcceptanceSweepTask", () => {
       routeLimit: 10,
       recordedByAgentId: "AGT-WS-PORTFOLIO",
     });
-    const nextRunAt = NEXT_RUN_AT;
-    expect(nextRunAt.getTime()).toBeGreaterThan(NOW.getTime());
-    expect(db.scheduledAgentTask.update).toHaveBeenCalledWith({
-      where: { taskId: "acceptance-sweep-daily" },
-      data: { lastRunAt: NOW, lastStatus: "ok", lastError: null, nextRunAt },
-    });
-    expect(db.scheduledJob.update).toHaveBeenCalledWith({
-      where: { jobId: "acceptance-sweep-daily" },
-      data: { lastRunAt: NOW, lastStatus: "ok", lastError: null, nextRunAt },
-    });
+    expect(finishAcceptanceSweep).toHaveBeenCalledWith(db, TASK.taskId, { token: "owner-test", runId: null },
+      { startedAt: NOW, schedule: TASK.schedule, error: null });
+    expect(db.scheduledAgentTask.update).not.toHaveBeenCalled();
+    expect(db.scheduledJob.update).not.toHaveBeenCalled();
   });
 
   it("records the error and still re-arms the task when the run throws", async () => {
     const db = fakeDb();
     const run = vi.fn().mockRejectedValue(new Error("pool read failed"));
     await executeAcceptanceSweepTask(TASK, { now: NOW, db: db as never, run });
-    expect(db.scheduledAgentTask.update).toHaveBeenCalledWith({
-      where: { taskId: "acceptance-sweep-daily" },
-      data: { lastRunAt: NOW, lastStatus: "error", lastError: "pool read failed", nextRunAt: NEXT_RUN_AT },
-    });
+    expect(finishAcceptanceSweep).toHaveBeenCalledWith(db, TASK.taskId, { token: "owner-test", runId: null },
+      { startedAt: NOW, schedule: TASK.schedule, error: "pool read failed" });
+    expect(db.scheduledAgentTask.update).not.toHaveBeenCalled();
   });
 });

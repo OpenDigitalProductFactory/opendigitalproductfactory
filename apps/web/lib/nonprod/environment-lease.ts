@@ -21,7 +21,7 @@ import { gateRunDispositionsTotal } from "@/lib/operate/metrics";
 import type { NonprodOwnerProvider } from "./nonprod-owner-provider";
 import { isImmutableGateClaimKey, type LocalCiEvidenceValidity } from "@/lib/gates/gate-run-identity";
 import { settleTerminalGateLease } from "./environment-lease-terminal-evidence";
-import { resolveResumeClaim } from "./environment-lease-resume";
+import { resolveResumeClaim, validateHostResourceClaim } from "./environment-lease-resume";
 import { admittedLeaseTtlMs, DEFAULT_LEASE_TTL_MS, requestedTtlMs } from "./environment-lease-timing";
 import { afterNonprodLeaseRelease, publishNonprodCapacityForHead } from "./durable-wait";
 export { NONPROD_OWNER_PROVIDERS, type NonprodOwnerProvider } from "./nonprod-owner-provider";
@@ -341,8 +341,11 @@ export async function claimNonprodEnvironmentLease(input: {
       });
 
     const resume = await resolveResumeClaim({ tx, resumeLeaseId: input.resumeLeaseId, claimLease: lease,
-      environmentKey: input.environmentKey, ownerSessionId: input.ownerSessionId, now });
-    if (resume.kind === "terminal") return { status: "terminal", lease: resume.lease, reason: "cancelled", poolPolicy };
+      environmentKey: input.environmentKey, ownerSessionId: input.ownerSessionId, ownerProvider: input.ownerProvider, now });
+    if (resume.kind === "terminal") {
+      if (!isTerminalLeaseStatus(resume.lease.status)) throw new Error(`nonprod_claim_invalid_status:${resume.lease.status}`);
+      return { status: "terminal", lease: resume.lease, reason: resume.lease.status, poolPolicy };
+    }
     superseded = resume.superseded;
 
     // A resumed claim never revives a cancelled row: cancellation is final (AC-DW-01).
@@ -373,17 +376,7 @@ export async function claimNonprodEnvironmentLease(input: {
       if (lease.environmentKey !== input.environmentKey) {
         throw new Error("nonprod_claim_key_environment_mismatch");
       }
-      if (
-        input.environmentKey === "host-heavy-resource"
-        && (
-          lease.resourceClass !== input.resourceClass
-          || Number(lease.expectedMemoryBytes ?? 0) !== input.expectedMemoryBytes
-          || lease.ownerPid !== input.ownerProcessId
-          || lease.ownerProcessIdentity !== input.ownerProcessIdentity
-        )
-      ) {
-        throw new Error("host_resource_claim_contract_mismatch");
-      }
+      const hostResume = validateHostResourceClaim(lease, input);
       if (lease.ownerSessionId !== input.ownerSessionId) {
         if (isImmutableGateClaimKey(input.claimKey)) {
           if (lease.status !== "active" && lease.status !== "queued") {
@@ -402,6 +395,7 @@ export async function claimNonprodEnvironmentLease(input: {
         lease = await tx.nonProductionEnvironmentLease.update({
           where: { id: lease.id },
           data: {
+            ...(hostResume ? { ownerPid: input.ownerProcessId, ownerProcessIdentity: input.ownerProcessIdentity } : {}),
             requestedTtlMs: ttlMs,
             heartbeatAt: now,
             expiresAt: new Date(now.getTime() + ttlMs),

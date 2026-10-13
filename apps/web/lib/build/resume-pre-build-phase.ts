@@ -743,7 +743,9 @@ export async function resumePreBuildPhase(params: {
             // try the transition once more; anything else stays a skip.
             if (isResearchReceiptGateBlock(outcome.reason) && hasDesignDoc(build.designDoc)) {
               const { attestIdeateResearch } = await import("@/lib/build/record-ideate-research-receipt");
-              await attestIdeateResearch(buildId, build.designDoc, userId, null);
+              const research = await attestIdeateResearch(buildId, build.designDoc, userId, null);
+              if (!research.recorded) return { kind: "skipped", phase,
+                reason: `Research attestation held; no transition retry: ${research.reason}` };
               const retried = await performPlanToBuildTransition({ buildId, userId });
               if (retried.kind === "advanced") {
                 return {

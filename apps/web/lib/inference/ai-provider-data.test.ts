@@ -3,7 +3,8 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 // Use vi.hoisted so mockPrisma is available when vi.mock factory runs
 const mockPrisma = vi.hoisted(() => ({
-  aiProviderConnection: { findMany: vi.fn() },
+  aiProviderConnection: { findMany: vi.fn(), findUnique: vi.fn() },
+  scheduledJob: { findUnique: vi.fn(), findMany: vi.fn() },
   tokenUsage: {
     groupBy: vi.fn(),
   },
@@ -46,7 +47,11 @@ import {
   getTokenSpendByProvider,
 } from "./ai-provider-data";
 
-beforeEach(() => { vi.clearAllMocks(); });
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrisma.aiProviderConnection.findMany.mockResolvedValue([]);
+  mockPrisma.scheduledJob.findMany.mockResolvedValue([]);
+});
 
 describe("getProviderAccounts", () => {
   it("returns separate account identities without raw secrets or tokens", async () => {
@@ -64,6 +69,24 @@ describe("getProviderAccounts", () => {
 });
 
 describe("getProviders", () => {
+  it("projects persisted pause timing and account authority without exposing the actor", async () => {
+    mockPrisma.modelProvider.findMany.mockResolvedValue([{
+      providerId: "local", name: "Local", families: [], enabledFamilies: [], supportedAuthMethods: [],
+      catalogVisibility: "visible", sensitivityClearance: [], taskTags: [], status: "inactive",
+    }]);
+    mockPrisma.credentialEntry.findMany.mockResolvedValue([]);
+    mockPrisma.aiProviderConnection.findMany.mockResolvedValue([{ providerId: "local", status: "paused" }]);
+    mockPrisma.scheduledJob.findMany.mockResolvedValue([{ jobId: "provider-pause-local", lastStatus: "paused", metadata: {
+      kind: "operator-provider-pause", version: 1, providerId: "local", operationId: "generation-1", actorId: "private-operator",
+      pausedAt: "2026-10-12T02:00:00Z", resumeAt: "2026-10-14T02:00:00Z", priorProviderStatus: "active", priorConnectionStatus: "active",
+    } }]);
+    const result = await getProviders();
+    expect(result[0].provider.defaultConnectionStatus).toBe("paused");
+    expect(result[0].provider.operatorPause).toEqual({ resumeAt: "2026-10-14T02:00:00Z", pausedAt: "2026-10-12T02:00:00Z" });
+    expect(JSON.stringify(result)).not.toContain("private-operator");
+    mockPrisma.aiProviderConnection.findMany.mockResolvedValue([{ providerId: "local", status: "active" }]);
+    expect((await getProviders())[0].provider.operatorPause).toBeNull();
+  });
   it("distinguishes an empty credential row from usable dispatch material", async () => {
     mockPrisma.modelProvider.findMany.mockResolvedValue([{
       providerId: "openai",
