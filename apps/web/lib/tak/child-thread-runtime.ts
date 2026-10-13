@@ -165,8 +165,9 @@ async function completeChildThreadExecution(input: {
     },
   });
 
-  await prisma.taskRun.update({
-    where: { taskRunId: input.context.taskRunId },
+  // BI-259F6743: a child cancelled while it ran keeps `canceled`.
+  const moved = await prisma.taskRun.updateMany({
+    where: { taskRunId: input.context.taskRunId, status: { notIn: [...TERMINAL_STATUSES] } },
     data: {
       status: "completed",
       completedAt: new Date(),
@@ -187,6 +188,12 @@ async function completeChildThreadExecution(input: {
       },
     },
   });
+  if (moved.count === 0) {
+    await emitCollaborationReturn(input.context.threadId, input.context.taskRunId, "canceled", {
+      routeContext: input.context.routeContext,
+    });
+    return;
+  }
   await emitCollaborationReturn(input.context.threadId, input.context.taskRunId, "completed", {
     specialistReply: input.replyText,
     resultText: input.replyText,
@@ -443,9 +450,10 @@ async function markChildThreadFailed(
   context: ChildRuntimeContext,
   message: string,
 ): Promise<void> {
-  await prisma.taskRun
-    .update({
-      where: { taskRunId: context.taskRunId },
+  // BI-259F6743: only an unfinished run fails; a cancelled one keeps `canceled`.
+  const moved = await prisma.taskRun
+    .updateMany({
+      where: { taskRunId: context.taskRunId, status: { notIn: [...TERMINAL_STATUSES] } },
       data: {
         status: "failed",
         completedAt: new Date(),
@@ -457,7 +465,12 @@ async function markChildThreadFailed(
         taskRunId: context.taskRunId,
         error: getErrorMessage(err),
       });
+      return { count: 1 };
     });
+  if (moved.count === 0) {
+    await emitCollaborationReturn(context.threadId, context.taskRunId, "canceled", { routeContext: context.routeContext });
+    return;
+  }
 
   await prisma.agentThread
     .update({

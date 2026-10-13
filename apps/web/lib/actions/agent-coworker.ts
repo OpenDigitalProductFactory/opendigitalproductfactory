@@ -2666,24 +2666,10 @@ export async function cancelThread(
   input: { threadId: string },
   userId: string,
 ): Promise<{ ok: boolean }> {
-  const thread = await prisma.agentThread.findUnique({
-    where: { id: input.threadId },
-    select: { id: true, userId: true, cancelledAt: true },
-  });
-  if (!thread) {
-    throw new Error(`Thread ${input.threadId} not found.`);
-  }
-  if (thread.userId !== userId) {
-    throw new Error("Unauthorized: thread is owned by another user.");
-  }
-  if (thread.cancelledAt) {
-    return { ok: true };
-  }
-  await prisma.agentThread.update({
-    where: { id: input.threadId },
-    data: { cancelledAt: new Date() },
-  });
-  return { ok: true };
+  // BI-259F6743: stops the thread and its delegated children, not only the row.
+  const { cancelThreadTree } = await import("@/lib/tak/thread-cancellation");
+  const { ok } = await cancelThreadTree(input.threadId, userId);
+  return { ok };
 }
 
 export async function getThreadResult(
