@@ -1,6 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHmac } from "node:crypto";
-import { copyFileSync, existsSync, mkdtempSync, writeFileSync, chmodSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, writeFileSync, chmodSync, mkdirSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -375,11 +375,15 @@ export function promoteDiagnostics(
   for (const [label, path] of Object.entries(files)) {
     let body: string;
     try {
-      body = statSync(path).isDirectory()
-        ? (readdirSync(path, { recursive: true }) as string[]).map(String).sort().join("\n")
-        : readFileSync(path, "utf8").slice(-6000);
+      // Read first and fall back to a listing: no check-then-use race on the path.
+      body = readFileSync(path, "utf8").slice(-6000);
     } catch (error) {
-      body = `<unreadable: ${(error as Error).message}>`;
+      try {
+        if ((error as NodeJS.ErrnoException).code !== "EISDIR") throw error;
+        body = (readdirSync(path, { recursive: true }) as string[]).map(String).sort().join("\n");
+      } catch (inner) {
+        body = `<unreadable: ${(inner as Error).message}>`;
+      }
     }
     sections.push(`--- ${label} (${path}) ---\n${body}`);
   }
