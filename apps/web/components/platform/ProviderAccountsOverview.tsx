@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { DataTable, FilterBar, Notice, StatusBadge, type Column } from "@/components/ui/report-kit";
+import { DataTable, FilterBar, StatusBadge, type Column } from "@/components/ui/report-kit";
+import { FormStatus } from "@/components/ui/form/FormStatus";
+import { SubmitButton } from "@/components/ui/form/SubmitButton";
 import { Surface } from "@/components/ui/Surface";
 import { fieldControlClass } from "@/components/ui/form/styles";
 import { addProviderAccount } from "@/lib/actions/provider-accounts";
@@ -35,6 +37,7 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
   const [method, setMethod] = useState("");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const catalogRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => { if (showCatalog && !firstRun) catalogRef.current?.querySelector("input")?.focus(); }, [showCatalog, firstRun]);
@@ -75,9 +78,10 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
     setMethod(provider.supportedAuthMethods.find(auth => supportedMethods.includes(auth)) ?? "");
     setLabel("");
     setError(null);
+    setSuccess(null);
   }
 
-  return <section className="space-y-3" aria-label={copy.connection}>
+  return <section className="space-y-3" aria-label={copy.connection} aria-busy={pending}>
     <div className="flex flex-wrap items-center justify-between gap-2">
       <FilterBar facets={[{ kind: "search", key: "query", placeholder: copy.searchAccounts }]} value={{ query: search }} onChange={next => setSearch(next.query ?? "")} resultCount={visibleRows.length} />
       {canWrite && <button type="button" className={buttonClass} disabled={pending} aria-expanded={showCatalog} aria-controls={`${id}-catalog`} onClick={() => setShowCatalog(!showCatalog)}>{copy.addProvider}</button>}
@@ -85,14 +89,19 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
     <DataTable columns={columns} rows={visibleRows} getRowKey={row => row.connectionId} empty={copy.noAccounts} dense ariaLabel={copy.connection} />
     {showCatalog && <Surface padding="sm"><div ref={catalogRef} id={`${id}-catalog`}>
       <h2 className="m-0 text-sm font-semibold">{copy.catalog}</h2>
-      {firstRun && canWrite && <button type="button" className={`${buttonClass} mt-2`} disabled={pending} onClick={() => startTransition(async () => {
+      {firstRun && canWrite && <SubmitButton type="button" className="mt-2" pending={pending} pendingLabel={copy.working} onClick={() => {
+        setError(null);
+        setSuccess(null);
+        startTransition(async () => {
         try {
           const result = await completeProviderAccountSetup();
           if (!result.ok) { setError(result.error); return; }
           setShowCatalog(false);
+          setSuccess(copy.setupComplete);
           router.refresh();
         } catch { setError(copy.failed); }
-      })}>{copy.finishLocal}</button>}
+        });
+      }}>{copy.finishLocal}</SubmitButton>}
       <FilterBar className="my-2" facets={[{ kind: "search", key: "query", placeholder: copy.searchProviders }]} value={{ query: catalogSearch }} onChange={next => setCatalogSearch(next.query ?? "")} />
       <ul className="m-0 grid list-none gap-2 p-0 sm:grid-cols-2 lg:grid-cols-3">
         {catalog.filter(provider => `${provider.name} ${provider.summary}`.toLocaleLowerCase().includes(catalogSearch.trim().toLocaleLowerCase())).map(provider => <li key={provider.providerId} className="rounded border border-[var(--dpf-border)] p-2">
@@ -106,6 +115,7 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
       event.preventDefault();
       if (!canWrite || pending) return;
       setError(null);
+      setSuccess(null);
       startTransition(async () => {
         try {
           const result = await addProviderAccount({ providerId: newProvider.providerId, label, authMethod: method });
@@ -117,14 +127,14 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
     }}>
       <h2 id={`${id}-new`} className="m-0 text-sm font-semibold">{copy.addAccount} · {newProvider.name}</h2>
       <div className="my-2 grid gap-2 sm:grid-cols-2">
-        <label className="text-sm">{copy.accountName}<input className={fieldClass} required maxLength={120} value={label} disabled={pending} onChange={event => setLabel(event.target.value)} /></label>
-        <label className="text-sm">{copy.authMethod}<select className={fieldClass} value={method} disabled={pending} onChange={event => setMethod(event.target.value)}>
+        <label className="text-sm">{copy.accountName}<input name="label" className={fieldClass} required maxLength={120} value={label} disabled={pending} onChange={event => setLabel(event.target.value)} /></label>
+        <label className="text-sm">{copy.authMethod}<select name="authMethod" className={fieldClass} value={method} disabled={pending} onChange={event => setMethod(event.target.value)}>
           {newProvider.supportedAuthMethods.filter(auth => supportedMethods.includes(auth)).map(auth => <option className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]" key={auth} value={auth}>{auth === "api_key" ? copy.apiKeyMethod : auth === "oauth2_authorization_code" ? copy.oauthMethod : copy.workloadMethod}</option>)}
         </select></label>
       </div>
-      <div className="flex gap-2"><button type="submit" className={buttonClass} disabled={pending || !method || !label.trim()}>{copy.addAccount}</button>
+      <div className="flex gap-2"><SubmitButton pending={pending} pendingLabel={copy.working} disabled={!method || !label.trim()}>{copy.addAccount}</SubmitButton>
         <button type="button" className={buttonClass} disabled={pending} onClick={() => setNewProvider(null)}>{copy.cancel}</button></div>
     </form></Surface>}
-    {error && <div role="alert"><Notice variant="error">{error}</Notice></div>}
+    <FormStatus error={error} success={success} />
   </section>;
 }

@@ -8,6 +8,8 @@
   "scope": "Scope",
   "advanced": "Advanced connection settings",
   "save": "Save connection",
+  "working": "Working…",
+  "setupComplete": "Provider setup complete. You can add providers at any time.",
   "saved": "Connection settings saved. Changed credentials require a new data-terms review.",
   "test": "Check connection",
   "discover": "Refresh account models",

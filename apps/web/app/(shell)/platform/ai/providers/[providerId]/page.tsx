@@ -50,12 +50,15 @@ export default async function ProviderDetailPage({ params, searchParams }: Props
   const { providerId } = await params;
   const query = await searchParams;
   if (Array.isArray(query.account)) notFound();
-  const selectedAccount = selectProviderAccount(await getProviderAccounts(providerId), providerId, query.account);
-  if (query.account !== undefined && !selectedAccount) notFound();
-  const additionalAccount = selectedAccount && !selectedAccount.isDefault ? selectedAccount : null;
-  const accessibleModelIds = new Set(Array.isArray(additionalAccount?.accessibleModelIds)
-    ? additionalAccount.accessibleModelIds.filter((value): value is string => typeof value === "string") : []);
-  const selectedConnectionId = selectedAccount?.connectionId ?? `provider-default-${providerId}`;
+  const requestedConnectionId = query.account ?? `provider-default-${providerId}`;
+  // Resolve ownership before refreshing; the canonical masked read must happen
+  // afterwards so React's request cache cannot preserve pre-refresh state.
+  const accountPeek = await prisma.aiProviderConnection.findUnique({
+    where: { connectionId: requestedConnectionId, providerId },
+    select: { providerId: true, authMethod: true, credentialEntry: { select: { tokenExpiresAt: true, refreshToken: true } } },
+  });
+  if (query.account !== undefined && !accountPeek) notFound();
+  const requestsAdditionalAccount = requestedConnectionId !== `provider-default-${providerId}`;
   const copy = await getProviderAccountCopy();
   const now = new Date();
 
@@ -70,12 +73,12 @@ export default async function ProviderDetailPage({ params, searchParams }: Props
     where: { providerId },
     select: { authMethod: true },
   });
-  if (additionalAccount?.authMethod === "oauth") {
-    if (additionalAccount.credential?.hasRefreshToken && additionalAccount.credential.tokenExpiresAt
-      && Date.parse(additionalAccount.credential.tokenExpiresAt) <= now.getTime()) {
-      await getProviderBearerToken(providerId, additionalAccount.connectionId).catch(() => null);
+  if (requestsAdditionalAccount && accountPeek?.authMethod === "oauth") {
+    if (accountPeek.credentialEntry?.refreshToken && accountPeek.credentialEntry.tokenExpiresAt
+      && accountPeek.credentialEntry.tokenExpiresAt.getTime() <= now.getTime()) {
+      await getProviderBearerToken(providerId, requestedConnectionId).catch(() => null);
     }
-  } else if (!additionalAccount && oauthPeek?.authMethod === "oauth2_authorization_code") {
+  } else if (!requestsAdditionalAccount && oauthPeek?.authMethod === "oauth2_authorization_code") {
     const credPeek = await prisma.credentialEntry.findUnique({
       where: { providerId },
       select: { tokenExpiresAt: true, refreshToken: true },
@@ -84,6 +87,12 @@ export default async function ProviderDetailPage({ params, searchParams }: Props
       await getProviderBearerToken(providerId).catch(() => null);
     }
   }
+  const selectedAccount = selectProviderAccount(await getProviderAccounts(providerId), providerId, query.account);
+  if (query.account !== undefined && !selectedAccount) notFound();
+  const additionalAccount = selectedAccount && !selectedAccount.isDefault ? selectedAccount : null;
+  const accessibleModelIds = new Set(Array.isArray(additionalAccount?.accessibleModelIds)
+    ? additionalAccount.accessibleModelIds.filter((value): value is string => typeof value === "string") : []);
+  const selectedConnectionId = selectedAccount?.connectionId ?? `provider-default-${providerId}`;
   const [pw, models, profiles, allProviders, routingProfiles, modelClassCounts, providerConnection, businessSuitabilityContext] = await Promise.all([
     getProviderById(providerId),
     getDiscoveredModels(providerId),

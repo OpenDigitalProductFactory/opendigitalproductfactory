@@ -3,7 +3,8 @@
 import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { confirmDialog } from "@/components/ui/Dialog";
-import { Notice } from "@/components/ui/report-kit";
+import { FormStatus } from "@/components/ui/form/FormStatus";
+import { SubmitButton } from "@/components/ui/form/SubmitButton";
 import { Surface } from "@/components/ui/Surface";
 import { fieldControlClass } from "@/components/ui/form/styles";
 import { configureProviderAccount, discoverProviderAccount, setProviderAccountEnabled } from "@/lib/actions/provider-accounts";
@@ -49,14 +50,14 @@ export function ProviderAccountConnectionForm({ account, canWrite, copy }: {
 
   function field(key: keyof typeof draft, label: string, secret = false) {
     return <label htmlFor={`${id}-${key}`} className="text-sm text-[var(--dpf-muted)]">{label}
-      <input id={`${id}-${key}`} className={fieldClass} value={draft[key]} disabled={disabled}
+      <input id={`${id}-${key}`} name={key} className={fieldClass} value={draft[key]} disabled={disabled}
         type={secret ? "password" : "text"} autoComplete={secret ? "new-password" : "off"}
         maxLength={key === "label" ? 120 : undefined}
         onChange={event => setDraft(previous => ({ ...previous, [key]: event.target.value }))} />
     </label>;
   }
 
-  return <Surface as="section" padding="sm" aria-labelledby={`${id}-heading`}>
+  return <Surface as="section" padding="sm" aria-labelledby={`${id}-heading`} aria-busy={pending}>
     <h2 id={`${id}-heading`} className="m-0 text-sm font-semibold">{copy.connection}</h2>
     <form className="mt-2 space-y-2" onSubmit={event => {
       event.preventDefault();
@@ -78,7 +79,7 @@ export function ProviderAccountConnectionForm({ account, canWrite, copy }: {
         <div className="grid gap-2 sm:grid-cols-2">{field("tokenEndpoint", copy.tokenEndpoint)}{field("scope", copy.scope)}</div>
       </details>}
       <p className="m-0 text-xs text-[var(--dpf-muted)]">{copy.writeOnly}</p>
-      <button className={buttonClass} type="submit" disabled={disabled}>{copy.save}</button>
+      <SubmitButton pending={pending} pendingLabel={copy.working} disabled={!canWrite}>{copy.save}</SubmitButton>
     </form>
     <div className="mt-2 flex flex-wrap gap-2">
       {account.authMethod === "oauth" && <button className={buttonClass} type="button" disabled={disabled} onClick={() => run(async () => {
@@ -101,6 +102,6 @@ export function ProviderAccountConnectionForm({ account, canWrite, copy }: {
       })}>{account.status === "disabled" ? copy.enable : copy.disable}</button>
       {account.authMethod === "oauth" && <button className={buttonClass} type="button" disabled={disabled} onClick={disconnect}>{copy.disconnect}</button>}
     </div>
-    {flash && <div className="mt-2" role={flash.error ? "alert" : "status"}><Notice variant={flash.error ? "error" : "success"}>{flash.text}</Notice></div>}
+    <FormStatus className="mt-2" error={flash?.error ? flash.text : null} success={flash && !flash.error ? flash.text : null} />
   </Surface>;
 }

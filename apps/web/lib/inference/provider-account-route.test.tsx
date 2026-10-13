@@ -59,4 +59,18 @@ describe("provider account route boundary", () => {
     expect(elements(tree).some(node => node.type === ProviderAccountConnectionForm)).toBe(false);
     expect(mocks.connection).toHaveBeenCalledWith(expect.objectContaining({ where: { connectionId: initial.connectionId } }));
   });
+  it("renders fresh masked OAuth state after a selected account self-heals", async () => {
+    const expired = { status: "ok", hasUsableMaterial: true, hasRefreshToken: true, tokenExpiresAt: new Date(Date.now() - 60_000).toISOString() };
+    const fresh = { ...expired, tokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString() };
+    let refreshed = false;
+    mocks.connection.mockImplementation(async (input: { select?: unknown }) => input.select
+      ? { providerId: "codex", authMethod: "oauth", credentialEntry: { tokenExpiresAt: new Date(expired.tokenExpiresAt), refreshToken: "test-refresh" } }
+      : { id: "connection-db", provider: { providerId: "codex" }, entitlements: {}, trustEvidence: [], supplierContract: null });
+    mocks.accounts.mockImplementation(async () => [{ ...extra, authMethod: "oauth", credential: refreshed ? fresh : expired }]);
+    mocks.bearer.mockImplementation(async () => { refreshed = true; return { token: "test-access" }; });
+    const tree = await ProviderDetailPage({ params: Promise.resolve({ providerId: "codex" }), searchParams: Promise.resolve({ account: extra.connectionId }) });
+    const status = elements(tree).find(node => node.type === OAuthConnectionStatus);
+    expect((status?.props as { credential?: { tokenExpiresAt: string } }).credential?.tokenExpiresAt).toBe(fresh.tokenExpiresAt);
+    expect(mocks.bearer).toHaveBeenCalledWith("codex", extra.connectionId);
+  });
 });

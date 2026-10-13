@@ -49,4 +49,17 @@ describe("compact provider account overview", () => {
     expect(screen.getAllByRole("button", { name: "Add account" })).toHaveLength(1);
     expect(screen.getByRole("link", { name: "Personal" })).toBeTruthy();
   });
+  it("names account creation fields and announces its pending state", async () => {
+    let settle!: (value: { ok: false; error: string }) => void;
+    mocks.add.mockImplementationOnce(() => new Promise(resolve => { settle = resolve; }));
+    render(<ProviderAccountsOverview rows={[row]} catalog={catalog} firstRun={false} canWrite copy={{ ...copy, working: "Working" }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
+    expect(screen.getByLabelText("Account name").getAttribute("name")).toBe("label");
+    expect(screen.getByLabelText("Authentication method").getAttribute("name")).toBe("authMethod");
+    fireEvent.change(screen.getByLabelText("Account name"), { target: { value: "Team" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Add account" }).find(button => button.getAttribute("type") === "submit")!);
+    await waitFor(() => expect(screen.getByText("Working")).toBeTruthy());
+    settle({ ok: false, error: "Retry creation" });
+    expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Retry creation");
+  });
 });

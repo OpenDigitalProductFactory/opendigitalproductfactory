@@ -66,4 +66,14 @@ describe("selected provider account controls", () => {
     for (const button of screen.getAllByRole("button")) expect(button.hasAttribute("disabled")).toBe(true);
     expect(screen.getByLabelText("API key").hasAttribute("disabled")).toBe(true);
   });
+  it("announces pending work and names write-only fields", async () => {
+    let settle!: (value: { ok: true }) => void;
+    mocks.configure.mockImplementationOnce(() => new Promise(resolve => { settle = resolve; }));
+    render(<ProviderAccountConnectionForm account={account()} canWrite copy={{ ...copy, working: "Working" }} />);
+    expect(screen.getByLabelText("API key").getAttribute("name")).toBe("secretRef");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.getByText("Working")).toBeTruthy());
+    settle({ ok: true });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save" }).hasAttribute("disabled")).toBe(false));
+  });
 });
