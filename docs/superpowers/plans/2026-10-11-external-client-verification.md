@@ -304,13 +304,25 @@ re-review and fresh shared CI; served acceptance remains unrun.
 
 
 PR #6275 exposed a CI boundary defect absent on dependency-provisioned hosts:
-the dependency-free pull-request policy suite imported preview runtime tests,
-which require tsx. A source-only fixture reproduces that failure. Keep claim-key
-policy checks dependency-free and register the unchanged preview behavior tests
-in the workspace profile, which installs dependencies. The shared registry's
-scoped co-claim awaits DPF approval; do not edit it before approval executes.
-Current source gate evidence remains tied to the previous commit and cannot
-qualify the changed test boundary. Re-review and gate the corrected commit.
+the dependency-free pull-request policy suite imported preview runtime code that
+loaded the delivery contract through tsx, and the web program imported the same
+contract from dpf-bootstrap source, which the typecheck program ratchet refuses.
+The contract now has one dependency-free home,
+`packages/integration-shared/src/delivery-readiness-contract.cjs` (typed by its
+`.d.cts`), consumed by the web program, the preview runtime script and a
+re-export in dpf-bootstrap. A source-only fixture test proves the claim-key
+policy suite runs without installed workspace dependencies.
+
+The same CI run found three further defects. The legacy external-development
+grant list lagged the registry's `coworker_catalog_read` and
+`coworker_engagement_write`, creating new grant-source divergence; the lists
+match again. The bounded-batch clone test sampled `heapUsed` without collecting
+garbage, so it measured GC timing rather than retention; it now forces
+collection before each sample and asserts retained growth below 16 MiB, which
+still fails when every batch is retained (~63 MiB). The UX sweep's auth-only
+bootstrap had lost the CI administrator credential path; on a disposable CI
+portal at `http://localhost:3000` it uses the job's `ADMIN_PASSWORD`, never an
+install file, and never for an admitted preview.
 
 PR readiness also requires an explicit qualified evidence reference despite the
 old local-CI skill calling it an unnecessary fallback. Align that instruction

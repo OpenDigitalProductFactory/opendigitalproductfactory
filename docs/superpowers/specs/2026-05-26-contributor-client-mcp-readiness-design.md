@@ -30,7 +30,8 @@ token's enforced access controls.
 ## Current delivery contract (BI-9FA87F90, 2026-10-11)
 
 This section supersedes the historical tools/list threshold below. The canonical
-workflow inventory is `packages/dpf-bootstrap/src/agent-toolchain/delivery-readiness-contract.ts`.
+workflow inventory is `packages/integration-shared/src/delivery-readiness-contract.cjs`
+(re-exported by `packages/dpf-bootstrap/src/agent-toolchain/delivery-readiness-contract.ts`).
 Bootstrap and portal probes use read-only `load_tools` discovery for every stage,
 including authoring, evidence, leases, preview authentication, UX collaboration,
 local verification and independent semantic review. Each tool must exist and be

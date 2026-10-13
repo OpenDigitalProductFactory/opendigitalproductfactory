@@ -1,3 +1,8 @@
+"use strict";
+// Dependency-free CommonJS so dependency-free policy scripts (node --test without
+// an installed workspace), the bootstrap package and the web program share one
+// contract. Types live in delivery-readiness-contract.d.cts.
+
 /** Required author-to-verification workflow; discovery never grants authority. */
 const DELIVERY_WORKFLOW_TOOLS = Object.freeze([
   "wiki_query", "principle_decide", "get_backlog_item", "claim_backlog_item_for_work",
@@ -10,8 +15,9 @@ const DELIVERY_WORKFLOW_TOOLS = Object.freeze([
   "retry_semantic_review",
 ]);
 
+/** @param {unknown} value @returns {Record<string, unknown> | undefined} */
 const object = value =>
-  value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+  value !== null && typeof value === "object" && !Array.isArray(value) ? /** @type {Record<string, unknown>} */ (value) : undefined;
 
 function deliveryReadinessFromDiscovery(value) {
   const envelope = object(value);
