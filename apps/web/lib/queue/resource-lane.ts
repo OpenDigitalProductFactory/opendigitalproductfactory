@@ -219,8 +219,8 @@ const localInferenceLane = getResourceLane(LOCAL_INFERENCE_LANE_KEY, {
  *  local-inference caller (chat + build) must acquire so the single GPU is
  *  never double-subscribed (BI-98572A51).
  *
- *  The lane only sees this process. Before taking it, ask whether the card is
- *  free at all (another process, another app, a game). Unit tests skip that
+ *  The lane only sees this process. After waiting, check the host lease and
+ *  whether the card is free (another process, another app, a game). Unit tests skip that
  *  import: it reaches the lease registry, and the suite must not touch the GPU. */
 export function withLocalInferenceLock<T>(
   fn: () => Promise<T>,
@@ -236,6 +236,10 @@ export function withLocalInferenceLock<T>(
 async function admitLocalGpuThenRun<T>(fn: () => Promise<T>, modelId: string | null, signal?: AbortSignal): Promise<T> {
   signal?.throwIfAborted();
   const { assertLocalGpuFree } = await import("@/lib/inference/host-gpu-admission");
-  await assertLocalGpuFree({ modelId });
-  return localInferenceLane.run(fn, { maxQueueDepth: localInferenceMaxQueueDepth(), signal });
+  return localInferenceLane.run(async () => {
+    const { assertLocalProviderCapacityAvailable } = await import("@/lib/routing/local-provider-capacity");
+    await assertLocalProviderCapacityAvailable();
+    await assertLocalGpuFree({ modelId });
+    return fn();
+  }, { maxQueueDepth: localInferenceMaxQueueDepth(), signal });
 }

@@ -24,6 +24,7 @@ import {
   formatMessageForResponses,
 } from "./provider-message-format";
 import { isAnthropic } from "./provider-utils";
+import { isLocalProviderId } from "./provider-locality";
 import { formatMessagesForGemini } from "./gemini-messages";
 import { captureAnthropicWeeklyQuota } from "./cli-pool-status";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
@@ -495,7 +496,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
           signal: execution ? AbortSignal.any([timeout, execution.signal]) : timeout,
         });
       };
-      res = providerId === "local"
+      res = isLocalProviderId(providerId)
         ? await withLocalInferenceLock(doFetch, { modelId, signal: currentGovernedInferenceDeadline()?.signal })
         : await doFetch();
     } catch (e) {
@@ -673,10 +674,9 @@ export const chatAdapter: ExecutionAdapterHandler = {
       // other OpenAI-compatible providers emit `reasoning`.
       reasoning = msg?.reasoning_content || msg?.reasoning || undefined;
 
-      // The answer is `content`. Falling back to reasoning is a LAST resort for a
-      // provider that returns only a thinking channel — without it such a turn
-      // renders blank. When content exists, reasoning must never displace it.
-      text = msg?.content || reasoning || "";
+      // Thinking without an answer is incomplete work. Keep it available for
+      // progress disclosure, but never promote scratchpad into a conclusion.
+      text = msg?.content ?? "";
       truncated = choice?.finish_reason === "length";
 
       if (msg?.tool_calls && msg.tool_calls.length > 0) {

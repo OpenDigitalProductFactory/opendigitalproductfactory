@@ -126,6 +126,17 @@ for it. The exact
 bundled Qwen 3.8 27B model carries a low-confidence provisional routing floor;
 smaller generic Qwen models do not inherit it.
 
+Local inference waits in the shared admission queue before checking host GPU and
+lease availability. Contention from another host process still defers dispatch.
+Deliberation jobs retain completed branch answers across capacity waits; after a
+bounded retry window, owned tasks request intervention rather than inventing a
+verdict. Empty or truncated answers are failed branch evidence, and a model's
+reasoning channel is never substituted for its answer.
+
+Build Studio's Automatic engine policy considers eligible alternative providers
+when a saved preference is unavailable. Explicit provider and engine pins retain
+their restrictions, and all alternatives must meet the phase capability floor.
+
 Decision Concierge records why it skips a case in the standing governance room.
 An empty action question, an unfinished panel or an unchanged completed case does
 not start another panel. New questions, options or recorded evidence can make a
