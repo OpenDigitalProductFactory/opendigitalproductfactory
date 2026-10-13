@@ -17,6 +17,16 @@ function plan(): RoutedExecutionPlan {
 }
 
 describe("applyCallerExecutionPlanOverrides", () => {
+  it("clamps an output allowance without increasing a stricter existing plan", () => {
+    expect(applyCallerExecutionPlanOverrides(plan(), { maxOutputTokens: 128 }).maxTokens).toBe(128);
+    expect(applyCallerExecutionPlanOverrides(plan(), { maxOutputTokens: 4096 }).maxTokens).toBe(1024);
+    expect(applyCallerExecutionPlanOverrides(plan(), {}).maxTokens).toBe(1024);
+  });
+
+  it.each([NaN, 0, -1, 1.5])("refuses invalid output allowance %s", value => {
+    expect(() => applyCallerExecutionPlanOverrides(plan(), { maxOutputTokens: value })).toThrow();
+  });
+
   it("overrides recipe auto tool choice after plan resolution", () => {
     expect(applyCallerExecutionPlanOverrides(plan(), { toolChoice: "required" })).toMatchObject({
       toolPolicy: { toolChoice: "required", allowParallelToolCalls: false },

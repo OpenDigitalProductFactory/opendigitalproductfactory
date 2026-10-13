@@ -47,11 +47,12 @@ import "../routing/codex-cli-adapter"; // codex: registers "codex-cli" adapter
 import {
   acquireInferenceSlot,
   currentInferenceOrigin,
+  currentInferenceSignal,
   engineKeyForProvider,
 } from "./inference-admission";
 import { assertProviderDispatchCapacity } from "@/lib/routing/local-provider-capacity";
 import { isLocalProviderId } from "@/lib/routing/provider-locality";
-import { providerInferenceFetch } from "./provider-inference-transport";
+import { providerInferenceFetch, withInferenceCancellationFetch } from "./provider-inference-transport";
 import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
 import { InferenceError } from "../routing/inference-error";
 
@@ -200,7 +201,9 @@ export async function callProvider(
     buildId?: string | null;
   },
 ): Promise<InferenceResult> {
-  await assertGovernedInferenceAuthority();
+  currentInferenceSignal()?.throwIfAborted();
+  await assertGovernedInferenceAuthority(currentInferenceSignal());
+  currentInferenceSignal()?.throwIfAborted();
   // Resolve adapter enforceability before capacity or budget accounting. A
   // plan/adapter capability miss is not a provider request and must not consume
   // budget, wait on host capacity, or mutate provider health through fallback.
@@ -375,15 +378,15 @@ export async function callProvider(
     // Queued work has not started inference yet. A disable during admission
     // invalidates its earlier selection; finally still releases the slot.
     if (needsModelConnection) await readEnabledRoutingProvider(providerId);
-    await assertGovernedInferenceAuthority();
+    await assertGovernedInferenceAuthority(currentInferenceSignal());
+    currentInferenceSignal()?.throwIfAborted();
+    const parentFetch = providerId === "local" ? currentGovernedInferenceDeadline()?.localFetch : undefined;
     result = await adapter.execute({
       providerId,
       modelId,
       plan: effectivePlan,
       provider: { baseUrl, headers },
-      fetchImpl: providerId === "local"
-        ? currentGovernedInferenceDeadline()?.localFetch ?? providerInferenceFetch
-        : providerInferenceFetch,
+      fetchImpl: parentFetch ? withInferenceCancellationFetch(parentFetch) : providerInferenceFetch,
       messages,
       systemPrompt,
       tools,
@@ -393,7 +396,8 @@ export async function callProvider(
     endTimer();
   } catch (err) {
     endTimer();
-    const errorType = err instanceof InferenceError ? err.code : "unknown";
+    const cancelled = currentInferenceSignal()?.aborted && err === currentInferenceSignal()?.reason;
+    const errorType = cancelled ? "cancelled" : err instanceof InferenceError ? err.code : "unknown";
     aiInferenceErrors.inc({ provider: providerId, error_type: errorType });
     // Phase A7: telemetry write before re-throw. Fire-and-forget — the writer
     // swallows its own errors so we never mask the original throw.
@@ -409,7 +413,7 @@ export async function callProvider(
       finishedAt,
       durationMs: finishedAt.getTime() - telemetryStartedAt.getTime(),
       status: "error",
-      errorClass: err instanceof InferenceError ? err.code : "unknown",
+      errorClass: errorType,
       httpStatus: err instanceof InferenceError ? err.statusCode : undefined,
       refusalReason: err instanceof InferenceError
         ? (err.rawBody ?? err.message)

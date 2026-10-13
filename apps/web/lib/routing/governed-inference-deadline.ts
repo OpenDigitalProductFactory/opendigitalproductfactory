@@ -18,14 +18,15 @@ export class GovernedInferenceDeadlineError extends Error {
   }
 }
 
-function awaitAuthority(checking: Promise<void>, signal: AbortSignal): Promise<void> {
-  signal.throwIfAborted();
+/** Cancellation ends this wait; it never supplies or revokes parent authority. */
+export function awaitInferenceCancellation<T>(checking: Promise<T>, signal: AbortSignal): Promise<T> {
   return new Promise((resolve, reject) => {
-    const canceled = () => reject(signal.reason);
+    const canceled = () => { signal.removeEventListener("abort", canceled); reject(signal.reason); };
     signal.addEventListener("abort", canceled, { once: true });
-    checking.then(() => { signal.removeEventListener("abort", canceled); resolve(); }, error => {
+    checking.then(value => { signal.removeEventListener("abort", canceled); resolve(value); }, error => {
       signal.removeEventListener("abort", canceled); reject(error);
     });
+    if (signal.aborted) canceled();
   });
 }
 
@@ -61,7 +62,7 @@ export async function withGovernedInferenceDeadline<T>(
         if (!disposed) controller.abort(new GovernedInferenceDeadlineError("authority-unavailable"));
       }
     })().finally(() => { checking = undefined; });
-    await awaitAuthority(checking, controller.signal);
+    await awaitInferenceCancellation(checking, controller.signal);
     controller.signal.throwIfAborted();
     if (Date.now() >= deadlineAt) {
       controller.abort(new GovernedInferenceDeadlineError("deadline-exhausted"));
@@ -97,6 +98,8 @@ export function currentGovernedInferenceDeadline(): DeadlineScope | undefined {
 }
 
 /** Called at the common provider choke point, including every fallback. */
-export async function assertGovernedInferenceAuthority(): Promise<void> {
-  await deadlines.getStore()?.assertAuthority();
+export async function assertGovernedInferenceAuthority(callerSignal?: AbortSignal): Promise<void> {
+  callerSignal?.throwIfAborted();
+  const checking = deadlines.getStore()?.assertAuthority();
+  if (checking) await (callerSignal ? awaitInferenceCancellation(checking, callerSignal) : checking);
 }

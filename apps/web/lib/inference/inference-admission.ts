@@ -37,20 +37,34 @@ export type InferenceOrigin = "interactive" | "autonomous";
  *  outbound budget (a conservative cap on concurrent cost/rate-limit exposure). */
 export type EngineKey = "local" | "remote";
 
-const originStore = new AsyncLocalStorage<InferenceOrigin>();
+const originStore = new AsyncLocalStorage<{ origin?: InferenceOrigin; signal?: AbortSignal }>();
 
 /** Run `fn` with the given inference origin bound for its whole async subtree.
  *  Every `callProvider` beneath it reads this origin without any signature
  *  threading. */
 export function withInferenceOrigin<T>(origin: InferenceOrigin, fn: () => T): T {
-  return originStore.run(origin, fn);
+  return originStore.run({ ...originStore.getStore(), origin }, fn);
 }
 
 /** The origin of the currently-executing inference call. Defaults to
  *  "interactive" when unset — background callers must opt in via
  *  withInferenceOrigin("autonomous", …). */
 export function currentInferenceOrigin(): InferenceOrigin {
-  return originStore.getStore() ?? "interactive";
+  return originStore.getStore()?.origin ?? "interactive";
+}
+
+/** One caller-owned cancellation boundary, preserved by nested origin scopes. */
+export function withInferenceCancellation<T>(signal: AbortSignal, fn: () => T): T {
+  const inherited = currentInferenceSignal();
+  return originStore.run({ ...originStore.getStore(),
+    signal: inherited && inherited !== signal ? AbortSignal.any([inherited, signal]) : signal,
+  }, fn);
+}
+
+export function currentInferenceSignal(parentSignal?: AbortSignal): AbortSignal | undefined {
+  const callerSignal = originStore.getStore()?.signal;
+  return callerSignal && parentSignal && callerSignal !== parentSignal
+    ? AbortSignal.any([callerSignal, parentSignal]) : callerSignal ?? parentSignal;
 }
 
 export function engineKeyForProvider(providerId: string): EngineKey {
@@ -117,7 +131,7 @@ interface Waiter {
   reject: (err: Error) => void;
   timer: ReturnType<typeof setTimeout> | null;
   enqueuedAt: number;
-  cleanup?: () => void;
+  cancelCleanup?: () => void;
 }
 
 interface EngineState {
@@ -148,6 +162,11 @@ function removeWaiter(s: EngineState, w: Waiter): void {
   if (i >= 0) q.splice(i, 1);
 }
 
+function clearWaiter(w: Waiter): void {
+  if (w.timer) clearTimeout(w.timer);
+  w.cancelCleanup?.();
+}
+
 /**
  * Acquire a slot on `engineKey`. Resolves immediately when the engine is below
  * its ceiling; otherwise queues (by priority) until a slot frees or the timeout
@@ -159,7 +178,8 @@ export async function acquireInferenceSlot(
   origin: InferenceOrigin,
   opts?: { providerId?: string; modelId?: string; signal?: AbortSignal },
 ): Promise<() => void> {
-  opts?.signal?.throwIfAborted();
+  const signal = currentInferenceSignal(opts?.signal);
+  signal?.throwIfAborted();
   const limit = resolveEngineLimit(engineKey);
   const s = engineState(engineKey);
 
@@ -174,23 +194,15 @@ export async function acquireInferenceSlot(
   await new Promise<void>((resolve, reject) => {
     const waiter: Waiter = {
       origin,
-      resolve: () => { waiter.cleanup?.(); resolve(); },
+      resolve,
       reject,
       timer: null,
       enqueuedAt: startedWaiting,
     };
-    const cancel = () => {
-      removeWaiter(s, waiter);
-      if (waiter.timer) clearTimeout(waiter.timer);
-      waiter.cleanup?.();
-      reject(opts?.signal?.reason ?? new Error("inference-parent-canceled"));
-    };
-    waiter.cleanup = () => opts?.signal?.removeEventListener("abort", cancel);
-    opts?.signal?.addEventListener("abort", cancel, { once: true });
     const timeoutMs = resolveAcquireTimeoutMs(origin);
     waiter.timer = setTimeout(() => {
       removeWaiter(s, waiter);
-      waiter.cleanup?.();
+      clearWaiter(waiter);
       const err: AdmissionTimeoutError = new Error(
         `inference admission timeout on ${engineKey} engine after ` +
           `${timeoutMs}ms (origin=${origin}` +
@@ -200,7 +212,22 @@ export async function acquireInferenceSlot(
       reject(err);
     }, timeoutMs);
     (origin === "interactive" ? s.interactiveQ : s.autonomousQ).push(waiter);
+    if (signal) {
+      const cancel = () => {
+        removeWaiter(s, waiter);
+        clearWaiter(waiter);
+        reject(signal.reason);
+      };
+      waiter.cancelCleanup = () => signal.removeEventListener("abort", cancel);
+      signal.addEventListener("abort", cancel, { once: true });
+    }
   });
+
+  // Cancellation can race the handoff before this continuation gets CPU time.
+  if (signal?.aborted) {
+    makeRelease(engineKey)();
+    signal.throwIfAborted();
+  }
 
   const waitedMs = Date.now() - startedWaiting;
   if (waitedMs >= 2_000) {
@@ -222,7 +249,7 @@ function makeRelease(engineKey: EngineKey): () => void {
     const next = nextWaiter(s);
     if (next) {
       // Hand our slot directly to the next waiter (active count stays put).
-      if (next.timer) clearTimeout(next.timer);
+      clearWaiter(next);
       next.resolve();
     } else {
       s.active = Math.max(0, s.active - 1);
@@ -251,7 +278,7 @@ export function getInferenceAdmissionSnapshot(): Record<
 export function __resetInferenceAdmissionForTest(): void {
   for (const s of engines.values()) {
     for (const w of [...s.interactiveQ, ...s.autonomousQ]) {
-      if (w.timer) clearTimeout(w.timer);
+      clearWaiter(w);
     }
   }
   engines.clear();
