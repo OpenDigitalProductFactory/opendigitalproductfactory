@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Recover historical immutable-reader requests under current bounds
 
 Backlog: BI-E8237EAE. Workroom: WC-C34C44B3.
