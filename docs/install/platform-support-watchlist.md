@@ -25,6 +25,21 @@ If a rule is *universal* across deployments, it belongs in the deployment
 contracts, not here. This file is for "when you touch X on platform Y, watch
 out for Z."
 
+## Repository-local Codex endpoint overrides (BI-9F258707)
+
+A trusted project's `.codex/config.toml` overrides the user's connector settings.
+Updating only the global file can leave the root checkout on HTTP while a new
+worktree uses HTTPS. Bootstrap now converges an existing project DPF block to
+its resolved endpoint; it does not create project overrides or scan other repos.
+Both repository updater wrappers pass the project explicitly to the standalone
+fallback. Disabled connections and custom credentials remain unchanged.
+
+Malformed project TOML stops convergence. The standalone fallback validates it
+with Python 3.11's `tomllib`, or `tomli` when already available on older Python;
+without either parser it refuses the write. The normal TypeScript planner uses
+its bundled TOML parser. Windows native and certificate-renewal acceptance need
+separate runtime evidence; passing Mac source tests does not establish them.
+
 ## Target environments
 
 Linux readiness evidence and remaining acceptance checks are maintained in
@@ -192,3 +207,14 @@ A bootstrap launched from a worktree may have no install PUBLIC_URL and may inhe
 | Docker Desktop and native Docker | A sibling promoter resolves relative monitoring binds beneath its own `/host-source`; the daemon cannot use that container path. A failed start leaves a Created container that an existence-only check misses. | Translate binds using the promoter's inspected host mounts. After release identity commit, release assets use the canonical install root. Retry only missing or proven never-started containers and retain failed recovery in the durable outcome. |
 | Apple Silicon macOS | The capability catalog asks for Docker speech while the macOS overlay points at the native service on port 8771. | The canonical container catalog excludes macOS for `dpf-tts`; verify native synthesis separately. A disabled `local.dpf-chatterbox-tts` LaunchAgent must be restored through the existing native setup procedure when speech is requested. |
 | All sandbox hosts | The persistent source volume contains newer package manifests but older dependency links. Next fails before its health endpoint starts. | The image-baked sandbox entrypoint performs a frozen dependency install and Prisma generation before serving the existing source. A failed install cannot fall through to a falsely ready preview. |
+
+## Linux pilot startup repairs — 2026-10-03
+
+PR #5998 merged the Docker Engine/Compose prerequisite repair. Additional source
+repairs prepare the runtime signing key and host-owned federation directories
+(BI-DFF7346E), remove the PKI host-UID assumption and suppress first-init password
+output (BI-F3AD783E), and pin pnpm plus Ollama loopback exposure (BI-5282E468).
+The [Linux guide](linux.md#source-repairs-awaiting-native-acceptance) owns release
+and acceptance caveats. Confirm the selected release contains the changes;
+customer HTTPS/login, AI, reboot, restore, upgrade and uninstall remain unrun.
+Historical root-owned directories are preserved and refused for scoped recovery.

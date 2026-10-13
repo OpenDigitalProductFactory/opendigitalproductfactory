@@ -117,3 +117,52 @@ it("does not let platform recovery bypass the pair's data clearance", async () =
   });
   expect(mocks.can).not.toHaveBeenCalled();
 });
+
+it.each([
+  ["review_workroom_sensitivity", false],
+  ["correct_workroom_sensitivity", true],
+] as const)("lets a current administrator reach only the classification control plane: %s", async (toolName, action) => {
+  mocks.can.mockReturnValue(true);
+  mocks.access.mockResolvedValue({ decision: { level: "discover", reason: "insufficient-clearance" } });
+  expect(await workroomTargetAccessRefusal({ ...input, toolName, action })).toBeNull();
+  expect(mocks.currentUser).toHaveBeenCalledWith("alice");
+  expect(mocks.can).toHaveBeenCalledWith(expect.anything(), "manage_platform");
+  expect(mocks.access).not.toHaveBeenCalled();
+  expect(mocks.room).not.toHaveBeenCalled();
+});
+
+it.each(["review_workroom_sensitivity", "correct_workroom_sensitivity"])("does not give an admitted nonadministrator classification authority: %s", async (toolName) => {
+  mocks.access.mockResolvedValue({ decision: { level: "action" } });
+  expect(await workroomTargetAccessRefusal({ ...input, toolName })).toMatchObject({
+    success: false, error: "not_authorized",
+  });
+});
+
+it("rechecks current administrator permission on each metadata request", async () => {
+  mocks.can.mockReturnValue(true);
+  mocks.currentUser.mockResolvedValueOnce({ userId: "alice" }).mockResolvedValueOnce(null);
+  const request = { ...input, toolName: "review_workroom_sensitivity", action: false };
+  expect(await workroomTargetAccessRefusal(request)).toBeNull();
+  expect(await workroomTargetAccessRefusal(request)).toMatchObject({ error: "not_authorized" });
+  expect(mocks.currentUser).toHaveBeenCalledTimes(2);
+});
+
+it.each([
+  ["get_workroom", false],
+  ["record_workroom_evidence", true],
+] as const)("keeps ordinary room access denied for administrators: %s", async (toolName, action) => {
+  mocks.can.mockReturnValue(true);
+  mocks.access.mockResolvedValue({ decision: { level: "discover", reason: "insufficient-clearance" } });
+  expect(await workroomTargetAccessRefusal({ ...input, toolName, action,
+    params: { ...input.params, toolName: "review_workroom_sensitivity", administrator: true },
+  })).toMatchObject({ error: "workroom_data_access_required" });
+  expect(mocks.currentUser).not.toHaveBeenCalled();
+});
+
+it("does not let an unbound OAuth connection use classification recovery", async () => {
+  mocks.can.mockReturnValue(true);
+  expect(await workroomTargetAccessRefusal({ ...input, agentId: undefined,
+    toolName: "review_workroom_sensitivity", action: false,
+  })).toMatchObject({ error: "workroom_access_denied" });
+  expect(mocks.currentUser).not.toHaveBeenCalled();
+});

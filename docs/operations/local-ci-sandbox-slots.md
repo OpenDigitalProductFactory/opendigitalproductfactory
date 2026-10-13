@@ -5,6 +5,25 @@ a versioned slot manifest. The lease decides who may run; the manifest decides
 which physical resources that admitted owner may mutate. These are separate
 safety layers.
 
+## Owned development lease cleanup
+
+On an installation proven to be `development` / `evolve-dpf`, a local-CI
+cleanup with the exact original session and a server-recorded durable wait
+belonging to the authenticated user does not need another generic authority
+approval. The classifier checks the complete lease/wait identity and version-one
+slot binding. It does not release the lease or alter its history by itself.
+
+Missing or legacy provenance, another user/session, unsupported environments,
+unknown state and live host-process reservations keep the authority gate.
+Non-development installations and explicit operator approval policies retain
+their gates. Token scope, coworker grants, user capabilities, immutable ownership,
+execution fencing and the release transaction remain enforced.
+
+Release the admitted lease after its owned work finishes. An expired or cancelled
+wait stays terminal; cleanup never implies admission, command success or completed
+verification. Reuse the exact supported request rather than creating repeated
+approval envelopes or new attempts for the same cleanup.
+
 ## Host-wide heavyweight resource admission
 
 The local-CI slots are not the only processes capable of exhausting a

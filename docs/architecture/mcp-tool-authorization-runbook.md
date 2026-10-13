@@ -516,6 +516,12 @@ The connection briefing carries bounded identity, mission, locale and owning-sco
 For recovery, begin with the local [routing reference](../../packages/dpf-skill-pack/skills/dpf-systematic-debugging/references/recovery-routing.md). Protocol conformance and deterministic routing tests do not establish fresh-model behavior. After deployment, exercise normal delivery, broken upgrade, unavailable MCP/CI, denied authority and stale expedite occupancy on supported hosts, recording tools attached, route selected, outcome and actual usage where available.
 
 
+## Administrator classification recovery
+
+`review_workroom_sensitivity` is a platform-administrator control-plane read. It returns only the room id, revision digest, canonical classification (or null) and whether an invalid historical declaration needs review. It does not return room contents, titles, membership or historical prose. OAuth dispatch checks the current human's `manage_platform` permission for this exact tool instead of requiring room-content admission.
+
+The paired `correct_workroom_sensitivity` operation uses that same administrative boundary and retains the normal exact authority approval. Its transaction rechecks current permission, verified classification, invalid-only eligibility and the revision/JSON compare-and-swap, then retains the original declaration in the audit. Neither operation grants room admission or changes coworker clearance. Ordinary room reads and writes keep their existing data-access checks. An administrator must verify actual classification before proposing a historical correction; DEV posture does not supply it.
+
 ## Recovering an interrupted independent review
 
 Read the canonical task with MCP `tasks/get` and `tasks/result`. Native review
@@ -571,3 +577,28 @@ For the review service's own repair, use the existing recovery routing and build
 gate runbooks. They provide no alternative independent-review receipt and do
 not relax DCO, grants, ownership or production integrity. Record unavailable
 checks as unrun, then reconcile them after canonical recovery.
+
+
+### Parent-bounded local review execution (BI-03AC2FD9)
+
+The local reviewer's default call window remains 600 seconds. A persisted native
+review binds each unfinished branch to its existing absolute parent deadline.
+The server checks current authority and generation before dispatch, after queue
+admission and periodically during execution. The branch uses only remaining
+parent time; queue waits and fallback never restart the clock. Ordinary chat,
+caller durations and an autonomous origin tag do not confer this authority.
+
+Parent expiry or loss of authority aborts local HTTP execution and removes queued
+waiters. Active work keeps its GPU slot until its actual call settles. A canceled
+client request is not proof that a remote provider stopped: uncertain outcomes
+still require the existing scoped reconciliation before recovery. Completed
+checkpoints survive revoked authority, but a review receipt cannot publish until
+current authority is valid. `auth-required` names that distinction; an execution
+failure remains infrastructure-inconclusive, never a failed code verdict.
+
+The 4,096-token generic output allowance and the 16,384-token semantic-review
+output reserve are separate from the model's served context window and execution
+deadline. This repair changes neither token/cost budgets nor model/tool routing.
+A larger context window alone does not prove reliable native tool execution;
+provider routing, tool schema/format fidelity, multistep completion and latency
+need separate measured acceptance.

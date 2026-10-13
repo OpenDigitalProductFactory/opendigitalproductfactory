@@ -48,10 +48,13 @@ function withHome(run) {
 }
 
 function bash(script, { home, env = {} }) {
-  return spawnSync("bash", ["-c", script], {
+  // Git Bash rewrites HOME on startup. Restore the exact temporary fixture
+  // path so persistence assertions exercise the same input on every host.
+  return spawnSync("bash", ["-c", `HOME="$DPF_FIXTURE_HOME"; export HOME; ${script}`], {
     encoding: "utf8",
     env: {
       PATH: process.env.PATH, HOME: posix(home), ENV_LIB: envLib, TRUST_LIB: trustLib,
+      DPF_FIXTURE_HOME: posix(home),
       // Never inherit the operator's own client environment into a test.
       DPF_MCP_URL: "", DPF_PKI_TRUST_BUNDLE: "", NODE_EXTRA_CA_CERTS: "",
       ...env,

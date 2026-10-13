@@ -61,7 +61,7 @@ export function buildBreadcrumbTrail(
     while (current && !seen.has(current.path)) {
       seen.add(current.path);
       if (canOpen(current.capabilityKey, capabilities)) {
-        trail.unshift({ label: labelOverrides[current.key] ?? current.label, href: current.path });
+        trail.unshift({ label: labelOverrides[current.key] ?? current.label, href: current === record ? pathname : current.path });
       }
       if (current.parentPath === current.path) break;
       current = getRouteNavRecord(current.parentPath);

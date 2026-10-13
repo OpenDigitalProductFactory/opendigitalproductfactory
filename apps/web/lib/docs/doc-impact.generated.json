@@ -602,10 +602,16 @@
     "apps/web/lib/backlog/deferral-contract.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
+    "apps/web/lib/backlog/initiative-readiness/body-baseline-persistence.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
     "apps/web/lib/backlog/initiative-readiness/delivery-sensitivity.ts": [
       "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md"
     ],
     "apps/web/lib/backlog/initiative-readiness/evaluate.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
+    "apps/web/lib/backlog/initiative-readiness/objective-mapping-repository.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
     ],
     "apps/web/lib/backlog/initiative-readiness/parent-scope-inheritance.ts": [
@@ -623,6 +629,9 @@
     "apps/web/lib/backlog/initiative-readiness/shape-requirements.ts": [
       "docs/architecture/backlog-and-planning-runbook.md",
       "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md"
+    ],
+    "apps/web/lib/backlog/initiative-readiness/terminal-recovery.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
     ],
     "apps/web/lib/backlog/initiative-readiness/types.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
@@ -3269,10 +3278,13 @@
     ],
     "docs/architecture/initiative-readiness-runbook.md": [
       "apps/web/lib/backlog/acceptance-sweep/execution-evidence-owner.ts",
+      "apps/web/lib/backlog/initiative-readiness/body-baseline-persistence.ts",
       "apps/web/lib/backlog/initiative-readiness/evaluate.ts",
+      "apps/web/lib/backlog/initiative-readiness/objective-mapping-repository.ts",
       "apps/web/lib/backlog/initiative-readiness/readiness-guidance.ts",
       "apps/web/lib/backlog/initiative-readiness/receipt-schema.ts",
       "apps/web/lib/backlog/initiative-readiness/reviewer-identity.ts",
+      "apps/web/lib/backlog/initiative-readiness/terminal-recovery.ts",
       "apps/web/lib/backlog/initiative-readiness/types.ts",
       "apps/web/lib/kernel/governing-principles.ts",
       "apps/web/lib/mcp/external-coworker-task-adapter.ts",

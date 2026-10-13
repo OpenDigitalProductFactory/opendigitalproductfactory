@@ -623,3 +623,80 @@ describe("expired review successor", () => {
       data: expect.objectContaining({ status: "failed", outputSnapshot: expect.objectContaining({ providerOutcome: "unknown", remediationVerificationId: "RV-1" }) }) }));
   });
 });
+
+// Exercise the server binding, not just a caller-created timeout policy.
+import { currentGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
+
+it("binds the immutable review deadline without changing its request or output budget", async () => {
+  mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => branch("change-reviewer", async () => {
+    providerCalls++;
+    expect(currentGovernedInferenceDeadline()?.deadlineAt).toBe(Date.parse(packet.deadlineAt));
+    return result;
+  }));
+  const digest = packet.digest;
+  await executePersistedSemanticReview("TR-1");
+  expect(packet.digest).toBe(digest);
+  expect(providerCalls).toBe(1);
+  expect(row.status).toBe("completed");
+  expect(currentGovernedInferenceDeadline()).toBeUndefined();
+});
+
+it("cancels local execution on generation loss and never writes a stale verdict", async () => {
+  vi.useFakeTimers();
+  try {
+    let started!: () => void;
+    const ready = new Promise<void>(resolve => { started = resolve; });
+    mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => branch("change-reviewer", async () => {
+      providerCalls++;
+      const signal = currentGovernedInferenceDeadline()!.signal;
+      started();
+      await new Promise<void>((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
+      return result;
+    }));
+    const outcome = executePersistedSemanticReview("TR-1").catch(error => error);
+    await ready;
+    row.status = "canceled";
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(await outcome).toBeInstanceOf(Error);
+    expect(row.status).toBe("canceled");
+    expect(providerCalls).toBe(1);
+    expect(mocks.evidence).not.toHaveBeenCalled();
+    expect(mocks.db.taskNode.update).not.toHaveBeenCalled();
+  } finally { vi.useRealTimers(); }
+});
+
+it("reports required authorization when authority is revoked during execution", async () => {
+  mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => branch("change-reviewer", async () => {
+    mocks.authority.mockResolvedValue(false);
+    await currentGovernedInferenceDeadline()!.assertAuthority();
+    return result;
+  }));
+  await expect(executePersistedSemanticReview("TR-1")).rejects.toThrow("authority-lost");
+  expect(row.status).toBe("auth-required");
+  expect(row.progressPayload).toMatchObject({ semanticReview: { reason: "submitting-authority-no-longer-valid" } });
+  expect(mocks.evidence).not.toHaveBeenCalled();
+});
+
+it("retains a completed checkpoint but refuses a receipt after authority is revoked", async () => {
+  mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => branch("change-reviewer", async () => {
+    mocks.authority.mockResolvedValue(false);
+    return result;
+  }));
+  await executePersistedSemanticReview("TR-1");
+  expect(row.status).toBe("auth-required");
+  expect(mocks.db.taskNode.update).toHaveBeenCalledWith(expect.objectContaining({
+    data: expect.objectContaining({ status: "completed", outputSnapshot: expect.objectContaining({ result }) }),
+  }));
+  expect(mocks.evidence).not.toHaveBeenCalled();
+});
+
+it("distinguishes an unavailable authority store from a denied grant", async () => {
+  mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => branch("change-reviewer", async () => {
+    mocks.authority.mockRejectedValue(new Error("store unavailable"));
+    return result;
+  }));
+  await executePersistedSemanticReview("TR-1");
+  expect(row.status).toBe("input-required");
+  expect(row.progressPayload).toMatchObject({ semanticReview: { reason: "review-authority-unavailable" } });
+  expect(mocks.evidence).not.toHaveBeenCalled();
+});

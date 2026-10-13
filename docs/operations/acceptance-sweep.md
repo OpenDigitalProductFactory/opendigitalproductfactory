@@ -1,5 +1,29 @@
 # Acceptance sweep (operator runbook)
 
+## Medium work whose criteria are in its body
+
+Product-linked medium work still needs independent acceptance after delivery.
+It can use an Acceptance heading with one criterion per bullet, or explicit
+`AC-<id>:` bullets, without obtaining a separate spec approval.
+
+After delivery passes, an authorized completion attempt retains those criteria
+as an immutable version. It requires one current source Workroom with a full
+repository commit, attributable criteria and source authors, and document storage
+in the item's organization. The attempt may still refuse completion: retaining
+criteria is preparation for review, not an acceptance receipt.
+
+Read the returned recovery action. It distinguishes unreadable criteria,
+unretained criteria, stale source or criteria, missing eligible evidence, and
+an unavailable independent reviewer. Record passing evidence after the retained
+baseline, then request the exact server-issued acceptance packet. The reviewer
+needs its existing reading and evidence-writing grants plus admission to the
+Workroom; use the governed coworker engagement procedure when admission is absent.
+
+Changed criteria, source identity or eligible evidence invalidate the old request.
+Refresh recovery for a successor; unchanged retries reuse the request and receipt.
+Historical requests remain auditable. Only a current independent receipt satisfies
+acceptance. Product links, delivery shape and administrator approval gates stay intact.
+
 The `acceptance-sweep-daily` scheduled task (05:00 UTC, owned by the Portfolio
 Advisor, AGT-WS-PORTFOLIO) revisits a page of `awaiting-acceptance` backlog
 items each day. It records who owes each item's acceptance, measures how long
