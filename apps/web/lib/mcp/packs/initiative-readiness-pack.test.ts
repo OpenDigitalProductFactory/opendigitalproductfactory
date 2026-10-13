@@ -67,12 +67,14 @@ describe("initiative readiness reviewer tools", () => {
       branchName: "feat/provider-accounts-ux", headSha: "45eb029a53ffd593f08be48eb4a061488aaa735f" };
     mocks.findTaskRun.mockResolvedValue({ a2aMetadata: { trigger: "external-mcp", initiativeReviewBinding: {
       writerToolName: "record_initiative_design_review", itemId: "BI-7AA4EB6B", gate: "plan-review", artifactRef, workroomRef,
+      expectedCurrentBaselineId: "baseline-434",
     } } });
     mocks.recordGateReceipt.mockResolvedValue({ ok: true, receiptId: "plan-receipt" });
     expect(await initiativeReadinessPack.handlers.record_initiative_design_review!({ decision: "pass", reason: "Reviewed.",
       findings: [], resolvedFindingRefs: [], workroomRef: { ...workroomRef, headSha: artifactRef.commitSha } },
       "user", { taskRunId: "TR-E084", agentId: "AGT-WS-REVIEW" } as never)).toMatchObject({ success: true });
-    expect(mocks.recordGateReceipt).toHaveBeenCalledWith(expect.objectContaining({ artifactRef, workroomRef }));
+    expect(mocks.recordGateReceipt).toHaveBeenCalledWith(expect.objectContaining({ artifactRef, workroomRef,
+      expectedCurrentBaselineId: "baseline-434" }));
   });
   it("validates a real failure citation after metrics-only source auditing without retaining source in the audit", async () => {
     const artifactRef = { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "a".repeat(40), providerBlobId: "b".repeat(40), path: "design.md" };

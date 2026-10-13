@@ -487,6 +487,7 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
       decision,
       artifactRef: params.artifactRef as InitiativeArtifactRef,
       workroomRef: binding?.workroomRef ?? undefined,
+      expectedCurrentBaselineId: binding?.expectedCurrentBaselineId,
       reason: String(params.reason ?? ""),
       findings,
       resolvedFindingRefs,

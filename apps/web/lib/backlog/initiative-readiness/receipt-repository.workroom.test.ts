@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const io = vi.hoisted(() => ({ artifact: vi.fn(), item: vi.fn(), decision: vi.fn(), room: vi.fn(),
-  append: vi.fn(), transaction: vi.fn(), lock: vi.fn() }));
+  append: vi.fn(), transaction: vi.fn(), lock: vi.fn(), canonicalPlan: vi.fn() }));
+vi.mock("./canonical-plan-source", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./canonical-plan-source")>(), loadCanonicalPlanSource: io.canonicalPlan,
+}));
 vi.mock("./artifact-resolver", () => ({ resolveInitiativeArtifact: io.artifact }));
 vi.mock("./reviewer-identity", async (importOriginal) => ({
   ...await importOriginal<typeof import("./reviewer-identity")>(),
@@ -22,7 +25,7 @@ const args = { itemId: "BI-7AA4EB6B", allowedGates: ["plan-review"] as const,
   requiredCapability: "manage_backlog", requiredGrant: "initiative_design_review", actionKey: "record_initiative_design_review",
   gate: "plan-review" as const, decision: "pass" as const, artifactRef, workroomRef, reason: "Reviewed the immutable plan.",
   findings: [], resolvedFindingRefs: [], reviewerUserId: "user", reviewerAgentId: "AGT-WS-REVIEW",
-  authorityDecisionId: "AUTH-1", tokenScope: "write", requiresIndependentReviewer: true };
+  authorityDecisionId: "AUTH-1", tokenScope: "write", requiresIndependentReviewer: true, expectedCurrentBaselineId: "baseline-1" };
 let room: Record<string, unknown>;
 
 beforeEach(() => {
@@ -32,6 +35,8 @@ beforeEach(() => {
     policyVersion: "PV-1", organizationId: null, rationale: {} });
   io.artifact.mockResolvedValue({ ok: true, artifact: { ref: artifactRef, digest: `sha256:${"a".repeat(64)}`,
     authorPrincipalId: "principal-author", authorAgentId: null, bytes: Buffer.from("canonical plan") } });
+  io.canonicalPlan.mockResolvedValue({ itemId: args.itemId, baselineId: "baseline-1", scopeOwnerItemId: "BI-PARENT",
+    artifactRef, digest: `sha256:${"a".repeat(64)}` });
   room = { capsuleId: workroomRef.workroomId, backlogItemId: args.itemId, repositoryFullName: workroomRef.repositoryFullName,
     headBranch: workroomRef.branchName, headSha: workroomRef.headSha, archivedAt: null, status: "ready",
     createdByPrincipalId: "principal-author" };
@@ -46,8 +51,29 @@ describe("bound historical plan receipt publication", () => {
     expect(await recordInitiativeGateReceipt(args)).toMatchObject({ ok: true });
     expect(io.artifact).toHaveBeenCalledWith(expect.objectContaining({ locator: artifactRef, workroomRef }));
     expect(io.room).toHaveBeenCalledWith(expect.objectContaining({ where: { capsuleId: workroomRef.workroomId } }));
-    expect(io.lock).toHaveBeenCalledTimes(2);
+    expect(io.lock).toHaveBeenCalledTimes(3);
+    expect(io.canonicalPlan).toHaveBeenCalledTimes(2);
     expect(io.append.mock.calls[0]?.[0].data.payload.artifactRef).toEqual(artifactRef);
+  });
+
+  it.each(["missing", "baseline", "locator", "digest", "scope-owner"])("refuses changed canonical plan %s at publication", async (drift) => {
+    const source = { itemId: args.itemId, baselineId: "baseline-1", scopeOwnerItemId: "BI-PARENT",
+      artifactRef, digest: `sha256:${"a".repeat(64)}` };
+    const changed = { ...source };
+    if (drift === "baseline") changed.baselineId = "baseline-new";
+    if (drift === "locator") changed.artifactRef = { ...artifactRef, commitSha: "d".repeat(40) };
+    if (drift === "digest") changed.digest = `sha256:${"d".repeat(64)}`;
+    if (drift === "scope-owner") changed.scopeOwnerItemId = "BI-FOREIGN";
+    io.canonicalPlan.mockResolvedValueOnce(source).mockResolvedValueOnce(drift === "missing" ? null : changed);
+    expect(await recordInitiativeGateReceipt(args)).toMatchObject({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS" });
+    expect(io.append).not.toHaveBeenCalled();
+  });
+
+  it("refuses a stale accepted baseline before source verification", async () => {
+    expect(await recordInitiativeGateReceipt({ ...args, expectedCurrentBaselineId: "baseline-old" }))
+      .toMatchObject({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS" });
+    expect(io.artifact).not.toHaveBeenCalled();
+    expect(io.append).not.toHaveBeenCalled();
   });
 
   it.each(["missing", "head", "branch", "repository", "subject", "owner", "archived", "abandoned", "cancelled"])(

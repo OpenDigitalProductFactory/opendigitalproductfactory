@@ -74,6 +74,38 @@ function providerFetch(signOff = "Signed-off-by: Author <author@example.com>") {
 }
 
 describe("resolveRepositoryArtifact", () => {
+  it.each(["subject", "locator", "digest", "unbound"])("refuses invalid canonical plan proof: %s", async (drift) => {
+    const headSha = "c".repeat(40);
+    const proof = { itemId: "BI-TEST", baselineId: "baseline-1", scopeOwnerItemId: "BI-PARENT", artifactRef: locator,
+      digest: `sha256:${createHash("sha256").update(bytes).digest("hex")}` };
+    if (drift === "subject") proof.itemId = "BI-FOREIGN";
+    if (drift === "locator") proof.artifactRef = { ...locator, path: "docs/superpowers/plans/foreign.md" };
+    if (drift === "digest") proof.digest = `sha256:${"d".repeat(64)}`;
+    const fetchImpl = providerFetch();
+    expect(await resolveRepositoryArtifact({ locator, subject: { kind: "backlog-item", id: "BI-TEST" },
+      workroomRef: drift === "unbound" ? undefined : { kind: "workroom-head", workroomId: "WC-TEST0001",
+        repositoryFullName: locator.repositoryFullName, branchName: "feat/test", headSha }, canonicalPlanProof: proof,
+      db: db({ capsules: [capsule({ headSha })] }) as never, fetchImpl: fetchImpl as typeof fetch,
+    })).toMatchObject({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS" });
+    if (drift !== "digest") expect(fetchImpl).not.toHaveBeenCalled();
+  });
+  it("retains the canonical coverage plan despite a different current file blob, without claiming byte equivalence", async () => {
+    const headSha = "c".repeat(40);
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => String(url).includes(`?ref=${headSha}`)
+      ? new Response(JSON.stringify({ type: "file", sha: "d".repeat(40), encoding: "base64",
+        content: Buffer.from("---\nstatus: active\n---\n" + bytes).toString("base64") }), { status: 200 })
+      : providerFetch()(url));
+    const result = await resolveRepositoryArtifact({ locator, subject: { kind: "backlog-item", id: "BI-TEST" },
+      workroomRef: { kind: "workroom-head", workroomId: "WC-TEST0001", repositoryFullName: locator.repositoryFullName,
+        branchName: "feat/test", headSha },
+      canonicalPlanProof: { itemId: "BI-TEST", baselineId: "baseline-1", scopeOwnerItemId: "BI-PARENT", artifactRef: locator,
+        digest: `sha256:${createHash("sha256").update(bytes).digest("hex")}` },
+      db: db({ capsules: [capsule({ headSha })] }) as never, fetchImpl: fetchImpl as typeof fetch,
+    } as Parameters<typeof resolveRepositoryArtifact>[0]);
+    expect(result).toMatchObject({ ok: true, artifact: { bytes } });
+    expect(fetchImpl).not.toHaveBeenCalledWith(expect.stringContaining(`?ref=${headSha}`), expect.anything());
+    expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining(`?ref=${locator.commitSha}`), expect.anything());
+  });
   it.each(["missing", "branch", "head", "repository", "duplicate", "author", "sign-off", "changed-blob"])("refuses a bound historical plan after %s drift", async (drift) => {
     const headSha = "c".repeat(40);
     const room = capsule({ headSha });
