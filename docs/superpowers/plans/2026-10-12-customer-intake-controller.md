@@ -67,3 +67,5 @@ Receipt cmv674efp0vuw01o77l9sg4hd validated six live mappings and was read back 
 
 Scope update: the subsequent claim resolved the impact contract to concrete paths. Related-test lookup returned the colocated reader/runner tests plus migration-proof, standing-operations-shapes, standing-room-declaration and standing-stage-evidence-grants tests. The queue wrapper has no linked tests; add its behavior test. The required style-drift guard, Design Grounding explanation and doc-index regeneration remain in the completion gate.
 
+Integration finding: the sequential-drive characterization also covers the task content generated from the issue-watch conditions. The first merged-code run passed 6,715 tests and failed only its golden comparison for ten issue-triage-watch traces; their stage-sequence summaries were unchanged. Regenerate that fixture through its documented writer for the intentional condition-text change, leave the frozen generator untouched, and verify that all other shapes and direct cases remain identical. Include the sequential-drive test in subsequent verification.
+
