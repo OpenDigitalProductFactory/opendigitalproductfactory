@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Local-MSP Channel Readiness Path — sell TO the MSP, sell THROUGH the MSP
 
 **2026-10-12 scope continuation:** Customer setup, external technician consent, DPF administration, edge/endpoint access and revocation now have a researched [delegated-support design](2026-10-12-msp-customer-setup-delegated-support-design.md). Its live delivery ledger is the current intake mapping. Historical statuses below remain dated context, not runtime verification.

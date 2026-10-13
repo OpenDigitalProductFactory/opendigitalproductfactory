@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # MSP customer setup and delegated support
 
 **Date:** 2026-10-12
