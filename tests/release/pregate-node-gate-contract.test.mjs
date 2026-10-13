@@ -245,6 +245,8 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   cpSync(join(repoRoot, "scripts", "lib", "lease-queue-call-options.mjs"), join(temp, "scripts", "lib", "lease-queue-call-options.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "script-argv.mjs"), join(temp, "scripts", "lib", "script-argv.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "mcp-credential.mjs"), join(temp, "scripts", "lib", "mcp-credential.mjs"));
+  // mcp-credential.mjs re-exports the exchange from the skill pack (BI-84C1F526).
+  cpSync(join(repoRoot, "packages", "dpf-skill-pack", "scripts", "lib", "client-credentials-exchange.mjs"), join(temp, "packages", "dpf-skill-pack", "scripts", "lib", "client-credentials-exchange.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "gate-quiescence.mjs"), join(temp, "scripts", "lib", "gate-quiescence.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "documentation-evidence-lane.mjs"), join(temp, "scripts", "lib", "documentation-evidence-lane.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "semantic-review-gate.mjs"), join(temp, "scripts", "lib", "semantic-review-gate.mjs"));

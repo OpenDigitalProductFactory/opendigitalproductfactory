@@ -16,4 +16,15 @@ describe("TOOL_TO_GRANTS — surface readiness (G9)", () => {
     expect(isToolAllowedByGrants("get_fleet_readiness", ["work_capsule_read"])).toBe(true);
     expect(isToolAllowedByGrants("get_fleet_readiness", ["work_room_read"])).toBe(false);
   });
+
+  // BI-84C1F526: Grok's own credential carries dpf.build, so issuing it needs a build grant.
+  it("issue_grok_credentials_client needs sandbox_execute, and its secret never reaches the audit row", async () => {
+    expect(TOOL_TO_GRANTS.issue_grok_credentials_client).toEqual(["sandbox_execute"]);
+    expect(isToolAllowedByGrants("issue_grok_credentials_client", ["sandbox_execute"])).toBe(true);
+    expect(isToolAllowedByGrants("issue_grok_credentials_client", ["work_capsule_write"])).toBe(false);
+    const { surfaceReadinessPack } = await import("@/lib/mcp/packs/surface-readiness-pack");
+    const tool = surfaceReadinessPack.definitions.find((d) => d.name === "issue_grok_credentials_client")!;
+    expect(tool).toMatchObject({ sideEffect: true, consequence: "authority", secretResultKeys: ["credentialsClient"] });
+    expect(surfaceReadinessPack.grants.issue_grok_credentials_client).toEqual(TOOL_TO_GRANTS.issue_grok_credentials_client);
+  });
 });

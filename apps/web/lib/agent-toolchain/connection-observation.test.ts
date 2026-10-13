@@ -11,7 +11,9 @@ import {
   recordToolchainObservation,
   resolveCredentialRef,
 } from "./connection-observation";
-import { rollUpToolchainCopies, type ToolchainObservationRow } from "./fleet-readiness";
+import { getToolchainCopies, rollUpToolchainCopies, type ToolchainObservationRow } from "./fleet-readiness";
+import { GROK_OWN_CREDENTIAL_KIND } from "./toolchain-verdict";
+import { GROK_CREDENTIALS_CLIENT_NAME } from "@/lib/auth/grok-credentials-client";
 
 /** A fake table shared by two "processes" (two memo resets). */
 function fakeTable() {
@@ -86,9 +88,15 @@ describe("recordToolchainObservation", () => {
 
 describe("resolveCredentialRef", () => {
   it("keys OAuth tokens by their client, bearer tokens by themselves, and skips sessions", async () => {
-    const db = { mcpApiToken: { findUnique: vi.fn(async ({ where }: { where: { id: string } }) => (where.id === "t-oauth" ? { oauthClientId: "oc-1", kind: "oauth_access" } : { oauthClientId: null, kind: "operator" })) } };
-    expect(await resolveCredentialRef(db, { tokenId: "t-oauth", source: "oauth" })).toEqual({ credentialRef: "oauth:oc-1", tokenKind: "oauth_access" });
-    expect(await resolveCredentialRef(db, { tokenId: "t-pat", source: "pat" })).toEqual({ credentialRef: "token:t-pat", tokenKind: "operator" });
+    const rows: Record<string, { oauthClientId: string | null; kind: string; oauthClient: { registrationKind: string; clientName: string } | null }> = {
+      "t-oauth": { oauthClientId: "oc-1", kind: "oauth_access", oauthClient: { registrationKind: "dcr", clientName: "Claude Code" } },
+      "t-grok": { oauthClientId: "oc-grok", kind: "oauth_access", oauthClient: { registrationKind: "credentials", clientName: GROK_CREDENTIALS_CLIENT_NAME } },
+      "t-pat": { oauthClientId: null, kind: "operator", oauthClient: null },
+    };
+    const db = { mcpApiToken: { findUnique: vi.fn(async ({ where }: { where: { id: string } }) => rows[where.id] ?? null) } };
+    expect(await resolveCredentialRef(db, { tokenId: "t-oauth", source: "oauth" })).toEqual({ credentialRef: "oauth:oc-1", credentialKind: "oauth_access" });
+    expect(await resolveCredentialRef(db, { tokenId: "t-grok", source: "oauth" })).toEqual({ credentialRef: "oauth:oc-grok", credentialKind: GROK_OWN_CREDENTIAL_KIND });
+    expect(await resolveCredentialRef(db, { tokenId: "t-pat", source: "pat" })).toEqual({ credentialRef: "token:t-pat", credentialKind: "operator" });
     expect(await resolveCredentialRef(db, { tokenId: "session:u:a", source: "session-jwt" })).toBeNull();
   });
 });
@@ -133,5 +141,19 @@ describe("rollUpToolchainCopies", () => {
     );
     expect(rollup!.verdict).toBe("current");
     expect(rollup!.copies.find((copy) => copy.silent)).toBeTruthy();
+  });
+
+  it("passes each credential's kind, so Grok on its own credentials client is current after grace", async () => {
+    const floored = { ...published, floor: { minPackVersion: "0.3.0", graceStartsAt: "2026-09-01T00:00:00Z" } };
+    const grok = (credentialRef: string) => row({ credentialRef, clientKind: "grok", authMode: credentialRef.startsWith("oauth:") ? "oauth" : "bearer" });
+    const db = {
+      agentToolchainObservation: { findMany: vi.fn(async () => [grok("oauth:oc-grok"), grok("token:t-pat")]) },
+      oAuthClient: { findMany: vi.fn(async () => [{ id: "oc-grok", registrationKind: "credentials", clientName: GROK_CREDENTIALS_CLIENT_NAME }]) },
+      mcpApiToken: { findMany: vi.fn(async () => [{ id: "t-pat", kind: "operator" }]) },
+    };
+    const { credentials } = await getToolchainCopies(db, { published: floored, mcpEndpoint: "https://dpf.example/api/mcp/v1", now, staleAfterMs: 7 * 86_400_000 });
+    const verdictOf = (ref: string) => credentials.find((c) => c.credentialRef === ref)!.verdict;
+    expect(verdictOf("oauth:oc-grok")).toBe("current");
+    expect(verdictOf("token:t-pat")).toBe("below-floor");
   });
 });

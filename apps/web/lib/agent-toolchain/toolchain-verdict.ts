@@ -9,6 +9,7 @@
 // what SDK-built customer agents send, so it may only label a row for display.
 
 import { mcpClientBearerHeaderRequired, type McpClient } from "@dpf/integration-shared/mcp-client-credential-policy";
+import { GROK_CREDENTIALS_CLIENT_NAME } from "@/lib/auth/grok-credentials-client";
 
 /** Client kinds that load the dpf-platform pack, and their credential-policy key. */
 export const DECLARING_CLIENT_KINDS: Readonly<Record<string, McpClient>> = Object.freeze({
@@ -36,9 +37,45 @@ export type PublishedToolchain = {
 export type ConnectionCredential = {
   /** How the request authenticated (McpAuthSource). */
   authSource: "oauth" | "pat" | "session-jwt";
-  /** McpApiToken.kind for bearer credentials, e.g. "operator" or "agent-client". */
-  tokenKind?: string | null;
+  /**
+   * What kind of credential this is: McpApiToken.kind ("operator",
+   * "oauth_access", ...), or GROK_OWN_CREDENTIAL_KIND for a token issued to
+   * Grok's registered OAuth credentials client (connection-observation.ts).
+   */
+  credentialKind?: string | null;
 };
+
+/** A token issued to the "DPF Grok connection" client_credentials client (BI-5BCDB07C). */
+export const GROK_OWN_CREDENTIAL_KIND = "grok-credentials-client";
+
+/**
+ * The credential kind for a token row: Grok's registered client_credentials
+ * client is told apart from every other OAuth client by its registration, not
+ * by anything the caller sends.
+ */
+export function credentialKindOf(
+  kind: string | null | undefined,
+  oauthClient: { registrationKind: string; clientName: string } | null | undefined,
+): string | null {
+  if (oauthClient?.registrationKind === "credentials" && oauthClient.clientName === GROK_CREDENTIALS_CLIENT_NAME) {
+    return GROK_OWN_CREDENTIAL_KIND;
+  }
+  return kind ?? null;
+}
+
+/** Default grace before a raised floor is enforced (design §5.2d, §11 decision 2). */
+export const TOOLCHAIN_FLOOR_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Whether the floor's grace window has ended. With no (or an unreadable)
+ * `graceStartsAt`, grace has not started, so it has not ended either.
+ */
+export function toolchainFloorGraceEnded(floor: PublishedToolchain["floor"], now: Date): boolean {
+  if (!floor.graceStartsAt) return false;
+  const start = Date.parse(floor.graceStartsAt);
+  if (!Number.isFinite(start)) return false;
+  return now.getTime() >= start + TOOLCHAIN_FLOOR_GRACE_MS;
+}
 
 const SEMVER_RE = /^(\d+)\.(\d+)\.(\d+)$/;
 const DIGEST_PREFIX_RE = /^[0-9a-f]{16}$/;
@@ -93,37 +130,44 @@ export type VerdictResult = { verdict: ToolchainVerdict; reasons: string[] };
  * The floor's rules apply only once a release configures one
  * (`floor.minPackVersion`): a declared pack older than it, a bearer where the
  * canonical credential policy says OAuth is available, or Grok on anything but
- * its client-scoped token. Grace never changes the verdict; it only changes
- * whether writes are refused (BI-DFC0270C).
+ * its own OAuth credentials client. Grace changes only the Grok rule: during
+ * grace, Grok on another credential is `stale`, and after it `below-floor`
+ * (DI-4B843FAF62F9). Refusing writes is BI-DFC0270C's job.
  */
 export function resolveToolchainVerdict(input: {
   declaration: ToolchainDeclaration | null;
   credential: ConnectionCredential;
   mcpEndpoint: string;
   published: PublishedToolchain;
+  now: Date;
 }): VerdictResult {
-  const { declaration, credential, mcpEndpoint, published } = input;
+  const { declaration, credential, mcpEndpoint, published, now } = input;
   if (!declaration) return { verdict: "undeclared", reasons: ["the connection declares no DPF toolchain"] };
 
   const reasons: string[] = [];
+  const staleReasons: string[] = [];
   const min = published.floor.minPackVersion;
   if (min) {
     if (compareSemver(declaration.pack, min) < 0) reasons.push(`pack ${declaration.pack} is below the floor ${min}`);
     const bearer = credential.authSource === "pat";
     const policyClient = DECLARING_CLIENT_KINDS[declaration.client]!;
     if (declaration.client === "grok") {
-      if (credential.tokenKind !== "agent-client") reasons.push("Grok must use its own expiring client token, not an operator token");
+      const own = credential.authSource === "oauth" && credential.credentialKind === GROK_OWN_CREDENTIAL_KIND;
+      if (!own) {
+        const reason = "Grok must connect with its own credentials client, not another token";
+        (toolchainFloorGraceEnded(published.floor, now) ? reasons : staleReasons).push(reason);
+      }
     } else if (bearer && !mcpClientBearerHeaderRequired(mcpEndpoint, policyClient)) {
       reasons.push(`${declaration.client} uses a stored token where this endpoint supports OAuth`);
     }
   }
   if (reasons.length > 0) return { verdict: "below-floor", reasons };
 
-  if (published.packDigest.startsWith(declaration.digest)) return { verdict: "current", reasons: [] };
-  return {
-    verdict: "stale",
-    reasons: [`loaded pack ${declaration.pack} (${declaration.digest}) differs from the released ${published.packVersion}`],
-  };
+  if (!published.packDigest.startsWith(declaration.digest)) {
+    staleReasons.push(`loaded pack ${declaration.pack} (${declaration.digest}) differs from the released ${published.packVersion}`);
+  }
+  if (staleReasons.length > 0) return { verdict: "stale", reasons: staleReasons };
+  return { verdict: "current", reasons: [] };
 }
 
 /**
