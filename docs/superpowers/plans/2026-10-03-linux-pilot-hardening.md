@@ -134,3 +134,47 @@ deliverables. Each can ship independently but this branch preserves their
 shared installer integration. Governed coverage is recorded before source
 implementation and its receipt is appended here.
 
+
+Coverage receipt: `cmusy0s2e7xh901jzxf5zbndo`, recorded against commit
+`f56b5877ff93a54098826f14d894c90d31b7fd29`, blob
+`43f520f024253bc2014767b5afd3d914c088280c`. Research receipt:
+`initiative-07c48d59-0018-48ce-878e-21da964e6891`.
+
+The host prerequisite repair also wires the PowerShell pnpm twin into the
+existing customizable-install path. The substrate manifest mirrors the Ollama
+loopback binding. Coverage refreshed for these guard-required parity paths:
+`cmusyf43p82zd01jztvite2jp` (same immutable plan provenance).
+
+The compiled capability/service catalog was refreshed after claiming its path;
+coverage receipt `cmusyionn85lm01jzvl4bqykf` retains the same plan provenance.
+
+## Verification checkpoint — 2026-10-03
+
+Source-local installer, PKI, release-asset, Docker, runtime-key and substrate
+tests: 77 passed, zero failed, 10 skipped because PowerShell is unavailable on
+the authoring host. Bash and Node syntax checks, twin-artifact parity, catalog
+freshness and whitespace checks passed. The public install card was visually
+checked at 1280×720 through a local static preview.
+
+The first preflight found a missing pnpm PowerShell twin, substrate port drift
+and a stale documentation index. The twin and substrate findings are repaired
+and their checks now pass. Index regeneration is blocked by the active
+`WC-9B1AAEA1` edit claim on `apps/web/lib/docs/doc-index.generated.json`.
+Operator approval for a narrow shared claim is pending under the MCP tool
+authorization runbook. No forced claim or index write has occurred.
+
+Implementation and documentation edits remain uncommitted at this checkpoint.
+Exact-tree pregate, independent semantic review, PR publication and deployed
+public-page verification remain unrun. Native Linux acceptance remains deferred
+to the customer pilot; source-local passes do not establish native readiness.
+
+## Resumption — 2026-10-13
+
+The operator requested completion of the remaining work. The conflicting
+workroom is archived; the documentation index and impact paths were claimed
+normally, without a forced claim. Both generated files were refreshed. The
+branch was rebased onto current main (`e4edd79cd6cfa83ac00df4dd64494090573b3e23`)
+and the saved edits reapplied. Conflict resolution retains main's release-asset
+helpers and its distinction between operating and development hardware sizing.
+The installer repairs and public assisted-pilot guidance remain one clean
+revert. Verification is rerun against this reconciled source before publication.

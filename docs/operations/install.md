@@ -10,6 +10,32 @@ Runtime topology is capability-driven. See [Capability-driven runtime profiles](
 
 That sentence is the whole contract for non-technical contributors. Everything below is for operators who need to diagnose a degraded state.
 
+## Linux pilot and private startup state
+
+The [Linux guide](../install/linux.md) owns the recommended host, prerequisites
+and acceptance status. The first target is Ubuntu Server 24.04 LTS x86-64 with
+native Docker Engine and Compose v2. Keep source verification, released assets
+and a successful customer installation as separate evidence.
+
+Both customer installers prepare the actual Compose-mounted runtime state
+before starting PKI or the portal. They reuse the canonical runtime-transition
+key initializer, preserve an existing valid key and stop on malformed material
+or an active transition. Compose resolves the mount, including process and
+`.env` overrides; the lifecycle/XDG directory is not assumed to be that mount.
+Fresh federation directories are created privately by the host user, including
+`federation/pki`, so Docker does not create root-owned directories that prevent
+later authorized cleanup. Unsafe existing ownership stops preparation; it does
+not trigger recursive ownership changes or data deletion. Back up and review
+that specific directory under the installation's recovery procedure.
+
+The PKI bootstrap transfers its private password over stdin into the existing
+CA volume as the image's non-root user. It preserves matching material and
+refuses mismatch. First initialization captures the upstream password-bearing
+output; normal service startup uses the resulting configuration. POSIX
+certificate clients use the host user's UID/GID when writing private host files.
+Rerun the updated bootstrap under the operating procedure to converge an
+existing install; a source merge alone does not change its host state.
+
 ## Capability-resolved runtime profiles
 
 Every install, restart, autostart, setup, and governed promotion resolves its

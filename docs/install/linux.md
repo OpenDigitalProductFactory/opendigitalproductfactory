@@ -70,33 +70,47 @@ it never removes an existing runtime or falls back to Engine alone. You bring:
 - **Node.js and npm** — Node 24 matches release CI; the current installer
   enforces only major version 20 or newer. It does not install Node for you.
 - **pnpm at the repository's `packageManager` version** — provision that exact
-  version for repeatability. If pnpm is absent, the installer currently tries
-  `npm install -g pnpm`, which can require package-directory permissions.
+  version for repeatability. The updated installer installs that pinned version
+  when missing and rejects an incompatible installed version before dependencies.
+  Global npm installation can require package-directory permissions.
 - **`git`, `curl`, `bash`, `python3`, CA certificates and systemd** — verify
   these on minimal server images; do not assume a desktop distribution's tools.
 
-## Quick start
+## Pilot installation handoff
 
-The Bash installer ships in the repository. For a customer pilot, use a
-selected release tag and matching `DPF_IMAGE_TAG` so source and images agree;
-the example below names the release whose evidence is linked above.
+The Bash installer ships as `install-dpf.sh` in the repository. An assisted
+pilot needs a selected release tag and matching `DPF_IMAGE_TAG`, so installer
+source and published images agree. The installation engineer records those
+identities in the [verification runbook](verification-runbook.md) before
+running the customer install with the release image option.
 
-```bash
-git clone --branch v2026.10.02 https://github.com/OpenDigitalProductFactory/opendigitalproductfactory ~/dpf
-cd ~/dpf
-DPF_IMAGE_TAG=v2026.10.02 bash install-dpf.sh --customer
-```
+Do not use `v2026.10.02` as the new pilot baseline: it is the historical test
+linked above and predates the Docker prerequisite and startup repairs. Select
+a release containing the repairs below. Until that release exists, the source
+is prepared but the customer package is not ready for acceptance. Do not mix
+an arbitrary `main` checkout with older images or describe a source merge as
+a published release.
 
-For unattended (CI / scripted) install:
+### Source repairs awaiting native acceptance
 
-```bash
-DPF_IMAGE_TAG=v2026.10.02 bash install-dpf.sh --headless --customer --release
-```
+The updated installer prepares the transition-signing key in the actual
+Compose-mounted state directory, preserves it on rerun and refuses active
+transitions or malformed material. It creates private host-owned federation
+directories before container startup, preventing the fresh-install cleanup
+permission failure seen in the release test. Historical root-owned directories
+require scoped ownership recovery; the installer never deletes them to retry.
 
-These commands describe the published release, which predates the
-BI-E1AA1B3C Docker bootstrap repair. Until a release contains that repair,
-pre-provision Docker Engine and Compose using Docker's official distro guide.
-Do not claim an unmerged or unpublished fix is in the selected release.
+The certificate bootstrap no longer assumes the host user has UID 1000. It
+stages private password custody inside the existing CA volume and runs POSIX
+certificate clients as the host user. Existing matching material is retained;
+a mismatch fails without rotation. Initial CA output is captured so the
+upstream password message does not enter installation logs. These changes
+address confirmed source defects; they do not prove the historical CA timeout
+had only one cause or that a customer's HTTPS setup now passes.
+
+The source also pins pnpm to `packageManager` and binds Ollama to host loopback.
+All these changes require a containing release and the checklist below before
+production reliance. Linux remains early access.
 
 #### Contributor: office document conversion
 
@@ -149,7 +163,7 @@ single-tree mode — the current default and fully back-compat.
 5. **`docker` group requires re-login.** If you were just added, the
    installer exits with code `75` and asks you to log out and back in
    (or `newgrp docker`). Re-run `bash install-dpf.sh` afterward.
-6. **Node / pnpm sanity check** — refuses Node < 20; tries `npm install -g pnpm` when pnpm is absent. Pre-provision the repository's pinned version for repeatability. Node 24 is the release-tested version.
+6. **Node / pnpm sanity check** — refuses Node < 20; installs the repository-pinned pnpm when absent and rejects a different installed version. Node 24 is the release-tested version.
 7. **Workspace dependencies** — `pnpm install`.
 8. **Host hardware profile** — runs `scripts/detect-hardware-host.ts`
    (reads `/proc/cpuinfo`, `nproc`, `free -b`, `nvidia-smi` if present).
@@ -158,7 +172,7 @@ single-tree mode — the current default and fully back-compat.
    fresh installs do not auto-provision mutable third-party model references.
 9. **`.env` generation** — only on first install; existing `.env` is
    preserved.
-10. **HTTPS at the canonical address** — the install becomes its own
+10. **Private runtime state and HTTPS at the canonical address** — first initialize the signing key and host-owned federation directories in the actual Compose mounts. Then the install becomes its own
     certificate authority and serves the portal over https at one address:
     `https://localhost` when it serves only this machine, or the machine's
     DNS name when the network resolves it here. It writes `PUBLIC_URL` and
@@ -208,8 +222,8 @@ Base application ports default to loopback through this value in `.env`:
 DPF_HOST_BIND_ADDRESS=127.0.0.1
 ```
 
-This is not a blanket guarantee for every overlay: the Linux Ollama service
-publishes `11434:11434` when enabled. Inspect the effective profile's published
+The updated Linux Ollama service publishes `127.0.0.1:11434:11434` when enabled;
+older releases published it on every interface. Inspect the effective profile's published
 ports before exposing a host. For remote customer access, configure the HTTPS
 ingress deliberately and keep database, cache, management and model endpoints
 private. Do not change the global bind address simply to expose the portal.
@@ -237,6 +251,8 @@ not exercised is **unrun**, not passed.
   uploaded files and required configuration. Never test restore over production.
 - Upgrade through `/ops/self-upgrade` and verify the recovery point and
   post-upgrade behavior. Do not substitute a hand-built image or database downgrade.
+- On a disposable pilot only, verify soft uninstall preserves state, reinstall
+  succeeds, and an explicitly approved purge removes it without permission errors.
 - Validate remote access and port exposure from a second machine; retain the
   diagnostic report with secrets redacted.
 
@@ -523,21 +539,9 @@ report — we'll integrate findings as they arrive.
 - [Deployment doctrine](../superpowers/specs/2026-05-09-deployment-contracts.md) — the 10 canonical contracts every install path wraps.
 - [CONTRIBUTING.md](../../CONTRIBUTING.md) — for contributing back to the platform.
 
-### Connecting Claude Code or VS Code via MCP
+### Connecting an agent through MCP
 
-Once the platform is running, you can connect Claude Code, Codex CLI, or VS Code to your install's MCP server at `/api/mcp/v1`.
-
-**Option A — CLI (fastest, no browser needed):**
-
-```bash
-pnpm --filter web exec tsx apps/web/scripts/issue-mcp-token.ts > .mcp.json
-```
-
-This issues a read-only token with the coding-agent scope set and writes a ready-to-paste `.mcp.json` in one step. Restart Claude Code to pick up the `dpf` connector.
-
-```bash
-# VS Code instead:
-pnpm --filter web exec tsx apps/web/scripts/issue-mcp-token.ts --format vscode > .vscode/mcp.json
-```
-
-**Option B — Admin UI:** Log in → Admin > Platform Development > MCP Token Manager → generate a token → paste the displayed snippet into `.mcp.json`.
+Use the [MCP connection procedure](../architecture/mcp-tool-authorization-runbook.md).
+The supported interactive connection uses OAuth at the installation's canonical
+origin. Preserve an existing approved endpoint and let the client complete its
+consent flow; a successful connection does not by itself grant write authority.
