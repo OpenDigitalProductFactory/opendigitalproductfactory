@@ -137,6 +137,16 @@ export type ChildRuntimeContext = {
   routeContext: string;
 };
 
+/**
+ * BI-FAD98137: a child never runs wider than the turn that delegated it. A
+ * delegate from an Advise-mode turn runs in Advise (side-effecting tools held
+ * back); every other child runs in Act, as before.
+ */
+async function childRuntimeMode(taskRunId: string): Promise<"advise" | "act"> {
+  const taskRun = await prisma.taskRun.findUnique({ where: { taskRunId }, select: { a2aMetadata: true } });
+  return readCollaborationProvenance(taskRun?.a2aMetadata)?.runtimeMode === "advise" ? "advise" : "act";
+}
+
 async function isProviderComplianceCollaboration(taskRunId: string): Promise<boolean> {
   const taskRun = await prisma.taskRun.findUnique({
     where: { taskRunId },
@@ -277,6 +287,7 @@ export async function runChildThreadExecution(context: ChildRuntimeContext): Pro
 
     const userContext = await loadUserContext(context.userId);
     const providerComplianceCollaboration = await isProviderComplianceCollaboration(context.taskRunId);
+    const runtimeMode = await childRuntimeMode(context.taskRunId);
 
     const agentInfo = await resolveAutonomousWorkAgent({
       agentId: context.agentId,
@@ -292,7 +303,7 @@ export async function runChildThreadExecution(context: ChildRuntimeContext): Pro
     const { tools, toolsForProvider, deferredTools } = await resolveAutonomousWorkTools({
       userContext,
       agentId: resolvedAgentId,
-      mode: "act",
+      mode: runtimeMode,
       // BI-CAP-F2D39F8F: budget the attachment to the serving model; the child
       // thread's latest user turn ranks which tools stay attached.
       routeContext: context.routeContext,

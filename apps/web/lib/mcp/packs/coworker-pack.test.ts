@@ -150,6 +150,23 @@ describe("coworker pack — registration", () => {
   );
 });
 
+// BI-FAD98137: the delegating turn's mode travels with the delegation.
+describe("coworker pack — the delegating turn's mode reaches the child", () => {
+  it.each([
+    ["request_coworker", "requestCoworker"],
+    ["summon_coworker", "summonCoworker"],
+  ] as const)("%s passes the turn's coworkerMode as runtimeMode", async (tool, fn) => {
+    authority.authorize.mockResolvedValue({ bounded: false });
+    collab[fn].mockResolvedValue({ childThreadId: "child-1", taskRunId: "TR-1", targetAgentId: "agent-mkt", targetLabel: "Marketing" });
+    await coworkerPack.handlers[tool]!(
+      { targetAgent: "marketing", objective: "draft" },
+      "u1",
+      { threadId: "parent-1", agentId: "coo", coworkerMode: "advise" } as never,
+    );
+    expect(collab[fn]).toHaveBeenCalledWith(expect.objectContaining({ runtimeMode: "advise" }), "u1");
+  });
+});
+
 describe("coworker pack — handler behavior (delegation preserved)", () => {
   it("cannot use a portal thread to escape the bounded review lane", async () => {
     authority.authorize.mockResolvedValue({ bounded: true });

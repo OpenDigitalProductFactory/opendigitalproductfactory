@@ -184,6 +184,7 @@ async function requestCoworkerHandler(
         callerAgentId: context.agentId ?? null,
         questionPacketSummary: typeof params["questionPacketSummary"] === "string" ? params["questionPacketSummary"] : undefined,
         routeContext: context.routeContext,
+        runtimeMode: context.coworkerMode,
       },
       userId,
     );
@@ -231,6 +232,7 @@ async function summonCoworkerHandler(
         tier: tierParam === 3 ? 3 : 2,
         callerAgentId: context.agentId ?? null,
         routeContext: context.routeContext,
+        runtimeMode: context.coworkerMode,
       },
       userId,
     );
