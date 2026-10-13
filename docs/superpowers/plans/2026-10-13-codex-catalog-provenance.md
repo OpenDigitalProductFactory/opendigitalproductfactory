@@ -103,6 +103,13 @@ BI-59E37E39 with no independent dependencies. Immutable plan coverage will be
 recorded through record_plan_backlog_coverage before implementation and its
 receipt retained in the Workroom.
 
+Recorded atomic coverage receipt: `cmv663t2j1b7n01mrvvnh3s1e`, bound to
+immutable plan commit `33016772c9103f0c315d810a6c5db770d4509ffb` and provider
+blob `170bcf9f321b8b15c4f0d52f66b7ddbd922cae8c`. The sole deliverable remains
+BI-59E37E39 with no independent dependencies. The graph-linked authentication
+test file is also an admitted edit scope to keep its actual-runner harness and
+private-home lifecycle checks valid; authentication implementation is unchanged.
+
 Traceability references for that receipt:
 
 - requirementRefs: AC-1; AC-2; AC-5
