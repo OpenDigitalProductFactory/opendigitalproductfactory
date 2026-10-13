@@ -1,3 +1,9 @@
+---
+status: draft
+backlogItem: BI-83260BB3
+workroom: WC-36508ED3
+---
+
 # Monitoring as an operator choice — implementation plan
 
 **Umbrella:** BI-83260BB3 / WC-36508ED3 (delivery-large), epic EP-MFG-DELIVER-INSTALL.
