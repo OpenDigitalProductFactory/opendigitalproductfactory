@@ -77,6 +77,29 @@ describe("journey queue (BI-BD0B0DCC)", () => {
     expect(sentSamples(t.beacons)).toEqual([{ kind: "journey", journey: "message-ack", totalMs: 90, serverMs: 42 }]);
   });
 
+  // Live finding 2026-10-13: fetch() resolves on response HEADERS, and the
+  // browser adds the resource-timing entry only once the body completes, so
+  // reading resource timing at the next frame found nothing and message-ack
+  // shipped with no server share. The response's own header is authoritative.
+  it("takes the server share from the response's Server-Timing header, with no resource entry yet (AC-2)", () => {
+    const t = fakeEnv({ serverTimingMs: () => undefined });
+    beginJourney("message-ack", t.env);
+    t.advance(40);
+    completeJourney("message-ack", { serverTiming: "db;dur=2, app;dur=6.4" }, t.env);
+    t.paint();
+    flushTelemetry(t.env);
+    expect(sentSamples(t.beacons)).toEqual([{ kind: "journey", journey: "message-ack", totalMs: 40, serverMs: 6 }]);
+  });
+
+  it("ignores a Server-Timing header with no app duration", () => {
+    const t = fakeEnv();
+    beginJourney("message-ack", t.env);
+    completeJourney("message-ack", { serverTiming: "db;dur=2" }, t.env);
+    t.paint();
+    flushTelemetry(t.env);
+    expect(sentSamples(t.beacons)).toEqual([{ kind: "journey", journey: "message-ack", totalMs: 0 }]);
+  });
+
   it("makes no network call on begin, complete or vital queueing until a flush trigger (AC-7)", () => {
     const t = fakeEnv();
     for (let i = 0; i < 5; i++) {
