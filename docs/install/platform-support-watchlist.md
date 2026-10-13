@@ -25,6 +25,21 @@ If a rule is *universal* across deployments, it belongs in the deployment
 contracts, not here. This file is for "when you touch X on platform Y, watch
 out for Z."
 
+## Repository-local Codex endpoint overrides (BI-9F258707)
+
+A trusted project's `.codex/config.toml` overrides the user's connector settings.
+Updating only the global file can leave the root checkout on HTTP while a new
+worktree uses HTTPS. Bootstrap now converges an existing project DPF block to
+its resolved endpoint; it does not create project overrides or scan other repos.
+Both repository updater wrappers pass the project explicitly to the standalone
+fallback. Disabled connections and custom credentials remain unchanged.
+
+Malformed project TOML stops convergence. The standalone fallback validates it
+with Python 3.11's `tomllib`, or `tomli` when already available on older Python;
+without either parser it refuses the write. The normal TypeScript planner uses
+its bundled TOML parser. Windows native and certificate-renewal acceptance need
+separate runtime evidence; passing Mac source tests does not establish them.
+
 ## Target environments
 
 Linux readiness evidence and remaining acceptance checks are maintained in

@@ -18,6 +18,7 @@ if (-not (Test-Path -LiteralPath $script)) {
 & $script `
     -SkillPackPath $SkillPackPath `
     -McpUrl $McpUrl `
+    -ProjectRoot (Split-Path -Parent $PSScriptRoot) `
     -CodexOnly:$CodexOnly `
     -ClaudeOnly:$ClaudeOnly `
     -SkipClaudeCliInstall:$SkipClaudeCliInstall `

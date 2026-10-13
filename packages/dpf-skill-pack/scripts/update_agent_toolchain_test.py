@@ -2168,5 +2168,92 @@ class CodexRegistrationConvergenceTest(unittest.TestCase):
             self.assertNotEqual(updater.codex_content_version(copied), version)
 
 
+
+class CodexProjectConfigTest(unittest.TestCase):
+    def test_missing_file_stays_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.assertFalse(updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False))
+            self.assertFalse((root / ".codex" / "config.toml").exists())
+
+    @unittest.skipIf(tomllib is None, "project TOML validation requires a TOML parser")
+    def test_preserves_other_settings_disabled_state_and_custom_credentials(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir()
+            original = 'model="custom"\n[mcp_servers.dpf]\nurl="http://127.0.0.1:3000/api/mcp/v1"\nenabled=false\nbearer_token_env_var="CUSTOM_TOKEN"\nstartup_timeout_sec=45\n[mcp_servers.other]\nurl="https://other.example/mcp"\n'
+            config.write_text(original)
+            self.assertTrue(updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False))
+            expected = tomllib.loads(original)
+            expected["mcp_servers"]["dpf"]["url"] = "https://localhost/api/mcp/v1?tier=full"
+            self.assertEqual(tomllib.loads(config.read_text()), expected)
+            self.assertFalse(updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False))
+
+    @unittest.skipIf(tomllib is None, "project TOML validation requires a TOML parser")
+    def test_no_override_does_not_create_one(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir()
+            config.write_text('model="custom"\n')
+            self.assertFalse(updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False))
+            self.assertEqual(config.read_text(), 'model="custom"\n')
+
+    @unittest.skipIf(tomllib is None, "project TOML validation requires a TOML parser")
+    def test_malformed_toml_is_unchanged_and_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir()
+            original = '[mcp_servers.dpf]\nurl="unfinished'
+            config.write_text(original)
+            with self.assertRaisesRegex(ValueError, "project.*TOML"):
+                updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False)
+            self.assertEqual(config.read_text(), original)
+
+
+    def test_missing_parser_refuses_an_existing_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir()
+            original = '[mcp_servers.dpf]\nurl="http://localhost:3000/mcp"'
+            config.write_text(original)
+            with patch.dict(sys.modules, {"tomllib": None, "tomli": None}):
+                with self.assertRaisesRegex(ValueError, "Python 3.11"):
+                    updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False)
+            self.assertEqual(config.read_text(), original)
+
+    @unittest.skipIf(tomllib is None, "project TOML validation requires a TOML parser")
+    def test_dry_run_and_managed_oauth_policy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir()
+            original = '[mcp_servers.dpf]\nurl="http://localhost:3000/mcp"\nbearer_token_env_var="DPF_MCP_BEARER_TOKEN"\n'
+            config.write_text(original)
+            with patch.dict(os.environ, {"DPF_MCP_AUTH_MODE": "oauth"}):
+                self.assertTrue(updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", True))
+                self.assertEqual(config.read_text(), original)
+                updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False)
+            parsed = tomllib.loads(config.read_text())
+            self.assertNotIn("bearer_token_env_var", parsed["mcp_servers"]["dpf"])
+            self.assertNotIn("enabled", parsed["mcp_servers"]["dpf"])
+
+    def test_main_forwards_explicit_project_and_endpoint_even_on_dry_run(self):
+        import contextlib
+        import io
+        skill_pack = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory) / "home"
+            home.mkdir()
+            project = Path(directory) / "repo"
+            with patch.object(updater, "home_dir", return_value=home), patch.object(updater, "ensure_codex_project_config", return_value=False) as converge, contextlib.redirect_stdout(io.StringIO()):
+                code = updater.main(["--skill-pack-path", str(skill_pack), "--project-root", str(project), "--mcp-url", "https://selected.example/mcp", "--dry-run", "--codex-only", "--skip-codex-cli-install", "--skip-grok-cli-install", "--skip-antigravity-cli-install"])
+            self.assertEqual(code, 0)
+            converge.assert_called_once_with(project, "https://selected.example/mcp", True)
+
+
 if __name__ == "__main__":
     unittest.main()
