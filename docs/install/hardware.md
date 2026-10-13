@@ -1,6 +1,7 @@
 # Choosing Hardware for DPF
 
-*Mac mini and Mac Studio configurations reviewed October 12, 2026; other machine examples last
+*Mac mini, Mac Studio, Framework Desktop, and DGX Spark configurations reviewed
+October 12, 2026; other machine examples last
 reviewed August 24, 2026. Product configurations, prices, and regional stock
 change frequently; follow the manufacturer links before ordering.*
 
@@ -189,26 +190,36 @@ for memory-efficient local and single-user work, and vLLM on supported NVIDIA
 hosts for higher throughput. See [Docker Model Runner inference
 engines](https://docs.docker.com/ai/model-runner/inference-engines/).
 
-## Shared-memory systems not yet in the standard profile
+## Compact Linux candidates — qualification required
 
-The market now includes additional 128 GB shared-memory machines:
+Linux runs DPF containers through native Docker Engine without Docker Desktop's
+additional VM. That can reduce hosting overhead; DPF has not measured a general
+efficiency advantage across these machines. The [Linux install guide](linux.md)
+remains early access, with Ubuntu 24.04 x86-64 as the recorded first pilot target.
 
-- [Framework Desktop](https://frame.work/desktop?tab=machine-learning) combines
-  Ryzen AI Max+ 395 with 128 GB shared memory and can allocate up to 96 GB to its
-  Radeon GPU. Docker Model Runner's GPU-backed Windows path currently requires
-  NVIDIA; AMD acceleration is available through Docker Engine on Linux, while
-  DPF's native Linux install remains early access.
-- [NVIDIA DGX Spark](https://marketplace.nvidia.com/en-us/enterprise/personal-ai-supercomputers/dgx-spark/)
-  and OEM GB10 systems such as HP ZGX Nano and Lenovo ThinkStation PGX provide
-  128 GB coherent unified memory in a compact Linux ARM system. DPF publishes
-  multi-architecture images, but its standard local-inference path on this
-  hardware has not yet been qualified.
+| Compact candidate | Configuration to evaluate | DPF qualification boundary |
+| --- | --- | --- |
+| [Framework Desktop](https://frame.work/desktop) | 128 GB shared memory and 2–4 TB SSD as a local-AI planning target; the current 4.5 L Ryzen AI Max+ PRO 495 family offers up to 192 GB | x86 PC supporting Linux or Windows. Validate the exact AMD GPU, drivers, and inference backend on Linux; the manufacturer's preinstalled Fedora option is not DPF certification. |
+| [NVIDIA DGX Spark](https://www.nvidia.com/en-us/products/workstations/dgx-spark/) | 128 GB coherent unified memory; storage up to 4 TB in a 150 × 150 × 50.5 mm enclosure | Compact GB10 ARM system with NVIDIA DGX OS. DPF's ARM64 images do not establish installer, CUDA inference, tool use, or recovery qualification on this host. |
 
-These machines are strong evaluation candidates and may become excellent DPF
-appliances. Do not buy one as the default production host until the exact DPF
-installer, Docker Model Runner backend, model, tool-call parser, and recovery
-path have passed the same functional checks as the generally available Windows
-and Apple Silicon routes.
+Framework Desktop is the PC alternative to evaluate when a shared memory pool
+and a choice of Linux or Windows matter. DGX Spark is the smaller NVIDIA local-AI
+candidate. Neither is a qualified DPF replacement for the generally available
+Apple Silicon path yet. For provider-assisted operations, a conventional compact
+x86 business PC with 32 GB RAM and a 1 TB SSD can instead be sized against the
+operations profile, with Linux pilot acceptance still required.
+
+[Docker Model Runner](https://docs.docker.com/ai/model-runner/) lists CPU, NVIDIA
+CUDA, AMD ROCm, and Vulkan backends for Docker Engine on Linux. Backend support
+does not establish support for every GPU or model. Do not carry a Linux AMD
+recommendation over to DPF's Windows local-inference path without separate
+qualification.
+
+Before recommending either candidate for a business, verify the exact DPF
+installer, GPU backend, model, tool-call parser, peak concurrent workload,
+reboot, upgrade, backup, and restore path. The same validation applies to a law
+firm's local document workflows; hardware capacity alone does not establish
+confidentiality or legal-work quality.
 
 ## Before ordering
 
