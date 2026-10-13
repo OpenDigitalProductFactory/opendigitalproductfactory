@@ -39,6 +39,9 @@ afterAll(() => {
 describe("lib/operate/metrics without prom-client (web-src script context)", () => {
   it("imports without resolving prom-client", async () => {
     await expect(import("./metrics")).resolves.toBeDefined();
+    const m = await import("./metrics");
+    expect(m.metricsBackendAvailable).toBe(false);
+    expect(m.loadPromClient()).toBeNull();
   });
 
   it("degrades every metric kind to a safe no-op", async () => {
