@@ -24,7 +24,7 @@ import { persistDiscoveredInventory } from "./discovered-model-inventory";
 import { findProviderCredential, resolveCredentialProviderId } from "./provider-account-credentials";
 export { resolveCredentialProviderId } from "./provider-account-credentials";
 import { supportsTextGeneration } from "@/lib/routing/model-classifier";
-import { modelOutputCapacityFields } from "./model-output-capacity";
+import { modelOutputCapacityFields, refreshModelOutputCapacity } from "./model-output-capacity";
 
 /**
  * Resolve the `supportsToolUse` value a metadata-sync should persist for a model,
@@ -670,11 +670,11 @@ export async function profileModelsInternal(
         where: { providerId_modelId: { providerId, modelId: m.modelId } },
         select: { profileSource: true, capabilityOverrides: true },
       });
+      await refreshModelOutputCapacity({ providerId, modelId: m.modelId }, card.maxOutputTokens, existingProfile);
       const metadataFields = {
         modelFamily: card.modelFamily,
         modelClass: card.modelClass,
         maxInputTokens: card.maxInputTokens,
-        ...modelOutputCapacityFields(card.maxOutputTokens, existingProfile),
         inputModalities: card.inputModalities,
         outputModalities: card.outputModalities,
         // For Ollama: force streaming=true (all models support it) since the
@@ -715,6 +715,7 @@ export async function profileModelsInternal(
           retiredReason: "Model not accessible with provider credential type",
           generatedBy: "system:metadata-sync",
           ...metadataFields,
+          ...modelOutputCapacityFields(card.maxOutputTokens),
           reasoning: 50, codegen: 50, toolFidelity: 50,
           instructionFollowingScore: 50, structuredOutputScore: 50,
           conversational: 50, contextRetention: 50,
@@ -724,7 +725,6 @@ export async function profileModelsInternal(
         update: {
           modelStatus: "retired",
           retiredReason: "Model not accessible with provider credential type",
-          ...modelOutputCapacityFields(card.maxOutputTokens, existingProfile),
         },
       });
       console.log(`[profiling] Retired restricted model ${JSON.stringify(m.modelId)} from ${JSON.stringify(providerId)}`);
@@ -820,6 +820,7 @@ export async function profileModelsInternal(
       where: { providerId_modelId: { providerId, modelId: m.modelId } },
       select: { rawMetadataHash: true, profileSource: true, supportsToolUse: true, capabilityOverrides: true },
     });
+    await refreshModelOutputCapacity({ providerId, modelId: m.modelId }, card.maxOutputTokens, existingProfile);
     const driftDetected = existingProfile?.rawMetadataHash != null
       && existingProfile.rawMetadataHash !== card.rawMetadataHash;
     if (driftDetected) {
@@ -835,7 +836,6 @@ export async function profileModelsInternal(
       }
     }
 
-    // EP-INF-003: ModelCard metadata fields — always safe to overwrite on re-sync.
     // supportsToolUse precedence lives in the pure resolveSyncedToolUse helper so the
     // "sticky false" trap (BI-B6DEBFFE) is unit-tested and can never silently re-pin a
     // healed model. A deliberate non-tool pin lives in capabilityOverrides, not the raw
@@ -860,7 +860,6 @@ export async function profileModelsInternal(
       modelFamily: card.modelFamily,
       modelClass: card.modelClass,
       maxInputTokens: card.maxInputTokens,
-      ...modelOutputCapacityFields(card.maxOutputTokens, existingProfile),
       inputModalities: card.inputModalities,
       outputModalities: card.outputModalities,
       capabilities: (providerId === "local" || providerId === "ollama")
@@ -963,6 +962,7 @@ export async function profileModelsInternal(
         retiredAt:     createStatus === "retired" ? new Date() : null,
         retiredReason: createStatus === "retired" ? "Deprecated by provider at discovery time" : null,
         ...metadataFields,
+        ...modelOutputCapacityFields(card.maxOutputTokens),
         qualityTier,
         qualityTierSource: "auto",
         // EP-INF-012b: Use card dimension scores (family baseline or known catalog)

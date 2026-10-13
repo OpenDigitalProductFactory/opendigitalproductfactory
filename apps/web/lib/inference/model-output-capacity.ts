@@ -1,4 +1,4 @@
-import type { Prisma } from "@dpf/db";
+import { prisma, Prisma } from "@dpf/db";
 import type { ModelCard } from "@/lib/routing/model-card-types";
 import { isRecord } from "@/lib/shared/coerce";
 
@@ -19,4 +19,23 @@ export function modelOutputCapacityFields(
   if (typeof reported !== "number" || !Number.isSafeInteger(reported)
     || reported <= 0 || reported > MAX_STORED_OUTPUT_TOKENS) return {};
   return { maxOutputTokens: reported };
+}
+
+/** Compare ownership in the UPDATE itself; a later admin edit always wins. */
+export async function refreshModelOutputCapacity(
+  identity: { providerId: string; modelId: string },
+  reported: ModelCard["maxOutputTokens"],
+  owner: OutputCapacityOwner | null,
+): Promise<void> {
+  const data = modelOutputCapacityFields(reported, owner);
+  if (!owner || data.maxOutputTokens === undefined) return;
+  await prisma.modelProfile.updateMany({
+    where: {
+      ...identity,
+      profileSource: owner.profileSource,
+      capabilityOverrides: { equals: owner.capabilityOverrides === null
+        ? Prisma.AnyNull : owner.capabilityOverrides as Prisma.InputJsonValue },
+    },
+    data,
+  });
 }

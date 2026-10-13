@@ -6,7 +6,7 @@
 import { prisma } from "@dpf/db";
 
 import { extractModelCardWithFallback } from "@/lib/routing/adapter-registry";
-import { modelOutputCapacityFields } from "./model-output-capacity";
+import { refreshModelOutputCapacity } from "./model-output-capacity";
 
 /**
  * EP-INF-003: Backfill ModelCard fields for all existing ModelProfiles.
@@ -23,13 +23,13 @@ export async function backfillModelCards(): Promise<number> {
       where: { providerId_modelId: { providerId: dm.providerId, modelId: dm.modelId } },
       select: { profileSource: true, capabilityOverrides: true },
     });
+    await refreshModelOutputCapacity({ providerId: dm.providerId, modelId: dm.modelId }, card.maxOutputTokens, owner);
     await prisma.modelProfile.updateMany({
       where: { providerId: dm.providerId, modelId: dm.modelId },
       data: {
         modelFamily: card.modelFamily,
         modelClass: card.modelClass,
         maxInputTokens: card.maxInputTokens,
-        ...modelOutputCapacityFields(card.maxOutputTokens, owner),
         inputModalities: card.inputModalities as any,
         outputModalities: card.outputModalities as any,
         capabilities: (dm.providerId === "local" || dm.providerId === "ollama")
