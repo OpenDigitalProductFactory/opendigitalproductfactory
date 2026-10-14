@@ -9,7 +9,8 @@
       "apps/web/components/platform/ProviderAccountConnectionForm.tsx",
       "apps/web/components/platform/ProviderAccountsOverview.tsx",
       "apps/web/components/platform/ProviderDetailSections.tsx",
-      "apps/web/components/platform/ProviderDetailForm.tsx"
+      "apps/web/components/platform/ProviderDetailForm.tsx",
+      "apps/web/components/platform/OAuthConnectionStatus.tsx"
     ]
   },
   "evidence": {

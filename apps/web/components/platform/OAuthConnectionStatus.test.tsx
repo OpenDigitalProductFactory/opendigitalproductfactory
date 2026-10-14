@@ -42,6 +42,12 @@ function render(credential: CredentialRow) {
 }
 
 describe("OAuthConnectionStatus", () => {
+  it("keeps non-destructive sign-in recovery available when upstream rejects a token with a future stored expiry", () => {
+    const html = render(credentialFixture({ tokenExpiresAt: new Date(Date.now() + HOUR).toISOString(), hasRefreshToken: true }));
+    expect(html).toContain("Connected");
+    expect(html).toContain("Sign in");
+    expect(html).not.toContain("Disconnect");
+  });
   it("renders a Sign in button wired to the server action, not the dead authorize URL", () => {
     const html = render(credentialFixture({ status: "unconfigured" }));
     expect(html).toContain("Sign in");

@@ -115,7 +115,7 @@ export function OAuthConnectionStatus({ credential, authMethod, authorizeUrl, pr
 
       {/* Actions */}
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
-        {(!isConnected || isExpired) && authorizeUrl && (
+        {authorizeUrl && (
           <div>
             <button
               type="button"

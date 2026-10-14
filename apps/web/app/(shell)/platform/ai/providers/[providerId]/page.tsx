@@ -336,7 +336,7 @@ export default async function ProviderDetailPage({ params, searchParams }: Props
               key={selectedConnectionId}
               credential={displayCredential}
               authMethod={additionalAccount ? additionalAccount.authMethod === "oauth" ? "oauth2_authorization_code" : additionalAccount.authMethod : pw.provider.authMethod}
-              authorizeUrl={pw.provider.authorizeUrl ?? null}
+              authorizeUrl={additionalAccount ? null : pw.provider.authorizeUrl ?? null}
               providerId={pw.provider.providerId}
               connectionId={additionalAccount?.connectionId}
               canWrite={canWrite}
