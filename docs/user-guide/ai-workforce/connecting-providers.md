@@ -57,7 +57,7 @@ Choose **Pause now** to stop new model requests immediately. The pause lasts unt
 
 Resuming removes the operator pause. It does not reset a provider's usage limit or override an authentication, billing, health, account, or local-only restriction. The panel keeps those restrictions visible. Read-only viewers can inspect the status; provider managers can change it.
 
-**ChatGPT and Codex share one OpenAI sign-in.** Both appear in Providers & Routing. The ChatGPT detail links to Codex to manage shared authentication; Codex links back to ChatGPT traffic controls. Pausing one provider leaves the other's operator control unchanged, although both can be affected by their shared subscription usage limit.
+**ChatGPT and Codex can share an OpenAI subscription.** Both appear in Providers & Routing. Each account keeps its own sign-in recovery unless the platform has verified a shared sign-in owner. Use the selected account's sign-in control; when the page identifies a shared owner, manage that sign-in there. Pausing one provider leaves the other's operator control unchanged. Subscription limits may affect both.
 
 Authentication proves only that a connection works. Before using company or customer data, also identify whether the connected account is personal/individual, business/team, enterprise, or unknown, and review its contract, retention, training, and processing-region terms. DPF keeps unreviewed hosted connections limited to public or synthetic work.
 
@@ -259,6 +259,6 @@ After provider setup, the finance-linked surfaces are:
 
 ## Troubleshooting
 
-- **"Token expired"** — a stored expiry date does not prove the upstream token still works. ChatGPT and Codex default connections share the sign-in managed from the Codex provider page. Use **Manage shared sign-in** beside ChatGPT verification to reconnect there, then verify again; disconnecting the ChatGPT connection is not required. Additional named accounts retain their own sign-in and recovery controls. The bounded expired-token verification repair retries once after refreshing the owning grant; if renewal fails or the second request is still expired, a new sign-in is required.
+- **"Token expired"** — a stored expiry date does not prove the upstream token still works. Use the selected account's sign-in control, which remains available while a token is stored; disconnecting the account is not required. A verified shared sign-in owner, when identified on the page, supplies that account's recovery instead. The bounded expired-token verification repair retries once after refreshing the owning grant; if renewal fails or the second request is still expired, a new sign-in is required.
 - **"Provider not configured"** — verify that an API key or OAuth connection has been set up for this provider.
 - **"No eligible endpoints"** — the provider needs at least one profiled model. Click "Sync Models & Profiles" on the provider detail page.

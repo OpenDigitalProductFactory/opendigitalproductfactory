@@ -33,6 +33,8 @@ type RoutingProfile = {
 };
 
 type Props = {
+  defaultConnectionId?: string;
+  /** Supply only when the server has validated shared sign-in ownership. */
   sharedAuthRecovery?: { help: string; label: string };
   pw: ProviderWithCredential;
   canWrite: boolean;
@@ -43,14 +45,14 @@ type Props = {
   routingProfiles?: RoutingProfile[];
 };
 
-export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActiveProvider, routingProfiles, sharedAuthRecovery }: Props) {
+export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActiveProvider, routingProfiles, sharedAuthRecovery, defaultConnectionId }: Props) {
   const { provider, credential } = pw;
   const router = useRouter();
   const fieldId = useId();
   const [isPending, startTransition] = useTransition();
   const isClaudeSubscription = provider.providerId === "anthropic-sub";
   const isZaiCodingProvider = provider.providerId === "zai-coding";
-  const isSharedOpenAiConsumer = provider.providerId === "chatgpt";
+  const isSharedOpenAiConsumer = provider.providerId === "chatgpt" && Boolean(sharedAuthRecovery);
 
   // Secrets are write-only — never sent from server. Empty = no change on save.
   const [secretRef, setSecretRef]                   = useState("");
@@ -481,13 +483,13 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
               {disconnectConfirm ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 12, color: "var(--dpf-muted)" }}>
-                    Disconnect this account? Linked services will be deactivated.
+                    {defaultConnectionId ? "Disconnect this account?" : "Disconnect this account? Linked services will be deactivated."}
                   </span>
                   <button
                     type="button"
                     disabled={!canWrite || isPending}
                     onClick={() => startTransition(async () => {
-                      const result = await disconnectProviderOAuth(provider.providerId);
+                      const result = defaultConnectionId ? await disconnectProviderOAuth(provider.providerId, defaultConnectionId) : await disconnectProviderOAuth(provider.providerId);
                       if (result.error) {
                         setTestResult({ ok: false, message: result.error });
                         setDisconnectConfirm(false);
@@ -526,44 +528,23 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
                   ? "Access token expired — it refreshes automatically on next use, or sign in again now"
                   : "Token expired — sign in again"}
               </div>
-              <button
-                type="button"
-                disabled={!canWrite || isPending}
-                onClick={() => startTransition(async () => {
-                  const result = await startProviderOAuth(provider.providerId);
-                  if ("authorizeUrl" in result) {
-                    window.open(result.authorizeUrl, "_self");
-                  } else {
-                    setTestResult({ ok: false, message: result.error });
-                  }
-                })}
-                style={{ background: "var(--dpf-accent)", color: "var(--dpf-on-accent)", border: "none", padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}
-              >
-                Sign in with {provider.name}
-              </button>
             </div>
           ) : (
             <div>
               <div style={{ color: "var(--dpf-muted)", fontSize: 13, marginBottom: 8 }}>
                 No account linked
               </div>
-              <button
-                type="button"
-                disabled={!canWrite || isPending}
-                onClick={() => startTransition(async () => {
-                  const result = await startProviderOAuth(provider.providerId);
-                  if ("authorizeUrl" in result) {
-                    window.open(result.authorizeUrl, "_self");
-                  } else {
-                    setTestResult({ ok: false, message: result.error });
-                  }
-                })}
-                style={{ background: "var(--dpf-accent)", color: "var(--dpf-on-accent)", border: "none", padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}
-              >
-                Sign in with {provider.name}
-              </button>
             </div>
           )}
+          {!disconnectConfirm && <button type="button" disabled={!canWrite || isPending}
+            onClick={() => startTransition(async () => {
+              const result = defaultConnectionId ? await startProviderOAuth(provider.providerId, defaultConnectionId) : await startProviderOAuth(provider.providerId);
+              if ("authorizeUrl" in result) window.open(result.authorizeUrl, "_self");
+              else setTestResult({ ok: false, message: result.error });
+            })}
+            style={{ background: "var(--dpf-accent)", color: "var(--dpf-on-accent)", border: "none", padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}>
+            Sign in with {provider.name}
+          </button>}
         </div>
       )}
 

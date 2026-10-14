@@ -10,6 +10,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { ProviderWithCredential } from "@/lib/ai-provider-types";
 import { SOURCE_CATALOG } from "@dpf/i18n";
 import { ProviderDetailForm } from "./ProviderDetailForm";
+import { startProviderOAuth } from "@/lib/actions/provider-oauth";
 const render = (ui: ReactNode) => testingRender(
   <MessagesProvider locale="en-US" messages={{ setup: namespaceMessages("en-US", "setup") }}>{ui}</MessagesProvider>,
 );
@@ -83,6 +84,14 @@ const providerFixture: ProviderWithCredential = {
 };
 
 describe("ProviderDetailForm", () => {
+  it("preserves exact-account recovery when default ChatGPT shared ownership is unproven", async () => {
+    const fixture: ProviderWithCredential = { ...providerFixture, provider: { ...providerFixture.provider, providerId: "chatgpt", name: "ChatGPT", authMethod: "oauth2_authorization_code", supportedAuthMethods: ["oauth2_authorization_code"] }, credential: { ...providerFixture.credential!, status: "ok", tokenExpiresAt: new Date(Date.now() + 3600000).toISOString() } };
+    vi.mocked(startProviderOAuth).mockResolvedValue({ error: "Fixture sign-in result" });
+    render(<ProviderDetailForm pw={fixture} canWrite models={[]} profiles={[]} hasActiveProvider defaultConnectionId="provider-default-chatgpt" />);
+    expect(screen.queryByRole("link", { name: "Manage shared sign-in" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Sign in with ChatGPT" }));
+    await waitFor(() => expect(startProviderOAuth).toHaveBeenCalledWith("chatgpt", "provider-default-chatgpt"));
+  });
   afterEach(() => { cleanup(); vi.clearAllMocks(); });
   it("keeps OAuth mutations disabled for a read-only viewer while retaining diagnostics", () => {
     const fixture: ProviderWithCredential = { ...providerFixture, provider: { ...providerFixture.provider, providerId: "codex", authMethod: "oauth2_authorization_code", supportedAuthMethods: ["oauth2_authorization_code"] } };

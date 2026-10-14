@@ -327,16 +327,16 @@ export default async function ProviderDetailPage({ params, searchParams }: Props
               BEFORE the user clicks Connect — eliminates the silent
               :3000 → :1455 origin divergence that the shared OpenAI
               Codex/ChatGPT OAuth client requires today. */}
-          {(!additionalAccount || additionalAccount.authMethod === "oauth") && providerId !== "chatgpt" && <OAuthPortMismatchBanner
+          {(!additionalAccount || additionalAccount.authMethod === "oauth") && <OAuthPortMismatchBanner
             oauthRedirectUri={pw.provider.oauthRedirectUri ?? null}
             providerLabel={pw.provider.name ?? pw.provider.providerId}
           />}
-          {displayCredential && (additionalAccount || providerId !== "chatgpt") && (
+          {displayCredential && (
             <OAuthConnectionStatus
               key={selectedConnectionId}
               credential={displayCredential}
               authMethod={additionalAccount ? additionalAccount.authMethod === "oauth" ? "oauth2_authorization_code" : additionalAccount.authMethod : pw.provider.authMethod}
-              authorizeUrl={additionalAccount ? null : pw.provider.authorizeUrl ?? null}
+              authorizeUrl={null}
               providerId={pw.provider.providerId}
               connectionId={additionalAccount?.connectionId}
               canWrite={canWrite}
@@ -356,7 +356,7 @@ export default async function ProviderDetailPage({ params, searchParams }: Props
               <Link href={`/platform/ai/providers/${encodeURIComponent(providerId)}`} className="inline-block py-2 text-sm text-[var(--dpf-accent)]">{copy.providerSettings}</Link>
             </> }]} />
           </div> : <div style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 8, padding: 12 }}>
-            <ProviderDetailForm key={`provider-default-${providerId}`} pw={pw} canWrite={canWrite} models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} routingProfiles={routingProfiles} sharedAuthRecovery={{ help: copy.sharedSignInHelp!, label: copy.manageSharedSignIn! }} />
+            <ProviderDetailForm key={`provider-default-${providerId}`} pw={pw} canWrite={canWrite} models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} routingProfiles={routingProfiles} defaultConnectionId={providerId === "chatgpt" ? selectedConnectionId : undefined} />
           </div>}
           <Suspense fallback={<Notice>{copy.loadingUsage}</Notice>}>
             <ProviderUsageDetails provider={pw.provider} additional={Boolean(additionalAccount)} now={now} copy={copy} />
