@@ -40,7 +40,9 @@ const STATE_PRESENTATION: Record<
   external: { Icon: CloudCog, iconClass: "text-[var(--dpf-accent)]" },
 };
 
-function ServiceRequirements({ items, sharedAction }: { items: CapabilityServiceHealthItem[]; sharedAction?: string }) {
+function ServiceRequirements({ items, sharedAction, sharedLabel }: {
+  items: CapabilityServiceHealthItem[]; sharedAction?: string; sharedLabel?: string;
+}) {
   return (
     <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {items.map(item => {
@@ -55,7 +57,7 @@ function ServiceRequirements({ items, sharedAction }: { items: CapabilityService
               <Icon aria-hidden="true" className={`mt-0.5 h-4 w-4 shrink-0 ${iconClass}`} />
               <div className="min-w-0">
                 <h3 className="break-words text-xs font-semibold text-[var(--dpf-text)]">{item.key}</h3>
-                <p className="mt-1 text-xs font-medium text-[var(--dpf-text)]">{item.label}</p>
+                <p className={sharedLabel === item.label ? "sr-only" : "mt-1 text-xs font-medium text-[var(--dpf-text)]"}>{item.label}</p>
                 {!(item.state === "required" && item.availability === "unavailable" && item.label.toLowerCase().includes("unavailable")) && (
                   <p className={`mt-1 text-xs font-semibold ${TONE_CLASS[item.tone]}`}>
                     Availability: {AVAILABILITY_LABEL[item.availability]}
@@ -82,6 +84,9 @@ export function CapabilityServiceHealth({ projection }: CapabilityServiceHealthP
   const required = active.filter(item => item.state === "required" && !item.actionHref);
   const sharedAction = required.length > 1 && required.every(item => item.action === required[0]!.action)
     ? required[0]!.action : undefined;
+  const sharedLabel = active.length > 1 && active.every(item => item.kind === "service"
+    && item.state === "required" && item.availability === active[0]!.availability && item.label === active[0]!.label)
+    ? active[0]!.label : undefined;
   return (
     <section
       aria-labelledby="capability-service-health-title"
@@ -96,7 +101,7 @@ export function CapabilityServiceHealth({ projection }: CapabilityServiceHealthP
             Capability service requirements
           </h2>
           <p className="mt-1 max-w-3xl text-xs leading-5 text-[var(--dpf-muted)]">
-            Requirements follow enabled capabilities; inactive optional services do not reduce health.
+            Inactive optional services do not reduce health.
           </p>
         </div>
         <div className="shrink-0 sm:max-w-xs sm:text-right">
@@ -119,11 +124,12 @@ export function CapabilityServiceHealth({ projection }: CapabilityServiceHealthP
       ) : (
         <>
           {sharedAction && <p className="mb-3 text-xs leading-5 text-[var(--dpf-muted)]">Required services: {sharedAction}</p>}
-          {active.length > 0 && <ServiceRequirements items={active} sharedAction={sharedAction} />}
+          {sharedLabel && <p className="mb-2 text-xs font-semibold text-[var(--dpf-text)]">{sharedLabel} ({active.length})</p>}
+          {active.length > 0 && <ServiceRequirements items={active} sharedAction={sharedAction} sharedLabel={sharedLabel} />}
           {inactive.length > 0 && (
             <details className="mt-4 rounded-md border border-[var(--dpf-border)] p-3">
               <summary className="min-h-8 cursor-pointer py-1 text-sm font-medium text-[var(--dpf-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dpf-accent)]">
-                Inactive optional services ({inactive.length})
+                Inactive services ({inactive.length})
               </summary>
               <div className="mt-3"><ServiceRequirements items={inactive} /></div>
             </details>

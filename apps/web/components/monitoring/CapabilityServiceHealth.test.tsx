@@ -61,7 +61,7 @@ describe("CapabilityServiceHealth", () => {
     const disclosure = html.match(/<details\b([^>]*)>([\s\S]*?)<\/details>/);
     expect(disclosure).not.toBeNull();
     expect(disclosure?.[1]).not.toMatch(/\bopen\b/);
-    expect(disclosure?.[2]).toContain("Inactive optional services (1)");
+    expect(disclosure?.[2]).toContain("Inactive services (1)");
     expect(disclosure?.[2]).toContain("speech-to-text");
     for (const key of ["portal", "browser-use", "openai"]) {
       expect(disclosure?.[2]).not.toContain(key);
@@ -94,6 +94,16 @@ describe("CapabilityServiceHealth", () => {
     expect(html).toContain(projection.items[3]!.action);
     expect(html).toContain("portal");
     expect(html).toContain("postgres");
+  });
+
+  it("shares an identical required status while retaining every named service and per-card accessible status", () => {
+    const items = Array.from({ length: 7 }, (_, index) => ({ ...projection.items[0]!, key: `required-${index}` }));
+    const html = renderToStaticMarkup(<CapabilityServiceHealth projection={{ ...projection, items }} />);
+    expect(html).toContain("Required — unavailable (7)");
+    expect(html.match(/class="sr-only"/g)).toHaveLength(7);
+    for (const item of items) expect(html).toContain(item.key);
+    const mixed = renderToStaticMarkup(<CapabilityServiceHealth projection={projection} />);
+    expect(mixed).not.toContain('class="sr-only"');
   });
 
   it("renders all requirement states with explicit non-color meaning", () => {
