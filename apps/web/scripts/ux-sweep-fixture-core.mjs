@@ -198,9 +198,9 @@ export async function convergeUxSweepFixture(db, now = new Date(), { dbNull } = 
  */
 export async function convergeUxSweepEstate(db, now) {
   const existing = await db.discoveryRun.findFirst({
-    orderBy: { startedAt: "desc" }, select: { id: true, sourceSlug: true },
+    where: { sourceSlug: { not: "ux-route-sweep" } }, select: { id: true },
   });
-  if (existing && existing.sourceSlug !== "ux-route-sweep") return null;
+  if (existing) return null;
   const runId = "ux-sweep-discovery-run";
   const nodes = [
     ["host", "host:hostname:ux-sweep-host", "Fixture host", { hostname: "ux-sweep-host", address: "10.1.0.10", macAddress: "02:AA:BB:CC:DD:10" }],

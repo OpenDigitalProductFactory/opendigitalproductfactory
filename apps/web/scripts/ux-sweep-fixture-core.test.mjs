@@ -6,14 +6,17 @@ import { convergeUxSweepFixture, convergeUxSweepEstate } from "./ux-sweep-fixtur
 const NOW = new Date("2026-07-28T19:30:00.000Z");
 
 function estateDb(existing = null) {
-  const rows = { run: existing, entities: new Map(), relationships: new Map(), issues: new Map() };
+  const rows = { run: existing, olderRuns: [], entities: new Map(), relationships: new Map(), issues: new Map() };
   const upsert = map => async ({ where, create, update }) => {
     const key = JSON.stringify(where);
     const value = map.has(key) ? { ...map.get(key), ...update } : { id: key, ...create };
     map.set(key, value); return value;
   };
   return { rows, db: {
-    discoveryRun: { findFirst: async () => rows.run,
+    discoveryRun: { findFirst: async ({ where } = {}) => {
+      const runs = [rows.run, ...rows.olderRuns].filter(Boolean);
+      return where?.sourceSlug?.not ? runs.find(r => r.sourceSlug !== where.sourceSlug.not) ?? null : runs[0] ?? null;
+    },
       upsert: async ({ create, update }) => (rows.run = rows.run ? { ...rows.run, ...update } : create) },
     inventoryEntity: { upsert: upsert(rows.entities) },
     inventoryRelationship: { upsert: upsert(rows.relationships) },
@@ -52,6 +55,17 @@ test("a partial estate write cannot produce a completed-run sentinel", async () 
   db.inventoryEntity.upsert = async () => { throw new Error("fixture write failed"); };
   await assert.rejects(convergeUxSweepEstate(db, NOW), /fixture write failed/);
   assert.equal(rows.run, null);
+});
+
+test("a newer fixture run cannot hide older real observations", async () => {
+  const latest = { id: "fixture-run", sourceSlug: "ux-route-sweep", status: "completed" };
+  const { db, rows } = estateDb(latest);
+  rows.olderRuns.push({ id: "older-real", sourceSlug: "dpf_bootstrap", status: "completed" });
+  assert.equal(await convergeUxSweepEstate(db, NOW), null);
+  assert.equal(rows.run, latest);
+  assert.equal(rows.entities.size, 0);
+  assert.equal(rows.relationships.size, 0);
+  assert.equal(rows.issues.size, 0);
 });
 
 function fixtureDb({ setupComplete, hasQueue = true, hasArchetype = true, hasStorefront = false }) {
