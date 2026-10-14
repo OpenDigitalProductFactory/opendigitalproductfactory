@@ -95,6 +95,34 @@ test("parseLockedVersion reads importer-scoped resolved versions", () => {
   assert.equal(parseLockedVersion(LOCKFILE, "packages", "next"), "");
 });
 
+// BI-D2FE6931: TypeScript 7 is installed under an npm alias. pnpm records an
+// aliased dependency's version as "<target>@<version>"; the installed
+// package.json says just "<version>". Reading the alias form verbatim would
+// report drift on every run.
+test("parseLockedVersion reads an npm-aliased dependency as its target version", () => {
+  const aliased = `lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    devDependencies:
+      typescript7:
+        specifier: npm:typescript@7.0.2
+        version: typescript@7.0.2
+      scoped-alias:
+        specifier: npm:@scope/pkg@1.2.3
+        version: '@scope/pkg@1.2.3(react@19.2.7)'
+`;
+  assert.equal(parseLockedVersion(aliased, ".", "typescript7"), "7.0.2");
+  assert.equal(parseLockedVersion(aliased, ".", "scoped-alias"), "1.2.3");
+});
+
+test("critical package sentinels include the TypeScript 7 checker pinned at the root", () => {
+  const ts7 = CRITICAL_PACKAGES.find((pkg) => pkg.name === "typescript7");
+  assert.ok(ts7, "a TypeScript 7 bump must reach the local-CI sandbox before it grades a diff");
+  assert.deepEqual(ts7.importers, ["."]);
+});
+
 test("critical package sentinels include the unit-test runner used by local-CI", () => {
   const vitest = CRITICAL_PACKAGES.find((pkg) => pkg.name === "vitest");
   assert.ok(vitest, "vitest must be checked before recording local-CI test evidence");
