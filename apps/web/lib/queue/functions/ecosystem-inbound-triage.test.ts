@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  run: vi.fn(), gate: vi.fn(), findUnique: vi.fn(), upsert: vi.fn(),
+  run: vi.fn(), gate: vi.fn(), findUnique: vi.fn(), upsert: vi.fn(), config: null as unknown,
 }));
-vi.mock("@/lib/jobs", () => ({ jobs: { createFunction: (_config: unknown, handler: unknown) => handler } }));
+vi.mock("@/lib/jobs", () => ({ jobs: { createFunction: (config: unknown, handler: unknown) => { mocks.config = config; return handler; } } }));
 vi.mock("../quiescence-gates", () => ({ gateAtEntry: mocks.gate }));
 vi.mock("@/lib/ecosystem/inbound-triage-runner", () => ({ runEcosystemInboundTriage: mocks.run }));
 vi.mock("@dpf/db", () => ({ prisma: { scheduledJob: { findUnique: mocks.findUnique, upsert: mocks.upsert } } }));
@@ -21,6 +21,14 @@ describe("ecosystem intake job reporting", () => {
     mocks.gate.mockResolvedValue({ proceed: true });
     mocks.findUnique.mockResolvedValue({ schedule: "17 6 * * 1" });
     mocks.upsert.mockResolvedValue({});
+  });
+
+  it("never overwrites scheduled-job metadata, so a commission reference survives every heartbeat", async () => {
+    mocks.run.mockResolvedValue({ ran: true, complete: true, ingested: 0, deduped: 0, failed: 0, itemIds: [], sourceErrors: [] });
+    await invoke();
+    const args = mocks.upsert.mock.calls[0][0];
+    expect(args.update).not.toHaveProperty("metadata");
+    expect(args.create).not.toHaveProperty("metadata");
   });
 
   it("persists incomplete coverage for the existing schedule view without replaying ingestion", async () => {
@@ -64,11 +72,17 @@ describe("ecosystem intake job reporting", () => {
     expect(mocks.upsert).toHaveBeenCalledTimes(2);
   });
 
-  it("does not report a skipped installation as a successful scan", async () => {
-    mocks.run.mockResolvedValue({ ran: false, reason: "installation purpose is undeclared" });
+  it("allows only one scan of the inbound queue at a time", () => {
+    // Local single-run protection (spec §6.1): an overlapping cron and retry must
+    // not ingest the same sources concurrently.
+    expect(mocks.config).toMatchObject({ concurrency: { limit: 1, scope: "fn" } });
+  });
+
+  it("does not report an uncommissioned installation as a successful scan", async () => {
+    mocks.run.mockResolvedValue({ ran: false, reason: "not commissioned: installation is not a production install" });
     await invoke();
     expect(mocks.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      update: expect.objectContaining({ lastStatus: "not-configured", lastRunSummary: "installation purpose is undeclared" }),
+      update: expect.objectContaining({ lastStatus: "not-configured", lastRunSummary: "not commissioned: installation is not a production install" }),
     }));
     const heartbeat = mocks.upsert.mock.calls[0][0].update;
     expect(deriveHealth({ kind: "recurring", enabled: true, schedule: "17 6 * * 1",

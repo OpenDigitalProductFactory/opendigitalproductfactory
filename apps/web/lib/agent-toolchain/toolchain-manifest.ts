@@ -20,20 +20,16 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
-import { mcpClientBearerHeaderRequired, type McpClient } from "@dpf/integration-shared/mcp-client-credential-policy";
+import { mcpClientBearerHeaderRequired } from "@dpf/integration-shared/mcp-client-credential-policy";
 
 import { buildPackArchive } from "./pack-archive";
 import { deliveredDigest, listPackFiles } from "./pack-digest";
+import { DECLARING_CLIENT_KINDS } from "./toolchain-verdict";
 
 export const TOOLCHAIN_MANIFEST_SCHEMA_VERSION = 1;
 
-/** The client kinds that load the dpf-platform pack, and their credential-policy key. */
-export const TOOLCHAIN_CLIENT_KINDS: Readonly<Record<string, McpClient>> = Object.freeze({
-  "claude-code": "claude",
-  codex: "codex",
-  grok: "grok",
-  antigravity: "antigravity",
-});
+/** The client kinds that load the dpf-platform pack; one home, in toolchain-verdict.ts. */
+export const TOOLCHAIN_CLIENT_KINDS = DECLARING_CLIENT_KINDS;
 
 export type ToolchainFloor = { minPackVersion: string | null; graceStartsAt: string | null };
 
@@ -125,6 +121,12 @@ export function clientShapes(mcpEndpoint: string): Record<string, ToolchainClien
       } satisfies ToolchainClientShape,
     ]),
   );
+}
+
+/** Version, delivered digest and floor of one pack tree: what a connection is compared with. */
+export function readPublishedToolchain(packRoot: string): { packVersion: string; packDigest: string; floor: ToolchainFloor } {
+  const { packVersion, floor } = readVersionSource(packRoot);
+  return { packVersion, packDigest: deliveredDigest(packRoot), floor };
 }
 
 /** Pure: build the archive and unsigned manifest for one pack tree. */

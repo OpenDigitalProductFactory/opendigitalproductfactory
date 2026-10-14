@@ -340,6 +340,54 @@ function Resolve-DpfCapabilityComposeProfiles {
     return ($json | ConvertFrom-Json)
 }
 
+# Installer monitoring question (BI-31F11C37, design 2026-10-13 sections 4-5).
+# The Node helper owns the cost arithmetic and the decision record; PowerShell
+# only transports its results. Set-DpfMonitoringChoice must run BEFORE
+# Resolve-DpfCapabilityComposeProfiles so the first compose up honours it.
+function Get-DpfMonitoringChoiceHelper {
+    param([string]$InstallDir = (Get-Location).Path)
+    $helper = Join-Path $InstallDir "scripts\installer\monitoring-choice.mjs"
+    if (-not (Test-Path -LiteralPath $helper)) { throw "monitoring_choice_helper_missing" }
+    return $helper
+}
+
+# Returns the cost phrase, e.g. "about 1.6 GB memory and 1.75 CPU", computed from
+# config/install-resource-budgets.json.
+function Get-DpfMonitoringCost {
+    param([string]$InstallDir = (Get-Location).Path)
+    $text = & node (Get-DpfMonitoringChoiceHelper -InstallDir $InstallDir) cost --text
+    if ($LASTEXITCODE -ne 0) { throw "monitoring_cost_unavailable" }
+    return ([string]$text).Trim()
+}
+
+# True unless an enabled/disabled monitoring decision is already recorded.
+function Test-DpfMonitoringPromptNeeded {
+    param([string]$InstallDir = (Get-Location).Path)
+    if (-not (Test-Path -LiteralPath (Get-DpfStatePath))) { return $true }
+    $answer = & node (Get-DpfMonitoringChoiceHelper -InstallDir $InstallDir) needs-prompt --state (Get-DpfStatePath)
+    if ($LASTEXITCODE -ne 0) { throw "monitoring_choice_read_failed" }
+    return (([string]$answer).Trim() -eq "true")
+}
+
+# Record the monitoring choice. $Choice: on | off | none (headless, no flag).
+# $Source: installer-prompt | installer-flag | headless-default.
+function Set-DpfMonitoringChoice {
+    param(
+        [string]$InstallDir = (Get-Location).Path,
+        [Parameter(Mandatory)][ValidateSet("on", "off", "none")][string]$Choice,
+        [Parameter(Mandatory)][ValidateSet("installer-prompt", "installer-flag", "headless-default")][string]$Source
+    )
+    $helper = Get-DpfMonitoringChoiceHelper -InstallDir $InstallDir
+    Initialize-DpfState -InstallPath $InstallDir
+    # The decision map exists from schema v2; migrate an older state first, the
+    # same way Resolve-DpfCapabilityComposeProfiles does.
+    $schemaStatus = Test-DpfStateSchema
+    if ($schemaStatus -eq 3) { Invoke-DpfStateMigration }
+    elseif ($schemaStatus -ne 0) { throw "install_state_schema_unsupported" }
+    & node $helper apply --state (Get-DpfStatePath) --choice $Choice.ToLowerInvariant() --source $Source | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "monitoring_choice_record_failed" }
+}
+
 function Get-DpfCapabilityProfileArgs {
     param([Parameter(Mandatory)]$Projection)
     $result = @()

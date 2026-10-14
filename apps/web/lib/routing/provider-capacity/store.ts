@@ -1,6 +1,6 @@
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 
-import type { ProviderCapacityClassification } from "./types";
+import type { ProviderCapacityClassification, ProviderQuotaObservation, ProviderQuotaReconciliation } from "./types";
 
 export type ProviderCapacitySource = "api" | "cli" | "opencode" | "oauth" | "manual";
 
@@ -36,11 +36,11 @@ export async function recordProviderCapacityStatus(input: {
   });
 }
 
-export async function clearProviderCapacityStatus(input: {
-  providerId: string;
+function availableCapacityData(input: {
   source: ProviderCapacitySource;
   observedAt?: Date;
-}): Promise<void> {
+  safeSummary?: string;
+}) {
   const observedAt = input.observedAt ?? new Date();
   const data = {
     state: "available",
@@ -48,14 +48,25 @@ export async function clearProviderCapacityStatus(input: {
     retryAt: null,
     retryAfterSeconds: null,
     providerCode: null,
-    safeSummary: "Provider is available.",
+    safeSummary: input.safeSummary ?? "Provider is available.",
     confidence: "exact",
     isHumanActionRequired: false,
     lastObservedAt: observedAt,
     lastSuccessAt: observedAt,
     source: input.source,
     rawSnippet: null,
-  };
+  } satisfies Prisma.ProviderCapacityStatusUpdateManyMutationInput
+    & Pick<ProviderCapacityClassification, "state" | "action" | "confidence">
+    & { source: ProviderCapacitySource };
+  return data;
+}
+
+export async function clearProviderCapacityStatus(input: {
+  providerId: string;
+  source: ProviderCapacitySource;
+  observedAt?: Date;
+}): Promise<void> {
+  const data = availableCapacityData(input);
 
   await prisma.providerCapacityStatus.upsert({
     where: { providerId: input.providerId },
@@ -65,4 +76,32 @@ export async function clearProviderCapacityStatus(input: {
     },
     update: data,
   });
+}
+
+/** Called only after completed inference and the selected connection's CAS. */
+export async function reconcileProviderQuotaObservation(
+  tx: Prisma.TransactionClient,
+  observation: ProviderQuotaObservation,
+): Promise<ProviderQuotaReconciliation> {
+  await tx.$executeRaw`SAVEPOINT dpf_provider_quota_reconciliation`;
+  try {
+    const updated = await tx.providerCapacityStatus.updateMany({
+      where: {
+        id: observation.id, providerId: observation.providerId, state: observation.state,
+        updatedAt: observation.updatedAt,
+        providerConnection: observation.ownerConnectionId === null
+          ? { is: null }
+          : { is: { connectionId: observation.ownerConnectionId } },
+      },
+      data: availableCapacityData({ source: "oauth", safeSummary: "Provider quota recheck completed." }),
+    });
+    await tx.$executeRaw`RELEASE SAVEPOINT dpf_provider_quota_reconciliation`;
+    return updated.count === 1 ? "cleared" : "changed";
+  } catch {
+    // Catching a SQL error alone leaves its transaction aborted. Isolate the
+    // quota write so earlier authentication survives only a successful commit.
+    await tx.$executeRaw`ROLLBACK TO SAVEPOINT dpf_provider_quota_reconciliation`;
+    await tx.$executeRaw`RELEASE SAVEPOINT dpf_provider_quota_reconciliation`;
+    return "write-failed";
+  }
 }

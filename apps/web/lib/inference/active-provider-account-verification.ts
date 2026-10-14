@@ -6,7 +6,7 @@ export type ActiveAccountSnapshot = { connectionId: string; providerId: string; 
   credentialRevision: { updatedAt: Date; cachedToken: string | null; refreshToken: string | null } };
 export const ACCOUNT_CHANGED = "Account changed during verification — retry with its current credentials";
 
-export function matchesCredentialRevision(snapshot: ActiveAccountSnapshot, credential: { id: string; updatedAt: Date; cachedToken: string | null; refreshToken: string | null } | null) {
+export function matchesCredentialRevision(snapshot: Pick<ActiveAccountSnapshot, "credentialEntryId" | "credentialRevision">, credential: { id: string; updatedAt: Date; cachedToken: string | null; refreshToken: string | null } | null) {
   return !!credential && credential.id === snapshot.credentialEntryId
     && credential.updatedAt.getTime() === snapshot.credentialRevision.updatedAt.getTime()
     && credential.cachedToken === snapshot.credentialRevision.cachedToken && credential.refreshToken === snapshot.credentialRevision.refreshToken;
@@ -47,11 +47,13 @@ export async function getActiveAccountBearerToken(snapshot: ActiveAccountSnapsho
     const credential = await prisma.credentialEntry.findUnique({ where: activeAccountCredentialWhere(snapshot) });
     if (!credential) return { error: ACCOUNT_CHANGED };
     if (!credential.cachedToken) return { error: "OAuth token not found — sign in again" };
-    if (credential.tokenExpiresAt && credential.tokenExpiresAt.getTime() > Date.now() + 5 * 60_000) {
+    const { refreshOAuthToken, oauthTokenExpiryMs } = await import("@/lib/provider-oauth");
+    if (credential.status !== "expired" && credential.tokenExpiresAt && credential.tokenExpiresAt.getTime() > Date.now() + 5 * 60_000) {
       const token = decryptSecret(credential.cachedToken);
-      return token ? { token } : { error: "OAuth token cannot be read — sign in again" };
+      if (!token) return { error: "OAuth token cannot be read — sign in again" };
+      const tokenExpiry = oauthTokenExpiryMs(token);
+      if (tokenExpiry === null || tokenExpiry > Date.now() + 5 * 60_000) return { token };
     }
-    const { refreshOAuthToken } = await import("@/lib/provider-oauth");
     return refreshOAuthToken(snapshot.providerId, snapshot.connectionId, snapshot);
   } catch (error) {
     return { error: error instanceof Error ? error.message : ACCOUNT_CHANGED };

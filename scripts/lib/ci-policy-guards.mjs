@@ -287,7 +287,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/installer/resolve-host-identity.test.mjs",
         "scripts/installer/validate-install-state.test.mjs",
         "scripts/installer/native-edge-host-contract.test.mjs",
+        // BI-31F11C37: the installers' monitoring question.
+        "scripts/installer/monitoring-choice.test.mjs",
       ),
+      conformanceTest("scripts/ci-runtime-install-state-fixture.test.mjs"),
+      // BI-31F11C37: both installers ask, accept the flag and record the
+      // choice before profiles resolve; reads the live installer sources.
+      conformanceTest("scripts/installer/monitoring-choice-installer-contract.test.mjs"),
       // BI-3267763F: no compose default, installer output or self-upgrade
       // leaves Inngest on the signing/event keys once published in this repo.
       conformanceTest("scripts/installer/inngest-keys-contract.test.mjs"),
@@ -1191,6 +1197,7 @@ export async function runPolicyProfile({
   execute,
   logger = () => {},
   now = () => Date.now(),
+  shouldStop = () => false,
 }) {
   let env;
   const run = execute ?? ((command, args) => {
@@ -1203,13 +1210,18 @@ export async function runPolicyProfile({
   const results = [];
 
   for (const entry of entries) {
+    if (shouldStop()) {
+      results.push({ id: entry.id, legacyJobId: entry.legacyJobId, name: entry.name,
+        status: "cancelled", durationMs: 0, failedCommand: null });
+      continue;
+    }
     const startedAt = now();
     let status = "passed";
     let failedCommand = null;
     logger({ type: "start", entry });
 
     for (const [command, args] of entry.commands) {
-      const exitCode = run(command, args);
+      const exitCode = await run(command, args, { guardId: entry.id });
       if (exitCode !== 0) {
         status = "failed";
         failedCommand = [command, ...args].join(" ");

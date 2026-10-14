@@ -12,7 +12,7 @@
 // else; the read returns readiness telemetry only (no secrets). Inputs are
 // validated against the closed vocabularies.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import {
   SURFACE_READINESS_STATES,
@@ -79,15 +79,35 @@ const definitions: ToolDefinition[] = [
   },
 ];
 
+/**
+ * BI-54469E18: an MCP caller's row is keyed by ITS OWN credential, so one
+ * token can no longer overwrite another host's readiness. In-platform callers
+ * with no MCP token keep the supplied key.
+ */
+async function boundSurfaceKey(
+  supplied: string,
+  clientKind: string,
+  context: ToolExecutionContext | undefined,
+): Promise<string> {
+  if (!context?.apiTokenId || (context.authSource !== "oauth" && context.authSource !== "pat")) return supplied;
+  const [{ prisma }, { resolveCredentialRef }] = await Promise.all([
+    import("@dpf/db"),
+    import("@/lib/agent-toolchain/connection-observation"),
+  ]);
+  const credential = await resolveCredentialRef(prisma as never, { tokenId: context.apiTokenId, source: context.authSource });
+  return credential ? `${clientKind}@${credential.credentialRef}` : supplied;
+}
+
 async function recordSurfaceReadinessHandler(
   params: Record<string, unknown>,
+  context?: ToolExecutionContext,
 ): Promise<ToolResult> {
-  const surfaceKey = typeof params.surfaceKey === "string" ? params.surfaceKey.trim() : "";
+  const suppliedKey = typeof params.surfaceKey === "string" ? params.surfaceKey.trim() : "";
   const clientKind = params.clientKind;
   const readinessState = params.readinessState;
   const mcpOk = params.mcpOk;
 
-  if (!surfaceKey) {
+  if (!suppliedKey) {
     return { success: false, error: "invalid_surface_key", message: "surfaceKey is required." };
   }
   if (!isSurfaceClientKind(clientKind)) {
@@ -100,6 +120,7 @@ async function recordSurfaceReadinessHandler(
     return { success: false, error: "invalid_mcp_ok", message: "mcpOk (boolean) is required." };
   }
 
+  const surfaceKey = await boundSurfaceKey(suppliedKey, clientKind, context);
   const { prisma } = await import("@dpf/db");
   const { recordSurfaceReadiness } = await import("@/lib/agent-toolchain/fleet-readiness");
   await recordSurfaceReadiness(prisma as never, {
@@ -129,12 +150,20 @@ async function getFleetReadinessHandler(
   const expectedPlatformVersion = typeof params.expectedPlatformVersion === "string" ? params.expectedPlatformVersion : null;
 
   const { prisma } = await import("@dpf/db");
-  const { getFleetReadiness } = await import("@/lib/agent-toolchain/fleet-readiness");
+  const { getFleetReadiness, getToolchainCopies } = await import("@/lib/agent-toolchain/fleet-readiness");
+  const { getPublishedToolchain } = await import("@/lib/agent-toolchain/served-toolchain");
+  const now = new Date();
   const summary = await getFleetReadiness(prisma as never, {
-    now: new Date(),
+    now,
     staleAfterMs,
     expectedPlatformVersion,
   });
+  // BI-54469E18: what each connection actually loaded, against this release.
+  const published = getPublishedToolchain();
+  const origin = (process.env.NEXT_PUBLIC_BASE_URL || process.env.PUBLIC_URL || "https://localhost").replace(/\/+$/, "");
+  const toolchain = published
+    ? { release: { packVersion: published.packVersion, packDigest: published.packDigest }, ...(await getToolchainCopies(prisma as never, { published, mcpEndpoint: `${origin}/api/mcp/v1`, now, staleAfterMs })) }
+    : null;
 
   const msg = summary.counts.total === 0
     ? "No build surfaces have reported readiness yet."
@@ -142,14 +171,14 @@ async function getFleetReadinessHandler(
       ? `All ${summary.counts.total} surface(s) are ready.`
       : `${summary.counts.notReady} not-ready, ${summary.counts.stale} stale of ${summary.counts.total} surface(s).`;
 
-  return { success: true, message: msg, data: summary as unknown as Record<string, unknown> };
+  return { success: true, message: msg, data: { ...summary, toolchain } as unknown as Record<string, unknown> };
 }
 
 export const surfaceReadinessPack: ToolPack = {
   packId: "surface-readiness",
   definitions,
   handlers: {
-    record_surface_readiness: (params) => recordSurfaceReadinessHandler(params),
+    record_surface_readiness: (params, _userId, context) => recordSurfaceReadinessHandler(params, context),
     get_fleet_readiness: (params) => getFleetReadinessHandler(params),
   },
   // Mirrors TOOL_TO_GRANTS (BI-6AC65187): the heartbeat upserts on a

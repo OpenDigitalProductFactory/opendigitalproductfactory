@@ -19,11 +19,11 @@
       "value": 13
     },
     "prismaModelCount": {
-      "contraction": "BI-911840CB",
+      "contraction": "BI-911840CB, BI-26ADC660",
       "direction": "non-increasing",
       "expiry": "2027-03-31",
       "owner": "portfolio-management",
-      "value": 643
+      "value": 644
     },
     "prismaSchemaLines": {
       "direction": "informational",

@@ -129,6 +129,11 @@ COPY scripts/installer/install-state-schema-registry.mjs ./scripts/installer/
 COPY scripts/installer/install-state.schema.json ./scripts/installer/
 COPY scripts/installer/install-state.v1.schema.json ./scripts/installer/
 COPY scripts/installer/install-state.v2.schema.json ./scripts/installer/
+# BI-31F11C37: the installers' monitoring question. The helper reads its cost from
+# config/install-resource-budgets.json (config/ is COPYed below) through the
+# budget gate's parser, so both ship with it.
+COPY scripts/installer/monitoring-choice.mjs ./scripts/installer/
+COPY scripts/check-compose-resource-budgets.mjs ./scripts/
 COPY scripts/installer/native-edge-host.ps1 ./scripts/installer/
 COPY scripts/bootstrap-organization-pki.ps1 scripts/rotate-runtime-transition-secret.mjs ./scripts/
 COPY scripts/installer/prepare-runtime-state.mjs scripts/installer/stage-ca-password.mjs ./scripts/installer/
@@ -281,7 +286,7 @@ RUN pnpm --filter @dpf/db exec prisma generate
 # Generate capability snapshot from mcp-tools.ts (runs at build time; output bundled into runner)
 RUN node packages/db/scripts/generate-tools-snapshot.js
 RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/installer/lib \
-      /dpf-release-assets/monitoring && \
+      /dpf-release-assets/monitoring /dpf-release-assets/config && \
     cp docker-compose.yml docker-compose.release.yml docker-compose.pki.yml docker-compose.organization-trust.yml docker-compose.tls.yml docker-compose.edge-actions.yml /dpf-release-assets/ && \
     mkdir -p /dpf-release-assets/scripts/pki && cp scripts/pki/edge-client.tpl /dpf-release-assets/scripts/pki/ && \
     cp uninstall-dpf.sh uninstall-dpf.ps1 uninstall-dpf.bat /dpf-release-assets/ && \
@@ -297,6 +302,9 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     cp scripts/installer/install-state.v1.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state.v2.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/native-edge-host.ps1 /dpf-release-assets/scripts/installer/ && \
+    cp scripts/installer/monitoring-choice.mjs /dpf-release-assets/scripts/installer/ && \
+    cp scripts/check-compose-resource-budgets.mjs /dpf-release-assets/scripts/ && \
+    cp config/install-resource-budgets.json /dpf-release-assets/config/ && \
     cp scripts/installer/lib/state.ps1 scripts/installer/lib/compose-chain.ps1 scripts/installer/lib/activation-overlays.txt scripts/installer/lib/canonical-origin.ps1 scripts/installer/lib/machine-trust.ps1 scripts/installer/lib/mcp-client-env.ps1 /dpf-release-assets/scripts/installer/lib/ && \
     cp config/consumer-install/agent-pointer.md /dpf-release-assets/AGENTS.md && \
     mkdir -p /dpf-release-assets/scripts/safety && \

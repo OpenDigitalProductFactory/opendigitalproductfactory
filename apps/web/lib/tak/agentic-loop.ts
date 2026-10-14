@@ -681,17 +681,17 @@ export function isSetupTourTurn(messages: ChatMessage[]): boolean {
   return /^\s*\[setup step:/i.test(latestUserText(messages));
 }
 
-function shouldAllowProviderStatusTextReply(params: {
+function shouldAllowFirstTurnTextReply(params: {
   routeContext: string;
   taskType?: string;
   providerId: string;
   messages: ChatMessage[];
   responseText: string;
+  conversationalSourceOnlyTurn?: boolean;
 }): boolean {
+  if (params.conversationalSourceOnlyTurn) return true;
   if (!params.routeContext.startsWith("/platform/ai/providers/")) return false;
-  // Provider-detail status questions are often classified as "unknown" or
-  // platform operations because the route carries most of the intent. The
-  // route and status-language checks below are the durable guard here.
+  // Provider-detail intent relies on the route and status-language checks.
   if (params.providerId === "local") return false;
 
   const latestUser = latestUserText(params.messages).toLowerCase();
@@ -706,10 +706,8 @@ function shouldAllowProviderStatusTextReply(params: {
 }
 
 /**
- * Clause 2.4: if a turn produces specific phase-evidence content in the
- * response text but does not call saveBuildEvidence with the matching field,
- * the evidence is ephemeral. Returns the field name that should have been
- * saved, or null. Conservative — only fires on clear evidence-content signals.
+ * Clause 2.4: specific phase evidence needs matching saveBuildEvidence.
+ * Return the missing field, or null; only clear evidence-content signals count.
  */
 export function detectUnsavedEvidence(
   responseText: string,
@@ -735,6 +733,7 @@ export function detectUnsavedEvidence(
 export type AgenticResult = {
   /** Final text response from the agent */
   content: string;
+  suppliedSourceEvidence?: boolean;
   /** Provider that generated the final response */
   providerId: string;
   modelId: string;
@@ -1266,15 +1265,16 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   // finish (up to this many times) before falling through to the best partial.
   const MAX_TRUNCATION_CONTINUES = 2;
   let truncationContinues = 0;
-  // Evidence-integrity gate (INV-1). Decide once whether this turn's answer
-  // depends on live operational state (a route with authoritative domain tools +
-  // a live-state question); the terminal guard in the zero-tool branch enforces
-  // that such a turn never returns factual prose without a successful tool call.
+  // INV-1: decide once whether this answer needs live operational evidence.
+  // The zero-tool terminal guard withholds factual prose without verification.
+  // Supplied source supports its own analysis; mixed requests still owe live evidence.
+  const isConversationalRoute = !BUILD_ROUTE_PATTERN.test(routeContext ?? "");
   const evidenceRequirement = classifyEvidenceRequirement({
     routeContext,
     domainTools: resolveRouteContext(routeContext).domainTools,
     message: latestUserText(messages),
   });
+  const suppliedSourceEvidence = !!evidenceRequirement.suppliedSourceEvidence && isConversationalRoute && !requireTools;
   let evidenceRecoveryNudges = 0;
   let terminalToolNudges = 0;
   let terminalToolSurfaceOverride: string[] | null = null;
@@ -1292,6 +1292,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     totalOutputTokens,
     executedTools,
     proposal: null,
+    suppliedSourceEvidence: suppliedSourceEvidence && !extra.failure,
     ...extra,
   });
   const terminalFailure = (message: string, source = lastResult): AgenticResult =>
@@ -1338,7 +1339,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         `[turn] thread=${JSON.stringify(threadId)} agent=${JSON.stringify(agentId)} ` +
         `route=${JSON.stringify(routeContext)} provider=${provider} model=${model} ` +
         `dispatches=${inferenceCallCount} nudges=${continuationNudges} ` +
-        `toolsAttached=${toolsAttachedForTurn} executedTools=${executedTools.length} ` +
+        `toolsAttached=${toolsAttachedForTurn} executedTools=${executedTools.length} sourceEvidence=${suppliedSourceEvidence ? 1 : 0} ` +
         `totalMs=${Date.now() - startTime} ` +
         `ctxPeakTokens=${ctxPeakTokens} ctxZone=${ctxPressure.zone} ` +
         `toolSurface=${surface.toolCount} estToolTokens=${surface.estDefinitionTokens} surfaceZone=${surface.zone} ` +
@@ -2054,13 +2055,14 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           ),
         ),
         isSetupTourTurn: isSetupTourTurn(messages),
-        isConversationalRoute: !BUILD_ROUTE_PATTERN.test(routeContext ?? ""),
-        allowFirstTurnTextOnlyReply: shouldAllowProviderStatusTextReply({
+        isConversationalRoute,
+        allowFirstTurnTextOnlyReply: shouldAllowFirstTurnTextReply({
           routeContext,
           taskType,
           providerId: result.providerId,
           messages,
           responseText: trimmed,
+          conversationalSourceOnlyTurn: suppliedSourceEvidence,
         }),
         requireToolExecution: requireTools,
       });
@@ -2544,8 +2546,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // that predate the field fall back to the unavailable reading only when they
     // actually reported a downgrade.
     downgradeReason: lastResult?.downgradeReason ?? (downgraded ? "provider-unavailable" : null),
-    // The same binding cause the banner named, so the advice below it addresses
-    // the constraint the owner was actually told about (BI-FB184D69).
+    // Use the banner's binding cause so recovery addresses the actual constraint (BI-FB184D69).
     cause: lastResult?.downgradeCause ?? null,
     executedTools,
   });
