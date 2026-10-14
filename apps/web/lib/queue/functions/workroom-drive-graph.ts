@@ -53,6 +53,7 @@ import {
 import type { WorkroomDriveEffects, WorkroomDriveRoom } from "./workroom-drive";
 import { applySubShapeEffects } from "./workroom-drive-children";
 import { recordRaisedDeadlines, sendCommittedDeadlineNotices } from "./workroom-drive-deadlines";
+import { readWorkroomQueueHold } from "@/lib/work-capsules/workroom-queue-hold";
 
 type Outcome = "dispatched" | "attention" | "stopped" | "skipped";
 
@@ -150,6 +151,19 @@ export async function applyGraphDrivePlan(input: {
       payload: observed,
       observationOnly: true,
     });
+    return "skipped";
+  }
+  if (readWorkroomQueueHold(room.workspaceState)) {
+    // BI-2B6A8A74: no provider answered the last stage; dispatching again would retry the outage.
+    // Every token the plan would dispatch stays where it was, as for a dispatch that failed.
+    const kept = plan.marking && !("raw" in plan.marking) && plan.definition
+      ? withUndispatchedTokensRestored(plan.marking, room.workspaceState, plan.definition, dispatch.map((token) => token.stageKey))
+      : null;
+    const held = await committing({ ...snapshot, ...(kept ? { marking: kept satisfies DriveMarking } : {}), action: "dispatch_agent",
+      reason: "provider_held" satisfies DriveReasonFor<"dispatch_agent">, dispatchedStageKeys: [] });
+    await persist({ roomId: room.id, snapshot: held, activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
+      summary: "Queue held after a provider failure; resume_workroom_queue releases it.", payload: held });
+    await afterCommit(held);
     return "skipped";
   }
 
