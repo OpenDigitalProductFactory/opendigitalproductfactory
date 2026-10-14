@@ -1075,6 +1075,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "packages/dpf-skill-pack/hooks/workroom-claim-guard.test.mjs",
       ),
+      // BI-AB4EA033: re-caches the guard's marker from claim/heartbeat answers.
+      node(
+        "--test",
+        "packages/dpf-skill-pack/hooks/workroom-claim-refresh.test.mjs",
+      ),
       node(
         "--test",
         "packages/dpf-skill-pack/hooks/uncommitted-work-guard.test.mjs",
