@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { chmod, link, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import fsPromises, { chmod, cp, link, mkdir, mkdtemp, readFile, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { syncBuiltinESMExports } from "node:module";
 import { canonicalJson } from "../lib/canonical-json.mjs";
 import { loadOfflineRecoveryKit } from "./offline-recovery-kit.mjs";
 
@@ -103,4 +104,30 @@ test("accepts an owned intermediate alias beneath protected ancestors", posix, a
   await writeFile(join(store, "enrollment.json"), await readFile(f.trustFile), { mode: 0o600 });
   const result = await loadOfflineRecoveryKit({ ...f.args, trustFile: join(alias, "store", "enrollment.json") });
   assert.equal(result.envelopeDigest, hash(f.envelopeBytes));
+});
+
+for (const target of ["kit", "enrollment"]) test(`refuses replacement of the protected ${target} directory during its multi-file read`, posix, async t => {
+  const f = await fixture(t);
+  const store = join(f.dir, "trust-store");
+  await mkdir(store, { mode: 0o700 });
+  const trustFile = join(store, "enrollment.json");
+  await writeFile(trustFile, await readFile(f.trustFile), { mode: 0o600 });
+  f.args.trustFile = trustFile;
+  const replacing = target === "kit" ? f.kit : store;
+  const originalOpen = fsPromises.open;
+  const canonicalKit = await realpath(f.kit);
+  let replaced = false;
+  const mocked = t.mock.method(fsPromises, "open", async (path, ...args) => {
+    if (!replaced && path === join(canonicalKit, "envelope-signatures.json")) {
+      replaced = true;
+      const old = join(f.dir, `old-${target}`);
+      await rename(replacing, old);
+      await cp(old, replacing, { recursive: true });
+    }
+    return originalOpen(path, ...args);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { mocked.mock.restore(); syncBuiltinESMExports(); });
+  await assert.rejects(loadOfflineRecoveryKit(f.args), /offline_recovery_kit_changed/);
+  assert.equal(replaced, true, "the real directory replacement must occur during the read");
 });
