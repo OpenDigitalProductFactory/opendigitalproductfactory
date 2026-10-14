@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { classifySlotRecord } from "./pregate-status.mjs";
 import { readLocalCiGateState } from "./local-ci-gate-state.mjs";
+import { collectToolchainFingerprint, defaultBuildStrategy } from "./local-integration-ci.mjs";
 import {
   couldBeDocumentationFiles,
   createPreAdmissionGateIdentity,
@@ -15,6 +16,12 @@ import {
 } from "./documentation-evidence-lane.mjs";
 
 describe("couldBeDocumentationFiles", () => {
+  it("rejects an invalid worker profile before unavailable-planner fallback or admission", async () => {
+    await assert.rejects(runPreAdmissionDocumentationLane({
+      worktreePath: "missing-worktree", gitBin: "missing-git", plannerPath: "missing-planner",
+      env: { DPF_LOCAL_CI_TEST_WORKERS: "0" },
+    }), /DPF_LOCAL_CI_TEST_WORKERS/);
+  });
   it("admits documentation plus its generated index", () => {
     assert.equal(couldBeDocumentationFiles([
       "docs/operations/gates.md",
@@ -96,6 +103,19 @@ digest:'${"e".repeat(64)}', plannerVersion:1, policyVersion:1, globalGuards:[] }
 }
 
 describe("documentation producer through the authoritative reader", () => {
+  it("binds a code gate's worker profile before admission", async (t) => {
+    const f = await documentationFixture(t);
+    writeFileSync(join(f.args.worktreePath, "scripts", "changed.mjs"), "export const changed = true;\n");
+    f.git("add", ".");
+    f.git("commit", "-m", "code candidate");
+    const env = { ...process.env, DPF_LOCAL_CI_TEST_WORKERS: "2" };
+    const result = await runPreAdmissionDocumentationLane({ ...f.args, sha: f.git("rev-parse", "HEAD"), env });
+    assert.equal(result.handled, false);
+    assert.deepEqual(f.requests, []);
+    const input = { buildStrategy: defaultBuildStrategy(process.platform, env), cwd: f.args.worktreePath };
+    assert.equal(result.gateIdentity.toolchainFingerprint, collectToolchainFingerprint({ ...input, env }).toolchainFingerprint);
+    assert.notEqual(result.gateIdentity.toolchainFingerprint, collectToolchainFingerprint({ ...input, env: {} }).toolchainFingerprint);
+  });
   it("publishes its own immutable evidence without reserving capacity or overwriting old diagnostics", async (t) => {
     const f = await documentationFixture(t);
     const oldMetadata = readFileSync(f.metadataFile, "utf8");
