@@ -122,3 +122,24 @@ write compares that account's status and revision along with the encrypted
 credential snapshot, and disabled accounts cannot start the exchange. Guarded
 OAuth renewal and decoded expiry still require the qualified shared service API;
 these source-local corrections alone do not prove that integration or deployment.
+
+Selected-account renewal consumes the qualified shared service's fourth guard
+argument with raw encrypted storage and the captured owner, including organization.
+The shared parser checks decoded JWT expiry and subscription identity. A rejected
+upstream token forces renewal rather than returning a cached token. Caller
+cancellation stops dispatch; ownership drift rebuilds selection; temporary renewal
+failure preserves configuration, records a scoped failure and tries an eligible
+sibling. The shared service's availability correction must be qualified and
+merged before this consumer receives final integration evidence.
+
+The overview may request current health for inactive accounts so a genuine
+reauthentication failure remains visible after setup is required. This option
+changes presentation only: routing's default projection, account eligibility,
+credential revision checks and disabled-account veto remain in force.
+
+Client-credentials exchange also checks the captured owner immediately before
+HTTP, then locks and rechecks that owner before saving a finite, nonempty token.
+Cancellation rolls back the write; network work stays outside the transaction.
+Credential-exchange failures carry the owning connection on the existing
+inference-error contract so they cannot degrade a shared model or cool down a
+healthy sibling. Source race tests do not replace real database qualification.

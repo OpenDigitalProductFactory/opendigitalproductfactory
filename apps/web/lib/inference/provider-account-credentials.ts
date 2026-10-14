@@ -1,6 +1,10 @@
 import { prisma } from "@dpf/db";
 import { decryptSecret, encryptSecret } from "@/lib/credential-crypto";
 import { accountExecutionVersion, ProviderAccountSelectionChangedError } from "../routing/provider-account-candidates";
+import { currentInferenceSignal } from "../routing/governed-inference-deadline";
+import { InferenceError } from "../routing/inference-error";
+import { capacityCredentialRevision } from "../routing/provider-capacity/scopes";
+import { isActiveDefaultSubscription, type ActiveAccountSnapshot, ACCOUNT_CHANGED } from "./active-provider-account-verification";
 
 /** Catalog aliases apply only to the legacy default, never to explicit accounts. */
 export function resolveCredentialProviderId(providerId: string): string {
@@ -85,11 +89,17 @@ export function decryptProviderCredential(cred: NonNullable<Awaited<ReturnType<t
   return { ...cred, secretRef, clientSecret, cachedToken, refreshToken };
 }
 
+function tokenExchangeFailure(message: string, providerId: string, connectionId?: string, statusCode?: number) {
+  return new InferenceError(message, "network", providerId, statusCode, undefined, undefined, undefined, undefined, connectionId);
+}
+
 /** OAuth token exchange — obtain or refresh bearer token for a provider.
  *  Dispatches by authMethod: oauth2_authorization_code uses refreshOAuthToken,
  *  oauth2_client_credentials uses the client_credentials grant.
  */
-export async function getProviderBearerToken(providerId: string, connectionId?: string, expectedExecutionVersion?: string): Promise<{ token: string } | { error: string }> {
+export async function getProviderBearerToken(providerId: string, connectionId?: string, expectedExecutionVersion?: string,
+  options: { forceRefresh?: boolean } = {}): Promise<{ token: string } | { error: string }> {
+  currentInferenceSignal()?.throwIfAborted();
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) return { error: "Provider not found" };
 
@@ -100,19 +110,61 @@ export async function getProviderBearerToken(providerId: string, connectionId?: 
     throw new ProviderAccountSelectionChangedError(providerId, "Selected provider account changed before token exchange");
   }
   if (["oauth", "oauth2_authorization_code"].includes(connection?.authMethod ?? provider.authMethod)) {
-    const { refreshOAuthToken } = await import("@/lib/provider-oauth");
-    const credential = await getDecryptedCredential(providerId, connectionId, expectedExecutionVersion);
+    const { refreshOAuthToken, oauthTokenExpiryMs, chatgptTokenIdentity, matchesScopedOAuthConnection } = await import("@/lib/provider-oauth");
+    const selected = connection ?? (connectionId === undefined ? await prisma.aiProviderConnection.findUnique({
+      where: { connectionId: `provider-default-${providerId}` }, include: { credentialEntry: true },
+    }) : null);
+    if (selected?.status === "disabled") return { error: "Provider account is disabled" };
+    const stored = selected?.credentialEntry ?? (connectionId === undefined ? await findDefaultProviderCredential(providerId) : null);
+    const credential = stored && decryptProviderCredential(stored, providerId);
     if (!credential) return { error: "No credential configured" };
 
-    if (credential.status === "ok" && credential.cachedToken && credential.tokenExpiresAt) {
+    if (!options.forceRefresh && credential.status === "ok" && credential.cachedToken && credential.tokenExpiresAt) {
       const buffer = 5 * 60 * 1000;
-      if (credential.tokenExpiresAt.getTime() > Date.now() + buffer) {
+      const decodedExpiry = oauthTokenExpiryMs(credential.cachedToken);
+      if (Math.min(credential.tokenExpiresAt.getTime(), decodedExpiry ?? Infinity) > Date.now() + buffer) {
         return { token: credential.cachedToken };
       }
     }
-    // chatgpt shares Codex OAuth — refresh via codex provider (has tokenUrl/clientId)
-    const refreshProviderId = !connectionId && providerId === "chatgpt" ? "codex" : providerId;
-    const refreshed = await refreshOAuthToken(refreshProviderId, connectionId);
+    const inherited = currentInferenceSignal();
+    const signal = inherited ? AbortSignal.any([inherited, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000);
+    let refreshed: { token: string } | { error: string };
+    if (selected?.credentialEntry && selected.credentialEntryId === stored!.id) {
+      const expectedIdentity = ["codex", "chatgpt"].includes(providerId) ? chatgptTokenIdentity(credential.cachedToken) : null;
+      if (["codex", "chatgpt"].includes(providerId) && !expectedIdentity) return { error: "Account sign-in identity could not be confirmed" };
+      const activeSnapshot: ActiveAccountSnapshot | undefined = isActiveDefaultSubscription(selected) ? {
+        connectionId: selected.connectionId, providerId, credentialEntryId: selected.credentialEntryId,
+        updatedAt: selected.updatedAt, credentialRevision: { updatedAt: stored!.updatedAt,
+          cachedToken: stored!.cachedToken, refreshToken: stored!.refreshToken },
+      } : undefined;
+      refreshed = await refreshOAuthToken(providerId, selected.connectionId, activeSnapshot, {
+        signal, connection: selected, credential: stored!, validateAccessToken: token => {
+          if (expectedIdentity && chatgptTokenIdentity(token) !== expectedIdentity) {
+            throw new ProviderAccountSelectionChangedError(providerId, "Renewed token belongs to a different account");
+          }
+        },
+      });
+      signal.throwIfAborted();
+      if ("error" in refreshed) {
+        if ([ACCOUNT_CHANGED, "Selected account changed during renewal", "Selected account credential changed",
+          "Selected default changed during renewal", "Shared default identity changed"].includes(refreshed.error)) {
+          throw new ProviderAccountSelectionChangedError(providerId, refreshed.error);
+        }
+        if (refreshed.error !== "Selected account re-authentication required" && !refreshed.error.includes("sign in again")) {
+          throw tokenExchangeFailure(refreshed.error, providerId, selected.connectionId);
+        }
+      } else {
+        const current = await prisma.aiProviderConnection.findUnique({ where: { connectionId: selected.connectionId }, include: { credentialEntry: true } });
+        if (!matchesScopedOAuthConnection(current, selected)) throw new ProviderAccountSelectionChangedError(providerId, "Selected account changed after renewal");
+      }
+    } else {
+      if (connectionId !== undefined) {
+        throw new ProviderAccountSelectionChangedError(providerId, "Selected account credential ownership is inconsistent");
+      }
+      // Unowned legacy defaults retain their existing path; explicit accounts never alias.
+      const refreshProviderId = connectionId === undefined && providerId === "chatgpt" ? "codex" : providerId;
+      refreshed = await refreshOAuthToken(refreshProviderId, connectionId);
+    }
     if ("token" in refreshed && expectedExecutionVersion) await findProviderCredential(providerId, connectionId, expectedExecutionVersion);
     return refreshed;
   }
@@ -126,7 +178,7 @@ export async function getProviderBearerToken(providerId: string, connectionId?: 
   }
 
   // Return cached token if still valid (5-minute buffer)
-  if (credential.status === "ok" && credential.cachedToken && credential.tokenExpiresAt) {
+  if (!options.forceRefresh && credential.status === "ok" && credential.cachedToken && credential.tokenExpiresAt) {
     const buffer = 5 * 60 * 1000;
     if (credential.tokenExpiresAt.getTime() > Date.now() + buffer) {
       return { token: credential.cachedToken };
@@ -142,35 +194,61 @@ export async function getProviderBearerToken(providerId: string, connectionId?: 
   });
 
   try {
+    const { matchesScopedOAuthConnection } = await import("@/lib/provider-oauth");
+    const signal = currentInferenceSignal(AbortSignal.timeout(10_000))!;
+    const assertOwner = async (client: Pick<typeof prisma, "aiProviderConnection">) => {
+      if (!connection || !storedCredential) return;
+      const current = await client.aiProviderConnection.findUnique({ where: { connectionId: connection.connectionId }, include: { credentialEntry: true } });
+      if (!matchesScopedOAuthConnection(current, connection) || !current?.credentialEntry
+        || current.credentialEntry.status !== storedCredential.status
+        || capacityCredentialRevision(current.credentialEntry) !== capacityCredentialRevision(storedCredential)) {
+        throw new ProviderAccountSelectionChangedError(providerId, "Selected provider account changed during token exchange");
+      }
+    };
+    signal.throwIfAborted();
+    await assertOwner(prisma);
     const res = await fetch(credential.tokenEndpoint, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: params.toString(),
-      signal: AbortSignal.timeout(10_000),
+      signal,
     });
-    if (!res.ok) return { error: `Token exchange failed: HTTP ${res.status}` };
+    signal.throwIfAborted();
+    if (!res.ok) {
+      if (res.status === 429 || res.status >= 500 || res.status === 408) throw tokenExchangeFailure(`Token exchange unavailable: HTTP ${res.status}`, providerId, connectionId, res.status);
+      return { error: `Token exchange failed: HTTP ${res.status}` };
+    }
 
     const body = await res.json() as { access_token: string; expires_in: number };
     const expiresAt = new Date(Date.now() + body.expires_in * 1000);
+    if (typeof body.access_token !== "string" || !body.access_token.trim() || !Number.isFinite(body.expires_in)
+      || body.expires_in <= 0 || !Number.isFinite(expiresAt.getTime())) throw tokenExchangeFailure("Malformed workload token exchange", providerId, connectionId);
 
     const data = { cachedToken: encryptSecret(body.access_token), tokenExpiresAt: expiresAt, status: "ok" };
     if (connectionId) {
-      const written = await prisma.credentialEntry.updateMany({ where: {
+      await prisma.$transaction(async tx => {
+      signal.throwIfAborted();
+      const owners = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM "AiProviderConnection" WHERE "connectionId"=${connectionId} FOR UPDATE`;
+      if (owners.length !== 1 || owners[0]!.id !== connection!.id) throw new ProviderAccountSelectionChangedError(providerId, "Selected provider account changed during token exchange");
+      await assertOwner(tx);
+      const written = await tx.credentialEntry.updateMany({ where: {
         id: credential.id, updatedAt: credential.updatedAt,
         ...(storedCredential ? { secretRef: storedCredential.secretRef, clientSecret: storedCredential.clientSecret, cachedToken: storedCredential.cachedToken, refreshToken: storedCredential.refreshToken } : {}),
         providerConnection: { is: { connectionId, providerId, credentialEntryId: credential.id,
           updatedAt: connection!.updatedAt, status: connection!.status } },
       }, data });
+      signal.throwIfAborted();
       if (written.count !== 1) {
-        const error = "Selected provider account changed during token exchange";
-        if (expectedExecutionVersion) throw new ProviderAccountSelectionChangedError(providerId, error);
-        return { error };
+        throw new ProviderAccountSelectionChangedError(providerId, "Selected provider account changed during token exchange");
       }
+      });
     } else await prisma.credentialEntry.update({ where: { id: credential.id }, data });
 
     return { token: body.access_token };
   } catch (err) {
-    if (err instanceof ProviderAccountSelectionChangedError) throw err;
-    return { error: err instanceof Error ? err.message : "Token exchange error" };
+    currentInferenceSignal()?.throwIfAborted();
+    if (err instanceof InferenceError || err instanceof ProviderAccountSelectionChangedError && expectedExecutionVersion) throw err;
+    if (err instanceof ProviderAccountSelectionChangedError) return { error: err.message };
+    throw tokenExchangeFailure("Workload token exchange temporarily unavailable", providerId, connectionId);
   }
 }

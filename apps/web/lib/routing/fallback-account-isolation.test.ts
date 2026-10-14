@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RouteDecision } from "./types";
-const mocks = vi.hoisted(() => ({ call: vi.fn(), disable: vi.fn(), updateAccount: vi.fn(), updateProfile: vi.fn(), refresh: vi.fn(), learn: vi.fn().mockResolvedValue({ changed: true }), readAccount: vi.fn() }));
+const mocks = vi.hoisted(() => ({ call: vi.fn(), disable: vi.fn(), updateAccount: vi.fn(), updateProfile: vi.fn(), refresh: vi.fn(), bearer: vi.fn(), markUnavailable: vi.fn(), learn: vi.fn().mockResolvedValue({ changed: true }), readAccount: vi.fn() }));
 vi.mock("./model-auth-eligibility", async (importOriginal) => ({ ...await importOriginal<typeof import("./model-auth-eligibility")>(), recordAuthEligibility: mocks.learn }));
 vi.mock("@dpf/db", () => ({ prisma: {
   modelProvider: { findUnique: vi.fn(async () => ({ providerId: "openai", name: "OpenAI", authMethod: "api_key" })) },
@@ -12,12 +12,13 @@ vi.mock("@/lib/ai-inference", () => {
   return { callProvider: mocks.call, InferenceError };
 });
 vi.mock("./provider-auto-disable", () => ({ autoDisableProvider: mocks.disable }));
-vi.mock("./rate-tracker", () => ({ recordRequest: vi.fn(), learnFromRateLimitResponse: vi.fn(), extractRetryAfterMs: vi.fn(), markEndpointUnavailable: vi.fn(), clearEndpointUnavailable: vi.fn() }));
+vi.mock("./rate-tracker", () => ({ recordRequest: vi.fn(), learnFromRateLimitResponse: vi.fn(), extractRetryAfterMs: vi.fn(), markEndpointUnavailable: mocks.markUnavailable, clearEndpointUnavailable: vi.fn() }));
 vi.mock("./rate-recovery", () => ({ scheduleRecovery: vi.fn() }));
 vi.mock("./loader", () => ({ invalidateRoutingLoaderCache: vi.fn() }));
 vi.mock("./route-outcome", () => ({ recordRouteOutcome: vi.fn(async () => {}) }));
 vi.mock("@/lib/ai-provider-internals", () => ({ autoDiscoverAndProfile: vi.fn(async () => {}), requestProviderCatalogRefresh: vi.fn(async () => {}) }));
 vi.mock("@/lib/provider-oauth", () => ({ refreshOAuthToken: mocks.refresh }));
+vi.mock("@/lib/inference/provider-account-credentials", () => ({ getProviderBearerToken: mocks.bearer }));
 import { InferenceError } from "@/lib/ai-inference";
 import { callWithFallbackChain } from "./fallback";
 import { accountExecutionVersion, ProviderAccountSelectionChangedError } from "./provider-account-candidates";
@@ -31,6 +32,30 @@ function decision(): RouteDecision {
 }
 beforeEach(() => { vi.clearAllMocks(); mocks.readAccount.mockImplementation(async ({ where }) => account(where.connectionId)); mocks.call.mockResolvedValue({ content: "Completed", inputTokens: 1, outputTokens: 1, inferenceMs: 1 }); mocks.updateAccount.mockResolvedValue({ count: 1 }); mocks.updateProfile.mockResolvedValue({ count: 1 }); mocks.disable.mockResolvedValue({ attempt: 0 }); });
 describe("fallback account isolation", () => {
+  it("scopes pre-inference token exchange failures to their account instead of the shared provider", async () => {
+    mocks.call.mockRejectedValueOnce(Object.assign(new InferenceError("Token exchange unavailable", "network", "openai"), { tokenExchangeConnectionId: "account-a" }));
+    await expect(callWithFallbackChain(decision(), [], "")).resolves.toMatchObject({ providerConnectionId: "account-b" });
+    expect(mocks.markUnavailable).toHaveBeenCalledWith("openai:account:account-a", "model", expect.any(String), expect.any(Number), expect.any(String));
+    expect(mocks.updateAccount).not.toHaveBeenCalled();
+    expect(mocks.updateProfile).not.toHaveBeenCalled();
+    expect(mocks.disable).not.toHaveBeenCalled();
+  });
+  it("uses guarded forced renewal and preserves account configuration when renewal is temporarily unavailable", async () => {
+    const routed = decision();
+    for (const candidate of routed.candidates) {
+      candidate.accountAuthMethod = "oauth2_authorization_code";
+      candidate.providerConnectionVersion = accountExecutionVersion({ ...account(candidate.providerConnectionId!), authMethod: "oauth" });
+    }
+    mocks.readAccount.mockImplementation(async ({ where }) => ({ ...account(where.connectionId), authMethod: "oauth" }));
+    mocks.call.mockRejectedValueOnce(new InferenceError("Token expired", "auth", "openai"));
+    mocks.bearer.mockRejectedValueOnce(new InferenceError("Renewal temporarily unavailable", "transient", "openai"));
+    mocks.refresh.mockResolvedValue({ error: "Legacy renewal must not run" });
+    await expect(callWithFallbackChain(routed, [], "")).resolves.toMatchObject({ providerConnectionId: "account-b" });
+    expect(mocks.bearer).toHaveBeenCalledWith("openai", "account-a", routed.candidates[0]!.providerConnectionVersion, { forceRefresh: true });
+    expect(mocks.refresh).not.toHaveBeenCalled();
+    expect(mocks.updateAccount).not.toHaveBeenCalled();
+    expect(mocks.disable).not.toHaveBeenCalled();
+  });
   it("replays full messages instead of transferring unbound provider response state to another account", async () => {
     const messages = [{ role: "user" as const, content: "Continue the saved task" }];
     await callWithFallbackChain(decision(), messages, "", undefined, undefined, "foreign-response");

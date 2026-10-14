@@ -78,6 +78,18 @@ describe("provider capacity store", () => {
       observedCredentialRevision: "old-revision", ownedAccount: { id: identity.accountId, providerId: "openai", connectionId: identity.connectionId, status: "active", credentialEntry: credential } }] as never);
     expect((await loadProviderCapacitySnapshots()).size).toBe(0);
   });
+  it("retains revision-valid recovery details for an unconfigured overview account without adding routing eligibility", async () => {
+    vi.mocked(prisma.providerCapacityStatus.findMany).mockResolvedValue([{
+      providerId: null, scopeKey: accountCapacityScope("openai", identity.accountId), state: "reauth_required",
+      retryAt: null, lastObservedAt: NOW, safeSummary: "Reconnect this account.", action: "reconnect",
+      isHumanActionRequired: true, observedCredentialRevision: identity.credentialRevision,
+      ownedAccount: { id: identity.accountId, providerId: "openai", connectionId: identity.connectionId,
+        status: "unconfigured", credentialEntryId: credential.id, credentialEntry: credential },
+    }] as never);
+    expect((await loadProviderCapacitySnapshots()).size).toBe(0);
+    expect((await loadProviderCapacitySnapshots({ includeInactiveAccountHealth: true })).get(accountRuntimeKey("openai", identity.connectionId)))
+      .toMatchObject({ safeSummary: "Reconnect this account.", action: "reconnect", isHumanActionRequired: true });
+  });
   it("shares a conservative consumer quota restriction across aliases while keeping authentication local", async () => {
     vi.mocked(prisma.providerCapacityStatus.findMany).mockResolvedValue([
       { providerId: "codex", state: "quota_resets_at", retryAt: new Date("2026-10-15T00:00:00Z"), lastObservedAt: NOW, providerConnection: null },

@@ -34,7 +34,7 @@ export function capacityProviderIds(providerIds: readonly string[]): string[] {
 }
 
 /** One projection feeds routing; account-local observations never become global. */
-export async function loadProviderCapacitySnapshots(): Promise<Map<string, CapacitySnapshot>> {
+export async function loadProviderCapacitySnapshots(options: { includeInactiveAccountHealth?: boolean } = {}): Promise<Map<string, CapacitySnapshot>> {
   const rows = await prisma.providerCapacityStatus.findMany({
     select: { providerId: true, scopeKey: true, observedCredentialRevision: true, state: true, retryAt: true, lastObservedAt: true,
       safeSummary: true, action: true, isHumanActionRequired: true,
@@ -47,7 +47,7 @@ export async function loadProviderCapacitySnapshots(): Promise<Map<string, Capac
   for (const row of rows) {
     const snapshot = snapshotFor(row);
     const account = row.ownedAccount;
-    if (account && ["active", "degraded"].includes(account.status) && account.credentialEntry?.status === "ok"
+    if (account && (options.includeInactiveAccountHealth || ["active", "degraded"].includes(account.status)) && account.credentialEntry?.status === "ok"
       && row.scopeKey === accountCapacityScope(account.providerId, account.id)
       && row.observedCredentialRevision === capacityCredentialRevision(account.credentialEntry)) {
       map.set(accountRuntimeKey(account.providerId, account.connectionId), snapshot);
