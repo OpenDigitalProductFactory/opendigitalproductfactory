@@ -23,7 +23,7 @@ function parse(bytes, code) {
  * The runtime adapter must provide observed identity and revalidate under its
  * exclusive apply lock. Windows requires a real ACL adapter, not mode-bit trust.
  */
-export async function loadOfflineRecoveryKit({ kitDirectory, trustFile, observed, nowMs }) {
+export async function readVerifiedOfflineRecoveryKit({ kitDirectory, trustFile, observed, nowMs }) {
   if (process.platform === "win32" || typeof process.getuid !== "function"
     || !constants.O_NOFOLLOW) fail("permissions_unavailable");
   if (typeof trustFile !== "string" || !isAbsolute(trustFile)) fail("trust_location");
@@ -57,5 +57,9 @@ export async function loadOfflineRecoveryKit({ kitDirectory, trustFile, observed
     const current = await lstat(canonical);
     if (current.dev !== identity.dev || current.ino !== identity.ino) fail("changed");
   }
-  return result;
+  return { result, files: inputs };
+}
+
+export async function loadOfflineRecoveryKit(options) {
+  return (await readVerifiedOfflineRecoveryKit(options)).result;
 }
