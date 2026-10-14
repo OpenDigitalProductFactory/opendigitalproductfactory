@@ -64,18 +64,21 @@ export const DRIVE_REASONS_BY_ACTION = Object.freeze({
   escalate: ["conformance_escalate"],
   // `construct_not_executable` and `marking_unreadable` are the graph path's
   // fail-closed pauses (GPP Phase 3c PR-3c-1, BI-8875C9DF; design §5 table).
-  pause: ["conformance_pause", "unknown_principal", "executor_writeback_unavailable", "construct_not_executable", "marking_unreadable"],
+  // `missing_task_owner`: an agent stage is ready but no accountable person with
+  // an active user account can be named to run its task (BI-D13FA12A). It was
+  // filed under dispatch_agent, so 127 rooms read as dispatched while nothing ran.
+  pause: ["conformance_pause", "unknown_principal", "executor_writeback_unavailable", "construct_not_executable", "marking_unreadable", "missing_task_owner"],
   // `gate_refused`: a refuse verdict whose route cannot be taken (its bound is
   // spent and the shape has no budget stop); the token stays (PR-3c-3).
   // `awaiting_sub_shape`: a sub-shape stage's child room is being created, runs
   // or is being completed; `sub_shape_stopped`: the child stopped without
   // success and the parent waits for its owner (PR-3c-5).
   attention: ["governed_decision", "role_stage", "person_stage", "gate_refused", "awaiting_sub_shape", "sub_shape_stopped"],
-  // `lease_held` and `missing_task_owner` are set by the drive job
-  // (lib/queue/functions/workroom-drive.ts) when it cannot act on a dispatch plan.
+  // `lease_held` is set by the drive job (lib/queue/functions/workroom-drive.ts)
+  // when another worker holds the stage.
   // `reviewer_dispatch_unavailable`: a review stage's reviewer packet could not
   // be sent (BI-2C8750FC, workroom-drive-review-stages.ts).
-  dispatch_agent: ["agent_stage", "lease_held", "missing_task_owner", "reviewer_dispatch_unavailable"],
+  dispatch_agent: ["agent_stage", "lease_held", "reviewer_dispatch_unavailable"],
 } as const);
 
 export type DriveReasonsByAction = typeof DRIVE_REASONS_BY_ACTION;
@@ -147,8 +150,8 @@ const BLOCKAGES: Record<string, { what: string; unblockedBy: string }> = {
     unblockedBy: "the executor records evidence or a writeback for the dispatched stage",
   },
   missing_task_owner: {
-    what: "An agent stage is ready but the room has no owner user to run its scheduled task under.",
-    unblockedBy: "an owner user is bound to the room",
+    what: "An agent stage is ready but no accountable person with an active user account can be named to run its scheduled task, so nothing was dispatched.",
+    unblockedBy: "the room, its containing room or the organization records an accountable person with an active user account",
   },
   reviewer_dispatch_unavailable: {
     what: "A review stage is due and its independent reviewer is named, but the platform could not send the reviewer request: no live authorized connection on the author's side, or the request was refused.",

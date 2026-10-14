@@ -8,6 +8,11 @@
 #                         <PUBLIC_URL>/api/mcp/v1?tier=full when the install's
 #                         .env names an https PUBLIC_URL; otherwise none
 #                         (the client plugin's https default applies).
+#   DPF_CLAUDE_MCP_URL  = the same endpoint, for Claude's connector only. Its
+#                         plugin descriptor reads this name and never the
+#                         shared DPF_MCP_URL, which every client, gate and stale
+#                         checkout can set (BI-D6A6462A). This module is its only
+#                         writer.
 #   Only an https endpoint whose host is a name or IPv4 address is ever
 #   persisted. The persisted DPF_MCP_URL is what Claude desktop and Claude Code
 #   expand into their OAuth connector, and OAuth refuses plain http
@@ -165,11 +170,14 @@ dpf_mcp_client_endpoint_can_persist() {
 dpf_persist_mcp_client_env() {
   dpf_mcp_client_endpoint_can_persist "${DPF_MCP_CLIENT_URL:-}" || return 1
   dpf_set_client_env_export DPF_MCP_URL "$DPF_MCP_CLIENT_URL" || return $?
+  dpf_set_client_env_export DPF_CLAUDE_MCP_URL "$DPF_MCP_CLIENT_URL" || return $?
   dpf_set_client_env_export NODE_EXTRA_CA_CERTS "${DPF_MCP_CLIENT_CA_BUNDLE:-}" || return $?
   dpf_source_client_env_from_profiles
   dpf_launchd_setenv DPF_MCP_URL "$DPF_MCP_CLIENT_URL"
+  dpf_launchd_setenv DPF_CLAUDE_MCP_URL "$DPF_MCP_CLIENT_URL"
   dpf_launchd_setenv NODE_EXTRA_CA_CERTS "${DPF_MCP_CLIENT_CA_BUNDLE:-}"
   export DPF_MCP_URL="$DPF_MCP_CLIENT_URL"
+  export DPF_CLAUDE_MCP_URL="$DPF_MCP_CLIENT_URL"
   if [ -n "${DPF_MCP_CLIENT_CA_BUNDLE:-}" ]; then export NODE_EXTRA_CA_CERTS="$DPF_MCP_CLIENT_CA_BUNDLE"; fi
   return 0
 }

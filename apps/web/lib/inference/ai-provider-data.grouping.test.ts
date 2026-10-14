@@ -44,7 +44,7 @@ describe("groupByEndpointTypeAndCategory", () => {
 
     expect(groups.map((group) => group.displayName)).toEqual([
       "Direct APIs",
-      "Subscription responses",
+      "Subscriptions",
       "Speech transcription",
     ]);
   });

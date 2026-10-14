@@ -8,6 +8,8 @@ import {
   isAdmissionTimeout,
   resolveEngineLimit,
   withInferenceOrigin,
+  withInferenceCancellation,
+  currentInferenceSignal,
 } from "./inference-admission";
 
 const ENV_KEYS = [
@@ -36,6 +38,39 @@ afterEach(() => {
 const tick = () => new Promise<void>(r => setTimeout(r, 0));
 
 describe("inference origin (AsyncLocalStorage)", () => {
+  it("preserves cancellation through nested origin scopes", async () => {
+    const controller = new AbortController();
+    const seen = await withInferenceCancellation(controller.signal, () =>
+      withInferenceOrigin("autonomous", async () => currentInferenceSignal()));
+    expect(seen).toBe(controller.signal);
+    expect(currentInferenceSignal()).toBeUndefined();
+  });
+
+  it("removes an aborted waiter without releasing a running request", async () => {
+    process.env.DPF_INFERENCE_MAX_CONCURRENCY_LOCAL = "1";
+    const release = await acquireInferenceSlot("local", "interactive");
+    const controller = new AbortController();
+    const pending = withInferenceCancellation(controller.signal, () => acquireInferenceSlot("local", "autonomous"));
+    const rejected = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    controller.abort();
+    await rejected;
+    expect(getInferenceAdmissionSnapshot().local).toMatchObject({ active: 1, autonomousWaiting: 0 });
+    release();
+    expect(getInferenceAdmissionSnapshot().local.active).toBe(0);
+  });
+
+  it("releases a handed-off slot if cancellation wins before the waiter resumes", async () => {
+    process.env.DPF_INFERENCE_MAX_CONCURRENCY_LOCAL = "1";
+    const release = await acquireInferenceSlot("local", "interactive");
+    const controller = new AbortController();
+    const pending = withInferenceCancellation(controller.signal, () => acquireInferenceSlot("local", "autonomous"));
+    const rejected = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    release();
+    controller.abort();
+    await rejected;
+    expect(getInferenceAdmissionSnapshot().local).toMatchObject({ active: 0, autonomousWaiting: 0 });
+  });
+
   it("defaults to interactive when unset", () => {
     expect(currentInferenceOrigin()).toBe("interactive");
   });
@@ -199,6 +234,23 @@ describe("acquireInferenceSlot", () => {
 });
 
 describe("parent cancellation during inference admission", () => {
+  it.each(["caller", "parent"])("combines both scopes and removes a waiter canceled by %s", async source => {
+    process.env.DPF_INFERENCE_MAX_CONCURRENCY_LOCAL = "1";
+    const release = await acquireInferenceSlot("local", "autonomous");
+    const caller = new AbortController();
+    const parent = new AbortController();
+    const queued = withInferenceCancellation(caller.signal, () =>
+      acquireInferenceSlot("local", "autonomous", { signal: parent.signal }))
+      .then(free => { free(); return "dispatched"; }, error => error);
+    const canceled = source === "caller" ? caller : parent;
+    try {
+      canceled.abort(new Error(`${source} expired`));
+      expect(await queued).toBe(canceled.signal.reason);
+      expect(getInferenceAdmissionSnapshot().local).toMatchObject({ active: 1, autonomousWaiting: 0 });
+    } finally { release(); }
+    expect(getInferenceAdmissionSnapshot().local.active).toBe(0);
+  });
+
   it("drops canceled queued work without leaking or releasing the occupied slot", async () => {
     process.env.DPF_INFERENCE_MAX_CONCURRENCY_LOCAL = "1";
     const release = await acquireInferenceSlot("local", "autonomous");

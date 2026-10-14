@@ -35,6 +35,10 @@ A purpose in this file is not proof that an approval row displays it.
 
 - Hook 1: [worktree-create.mjs](worktree-create.mjs) — Create an isolated worktree in the shared worktree directory
 
+## PostToolUse
+
+- Hook 1 [^mcp__.+__(adopt_worktree\|heartbeat_workroom\|claim_workroom_scope\|claim_backlog_item_for_work\|create_workroom)$]: [workroom-claim-refresh.mjs](workroom-claim-refresh.mjs) — Cache the renewed Workroom claim for this worktree
+
 ## SessionStart
 
 - Hook 1: [install-folder-contract.mjs](install-folder-contract.mjs) — Load the source contract when the session opens in the install folder
@@ -46,6 +50,7 @@ A purpose in this file is not proof that an approval row displays it.
 - Hook 7: [worktree-session-heartbeat.mjs](worktree-session-heartbeat.mjs) — Refresh this session heartbeat to protect active work
 - Hook 8: [root-clone-freshness.mjs](root-clone-freshness.mjs) — Safely fast-forward the clean shared source checkout
 - Hook 9: [worktree-readiness-banner.mjs](worktree-readiness-banner.mjs) — Report which checks this worktree is ready to run
+- Hook 10: [toolchain-freshness.mjs](toolchain-freshness.mjs) — Check the installed DPF tools match the portal's release
 
 ## SessionEnd
 

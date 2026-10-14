@@ -52,6 +52,7 @@ export type ReceiptDb = {
     create(args: unknown): Promise<unknown>;
   };
   $queryRaw?(strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>;
+  $executeRaw?(strings: TemplateStringsArray, ...values: unknown[]): Promise<number>;
   $transaction?<T>(fn: (tx: ReceiptDb) => Promise<T>, options?: { timeout?: number; maxWait?: number }): Promise<T>;
 };
 
@@ -138,7 +139,9 @@ export async function runReceiptedCommand<T>(args: {
   try {
     return await inTransaction(args.db, async (tx) => {
       if (tx.$queryRaw) {
-        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`command:${scope}:${args.commandId}`}, 0))`;
+        if (!tx.$executeRaw) throw new Error("Command receipt locking requires $executeRaw");
+        // The lock returns PostgreSQL void, which Prisma cannot decode as a row.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`command:${scope}:${args.commandId}`}, 0))`;
       }
       roomRowId = await lockRoom(tx, args.target.id);
       const existing = await readReceipt(tx, scope, args.commandId);

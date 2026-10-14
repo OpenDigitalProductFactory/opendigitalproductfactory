@@ -77,6 +77,16 @@ const definitions: ToolDefinition[] = [
     executionMode: "immediate",
   },
   {
+    name: "probe_pending_approval_conversion",
+    title: "Probe pending approval conversion",
+    description: "Dry-run, for every pending proposal, what converting it to an approval request would hit: the authority decision, identity resolution, governance hook verdicts and alignment requirement, with one refusal code per row and the owner's activity. Read-only: runs no tool, approves nothing and writes nothing. Platform administrators only.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    requiredCapability: "manage_platform",
+    // Read-only by construction: evaluation runs on read-only transactions and no handler is called.
+    sideEffect: false,
+    executionMode: "immediate",
+  },
+  {
     name: "request_coworker",
     description:
       "Hand off a scoped sub-task to a NAMED peer coworker. Unlike spawn_work_thread (anonymous child), this targets a specific coworker by agentId or slug and emits a VISIBLE handoff the user sees inline. Use when you need another coworker's distinct capability (e.g. ask the Enterprise Architect to review a schema).",
@@ -366,6 +376,19 @@ const handlers: Record<string, ToolPackHandler> = {
     const outcome = await readApprovalOutcome(envelopeId, userId, context?.agentId);
     if (!outcome) return { success: false, error: "approval_not_available", message: "This approval request is not available to your current user and assistant." };
     return { success: true, message: `${outcome.label}. ${outcome.nextAction}`, data: outcome };
+  },
+  probe_pending_approval_conversion: async (params, userId) => {
+    if (Object.keys(params).length) return { success: false, error: "invalid_params", message: "This probe takes no inputs; it reads every pending proposal." };
+    const [{ currentUserContext }, { can }] = await Promise.all([
+      import("@/lib/govern/current-user-context"), import("@/lib/govern/permissions"),
+    ]);
+    const user = await currentUserContext(userId);
+    if (!user || !can(user, "manage_platform")) return { success: false, error: "forbidden", message: "Platform administration permission is required." };
+    const [{ prisma }, { runApprovalConvergenceProbe }] = await Promise.all([
+      import("@dpf/db"), import("@/lib/coworker/approval-convergence-probe-run"),
+    ]);
+    const report = await runApprovalConvergenceProbe(prisma);
+    return { success: true, message: `Probed ${report.summary.rows} pending proposal(s) at ${report.probedAt}.`, data: report };
   },
   request_coworker: (params, userId, context) => requestCoworkerHandler(params, userId, context),
   summon_coworker: (params, userId, context) => summonCoworkerHandler(params, userId, context),

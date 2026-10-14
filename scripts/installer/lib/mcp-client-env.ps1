@@ -8,6 +8,8 @@
 #                         <PUBLIC_URL>/api/mcp/v1?tier=full when the install's
 #                         .env names an https PUBLIC_URL; otherwise none
 #                         (the client plugin's https default applies).
+#   DPF_CLAUDE_MCP_URL  = the same endpoint, for Claude's connector only
+#                         (BI-D6A6462A); this module is its only writer.
 #   Only an https endpoint whose host is a name or IPv4 address is ever
 #   persisted: Claude clients expand DPF_MCP_URL into their OAuth connector,
 #   OAuth refuses plain http (BI-46B636B0), and Docker publishes the portal on
@@ -78,7 +80,9 @@ function Set-DpfMcpClientEnv {
         [scriptblock]$SetUserEnv = { param($name, $value) [System.Environment]::SetEnvironmentVariable($name, $value, 'User') }
     )
     if (-not (Test-DpfMcpClientEndpointPersistable ([string]$ClientEnv.McpUrl))) { return "not-https" }
-    $wanted = [ordered]@{ DPF_MCP_URL = $ClientEnv.McpUrl }
+    # DPF_CLAUDE_MCP_URL is Claude's connector's own name for the same endpoint
+    # (BI-D6A6462A); this module is its only writer.
+    $wanted = [ordered]@{ DPF_MCP_URL = $ClientEnv.McpUrl; DPF_CLAUDE_MCP_URL = $ClientEnv.McpUrl }
     # An empty bundle (a publicly trusted certificate) leaves NODE_EXTRA_CA_CERTS
     # alone: the variable may carry the operator's own bundle.
     if ($ClientEnv.CaBundle) { $wanted["NODE_EXTRA_CA_CERTS"] = $ClientEnv.CaBundle }
