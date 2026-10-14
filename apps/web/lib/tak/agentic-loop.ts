@@ -2546,8 +2546,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // that predate the field fall back to the unavailable reading only when they
     // actually reported a downgrade.
     downgradeReason: lastResult?.downgradeReason ?? (downgraded ? "provider-unavailable" : null),
-    // The same binding cause the banner named, so the advice below it addresses
-    // the constraint the owner was actually told about (BI-FB184D69).
+    // Use the banner's binding cause so recovery addresses the actual constraint (BI-FB184D69).
     cause: lastResult?.downgradeCause ?? null,
     executedTools,
   });
