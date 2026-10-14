@@ -14,3 +14,9 @@ Implement after the active immutable gate finishes. Write failing regressions in
 Acceptance requires an executed served verification on the admitted source commit. A parser test does not establish runtime readiness or feature delivery. This is a bounded delivery prerequisite under BI-0ACB97B5 / WC-B5D4B788, not a new authorization system.
 
 The same preview boundary compares the server's forward-slash worktree spelling with native `realpath()` output. On Windows these can identify the same checkout but compare unequal. Resolve a nonempty absolute admitted path through the filesystem before comparing it with the already-canonical worktree. Missing, relative, different and unresolvable paths still refuse before Compose configuration or runtime mutation. Cover equivalent slash spellings and each refusal using temporary filesystem fixtures. Preserve lease, owner, source, branch, URL, purpose, status and expiry checks.
+
+## Retain safe failure diagnostics
+
+Preview NPEL-BD8AD572B1 initialized a sanitized clone but failed before serving. Its last successful heartbeat was at 10:30:03 UTC, its expiry at 10:32:03, and its owned release at 10:32:01. The launcher reported only `preview_operation_failed`; it discarded the operation exit code and lease-supervisor events. Those records do not establish the cause. The canonical upgrade started at 10:33:28, after this release.
+
+Retain the numeric child exit code or termination classification, without command arguments, stdout or stderr. Report only selected lease-failure event types and fixed categories for authority deadline, source binding, transport timeout, connection and invalid response. Arbitrary reasons remain unclassified. Test child stdout/stderr suppression and reason redaction before another admitted preview. This repair changes diagnostics only; source identity, authorization, deadlines, renewal, protected services and owned cleanup stay enforced.

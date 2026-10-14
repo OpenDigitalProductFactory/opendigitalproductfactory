@@ -74,7 +74,7 @@ export function assertPreviewContainer(container, { worktree, sha, leaseId }) {
 }
 
 // Output from config/inspect may contain secrets. Capture it privately and report
-// only the operation name on failure; never echo command arguments or stderr.
+// only the exit code on failure; never echo command arguments or child output.
 export function commandRunner({ docker = 'docker', env = process.env } = {}) {
   const children = new Set();
   return {
@@ -86,11 +86,24 @@ export function commandRunner({ docker = 'docker', env = process.env } = {}) {
         child.stdout.on('data', chunk => { if (capture) output += chunk; });
         child.stderr.resume();
         child.once('error', () => { children.delete(child); fail(new Error('preview_process_unavailable')); });
-        child.once('close', code => { children.delete(child); code === 0 ? done(output.trim()) : fail(new Error('preview_operation_failed')); });
+        child.once('close', code => { children.delete(child); code === 0 ? done(output.trim()) : fail(new Error(`preview_operation_failed:${Number.isInteger(code) ? `exit-${code}` : 'terminated'}`)); });
       });
     },
     terminate() { for (const child of children) child.kill('SIGKILL'); },
   };
+}
+
+/** Low-cardinality diagnostics: transport messages may contain secrets. */
+export function previewLeaseEventSummary(event) {
+  if (!['authority-deadline', 'heartbeat-lost', 'heartbeat-uncertain', 'fence-termination-failed', 'release-failed'].includes(event.type)) return null;
+  const reason = typeof event.reason === 'string' ? event.reason : '';
+  let category = 'unclassified';
+  if (reason === 'lease-authority-deadline') category = 'authority-deadline';
+  else if (reason === 'preview_binding_changed') category = 'source-binding';
+  else if (/timed out|ETIMEDOUT/i.test(reason)) category = 'transport-timeout';
+  else if (/ECONNRESET|ECONNREFUSED/i.test(reason)) category = 'transport-connection';
+  else if (/invalid JSON/i.test(reason)) category = 'transport-response';
+  return { type: event.type, category };
 }
 
 export function protectedServiceIdentity(containers) {
@@ -274,7 +287,7 @@ async function runAdmittedPreview(env, cleanupState) {
             hostPressure: await sampleLocalCiHostPressure({ rootPath: worktree, evidenceIsolationHealthy: true }) });
         }, terminate,
         release,
-        onEvent: event => { if (event.type === 'release-failed') console.error(event.reason); },
+        onEvent: event => { const summary = previewLeaseEventSummary(event); if (summary) console.error(JSON.stringify(summary)); },
       });
       if (outcome.status !== 'completed') throw new Error(`preview_fenced:${outcome.reason}`);
     } finally { process.off('SIGINT', signal); process.off('SIGTERM', signal); }

@@ -46,7 +46,29 @@ test("terminal keys are stopped instead of scanned or replaced", () => {
   assert.match(script, /terminal lease claim; stop/);
 });
 
-import { protectedServiceIdentity, REQUIRED_PREVIEW_DELIVERY_TOOLS, assertToolReadiness, assertPreviewConfig, assertPreviewContainer, assertAdmittedWorktreePath, previewOverride, runPreviewLifecycle, stopOwnedPreviewContainers } from './dev-preview-runtime.mjs';
+import { protectedServiceIdentity, REQUIRED_PREVIEW_DELIVERY_TOOLS, assertToolReadiness, assertPreviewConfig, assertPreviewContainer, assertAdmittedWorktreePath, previewOverride, runPreviewLifecycle, stopOwnedPreviewContainers, commandRunner } from './dev-preview-runtime.mjs';
+
+test('preview diagnostics retain the failed exit code without child output or arguments', async () => {
+  const secret = 'diagnostic-secret-must-not-escape';
+  await assert.rejects(commandRunner().run(['-e', `console.log('${secret}'); console.error('${secret}'); process.exit(7)`], { bin: process.execPath }), error => {
+    assert.equal(error.message, 'preview_operation_failed:exit-7');
+    assert.ok(!error.message.includes(secret));
+    return true;
+  });
+});
+
+test('preview diagnostics distinguish lease failure categories without retaining arbitrary reasons', async () => {
+  const { previewLeaseEventSummary } = await import('./dev-preview-runtime.mjs');
+  assert.equal(previewLeaseEventSummary({ type: 'heartbeat-renewed' }), null);
+  assert.deepEqual(previewLeaseEventSummary({ type: 'authority-deadline', reason: 'lease-authority-deadline' }),
+    { type: 'authority-deadline', category: 'authority-deadline' });
+  assert.deepEqual(previewLeaseEventSummary({ type: 'heartbeat-lost', reason: 'preview_binding_changed' }),
+    { type: 'heartbeat-lost', category: 'source-binding' });
+  assert.deepEqual(previewLeaseEventSummary({ type: 'heartbeat-uncertain', reason: 'mcp timed out after 10000ms diagnostic-secret-must-not-escape' }),
+    { type: 'heartbeat-uncertain', category: 'transport-timeout' });
+  assert.deepEqual(previewLeaseEventSummary({ type: 'release-failed', reason: 'diagnostic-secret-must-not-escape' }),
+    { type: 'release-failed', category: 'unclassified' });
+});
 const identity = { worktree: resolve('/feature/worktree'), sha: 'a'.repeat(40), leaseId: 'NPEL-MINE' };
 const config = () => {
   const result = previewOverride(identity);
