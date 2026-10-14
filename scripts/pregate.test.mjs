@@ -22,6 +22,18 @@ test("parent preflight timeout remains unrun even if the child exits zero", asyn
   assert.equal(result, 88);
 });
 
+test("parent preflight recording error remains unrun even if the child exits zero", async () => {
+  let output = "";
+  let diagnostics = "";
+  const result = await pregate.runHostPreflight({ env: {}, readStatusImpl: async () => ({level:"normal"}),
+    runObservedImpl: async () => ({status:0,error:new Error("progress recording failed"),
+      outputTail:'DPF_HOST_PREFLIGHT_RESULT={"status":"passed"}\n'}),
+    stdout: text => {output += text;}, stderr: text => {diagnostics += text;} });
+  assert.equal(result,88);
+  assert.doesNotMatch(output,/preflight passed/);
+  assert.match(diagnostics,/could not RUN/);
+});
+
 test("observed parent preflight passes cancellation and cleans its listeners", async () => {
   const before = process.listenerCount("SIGINT");
   let output = "";

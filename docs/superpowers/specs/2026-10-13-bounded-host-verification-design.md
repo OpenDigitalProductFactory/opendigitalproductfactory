@@ -100,6 +100,13 @@ reproduce and verify the tie. Migration-inventory batching is owned separately.
 Cross-stage guard-cache consolidation is a separate follow-up: current stage
 and plan identities intentionally differ, and PR metadata must remain fresh.
 
+Independent client assessment of the committed change found that a parent
+preflight could return zero when the observer reported a recording error with
+a zero child close. The parent now maps every reported observer error to unrun
+exit 88 before interpreting the child status. A parent-level regression covers
+that combination, including a child summary claiming pass; ordinary successful
+completion and elapsed-deadline controls retain their distinct outcomes.
+
 BI-D27ADE59's shared CI classification is already merged. Claim identity remains
 BI-2641F34A; semantic-review recovery remains BI-8ECEC429; readiness presentation
 remains BI-9DC43E17. Canonical identity BI-CAP-437F7745 and role-and-room

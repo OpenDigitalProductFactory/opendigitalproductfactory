@@ -908,7 +908,7 @@ export async function runHostPreflight({
         process.removeListener("SIGTERM", cancel);
       }
     }
-    const unavailable = preflight.deadlineExceeded || preflight.cancelled || preflight.closeTimedOut;
+    const unavailable = preflight.error || preflight.deadlineExceeded || preflight.cancelled || preflight.closeTimedOut;
     if (unavailable) preflight = { ...preflight, status: 88 };
     if (preflight.error || (preflight.status ?? 1) !== 0) {
       if (!verbose) {
