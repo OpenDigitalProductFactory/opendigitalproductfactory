@@ -83,7 +83,7 @@ export function isAdmissionTimeout(err: unknown): boolean {
  *  (callers such as cert REQUEUE on it, they do not fail). Tune per install via
  *  DPF_INFERENCE_ADMISSION_TIMEOUT_MS (interactive) and
  *  DPF_INFERENCE_ADMISSION_TIMEOUT_MS_AUTONOMOUS (autonomous). */
-function resolveAcquireTimeoutMs(origin: InferenceOrigin): number {
+export function resolveAcquireTimeoutMs(origin: InferenceOrigin): number {
   const raw =
     origin === "autonomous"
       ? process.env.DPF_INFERENCE_ADMISSION_TIMEOUT_MS_AUTONOMOUS
@@ -93,6 +93,21 @@ function resolveAcquireTimeoutMs(origin: InferenceOrigin): number {
   // Interactive: fail fast (human waiting). Autonomous: patient (30 min) — long
   // enough to wait out real contention, bounded enough to catch a stuck slot.
   return origin === "autonomous" ? 1_800_000 : 120_000;
+}
+
+export function createInferenceAdmissionTimeoutError(
+  engineKey: EngineKey,
+  origin: InferenceOrigin,
+  timeoutMs: number,
+  opts?: { providerId?: string },
+): Error {
+  const err: AdmissionTimeoutError = new Error(
+    `inference admission timeout on ${engineKey} engine after ` +
+      `${timeoutMs}ms (origin=${origin}` +
+      `${opts?.providerId ? `, provider=${opts.providerId}` : ""})`,
+  );
+  err.code = ADMISSION_TIMEOUT_CODE;
+  return err;
 }
 
 interface Waiter {
@@ -173,13 +188,7 @@ export async function acquireInferenceSlot(
     waiter.timer = setTimeout(() => {
       removeWaiter(s, waiter);
       clearWaiter(waiter);
-      const err: AdmissionTimeoutError = new Error(
-        `inference admission timeout on ${engineKey} engine after ` +
-          `${timeoutMs}ms (origin=${origin}` +
-          `${opts?.providerId ? `, provider=${opts.providerId}` : ""})`,
-      );
-      err.code = ADMISSION_TIMEOUT_CODE;
-      reject(err);
+      reject(createInferenceAdmissionTimeoutError(engineKey, origin, timeoutMs, opts));
     }, timeoutMs);
     (origin === "interactive" ? s.interactiveQ : s.autonomousQ).push(waiter);
     if (signal) {
