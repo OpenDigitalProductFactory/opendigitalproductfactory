@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Workrooms for human operators
 
 Backlog: BI-65D75876. Workroom: WC-24AD64E1. Delivery shape: medium.
