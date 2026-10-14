@@ -97,6 +97,12 @@ not from the receipt. A receipt for one role cannot authorize another role.
    Call `review_semantic_change` with the governing Workroom, immutable base/head
    trees, committed diff digest and failure analysis bound to that evidence.
    Source-local test prose does not replace executed gate evidence.
+   Invalid analysis or unresolved, expired or mismatched evidence returns
+   `invalid_failure_analysis` with structured reasons before a review task is
+   created. Reconcile the Workroom head and cite current passing evidence for
+   that room and exact change before resubmitting. Existing completed gate
+   records are retained; a refusal does not authorize changing their identity.
+   Execution revalidates evidence again because it can change after admission.
 2. Repair blocking code findings. Re-review a changed tree; stop after two failed
    repair rounds. A changed diff, policy, reviewer or specialist set invalidates
    a receipt. An infrastructure refusal or uncertain execution is not a finding.
