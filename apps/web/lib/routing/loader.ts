@@ -49,7 +49,7 @@ interface LoaderCacheEntry<T> {
 export type LocalContextReader = (
   fetchImpl: typeof fetch | undefined,
   selected: { modelId: string; provider: { providerId: string; baseUrl: string | null; endpoint: string | null } },
-) => Promise<number | null>;
+) => Promise<number | null | { contextTokens: number | null; thinkingBudgetEvidence?: import("./types").LocalThinkingBudgetEvidence }>;
 const unknownLocalContext: LocalContextReader = async () => null;
 let manifestsCache = new WeakMap<LocalContextReader, LoaderCacheEntry<EndpointManifest[]>>();
 let policyRulesCache: LoaderCacheEntry<PolicyRuleEval[]> | null = null;
@@ -246,10 +246,13 @@ async function profileToManifest(
 
   let maxContextTokens = mp.maxContextTokens ?? mp.provider.maxContextTokens;
   let maxOutputTokens = mp.maxOutputTokens ?? mp.provider.maxOutputTokens;
+  let localThinkingBudgetEvidence: EndpointManifest["localThinkingBudgetEvidence"];
   if (mp.providerId === "local" && ["chat", "reasoning", "code"].includes(mp.modelClass ?? "chat")) {
-    const served = await readLocalContext(undefined, {
+    const observation = await readLocalContext(undefined, {
       modelId: mp.modelId, provider: mp.provider,
     });
+    const served = typeof observation === "object" && observation !== null ? observation.contextTokens : observation;
+    localThinkingBudgetEvidence = typeof observation === "object" && observation !== null ? observation.thinkingBudgetEvidence : undefined;
     maxContextTokens = served !== null && Number.isSafeInteger(served) && served > 0 ? served : null;
     // DMR shares one window between input and completion. This is an upper
     // bound, not a requested allowance; activity admission still checks the sum.
@@ -305,6 +308,7 @@ async function profileToManifest(
     capabilities: (mp.capabilities as unknown as ModelCardCapabilities) ?? EMPTY_CAPABILITIES,
     pricing: (mp.pricing as unknown as ModelCardPricing) ?? EMPTY_PRICING,
     supportedParameters: (mp.supportedParameters as string[]) ?? [],
+    ...(localThinkingBudgetEvidence ? { localThinkingBudgetEvidence } : {}),
     deprecationDate: mp.deprecationDate ?? null,
     metadataSource: mp.metadataSource ?? "inferred",
     metadataConfidence: mp.metadataConfidence ?? "low",

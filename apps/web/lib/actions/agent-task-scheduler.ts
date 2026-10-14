@@ -52,6 +52,7 @@ import { ACCEPTANCE_SWEEP_TASK_KIND, BUSINESS_ANALYSIS_WATCH_TASK_KIND } from "@
 import { executeBusinessAnalysisWatchRun } from "@/lib/performance/business-analysis-watch-run";
 import { runDeterministicScheduledTaskKind } from "./agent-task-scheduler-deterministic";
 import { claimScheduledTaskCadence } from "./agent-task-claim";
+import { holdWorkroomQueueAfterFailure } from "@/lib/work-capsules/workroom-queue-hold";
 import {
   completeProductManagementPlaybookRun,
   prepareProductManagementPlaybookRun,
@@ -793,5 +794,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       where: { jobId: taskId },
       data: { lastRunAt: now, lastStatus: "error", lastError: errMsg, nextRunAt },
     }).catch(() => {});
+    // BI-2B6A8A74: a room's stage that no provider could answer holds the room's queue.
+    await holdWorkroomQueueAfterFailure({ taskId, ownerUserId: task.ownerUserId, taskConfig: task.taskConfig, error: errMsg, now }).catch(() => null);
   }
 }

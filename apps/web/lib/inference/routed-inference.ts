@@ -8,7 +8,7 @@
  * champion/challenger, rate tracking, and outcome telemetry.
  */
 
-import { resolveLocalServedContextTokens } from "@/lib/inference/local-model-context-reconcile";
+import { resolveLocalRoutingRuntime } from "@/lib/inference/local-model-context-reconcile";
 import { currentInferenceSignal } from "./inference-admission";
 import type { ChatMessage, ToolCallEntry } from "@/lib/routing/chat-message-types";
 import type {
@@ -262,7 +262,7 @@ async function prepareRoute(
   });
 
   const [loadedManifests, policies, overrides] = await Promise.all([
-    loadEndpointManifests(Date.now(), resolveLocalServedContextTokens),
+    loadEndpointManifests(Date.now(), resolveLocalRoutingRuntime),
     loadPolicyRules(),
     loadOverrides(taskType),
   ]);

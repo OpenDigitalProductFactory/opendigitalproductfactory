@@ -604,37 +604,37 @@
     {
       "id": "issue-triage-watch@1.0.0#0",
       "seed": 2289425767,
-      "digest": "sha256:8c53d901e43c66d691cd87cc780951b0eee70ed443059c8ac2c21d47300cbd8c",
+      "digest": "sha256:58c3793b66a501cf7edb73f2c7ff560166f70731c65ba6062463c06f8919205f",
       "summary": "agent_stage@classify | executor_writeback_unavailable@classify x3 | agent_stage@dedupe | governed_decision@admit x2 | success@- | cycle_complete@- x7"
     },
     {
       "id": "issue-triage-watch@1.0.0#1",
       "seed": 2289425768,
-      "digest": "sha256:a1733270f94ca1b77447d39a2f68550f463857836f0e3fe6c5d89c8f723f2dad",
+      "digest": "sha256:ca9f6ae2096b6efd37701142add3f344f4ad855dbd9ad5338abca2afae20eb36",
       "summary": "agent_stage@- | agent_stage@classify | executor_writeback_unavailable@classify x5 | conformance_pause@- x8"
     },
     {
       "id": "issue-triage-watch@1.0.0#2",
       "seed": 2289425769,
-      "digest": "sha256:46b32c93bae2a825ce717302fe2a5eaa5e702dafd333b641801d1842d24861b1",
+      "digest": "sha256:cf17ec24d1ca8e0222eaf03f8d6fc139444ca4b8d62f1b8fa99df4dc43d9c0d9",
       "summary": "agent_stage@- | agent_stage@classify | executor_writeback_unavailable@classify x2 | agent_stage@dedupe | governed_decision@admit x3 | success@- | cycle_complete@- x6"
     },
     {
       "id": "issue-triage-watch@1.0.0#3",
       "seed": 2289425770,
-      "digest": "sha256:9514ca9f87d1b9e48fd0a676a17136d7c85a14823f1a9bddc1e454095f78bd0d",
+      "digest": "sha256:055bfc2081af88f347995951da4f88f44fc30e43fb44787b6b654562b29ff702",
       "summary": "agent_stage@- | agent_stage@classify | executor_writeback_unavailable@classify x2 | agent_stage@dedupe | governed_decision@admit | success@- | cycle_complete@- x8"
     },
     {
       "id": "issue-triage-watch@1.0.0#4",
       "seed": 2289425771,
-      "digest": "sha256:e745f1ea59b1e895430517c77a4034b5b5ce51107a096f796051532bd7f6d8c0",
+      "digest": "sha256:ad4d7103762ab8c1692a30d00b05d57824885c58832fe54f42c080215e43763f",
       "summary": "agent_stage@classify | executor_writeback_unavailable@classify | agent_stage@classify | agent_stage@dedupe | governed_decision@admit | success@- | cycle_complete@- x90 | conformance_stop@- x4"
     },
     {
       "id": "issue-triage-watch@1.0.0#5",
       "seed": 2289425772,
-      "digest": "sha256:232050f98b7a99b3c12aa48ff9214e4a269be3d66b81d512c6b586c25c73aa28",
+      "digest": "sha256:bb5a1a7479d615c4a3979ab77747265766cbe6ceb677628ee6f4497b7a31b66a",
       "summary": "agent_stage@- x2 | agent_stage@classify | agent_stage@dedupe | governed_decision@admit | success@- | cycle_complete@- x9"
     },
     {
@@ -676,7 +676,7 @@
     {
       "id": "issue-triage-watch@1.0.0#12",
       "seed": 2289425779,
-      "digest": "sha256:f750a841bf54123c69c2f42dc49c7e0a1ea95eba3f083f84ef2af1fdb06fe011",
+      "digest": "sha256:eca6f230141b69b0237f8e7142a99c4c3cf92b475ee91e9f2455be58192b7273",
       "summary": "agent_stage@classify | executor_writeback_unavailable@classify | agent_stage@dedupe | executor_writeback_unavailable@dedupe x2 | conformance_stop@- x10"
     },
     {
@@ -688,7 +688,7 @@
     {
       "id": "issue-triage-watch@1.0.0#14",
       "seed": 2289425781,
-      "digest": "sha256:cb980793f0536399599533d8b3426eb8e56d9741ddad641c40f423aca10c0849",
+      "digest": "sha256:00ea576fe88b5f1beee766c5c21f15f6193de7209dc7351364685f1e3107bd32",
       "summary": "agent_stage@classify | executor_writeback_unavailable@classify x2 | agent_stage@dedupe | governed_decision@admit x3 | success@- | cycle_complete@- x88 | agent_stage@classify | executor_writeback_unavailable@classify x3"
     },
     {
@@ -712,13 +712,13 @@
     {
       "id": "issue-triage-watch@1.0.0#18",
       "seed": 2289425785,
-      "digest": "sha256:6233f3549153d14b3c6b42f56e86904bc264bcaec6eb1435dd29021342ce4f4f",
+      "digest": "sha256:3dff3fecc32f93bea15f658d69085a3e98cecffe1385f21886f543a56ac53c18",
       "summary": "agent_stage@classify | conformance_pause@- x14"
     },
     {
       "id": "issue-triage-watch@1.0.0#19",
       "seed": 2289425786,
-      "digest": "sha256:602dcf7f104d2e8123cbef74fe3da57be7c66db75a3990042c8565c429563df9",
+      "digest": "sha256:42a3855770ccbcec599f42dbe24f64485487a057ee9c5d7ffcc1105c9b1527e3",
       "summary": "agent_stage@classify | executor_writeback_unavailable@classify x2 | agent_stage@dedupe | governed_decision@admit x2 | success@- | cycle_complete@- x89 | agent_stage@classify | executor_writeback_unavailable@classify x3"
     },
     {

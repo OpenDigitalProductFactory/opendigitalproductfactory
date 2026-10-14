@@ -2,6 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import { runEcosystemInboundTriage } from "./inbound-triage-runner";
 
+// Envelope validation has its own suite; these cases exercise transport isolation.
+vi.mock("@/lib/federation/demand-exchange", () => ({
+  decodeDemandMirrorPayload: (payload: unknown) => payload,
+}));
+
 const issue = {
   number: 412,
   title: "Dispatch board loses the second appointment",
@@ -11,6 +16,55 @@ const issue = {
 };
 
 describe("runEcosystemInboundTriage", () => {
+  it("marks a successful empty scan as complete", async () => {
+    expect(await runEcosystemInboundTriage({
+      loadPurpose: async () => "evolve-dpf",
+      readIssues: async () => ({ ok: true, issues: [] }),
+      readPeerDemand: async () => [], ingest: vi.fn(),
+    })).toMatchObject({ ran: true, complete: true, sourceErrors: [] });
+  });
+
+  it("preserves upstream ingestion when the peer source throws and exposes the missing coverage", async () => {
+    const ingest = vi.fn().mockResolvedValue({ itemId: "BI-INBOUND", created: true });
+    const result = await runEcosystemInboundTriage({
+      loadPurpose: async () => "evolve-dpf",
+      readIssues: async () => ({ ok: true, issues: [issue] }),
+      readPeerDemand: async () => { throw new Error("peer unavailable"); }, ingest,
+    });
+    expect(result).toMatchObject({ ran: true, complete: false, ingested: 1,
+      sourceErrors: [{ source: "peer-demand", error: "peer unavailable" }] });
+    expect(ingest).toHaveBeenCalledOnce();
+  });
+
+  it("still reads the peer source after a thrown GitHub read", async () => {
+    const readPeerDemand = vi.fn().mockResolvedValue([]);
+    const result = await runEcosystemInboundTriage({
+      loadPurpose: async () => "evolve-dpf",
+      readIssues: async () => { throw new Error("GitHub unavailable"); },
+      readPeerDemand, ingest: vi.fn(),
+    });
+    expect(readPeerDemand).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ ran: true, complete: false,
+      sourceErrors: [{ source: "upstream-issue", error: "GitHub unavailable" }] });
+  });
+
+  it("does not treat a malformed successful read as an empty source", async () => {
+    const result = await runEcosystemInboundTriage({
+      loadPurpose: async () => "evolve-dpf", readIssues: async () => ({ ok: true }),
+      readPeerDemand: async () => [], ingest: vi.fn(),
+    });
+    expect(result).toMatchObject({ ran: true, complete: false,
+      sourceErrors: [{ source: "upstream-issue", error: expect.any(String) }] });
+  });
+
+  it("marks item ingestion failures incomplete too", async () => {
+    const result = await runEcosystemInboundTriage({
+      loadPurpose: async () => "evolve-dpf", readIssues: async () => ({ ok: true, issues: [issue] }),
+      readPeerDemand: async () => [], ingest: vi.fn().mockRejectedValue(new Error("write failed")), onFailure: vi.fn(),
+    });
+    expect(result).toMatchObject({ ran: true, complete: false, failed: 1 });
+  });
+
   it("does not run on an operate-organization install", async () => {
     // This sweep would fill a customer's own backlog with other installs'
     // defects — not merely useless, actively wrong.
@@ -59,10 +113,16 @@ describe("runEcosystemInboundTriage", () => {
     const result = await runEcosystemInboundTriage({
       loadPurpose: async () => "evolve-dpf",
       readIssues: async () => ({ ok: false, error: "GitHub auth failed (401)" }),
-      readPeerDemand: async () => [],
+      readPeerDemand: async () => [{ mirrorId: "peer-demand-example", payload: {
+        envelope: { title: "Customer request", summary: "Peer transport is still available" },
+      } }],
       ingest,
     });
 
-    expect(result).toMatchObject({ ran: true });
+    expect(result).toMatchObject({ ran: true, complete: false,
+      sourceErrors: [{ source: "upstream-issue", error: "GitHub auth failed (401)" }] });
+    expect(ingest).toHaveBeenCalledWith(expect.objectContaining({
+      origin: { kind: "ecosystem-peer-demand", id: "peer-demand-example" },
+    }));
   });
 });

@@ -78,6 +78,18 @@ export function resolveSessionRef({ worktreePath, env = process.env } = {}) {
   );
 }
 
+/**
+ * Every identity this session may truthfully claim under, in preference order:
+ * the host's own session id, then the worktree form. A claim made with
+ * claim_backlog_item_for_work may carry either (BI-EFCDE989), and the server
+ * reuses a capsule only for the session that holds it.
+ */
+export function sessionRefCandidates({ worktreePath, env = process.env } = {}) {
+  const preferred = resolveSessionRef({ worktreePath, env });
+  const worktreeRef = worktreePath ? `worktree:${toPosixPath(worktreePath)}` : null;
+  return [...new Set([preferred, worktreeRef].filter(Boolean))];
+}
+
 export function activityKindForBranch(branch) {
   const b = String(branch ?? "");
   if (b.startsWith("fix/") || b.startsWith("hotfix/")) return "remediation";
@@ -177,20 +189,29 @@ export async function bindWorktreeToWorkroom({
   const access = resolveMcpAccess(env);
   if (!access) return { status: "unavailable", reason: "DPF_MCP_BEARER_TOKEN is not set" };
 
+  // Try each identity this session can truthfully present, host session first.
+  // Only an occupancy refusal moves on to the next one: the claim may have been
+  // recorded under the other identity (BI-EFCDE989). Every other refusal is a
+  // real answer and is returned as-is.
   let payload;
-  try {
-    payload = await call("adopt_worktree", planAdoption({ branch, worktreePath, repositoryFullName, headSha, baseBranch, sessionRef: resolveSessionRef({ worktreePath, env }) }), {
-      ...access,
-      timeoutMs: BIND_TIMEOUT_MS,
-    });
-  } catch (err) {
-    return { status: "unavailable", reason: err?.message ?? String(err) };
+  let refusal = null;
+  for (const sessionRef of sessionRefCandidates({ worktreePath, env })) {
+    try {
+      payload = await call("adopt_worktree", planAdoption({ branch, worktreePath, repositoryFullName, headSha, baseBranch, sessionRef }), {
+        ...access,
+        timeoutMs: BIND_TIMEOUT_MS,
+      });
+    } catch (err) {
+      return { status: "unavailable", reason: err?.message ?? String(err) };
+    }
+    if (!(payload?.success === false || payload?.error)) {
+      refusal = null;
+      break;
+    }
+    refusal ??= { status: "refused", reason: payload.message ?? payload.error ?? "adopt_worktree refused" };
+    if (payload.error !== "branch_occupied") break;
   }
-
-  if (payload?.success === false || payload?.error) {
-    // branch_occupied and friends are real answers, not failures to retry.
-    return { status: "refused", reason: payload.message ?? payload.error ?? "adopt_worktree refused" };
-  }
+  if (refusal) return refusal;
 
   const marker = markerFromAdoption(payload, branch);
   if (!marker) return { status: "error", reason: "adopt_worktree returned no usable capsule identity" };

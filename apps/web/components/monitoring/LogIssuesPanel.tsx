@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { TONE_COLOR, type Tone } from "./health-summary";
 import { AskCoworkerButton } from "@/components/agent/AskCoworkerButton";
 import { getLogSignatureIssues } from "@/lib/actions/quality";
+import { useMonitoringStatus } from "./MonitoringContext";
 
 interface LogIssue {
   reportId: string;
@@ -64,6 +65,8 @@ function buildLogIssuePrompt(issue: LogIssue, service: string | null): string {
 }
 
 export function LogIssuesPanel() {
+  // Grafana runs only with monitoring on; Loki itself is always on (BI-2CE9CBF4).
+  const { off: monitoringOff } = useMonitoringStatus();
   const [issues, setIssues] = useState<LogIssue[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "unauthorized" | "error">("loading");
 
@@ -135,14 +138,14 @@ export function LogIssuesPanel() {
                         routeContext="/admin"
                         className="text-[var(--dpf-accent)] hover:underline mr-3"
                       />
-                      <a
+                      {!monitoringOff && <a
                         href={lokiExploreUrl(service)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-[var(--dpf-accent)] hover:underline"
                       >
                         Logs ↗
-                      </a>
+                      </a>}
                     </td>
                   </tr>
                 );

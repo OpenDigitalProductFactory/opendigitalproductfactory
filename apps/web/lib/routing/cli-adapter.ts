@@ -94,7 +94,7 @@ type CliAuth =
   | { mode: "oauth"; token: string }
   | { mode: "apikey"; apiKey: string };
 
-async function resolveCliAuth(providerId: string, connectionId?: string, expectedExecutionVersion?: string): Promise<CliAuth> {
+export async function resolveCliAuth(providerId: string, connectionId?: string, expectedExecutionVersion?: string): Promise<CliAuth> {
   if (providerId === "anthropic-sub") {
     // Use getProviderBearerToken which handles token refresh automatically.
     // The raw getDecryptedCredential doesn't refresh expired tokens — it just

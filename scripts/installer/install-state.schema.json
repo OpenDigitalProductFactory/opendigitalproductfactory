@@ -51,6 +51,21 @@
       "pattern": "^[a-f0-9]{64}$",
       "description": "Deterministic hash of the catalog and sorted runtime capability states."
     },
+    "runtimeCapabilityDecisions": {
+      "type": "object",
+      "description": "Whether a person chose each operator-controlled runtime capability, and how (BI-83260BB3, docs/superpowers/specs/2026-10-13-monitoring-operator-choice-design.md §4). Mirrors membership of enabledRuntimeCapabilities; 'undecided' means nobody chose the current topology and the portal should ask.",
+      "propertyNames": { "pattern": "^runtime:[a-z0-9-]+$" },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["decision", "source", "decidedAt"],
+        "additionalProperties": false,
+        "properties": {
+          "decision": { "enum": ["enabled", "disabled", "undecided"] },
+          "source": { "enum": ["installer-prompt", "installer-flag", "headless-default", "upgrade-carried", "portal"] },
+          "decidedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
     "platform": {
       "type": "string",
       "enum": ["darwin", "linux", "win32"],

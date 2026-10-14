@@ -3,6 +3,7 @@
 // Server actions in actions/*.ts can import from here freely.
 
 import { prisma } from "@dpf/db";
+import { getLocalThinkingBudgetEvidence } from "./dmr-runtime-config";
 import { providerWorkspaceHeaders } from "./provider-workspace";
 import { computeTokenCost, computeComputeCost } from "@/lib/ai-provider-types";
 import {
@@ -402,6 +403,7 @@ export async function callProvider(
         modelId,
         plan: effectivePlan,
         provider: { baseUrl, headers },
+        readLocalThinkingBudgetEvidence: getLocalThinkingBudgetEvidence,
         fetchImpl: parentFetch ? withInferenceCancellationFetch(parentFetch) : providerInferenceFetch,
         messages,
         systemPrompt,
