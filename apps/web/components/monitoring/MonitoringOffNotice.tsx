@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { Surface } from "@/components/ui/Surface";
 import { useT } from "@/lib/i18n/use-t";
 
 // Shown wherever metrics would render when monitoring is switched off on this
@@ -21,12 +22,12 @@ export function MonitoringOffNotice({ compact = false }: { compact?: boolean }) 
     );
   }
   return (
-    <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-6 text-center space-y-2">
+    <Surface level={2} padding="lg" className="text-center space-y-2">
       <p className="text-sm text-[var(--dpf-text)] font-medium">{t("monitoring.offLabel")}</p>
       <p className="text-xs text-[var(--dpf-muted)]">{t("monitoring.offBody")}</p>
       <Link href={MONITORING_SETTINGS_HREF} className="text-xs text-[var(--dpf-accent)] hover:underline">
         {t("monitoring.offLink")}
       </Link>
-    </div>
+    </Surface>
   );
 }

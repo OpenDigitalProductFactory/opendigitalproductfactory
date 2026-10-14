@@ -5,15 +5,15 @@
   "scope": {
     "files": [
       "apps/web/components/monitoring/MonitoringOffNotice.tsx",
-      "apps/web/components/monitoring/PlatformHealthIndicator.tsx",
-      "apps/web/components/monitoring/SystemHealthDashboard.tsx",
-      "apps/web/components/monitoring/ServiceHealthDashboard.tsx",
-      "apps/web/components/monitoring/LogIssuesPanel.tsx",
-      "apps/web/components/portfolio/PlatformHealthStrip.tsx"
+      "apps/web/components/monitoring/LogIssuesPanel.tsx"
     ]
   },
   "evidence": {
     "kind": "propose-n-pick",
-    "consideredOptions": ["off-notice", "reuse-offline-banner", "hide-surfaces"]
+    "consideredOptions": [
+      "off-notice",
+      "reuse-offline-banner",
+      "hide-surfaces"
+    ]
   }
 }

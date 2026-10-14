@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 
 import { MonitoringOffNotice } from "@/components/monitoring/MonitoringOffNotice";
+import { Surface } from "@/components/ui/Surface";
 
 type Alert = {
   labels: Record<string, string>;
@@ -103,9 +104,9 @@ export function PlatformHealthStrip() {
 
   if (state.off) {
     return (
-      <div className="mb-6 px-3 py-2 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)]">
+      <Surface padding="sm" className="mb-6">
         <MonitoringOffNotice compact />
-      </div>
+      </Surface>
     );
   }
 
