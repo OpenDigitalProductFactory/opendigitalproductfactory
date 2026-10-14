@@ -27,11 +27,11 @@
 // `apiRoot` is the management root (NO `/v1` suffix) — callers compute it with
 // `getOllamaApiRoot()`, which strips the OpenAI-compatible inference prefix.
 
-/** DMR `_configure` GET response shape (array, one entry per backend/model). */
 import { createHash } from "node:crypto";
 import { canonicalLocalModelKey, validateLocalModelReference } from "./local-model-management";
 import type { LocalThinkingBudgetEvidence } from "@/lib/routing/types";
 
+/** DMR `_configure` GET response shape (array, one entry per backend/model). */
 type DmrConfigureEntry = {
   Backend?: string;
   Model?: string;
@@ -94,13 +94,15 @@ export async function getLocalThinkingBudgetEvidence(
     const card = metadata as { id?: string; config?: { gguf?: Record<string, unknown> } };
     if (card?.id !== entry.ModelID) return undefined;
     const template = card.config?.gguf?.["tokenizer.chat_template"];
-    // The verified generic parser recognizes this rendered start/end pair.
-    // A name containing Qwen or a version alone establishes neither delimiter.
-    if (typeof template !== "string" || !template.includes("'<think>\\n'") ||
-        !template.includes("\\n</think>\\n\\n'")) return undefined;
     const digest = (value: string) => createHash("sha256").update(value).digest("hex");
+    // Audited Qwen3.8 GGUF template captured without a trailing newline in the
+    // adjacent regression fixture (2026-10-14). Arbitrary Jinja source text
+    // cannot establish effective delimiters: comments and dead branches lie.
+    // This is dialect recognition, not model-selection pinning or live quality.
+    const templateDigest = typeof template === "string" ? digest(template) : null;
+    if (templateDigest !== "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041") return undefined;
     return { dialect: "llama.cpp-b9879", modelDigest: entry.ModelID!, engineIdentity: identity,
-      templateDigest: digest(template), configDigest: digest(JSON.stringify(entry.Config)), observedAt: Date.now() };
+      templateDigest, configDigest: digest(JSON.stringify(entry.Config)), observedAt: Date.now() };
   } catch { return undefined; }
 }
 

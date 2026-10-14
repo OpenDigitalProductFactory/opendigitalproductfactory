@@ -1,11 +1,12 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import { getServedContextTokens, setServedContextTokens, getLocalThinkingBudgetEvidence } from "./dmr-runtime-config";
 
 const API_ROOT = "http://model-runner.docker.internal";
 
 describe("selected runtime thinking budget evidence", () => {
   const digest = `sha256:${"a".repeat(64)}`;
-  const template = "{{ '<think>\\n' }}{{ '\\n</think>\\n\\n' }}";
+  const template = readFileSync(new URL("./fixtures/qwen38-chat-template.jinja", import.meta.url), "utf8");
   function probe(overrides: { template?: string; config?: object; engine?: string; digest?: string; duplicate?: boolean } = {}) {
     return (async (url: string) => ({ ok: true, status: 200, json: async () =>
       url.includes("_configure") ? Array(overrides.duplicate ? 2 : 1).fill({ Backend: "llama.cpp", Model: "ai/test", ModelID: digest, Mode: "completion", Config: overrides.config ?? { "context-size": 131072 } }) :
@@ -21,6 +22,12 @@ describe("selected runtime thinking budget evidence", () => {
     { engine: "Running: llama.cpp b7000-metal" }, { digest: `sha256:${"b".repeat(64)}` }, { duplicate: true },
   ])("leaves unsupported, overridden or ambiguous evidence unknown: %j", async overrides => {
     expect(await getLocalThinkingBudgetEvidence(API_ROOT, "ai/test", probe(overrides))).toBeUndefined();
+  });
+  it.each([
+    "{# '<think>\\n' '\\n</think>\\n\\n' #}{{ 'Ordinary answer' }}",
+    "{% if false %}{{ '<think>\\n' }}{{ '\\n</think>\\n\\n' }}{% endif %}{{ 'Ordinary answer' }}",
+  ])("does not infer parser support from unused delimiters", async template => {
+    expect(await getLocalThinkingBudgetEvidence(API_ROOT, "ai/test", probe({ template }))).toBeUndefined();
   });
 });
 
