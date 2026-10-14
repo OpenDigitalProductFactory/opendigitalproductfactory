@@ -75,6 +75,21 @@ afterEach(() => {
 });
 
 describe("CoworkerEnvelopeApproval", () => {
+  it.each(["record_workroom_evidence", "record_initiative_evidence", "reassign_workroom_executor"])("offers complete literal content before authorizing %s", (toolName) => {
+    const params = { decision: "pass", capsuleId: "WC-1", toExecutorKind: "codex-desktop", body: "x".repeat(900) + "<script>unsafe()</script>", clear: null, empty: "", enabled: false };
+    const decision = summarizeCoworkerEnvelopeDecision({ toolName, proposedParameters: params, reviewBinding: { gate: "research", itemId: "BI-1" }, recommenderAgentId: "AGT-EXT-CODEX", authorizerUserId: "user-1" });
+    const { container } = render(<CoworkerEnvelopeApproval approval={approval({ decision })} />);
+    const summary = screen.getByText("Complete proposed content");
+    const details = summary.closest("details")!;
+    expect(details.open).toBe(false);
+    const content = details.querySelector("pre")!;
+    expect(JSON.parse(content.textContent!)).toEqual(params);
+    expect(content.tabIndex).toBe(0);
+    expect(details.querySelector("script")).toBeNull();
+    expect(screen.getByText("Authorize").closest("details")).toBeNull();
+    expect(container.querySelectorAll("pre")).toHaveLength(1);
+  });
+
   it("states the AI recommendation versus human authorization, not identity plumbing", () => {
     render(<CoworkerEnvelopeApproval approval={approval()} />);
 
