@@ -70,11 +70,13 @@ D1, D2, D4, D6 can start in parallel. D3 after D1+D2. D5 after D2; its live swit
 
 ## Traceability
 
+Requirements are the design's objectives; verification is its acceptance criteria. Test files and runtime checks per slice are listed in the slice sections above.
+
 | Deliverable | Backlog item | Requirements | Contracts | Flows | Verification |
 | --- | --- | --- | --- | --- | --- |
-| D1 | BI-D6769E2F | AC-MON-08 | `config/install-resource-budgets.json`; `docker-compose.yml` | install/upgrade compose up with monitoring on | `scripts/check-compose-resource-budgets.test.mjs`; measured docker stats |
-| D2 | BI-0048E94D | AC-MON-09; AC-MON-05 | `scripts/installer/install-state.v2.schema.json`; `scripts/apply-runtime-capability-transition.mjs` | upgrade migration; host transition apply journal | schema, resolver and apply-script tests |
-| D3 | BI-31F11C37 | AC-MON-01; AC-MON-02 | `install-dpf.ps1`; `install-dpf.sh`; `scripts/installer/lib/state.ps1` | interactive, flag and headless install | installer unit tests; help/state contract guards |
-| D4 | BI-2CE9CBF4 | AC-MON-07 | `apps/web/components/monitoring/MonitoringContext.tsx`; `apps/web/app/api/platform/metrics/route.ts` | header and dashboard render with monitoring off | component and route tests; served-target check |
-| D5 | BI-8BBFE50B | AC-MON-03; AC-MON-04; AC-MON-05; AC-MON-06 | `apps/web/lib/actions/runtime-capabilities.ts`; `/admin/settings/monitoring` | onboarding step → settings → transition → receipt | state-derivation tests; live on/off acceptance |
-| D6 | BI-B670E078 | AC-MON-10 | `docs/architecture/platform-overview.md`; `docs/architecture/capability-driven-runtime-profiles.md` | operator reads architecture docs | docs lint |
+| D1 | BI-D6769E2F | OBJ-MON-04 | `config/install-resource-budgets.json`; `docker-compose.yml` | install/upgrade compose up with monitoring on | AC-MON-08 |
+| D2 | BI-0048E94D | OBJ-MON-04; OBJ-MON-02 | `scripts/installer/install-state.v2.schema.json`; `scripts/apply-runtime-capability-transition.mjs` | upgrade migration; host transition apply journal | AC-MON-09; AC-MON-05 |
+| D3 | BI-31F11C37 | OBJ-MON-01 | `install-dpf.ps1`; `install-dpf.sh`; `scripts/installer/lib/state.ps1` | interactive, flag and headless install | AC-MON-01; AC-MON-02 |
+| D4 | BI-2CE9CBF4 | OBJ-MON-03 | `apps/web/components/monitoring/MonitoringContext.tsx`; `apps/web/app/api/platform/metrics/route.ts` | header and dashboard render with monitoring off | AC-MON-07 |
+| D5 | BI-8BBFE50B | OBJ-MON-01; OBJ-MON-02 | `apps/web/lib/actions/runtime-capabilities.ts`; `/admin/settings/monitoring` | onboarding step -> settings -> transition -> receipt | AC-MON-03; AC-MON-04; AC-MON-05; AC-MON-06 |
+| D6 | BI-B670E078 | OBJ-MON-04 | `docs/architecture/platform-overview.md`; `docs/architecture/capability-driven-runtime-profiles.md` | operator reads architecture docs | AC-MON-10 |
