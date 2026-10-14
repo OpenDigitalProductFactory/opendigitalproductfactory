@@ -162,7 +162,12 @@ export async function claimHostResourceAdmission({ claimArgs, connection, attemp
     const result = await call(name, args, options);
     if (name === "claim_nonprod_environment_lease" && result?.success === true) {
       const id = result.entityId ?? result.data?.lease?.leaseId;
-      if (safeLeaseId(id)) knownLeaseId = id;
+      if (!safeLeaseId(id)) throw unavailable("claim-response-unproven");
+      if ((knownLeaseId && id !== knownLeaseId)
+        || (result.data?.lease?.leaseId && result.data.lease.leaseId !== id)) {
+        throw unavailable("claim-identity-conflict");
+      }
+      knownLeaseId = id;
     }
     if (now() >= deadline) throw unavailable("claim-deadline");
     if (now() - callStarted >= options.timeoutMs) {
@@ -449,7 +454,11 @@ async function main() {
     }, connection),
     release: async () => {
       const reply = await mcpCall("release_nonprod_environment_lease", { leaseId, ownerSessionId }, connection);
-      if (reply?.success !== true) throw new Error("host_lease_cleanup_unproven");
+      const lease = reply?.data?.lease;
+      if (reply?.success !== true || reply.entityId !== leaseId || lease?.leaseId !== leaseId
+        || lease.ownerSessionId !== ownerSessionId || !["released", "cancelled", "expired"].includes(lease.status)) {
+        throw new Error("host_lease_cleanup_unproven");
+      }
     },
     onEvent: event => {
       if (event.type === "release-failed") process.stderr.write(JSON.stringify({

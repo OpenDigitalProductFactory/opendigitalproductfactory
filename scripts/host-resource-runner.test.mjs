@@ -195,7 +195,8 @@ async function createHostClaimFixture(t, { claimDelayMs = 0, loseFirstResponse =
     if (rpc.params.name === "release_nonprod_environment_lease" && releaseRefused) {
       response.setHeader("Content-Type", "application/json");
       response.end(JSON.stringify({ jsonrpc: "2.0", id: rpc.id,
-        result: { success: false, error: "approval_required" } }));
+        result: releaseRefused === "unproven" ? { success: true, entityId: "APPROVAL-FIXTURE" }
+          : { success: false, error: "approval_required" } }));
       return;
     }
     if (rpc.params.name === "claim_nonprod_environment_lease") {
@@ -218,6 +219,8 @@ async function createHostClaimFixture(t, { claimDelayMs = 0, loseFirstResponse =
       success: true, entityId: "NPEL-FIXTURE-CLAIM",
       data: { admission: { status: "admitted" }, lease: {
         leaseId: "NPEL-FIXTURE-CLAIM", expiresAt: new Date(Date.now() + 600000).toISOString(),
+        status: rpc.params.name === "release_nonprod_environment_lease" ? "released" : "active",
+        ownerSessionId: args.ownerSessionId,
       } },
     } }));
   });
@@ -313,6 +316,21 @@ test("a refused cleanup is exposed separately and never relabels an executed cod
   assert.equal(packet.recovery.tool, "release_nonprod_environment_lease");
   assert.equal(packet.recovery.arguments.ownerSessionId, "fixture-claim-session");
   assert.equal(fixture.calls.at(-1).arguments.ownerSessionId, "fixture-claim-session");
+});
+
+test("a success flag without the exact terminal lease is not verified cleanup", { timeout: 60000 }, async t => {
+  const fixture = await createHostClaimFixture(t, { releaseRefused: "unproven" });
+  const result = await fixture.run([process.execPath, "-e", "process.exit(0)"]);
+  assert.equal(result.code, 0, "actual command success remains its own fact");
+  assert.equal(JSON.parse(result.stderr.trim()).cleanupVerified, false);
+});
+
+test("a conflicting authoritative lease identity never replaces the reconciled original", async () => {
+  const fixture = admissionFixture();
+  const attempt = { ...fixture.attempt, leaseId: fixture.row.leaseId };
+  await assert.rejects(claimHostResourceAdmission({ ...fixture, attempt, call: async () => ({
+    success: true, entityId: "NPEL-FOREIGN", data: { admission: { status: "admitted" }, lease: { leaseId: "NPEL-FOREIGN" } },
+  }) }), error => error.reason === "claim-identity-conflict" && error.leaseId === fixture.row.leaseId);
 });
 
 for (const [reason, result] of Object.entries({
