@@ -40,6 +40,10 @@ status: active
 
 - **AC-F5-1:** every portfolio shows the same five measures over the same window, each with its change against the prior window. Rooms with no portfolio appear as their own Unplaced column.
 - **AC-F5-2:** a step that was only waited on counts as zero touch time, so flow efficiency is never overstated.
+- **AC-F5-3:** flow load, flow time, flow efficiency and throughput each show an 8-week trend, and flow load shows its change against four weeks earlier. A cancelled run stops counting as in flow when it was cancelled.
+- **AC-F5-4:** `PORTFOLIO_COLOURS` values are `--dpf-portfolio-*` tokens, defined for light and dark.
+
+AC-F5-3 and AC-F5-4 shipped after #6151, which drew a trend only on flow time. The series come from the stage telemetry the tiles already read; no new store. The tiles use the existing token-styled `Trend` sparkline rather than report-kit `Chart`, which is sized for full charts, not 96-pixel inline trends.
 - **AC-F4-1:** a shape renders across every room on it, with each step's queue. Versions with data can be compared. Choosing a step lists the rooms at that step.
 
 ## Recorded limitations

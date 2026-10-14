@@ -103,4 +103,75 @@ describe("shapeItemType", () => {
     ["payables-watch", "feature"],
     ["cross-cutting-portfolio-standup", null],
   ])("%s → %s", (key, type) => expect(shapeItemType(key)).toBe(type));
+
+  it("draws a weekly trend for every measure, oldest week first", () => {
+    const W = 7 * 24;
+    const flows = computePortfolioFlow({
+      rooms: [room("WC-1", "foundational"), room("WC-2", "foundational"), room("WC-3", "foundational")],
+      rows: [
+        // Finished this week: 4h, waits 2h on merge.
+        ...run("WC-1", 30, 2),
+        // Finished three weeks ago.
+        ...run("WC-2", 3 * W + 10, 1),
+        // Entered five weeks ago and still in flow.
+        row("WC-3", "reproduce", "enqueued", 5 * W),
+        row("WC-3", "reproduce", "held", 5 * W),
+      ],
+      now,
+    });
+    const f = flows.find((flow) => flow.key === "foundational")!;
+    expect(f.weeklyThroughput).toEqual([0, 0, 0, 0, 1, 0, 0, 1]);
+    // 2h worked on reproduce, 2h held on merge.
+    expect(f.weeklyFlowEfficiency.at(-1)).toBeCloseTo(2 / 4);
+    expect(f.weeklyFlowEfficiency[0]).toBeNull();
+    // In flow at each week's end: only WC-3, from the first week end after it entered.
+    expect(f.weeklyFlowLoad).toEqual([0, 0, 0, 1, 1, 1, 1, 1]);
+    expect(f.weeklyFlowLoad).toHaveLength(8);
+  });
+
+  it("stops counting a cancelled run as in flow when it was cancelled, and keeps it out of flow time", () => {
+    const W = 7 * 24;
+    const flows = computePortfolioFlow({
+      rooms: [room("WC-9", "forEmployees")],
+      rows: [
+        { ...row("WC-9", "reproduce", "enqueued", 3 * W + 24), itemId: "WC-9:2026-09-16" },
+        { ...row("WC-9", "reproduce", "held", 3 * W + 24), itemId: "WC-9:2026-09-16" },
+        { ...row("WC-9", "reproduce", "cancelled", 2 * W + 24, "cancelled"), itemId: "WC-9:2026-09-16" },
+      ],
+      now,
+    });
+    const f = flows.find((flow) => flow.key === "forEmployees")!;
+    // Open across the end of the week three weeks ago; cancelled before the next week's end.
+    expect(f.weeklyFlowLoad).toEqual([0, 0, 0, 0, 1, 0, 0, 0]);
+    expect(f.flowTime.runs).toBe(0);
+    expect(f.weeklyThroughput.every((n) => n === 0)).toBe(true);
+  });
+
+  it("gives flow load a change against four weeks ago only when the telemetry reaches that far back", () => {
+    const W = 7 * 24;
+    const old = computePortfolioFlow({
+      rooms: [room("WC-5", "foundational")],
+      rows: [row("WC-5", "reproduce", "enqueued", 6 * W), row("WC-5", "reproduce", "held", 6 * W)],
+      now,
+    }).find((flow) => flow.key === "foundational")!;
+    expect(old.flowLoadPrior).toBe(1);
+    const recent = computePortfolioFlow({
+      rooms: [room("WC-6", "foundational")],
+      rows: [row("WC-6", "reproduce", "enqueued", 24), row("WC-6", "reproduce", "held", 24)],
+      now,
+    }).find((flow) => flow.key === "foundational")!;
+    expect(recent.flowLoadPrior).toBeNull();
+  });
+
+  it("counts a run entered before the telemetry window as in flow, but leaves its unknown start out of flow time", () => {
+    const flows = computePortfolioFlow({
+      rooms: [room("WC-7", "foundational")],
+      // Only its later events are in the window: no enqueued row.
+      rows: [row("WC-7", "reproduce", "released", 50), row("WC-7", "reproduce", "finished", 10, "success")],
+      now,
+    });
+    const f = flows.find((flow) => flow.key === "foundational")!;
+    expect(f.flowTime.runs).toBe(0);
+    expect(f.weeklyThroughput.at(-1)).toBe(1);
+  });
 });
