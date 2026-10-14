@@ -496,14 +496,19 @@ describe("AC-3C-SEQ-IDENTICAL: sequential rooms are byte-identical to the pre-3c
     // through the readiness review overlay, which this golden harness does not
     // compose; workroom-drive-review-stages.test.ts reaches it.
     const reviewStageOnly = new Set<string>(["reviewer_dispatch_unavailable"]);
+    // A room whose backlog item is not live work (BI-72679FE0) is stood down by
+    // the drive job after resolution (drive-work-item-gate.ts), which this golden
+    // harness does not compose; drive-work-item-gate.test.ts reaches it.
+    const jobGateOnly = new Set<string>(["work_item_inactive"]);
     const expected = [
       ...Object.values(DRIVE_REASONS_BY_ACTION).flat(),
       "executor_writeback_unavailable",
       "cycle_complete",
-    ].filter((reason) => !graphOnly.has(reason) && !reviewStageOnly.has(reason));
+    ].filter((reason) => !graphOnly.has(reason) && !reviewStageOnly.has(reason) && !jobGateOnly.has(reason));
     expect(expected.filter((reason) => !reached.has(reason))).toEqual([]);
     expect([...graphOnly].filter((reason) => reached.has(reason))).toEqual([]);
     expect([...reviewStageOnly].filter((reason) => reached.has(reason))).toEqual([]);
+    expect([...jobGateOnly].filter((reason) => reached.has(reason))).toEqual([]);
   }, 300_000);
 
   it("no persisted sequential snapshot carries a marking or pendingAttentions key", async () => {
