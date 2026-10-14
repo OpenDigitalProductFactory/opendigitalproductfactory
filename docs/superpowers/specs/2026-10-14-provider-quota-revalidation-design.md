@@ -34,6 +34,23 @@ The active-account `verificationOnly` path introduced in PR #6354 does not activ
 
 Atomic deliverable `account-quota-reconciliation`, mapped to BI-38064739: ownership, completed-response ordering and conditional quota update must ship together. Contract references: `selected-account-ownership`, `responses-completion`, `capacity-observation-fence`. Flow references: `approved-account-verification`, `quota-routing-reconciliation`. Verification references: `explicit-default-red-green`, `owner-and-generation-failure-injection`, `canonical-exact-head`, `served-account-recheck`.
 
+## Quoted delivery baseline
+
+The following criteria are quoted from the existing BI-3CF78C8E acceptance baseline for immutable plan traceability. The output-fit design remains the owning design for AC-WIRE through AC-DELIVERY; this quota follow-through does not close broader calibration or erase outstanding native and live acceptance.
+
+- AC-WIRE: Inspect the real adapter body for the supported numeric thinking allowance while preserving total max_tokens.
+- AC-SUPPORT: Unknown, ambiguous, stale or unreadable backend/template evidence must not claim numeric effort support.
+- AC-ENVELOPE: Activity allowances, invalid budgets, fixed provider thinking and fallback dispatch must preserve the authorized total.
+- AC-JSON: Actual native review requests JSON; malformed, empty, reasoning-only or truncated output stays inconclusive.
+- AC-RECOVERY: Preserve request identity, evidence, authority, deadlines, replay/expiry/cancellation/executor-loss and late-writer fencing tests.
+- AC-QUALITY: Obtain a genuine complete native verdict and matched clean/defective completion controls with exact model/runtime/template/prompt/schema/tools/budgets; legitimate FAIL counts as verdict, one pair is not broad calibration.
+- AC-DELIVERY: Record DCO source, independent exact-commit assessment, canonical gate, protected queue, canonical deployment and live verification; unavailable gates remain unrun.
+- AC-Q1: Reproduce explicit account verification succeeding without clearing its own old quota, then verify the repair.
+- AC-Q2: Reconcile only selected linked-account evidence or verified canonical-default legacy credential ownership; preserve foreign accounts and unrelated capacity states.
+- AC-Q3: Require strict completed Responses output and successful selected-connection transaction; failed/incomplete probes must not clear quota.
+- AC-Q4: Fence quota mutation by captured row identity/version/state/ownership; newer failure, handoff, deletion and duplicate completion preserve current evidence and report truthful status.
+- AC-Q5: Deliver the quota repair through canonical tests, independent review, DCO PR/queue/canonical deployment and a fresh authorized live account check; verificationOnly cannot activate accounts or mutate quota and existing snapshot-bound token renewal remains allowed.
+
 ## Rollback and operational limits
 
 Revert the scoped source PR through protected delivery if routing acceptance fails. Retain provider observations and audit evidence; never clear runtime rows by hand. A verified account may still be restricted by grants, data-use terms, billing or other provider failures. Old exhausted review lineages remain exhausted and are never renamed or restarted to manufacture assurance.
