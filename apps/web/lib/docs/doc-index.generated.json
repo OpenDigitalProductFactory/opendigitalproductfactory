@@ -9,6 +9,7 @@
       "publishedPortal": false,
       "anchors": [
         "documentation",
+        "install-and-host-selection",
         "user-guide",
         "market-proof",
         "source-of-truth-boundaries",
@@ -1501,7 +1502,8 @@
       "publishedPortal": false,
       "anchors": [
         "delivery-surfaces-runbook",
-        "task-specific-operating-rules"
+        "task-specific-operating-rules",
+        "contributor-preview-binding-and-cleanup"
       ]
     },
     "docs/architecture/dependency-reduction-routine.md": {
@@ -2013,6 +2015,7 @@
       "anchors": [
         "initiative-readiness-runbook-who-does-what-when-through-the-gates",
         "0-two-shapes-do-not-conflate-them",
+        "medium-body-criteria-and-independent-acceptance",
         "1-the-lifecycle-sequence",
         "2-the-gates-role-actor-evidence-feature-profile",
         "3-how-a-gate-is-handed-to-the-right-coworker-the-recovery-packet",
@@ -2156,7 +2159,10 @@
         "diagnosing-an-empty-loadtools-result",
         "task-specific-operating-rules",
         "disclosure-measurement-and-recovery",
-        "recovering-an-interrupted-independent-review"
+        "administrator-classification-recovery",
+        "approval-convergence-probe",
+        "recovering-an-interrupted-independent-review",
+        "parent-bounded-local-review-execution-bi-03ac2fd9"
       ]
     },
     "docs/architecture/mcp-tool-packs.md": {
@@ -2761,6 +2767,7 @@
         "the-brief-and-what-advances-a-stage",
         "failing-closed-is-not-the-same-as-locking",
         "every-reason-the-drive-emits-is-in-its-vocabulary-by-type",
+        "an-undispatched-stage-is-a-pause-and-its-task-owner-is-the-accountable-person",
         "every-stage-is-a-queue",
         "a-named-governed-writer-must-be-attached-not-discovered",
         "a-stage-names-the-tools-it-needs",
@@ -5618,14 +5625,17 @@
       "publishedPortal": false,
       "anchors": [
         "choosing-hardware-for-dpf",
+        "linux-pilot-target",
         "the-short-recommendation",
+        "a-mac-mini-for-everyday-business-operations",
+        "local-ai-for-professional-firms",
         "machines-available-now",
         "provider-assisted-operations",
         "local-first-windows-with-nvidia",
         "local-first-apple-unified-memory",
         "why-unified-memory-changes-the-calculation",
         "model-and-context-sizing",
-        "shared-memory-systems-not-yet-in-the-standard-profile",
+        "compact-linux-candidates-qualification-required",
         "before-ordering"
       ]
     },
@@ -5639,7 +5649,8 @@
         "recommended-first-deployment",
         "compatibility-and-prerequisites",
         "prerequisites",
-        "quick-start",
+        "pilot-installation-handoff",
+        "source-repairs-awaiting-native-acceptance",
         "contributor-office-document-conversion",
         "contributor-separate-dev-workspace-from-install-recommended-bi-0856a4ce-phase-1",
         "what-the-installer-does",
@@ -5656,7 +5667,7 @@
         "uninstall",
         "help-us-graduate-to-ga",
         "going-further",
-        "connecting-claude-code-or-vs-code-via-mcp"
+        "connecting-an-agent-through-mcp"
       ]
     },
     "docs/install/macos.md": {
@@ -5669,6 +5680,7 @@
         "supported-environment",
         "recommended-hardware",
         "prerequisites",
+        "docker-memory-during-installation",
         "quick-start",
         "contributor-separate-dev-workspace-from-install-recommended-bi-0856a4ce-phase-1",
         "what-the-installer-does",
@@ -5694,6 +5706,8 @@
       "anchors": [
         "platform-support-watch-list-living-document",
         "windows-host-guard-interpreters-bi-ba5f777a",
+        "macos-docker-memory-allocation-bi-dc4352e8",
+        "repository-local-codex-endpoint-overrides-bi-9f258707",
         "target-environments",
         "how-to-use-this-file",
         "1-monitoring-telemetry",
@@ -5703,7 +5717,8 @@
         "room-route-guard-on-windows",
         "recurring-meta-pattern",
         "persisted-mcp-endpoint-recovery-bi-9f258707",
-        "required-services-after-container-driven-upgrades-bi-fffea4ed"
+        "required-services-after-container-driven-upgrades-bi-fffea4ed",
+        "linux-pilot-startup-repairs-2026-10-03"
       ]
     },
     "docs/install/scratch-install-rehearsal.md": {
@@ -5745,6 +5760,7 @@
       "publishedPortal": false,
       "anchors": [
         "dpf-install-verification-runbook",
+        "linux-customer-handoff",
         "verification-matrix",
         "fastest-path-one-command-for-the-whole-sweep",
         "linux-macos",
@@ -6000,6 +6016,7 @@
       "publishedPortal": false,
       "anchors": [
         "acceptance-sweep-operator-runbook",
+        "medium-work-whose-criteria-are-in-its-body",
         "closing-items-the-gate-already-allows-off-by-default",
         "what-the-summary-tells-you",
         "who-verifies-an-item-that-is-not-closable",
@@ -6159,6 +6176,7 @@
       "anchors": [
         "dpf-install-operations",
         "quick-start",
+        "linux-pilot-and-private-startup-state",
         "capability-resolved-runtime-profiles",
         "consumer-release-assets",
         "fresh-install-runtime-and-recovery",
@@ -6216,6 +6234,7 @@
       "publishedPortal": false,
       "anchors": [
         "local-ci-sandbox-slots",
+        "owned-development-lease-cleanup",
         "host-wide-heavyweight-resource-admission",
         "current-operating-mode",
         "peer-slot-host-fencing",
@@ -11942,6 +11961,7 @@
         "pull-requests-and-security-gates",
         "pre-pr-security-gates",
         "autonomous-merge-queue-delivery",
+        "when-the-platform-moved-on-before-the-pull-request-opened",
         "configuration",
         "safety-guarantees"
       ]
@@ -12538,6 +12558,7 @@
       "publishedPortal": true,
       "anchors": [
         "use-this-doc-for",
+        "before-first-login-on-linux",
         "workflow",
         "help-visibility-policy"
       ]
@@ -12696,6 +12717,7 @@
         "use-this-doc-for",
         "overview",
         "reading-the-panel",
+        "what-a-quarter-is-charged-for",
         "which-portfolio-an-item-counts-against",
         "setting-a-budget",
         "choosing-who-answers-for-each-portfolio",
@@ -13174,6 +13196,7 @@
         "a-shape-is-a-model-the-platform-checks",
         "incomplete-or-unavailable-rooms",
         "who-is-accountable-and-who-is-working",
+        "who-an-ai-coworkers-stage-runs-for",
         "when-an-account-stops-being-used",
         "opening-a-workroom-that-has-no-work-item"
       ]

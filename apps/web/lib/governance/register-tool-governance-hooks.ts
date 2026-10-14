@@ -1,7 +1,12 @@
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 
-import { createCompletionEvidenceGovernanceHook } from "@/lib/backlog/completion-evidence-governance-hook";
-import { registerToolLifecycleHook } from "@/lib/mcp-governed-execute";
+import {
+  createCompletionEvidenceGovernanceHook,
+  type CompletionEvidenceHookDeps,
+} from "@/lib/backlog/completion-evidence-governance-hook";
+import { installApprovalProbeRuntime } from "@/lib/coworker/approval-convergence-probe-runtime";
+import { registerToolLifecycleHook, runPreToolHooks } from "@/lib/mcp-governed-execute";
+import type { ToolLifecycleHook } from "@/lib/mcp-governed-execute-types";
 import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
 import {
   createDecisionRoutingGovernanceHook,
@@ -16,6 +21,12 @@ import {
   type WorkroomShapeShadowRecord,
 } from "./workroom-shape-governance-hook";
 
+/** The client every governance hook reads and writes through. */
+export type GovernanceHookDb = Pick<
+  Prisma.TransactionClient,
+  "workroom" | "workroomActivity" | "toolExecution" | "backlogItemActivity"
+>;
+
 /** One shadow record per room+tool per window keeps the audit stream readable. */
 const SHADOW_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
 
@@ -28,8 +39,9 @@ const SHADOW_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
  */
 async function loadWorkroomForShapeGate(
   workroomId: string,
+  db: GovernanceHookDb,
 ): Promise<WorkroomShapeGateRoom | null> {
-  const room = await prisma.workroom.findFirst({
+  const room = await db.workroom.findFirst({
     where: { OR: [{ id: workroomId }, { capsuleId: workroomId }] },
     select: {
       id: true,
@@ -71,6 +83,7 @@ async function loadWorkroomForShapeGate(
  */
 async function recordWorkroomShapeShadow(
   input: WorkroomShapeShadowRecord,
+  db: GovernanceHookDb,
 ): Promise<void> {
   if (!input.roomRowId) {
     console.warn(
@@ -84,7 +97,7 @@ async function recordWorkroomShapeShadow(
     );
     return;
   }
-  const recent = await prisma.workroomActivity.findFirst({
+  const recent = await db.workroomActivity.findFirst({
     where: {
       workCapsuleId: input.roomRowId,
       kind: "workroom_shape_gate_shadow",
@@ -97,7 +110,7 @@ async function recordWorkroomShapeShadow(
   const envelope = input.verdict.withinEnvelope
     ? "within envelope"
     : `gaps: ${input.verdict.gaps.join(", ") || "none"}`;
-  await prisma.workroomActivity.create({
+  await db.workroomActivity.create({
     data: {
       workCapsuleId: input.roomRowId,
       kind: "workroom_shape_gate_shadow",
@@ -116,19 +129,38 @@ async function recordWorkroomShapeShadow(
   });
 }
 
-export function registerServerToolGovernanceHooks(): void {
+/**
+ * The server's tool governance hooks, bound to `db`. The live registration
+ * binds them to the shared client; the AC-PROBE runner binds the same hooks to
+ * a read-only transaction and replaces the attention notification, which
+ * writes through its own client, with a refusal (BI-129EFFD1).
+ */
+export function buildServerToolGovernanceHooks(
+  db: GovernanceHookDb = prisma,
+  completionEvidence: Partial<Pick<CompletionEvidenceHookDeps, "notifyCircuit">> = {},
+): ToolLifecycleHook[] {
   // Give the decision-routing gate its real reach BEFORE the hook is live:
   // derived from every ToolDefinition.consequence, not the two-name seed
   // (TAK §8.4.1). Installed here because the hook must not statically import
   // the tool catalog. A conformance test pins that this call is present.
   installConsequentialToolResolver(getConsequentialToolNames);
-  registerToolLifecycleHook(createDecisionRoutingGovernanceHook());
-  registerToolLifecycleHook(createCompletionEvidenceGovernanceHook());
-  registerToolLifecycleHook(
+  return [
+    createDecisionRoutingGovernanceHook(),
+    createCompletionEvidenceGovernanceHook(completionEvidence, db),
     createWorkroomShapeGovernanceHook({
       findTool: (toolName) => PLATFORM_TOOLS.find((tool) => tool.name === toolName),
-      loadRoom: loadWorkroomForShapeGate,
-      recordShadow: recordWorkroomShapeShadow,
+      loadRoom: (workroomId) => loadWorkroomForShapeGate(workroomId, db),
+      recordShadow: (input) => recordWorkroomShapeShadow(input, db),
     }),
-  );
+  ];
+}
+
+export function registerServerToolGovernanceHooks(): void {
+  for (const hook of buildServerToolGovernanceHooks()) registerToolLifecycleHook(hook);
+  // The AC-PROBE runner cannot import the catalog or these hooks (it is reached
+  // from a tool pack); it runs the same hooks bound to its read-only transaction.
+  installApprovalProbeRuntime({
+    findTool: (name) => PLATFORM_TOOLS.find((tool) => tool.name === name),
+    runGovernanceHooks: (event, db, options) => runPreToolHooks(event, buildServerToolGovernanceHooks(db, options)),
+  });
 }

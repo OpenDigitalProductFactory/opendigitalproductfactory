@@ -53,12 +53,22 @@ function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-function deliveryState(build: TerminalBuild) {
+/**
+ * Delivery evidence for a build: its own checks passed, and its change is
+ * delivered. Delivery is either a recorded build pass or proof the caller
+ * already holds that the merged change is live (BI-3555F94E: nothing in the
+ * pipeline writes `buildPassed`, so no build could ever pass this). UX counts
+ * where there is UI to verify; "skipped" means the build had no UX criteria,
+ * which the proportional gates treat as not applicable, never as verified.
+ */
+export function buildDeliveryState(build: Pick<TerminalBuild, "verificationOut" | "uxVerificationStatus">, deliveryProven = false) {
   const verification = object(build.verificationOut);
+  const delivered = verification.buildPassed === true || deliveryProven;
+  const uxSettled = build.uxVerificationStatus === "complete" || build.uxVerificationStatus === "skipped";
   return verification.typecheckPassed === true
     && verification.testsFailed === 0
-    && verification.buildPassed === true
-    && build.uxVerificationStatus === "complete"
+    && delivered
+    && uxSettled
     ? "pass" as const
     : "missing" as const;
 }
@@ -67,18 +77,47 @@ function factsDigest(value: unknown) {
   return `sha256:${createHash("sha256").update(canonicalJson(value)).digest("hex")}`;
 }
 
+type BuildReadinessFacts = Awaited<ReturnType<typeof import("@/lib/build/build-entry-gate").loadBuildReadinessFacts>>;
+
+async function loadTerminalBuildFacts(buildId: string): Promise<BuildReadinessFacts | null> {
+  const build = await prisma.featureBuild.findUnique({
+    where: { buildId },
+    select: {
+      kind: true, designDoc: true, designReview: true, buildPlan: true,
+      originator: { select: { id: true, itemId: true, title: true, body: true, workType: true } },
+    },
+  });
+  if (!build?.originator) return null;
+  const { loadBuildReadinessFacts } = await import("@/lib/build/build-entry-gate");
+  return loadBuildReadinessFacts(prisma as never, { ...build, originator: build.originator });
+}
+
 export async function completeFeatureBuildTransition(args: {
   db?: TerminalTransitionDb;
   buildId: string;
   expectedPhase: string;
   evaluatedAt?: string;
+  /**
+   * The caller has already proven the merged change is live (the delivery
+   * preconditions in build-flow-state.ts). Stands in for `buildPassed`.
+   */
+  deliveryProven?: boolean;
   dependencies?: {
     reconcileObjectives?: ReconcileObjectives;
     projectReadiness?: ProjectReadiness;
+    /** The build's shape, sensitivity, inherited scope and reviewed design. */
+    loadFacts?: (buildId: string) => Promise<BuildReadinessFacts | null>;
   };
 }): Promise<GovernedTerminalTransitionResult> {
   const db = args.db ?? (prisma as unknown as TerminalTransitionDb);
   const evaluatedAt = args.evaluatedAt ?? new Date().toISOString();
+  // BI-3555F94E: every other build gate judges the item on its bound shape and
+  // the build's reviewed design (build-entry-gate.ts). This one judged every
+  // build as unshaped feature work, which owes plan documents and receipts the
+  // automated lane never produces, so no shaped build could complete. Read
+  // outside the transaction: they are reads, and the projector is pure.
+  // A failed read falls back to the unshaped table: stricter, never looser.
+  const facts = await (args.dependencies?.loadFacts ?? loadTerminalBuildFacts)(args.buildId).catch(() => null);
   let lockedBuild: TerminalBuild | null = null;
   const actor = {
     actorType: "agent" as const,
@@ -139,9 +178,14 @@ export async function completeFeatureBuildTransition(args: {
         itemRowId: originator.id,
         activities: originator.activities,
       });
-      const delivery = deliveryState(build);
+      const delivery = buildDeliveryState(build, args.deliveryProven === true);
       const projected = (args.dependencies?.projectReadiness ?? projectBacklogItemReadiness)({
-        item: { ...originator, activeBuildKind: build.kind },
+        item: {
+          ...originator,
+          activeBuildKind: build.kind,
+          ...(facts ? { workShape: facts.workShape, deliverySensitivity: facts.deliverySensitivity } : {}),
+        },
+        ...(facts ? { buildDesign: facts.buildDesign, inheritedScope: facts.inheritedScope } : {}),
         activities: originator.activities as InitiativeReadinessActivity[],
         target: "completion",
         transitionObject: { kind: "feature-build", id: build.id, expectedVersion: args.expectedPhase, targetState: "complete" },
@@ -169,6 +213,7 @@ export async function completeFeatureBuildTransition(args: {
           buildId: build.buildId,
           buildRowId: build.id,
           expectedPhase: args.expectedPhase,
+          workShape: facts?.workShape ?? null,
           delivery,
           baselineId: reconciliation.baselineId,
           objectiveState: reconciliation.state,

@@ -20,7 +20,7 @@ const propose = portfolioBudgetPack.handlers["propose_portfolio_budgets"]!;
 const done = (itemId: string, completedAt: string) => ({
   itemId, status: "done", effortSize: "large", jobSize: null, estimateAgreed: null, storedPortfolioId: "p1", storedPortfolioDangling: false,
   productPortfolioId: null, taxonomyPortfolioId: null, coworkerNeedPortfolioId: null, epicPortfolioId: null, activeBuildId: null,
-  hasLiveWorkroom: false, deliverySurface: "other", traced: false, completedAt: new Date(completedAt),
+  hasActiveWorkroom: false, deliveredAt: null, deliverySurface: "other", traced: false, completedAt: new Date(completedAt),
 });
 
 beforeEach(() => {

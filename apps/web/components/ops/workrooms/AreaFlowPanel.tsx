@@ -10,7 +10,7 @@ import type { PortfolioFlowWithCost, ShapeFlowView } from "@/lib/work-management
 import { FLOW_ITEM_TYPES, FLOW_WINDOW_DAYS, type FlowItemType } from "@/lib/work-management/portfolio-flow";
 import { getWorkShape } from "@/lib/work-management/work-shapes";
 import { formatDuration } from "@/lib/datetime";
-import { formatMoney } from "@/lib/org-locale/org-locale";
+import { aiSpendText } from "@/lib/portfolio/ai-resource";
 import { describeHoldCause } from "@/lib/work-management/workroom-stage-telemetry";
 
 /** Translator for the `workrooms` namespace (server: `await getT("workrooms")`). */
@@ -23,7 +23,6 @@ const ITEM_COLOR: Record<FlowItemType, string> = {
   debt: "var(--dpf-muted)",
 };
 
-const usd = (amount: number) => formatMoney(amount, "USD", null, { maximumFractionDigits: 2 });
 
 /** Median flow time per week; gaps where a week finished nothing. */
 function Trend({ values, label }: { values: (number | null)[]; label: string }) {
@@ -71,7 +70,7 @@ export function PortfolioFlowTiles({ flow, areaHref, t }: { flow: PortfolioFlowW
   const typed = FLOW_ITEM_TYPES.reduce((sum, type) => sum + flow.distribution[type], 0);
   const costHint = [
     flow.points ? t("flow.deliveredPoints", { points: flow.points.delivered }) : t("flow.noBudget"),
-    flow.aiUsd == null ? t("flow.aiUnavailable") : t("flow.aiSpend", { amount: usd(flow.aiUsd), days: FLOW_WINDOW_DAYS }),
+    flow.ai == null ? t("flow.aiUnavailable") : t("flow.aiSpend", { spend: aiSpendText(flow.ai), days: FLOW_WINDOW_DAYS }),
   ].join(" · ");
   return (
     <section aria-labelledby="area-flow-heading" className="space-y-3">
@@ -196,7 +195,7 @@ export function PortfolioFlowComparison({ flows, areaHrefByRole, t }: { flows: P
     { label: t("flow.efficiency"), value: (f) => (f.flowEfficiency.value == null ? "—" : pct(f.flowEfficiency.value)) },
     { label: t("flow.perWeek"), value: (f) => f.throughput.perWeek.toFixed(1) },
     { label: t("flow.pointsInFlight"), value: (f) => (f.points ? String(f.points.inFlight) : "—") },
-    { label: t("flow.aiSpendRow", { days: FLOW_WINDOW_DAYS }), value: (f) => (f.aiUsd == null ? "—" : usd(f.aiUsd)) },
+    { label: t("flow.aiSpendRow", { days: FLOW_WINDOW_DAYS }), value: (f) => (f.ai == null ? "—" : aiSpendText(f.ai)) },
   ];
   return (
     <section aria-labelledby="portfolio-flow-heading" className="my-6 space-y-2">

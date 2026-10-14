@@ -8,6 +8,7 @@ import { formatGateContextMarkdown } from "../lib/gate-context.mjs";
 import { isSignedOff } from "../lib/dco-signoff.mjs";
 import { isDocsOnlyFileSet } from "../pr-health.mjs";
 import { classifySlotRecord } from "../lib/pregate-status.mjs";
+import { guardAppliesToScope } from "../lib/pregate-preflight.mjs";
 import { hasBoundDocumentationEvidence } from "../lib/local-ci-gate-state.mjs";
 import { classifyLocalCiOverride, classifyGateInfrastructureEvidence, GATE_INFRASTRUCTURE_UNAVAILABLE_CODE } from "../../packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs";
 import {
@@ -48,6 +49,7 @@ export function buildGatePlan({
   prBody = "",
   prLabelsJson = "[]",
   profiles = POLICY_GUARD_PROFILES,
+  changeScope = null,
 } = {}) {
   const env = {
     BASE_SHA: "origin/main",
@@ -58,6 +60,7 @@ export function buildGatePlan({
 
   return LOCAL_READINESS_PROFILE_NAMES.flatMap((profileName) =>
     (profiles[profileName] ?? []).flatMap((entry) => {
+      if (!guardAppliesToScope(entry, changeScope)) return [];
       // The readiness command runs in the author's topic worktree. Never replay
       // CI setup that rewrites Git state there. Its checks remain covered by CI
       // and by the exact-tree local-CI gate.

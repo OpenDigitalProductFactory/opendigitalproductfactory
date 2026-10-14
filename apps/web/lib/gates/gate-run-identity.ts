@@ -60,6 +60,7 @@ export type LocalCiTerminalEvidenceProjection =
 export type SemanticReviewGateIdentityInput = {
   repository: string;
   identity: {
+    artifactType?: string;
     capsuleId: string;
     baseTreeHash: string;
     headTreeHash: string;
@@ -236,6 +237,8 @@ export function deriveSemanticReviewGateIdentity(input: SemanticReviewGateIdenti
   gateKey: string;
 } {
   const reviewPlan = {
+    // Omit the field for legacy packets so their persisted gate keys stay stable.
+    ...(input.identity.artifactType ? { artifactType: nonEmpty(input.identity.artifactType, "semantic-review artifact type") } : {}),
     failureAnalysisDigest: input.identity.failureAnalysisDigest ?? null,
     sourceHeadSha: input.identity.sourceHeadSha ?? null,
     capsuleId: nonEmpty(input.identity.capsuleId, "semantic-review capsule"),

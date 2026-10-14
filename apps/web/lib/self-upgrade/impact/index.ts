@@ -6,14 +6,13 @@
 // Resolution order:
 //   1. currentLineageSha = latest succeeded SelfUpgradeRun.targetSha
 //      (the upstream marker — see run-store.ts getLatestSucceededRun).
-//   2. targetSha = resolved upstream HEAD (version.ts resolveTargetSha).
+//   2. targetSha = canonical status target (verified release or upstream HEAD).
 //   3. If lineage is missing or already equals target -> SummaryNotApplicable.
 //   4. Otherwise: collect change set -> classify -> score -> phrase -> cache.
 
 import { getLatestSucceededRun } from "@/lib/self-upgrade/run-store";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
-import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
-import { resolveTargetSha } from "@/lib/self-upgrade/version";
+import { loadImpactSource } from "./source";
 import { cacheKey, getCached, setCached } from "./cache";
 import {
   getPersistedSummary,
@@ -99,27 +98,19 @@ export async function summarizeUpgradeImpact(
   options: SummarizeOptions = {},
   deps: SummarizeDeps = {},
 ): Promise<SummaryResult> {
-  // The self-upgrade config carries the host clone path + remote/branch the git
-  // reads must use. getSelfUpgradeStatus threads this into resolveTargetSha; the
-  // impact summary historically did NOT, so both the target resolve and the
-  // change-set `git log` ran against the wrong default path (`/workspace`) and
-  // the panel could never produce output on any real install. Load it once and
-  // pass it through (only when the caller hasn't injected its own loaders).
+  // Use the same target contract as the status banner; source-free release
+  // installs read published source changes rather than a nonexistent clone.
   const needsConfig = !deps.loadTargetSha || !deps.loadChangeSet;
-  const config = needsConfig ? await getSelfUpgradeConfig() : null;
+  const source = needsConfig ? await loadImpactSource() : null;
 
   const loadCurrentLineageSha = deps.loadCurrentLineageSha ?? defaultLoadCurrentLineageSha;
   const loadTargetSha =
     deps.loadTargetSha ??
-    (() => resolveTargetSha("operator-impact-summary", config ?? {}));
+    (async () => source?.targetSha ?? null);
   const loadInstallSignals = deps.loadInstallSignals ?? (() => collectInstallSignals());
   const loadChangeSet =
     deps.loadChangeSet ??
-    ((input) =>
-      collectChangeSet({
-        ...input,
-        config: { hostSourcePath: config?.hostSourceMountPath },
-      }));
+    ((input) => source!.collect(input));
   const enrich = deps.enrichPrs ?? enrichPrs;
   const phrase = deps.phraseSummary ?? phraseSummary;
 
@@ -139,7 +130,7 @@ export async function summarizeUpgradeImpact(
       ok: false,
       reason: "no-target",
       detail:
-        "Could not resolve the upstream target SHA: the configured remote did not answer and the host clone has no local ref for the branch.",
+        `The update target is temporarily unavailable${source?.unavailableReason ? ` (${source.unavailableReason})` : ""}. Try again later.`,
     };
   }
   if (currentLineageSha === targetSha) {
@@ -180,7 +171,6 @@ export async function summarizeUpgradeImpact(
   } catch (err) {
     const detail = getErrorMessage(err);
     const result: SummaryResult = { ok: false, reason: "git-log-failed", detail };
-    setCached(currentLineageSha, targetSha, result);
     return result;
   }
 
@@ -321,11 +311,11 @@ export async function getCurrentImpactSummaryId(
   deps: SummarizeDeps = {},
 ): Promise<string | null> {
   try {
-    const config = !deps.loadTargetSha ? await getSelfUpgradeConfig() : null;
+    const source = !deps.loadTargetSha ? await loadImpactSource() : null;
     const loadLineage = deps.loadCurrentLineageSha ?? defaultLoadCurrentLineageSha;
     const loadTarget =
       deps.loadTargetSha ??
-      (() => resolveTargetSha("operator-impact-summary", config ?? {}));
+      (async () => source?.targetSha ?? null);
     const currentLineageSha = await loadLineage();
     const targetSha = await loadTarget();
     if (!currentLineageSha || !targetSha || currentLineageSha === targetSha) {

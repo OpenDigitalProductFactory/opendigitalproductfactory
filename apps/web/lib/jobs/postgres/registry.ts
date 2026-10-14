@@ -5,7 +5,7 @@
  * synchronously at module load without pulling `pg` into every job module.
  * The worker reads this registry; senders never need it.
  */
-import type { JobFunction, JobFunctionOptions, JobHandler } from "../types";
+import type { JobFunction, JobFunctionOptions, JobHandler, JobRecovery } from "../types";
 import { assertSupportedExpression } from "./expressions";
 
 /** Inngest's default when a function names no retry count. */
@@ -18,6 +18,11 @@ export type RegisteredFunction = {
   eventNames: string[];
   crons: string[];
 };
+
+/** The declared recovery class, or the one its retry declaration implies (BI-4FA0EFEB). */
+export function recoveryFor(fn: RegisteredFunction): JobRecovery {
+  return fn.options.recovery ?? ((fn.options.retries ?? 0) >= 1 ? "replay-safe" : "process-bound");
+}
 
 const POSTGRES_FUNCTION = Symbol.for("dpf.jobs.postgres-function");
 

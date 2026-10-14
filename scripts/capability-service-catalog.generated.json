@@ -1076,7 +1076,7 @@
             "linux"
           ],
           "ports": [
-            "11434:11434"
+            "127.0.0.1:11434:11434"
           ],
           "profiles": [
             "runtime-external-ai"
@@ -1135,7 +1135,7 @@
       ]
     }
   ],
-  "catalogHash": "52358eb9e4f8442f3b870a37ed46e9cba184e04ad811520842858d0833f2b6d9",
+  "catalogHash": "6b1288a316a5901fa2a692a5ad6b5a3ceedebed1ad3d224c090e985c6e8327a1",
   "catalogVersion": 1,
   "substrateManifestVersion": 2
 }

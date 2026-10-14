@@ -11,7 +11,13 @@
  *
  *   queueKey  wr:<shapeKey>@<version>:<stageKey>
  *   itemKind  workroom-stage
- *   itemId    <capsuleId>:<cycleKey | "run">
+ *   itemId    <capsuleId>:<cycleKey> for a recurring shape, <capsuleId>:run for a finite one
+ *
+ * The drive stamps every room with a daily cycle key. Only a shape that
+ * recurs (a cadence) has cycles; a finite room is one run however many days
+ * it takes, so its cycle stamp is ignored. A recurring cycle still open when
+ * the next one begins did not complete: it is cancelled (abandoned), never
+ * counted as a success, so it stays out of flow time and throughput.
  *
  * The drive records a trail row only when a room's state changes. This module
  * turns the change between two drive snapshots into queue transitions:
@@ -21,6 +27,7 @@
  *   waiting/blocked → working   released, started (the first start wins)
  *   leaving a stage             released if held, then finished
  *   a stop                      finished: success for `success`, failed otherwise
+ *   a new cycle over an open one   cancelled (the open cycle never completed)
  *
  * Pure, apart from `emitStageTransitions`, which hands the plan to the
  * fire-and-forget writer. A telemetry failure never touches the drive.
@@ -28,7 +35,7 @@
 import type { QueueOutcome, QueueTransition } from "@/lib/queue/flow-metrics";
 import type { QueueTransitionInput } from "@/lib/queue/queue-telemetry";
 
-import { getWorkShapeVersion } from "./work-shapes";
+import { getWorkShapeVersion, workShapeRecurs } from "./work-shapes";
 import { readWorkShapeClaimRef } from "./workroom-shape-claim";
 import { classifyDriveSegment, type WorkroomFlowState } from "./workroom-flow-state";
 import { holdCauseTag } from "./workroom-hold-cause";
@@ -98,9 +105,19 @@ export function readDriveObservation(workspaceState: unknown): DriveObservation 
  * this door, so its hold is measured here rather than dropped.
  */
 export function entryStageKey(shapeRef: string | null): string | null {
+  return definitionOf(shapeRef)?.stages[0]?.key ?? null;
+}
+
+/** Whether a shape version recurs on a cadence; a finite shape is one run per room. */
+export function shapeRecurs(shapeRef: string | null): boolean {
+  const definition = definitionOf(shapeRef);
+  return definition ? workShapeRecurs(definition) : false;
+}
+
+function definitionOf(shapeRef: string | null) {
   const at = shapeRef ? shapeRef.lastIndexOf("@") : -1;
   if (!shapeRef || at <= 0) return null;
-  return getWorkShapeVersion(shapeRef.slice(0, at), shapeRef.slice(at + 1))?.stages[0]?.key ?? null;
+  return getWorkShapeVersion(shapeRef.slice(0, at), shapeRef.slice(at + 1));
 }
 
 const IN_FLOW: ReadonlySet<WorkroomFlowState> = new Set(["working", "awaiting-person", "blocked"]);
@@ -121,7 +138,7 @@ function locate(observation: DriveObservation | null, shapeRef: string | null, k
     ...classified,
     cause: classified.state === "blocked" ? holdCauseTag(classified.cause, observation.detail) : classified.cause,
     stageKey: observation.stageKey ?? (held ? knownStage ?? entryStageKey(shapeRef) : null),
-    cycleKey: observation.cycleKey,
+    cycleKey: shapeRecurs(shapeRef) ? observation.cycleKey : null,
   };
 }
 
@@ -160,10 +177,18 @@ export function planStageTransitions(input: {
   if (!shapeRef) return [];
   const before = locate(input.prior, shapeRef, input.openStageKey);
   const priorOpen = before && IN_FLOW.has(before.state) && before.stageKey ? before : null;
+  // A room that went idle without completing its cycle left its item open and
+  // held; the caller knows where (`openStageKey`). Re-attach to it rather than
+  // entering the same item twice.
+  const idleOpen: Located | null = !priorOpen && before?.state === "awaiting-trigger" && input.prior?.reason !== "cycle_complete" && input.openStageKey
+    ? { ...before, state: "blocked", stageKey: input.openStageKey }
+    : null;
+  const open = priorOpen ?? idleOpen;
+  const nextCycle = shapeRecurs(shapeRef) ? input.next.cycleKey : null;
   // A hold the drive raised without naming a stage (a conformance pause) holds
   // the stage the room was already in, or, when it has not entered one, the
   // shape's first stage.
-  const after = locate(input.next, shapeRef, priorOpen && priorOpen.cycleKey === input.next.cycleKey ? priorOpen.stageKey : null);
+  const after = locate(input.next, shapeRef, open && open.cycleKey === nextCycle ? open.stageKey : null);
   if (!after) return [];
   const nextStage = after.stageKey;
 
@@ -185,9 +210,15 @@ export function planStageTransitions(input: {
     });
   };
 
-  const close = (open: Located & { stageKey: string }, outcome: QueueOutcome) => {
-    if (open.state !== "working") emit(open, "released", { actor: "system" });
-    emit(open, "finished", { outcome, actor: actorFor(open.state) });
+  const close = (item: Located & { stageKey: string }, outcome: QueueOutcome) => {
+    if (item.state !== "working") emit(item, "released", { actor: "system" });
+    emit(item, "finished", { outcome, actor: actorFor(item.state) });
+  };
+
+  // The open item belongs to a cycle that is over without completing.
+  const abandon = (item: Located & { stageKey: string }) => {
+    if (item.state !== "working") emit(item, "released", { actor: "system" });
+    emit(item, "cancelled", { outcome: "cancelled", actor: "system" });
   };
 
   const enter = (stageKey: string) => {
@@ -197,44 +228,49 @@ export function planStageTransitions(input: {
     else emit(on, "held", { laneKey: holdLane(after), actor: actorFor(after.state) });
   };
 
+  const openItem = open as (Located & { stageKey: string }) | null;
+
   if (after.state === "done") {
-    if (priorOpen) close(priorOpen as Located & { stageKey: string }, input.next.reason === "success" ? "success" : "failed");
+    if (openItem) close(openItem, input.next.reason === "success" ? "success" : "failed");
     return out;
   }
 
   if (after.state === "awaiting-trigger") {
-    if (!priorOpen) return out;
+    if (!openItem) return out;
     // A finished cycle completes the stage it was in. Any other idle reason
     // (a quiet posture, an empty read) leaves the item sitting in the stage,
     // which is held time, not a completion.
-    if (input.next.reason === "cycle_complete") close(priorOpen as Located & { stageKey: string }, "success");
-    else if (priorOpen.state === "working") emit(priorOpen as Located & { stageKey: string }, "held", { laneKey: input.next.reason ?? "idle", actor: "system" });
+    if (input.next.reason === "cycle_complete") close(openItem, "success");
+    else if (openItem.state === "working") emit(openItem, "held", { laneKey: input.next.reason ?? "idle", actor: "system" });
     return out;
   }
 
   if (!nextStage) return out;
 
-  const sameItem = priorOpen && priorOpen.stageKey === nextStage && priorOpen.cycleKey === after.cycleKey;
-  if (priorOpen && !sameItem) {
-    close(priorOpen as Located & { stageKey: string }, "success");
+  const sameItem = openItem && openItem.stageKey === nextStage && openItem.cycleKey === after.cycleKey;
+  if (openItem && !sameItem) {
+    // Moving on within a cycle completes the step; a new cycle over an open
+    // one abandons it.
+    if (openItem.cycleKey === after.cycleKey) close(openItem, "success");
+    else abandon(openItem);
     enter(nextStage);
     return out;
   }
-  if (!priorOpen) {
+  if (!openItem) {
     enter(nextStage);
     return out;
   }
 
   // Same stage, same cycle: the state inside the stage changed.
   const on = { stageKey: nextStage, cycleKey: after.cycleKey };
-  const wasHeld = priorOpen.state !== "working";
+  const wasHeld = openItem.state !== "working";
   const isHeld = after.state !== "working";
   if (!wasHeld && isHeld) {
     emit(on, "held", { laneKey: holdLane(after), actor: actorFor(after.state) });
   } else if (wasHeld && !isHeld) {
     emit(on, "released", { actor: "system" });
     emit(on, "started", { actor: "ai-agent" });
-  } else if (wasHeld && isHeld && holdLane(priorOpen) !== holdLane(after)) {
+  } else if (wasHeld && isHeld && holdLane(openItem) !== holdLane(after)) {
     emit(on, "released", { actor: "system" });
     emit(on, "held", { laneKey: holdLane(after), actor: actorFor(after.state) });
   }

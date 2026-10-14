@@ -12,12 +12,14 @@ const txActivityCreateMock = vi.fn();
 const platformDevConfigFindUniqueMock = vi.fn();
 const autoResolveDecomposeMock = vi.fn();
 const buildActivityFindManyMock = vi.fn();
+const backlogItemActivityFindFirstMock = vi.fn();
 
 vi.mock("@dpf/db", () => ({
   prisma: {
     featureBuild: { findUnique: (...args: unknown[]) => findUniqueMock(...args) },
     platformDevConfig: { findUnique: (...args: unknown[]) => platformDevConfigFindUniqueMock(...args) },
     buildActivity: { findMany: (...args: unknown[]) => buildActivityFindManyMock(...args) },
+    backlogItemActivity: { findFirst: (...args: unknown[]) => backlogItemActivityFindFirstMock(...args) },
     // abandonStrandedPreBuild wraps its work in a $transaction; run the callback
     // immediately with a tx exposing the row re-check + mutation methods.
     $transaction: (fn: (tx: unknown) => unknown) =>
@@ -72,6 +74,10 @@ import {
   countReviewIncompleteStreak,
   REVIEW_INCOMPLETE_BACKOFF_BASE_MS,
   REVIEW_INCOMPLETE_BACKOFF_MAX_MS,
+  countUnchangedRefusalStreak,
+  unchangedRefusalBackoff,
+  UNCHANGED_REFUSAL_BACKOFF_BASE_MS,
+  UNCHANGED_REFUSAL_BACKOFF_MAX_MS,
 } from "./resume-pre-build-phase";
 
 describe("resumePreBuildPhase (BI-9257CF19)", () => {
@@ -771,5 +777,71 @@ describe("abandonStrandedPreBuild", () => {
     txFindUniqueMock.mockResolvedValue(null);
     const ok = await abandonStrandedPreBuild({ buildId: "FB-GONE", phase: "ideate", ageMs: 20 * 86_400_000 });
     expect(ok).toBe(false);
+  });
+});
+
+// BI-6F2872FC: an identical plan→build refusal with no new readiness input backs off quietly.
+describe("unchanged plan→build refusal backoff", () => {
+  const at = (iso: string) => new Date(iso);
+  const refused = (summary: string, iso: string) => ({ summary, createdAt: at(iso) });
+
+  it("counts only the newest run of identical refusals", () => {
+    expect(countUnchangedRefusalStreak([
+      refused("PLAN_REQUIRED", "2026-10-13T12:20:00Z"),
+      refused("PLAN_REQUIRED", "2026-10-13T12:10:00Z"),
+      refused("CANONICAL_DESIGN_REQUIRED", "2026-10-13T12:00:00Z"),
+      refused("PLAN_REQUIRED", "2026-10-13T11:50:00Z"),
+    ])).toEqual({ streak: 2, lastAt: at("2026-10-13T12:20:00Z") });
+    expect(countUnchangedRefusalStreak([])).toEqual({ streak: 0, lastAt: null });
+  });
+
+  it("doubles from 10 minutes to a 6-hour cap", () => {
+    const lastAt = at("2026-10-13T12:00:00Z");
+    const wait = (streak: number) => {
+      const out = unchangedRefusalBackoff({ streak, lastAt, inputsChangedAt: null, now: lastAt });
+      return out.due ? 0 : out.waitMs;
+    };
+    expect(wait(1)).toBe(UNCHANGED_REFUSAL_BACKOFF_BASE_MS);
+    expect(wait(2)).toBe(2 * UNCHANGED_REFUSAL_BACKOFF_BASE_MS);
+    expect(wait(20)).toBe(UNCHANGED_REFUSAL_BACKOFF_MAX_MS);
+  });
+
+  it("is due at once when an input landed after the last refusal, or with no refusal", () => {
+    const lastAt = at("2026-10-13T12:00:00Z");
+    expect(unchangedRefusalBackoff({ streak: 9, lastAt, inputsChangedAt: at("2026-10-13T12:05:00Z"), now: at("2026-10-13T12:06:00Z") }).due).toBe(true);
+    expect(unchangedRefusalBackoff({ streak: 0, lastAt: null, inputsChangedAt: null, now: lastAt }).due).toBe(true);
+  });
+
+  it("holds a plan-reviewed build quietly without re-running the transition", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { x: 1 }, buildPlan: { tasks: [{ title: "t" }] }, planReview: { decision: "pass" },
+      originatingBacklogItemId: "row-1",
+    });
+    // Newer than this process's start, so only the backoff can hold it.
+    const recent = new Date();
+    buildActivityFindManyMock.mockImplementation(async (args: { where?: { tool?: string } }) =>
+      args.where?.tool === "phase:gate-blocked"
+        ? [{ summary: "PLAN_REQUIRED", createdAt: recent }, { summary: "PLAN_REQUIRED", createdAt: new Date(recent.getTime() - 600_000) }]
+        : []);
+    backlogItemActivityFindFirstMock.mockResolvedValue({ recordedAt: new Date(Date.now() - 86_400_000) });
+    performPlanToBuildTransitionMock.mockReset();
+    const out = await resumePreBuildPhase({ buildId: "FB-HOLD", phase: "plan", userId: "u" });
+    expect(out, JSON.stringify(out)).toMatchObject({ kind: "skipped", quiet: true });
+    expect(performPlanToBuildTransitionMock).not.toHaveBeenCalled();
+  });
+
+  it("re-runs the transition once a readiness input lands after the last refusal", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { x: 1 }, buildPlan: { tasks: [{ title: "t" }] }, planReview: { decision: "pass" },
+      originatingBacklogItemId: "row-1",
+    });
+    const refusedAt = new Date();
+    buildActivityFindManyMock.mockImplementation(async (args: { where?: { tool?: string } }) =>
+      args.where?.tool === "phase:gate-blocked" ? [{ summary: "PLAN_REQUIRED", createdAt: refusedAt }] : []);
+    backlogItemActivityFindFirstMock.mockResolvedValue({ recordedAt: new Date(refusedAt.getTime() + 1) });
+    performPlanToBuildTransitionMock.mockReset().mockResolvedValue({ kind: "advanced" });
+    const out = await resumePreBuildPhase({ buildId: "FB-NEW", phase: "plan", userId: "u" });
+    expect(performPlanToBuildTransitionMock).toHaveBeenCalledOnce();
+    expect(out).toMatchObject({ kind: "resumed" });
   });
 });

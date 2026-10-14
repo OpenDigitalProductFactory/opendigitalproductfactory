@@ -88,6 +88,20 @@ const workroomDataAccessRequired = () => ({
   data: { recoveryUrl: "/platform/identity/agents" },
 });
 
+async function currentPlatformAdministrator(userId: string): Promise<boolean> {
+  const { currentUserContext } = await import("@/lib/govern/current-user-context");
+  const { can } = await import("@/lib/govern/permissions");
+  const human = userId ? await currentUserContext(userId) : null;
+  return Boolean(human && can(human, "manage_platform"));
+}
+
+// These handlers expose classification state only. Correction still enters the
+// authority gate and rechecks current permission, exact approval, digest and audit.
+const CLASSIFICATION_RECOVERY_TOOLS = new Set([
+  "review_workroom_sensitivity",
+  "correct_workroom_sensitivity",
+]);
+
 /**
  * Authorize the one tool that can repair a room whose current admission is
  * wrong. Normal admitted callers retain the ordinary exact-room rule. The
@@ -115,14 +129,18 @@ export async function coordinatorAppointmentAccessRefusal(input: {
     if (decision.reason === "insufficient-clearance") return workroomDataAccessRequired();
   }
 
-  const { currentUserContext } = await import("@/lib/govern/current-user-context");
-  const { can } = await import("@/lib/govern/permissions");
-  const human = input.userId ? await currentUserContext(input.userId) : null;
-  return human && can(human, "manage_platform") ? null : workroomAccessDenied();
+  return await currentPlatformAdministrator(input.userId) ? null : workroomAccessDenied();
 }
 
 export async function workroomTargetAccessRefusal(input: OAuthCapsuleTarget) {
   if (input.authSource !== "oauth" || typeof input.params.capsuleId !== "string") return null;
+  if (input.agentId && CLASSIFICATION_RECOVERY_TOOLS.has(input.toolName ?? "")) {
+    return await currentPlatformAdministrator(input.userId) ? null : {
+      success: false as const,
+      error: "not_authorized",
+      message: "Platform administration permission is required.",
+    };
+  }
   if (input.toolName === WORKROOM_COORDINATOR_APPOINTMENT_TOOL) {
     return coordinatorAppointmentAccessRefusal({
       capsuleId: input.params.capsuleId,

@@ -276,9 +276,9 @@ function rejectionResult(
   };
 }
 
-/** Also read by the approval-convergence probe (scripts/approval-convergence-probe.ts), on a read-only session. */
-export async function runPreToolHooks(event: ToolLifecycleEvent): Promise<GovernedExecuteResult | null> {
-  for (const hook of _lifecycleHooks) {
+/** Also run by the AC-PROBE runner, with the governance hooks bound to a read-only transaction. */
+export async function runPreToolHooks(event: ToolLifecycleEvent, hooks: readonly ToolLifecycleHook[] = _lifecycleHooks): Promise<GovernedExecuteResult | null> {
+  for (const hook of hooks) {
     const decision = await hook.onPreToolUse?.(event);
     if (decision?.decision === "deny") {
       return rejectionResult(event.toolName, "hook_denied", decision.reason);
@@ -661,10 +661,9 @@ async function governedExecuteToolRun(args: GovernedExecuteArgs, run: ApprovalRu
       routeContext: args.context?.routeContext,
       taskRunId: args.context?.taskRunId,
       featureBuildId: args.context?.featureBuildId,
-      // Caller attribution for the decision ledger (BI-0EEBA669). Without these
-      // three, every principle_decide consult recorded an all-null caller — the
-      // route builds them from the request UA + resolved token, but this
-      // forwarding dropped them on the floor, so the ledger never saw them.
+      coworkerMode: args.context?.coworkerMode,
+      // Caller attribution for the decision ledger (BI-0EEBA669): without these three,
+      // every principle_decide consult recorded an all-null caller.
       callerClient: args.context?.callerClient,
       apiTokenId: args.context?.apiTokenId,
       authSource: args.context?.authSource,

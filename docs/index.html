@@ -1951,17 +1951,22 @@
       <article class="install-card" data-install-target="macos">
         <span class="status-badge">Generally available</span>
         <h3>macOS Apple Silicon</h3>
-        <p>Native shell installer with one shared memory pool for the CPU and GPU.</p>
+        <p>A compact Mac mini can host your business operating system, with DPF and business records on your own machine.</p>
         <div class="install-profiles">
           <div class="install-profile">
-            <strong>Provider-assisted operations</strong>
-            <span>32 GB unified memory · 1 TB SSD · no separate GPU required</span>
+            <strong>Provider-assisted operations: Mac mini with M6</strong>
+            <span>32 GB unified memory · 1 TB SSD · everyday operations with approved external AI providers</span>
           </div>
           <div class="install-profile">
-            <strong>Local-first operations</strong>
-            <span>64 GB unified memory practical · 128 GB for larger models or combined operations and development · 2 TB SSD</span>
+            <strong>Local-first operations: Mac mini with M5 Pro</strong>
+            <span>64 GB unified memory · 2 TB SSD · size the local model and concurrent work before buying</span>
+          </div>
+          <div class="install-profile">
+            <strong>Larger local AI workloads: Mac Studio with M5 Max</strong>
+            <span>128 GB unified memory · 2–4 TB SSD · a candidate for document-heavy professional firms, including law firms</span>
           </div>
         </div>
+        <p>The M6 mini tops out at 32 GB. This is a suggested operations configuration, not a measured guarantee for every business. Consider 128 GB for larger models or combined operations and development.</p>
         <a href="/install/macos/">macOS hardware and install guide &rarr;</a>
       </article>
     </div>
@@ -1970,8 +1975,9 @@
       <article class="install-card compact">
         <span class="status-badge early">Early access</span>
         <h3>Native Linux</h3>
-        <p>Docker-based host path for contributors and pilot operators. Validate the exact GPU backend before buying hardware.</p>
-        <a href="/install/linux/">Linux install guide &rarr;</a>
+        <p>Assisted pilot: Ubuntu Server 24.04 LTS, x86-64, on a dedicated VM or server. Uses Docker Engine and Compose v2; Docker Desktop is not required.</p>
+        <p>Provider-assisted starting point: 8–12 CPU cores, 32 GB RAM and a 1 TB SSD. No GPU required. Bash installer available; customer validation pending.</p>
+        <a href="/install/linux/">Linux pilot guide and acceptance checklist &rarr;</a>
       </article>
       <article class="install-card compact">
         <span class="status-badge early">Early access</span>
@@ -1988,10 +1994,12 @@
     </div>
 
     <div class="note">
-      <strong>Operations and development are different workloads.</strong> Customer operations
-      do not need coding-workstation capacity or Build Studio. Choose customizable only when the
-      host will also do serious source work, builds, tests, or local coding-model evaluation.
-      Compare current Windows and Mac machines in the <a href="/install/hardware/">complete hardware guide</a>.
+      <strong>Size for your business workload.</strong> Day-to-day operations do not carry the same
+      memory demand as continuous platform development. On a customizable install, embedded Build
+      Studio can handle supported changes without separate Claude or Codex apps. Builds, tests,
+      previews, and local coding models still need capacity wherever they run; a 32 GB operations
+      recommendation does not include a full development workload.
+      Compare Windows, Mac and Linux sizing in the <a href="/install/hardware/">complete hardware guide</a>.
     </div>
   </section>
 
@@ -2018,7 +2026,7 @@
       <a class="doc-path" href="/install/hardware/">
         <span class="doc-kind">Install</span>
         <strong>Hardware and installation</strong>
-        <span>Compare the two AI deployment models, current Windows and Mac machines, and the guide for each tested host.</span>
+        <span>Compare AI deployment models, Windows and Mac machines, and the recommended Linux pilot target.</span>
       </a>
       <a class="doc-path" href="/architecture/platform-overview">
         <span class="doc-kind">Understand</span>

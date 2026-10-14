@@ -18,10 +18,11 @@
 //   pnpm ux:sweep-touched -- --run
 //
 // A layout change touches every route beneath it; the command says so and
-// still sweeps them, capped by --max-routes (default 40) so a shell layout
-// edit points you at CI rather than sweeping 600 routes locally.
+// provides a bounded feedback sweep by default. --exhaustive selects every
+// touched route, requires dynamic fixtures, and bypasses only the local cap.
 
 import { parseArgs as utilParseArgs } from "node:util";
+import { runGit } from "./lib/git.mjs";
 import { scriptArgv } from "./lib/script-argv.mjs";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -80,18 +81,25 @@ export function touchedRoutes(changed, manifestRoutes, { read, resolveImport = r
   return hits.sort((a, b) => a.routePath.localeCompare(b.routePath));
 }
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   // strict: false keeps the old tolerance: unknown flags are ignored.
   const { values } = utilParseArgs({
     args: scriptArgv(argv),
     strict: false,
     allowPositionals: true,
-    options: { run: { type: "boolean" }, "base-url": { type: "string" }, "max-routes": { type: "string" } },
+    options: { run: { type: "boolean" }, "base-url": { type: "string" }, "max-routes": { type: "string" }, exhaustive: { type: "boolean" }, "fixture-map": { type: "string" }, viewport: { type: "string" }, "nav-mode": { type: "string" }, "storage-state": { type: "string" }, "source-worktree": { type: "string" }, "color-scheme": { type: "string" } },
   });
   const baseUrl = typeof values["base-url"] === "string" ? values["base-url"] : undefined;
   const maxRoutes = typeof values["max-routes"] === "string" ? Number(values["max-routes"]) : NaN;
   return {
     run: values.run === true,
+    exhaustive: values.exhaustive === true,
+    sourceWorktree: values["source-worktree"],
+    colorScheme: values["color-scheme"],
+    fixtureMap: values["fixture-map"],
+    viewport: values.viewport,
+    navMode: values["nav-mode"],
+    storageState: values["storage-state"],
     baseUrl: baseUrl ?? process.env.UX_SWEEP_BASE_URL ?? "http://localhost:3000",
     maxRoutes: maxRoutes || 40,
   };
@@ -100,26 +108,29 @@ function parseArgs(argv) {
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const base = process.env.BASE_SHA || process.env.DPF_PREPUSH_BASE_REF || "origin/main";
-  const listed = listChangedFiles(base);
+  const sourceRoot = args.sourceWorktree ? resolve(args.sourceWorktree) : REPO_ROOT;
+  const git = gitArgs => runGit(gitArgs, { cwd: sourceRoot });
+  const listed = listChangedFiles(base, { git });
   if (listed.status === "unresolvable") exitUnresolvable("ux-sweep-touched", base, listed.detail);
   const changed = listed.files.filter((f) => f.startsWith("apps/web/") && /\.(ts|tsx|mts|cts|css)$/.test(f));
   if (changed.length === 0) {
     console.log("[ux-sweep-touched] no apps/web source changed; nothing to sweep.");
     return;
   }
-  const manifest = JSON.parse(readFileSync(join(REPO_ROOT, MANIFEST_REL), "utf8"));
+  const manifest = JSON.parse(readFileSync(join(sourceRoot, MANIFEST_REL), "utf8"));
   const sources = new Map();
   const read = (file) => {
     if (!sources.has(file)) {
       try {
-        sources.set(file, readFileSync(join(REPO_ROOT, file), "utf8"));
+        sources.set(file, readFileSync(join(sourceRoot, file), "utf8"));
       } catch {
         sources.set(file, null);
       }
     }
     return sources.get(file);
   };
-  const hits = touchedRoutes(changed, manifest.routes, { read });
+  const exists = file => existsSync(join(sourceRoot, file));
+  const hits = touchedRoutes(changed, manifest.routes, { read, exists, resolveImport: (file, specifier) => resolveLocalImport(file, specifier, { exists }) });
   if (hits.length === 0) {
     console.log(`[ux-sweep-touched] ${changed.length} changed file(s) are rendered by no page route in ${MANIFEST_REL}.`);
     return;
@@ -131,18 +142,30 @@ function main() {
     console.log(`\n[ux-sweep-touched] add --run to sweep them against ${args.baseUrl} (a served portal; the ratchet is CI's).`);
     return;
   }
-  if (staticHits.length === 0) {
+  if (!args.exhaustive && staticHits.length === 0) {
     console.log("[ux-sweep-touched] only dynamic routes are touched; the sweep needs fixture params, so CI owns these.");
     return;
   }
-  if (staticHits.length > args.maxRoutes) {
+  if (!args.exhaustive && staticHits.length > args.maxRoutes) {
     console.error(`[ux-sweep-touched] ${staticHits.length} static routes exceed --max-routes ${args.maxRoutes}; this looks like a shared layout change. Let CI's exhaustive sweep judge it, or raise --max-routes.`);
     process.exitCode = 7;
     return;
   }
-  const routes = staticHits.map((h) => h.routePath).join(",");
+  if (args.exhaustive && hits.some(hit => hit.dynamic) && !args.fixtureMap) {
+    throw new Error("Exhaustive coverage requires --fixture-map for every touched dynamic route; no route may be silently excluded.");
+  }
+  const routes = (args.exhaustive ? hits : staticHits).map((h) => h.routePath).join(",");
+  const extraArgs = [
+    ...(args.exhaustive ? ["--exhaustive"] : []),
+    ...(args.fixtureMap ? ["--fixture-map", args.fixtureMap] : []),
+    ...(args.viewport ? ["--viewport", args.viewport] : []),
+    ...(args.navMode ? ["--nav-mode", args.navMode] : []),
+    ...(args.sourceWorktree ? ["--source-root", sourceRoot] : []),
+    ...(args.colorScheme ? ["--color-scheme", args.colorScheme] : []),
+    ...(args.storageState ? ["--storage-state", args.storageState] : []),
+  ];
   console.log(`\n[ux-sweep-touched] pnpm --filter web ux:sweep -- --routes ${routes} --base-url ${args.baseUrl}`);
-  const result = spawnSync("pnpm", ["--filter", "web", "ux:sweep", "--", "--routes", routes, "--base-url", args.baseUrl], { cwd: REPO_ROOT, stdio: "inherit", shell: process.platform === "win32" });
+  const result = spawnSync("pnpm", ["--filter", "web", "ux:sweep", "--", "--routes", routes, "--base-url", args.baseUrl, ...extraArgs], { cwd: REPO_ROOT, stdio: "inherit", shell: process.platform === "win32" });
   process.exitCode = result.status ?? 7;
 }
 

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { durationMs, positiveIntFromEnv, retryBackoffMs } from "./durations";
 import { evaluateCondition, evaluateKey, UnsupportedExpressionError } from "./expressions";
 import { lanesFor } from "./lanes";
-import { isPostgresFunction, registeredFunction, resetPostgresRegistry } from "./registry";
+import { isPostgresFunction, recoveryFor, registeredFunction, resetPostgresRegistry, type RegisteredFunction } from "./registry";
 import { createRoutingJobsClient, inngestStillServes, readJobsEngineSelection, routesToPostgres } from "../routing";
 import type { JobsClient } from "../types";
 
@@ -141,5 +141,19 @@ describe("engine selection", () => {
       { id: "bad", triggers: [{ event: "x" }], concurrency: { limit: 1, key: "event.data.a + 1" } },
       async () => null,
     )).toThrow(UnsupportedExpressionError);
+  });
+});
+
+// BI-4FA0EFEB: the recovery class a run gets after its worker died.
+describe("recoveryFor", () => {
+  const fn = (options: object) => ({ options }) as unknown as RegisteredFunction;
+  it("takes the declaration over the retry count", () => {
+    expect(recoveryFor(fn({ recovery: "process-bound", retries: 3 }))).toBe("process-bound");
+    expect(recoveryFor(fn({ recovery: "replay-safe", retries: 0 }))).toBe("replay-safe");
+  });
+  it("treats retries >= 1 as replay-safe, and no retries or no declaration as process-bound", () => {
+    expect(recoveryFor(fn({ retries: 1 }))).toBe("replay-safe");
+    expect(recoveryFor(fn({ retries: 0 }))).toBe("process-bound");
+    expect(recoveryFor(fn({}))).toBe("process-bound");
   });
 });

@@ -250,3 +250,82 @@ describe("an operational close is gated as small work, not as an unshaped fix (B
     expect(unmetCodes(result.decision)).toEqual(expect.arrayContaining(["OBJECTIVE_BASELINE_REQUIRED"]));
   });
 });
+
+// BI-4A222439, reproducing BI-1B5BE5F4: a merged direct-merge platform bug
+// whose cloud UX passed and whose installed-portal UX check then FAILED. The
+// acceptance sweep closed it at 2026-10-13 05:00Z because the merge alone
+// passed delivery and acceptance. A failure that is still the newest word in
+// its dimension now blocks done on the read, on the sweep and on a person's close.
+describe("current failing evidence blocks done on every path (BI-4A222439)", () => {
+  const UX_PASS = { id: "ux-pass", kind: "evidence", recordedAt: new Date("2026-10-06T05:29:55.000Z"),
+    payload: { evidenceKind: "ux_verified", url: "https://github.com/acme/repo/actions/runs/1", body: "cloud fixture" } };
+  const UX_FAIL = { id: "ux-fail", kind: "evidence", recordedAt: new Date("2026-10-06T05:50:36.000Z"),
+    payload: { evidenceKind: "ux_fail", url: "http://127.0.0.1:3000/ops/workrooms", body: "Do not close acceptance yet." } };
+  const UX_PASS_LATER = { ...UX_PASS, id: "ux-pass-later", recordedAt: new Date("2026-10-06T07:00:00.000Z") };
+
+  function withEvidence(rows: Array<Record<string, unknown>>, itemOverrides: Record<string, unknown> = {}) {
+    const side = fixture(itemOverrides);
+    const stored = rows.map((row) => ({ backlogItemId: "row-1", gateKey: null, ...row }));
+    side.client.backlogItemActivity.findMany.mockImplementation((async (args: unknown) =>
+      JSON.stringify(args).includes("\"evidence\"") ? stored : []) as never);
+    return side;
+  }
+
+  async function evaluate(rows: Array<Record<string, unknown>>, signal: MergeDeliverySignal = "merged") {
+    const { client, item } = withEvidence(rows);
+    return evaluateBacklogItemCompletion({
+      db: client as never, item: item as never, rawManifest: undefined,
+      transitionObject: { kind: "backlog-item", id: item.itemId, expectedVersion: "read", targetState: "completion" },
+      evaluatedAt: NOW, dependencies: deps(signal),
+    });
+  }
+
+  it("a merged item whose newest ux evidence is ux_fail is denied, naming the failing row", async () => {
+    const result = await evaluate([UX_PASS, UX_FAIL]);
+    expect(result.decision.verdict).toBe("denied");
+    const delivery = result.decision.blockers.find((entry) => entry.code === "DELIVERY_EVIDENCE_REQUIRED");
+    const acceptance = result.decision.blockers.find((entry) => entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED");
+    expect(delivery?.state).toBe("fail");
+    expect(delivery?.evidenceRefs).toContain("ux-fail");
+    expect(acceptance?.state).toBe("fail");
+    expect(acceptance?.evidenceRefs).toContain("ux-fail");
+    expect(result.independentAcceptanceDecision.verdict).toBe("denied");
+  });
+
+  it("a later ux pass supersedes the failure and the merge closes it again", async () => {
+    const result = await evaluate([UX_PASS, UX_FAIL, UX_PASS_LATER]);
+    expect(result.decision.verdict).toBe("allowed");
+  });
+
+  it("a deployment closure does not wave the current failure through", async () => {
+    const { client, item } = withEvidence([UX_FAIL]);
+    const result = await evaluateBacklogItemCompletion({
+      db: client as never, item: item as never, rawManifest: undefined,
+      transitionObject: { kind: "backlog-item", id: item.itemId, expectedVersion: "read", targetState: "completion" },
+      evaluatedAt: NOW,
+      dependencies: {
+        resolveMergeDelivery: async () => "merged" as const,
+        resolveDeploymentClosure: async () => ({ kind: "deployed", runId: "SUR-1", deployedSha: "a".repeat(40) }) as never,
+      },
+    });
+    expect(result.decision.verdict).not.toBe("allowed");
+  });
+
+  it("the sweep's close is refused and the item stays awaiting acceptance", async () => {
+    const side = withEvidence([UX_PASS, UX_FAIL]);
+    const gate = await completeBacklogItemTransition({
+      db: side.db as never,
+      itemId: "BI-1",
+      expectedStatus: "awaiting-acceptance",
+      resolution: "Closed by the acceptance sweep.",
+      // The shape sweepCompletionEvidence() sends: a readiness citation, not a manifest.
+      completionEvidence: { source: "acceptance-sweep", readinessDecisionId: "IRD-1", verdict: "allowed", satisfied: [] },
+      actor,
+      authority,
+      evaluatedAt: NOW,
+      dependencies: deps("merged"),
+    });
+    expect(gate.ok).toBe(false);
+    expect(side.updateMany).not.toHaveBeenCalled();
+  });
+});

@@ -98,13 +98,14 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
     expect(db.backlogItemFindUnique).not.toHaveBeenCalled();
   });
 
-  it("record_execution_evidence validates a supplied ToolExecution reference", async () => {
+  it.each(["test_pass", "build_pass", "ux_verified", "migration_pass", "manual_check", "spec_review", "external_link", "source_verified"])("rejects failed ToolExecution linked as %s", async (kind) => {
     db.backlogItemFindUnique.mockResolvedValue({ id: "row-1" });
-    db.toolExecutionFindUnique.mockResolvedValue({ id: "te-1", success: false });
+    db.toolExecutionFindUnique.mockResolvedValue({ id: "te-1", success: false, userId: "u1" });
     const res = await buildEvidencePack.handlers.record_execution_evidence(
       {
         itemId: "BI-1",
-        kind: "test_pass",
+        kind,
+        url: "https://example.test/proof",
         summary: "green",
         toolExecutionId: "te-1",
       },
@@ -113,6 +114,35 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
     expect(res.success).toBe(false);
     expect(res.error).toBe("invalid_tool_execution");
     expect(db.activityCreate).not.toHaveBeenCalled();
+  });
+
+  describe.each(["test_fail", "build_fail", "ux_fail", "migration_fail"])("negative evidence %s", (kind) => {
+    it.each([false, true])("retains the owned source when execution success=%s", async (success) => {
+      db.backlogItemFindUnique.mockResolvedValue({ id: "row-1" });
+      db.toolExecutionFindUnique.mockResolvedValue({ id: "te-1", success, userId: "u1" });
+      db.activityCreate.mockResolvedValue({ id: "act-1", recordedAt: new Date("2026-10-12T12:00:00Z") });
+
+      const result = await buildEvidencePack.handlers.record_execution_evidence(
+        { itemId: "BI-1", kind, summary: "Observed failure", toolExecutionId: "te-1" }, "u1",
+      );
+
+      expect(result.success).toBe(true);
+      expect(db.activityCreate).toHaveBeenCalledWith({ data: expect.objectContaining({
+        toolExecutionId: "te-1",
+        recordedById: "u1",
+        payload: expect.objectContaining({ evidenceKind: kind, toolExecutionId: "te-1" }),
+      }) });
+    });
+
+    it.each([null, { id: "te-1", success: false, userId: "other" }, { id: "te-1", success: true, userId: "other" }])("refuses a missing or foreign source %j", async (execution) => {
+      db.backlogItemFindUnique.mockResolvedValue({ id: "row-1" });
+      db.toolExecutionFindUnique.mockResolvedValue(execution);
+      const result = await buildEvidencePack.handlers.record_execution_evidence(
+        { itemId: "BI-1", kind, summary: "Observed failure", toolExecutionId: "te-1" }, "u1",
+      );
+      expect(result).toMatchObject({ success: false, error: "invalid_tool_execution" });
+      expect(db.activityCreate).not.toHaveBeenCalled();
+    });
   });
 
   it("record_execution_evidence writes an evidence activity for a known item", async () => {

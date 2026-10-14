@@ -690,6 +690,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
       prNumber: prResult.prNumber,
       prUrl: prResult.prUrl,
       token,
+      publishedHeadSha: published.commitSha,
       eligible: true,
     });
     deliveryState = outcome.state.status;

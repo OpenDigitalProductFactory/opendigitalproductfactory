@@ -111,6 +111,11 @@ describe("canTransitionPhase", () => {
     expect(canTransitionPhase("ship", "complete")).toBe(true);
   });
 
+  it("allows ship → review, so a build rebased at ship re-earns review (BI-76BD65E6)", () => {
+    expect(canTransitionPhase("ship", "review")).toBe(true);
+    expect(canTransitionPhase("ship", "build")).toBe(false);
+  });
+
   it("allows any phase → failed", () => {
     expect(canTransitionPhase("ideate", "failed")).toBe(true);
     expect(canTransitionPhase("build", "failed")).toBe(true);

@@ -39,6 +39,21 @@ Model discovery authenticates with the selected credential and records
 models to the shared catalog, but absence from one account never retires models
 used by another account. A failed discovery preserves the last successful result.
 
+ModelCard output capacity is projected into the existing model profile by one
+shared writer policy used by normal profiling, credential-restricted profiling,
+and metadata backfill. A provider-reported positive integer that fits the
+existing storage type can update `maxOutputTokens`. Missing or invalid evidence
+omits the field, preserving a previously known limit. The existing full-admin
+fallback and explicit `maxOutputTokens` field locks retain ownership. Existing-row
+capacity writes compare the observed source and overrides in the database UPDATE;
+an intervening ownership change skips that capacity write. Upsert UPDATE branches
+never carry output capacity, protecting rows inserted after the initial read. Normal
+profiling also keeps the source marker creation-only so an intervening administrator
+insert remains protected on later refreshes. Input and
+context capacity policies remain unchanged. Catalog access evidence does not
+establish capacity: a model list without numeric bounds leaves those limits
+unknown, and limits from another model or execution channel are not substituted.
+
 ## Governed controls
 
 The portal server actions and MCP handlers delegate to the same account services.

@@ -17,6 +17,7 @@ const modelProfileMock = vi.hoisted(() => ({
   findMany: vi.fn(),
   findUnique: vi.fn(),
   upsert: vi.fn(),
+  update: vi.fn().mockResolvedValue({}),
   updateMany: vi.fn<(args: Record<string, any>) => Promise<{ count: number }>>(async () => ({ count: 0 })),
 }));
 const modelProviderMock = vi.hoisted(() => ({ findUnique: vi.fn() }));
@@ -26,6 +27,7 @@ const discoverCodexCliModelsMock = vi.hoisted(() => vi.fn());
 const authEligibilityMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 vi.mock("@/lib/routing/model-auth-eligibility", () => ({ recordDiscoveredAuthEligibility: authEligibilityMock }));
 vi.mock("@dpf/db", () => ({
+  Prisma: { AnyNull: "any-null" },
   prisma: {
     credentialEntry: {
       findUnique: vi.fn(async (args: { where?: { providerId?: string } } | undefined) => {
@@ -615,5 +617,118 @@ describe("reconcileDiscoveredModelPresence (retire-forever trap — BI-B6B8C1F9)
 
     expect(discoveredModelMock.update).not.toHaveBeenCalled();
     expect(modelProfileMock.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("provider-reported output capacity", () => {
+  beforeEach(() => {
+    modelProviderMock.findUnique.mockReset();
+    modelProviderMock.findUnique.mockResolvedValue({ providerId: "anthropic", name: "Anthropic", modelRestrictions: [], supportsToolUse: true });
+    discoveredModelMock.findMany.mockReset();
+    discoveredModelMock.findMany.mockResolvedValue([{ modelId: "claude-future", rawMetadata: { max_input_tokens: 48_000, max_tokens: 64_000 } }]);
+    modelProfileMock.findUnique.mockReset();
+    modelProfileMock.findUnique.mockResolvedValue(null);
+    modelProfileMock.upsert.mockReset();
+    modelProfileMock.upsert.mockResolvedValue({});
+    modelProfileMock.update.mockClear();
+    modelProfileMock.updateMany.mockReset();
+    modelProfileMock.updateMany.mockResolvedValue({ count: 1 });
+  });
+
+  it.each([
+    { name: "eligible", restrictions: [] },
+    { name: "credential-restricted", restrictions: ["permitted-*"] },
+  ])("persists the real adapter output limit on $name create and update", async ({ restrictions }) => {
+    modelProviderMock.findUnique.mockResolvedValue({ providerId: "anthropic", name: "Anthropic", modelRestrictions: restrictions, supportsToolUse: true });
+
+    await profileModelsInternal("anthropic", ["claude-future"]);
+
+    const write = modelProfileMock.upsert.mock.calls[0][0];
+    expect(write.create.maxOutputTokens).toBe(64_000);
+    expect(write.update).not.toHaveProperty("maxOutputTokens");
+    expect(write.create.maxInputTokens).toBe(48_000);
+    expect(write.update.maxInputTokens).toBe(restrictions.length ? undefined : 48_000);
+  });
+
+  it.each([null, 0, -1, 1.5, NaN, Infinity, 2_147_483_648])("does not erase previous capacity for invalid or unknown output %s", async (maxTokens) => {
+    discoveredModelMock.findMany.mockResolvedValue([{ modelId: "claude-future", rawMetadata: { max_tokens: maxTokens } }]);
+    modelProfileMock.findUnique.mockResolvedValue({ rawMetadataHash: null, profileSource: "evaluated", capabilityOverrides: {}, maxOutputTokens: 32_768 });
+
+    await profileModelsInternal("anthropic", ["claude-future"]);
+
+    expect(modelProfileMock.upsert.mock.calls[0][0].update).not.toHaveProperty("maxOutputTokens");
+  });
+
+  it.each([
+    { profileSource: "seed", capabilityOverrides: null, equals: "any-null" },
+    { profileSource: "evaluated", capabilityOverrides: {}, equals: {} },
+    { profileSource: "admin", capabilityOverrides: { supportsToolUse: false }, equals: { supportsToolUse: false } },
+  ])("refreshes an existing unlocked output limit using atomic $profileSource ownership", async (owner) => {
+    modelProfileMock.findUnique.mockResolvedValue({ rawMetadataHash: null, ...owner });
+    await profileModelsInternal("anthropic", ["claude-future"]);
+    expect(modelProfileMock.updateMany).toHaveBeenCalledWith({
+      where: { providerId: "anthropic", modelId: "claude-future", profileSource: owner.profileSource, capabilityOverrides: { equals: owner.equals } },
+      data: { maxOutputTokens: 64_000 },
+    });
+    expect(modelProfileMock.upsert.mock.calls[0][0].update).not.toHaveProperty("maxOutputTokens");
+  });
+
+  it.each([
+    { profileSource: "admin", capabilityOverrides: null },
+    { profileSource: "seed", capabilityOverrides: { maxOutputTokens: true } },
+  ])("preserves an admin output lock %j", async (owner) => {
+    modelProfileMock.findUnique.mockResolvedValue({ rawMetadataHash: null, maxOutputTokens: 32_768, ...owner });
+
+    await profileModelsInternal("anthropic", ["claude-future"]);
+
+    expect(modelProfileMock.upsert.mock.calls[0][0].update).not.toHaveProperty("maxOutputTokens");
+  });
+
+  it.each(["seed", "evaluated"])("retains one drift marker while refreshing %s metadata", async (profileSource) => {
+    modelProfileMock.findUnique.mockResolvedValue({ rawMetadataHash: "old-card-metadata", profileSource, capabilityOverrides: {} });
+
+    await profileModelsInternal("anthropic", ["claude-future"]);
+
+    expect(modelProfileMock.update).toHaveBeenCalledExactlyOnceWith({
+      where: { providerId_modelId: { providerId: "anthropic", modelId: "claude-future" } },
+      data: { driftDetectedAt: expect.any(Date) },
+    });
+    expect(modelProfileMock.updateMany).toHaveBeenCalledWith({
+      where: { providerId: "anthropic", modelId: "claude-future", profileSource, capabilityOverrides: { equals: {} } },
+      data: { maxOutputTokens: 64_000 },
+    });
+  });
+
+  it.each([
+    { name: "eligible", restrictions: [] },
+    { name: "credential-restricted", restrictions: ["permitted-*"] },
+  ])("preserves a concurrent admin edit during $name refresh", async ({ restrictions }) => {
+    modelProviderMock.findUnique.mockResolvedValue({ name: "Anthropic", modelRestrictions: restrictions, supportsToolUse: true });
+    const previous = { rawMetadataHash: null, profileSource: "seed", capabilityOverrides: {} };
+    const row = { profileSource: "admin", capabilityOverrides: { maxOutputTokens: true }, maxOutputTokens: 32_768 };
+    modelProfileMock.findUnique.mockResolvedValueOnce(previous).mockResolvedValue(row);
+    modelProfileMock.updateMany.mockImplementation(async ({ where, data }) => {
+      if (where.profileSource === row.profileSource && JSON.stringify(where.capabilityOverrides?.equals) === JSON.stringify(row.capabilityOverrides)) Object.assign(row, data);
+      return { count: 0 };
+    });
+    modelProfileMock.upsert.mockImplementation(async ({ update }) => { Object.assign(row, update); return row; });
+
+    await profileModelsInternal("anthropic", ["claude-future"]);
+
+    expect(row.maxOutputTokens).toBe(32_768);
+    expect(row.capabilityOverrides).toEqual({ maxOutputTokens: true });
+  });
+
+  it("preserves a locked row inserted after discovery saw no profile", async () => {
+    const row = { profileSource: "admin", capabilityOverrides: null, maxOutputTokens: 32_768 };
+    modelProfileMock.findUnique.mockResolvedValue(null);
+    modelProfileMock.upsert.mockImplementation(async ({ update }) => { Object.assign(row, update); return row; });
+    await profileModelsInternal("anthropic", ["claude-future"]);
+    expect(row.maxOutputTokens).toBe(32_768);
+    expect(row.profileSource).toBe("admin");
+    modelProfileMock.findUnique.mockResolvedValue(row);
+    await profileModelsInternal("anthropic", ["claude-future"]);
+    expect(row.maxOutputTokens).toBe(32_768);
+    expect(row.profileSource).toBe("admin");
   });
 });
