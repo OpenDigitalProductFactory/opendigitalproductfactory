@@ -56,6 +56,7 @@ type RepairDb = RoomOwnershipDb & {
   workroom: { findMany(args: unknown): Promise<Array<Record<string, any>>> };
   workroomActivity: { create(args: unknown): Promise<unknown> };
   principal: { findFirst(args: unknown): Promise<{ id: string } | null> };
+  $queryRaw<T = unknown>(query: TemplateStringsArray, ...values: unknown[]): Promise<T>;
   $transaction<T>(fn: (tx: RepairDb) => Promise<T>): Promise<T>;
 };
 
@@ -96,6 +97,10 @@ export async function repairUnownedDeliveryRooms(db: RepairDb, roomIds: readonly
     const principals = resolveExistingRoomOwnership(room, userPrincipalId);
     if (!principals.ownerPrincipalId) continue;
     const appointed = await db.$transaction(async (tx) => {
+      // Match executor reassignment's room-before-participant order. Activity
+      // ingestion also locks this parent; taking it after a roster write would
+      // invert the order and allow concurrent repair/reassignment to deadlock.
+      await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "id" = ${room.id} FOR UPDATE`;
       const outcome = await establishRoomOwnership(tx, { workroomId: room.id, ...principals });
       const summary = describeRoomOwnership(outcome);
       if (summary && (outcome.ownerAppointed || outcome.assistantAdmitted)) {
