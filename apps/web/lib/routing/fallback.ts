@@ -216,7 +216,9 @@ export async function callWithFallbackChain(
   mcpSession?: import("./adapter-types").AdapterMcpSession,
   outcomeAttribution?: RouteOutcomeAttribution,
   screeningInput?: ScreenInferencePayloadInput,
+  cancellation?: AbortSignal,
 ): Promise<FallbackResult> {
+  cancellation?.throwIfAborted();
   if (!decision.selectedEndpoint) {
     throw new Error(
       `No endpoint available for ${decision.taskType}: ${decision.reason}`,
@@ -310,6 +312,7 @@ export async function callWithFallbackChain(
   };
 
   for (let i = 0; i < chain.length; i++) {
+    cancellation?.throwIfAborted();
     const entry = chain[i]!;
 
     if (i > 0 && entry.providerId === "local" && attachedToolCount > 0) {
@@ -445,6 +448,8 @@ export async function callWithFallbackChain(
           : {}),
       };
     } catch (e) {
+      // A caller deadline is not provider failure and cannot authorize a retry.
+      cancellation?.throwIfAborted();
       if (e instanceof LocalProviderCapacityDeferredError) {
         capacityDeferrals.push(e);
         attempts.push({ endpointId: entry.providerId, error: e.reason, code: "capacity" });
