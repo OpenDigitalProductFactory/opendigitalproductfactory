@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { lstat, open, realpath } from "node:fs/promises";
+import { lstat, open, readlink, realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { canonicalJson } from "../lib/canonical-json.mjs";
 import { verifyOfflineRecoveryAuthority } from "./offline-recovery-authority.mjs";
@@ -13,16 +13,32 @@ async function protectedDirectory(path) {
   const original = await lstat(path).catch(() => null);
   if (!original?.isDirectory() || original.isSymbolicLink()) fail("directory");
   if (!trustedOwner(original) || (original.mode & 0o077) !== 0) fail("permissions");
-  const canonical = await realpath(path);
-  // A private leaf beneath a foreign-owned or replaceable ancestor is not a
-  // protected store. Root-owned sticky temporary directories are allowed for
-  // tests and operator-managed private subdirectories, never as the leaf.
-  for (let at = dirname(canonical); ; at = dirname(at)) {
-    const stat = await lstat(at);
-    if (!stat.isDirectory() || !trustedOwner(stat)
+  // Inspect the original traversal as well as its resolved destination. A
+  // symlink must not erase an unsafe ancestor from the trust decision.
+  const pending = path.split(sep).filter(Boolean);
+  let at = sep; let hops = 0;
+  while (pending.length) {
+    const part = pending.shift();
+    if (part === "..") fail("directory");
+    if (part === ".") continue;
+    const next = join(at, part);
+    const stat = await lstat(next);
+    if (!trustedOwner(stat)) fail("permissions");
+    if (stat.isSymbolicLink()) {
+      if (++hops > 40) fail("directory");
+      const target = await readlink(next);
+      pending.unshift(...target.split(sep).filter(Boolean));
+      if (isAbsolute(target)) at = sep;
+      continue;
+    }
+    if (!stat.isDirectory()
       || ((stat.mode & 0o022) !== 0 && !(stat.uid === 0 && (stat.mode & 0o1000)))) fail("permissions");
-    if (dirname(at) === at) break;
+    at = next;
   }
+  const canonical = await realpath(path);
+  const current = await lstat(canonical);
+  if (canonical !== at || current.dev !== original.dev || current.ino !== original.ino
+    || !current.isDirectory() || !trustedOwner(current) || (current.mode & 0o077) !== 0) fail("changed");
   return canonical;
 }
 
@@ -76,6 +92,8 @@ export async function loadOfflineRecoveryKit({ kitDirectory, trustFile, observed
   const kit = await protectedDirectory(kitDirectory);
   const trustParent = await protectedDirectory(dirname(trustFile));
   const trustPath = join(trustParent, basename(trustFile));
+  const kitIdentity = await lstat(kit);
+  const trustIdentity = await lstat(trustParent);
   const fromKit = relative(kit, trustPath);
   if (fromKit === "" || (!fromKit.startsWith(`..${sep}`) && fromKit !== ".." && !isAbsolute(fromKit))) fail("trust_location");
   const enrollment = parse(await protectedRead(trustPath), "enrollment");
@@ -88,10 +106,18 @@ export async function loadOfflineRecoveryKit({ kitDirectory, trustFile, observed
   for (const name of ["manifest.json", "manifest-signatures.json", "envelope.json", "envelope-signatures.json"]) {
     inputs[name] = await protectedRead(join(kit, name));
   }
-  return verifyOfflineRecoveryAuthority({
+  const result = verifyOfflineRecoveryAuthority({
     manifestBytes: inputs["manifest.json"], manifestSignatures: parse(inputs["manifest-signatures.json"], "signatures"),
     envelopeBytes: inputs["envelope.json"], envelopeSignatures: parse(inputs["envelope-signatures.json"], "signatures"),
     trustedKeyFingerprints: enrollment.trustedKeyFingerprints,
     minimumTrustEpoch: enrollment.minimumTrustEpoch, observed, nowMs,
   });
+  // Refuse path replacement during the multi-file read. Runtime execution
+  // separately revalidates all observations under exclusive ownership.
+  for (const [originalPath, canonical, identity] of [[kitDirectory, kit, kitIdentity], [dirname(trustFile), trustParent, trustIdentity]]) {
+    if (await protectedDirectory(originalPath) !== canonical) fail("changed");
+    const current = await lstat(canonical);
+    if (current.dev !== identity.dev || current.ino !== identity.ino) fail("changed");
+  }
+  return result;
 }

@@ -89,10 +89,12 @@ export function verifyOfflineRecoveryAuthority({
     const entry = matches[0];
     fields(entry, ["role", "fingerprint", "publicKey", "revoked"]);
     if (entry.revoked !== false || entry.fingerprint !== trustedKeyFingerprints[role]
-      || typeof entry.publicKey !== "string") fail("trust_key");
+      || typeof entry.publicKey !== "string"
+      || !entry.publicKey.startsWith("-----BEGIN PUBLIC KEY-----\n")) fail("trust_key");
     let key;
     try { key = createPublicKey(entry.publicKey); } catch { fail("trust_key"); }
-    if (key.asymmetricKeyType !== "ed25519"
+    if (key.export({ type: "spki", format: "pem" }) !== entry.publicKey
+      || key.asymmetricKeyType !== "ed25519"
       || sha256(key.export({ type: "spki", format: "der" })) !== entry.fingerprint) fail("trust_key");
     publicKeys[role] = { key, fingerprint: entry.fingerprint };
   }

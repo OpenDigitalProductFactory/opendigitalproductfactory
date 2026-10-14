@@ -85,3 +85,22 @@ test("rejects duplicate keys in the protected enrollment", posix, async t => {
 test("Windows refuses before trusting permission bits", { skip: process.platform !== "win32" }, async () => {
   await assert.rejects(loadOfflineRecoveryKit({}), /offline_recovery_kit_permissions_unavailable/);
 });
+
+test("refuses an intermediate alias beneath an unsafe original ancestor", posix, async t => {
+  const f = await fixture(t);
+  const unsafe = join(f.dir, "unsafe");
+  await mkdir(unsafe); await chmod(unsafe, 0o777);
+  const alias = join(unsafe, "alias"); await symlink(f.dir, alias);
+  const store = join(f.dir, "store"); await mkdir(store, { mode: 0o700 });
+  await writeFile(join(store, "enrollment.json"), await readFile(f.trustFile), { mode: 0o600 });
+  await assert.rejects(loadOfflineRecoveryKit({ ...f.args, trustFile: join(alias, "store", "enrollment.json") }), /offline_recovery_kit_permissions/);
+});
+
+test("accepts an owned intermediate alias beneath protected ancestors", posix, async t => {
+  const f = await fixture(t);
+  const alias = join(f.dir, "alias"); await symlink(f.dir, alias);
+  const store = join(f.dir, "store"); await mkdir(store, { mode: 0o700 });
+  await writeFile(join(store, "enrollment.json"), await readFile(f.trustFile), { mode: 0o600 });
+  const result = await loadOfflineRecoveryKit({ ...f.args, trustFile: join(alias, "store", "enrollment.json") });
+  assert.equal(result.envelopeDigest, hash(f.envelopeBytes));
+});

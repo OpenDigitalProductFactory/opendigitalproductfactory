@@ -150,3 +150,13 @@ test("rejects traversal even when observed input echoes it", () => {
   f.args.observed.statePath = f.envelope.statePath;
   assert.throws(() => verifyOfflineRecoveryAuthority(f.args), /offline_recovery_binding/);
 });
+
+for (const representation of ["private", "public-and-private"]) test(`rejects signed ${representation} PEM in public trust material`, () => {
+  const f = fixture();
+  changeManifest(f, m => {
+    const key = m.keys.find(k => k.role === "operator");
+    const privatePem = keys.operator.privateKey.export({ type: "pkcs8", format: "pem" });
+    key.publicKey = representation === "private" ? privatePem : key.publicKey + privatePem;
+  });
+  assert.throws(() => verifyOfflineRecoveryAuthority(f.args), /offline_recovery_trust_key/);
+});
