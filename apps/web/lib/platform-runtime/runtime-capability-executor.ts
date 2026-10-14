@@ -1,7 +1,9 @@
 import { readFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
 import { prisma } from "@dpf/db";
+import { readImageVersion } from "@/lib/platform/image-version";
 import catalogSeed from "../../../../scripts/capability-service-catalog.generated.json";
-import { isPromoterAvailable, runPromoter } from "@/lib/self-upgrade/promoter";
+import { isPromoterAvailable, resolvePromoterArtifact, runPromoter, runRuntimeCapabilityProtocolProbe } from "@/lib/self-upgrade/promoter";
 import { countAttributedWork, createPrismaWorkAttributionStore } from "./work-attribution";
 import { computeCapabilityStateVersion, coordinateRuntimeCapabilityTransition, createPrismaRuntimeTransitionReceipts } from "./transition-coordinator";
 import type { RuntimeTransitionReceipt } from "./transition-protocol";
@@ -57,7 +59,33 @@ export async function rotateProductionRuntimeTransitionSecret() {
   return { status: "rotated" as const };
 }
 
-export async function executeProductionRuntimeCapabilityTransition(input: { transitionId: string; desiredKeys: string[]; requestedById: string }) {
+/** The portal image carries the same source closure used to build its promoter.
+ * Expected bytes come from that packaged closure, never the host install or a
+ * caller-supplied digest. This probe has no host mounts or launch authority. */
+async function inspectPackagedReconciliationProtocol() {
+  const image = await readImageVersion();
+  if (!image || image.source !== "git-sha" || !/^[a-f0-9]{40}$/.test(image.raw)) throw new Error("runtime_protocol_server_identity_missing");
+  const sourceSha = image.raw;
+  if (process.env.DEPLOYED_SHA && process.env.DEPLOYED_SHA !== sourceSha) throw new Error("runtime_protocol_server_identity_mismatch");
+  const [actuator, signer] = await Promise.all([
+    readFile("/promoter/scripts/apply-runtime-capability-transition.mjs"),
+    readFile("/promoter/scripts/lib/transition-signing.mjs"),
+  ]);
+  const expected = { sourceSha, actuatorSha256: createHash("sha256").update(actuator).digest("hex"), signerSha256: createHash("sha256").update(signer).digest("hex") };
+  const artifact = await resolvePromoterArtifact({ targetSha: sourceSha });
+  const info = await runRuntimeCapabilityProtocolProbe({ artifact, expected, containerName: `dpf-runtime-protocol-${randomUUID()}` });
+  if (!info.signingVersions.includes(2) || !info.applyVersions.includes(2) || !info.reconciliationVersions.includes(2)) throw new Error("runtime_reconciliation_protocol_unsupported");
+  return info;
+}
+
+export async function executeProductionRuntimeCapabilityTransition(input: { transitionId: string; desiredKeys: string[]; requestedById: string; mode?: "transition" | "reconciliation" }) {
+  input = { ...input, desiredKeys: [...input.desiredKeys] };
+  if (input.mode === "reconciliation") {
+    try { await inspectPackagedReconciliationProtocol(); } catch { /* Missing or incompatible packaged evidence cannot authorize an apply. */ }
+    // Server reconciliation is not implemented yet. In particular, host support
+    // cannot authorize falling back to the ordinary consistent-baseline saga.
+    return { status: "failed" as const, failure: "runtime_reconciliation_protocol_unavailable" as const };
+  }
   const rows = await prisma.platformCapability.findMany({ where: { capabilityId: { startsWith: "runtime:" } }, select: { capabilityId: true, state: true, manifest: true } });
   const previousStates = Object.fromEntries(rows.map((row) => [row.capabilityId, row.state]));
   const previousKeys = rows.filter((row) => row.state === "active").map((row) => row.capabilityId).sort();

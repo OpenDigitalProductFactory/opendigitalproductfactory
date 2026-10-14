@@ -54,6 +54,16 @@ Declare delivery-medium@1.0.0. Existing native research receipt `initiative-25c7
 
 The first continued coordinator prerequisite reproduced seven failing identity,
 baseline and replay tests, then passed 114 affected tests across three executed
-files and both official web TypeScript programs. Independent assessment is
-pending. Dual-baseline reconciliation, owned compensation, bootstrap sync,
-real PostgreSQL, the full governed gate and live acceptance remain unrun.
+files and both official web TypeScript programs. Its narrow independent source
+assessment found no blocking issues.
+
+The production executor now captures caller identity before observation and
+checks the immutable packaged protocol against the portal's baked Git identity
+and packaged actuator/signer hashes. Missing or conflicting identity refuses
+before host authority. Reconciliation remains unavailable even when the host
+advertises support; it never falls back to the ordinary transition. This
+prerequisite passed 121 affected tests across four files and both official web
+TypeScript programs after the identity regression failed on the earlier source.
+Independent assessment of this executor correction is pending. Dual-baseline
+reconciliation, owned compensation, bootstrap sync, real PostgreSQL, the full
+governed gate and live acceptance remain incomplete.
