@@ -224,7 +224,8 @@ function eventsCell(host) {
   return parts.join("; ");
 }
 
-const escapeCell = (text) => String(text ?? "").replace(/\|/g, "\\|").replace(/\n/g, " ");
+// Backslashes first, so an escaped pipe in the input cannot end the cell.
+const escapeCell = (text) => String(text ?? "").replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\n/g, " ");
 
 /** The rendered matrix block, auth gaps and hook gaps side by side. */
 export function renderMatrix(profile) {
