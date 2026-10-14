@@ -15,6 +15,7 @@ import {
   SELF_OPTIMIZATION_SWEEP_TASK_ID,
   SELF_OPTIMIZATION_SWEEP_TASK_TITLE,
 } from "./self-optimization-sweep-config";
+import { findInstallWorkOwnerUserId } from "./install-work-owner";
 
 type ScheduledTaskSeedClient = Pick<PrismaClient, "user" | "scheduledAgentTask" | "scheduledJob">;
 
@@ -45,12 +46,8 @@ export async function ensureSelfOptimizationSweepScheduledTask(
   prisma: ScheduledTaskSeedClient,
   now: Date = new Date(),
 ): Promise<{ created: boolean }> {
-  const owner = await prisma.user.findFirst({
-    where: { isSuperuser: true },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
-  if (!owner) {
+  const ownerId = await findInstallWorkOwnerUserId(prisma);
+  if (!ownerId) {
     throw new Error("seed: no superuser found - cannot seed self-optimization sweep scheduled task");
   }
 
@@ -87,7 +84,7 @@ export async function ensureSelfOptimizationSweepScheduledTask(
         routeContext: SELF_OPTIMIZATION_SWEEP_ROUTE_CONTEXT,
         schedule: SELF_OPTIMIZATION_SWEEP_SCHEDULE,
         timezone,
-        ownerUserId: owner.id,
+        ownerUserId: ownerId,
         nextRunAt,
       },
     });
