@@ -169,7 +169,7 @@ describe("expired OAuth verification recovery", () => {
     restoredDefaultAccount();
     mockPrisma.providerCapacityStatus.updateMany.mockResolvedValue({ count: 0 });
     expect(await testProviderAuth("chatgpt", false, "provider-default-chatgpt")).toMatchObject({
-      ok: true, message: expect.stringContaining("routing restriction changed during verification and was preserved"),
+      ok: true, message: expect.stringContaining("Routing status changed during verification"),
     });
     expect(fetch).toHaveBeenCalledTimes(1);
   });

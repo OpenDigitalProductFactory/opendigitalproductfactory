@@ -185,11 +185,12 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
         assertResponsesCompleted(body, streaming);
         const quotaReconciled = await markAuthenticated(quotaObservation);
         if (connectionId === undefined) await clearProviderCapacityStatus({ providerId, source: "oauth" });
-        if (quotaReconciled === false) return {
+        return {
           ok: true,
-          message: "Connected via OAuth — Responses API verified. The routing restriction changed during verification and was preserved; check its current status.",
+          message: quotaReconciled === false
+            ? "Connected via OAuth — Responses API verified. Routing status changed during verification; check its current status."
+            : "Connected via OAuth — Responses API verified",
         };
-        return { ok: true, message: "Connected via OAuth — Responses API verified" };
       }
 
       const scopeError = formatResponsesScopeError(body);
