@@ -30,6 +30,15 @@ model User {
   /// Tells an operator that approvals routed to this account have no reader
   /// (BI-61DE8177). Not a security signal; sessions outlive it.
   lastSeenAt                       DateTime?
+  /// When this account's live work was handed over (BI-F25A5FC7) and who
+  /// approved it. Null = never. Rules that name an owner for NEW work (the
+  /// workroom drive's task owner, the scheduled-task seeds, the install-owner
+  /// fallback) skip a handed-over account; historical requester/creator fields
+  /// keep naming it (BI-858FDE5A).
+  workHandedOverAt                 DateTime?
+  workHandedOverById               String?
+  workHandedOverBy                 User?                               @relation("UserWorkHandedOverBy", fields: [workHandedOverById], references: [id], onDelete: SetNull)
+  workHandoversApproved            User[]                              @relation("UserWorkHandedOverBy")
   approvedProposals                AgentActionProposal[]               @relation("ProposalDecisions")
   agentThreads                     AgentThread[]
   apiTokens                        ApiToken[]
@@ -112,6 +121,7 @@ model User {
 
   @@unique([automationVerificationId, automationProfile, automationSlot], map: "User_automation_fixture_key")
   @@index([automationExpiresAt, id])
+  @@index([workHandedOverById])
 }
 
 model UserGroup {
