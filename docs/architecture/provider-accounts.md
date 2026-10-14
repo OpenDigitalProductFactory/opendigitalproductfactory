@@ -153,7 +153,7 @@ disconnection, trust reset, account discovery, masked reads, tool pagination and
 authorization. The database migration fixtures run only in CI or a leased
 nonproduction database and use a transaction with rollback. A skipped fixture is
 not migration-apply evidence.
-# Measured route integration
+## Measured route integration
 
 PR 6364's exact 91b4 source was exercised by CI run 38531673277. The compact
 overview measured 294 visible words against the previous 345-word limit, with
@@ -162,5 +162,9 @@ Its changed accessibility structure needs a provider-route baseline update.
 The buried-next-action regression is corrected in source: writable users start
 with Add provider, and read-only users start with the first account's management
 link. Both remain visible while advice is disclosed. The existing zero buried
-action limit remains in force; a fresh served sweep must verify the correction.
+action limit remains in force. Optional COO advice retains its confirmation but
+is secondary to account management. Measurement run 38533367131 captures the
+intentional provider-route structure and three visible fields; only that route's
+fields, accessibility snapshot and 294-word tightening are adopted. A fresh
+served sweep must verify the action correction.
 

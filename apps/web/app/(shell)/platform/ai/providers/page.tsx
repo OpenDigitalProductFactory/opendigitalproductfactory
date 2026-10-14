@@ -155,7 +155,7 @@ export default async function ProvidersPage() {
 
       <Surface className="mb-3" padding="sm"><details>
         <summary className="cursor-pointer py-2 text-sm font-semibold">{copy.allowedWork}</summary>
-        <ProviderSuitabilityGuide recommendation={onboardingRecommendation} telemetry={suitabilityTelemetry} />
+        <ProviderSuitabilityGuide recommendation={onboardingRecommendation} telemetry={suitabilityTelemetry} primaryAction={false} />
       </details></Surface>
 
       <details
