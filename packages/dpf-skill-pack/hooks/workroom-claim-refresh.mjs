@@ -34,7 +34,9 @@ const GIT_TIMEOUT_MS = 3_000;
 
 /** dpf MCP tools whose successful answer names the caller's live capsule. */
 const CLAIM_TOOLS = ["adopt_worktree", "heartbeat_workroom", "claim_workroom_scope", "claim_backlog_item_for_work", "create_workroom"];
-const CLAIM_TOOL_RE = new RegExp(`^mcp__.+__(${CLAIM_TOOLS.join("|")})$`);
+// Claude/Codex name an MCP tool mcp__<server>__<tool>; Grok's payload says
+// <server>__<tool> (live-probed 2026-10-14, Grok 1.0.52: "dpf__get_backlog_item").
+const CLAIM_TOOL_RE = new RegExp(`^(?:mcp__)?.+__(${CLAIM_TOOLS.join("|")})$`);
 
 const TERMINAL_STATUSES = new Set(["complete", "abandoned", "archived"]);
 
@@ -73,6 +75,10 @@ export function parseToolResponse(response) {
   if (!response || typeof response !== "object") return null;
   // Codex passes the raw MCP call result (BI-C3D3762B); a failed call says so here.
   if (response.isError === true) return null;
+  // Grok wraps it: {type:"MCP", output:{OkayOutput:"<JSON text>"}}; a failure is any other key.
+  if (response.type === "MCP" && response.output && typeof response.output === "object") {
+    return parseJsonObject(response.output.OkayOutput);
+  }
   if (response.structuredContent && typeof response.structuredContent === "object") return response.structuredContent;
   if (Array.isArray(response.content)) return fromContentBlocks(response.content);
   return response;
@@ -149,7 +155,7 @@ function main() {
   const toolName = raw.tool_name ?? raw.toolName;
   if (!isClaimTool(toolName)) return;
 
-  const capsule = capsuleFromAnswer(parseToolResponse(raw.tool_response ?? raw.toolResponse));
+  const capsule = capsuleFromAnswer(parseToolResponse(raw.tool_response ?? raw.toolResponse ?? raw.toolResult));
   if (!capsule || typeof capsule.worktreePath !== "string") return;
 
   // Follow the answer, not the session folder: on an install host the session

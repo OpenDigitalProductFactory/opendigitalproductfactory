@@ -47,3 +47,8 @@
 !scripts/lib/git.mjs
 !scripts/lib/capability-state-hash.mjs
 !scripts/capability-service-catalog.generated.json
+!scripts/installer/runtime-apply-lock.mjs
+!scripts/installer/recovery-filesystem.mjs
+!scripts/lib/canonical-json.mjs
+!scripts/lib/local-sandbox-fence.mjs
+!scripts/lib/entry-module.mjs
