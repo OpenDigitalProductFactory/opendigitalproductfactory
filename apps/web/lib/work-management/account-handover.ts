@@ -14,7 +14,9 @@
 //   2. apply - recomputes the plan, refuses if the digest moved, and re-homes
 //              each item: rooms through the one coordinator rule
 //              (executeCoordinatorAppointment), builds and tasks by owner field,
-//              each with an activity row.
+//              each with an activity row. Then it records on the account
+//              that its work was handed over (User.workHandedOverAt), so rules
+//              that name an owner for NEW work skip it (BI-858FDE5A).
 //
 // It never assigns the guessed install owner (`fallback`) and never hands work
 // back to the account it is leaving. It runs under the approving person's
@@ -57,7 +59,7 @@ export type HandoverPlan = {
 };
 
 export type AccountHandoverDb = {
-  user: Pick<Db["user"], "findFirst">;
+  user: Pick<Db["user"], "findFirst" | "update">;
   principalAlias: Pick<Db["principalAlias"], "findFirst">;
   portfolio: Pick<Db["portfolio"], "findMany">;
   agent: Pick<Db["agent"], "findMany">;
@@ -189,7 +191,7 @@ export type HandoverResult = {
 
 export async function applyAccountHandover(
   db: AccountHandoverDb,
-  input: { sourceAccount: string; digest: string; reason: string; actor: { userId: string } },
+  input: { sourceAccount: string; digest: string; reason: string; actor: { userId: string }; now?: Date },
 ): Promise<ActionResult<HandoverResult>> {
   const reason = input.reason.trim();
   if (!reason) return err("Say why this account's work is being handed over; the reason is recorded on every item.");
@@ -225,5 +227,12 @@ export async function applyAccountHandover(
       result.failed.push({ kind: item.kind, ref: item.ref, reason: (error as Error).message });
     }
   }
+  // Re-homing existing work is not enough: the drive's task owner and the task
+  // seeds name owners for NEW work from history. The account records that its
+  // work was handed over, and those rules skip it (BI-858FDE5A).
+  await db.user.update({
+    where: { id: plan.data.sourceUserId },
+    data: { workHandedOverAt: input.now ?? new Date(), workHandedOverById: input.actor.userId },
+  });
   return ok(result);
 }

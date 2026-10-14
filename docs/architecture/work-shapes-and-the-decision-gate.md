@@ -916,6 +916,14 @@ for the stall notice, and its conclusion names the missing owner. A graph room
 whose aggregate plan is `dispatch_agent` follows the same rule. No administrator
 or other guess is substituted.
 
+A room's requester and creator are history and are never rewritten, so an
+account handover (BI-F25A5FC7) left them naming the account it retired. Until
+BI-858FDE5A the drive read them as the current owner and created new tasks under
+that account: eight on 2026-10-13/14. A handover now records
+`User.workHandedOverAt` on the account. `roomOwnerUserId` skips a handed-over
+account, so such a room falls through to its accountable person by the walk
+above.
+
 ### Every stage is a queue
 
 Since EP-B70E718D F2 (BI-4ADFFEDB), the drive reports where each room's time goes. When it writes a state-change row, it also emits queue transitions into the shared flow telemetry, under `wr:<shape>@<version>:<stage>`:

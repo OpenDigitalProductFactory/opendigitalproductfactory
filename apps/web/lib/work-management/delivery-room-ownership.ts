@@ -132,7 +132,28 @@ type AliasHolder = { aliases: Array<{ aliasValue: string }> } | null | undefined
  * The user a drive-dispatched task runs for. An OAuth room was created by the
  * assistant but requested by its human, so the requester wins; reading only the
  * creator left every OAuth room unable to dispatch (missing_task_owner).
+ *
+ * Requester and creator are history, never rewritten. An account whose work was
+ * handed over (User.workHandedOverAt, BI-858FDE5A) is skipped, so a room it
+ * once requested returns null here and the drive names the room's accountable
+ * person (resolveDriveTaskOwner) instead of birthing a task under the absent
+ * account.
  */
-export function roomOwnerUserId(row: { requestedByPrincipal?: AliasHolder; createdByPrincipal?: AliasHolder }): string | null {
-  return row.requestedByPrincipal?.aliases[0]?.aliasValue ?? row.createdByPrincipal?.aliases[0]?.aliasValue ?? null;
+export function roomOwnerUserId(
+  row: { requestedByPrincipal?: AliasHolder; createdByPrincipal?: AliasHolder },
+  handedOverUserIds: ReadonlySet<string> = new Set(),
+): string | null {
+  for (const holder of [row.requestedByPrincipal, row.createdByPrincipal]) {
+    const userId = holder?.aliases[0]?.aliasValue;
+    if (userId && !handedOverUserIds.has(userId)) return userId;
+  }
+  return null;
+}
+
+/** Accounts whose work was handed over; read once per drive tick. */
+export async function loadHandedOverUserIds(db: {
+  user: { findMany(args: unknown): Promise<Array<{ id: string }>> };
+}): Promise<Set<string>> {
+  const rows = await db.user.findMany({ where: { workHandedOverAt: { not: null } }, select: { id: true } });
+  return new Set(rows.map((row) => row.id));
 }
