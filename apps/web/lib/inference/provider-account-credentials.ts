@@ -7,12 +7,19 @@ export function resolveCredentialProviderId(providerId: string): string {
   return providerId === "zai-coding" ? "zai" : providerId;
 }
 
+/** An optional coding key overrides the documented shared legacy Z.ai key. */
+export async function findDefaultProviderCredential(providerId: string) {
+  if (providerId === "zai-coding") {
+    const override = await prisma.credentialEntry.findUnique({ where: { providerId } });
+    if (override?.secretRef) return override;
+  }
+  return prisma.credentialEntry.findUnique({ where: { providerId: resolveCredentialProviderId(providerId) } });
+}
+
 /** Server-only credential boundary. An explicit connection never falls back. */
 export async function findProviderCredential(providerId: string, connectionId?: string, expectedExecutionVersion?: string) {
   if (connectionId === undefined) {
-    return prisma.credentialEntry.findUnique({
-      where: { providerId: resolveCredentialProviderId(providerId) },
-    });
+    return findDefaultProviderCredential(providerId);
   }
   if (!connectionId.trim()) throw new Error("Provider connection identity is required");
   const connection = await prisma.aiProviderConnection.findUnique({

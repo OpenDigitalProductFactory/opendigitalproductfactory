@@ -54,9 +54,14 @@ describe("provider account credential boundary", () => {
   });
 
   it("retains the documented zai default alias", async () => {
-    db.credentialEntry.findUnique.mockResolvedValue({ id: "zai-default" });
+    db.credentialEntry.findUnique.mockImplementation(async ({ where }) => where.providerId === "zai" ? { id: "zai-default" } : null);
     await findProviderCredential("zai-coding");
     expect(db.credentialEntry.findUnique).toHaveBeenCalledWith({ where: { providerId: "zai" } });
+  });
+  it("prefers a configured coding-key override for a legacy default caller", async () => {
+    db.credentialEntry.findUnique.mockImplementation(async ({ where }) => ({ id: where.providerId, secretRef: "encrypted-fixture" }));
+    expect(await findProviderCredential("zai-coding")).toMatchObject({ id: "zai-coding" });
+    expect(db.credentialEntry.findUnique).not.toHaveBeenCalledWith({ where: { providerId: "zai" } });
   });
 
   it("rejects an explicitly empty account identity instead of using the default", async () => {

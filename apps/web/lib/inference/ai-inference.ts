@@ -456,7 +456,7 @@ export async function callProvider(
       skillId: attribution?.skillId ?? undefined,
       agentMessageId: attribution?.agentMessageId ?? undefined,
     });
-    if (err instanceof InferenceError && err.capacity && (!selectedAccount || capacityAccount)) {
+    if (err instanceof InferenceError && err.capacity && (!selectedAccount || capacityAccount || localProvider)) {
       void recordProviderCapacityStatus({
         providerId,
         ...(capacityAccount ? { account: capacityAccount } : {}),
@@ -472,7 +472,7 @@ export async function callProvider(
     releaseInferenceSlot?.();
   }
 
-  if (!selectedAccount || capacityAccount) void clearProviderCapacityStatus({ providerId, source: "api", ...(capacityAccount ? { account: capacityAccount } : {}) }).catch((capacityErr) => {
+  if (!selectedAccount || capacityAccount || localProvider) void clearProviderCapacityStatus({ providerId, source: "api", ...(capacityAccount ? { account: capacityAccount } : {}) }).catch((capacityErr) => {
     console.warn("[ai-inference] Failed to clear provider capacity:", capacityErr);
   });
 

@@ -62,7 +62,8 @@ export function accountRuntimeKey(providerId: string, connectionId?: string): st
 }
 
 export function accountCandidateExclusion(manifest: EndpointManifest, contract: RequestContract): string | null {
-  if (manifest.providerConnectionId && contract.deniedProviderConnectionIds?.includes(manifest.providerConnectionId)) return "Provider account is excluded by the request account denylist";
+  const deniedIdentity = manifest.providerConnectionId ?? `provider-default-${manifest.providerId}`;
+  if (contract.deniedProviderConnectionIds?.includes(deniedIdentity)) return "Provider account is excluded by the request account denylist";
   if (contract.allowedProviderConnectionIds !== undefined
     && (!manifest.providerConnectionId || !contract.allowedProviderConnectionIds.includes(manifest.providerConnectionId))) return "Provider account is outside the request account allowlist";
   return null;
@@ -112,7 +113,13 @@ export function expandProviderAccountCandidates(
   const defaultAccount = owned.find(account => account.connectionId === defaultId);
   const result: EndpointManifest[] = [];
   if (defaultReady && (!defaultAccount || ["active", "degraded"].includes(defaultAccount.status))) {
-    result.push({ ...manifest, modelProfileId: manifest.id, ...(defaultAccount ? { providerConnectionId: defaultId, providerConnectionVersion: accountExecutionVersion(defaultAccount) } : {}) });
+    // The documented Z.ai coding alias can use the legacy shared key without
+    // owning that credential. Never invent an account binding or borrow it for
+    // an explicit additional account; a configured coding override is owned.
+    const boundDefault = defaultAccount && !(manifest.providerId === "zai-coding" && !defaultAccount.credentialEntryId);
+    result.push({ ...manifest, modelProfileId: manifest.id, providerConnectionId: undefined, providerConnectionVersion: undefined,
+      ...(boundDefault ? { providerConnectionId: defaultId, providerConnectionVersion: accountExecutionVersion(defaultAccount!),
+        accountAuthMethod: accountAuthMethod(defaultAccount!.authMethod), executionChannel: defaultAccount!.executionChannel } : {}) });
   }
   for (const account of owned) {
     if (account.connectionId === defaultId || !["active", "degraded"].includes(account.status)) continue;

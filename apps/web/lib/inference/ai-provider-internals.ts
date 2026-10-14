@@ -20,7 +20,7 @@ import { seedKnownModels } from "@/lib/inference/known-model-seeding";
 import { recordDiscoveredAuthEligibility } from "@/lib/routing/model-auth-eligibility";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { persistDiscoveredInventory } from "./discovered-model-inventory";
-import { decryptProviderCredential, findProviderCredential, getDecryptedCredential, resolveCredentialProviderId } from "./provider-account-credentials";
+import { decryptProviderCredential, findDefaultProviderCredential, findProviderCredential, getDecryptedCredential, resolveCredentialProviderId } from "./provider-account-credentials";
 import { ProviderAccountSelectionChangedError } from "../routing/provider-account-candidates";
 export { getDecryptedCredential, resolveCredentialProviderId } from "./provider-account-credentials";
 import { supportsTextGeneration } from "@/lib/routing/model-classifier";
@@ -110,15 +110,7 @@ export async function providerHasConfiguredCredential(
   // No-auth endpoints (local model runner, self-hosted) need no credential.
   if (method === "none" || method === "") return true;
 
-  const cred = await prisma.credentialEntry.findUnique({
-    where: { providerId: resolveCredentialProviderId(providerId) },
-    select: {
-      secretRef: true,
-      clientSecret: true,
-      cachedToken: true,
-      refreshToken: true,
-    },
-  });
+  const cred = await findDefaultProviderCredential(providerId);
   if (!cred) return false;
 
   if (method === "api_key") return Boolean(cred.secretRef);

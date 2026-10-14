@@ -9,6 +9,9 @@ const endpoint = { id: "model-profile", providerId: "anthropic", modelId: "model
 const contract = { contractId: "work", taskType: "summarization", sensitivity: "public", modality: { input: ["text"], output: ["text"] }, estimatedInputTokens: 10, estimatedOutputTokens: 10 } as RequestContract;
 
 describe("account candidate hard fence", () => {
+  it("keeps a default account denylist authoritative on the legacy shared-key route", () => {
+    expect(getExclusionReasonV2({ ...endpoint, providerId: "zai-coding", providerConnectionId: undefined }, { ...contract, deniedProviderConnectionIds: ["provider-default-zai-coding"] })).toContain("account");
+  });
   it("excludes an unapproved sibling before capability or capacity ranking", () => {
     expect(getExclusionReasonV2(endpoint, { ...contract, allowedProviderConnectionIds: ["business"] })).toContain("account");
   });
@@ -24,6 +27,19 @@ function account(overrides: Partial<ProviderAccountCandidateFacts> = {}): Provid
   return { connectionId: "business", providerId: "anthropic", status: "active", authMethod: "api-key", executionChannel: "direct-api", credentialEntryId: "owned-credential", credentialEntry: { status: "ok" }, accessibleModelIds: ["model"], modelsVerifiedAt: new Date(), evidenceStatus: "unreviewed", ...overrides };
 }
 describe("account manifest expansion", () => {
+  it("binds a default subscription provider's configured API key to its HTTP protocol", () => {
+    const defaults = account({ providerId: "anthropic-sub", connectionId: "provider-default-anthropic-sub" });
+    const candidate = expandProviderAccountCandidates({ ...endpoint, providerId: "anthropic-sub" }, [defaults], true, {})[0]!;
+    const bound = bindProviderAccountExecution({ providerId: "anthropic-sub", executionAdapter: "claude-cli" } as RoutedExecutionPlan, candidate);
+    expect(bound).toMatchObject({ accountAuthMethod: "api_key", executionAdapter: "chat" });
+  });
+  it("preserves the legacy shared-key coding route without inventing an owned account credential", () => {
+    const coding = { ...endpoint, providerId: "zai-coding", providerConnectionId: undefined };
+    const sharedDefault = account({ providerId: "zai-coding", connectionId: "provider-default-zai-coding", credentialEntryId: null, credentialEntry: null });
+    const candidate = expandProviderAccountCandidates(coding, [sharedDefault], true, {})[0]!;
+    expect(candidate.providerConnectionId).toBeUndefined();
+    expect(candidate.id).toBe(coding.id);
+  });
   it("invalidates a selected account when its data-use review changes without changing authentication", () => {
     const a = Object.assign(account(), { accountClass: "business", supplierContractId: "contract-a", lastReviewedAt: new Date("2026-10-14T00:00:00Z") });
     const b = Object.assign({ ...a }, { lastReviewedAt: new Date("2026-10-14T01:00:00Z") });
