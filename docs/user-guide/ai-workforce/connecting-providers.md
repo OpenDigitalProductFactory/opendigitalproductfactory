@@ -38,7 +38,9 @@ The legacy provider link opens the default account. **Shared provider settings**
 contains catalog and endpoint configuration; provider-wide emergency clearance,
 usage/billing, recipes, diagnostics, and routing operations remain reachable
 through disclosures. Local hardware and installed-model management remain on
-the Local detail page. Shared usage and diagnostics are identified as applying
+the Local detail page. Open **Provider settings** there to review GPU/CPU wattage
+and electricity cost. **Usage and billing** retains cost sources, finance links
+and routing recipes. Shared usage and diagnostics are identified as applying
 across accounts.
 
 An authenticated additional account is not automatically executable. Its own
