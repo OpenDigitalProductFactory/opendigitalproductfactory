@@ -7,6 +7,7 @@
 //  - Labels use service-level language, not infrastructure language
 
 import { MonitoringProvider, useMonitoringStatus } from "./MonitoringContext";
+import { MonitoringOffNotice } from "./MonitoringOffNotice";
 import { AlertBanner } from "./AlertBanner";
 import { ServiceStatusGrid } from "./ServiceStatusGrid";
 import { MetricGauge } from "./MetricGauge";
@@ -49,7 +50,7 @@ function ServiceHealthContent({
   releaseHealth,
   capabilityHealth,
 }: ServiceHealthDashboardProps) {
-  const { online, checked } = useMonitoringStatus();
+  const { online, checked, off } = useMonitoringStatus();
   const { data: upTargets, loading: upTargetsLoading } = useMetricQuery("up");
   const { alerts } = useAlertQuery();
 
@@ -60,6 +61,15 @@ function ServiceHealthContent({
         <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-6 text-center">
           <p className="text-sm text-[var(--dpf-muted)]">Checking platform health...</p>
         </div>
+      </div>
+    );
+  }
+
+  if (off) {
+    return (
+      <div className="space-y-6">
+        <CapabilityAuthoritySection capabilityHealth={capabilityHealth} />
+        <MonitoringOffNotice />
       </div>
     );
   }

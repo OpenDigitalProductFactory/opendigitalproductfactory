@@ -19,13 +19,22 @@ export type ApprovalProbeRuntime = {
   ): Promise<GovernedExecuteResult | null>;
 };
 
-let runtime: ApprovalProbeRuntime | null = null;
+// Process-wide via globalThis (BI-7DE3F806): instrumentation installs this and
+// the MCP route requires it, and Next can load this module from different
+// bundle chunks for the two, so a module-level variable installed at boot was
+// invisible to the tool. Same reason as build-liveness.ts (BI-4EB33E54).
+const RUNTIME_KEY = "__dpfApprovalProbeRuntime";
+
+function scope(): Record<string, ApprovalProbeRuntime | null | undefined> {
+  return globalThis as unknown as Record<string, ApprovalProbeRuntime | null | undefined>;
+}
 
 export function installApprovalProbeRuntime(next: ApprovalProbeRuntime | null): void {
-  runtime = next;
+  scope()[RUNTIME_KEY] = next;
 }
 
 export function requireApprovalProbeRuntime(): ApprovalProbeRuntime {
+  const runtime = scope()[RUNTIME_KEY];
   if (!runtime) throw new Error("The approval convergence probe is not available: server governance hooks are not registered.");
   return runtime;
 }

@@ -113,6 +113,18 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "^mcp__.+__(adopt_worktree|heartbeat_workroom|claim_workroom_scope|claim_backlog_item_for_work|create_workroom)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/workroom-claim-refresh.mjs\"",
+            "statusMessage": "Cache the renewed Workroom claim for this worktree"
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [

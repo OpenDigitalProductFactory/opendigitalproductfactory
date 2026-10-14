@@ -131,7 +131,7 @@ describe("Build Studio assembled semantic review", () => {
   });
 
   it("reviews and records the same receipt before verification", async () => {
-    const result = await reviewBuildStudioAssembledChange({
+    const args: Parameters<typeof reviewBuildStudioAssembledChange>[0] = {
       build: {
         id: "build-row",
         buildId: "FB-1",
@@ -171,13 +171,23 @@ describe("Build Studio assembled semantic review", () => {
           reason: null,
         },
       },
-    });
+    };
+    const result = await reviewBuildStudioAssembledChange(args);
 
     expect(result.kind).toBe("reviewed");
     expect(dispatchRoutedSemanticReview).toHaveBeenCalledOnce();
     const externalReceipt = recordExternalEvidence.mock.calls[0]![0].details;
     const activityReceipt = recordWorkCapsuleEvidence.mock.calls[0]![0].evidence.result;
     expect(activityReceipt).toEqual(externalReceipt);
+    expect(externalReceipt).toMatchObject({
+      schemaVersion: "semantic-change-review-receipt.v3", artifactType: "code-change",
+    });
+    db.evidenceFindMany.mockResolvedValue([{ id: "evidence-1", details: externalReceipt }]);
+    db.evidenceFindUnique.mockResolvedValue({ workCapsuleId: "capsule-row", details: externalReceipt });
+    const reused = await reviewBuildStudioAssembledChange(args);
+    expect(reused.kind).toBe("reviewed");
+    expect(dispatchRoutedSemanticReview).toHaveBeenCalledOnce();
+    expect(recordExternalEvidence).toHaveBeenCalledOnce();
   });
 
   it("requires an older build to refresh missing evidence even in shadow mode", async () => {

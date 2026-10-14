@@ -293,3 +293,69 @@ test("another session's claim is still refused and no marker is written", async 
     rmSync(gitDir, { recursive: true, force: true });
   }
 });
+
+// ── BI-EFCDE989: the claim's identity and the CLI's identity can differ ──────
+//
+// claim_backlog_item_for_work is often called with sessionRef
+// `worktree:<path>` (the form its refusals suggest). Inside Claude Code the CLI
+// then sends CLAUDE_CODE_SESSION_ID, the server sees another session, and the
+// caller's own claim is refused. The CLI now tries each identity it can
+// truthfully present, host session first, and stops at the first acceptance.
+
+test("a claim recorded under the worktree identity is re-cached from inside a Claude session", async () => {
+  const gitDir = mkdtempSync(join(tmpdir(), "dpf-bind-wtref-"));
+  const sent = [];
+  try {
+    const owner = serverWithCapsuleOwnedBy("worktree:/wt/a");
+    const r = await bindWorktreeToWorkroom({
+      branch: "fix/a", worktreePath: "/wt/a", gitDir, repositoryFullName: REPO,
+      env: { DPF_MCP_BEARER_TOKEN: "t", CLAUDE_CODE_SESSION_ID: "sess-claude" },
+      call: async (tool, args) => { sent.push(args.sessionRef); return owner(tool, args); },
+    });
+    assert.equal(r.status, "bound", r.reason);
+    assert.deepEqual(sent, ["sess-claude", "worktree:/wt/a"], "host identity first, worktree identity second");
+    assert.equal(JSON.parse(readFileSync(join(gitDir, "dpf-workroom-claim.json"), "utf8")).capsuleId, "WC-OWNED1");
+  } finally {
+    rmSync(gitDir, { recursive: true, force: true });
+  }
+});
+
+test("a claim held under neither of this session's identities is still refused", async () => {
+  const gitDir = mkdtempSync(join(tmpdir(), "dpf-bind-neither-"));
+  const sent = [];
+  try {
+    const owner = serverWithCapsuleOwnedBy("sess-someone-else");
+    const r = await bindWorktreeToWorkroom({
+      branch: "fix/a", worktreePath: "/wt/a", gitDir, repositoryFullName: REPO,
+      env: { DPF_MCP_BEARER_TOKEN: "t", CLAUDE_CODE_SESSION_ID: "sess-claude" },
+      call: async (tool, args) => { sent.push(args.sessionRef); return owner(tool, args); },
+    });
+    assert.equal(r.status, "refused");
+    assert.match(r.reason, /already bound/);
+    assert.equal(sent.length, 2, "both identities tried, nothing more");
+    assert.throws(() => readFileSync(join(gitDir, "dpf-workroom-claim.json"), "utf8"));
+  } finally {
+    rmSync(gitDir, { recursive: true, force: true });
+  }
+});
+
+test("a refusal that is not about occupancy is not retried under another identity", async () => {
+  const sent = [];
+  const r = await bindWorktreeToWorkroom({
+    branch: "fix/a", worktreePath: "/wt/a", gitDir: null, repositoryFullName: REPO,
+    env: { DPF_MCP_BEARER_TOKEN: "t", CLAUDE_CODE_SESSION_ID: "sess-claude" },
+    call: async (_tool, args) => { sent.push(args.sessionRef); return { success: false, error: "portal_quiescing", message: "writes refused" }; },
+  });
+  assert.equal(r.status, "refused");
+  assert.deepEqual(sent, ["sess-claude"]);
+});
+
+test("with only one identity available, exactly one call is made", async () => {
+  const sent = [];
+  await bindWorktreeToWorkroom({
+    branch: "fix/a", worktreePath: "/wt/a", gitDir: null, repositoryFullName: REPO,
+    env: { DPF_MCP_BEARER_TOKEN: "t" },
+    call: async (_tool, args) => { sent.push(args.sessionRef); return { success: false, error: "branch_occupied", message: "already bound" }; },
+  });
+  assert.deepEqual(sent, ["worktree:/wt/a"]);
+});
