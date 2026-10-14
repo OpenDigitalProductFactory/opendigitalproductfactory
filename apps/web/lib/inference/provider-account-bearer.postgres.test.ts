@@ -10,7 +10,12 @@ vi.mock("@dpf/db", () => ({ prisma: new Proxy({}, { get: (_target, key) => {
   return typeof value === "function" ? value.bind(state.db) : value;
 } }) }));
 vi.mock("@/lib/credential-crypto", () => ({ encryptSecret: (value: string) => `enc:${value}`, decryptSecret: (value: string | null) => value?.replace(/^enc:/, "") ?? null }));
+vi.mock("@/lib/govern/activate-provider", () => ({ activateProvider: vi.fn() }));
+vi.mock("@/lib/portal-url", () => ({ getStablePortalUrl: () => "https://localhost" }));
+vi.mock("@/lib/inference/provider-account-management", () => ({ ACCOUNT_ACCESS_RESET: {}, invalidateProviderAccountProofs: vi.fn() }));
 import { getProviderBearerToken } from "./provider-account-credentials";
+import { accountExecutionVersion } from "../routing/provider-account-candidates";
+import { withProviderReconciliationRetry } from "./provider-reconciliation";
 
 // Only an explicit fixture or governed CI database; never install credentials.
 const url = process.env.DPF_SQL_TEST_DATABASE_URL ?? process.env.DPF_LOCAL_CI_TEST_DATABASE_URL
@@ -43,6 +48,26 @@ describe.skipIf(!url)("account workload token persistence on PostgreSQL", () => 
     await admin?.end();
   });
   const saved = () => db.credentialEntry.findUniqueOrThrow({ where: { id: "owned" } });
+
+  it.each([false, true])("renews through the real OAuth service and rebuilds the execution version once (forced=%s)", async forceRefresh => {
+    const jwt = (seconds: number) => `header.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + seconds })).toString("base64url")}.signature`;
+    await db.modelProvider.create({ data: { providerId: "openai", name: "OAuth fixture", families: [], authMethod: "oauth2_authorization_code", tokenUrl: "https://fixture.invalid/oauth", oauthClientId: "fixture" } });
+    await db.credentialEntry.create({ data: { id: "oauth-owned", cachedToken: `enc:${jwt(forceRefresh ? 3600 : -60)}`, refreshToken: "enc:refresh", tokenExpiresAt: new Date(Date.now() + 86_400_000), status: "ok" } });
+    await db.aiProviderConnection.create({ data: { id: "immutable-oauth", connectionId: "oauth-account", providerId: "openai", credentialEntryId: "oauth-owned", executionChannel: "responses", authMethod: "oauth", status: "active" } });
+    const freshToken = jwt(7200);
+    vi.mocked(fetch).mockImplementation(async () => new Response(JSON.stringify({ access_token: freshToken, refresh_token: "rotated", expires_in: 7200 }), { status: 200 }));
+    let attempts = 0;
+    const rebuild = vi.fn();
+    const result = await withProviderReconciliationRetry(async () => {
+      const account = await db.aiProviderConnection.findUniqueOrThrow({ where: { connectionId: "oauth-account" }, include: { credentialEntry: true } });
+      return getProviderBearerToken("openai", account.connectionId, accountExecutionVersion(account), { forceRefresh: forceRefresh && ++attempts === 1 });
+    }, rebuild);
+    expect(result).toEqual({ token: freshToken });
+    expect(rebuild).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(await db.credentialEntry.findUniqueOrThrow({ where: { id: "oauth-owned" } })).toMatchObject({ refreshToken: "enc:rotated", status: "ok" });
+    expect(await saved()).toMatchObject({ cachedToken: null, status: "pending" });
+  });
 
   it("persists initial verification without enabling the account", async () => {
     expect(await getProviderBearerToken("workload", "account-a")).toEqual({ token: "owned-token" });

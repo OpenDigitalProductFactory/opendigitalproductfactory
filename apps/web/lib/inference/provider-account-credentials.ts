@@ -100,6 +100,9 @@ function tokenExchangeFailure(message: string, providerId: string, connectionId?
 export async function getProviderBearerToken(providerId: string, connectionId?: string, expectedExecutionVersion?: string,
   options: { forceRefresh?: boolean } = {}): Promise<{ token: string } | { error: string }> {
   currentInferenceSignal()?.throwIfAborted();
+  if (connectionId !== undefined && !connectionId.trim()) {
+    return { error: "Provider connection identity is required" };
+  }
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) return { error: "Provider not found" };
 

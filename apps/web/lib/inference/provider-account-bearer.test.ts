@@ -33,6 +33,13 @@ describe("account workload token persistence", () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
+  it.each(["", "   "])("refuses an explicit blank workload account identity %j before reading credentials", async connectionId => {
+    await expect(getProviderBearerToken("workload", connectionId)).resolves.toEqual({ error: "Provider connection identity is required" });
+    expect(db.modelProvider.findUnique).not.toHaveBeenCalled();
+    expect(db.credentialEntry.findUnique).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("refuses to overwrite replacement credentials after the token exchange", async () => {
     await expect(getProviderBearerToken("workload", "account-a")).resolves.toMatchObject({ error: expect.stringContaining("changed") });
     expect(db.credentialEntry.update).not.toHaveBeenCalled();
