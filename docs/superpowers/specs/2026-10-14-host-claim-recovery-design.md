@@ -88,6 +88,9 @@ changes are part of this repair.
 ## Ordered implementation and coverage
 
 One atomic host admission/execution boundary is owned by BI-091A2DCF.
+Flow FLOW-HOST-CLAIM uses contracts CT-HOST-ATTEMPT, CT-LEASE-CALL-BUDGET
+and CT-LEASE-SUPERVISOR; these are references to the existing modules, not new
+platform types or records.
 Requirements OBJ-CLAIM-001 through OBJ-CLAIM-004 map to AC-CLAIM-001 through
 AC-CLAIM-004 and the existing host runner, shared MCP client, attempt pin,
 lease supervisor and command resolver. None is independently safe to publish
