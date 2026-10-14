@@ -3,6 +3,19 @@ import { describe, expect, it, vi } from "vitest";
 import { loadCapsuleLivenessInventory } from "./liveness-inventory";
 
 describe("loadCapsuleLivenessInventory", () => {
+  it("uses a bounded portal read without fetching scope or activity history and preserves hold facts", async () => {
+    const now = new Date("2026-10-13T00:00:00Z");
+    const db = { workroom: { findMany: vi.fn().mockResolvedValue([{
+      id: "row-1", capsuleId: "WC-1", status: "working", source: "manual", updatedAt: now,
+      taskRun: null, workspaceState: { privateNote: "private", workroomDrive: { action: "pause", reason: "executor_writeback_unavailable" } },
+    }]) }, featureBuild: { findMany: vi.fn().mockResolvedValue([]) } };
+    const result = await loadCapsuleLivenessInventory(db, { where: {}, take: 200, portalSummary: true }, now);
+    expect(db.workroom.findMany).toHaveBeenCalledTimes(1);
+    expect(db.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 200,
+      select: expect.objectContaining({ id: true, scopeClaims: false, outcomeAnchor: false, activities: expect.objectContaining({ take: 1 }) }) }));
+    expect(result.capsulesAll[0]).toMatchObject({ id: "row-1", drive: { action: "pause", reason: "executor_writeback_unavailable" } });
+    expect(JSON.stringify(result)).not.toContain("privateNote");
+  });
   it("batches scheduled targets and strips private workspace state in compact results", async () => {
     const now = new Date("2026-10-01T00:00:00Z");
     const db = {
