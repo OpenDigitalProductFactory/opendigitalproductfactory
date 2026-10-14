@@ -125,6 +125,14 @@ The auto-install hook (BI-98683E68) wires these into portal install + worktree c
 
 ## Standalone install and update
 
+The root-clone guard distinguishes shell syntax from quoted diagnostic text and
+interpreter heredoc input (BI-F6176C63). Read-only scripts with comparisons or
+HTML are allowed. Shell redirections, commands after a heredoc, shell-fed input,
+and interpreter file-write intent retain the existing root protections. The
+shared command-text helper owns heredoc boundaries; guards choose whether a
+body is executable shell input. Install the merged hook through the normal
+toolchain updater so every client uses the same correction.
+
 The DPF skill pack can be installed or updated without installing the full DPF
 project. This is the supported path for contributors who only need the governed
 Codex / Claude workflows and an existing DPF MCP endpoint.
