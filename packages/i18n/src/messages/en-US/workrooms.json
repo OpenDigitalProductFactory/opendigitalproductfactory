@@ -1,4 +1,40 @@
 {
+  "inventory": {
+    "current": "Current work",
+    "views": "Work views",
+    "attention": "Needs attention",
+    "working": "Working now",
+    "waiting": "Waiting",
+    "history": "History",
+    "historyCount": "History · {$count} retained rooms",
+    "work": "Work",
+    "accountable": "Accountable",
+    "unassigned": "Not assigned",
+    "next": "Next step",
+    "details": "Details",
+    "technical": "Technical evidence",
+    "recovery": "Recovery condition: {$condition}",
+    "change": "Open change",
+    "empty": "Nothing in this view. Choose another work view.",
+    "system": "System details",
+    "held": "Held",
+    "cleanup": "Cleanup",
+    "executing": "Executing",
+    "status": {
+      "closeout": "Ready for closeout", "delivered": "Delivered", "closed": "Closed",
+      "ended": "Session ended", "ownerNeeded": "Owner needed", "attention": "Needs attention",
+      "check": "Check required", "capacity": "Waiting for capacity", "paused": "Worker paused",
+      "idle": "No recent progress", "verifying": "Checking result", "working": "Working", "unknown": "State not recorded"
+    },
+    "nextAction": {
+      "closeout": "Review the result before closing the room", "history": "Open the retained record",
+      "owner": "Assign an accountable person in the room", "decision": "Open the room to answer its pending decision",
+      "hold": "Resolve the recorded hold in the room", "blocker": "Open the room to check its blocker",
+      "capacity": "The system manages queue admission", "paused": "Waiting for the worker to return",
+      "idle": "Check the worker's last result in the room", "working": "Open the room to follow progress",
+      "unknown": "Open the room to establish its next step"
+    }
+  },
   "stageDecision": {
     "yours": "Your decision: {$stage}.",
     "waitingOn": "Waiting on {$name} to decide: {$stage}.",

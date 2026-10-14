@@ -19,11 +19,11 @@ describe("operator work groups", () => {
   });
   it("shows stopped sessions as retained work rather than success", () => {
     const view = projectWorkroomOperatorSummary({ ...base, isLive: false, liveness: "lease-expired" });
-    expect(view).toMatchObject({ group: "history", label: "Session ended" });
+    expect(view).toMatchObject({ group: "history", label: "inventory.status.ended" });
     expect(view.nextAction).not.toMatch(/completed|passed/i);
   });
   it("asks for accountability only when no recorded person resolves", () => {
     const view = projectWorkroomOperatorSummary({ ...base, accountability: { state: "setup-required", reason: "no-organization-owner-recorded", message: "No owner", atWorkroomId: null } });
-    expect(view).toMatchObject({ group: "attention", nextAction: "Assign an accountable person in the room" });
+    expect(view).toMatchObject({ group: "attention", nextAction: "inventory.nextAction.owner" });
   });
 });

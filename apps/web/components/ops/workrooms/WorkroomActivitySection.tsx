@@ -1,4 +1,7 @@
 import { prisma } from "@dpf/db";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import Link from "next/link";
 
 import { getT } from "@/lib/i18n/t.server";
@@ -43,6 +46,7 @@ type Props = {
  */
 export async function WorkroomActivitySection({ portfolioRole, scopeLabel, children, heldCapsuleIds = [] }: Props) {
   const t = await getT("shell");
+  const locale = await getLocaleContext();
   const inventory = await loadCapsuleLivenessInventory(prisma, {
     where: workroomInventoryWhere(portfolioRole),
     take: WORKROOM_READ_LIMIT,
@@ -104,7 +108,7 @@ export async function WorkroomActivitySection({ portfolioRole, scopeLabel, child
   const where = scopeLabel ? ` in ${scopeLabel}` : "";
 
   return (
-    <>
+    <MessagesProvider locale={locale.language} messages={{ workrooms: namespaceMessages(locale.language, "workrooms") }}>
       <Surface data-dpf-lead className="my-6" rounded="xl">
         <p className="text-sm font-medium text-[var(--dpf-text)]">
           {working} working now{where} · {attention} need attention.
@@ -126,6 +130,6 @@ export async function WorkroomActivitySection({ portfolioRole, scopeLabel, child
           <PortfolioActivityTree rows={activityRows} partial={activity.partial} roomReadBounded={roomReadBounded} />
         </details>
       )}
-    </>
+    </MessagesProvider>
   );
 }

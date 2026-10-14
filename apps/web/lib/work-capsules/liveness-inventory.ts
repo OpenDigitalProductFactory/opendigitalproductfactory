@@ -16,6 +16,7 @@ import { readBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
 import { projectPrFollowThroughStatus } from "@/lib/build/pr-follow-through";
 import { projectInvocationAttribution, recordedDriveTask } from "./invocation-attribution";
 import { readStoredWorkroomDriveState, projectStoredWorkroomDriveObservation } from "@/lib/work-management/workroom-drive-state";
+import { loadWorkroomDisplayTitles, workroomDisplayTitle } from "./workroom-display-titles.server";
 
 const INVENTORY_SELECT = {
   capsuleId: true,
@@ -51,6 +52,7 @@ const INVENTORY_SELECT = {
 } as const satisfies Prisma.WorkroomSelect;
 
 export type InventoryDb = {
+  backlogItem?: { findMany(args: unknown): Promise<Array<{ itemId: string; title: string }>> };
   workroom: { findMany(args: unknown): Promise<any[]> };
   featureBuild: { findMany(args: unknown): Promise<any[]> };
   scheduledAgentTask?: { findMany(args: unknown): Promise<Array<{ taskId: string; agentId: string }>> };
@@ -92,6 +94,7 @@ export async function loadCapsuleLivenessInventory(
       ? { ...INVENTORY_SELECT, id: true, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false }
       : args.compact ? { ...INVENTORY_SELECT, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false } : INVENTORY_SELECT,
   });
+  const titles = args.portalSummary ? await loadWorkroomDisplayTitles(db, rows) : null;
 
   const taskIds = rows.map((row) => recordedDriveTask(row)?.taskId).filter((id): id is string => Boolean(id));
   const tasks = taskIds.length && db.scheduledAgentTask ? await db.scheduledAgentTask.findMany({
@@ -143,6 +146,7 @@ export async function loadCapsuleLivenessInventory(
     const { featureBuildId: _omit, taskRun: _taskRun, workspaceState: _workspace, activities: _activities, ...rest } = row;
     return {
       ...rest,
+      ...(titles ? { title: workroomDisplayTitle(row, titles) } : {}),
       ...(drive ? { drive: { action: drive.lastAction, reason: drive.lastReason,
         attentionRecorded: Boolean(projectStoredWorkroomDriveObservation(row.workspaceState).attentionReason) } } : {}),
       attribution: projectInvocationAttribution(row, tasksById.get(recordedDriveTask(row)?.taskId ?? "")),

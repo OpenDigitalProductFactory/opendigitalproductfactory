@@ -1,10 +1,15 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
+import type { ReactNode } from "react";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { WorkroomInventory, type WorkroomInventoryRow } from "./WorkroomInventory";
 
 afterEach(cleanup);
+const renderInventory = (node: ReactNode) => render(<MessagesProvider locale="en-US"
+  messages={{ workrooms: namespaceMessages("en-US", "workrooms") }}>{node}</MessagesProvider>);
 const summary = { scanned: 3, live: 2, working: 1, history: 1, reapable: 1, byLiveness: {},
   heavyLane: { executing: 1, nextReady: 0, dormant: 0 }, progressSlo: { oldestWaitMs: null, maxNoTransitionMs: null } };
 const row = (capsuleId: string, liveness: string, title: string): WorkroomInventoryRow => ({
@@ -17,7 +22,7 @@ const row = (capsuleId: string, liveness: string, title: string): WorkroomInvent
 const rows = [row("WC-NOW", "live", "Prepare adoption event"), row("WC-WAIT", "paused", "Update user guide"), row("WC-OLD", "lease-expired", "Stopped review")];
 describe("operator Workrooms inventory", () => {
   it("shows actual progress first without mounting history or exposing diagnostic text", () => {
-    render(<WorkroomInventory workrooms={rows} summary={summary} />);
+    renderInventory(<WorkroomInventory workrooms={rows} summary={summary} />);
     expect(screen.getByRole("table", { name: "Working now" })).toBeVisible();
     expect(screen.queryByText("Stopped review")).toBeNull();
     expect(screen.getByText("Dana Reyes")).toBeVisible();
@@ -25,14 +30,14 @@ describe("operator Workrooms inventory", () => {
     expect(screen.getByRole("link", { name: "Prepare adoption event" })).toHaveAttribute("href", "/workspace/cases/work-capsule%3AWC-NOW");
   });
   it("puts paused workers in Waiting rather than Working now", () => {
-    render(<WorkroomInventory workrooms={rows} summary={summary} />);
+    renderInventory(<WorkroomInventory workrooms={rows} summary={summary} />);
     fireEvent.click(screen.getByRole("button", { name: "Waiting · 1" }));
     expect(screen.getByRole("link", { name: "Update user guide" })).toBeVisible();
     expect(screen.queryByRole("link", { name: "Prepare adoption event" })).toBeNull();
     expect(screen.getByText("Worker paused")).toBeVisible();
   });
   it("mounts retained records only when history is requested, and removes them on close", () => {
-    render(<WorkroomInventory workrooms={rows} summary={summary} />);
+    renderInventory(<WorkroomInventory workrooms={rows} summary={summary} />);
     const details = screen.getByText("History · 1 retained rooms").closest("details")!;
     details.open = true; fireEvent(details, new Event("toggle"));
     expect(screen.getByRole("link", { name: "Stopped review" })).toBeVisible();
@@ -40,14 +45,14 @@ describe("operator Workrooms inventory", () => {
     expect(screen.queryByText("Stopped review")).toBeNull();
   });
   it("prioritizes a blocked room and is honest about missing accountability", () => {
-    render(<WorkroomInventory workrooms={[...rows, { ...row("WC-BLOCK", "live", "Restore failed review"), status: "blocked", accountableName: null }]} summary={summary} />);
+    renderInventory(<WorkroomInventory workrooms={[...rows, { ...row("WC-BLOCK", "live", "Restore failed review"), status: "blocked", accountableName: null }]} summary={summary} />);
     expect(screen.getByRole("table", { name: "Needs attention" })).toBeVisible();
     expect(screen.getByText("Not assigned")).toBeVisible();
     expect(screen.getByText("Open the room to check its blocker")).toBeVisible();
   });
   it("shows a shared hold once instead of repeating it as an individual row", () => {
     const blocked = { ...row("WC-BLOCK", "live", "Repeated review"), status: "blocked" };
-    render(<WorkroomInventory workrooms={[blocked]} summary={summary} heldCapsuleIds={["WC-BLOCK"]}
+    renderInventory(<WorkroomInventory workrooms={[blocked]} summary={summary} heldCapsuleIds={["WC-BLOCK"]}
       attentionContent={<p>One shared recovery issue</p>} />);
     expect(screen.getByText("One shared recovery issue")).toBeVisible();
     expect(screen.queryByRole("link", { name: "Repeated review" })).toBeNull();
