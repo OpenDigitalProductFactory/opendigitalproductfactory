@@ -19,6 +19,8 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { dirname, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
+import { leaseQueueCallOptions } from "./lib/lease-queue-call-options.mjs";
+export { leaseQueueCallOptions } from "./lib/lease-queue-call-options.mjs";
 import { loadEvidencePolicy } from "./lib/ci-evidence-plan.mjs";
 import { resolveMcpCredential } from "./lib/mcp-credential.mjs";
 import { readQuiescenceStatus, quiescenceBlocksWrites, quiescenceWait } from "./lib/gate-quiescence.mjs";
@@ -42,15 +44,7 @@ import { readFailureEvidenceBinding } from "./lib/semantic-review-gate.mjs";
 //
 // So these calls get real headroom, tunable without patching source. The global
 // default stays at 10s: a health probe should still fail fast.
-const LEASE_QUEUE_TIMEOUT_MS = (() => {
-  const raw = Number(process.env.DPF_GATE_MCP_TIMEOUT_MS);
-  return Number.isFinite(raw) && raw > 0 ? raw : 60_000;
-})();
-
-/** Transport options for a queue call whose latency grows with the queue. */
-export function leaseQueueCallOptions(mcpUrl, bearerToken) {
-  return { mcpUrl, bearerToken, timeoutMs: LEASE_QUEUE_TIMEOUT_MS };
-}
+// The shared resolver carries this existing contract for all lease callers.
 
 /**
  * Describe a failed lease-queue call in the terms the operator has to act on.
