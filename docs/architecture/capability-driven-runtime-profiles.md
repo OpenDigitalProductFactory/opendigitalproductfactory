@@ -346,6 +346,14 @@ remain unverified. No capability was activated by these checks.
 
 ## Safe operating rules
 
+Runtime Health keeps active required, degraded and provider-managed service
+requirements visible. Known inactive optional services remain available in a
+collapsed, keyboard-operable disclosure; they do not reduce platform health.
+Identical required-service recovery advice is shown once, while distinct actions
+and provider navigation remain visible. This presentation preserves the canonical
+health projection and every service record; it changes neither capability intent
+nor observed availability.
+
 - Change physical service facts in the substrate manifest and regenerate the catalog; do not hand-edit the generated catalog.
 - Change capability dependencies or activation policy in the canonical capability seed/sync path; do not encode them in Compose.
 - Change enabled state only through the governed transition API/saga. Do not set `COMPOSE_PROFILES` to bypass capability authority.

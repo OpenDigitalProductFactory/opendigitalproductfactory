@@ -1,4 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import { measureUxBudget } from "@/lib/ux-budget/measure";
 import { describe, expect, it } from "vitest";
 
 import type { CapabilityServiceHealthProjection } from "@/lib/platform-runtime/service-health";
@@ -55,6 +56,46 @@ const projection: CapabilityServiceHealthProjection = {
 };
 
 describe("CapabilityServiceHealth", () => {
+  it("keeps active requirements visible and retains inactive services in a closed native disclosure", () => {
+    const html = renderToStaticMarkup(<CapabilityServiceHealth projection={projection} />);
+    const disclosure = html.match(/<details\b([^>]*)>([\s\S]*?)<\/details>/);
+    expect(disclosure).not.toBeNull();
+    expect(disclosure?.[1]).not.toMatch(/\bopen\b/);
+    expect(disclosure?.[2]).toContain("Inactive optional services (1)");
+    expect(disclosure?.[2]).toContain("speech-to-text");
+    for (const key of ["portal", "browser-use", "openai"]) {
+      expect(disclosure?.[2]).not.toContain(key);
+    }
+    expect(html.match(/<li\b/g)).toHaveLength(projection.items.length);
+  });
+
+  it("does not let inactive inventory dominate arrival or retain sub-legible navigation", () => {
+    const items = Array.from({ length: 18 }, (_, index) => ({ ...projection.items[1]!,
+      key: `optional-${index}`, actionHref: "/admin/settings/monitoring" }));
+    const active = projection.items.filter(item => item.state !== "optional_inactive");
+    const small = measureUxBudget(renderToStaticMarkup(<CapabilityServiceHealth projection={{ ...projection, items: active }} />));
+    const html = renderToStaticMarkup(<CapabilityServiceHealth projection={{ ...projection, items: [...active, ...items] }} />);
+    const measured = measureUxBudget(html);
+    expect(measured.defaultVisibleWords).toBeLessThanOrEqual(small.defaultVisibleWords + 8);
+    const links = [...html.matchAll(/<a\b[^>]*>/g)];
+    expect(links).toHaveLength(18);
+    for (const link of links) expect(link[0]).not.toMatch(/text-\[(?:9|10|11)px\]/);
+    expect(measureUxBudget(html.replace(/<details\b([^>]*)>/, "<details$1 open>")).subLegibleControls).toBe(0);
+  });
+
+  it("shows a shared required-service remedy once without hiding distinct critical actions", () => {
+    const first = projection.items[0]!;
+    const html = renderToStaticMarkup(<CapabilityServiceHealth projection={{ ...projection, items: [
+      first, { ...first, key: "postgres" }, projection.items[2]!, projection.items[3]!,
+    ] }} />);
+    expect(html.split(first.action)).toHaveLength(2);
+    expect(html).toContain("Required services:");
+    expect(html).toContain(projection.items[2]!.action);
+    expect(html).toContain(projection.items[3]!.action);
+    expect(html).toContain("portal");
+    expect(html).toContain("postgres");
+  });
+
   it("renders all requirement states with explicit non-color meaning", () => {
     const html = renderToStaticMarkup(<CapabilityServiceHealth projection={projection} />);
 
