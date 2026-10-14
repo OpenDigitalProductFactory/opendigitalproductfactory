@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Owned Workroom scope release
 
 Implementation parent: BI-8D8939E5. Workroom: WC-C2B2C6C8.
@@ -102,7 +106,9 @@ dispositioned above; closure must not imply their live acceptance is proven.
    2026-10-14; Workroom activity sequence 40 records the exact handler co-claim.
 3. Test own/foreign/unknown claims, mixed requests, null actor, malformed inputs,
    terminal/archive/expired/foreign leases, exact target, no-op, read failure,
-   unknown raw claims, stale snapshots and lease changes. Test decision binding
+   unknown raw claims, stale snapshots and lease changes, including expiry while
+   an unkeyed call waits for transaction admission. Read and classify inside the
+   existing transaction callback immediately before the snapshot CAS. Test decision binding
    across human/assistant/tool and ordinary versus approved/graduated execution.
 4. Run graph-linked work-capsules pack/alias, tool-registry, scope-input parity,
    store/adoption/session/branch/reaper/terminal tests plus command-receipt,

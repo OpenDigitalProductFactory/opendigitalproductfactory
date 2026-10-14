@@ -18,6 +18,21 @@ function store(row: Record<string, unknown>) {
 }
 
 describe("ordinary release is revalidated at mutation", () => {
+  it("refuses an ordinary release whose lease expires while transaction admission waits", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    const base = store(room);
+    const db = { ...base, $transaction: async (write: (tx: CapsuleDb) => Promise<unknown>) => {
+      vi.setSystemTime(new Date(room.leaseExpiresAt.getTime() + 1));
+      return write(base as unknown as CapsuleDb);
+    } };
+    try {
+      await expect(releaseWorkCapsuleScope({ db: db as unknown as CapsuleDb, capsuleId: "WC-A",
+        claims: [claim], actor, ownScopeOnly: true })).rejects.toThrow("Owned scope or lease changed");
+      expect(base.workroom.update).not.toHaveBeenCalled();
+      expect(base.workroomActivity.create).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
   it("requires positive principal proof and rejects an entire mixed request", () => {
     expect(classifyScopeRelease({ room, capsuleId: "WC-A", claims: [claim], callerPrincipalId: null, now }).consequence).toBe("authority");
     const foreign = { ...claim, value: "foreign.ts", recordedByPrincipalId: "principal-b" };
