@@ -286,9 +286,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/installer/migrate-install-state.test.mjs",
         "scripts/installer/resolve-host-identity.test.mjs",
         "scripts/installer/validate-install-state.test.mjs",
-        "scripts/ci-runtime-install-state-fixture.test.mjs",
         "scripts/installer/native-edge-host-contract.test.mjs",
       ),
+      conformanceTest("scripts/ci-runtime-install-state-fixture.test.mjs"),
       // BI-3267763F: no compose default, installer output or self-upgrade
       // leaves Inngest on the signing/event keys once published in this repo.
       conformanceTest("scripts/installer/inngest-keys-contract.test.mjs"),
