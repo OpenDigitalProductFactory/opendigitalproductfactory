@@ -6,6 +6,10 @@ import { flagUnconfiguredGateways } from "../../../packages/db/src/discovery-run
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { PortfolioQualityIssuesPanel } from "@/components/inventory/PortfolioQualityIssuesPanel";
+import { resolveMacVendor } from "../../../packages/db/src/mac-oui";
+import { deriveInventoryEnrichment } from "../../../packages/db/src/inventory-enrichment";
+import { buildQualityEvaluationEntities } from "../../../packages/db/src/discovery-quality-input";
+import { evaluateInventoryQuality } from "../../../packages/db/src/discovery-attribution";
 
 const state = vi.hoisted(() => ({ entities: [] as unknown[], relations: [] as unknown[], graph: vi.fn() }));
 vi.mock("@dpf/db", () => ({
@@ -30,6 +34,39 @@ import { getInventoryEntitiesGroupedBySubnet } from "@/lib/discovery-data";
 import { syncInventoryEntityAsInfraCI } from "../../../packages/db/src/graph-sync";
 
 describe("declared estate uses the actual discovery read-model contract", () => {
+  it("derives the known NIC lifecycle from OUI evidence while retaining unknown estate cases", () => {
+    const normalized = normalizeDiscoveredFacts(uxSweepEstateFacts(), {
+      taxonomyNodes: [
+        { nodeId: "foundational/compute/servers", name: "Servers", portfolioSlug: "foundational" },
+        { nodeId: "foundational/platform_services/container_platform", name: "Containers", portfolioSlug: "foundational" },
+        { nodeId: "foundational/network_management/network_connectivity", name: "Network", portfolioSlug: "foundational" },
+      ],
+    });
+    // Verified against the committed OUI TSV and the seeded MacVendorOui row.
+    const vendors = new Map([["000D3A", "Microsoft Corp."]]);
+    const enrichments = new Map(normalized.inventoryEntities.map(e => {
+      const properties = { ...e.properties };
+      const resolution = resolveMacVendor(properties.mac as string | undefined, vendors);
+      if (resolution.vendor) properties.vendor = resolution.vendor;
+      return [e.entityKey, deriveInventoryEnrichment({
+        entityType: e.entityType, name: e.name, properties,
+        manufacturer: null, productModel: null, observedVersion: null, normalizedVersion: null,
+        iconKey: null, supportStatus: "unknown",
+      })];
+    }));
+    const nic = normalized.inventoryEntities.find(e => e.entityType === "network_interface")!;
+    expect(enrichments.get(nic.entityKey)?.manufacturer).toBe("Microsoft");
+    const { issues } = evaluateInventoryQuality(buildQualityEvaluationEntities({
+      observedEntities: normalized.inventoryEntities, softwareEvidenceByEntityKey: new Map(),
+      enrichmentByEntityKey: enrichments, persistedIdentityByEntityKey: new Map(),
+      staleEntityKeys: [], existingEntityByKey: new Map(),
+    }));
+    expect(issues.filter(i => i.issueType === "lifecycle_unverified").map(i => i.inventoryEntityKey).sort()).toEqual([
+      "gateway:gateway:10.1.0.1", "host:hostname:ux-sweep-machine",
+      "runtime:socket:/var/run/docker.sock", "subnet:subnet:10.1.0.0/24",
+    ].sort());
+    expect(issues.filter(i => i.issueType === "attribution_missing")).toHaveLength(2);
+  });
   it("renders the three uncovered gateway connection actions from normal follow-up", async () => {
     const normalized = normalizeDiscoveredFacts(uxSweepEstateFacts());
     const gateways = normalized.inventoryEntities.filter(e => e.entityType === "gateway")

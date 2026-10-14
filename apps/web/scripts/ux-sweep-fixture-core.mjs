@@ -203,7 +203,7 @@ export function uxSweepEstateFacts() {
     ["host", "LAN Host 172.18.0.2", "arp:02AABBCCDD20", { address: "172.18.0.2", mac: "02:AA:BB:CC:DD:20" }],
     ["gateway", "Gateway 10.1.0.1", "gateway:10.1.0.1", { address: "10.1.0.1" }],
     ["subnet", "10.1.0.0/24", "subnet:10.1.0.0/24", { networkAddress: "10.1.0.0/24" }],
-    ["network_interface", "Interface 10.1.0.10", "nic:02AABBCCDD10", { address: "10.1.0.10", mac: "02:AA:BB:CC:DD:10" }],
+    ["network_interface", "Interface 10.1.0.10", "nic:000D3A000010", { address: "10.1.0.10", mac: "00:0D:3A:00:00:10" }],
     ["docker_runtime", "Docker", "socket:/var/run/docker.sock", { socketPath: "/var/run/docker.sock", serverVersion: "26.0.0" }],
     ["docker_container", "Fixture portal", "container:ux-sweep-portal", { containerName: "ux-sweep-portal" }],
     ["gateway", "Docker GW fixture (172.18.0.1)", "docker-gw:fixture", { address: "172.18.0.1" }],
