@@ -54,6 +54,9 @@ function database(opts: { participantRows: Array<{ roles: string[] }>; headSha?:
         payload: { schemaVersion: 1, intent: "design", policyVersion: "initiative-readiness.v1", subject: { kind: "backlog-item", id: "BI-ENTRY" } },
       }),
     },
+    // No account here was handed over (BI-C66B6076 reads these before appointing).
+    principalAlias: { findFirst: vi.fn().mockResolvedValue(null) },
+    user: { findFirst: vi.fn().mockResolvedValue(null) },
     workroomParticipant: {
       // First read: nobody in the room. Second read (the readback count): what the test says exists.
       findMany: vi.fn().mockResolvedValueOnce([]).mockResolvedValue(opts.participantRows),

@@ -86,6 +86,9 @@ describe("repairUnownedDeliveryRooms", () => {
   function repairDb(rows: Array<Record<string, unknown>>) {
     const db = {
       workroom: { findMany: vi.fn(async () => rows) },
+      // No account here was handed over (BI-C66B6076 reads these before appointing).
+      principalAlias: { findFirst: vi.fn(async () => null) },
+      user: { findFirst: vi.fn(async () => null) },
       workroomParticipant: {
         findMany: vi.fn(async () => []),
         create: vi.fn(async () => ({})),
@@ -133,6 +136,35 @@ describe("repairUnownedDeliveryRooms", () => {
     expect(roomId).toBe("delivery");
     expect(db.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
       db.workroomParticipant.findMany.mock.invocationCallOrder[0]!);
+  });
+
+  // BI-C66B6076: the repair reads requester/creator history, so a room the
+  // handed-over admin requested would be given back to it. It goes to the
+  // room's accountable person instead.
+  it("gives a room requested by a handed-over account to the accountable person", async () => {
+    const db = repairDb([
+      { id: "delivery", scopeClaims: DELIVERY_CLAIMS, requestedByPrincipal: person("ADMIN"), createdByPrincipal: agent("CODEX"), leaseHolderPrincipal: null, activities: [] },
+    ]);
+    const userOf: Record<string, string> = { ADMIN: "u-admin", MARK: "u-mark" };
+    Object.assign(db, {
+      principalAlias: { findFirst: vi.fn(async ({ where }: { where: { principalId?: string; aliasValue?: string } }) => {
+        if (where.principalId) return userOf[where.principalId] ? { aliasValue: userOf[where.principalId] } : null;
+        const principalId = Object.keys(userOf).find((key) => userOf[key] === where.aliasValue);
+        return principalId ? { principalId } : null;
+      }) },
+      user: { findFirst: vi.fn(async ({ where }: { where: { id: string; workHandedOverAt?: unknown } }) =>
+        (where.workHandedOverAt ? where.id === "u-admin" : Object.values(userOf).includes(where.id)) ? { id: where.id } : null) },
+      portfolio: { findUnique: vi.fn(async ({ where }: { where: { slug?: string } }) =>
+        where.slug === "foundational" ? { id: "pf-found", slug: "foundational", accountablePrincipalId: "MARK" } : null) },
+      organization: { findFirst: vi.fn(async () => null) },
+    });
+    db.workroom = Object.assign(db.workroom, { findUnique: vi.fn(async () => ({ portfolioRole: null })) });
+    await expect(repairUnownedDeliveryRooms(db as never, ["delivery"])).resolves.toBe(1);
+    expect(db.workroomParticipant.create).toHaveBeenCalledWith({ data: expect.objectContaining({ principalId: "MARK", roles: ["coordinator"] }) });
+    expect(db.workroomParticipant.create).not.toHaveBeenCalledWith({ data: expect.objectContaining({ principalId: "ADMIN" }) });
+    expect(db.workroomActivity.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      payload: expect.objectContaining({ source: "drive-repair", reroutedFromPrincipalId: "ADMIN", ownerSource: "foundational" }),
+    }) });
   });
 
   it("does nothing without room ids", async () => {
