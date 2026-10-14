@@ -176,7 +176,8 @@ then bounded by regulation and intrinsic authority.
 The platform asks for attention only when attention changes the outcome:
 
 - evidence is genuinely missing;
-- a newer failure invalidates an older pass;
+- a newer failure invalidates an older pass (in any dimension, on every close
+  path, merged or not; BI-4A222439);
 - repeated unsupported mutations suggest a runaway client;
 - a regulatory or authority ceiling requires a human; or
 - bounded autonomous recovery is exhausted.

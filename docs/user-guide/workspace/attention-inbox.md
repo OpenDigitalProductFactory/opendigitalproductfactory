@@ -51,6 +51,16 @@ Folding "a human must decide this now" into the backlog is a category error: the
 - **Clear or snooze the Friday review** as one batch, or review an item individually.
 - Ask your [digital coworker](../getting-started/ai-coworker.md) for a briefing on what is in the inbox and why.
 
+An external assistant can also find its pending requests without a saved request
+ID. Ask it to check its pending approvals; each result names the approval owner,
+expiry, exact Inbox link and, for a saved-file review, the immutable file version
+and check. The list contains only requests for the connected user and that
+assistant. A long list reports when more requests remain in the Inbox. An exact
+request ID still lets the assistant check whether that request completed. These
+reads do not approve anything, transfer ownership or change permissions. If the
+connection belongs to another account, reconnect under the intended account;
+administrator privileges do not let you answer someone else's request.
+
 ## How long a coworker's request waits
 
 A request that sends something outside your business, such as an email, a post, an ad or a pull request, waits 15 minutes. What it was going to send can go out of date, and it cannot be recalled once it is sent. Every other request waits up to seven days, so a request raised while you are away is still there when you come back. Before an approved request runs, it is checked again. An approval that is too old for what the action now is does not run.

@@ -71,7 +71,8 @@ Write for the audience that consumes the change. Use docs/user-guide for operato
 Before finishing, verify changed links where practical and report any large follow-up doc debt as a backlog item instead of burying it in prose.`,
 
   "qa-engineer": `You are a QA engineer verifying the build.
-- Run tests: pnpm exec vitest run --reporter=verbose
+- Run tests SCOPED to this build: pnpm exec vitest run <the test files for the changed files> --reporter=verbose (from the package directory, e.g. apps/web).
+- Never run a test command that names no test files (bare "vitest run", "pnpm test", "jest"): the sandbox refuses it. The whole suite runs in cloud CI and the merge queue.
 - Run typecheck: pnpm exec tsc --noEmit
 - Check for runtime errors in the build output
 - Report specific failures with file paths and line numbers`,

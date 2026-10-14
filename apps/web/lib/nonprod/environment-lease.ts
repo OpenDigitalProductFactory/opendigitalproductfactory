@@ -542,7 +542,6 @@ export async function releaseNonprodEnvironmentLease(input: {
 }) {
   const db = input.db ?? prisma;
   const now = input.now ?? new Date();
-  let priorStatus = "";
   const result = await inLeaseTransaction(db, async (tx) => {
     const beforeLock = await tx.nonProductionEnvironmentLease.findUnique({
       where: { leaseId: input.leaseId },
@@ -562,11 +561,11 @@ export async function releaseNonprodEnvironmentLease(input: {
     if (isTerminalLeaseStatus(current.status)) {
       return {
         lease: current,
+        priorStatus: current.status,
         promotedLeaseIds: [] as string[],
         queueDepth: 0,
       };
     }
-    priorStatus = current.status;
     const queued = current.status === "queued";
     const lease = await tx.nonProductionEnvironmentLease.update({
       where: { leaseId: input.leaseId },
@@ -591,10 +590,12 @@ export async function releaseNonprodEnvironmentLease(input: {
     });
     return {
       lease,
+      priorStatus: current.status,
       promotedLeaseIds: reconciliation.admittedLeaseIds,
       queueDepth: reconciliation.queueDepth,
     };
   });
+  const { priorStatus } = result;
   const transitions: LeaseTransitionInput[] = [];
   if (priorStatus === "queued") {
     transitions.push({

@@ -153,8 +153,8 @@ function classifyFromTask(task: PlanTask): SpecialistRole {
 
 // --- Redundant verification task pruning -------------------------------------
 //
-// buildDependencyGraph ALWAYS appends a synthetic QA phase ("Full verification:
-// tests + typecheck", run via scoped run_sandbox_tests). When the LLM planner
+// buildDependencyGraph ALWAYS appends a synthetic QA phase ("Scoped verification:
+// changed-file tests + typecheck", run via scoped run_sandbox_tests). When the LLM planner
 // ALSO emits explicit "run the full test suite" / "full verification" tasks, the
 // build runs the whole monorepo suite redundantly — slow, brittle, and the exact
 // over-decomposition that let an unrelated broken test stall FB-69231490. Those
@@ -263,10 +263,10 @@ export function buildDependencyGraph(
     parallel: false,
     tasks: [{
       taskIndex: -1, // Synthetic task -- not from the plan
-      title: "Full verification: tests + typecheck",
+      title: "Scoped verification: changed-file tests + typecheck",
       specialist: "qa-engineer",
       files: [],
-      task: { title: "Full verification", testFirst: "", implement: "", verify: "run_sandbox_tests + tsc --noEmit" },
+      task: { title: "Scoped verification", testFirst: "", implement: "", verify: "run_sandbox_tests (scoped to the changed files) + tsc --noEmit" },
     }],
   });
 

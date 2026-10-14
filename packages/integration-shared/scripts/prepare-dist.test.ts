@@ -28,6 +28,24 @@ describe("prepare-dist", () => {
     expect(next.dependencies).toEqual({ undici: "^8.10.0" });
   });
 
+  // BI-D560D82A: #6275 added a conditional export; every release image build
+  // then died in toDistEntry ("path.replace is not a function").
+  test("rewriteManifest maps conditional exports and leaves hand-written CommonJS at its source", () => {
+    const next = rewriteManifest({
+      main: "./src/index.ts",
+      exports: {
+        ".": "./src/index.ts",
+        "./contract": { types: "./src/contract.d.cts", default: "./src/contract.cjs" },
+        "./typed": { types: "./src/typed.ts", default: "./src/typed.ts" },
+      },
+    });
+    expect(next.exports).toEqual({
+      ".": "./dist/index.js",
+      "./contract": { types: "./src/contract.d.cts", default: "./src/contract.cjs" },
+      "./typed": { types: "./dist/typed.js", default: "./dist/typed.js" },
+    });
+  });
+
   test("addJsExtensions completes extensionless relative specifiers only", () => {
     const files = new Set(["./redact.js", "./sub/index.js"]);
     const out = addJsExtensions(

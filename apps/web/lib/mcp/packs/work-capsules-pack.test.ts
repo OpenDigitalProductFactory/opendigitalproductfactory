@@ -12,6 +12,7 @@ const mockPrisma = {
   },
   workroomActivity: {
     create: vi.fn(),
+    findMany: vi.fn(),
   },
   // adopt_worktree resolves a supplied backlogItemId before binding it, so an
   // unknown id is refused rather than silently dropped (BI-D526F72C).
@@ -121,6 +122,30 @@ describe("work capsule MCP tools", () => {
         portfolioRole: "productsAndServicesSold",
       }),
     ]);
+  });
+
+  // BI-62514632: read the room's ordered log from a position the caller holds.
+  it("get_workroom returns the log after afterSequence, oldest first", async () => {
+    mockPrisma.workroom.findUnique.mockResolvedValue({ id: "row-1", capsuleId: "WC-LOG", title: "Log", activities: [] });
+    mockPrisma.workroomActivity.findMany.mockResolvedValue([{ id: "a5", sequence: 5 }, { id: "a6", sequence: 6 }]);
+
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const result = await executeTool("get_workroom", { capsuleId: "WC-LOG", afterSequence: 4 }, "user-1", { agentId: "codex" });
+
+    expect(result).toMatchObject({
+      success: true,
+      data: { log: { afterSequence: 4, activity: [{ sequence: 5 }, { sequence: 6 }], hasMore: false } },
+    });
+    expect(mockPrisma.workroomActivity.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { workCapsuleId: "row-1", sequence: { gt: 4 } },
+      orderBy: { sequence: "asc" },
+    }));
+  });
+
+  it("get_workroom refuses a malformed afterSequence", async () => {
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const result = await executeTool("get_workroom", { capsuleId: "WC-LOG", afterSequence: -3 }, "user-1", { agentId: "codex" });
+    expect(result).toMatchObject({ success: false, error: "invalid_input" });
   });
 
   it("get_workroom does not renew leases for read-only hydration", async () => {

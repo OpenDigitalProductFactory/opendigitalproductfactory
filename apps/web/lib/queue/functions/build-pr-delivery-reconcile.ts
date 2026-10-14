@@ -1,6 +1,7 @@
 import { cron } from "@/lib/jobs/triggers";
 import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
+import type { BuildPrDeliveryStateV1 } from "@/lib/build/build-pr-delivery-state";
 
 export const BUILD_PR_DELIVERY_RECONCILE_CRON = "2,7,12,17,22,27,32,37,42,47,52,57 * * * *";
 
@@ -12,6 +13,25 @@ export const BUILD_PR_DELIVERY_RECONCILE_CRON = "2,7,12,17,22,27,32,37,42,47,52,
  */
 const ROOM_SCAN_WINDOW = 200;
 const ROOMS_PER_RUN = 25;
+
+/**
+ * Whether an observed PR head belongs to the room's current source (#6148): a
+ * PR still showing the head a room held before it was re-adopted elsewhere is
+ * stale and must not be actuated. One move is the room's own doing and is
+ * followed (BI-ECA50241): after this reconciler had GitHub update the branch
+ * from the room's head, the PR head is GitHub's merge commit. Refusing that
+ * froze the room in "updating" forever.
+ */
+export function observesRoomHead(
+  roomHeadSha: string | null | undefined,
+  observedHeadSha: string,
+  state: Pick<BuildPrDeliveryStateV1, "status" | "lastObservedHeadSha"> | null | undefined,
+): boolean {
+  if (!roomHeadSha) return true;
+  const room = roomHeadSha.toLowerCase();
+  if (observedHeadSha.toLowerCase() === room) return true;
+  return state?.status === "updating" && state.lastObservedHeadSha?.toLowerCase() === room;
+}
 
 export async function runBuildPrDeliveryReconcile(): Promise<{
   observed: number;
@@ -159,7 +179,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
       }
       const observation = await observeGithubPullRequest({ owner, repo, prNumber, token });
       observed += 1;
-      if (capsule.headSha && observation.headSha.toLowerCase() !== capsule.headSha.toLowerCase()) continue;
+      if (!observesRoomHead(capsule.headSha, observation.headSha, existing)) continue;
       const readiness = projectGithubPrReadiness(observation);
       const posture = resolvePrFollowThroughPosture({
         scopeClaims: capsule.scopeClaims,

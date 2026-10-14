@@ -8,6 +8,16 @@ order: 3
 
 - `/setup`
 
+## Before first login on Linux
+
+Use the [Linux pilot guide](../../install/linux.md) for host preparation and
+version selection. The recommended first target is Ubuntu Server 24.04 LTS
+x86-64 with native Docker Engine and Compose v2. Docker Desktop is not required.
+Complete the HTTPS and certificate-trust checks before using the canonical
+login address; a successful HTTP health check alone does not establish readiness.
+The [pilot checklist](../../install/linux.md#pilot-acceptance-checks) records
+what your installation actually passed, failed or has not yet exercised.
+
 ## Workflow
 
 1. Create the owner account and enter the company's business context, including location, markets, customers, risk posture, and data-residency needs. The owner account is recorded as the organization's accountable owner — the person every Workroom without its own owner answers to — unless one is already recorded. Change it later under **Admin > Settings**.

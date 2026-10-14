@@ -8,7 +8,7 @@
 // Design: docs/superpowers/specs/2026-08-26-mcp-client-self-authentication-design.md §9
 
 import { isLoopbackHostname } from "@/lib/auth/oauth-metadata";
-import { isConfiguredCanonicalOrigin } from "@/lib/canonical-host";
+import { isConfiguredCanonicalOrigin } from "@/lib/canonical-host-core";
 
 function envFlag(name: string): boolean | null {
   const raw = process.env[name];

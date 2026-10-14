@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { ancestorLayouts, touchedRoutes } from "./ux-sweep-touched.mjs";
+import { ancestorLayouts, parseArgs, touchedRoutes } from "./ux-sweep-touched.mjs";
 import { resolveLocalImport } from "./check-no-server-imports-in-client.mjs";
 
 const fixture = {
@@ -36,4 +36,13 @@ test("a vocabulary edit maps to the one route that renders it, through the clien
 test("a shared shell layout edit maps to every page beneath it, and API routes never appear", () => {
   const hits = touchedRoutes(["apps/web/components/Shell.tsx"], routes, { read, resolveImport, exists });
   assert.deepEqual(hits.map((h) => h.routePath), ["/workspace/inbox", "/workspace/rescue/care"]);
+});
+
+test("exhaustive mode carries dynamic fixture and responsive context without changing the small feedback cap", () => {
+  const args = parseArgs(["--run", "--exhaustive", "--fixture-map", "fixtures.json", "--viewport", "mobile", "--nav-mode", "worker"]);
+  assert.equal(args.exhaustive, true);
+  assert.equal(args.fixtureMap, "fixtures.json");
+  assert.equal(args.viewport, "mobile");
+  assert.equal(args.navMode, "worker");
+  assert.equal(args.maxRoutes, 40);
 });

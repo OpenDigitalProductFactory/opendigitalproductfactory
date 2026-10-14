@@ -13,6 +13,19 @@ not a passing test or a product validation failure. Host PATH is unchanged.
 Git isolation fixtures write files through Node instead of invoking a shell.
 PKI rejection assertions and existing POSIX permission checks remain intact.
 
+## macOS Docker memory allocation (BI-DC4352E8)
+
+An oversized Docker VM can compete with native applications and models even
+when container usage is modest. The installer now bounds local Desktop memory
+to a quarter of host RAM (8 GiB floor, 32 GiB cap), preserving valid smaller
+allocations. It verifies the running VM, backs up settings, restarts gracefully
+with consent for running containers or enabled Docker AI, and restores the
+previously running containers. Missing, malformed, symlinked or managed settings
+fail before shutdown. See [the Mac guide](macos.md#docker-memory-during-installation).
+This is installer convergence, not an automatic migration of existing installs
+or proof of the cause of historical Chatterbox growth. Native model memory is
+outside the Docker VM allocation.
+
 A running tally of **platform-specific gotchas** to watch for when supporting
 DPF's target environments. This is the operational companion to the canonical
 design docs — it tracks *symptoms and recurring traps*, not contracts:
@@ -24,6 +37,21 @@ design docs — it tracks *symptoms and recurring traps*, not contracts:
 If a rule is *universal* across deployments, it belongs in the deployment
 contracts, not here. This file is for "when you touch X on platform Y, watch
 out for Z."
+
+## Repository-local Codex endpoint overrides (BI-9F258707)
+
+A trusted project's `.codex/config.toml` overrides the user's connector settings.
+Updating only the global file can leave the root checkout on HTTP while a new
+worktree uses HTTPS. Bootstrap now converges an existing project DPF block to
+its resolved endpoint; it does not create project overrides or scan other repos.
+Both repository updater wrappers pass the project explicitly to the standalone
+fallback. Disabled connections and custom credentials remain unchanged.
+
+Malformed project TOML stops convergence. The standalone fallback validates it
+with Python 3.11's `tomllib`, or `tomli` when already available on older Python;
+without either parser it refuses the write. The normal TypeScript planner uses
+its bundled TOML parser. Windows native and certificate-renewal acceptance need
+separate runtime evidence; passing Mac source tests does not establish them.
 
 ## Target environments
 
@@ -139,7 +167,7 @@ bootstrap runs with the system interpreter.
 | D19 | A spatial view shows "region pack missing" even though a pack was copied onto the host | all | 📌 By design (BI-814F86E1, `DI-63D94E36B0B0`). Map packs live in the `map_data` named volume mounted at `/var/lib/dpf/maps` on the portal (override with `DPF_MAP_DATA_DIR`); the image never carries one. A pack copied to a host directory is invisible until it is placed in that volume with its `<packId>.manifest.json`, and a manifest whose `byteLength` disagrees with the file is reported as invalid (`409`). | Never bind-mount a host map directory into the shared base compose file, and never fetch tiles from a remote host as a fallback. |
 | D20 | Maps stop drawing after a Content-Security-Policy is introduced | all | ⚠️ open (watch). DPF has no app-wide CSP today. MapLibre 6 builds its worker from the same-origin module `/api/map-assets/runtime/maplibre-gl-worker.mjs` (BI-814F86E1), so any future CSP must allow `worker-src 'self' blob:`. | When adding a CSP, include the worker directive and exercise a geographic view in light and dark themes. |
 | D23 | Coworker reviews end without a receipt (`spawn docker EAGAIN`, "Sandbox file write failed") and `docker exec` fails with "resource temporarily unavailable"; `docker stats` shows a container with tens of thousands of PIDs | all Docker hosts | ✅ BI-95BB9CB1: the sandbox's PID 1 is a shell entrypoint and portal-tls's is caddy; neither reaps orphaned children, so every git a build ran and every health-check probe left a zombie (75,868 and 11,573 measured on one install) until the Docker VM's process table was nearly full. Both services now set `init: true` with a `pids_limit` (#6020), and `scripts/compose-init-reaping.test.mjs` keeps the init in place. | Any new long-running service whose PID 1 is a shell script or an app that does not reap children (most are not init systems) must set `init: true`. Check `docker exec <c> sh -c 'ps -eo stat'` for Z states when a container's PID count climbs. |
-| D24 | An agent asks the operator a platform decision it could have put to the kernel (WWMD); the decision-routing guard never fires | Claude desktop app (Code tab), all OSes | ⚠️ open (BI-271B8EEC). The desktop app renders `AskUserQuestion` itself and does not invoke the project `PreToolUse` hook for it; other `PreToolUse` hooks fire. Live probe 2026-10-07: the guard binary denies the payload, the app showed it. See the decision-routing spec §15. | The operator is asked to choose between options with no `principle_decide` record in the session. |
+| D24 | An agent asks the operator a platform decision it could have put to the kernel (WWMD), or runs a command a guard should refuse; no `PreToolUse` guard blocks anything | Claude desktop app (Code tab, Claude Code 2.1.295 / app 2.31226.1), all OSes and permission modes | ✅ BI-E5C45F61 (2026-10-13). The host runs every `PreToolUse` hook, but it validates the output and accepts a top-level `decision` only as `approve`/`block`. The guards' shared deny carried Grok's `decision: "deny"` beside Claude's `hookSpecificOutput`, so the host discarded the whole output, logged a `hook_non_blocking_error` in the transcript, and ran the tool. Claude and Codex payloads now get `hookSpecificOutput` only (`hooks/lib/hook-io.mjs`, contract in `hooks/lib/claude-hook-contract.mjs`); plugin 0.2.9. Bypass mode, an unresolved `${CLAUDE_PROJECT_DIR}` and stale plugin copies were ruled out from the same transcript. The 2026-10-07 reading (BI-271B8EEC, "the app does not invoke the hook for `AskUserQuestion`") was wrong; see the decision-routing spec §15.1. **Probes**, all harmless: `docker compose up --help` (compose-guard), `npx tsc --noEmit` (raw-tool-guard), `npx prisma migrate dev` with no `DATABASE_URL` (lease-punt-guard), a two-option architecture `AskUserQuestion` naming a BI id (decision-routing-guard). Each must be refused. | SessionStart prints "PreToolUse guards inactive in this session" when a probe is not denied in the Claude contract or a declared guard command cannot run (`hooks/pretooluse-guard-selftest.mjs`). The transcript records a discarded verdict as `hook_non_blocking_error`. Client hooks only accelerate: the client-independent backstop is BI-271B8EEC Direction 2 (a decision reaches a person only with a qualifying kernel record), not built yet. |
 
 ## 4. Git / repo hygiene
 
@@ -192,3 +220,14 @@ A bootstrap launched from a worktree may have no install PUBLIC_URL and may inhe
 | Docker Desktop and native Docker | A sibling promoter resolves relative monitoring binds beneath its own `/host-source`; the daemon cannot use that container path. A failed start leaves a Created container that an existence-only check misses. | Translate binds using the promoter's inspected host mounts. After release identity commit, release assets use the canonical install root. Retry only missing or proven never-started containers and retain failed recovery in the durable outcome. |
 | Apple Silicon macOS | The capability catalog asks for Docker speech while the macOS overlay points at the native service on port 8771. | The canonical container catalog excludes macOS for `dpf-tts`; verify native synthesis separately. A disabled `local.dpf-chatterbox-tts` LaunchAgent must be restored through the existing native setup procedure when speech is requested. |
 | All sandbox hosts | The persistent source volume contains newer package manifests but older dependency links. Next fails before its health endpoint starts. | The image-baked sandbox entrypoint performs a frozen dependency install and Prisma generation before serving the existing source. A failed install cannot fall through to a falsely ready preview. |
+
+## Linux pilot startup repairs — 2026-10-03
+
+PR #5998 merged the Docker Engine/Compose prerequisite repair. Additional source
+repairs prepare the runtime signing key and host-owned federation directories
+(BI-DFF7346E), remove the PKI host-UID assumption and suppress first-init password
+output (BI-F3AD783E), and pin pnpm plus Ollama loopback exposure (BI-5282E468).
+The [Linux guide](linux.md#source-repairs-awaiting-native-acceptance) owns release
+and acceptance caveats. Confirm the selected release contains the changes;
+customer HTTPS/login, AI, reboot, restore, upgrade and uninstall remain unrun.
+Historical root-owned directories are preserved and refused for scoped recovery.

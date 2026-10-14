@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -101,5 +102,73 @@ describe("worktree-session-hygiene", () => {
       !/reaped Tier-A worktree/.test(r.stdout || ""),
       `Stop must not report a reap; got: ${r.stdout}`,
     );
+  });
+});
+
+// BI-296C9E24: an ending session reaped a merged, clean worktree that another
+// session was still working in (138 tracked files deleted, 2026-10-13).
+describe("SessionEnd reap respects other live sessions (BI-296C9E24)", () => {
+  const git = (cwd, ...args) => {
+    const r = spawnSync("git", args, { cwd, encoding: "utf8" });
+    assert.equal(r.status, 0, `git ${args.join(" ")}: ${r.stderr}`);
+    return r.stdout.trim();
+  };
+
+  /** A main repo plus a linked worktree on a branch already merged into origin/main. */
+  function tierAWorktree() {
+    const base = mkdtempSync(join(tmpdir(), "reap-live-"));
+    const main = join(base, "main");
+    const wt = join(base, "wt");
+    mkdirSync(main);
+    git(main, "init", "-q", "-b", "main");
+    git(main, "config", "user.email", "t@example.test");
+    git(main, "config", "user.name", "t");
+    writeFileSync(join(main, "tracked.txt"), "x\n");
+    writeFileSync(join(main, ".gitignore"), ".dpf-session-heartbeat.json\n");
+    git(main, "add", ".");
+    git(main, "commit", "-q", "-m", "base");
+    git(main, "update-ref", "refs/remotes/origin/main", "HEAD");
+    git(main, "worktree", "add", "-q", "-b", "topic", wt, "HEAD");
+    return { main, wt };
+  }
+
+  function sessionEnd(wt, sessionId) {
+    return spawnSync(process.execPath, [script], {
+      input: JSON.stringify({ hook_event_name: "SessionEnd", session_id: sessionId, cwd: wt }),
+      env: { ...process.env, DPF_GUARDS_WORKSPACE_ANY: "1", DPF_WORKTREE_SESSION_REAP: "1", GH_TOKEN: "" },
+      encoding: "utf8",
+      timeout: 60_000,
+    });
+  }
+
+  it("control: alone in its worktree, the ending session reaps it", () => {
+    const { wt } = tierAWorktree();
+    writeFileSync(join(wt, ".dpf-session-heartbeat.json"), JSON.stringify({ beatAt: Date.now(), sessionId: "ending" }));
+    sessionEnd(wt, "ending");
+    assert.equal(existsSync(join(wt, "tracked.txt")), false);
+  });
+
+  it("keeps the worktree, every file intact, while another session's heartbeat is fresh", () => {
+    const { wt } = tierAWorktree();
+    const now = Date.now();
+    writeFileSync(
+      join(wt, ".dpf-session-heartbeat.json"),
+      JSON.stringify({
+        beatAt: now,
+        sessions: { live: { beatAt: now - 1000 }, ending: { beatAt: now } },
+      }),
+    );
+    const r = sessionEnd(wt, "ending");
+    assert.equal(existsSync(join(wt, "tracked.txt")), true, r.stdout);
+    assert.match(r.stdout, /another live session/);
+  });
+
+  it("a second reap of the same worktree while one is in flight does nothing", () => {
+    const { main, wt } = tierAWorktree();
+    const gitDir = git(wt, "rev-parse", "--absolute-git-dir");
+    writeFileSync(join(gitDir, "dpf-reap.lock"), String(Date.now()));
+    const r = sessionEnd(wt, "ending");
+    assert.equal(existsSync(join(wt, "tracked.txt")), true, r.stdout);
+    assert.ok(existsSync(main));
   });
 });
