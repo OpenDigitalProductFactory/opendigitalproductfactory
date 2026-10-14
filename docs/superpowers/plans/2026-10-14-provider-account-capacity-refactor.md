@@ -4,6 +4,26 @@ status: active
 
 # Provider account capacity refactoring
 
+## Acceptance repairs after the first UI release
+
+The served 390px provider table extended to 558px and clipped account actions.
+The existing report-kit DataTable now offers an opt-in responsive mode: one
+semantic table reflows into compact rows below the desktop breakpoint, retains
+every field/action, and exposes native keyboard sorting controls. Its default
+callers keep their existing layout. Untouched optional local engines remain in
+the searchable catalogue after setup; bundled Local and configured engines stay
+visible. This follows the recorded compact-disclosure choice DI-BE29BCA0E998.
+
+Dimension history uses the persisted results.dimensions discriminator for its
+0–100 score scale; legacy scenarios keep 0–5. Runs without probes omit the
+misleading zero-of-zero failure indicator. Queued evaluation/test acknowledgements
+direct operators to Test Runs rather than presenting a stale running state;
+timer-driven route refresh is removed under the existing observation contract.
+No historical records are rewritten and no paid evaluation is needed to verify
+these repairs. Regression tests first reproduced both history defects, then all
+six history/model-card cases passed. The three account/table suites passed 26
+cases. These source results do not assert served phone, theme or role acceptance.
+
 Implementation detail for BI-385C0357 / WC-4B3D81BC under the approved
 [multi-account design](../specs/2026-10-04-provider-multi-account-design.md)
 and [delivery plan](2026-10-04-provider-multi-account.md). The original independent
