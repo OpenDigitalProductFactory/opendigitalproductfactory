@@ -214,7 +214,7 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
         return {
           ok: true,
           message: quotaReconciled === "write-failed"
-            ? "Connected via OAuth — Responses API verified. DPF could not update routing; the account is authenticated and its routing restriction remains."
+            ? "Connected via OAuth — Responses API verified. DPF could not update routing; the account is authenticated, but routing status was not confirmed. Check its current status."
             : quotaReconciled === "changed"
               ? "Connected via OAuth — Responses API verified. Routing status changed during verification; check its current status."
               : "Connected via OAuth — Responses API verified",
