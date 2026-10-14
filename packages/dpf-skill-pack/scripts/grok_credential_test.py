@@ -18,8 +18,10 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import grok_credential as gc  # noqa: E402
 
-SECRET = "dpfocs_fixture-secret"
-CLIENT = json.dumps({"clientId": "dpfoc_fixture", "clientSecret": SECRET})
+# A fixture client, read from disk so no credential-shaped literal flows into the files the tests write.
+_FIXTURE = json.loads((Path(__file__).parent / "fixtures" / "grok-credentials-client.json").read_text(encoding="utf-8"))
+SECRET = _FIXTURE["clientSecret"]
+CLIENT = json.dumps(_FIXTURE)
 
 
 class FakeRunner:
