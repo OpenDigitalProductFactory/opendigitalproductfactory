@@ -4,12 +4,15 @@
   "decisionInteractionId": "DI-A435A194E077",
   "scope": {
     "files": [
-      "apps/web/components/admin/ManagedRepositorySection.tsx",
-      "apps/web/app/(shell)/admin/platform-development/page.tsx"
+      "apps/web/components/admin/ManagedRepositorySection.tsx"
     ]
   },
   "evidence": {
     "kind": "propose-n-pick",
-    "consideredOptions": ["inline-section-single-action", "new-settings-page", "extend-connect-github-card"]
+    "consideredOptions": [
+      "inline-section-single-action",
+      "new-settings-page",
+      "extend-connect-github-card"
+    ]
   }
 }
