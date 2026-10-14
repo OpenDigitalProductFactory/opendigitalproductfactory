@@ -112,8 +112,10 @@ projection as routing. Retain its safe recovery summary, action and human-action
 flag while excluding raw upstream snippets and credential storage. Additional
 accounts show their own current sign-in, billing or model-access restriction;
 shared provider quotas and reset times remain explicitly shared. Unknown
-independent allowance stays unknown. Integrate the overview consumer after the
-qualified compact UI is merged, rather than maintaining a second health registry.
+independent allowance stays unknown. The consumer now follows the merged compact
+UI, with shared-limit labels, account-specific recovery actions, and an optional
+capacity-read failure notice that preserves connection management. API key
+recovery points to connection settings; OAuth recovery points to sign-in.
 
 Bearer cache reuse requires an `ok` credential; a future stored expiry does not
 override an expired status. Explicit initial workload authentication retains the
@@ -143,3 +145,10 @@ Cancellation rolls back the write; network work stays outside the transaction.
 Credential-exchange failures carry the owning connection on the existing
 inference-error contract so they cannot degrade a shared model or cool down a
 healthy sibling. Source race tests do not replace real database qualification.
+
+The isolated PostgreSQL workload-token fixture exercises the production helper
+through real Prisma transactions: initial verification without enabling the
+account, disable during HTTP, unchanged-timestamp credential replacement, and
+concurrent owner-lock contention. It accepts only an explicit test database or
+the governed CI database and cleans up its generated schema. Host execution
+without that database is skipped, not evidence of database qualification.
