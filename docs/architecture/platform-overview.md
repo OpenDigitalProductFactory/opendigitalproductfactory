@@ -340,7 +340,7 @@ No single query surface has all three. This is why the platform renders its own 
 
 ### Grafana's Role: Power-User Escape Hatch
 
-Grafana ships as an **opt-in** power-user tool — it is not started by `docker compose up` (enable it with `docker compose --profile observability-ui up -d grafana`). It serves a different audience and purpose than the platform UI:
+Grafana ships as an **opt-in** power-user tool — it starts only when the `runtime:deep-observability` capability is enabled, never from a bare `docker compose up`. It serves a different audience and purpose than the platform UI:
 
 | | Platform UI | Grafana |
 |---|---|---|
@@ -405,7 +405,7 @@ flowchart TB
 
 ### Monitoring Stack Topology
 
-The monitoring stack (Prometheus, Loki, Alloy, Grafana, and the metric exporters) is **capability-activated, not default**: every one of them sits behind the `runtime-deep-observability` Compose profile and starts only when the `runtime:deep-observability` capability is enabled. An installation that has not enabled it collects nothing, and the metric-backed surfaces have no source. Grafana is a further step again — the platform renders its own context-aware dashboards and delivers alerts via the Inngest poll-bridge rather than through Grafana, so the Grafana UI is for power users.
+Log capture and metrics are split. **Loki and Alloy are always on**: they belong to `runtime:core`, carry no Compose profile, and run within the budgets in `config/install-resource-budgets.json` (BI-F8024A9D), so container logs are captured on every install. **Prometheus, Grafana and the PostgreSQL exporter are optional**: they sit behind the `runtime-deep-observability` Compose profile and start only when the `runtime:deep-observability` capability is enabled. An installation that has not enabled it collects no metrics, and the metric-backed surfaces have no source. Grafana is a further step again — the platform renders its own context-aware dashboards and delivers alerts via the Inngest poll-bridge rather than through Grafana, so the Grafana UI is for power users. Asking the operator to make this choice at install and onboarding, and switching it from the portal, is designed in [monitoring as an operator choice](../superpowers/specs/2026-10-13-monitoring-operator-choice-design.md) (BI-83260BB3).
 
 On an install that was upgraded rather than freshly installed, the stack's containers are created by the self-upgrade's service-reconcile step once the capability is enabled. If one of them cannot be created, the upgrade is shown as degraded in the Upgrade Center and names the missing services. See [capability-driven runtime profiles](capability-driven-runtime-profiles.md).
 

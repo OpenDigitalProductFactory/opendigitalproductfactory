@@ -388,16 +388,31 @@ export function typecheckPackagesFor(changedFiles: readonly string[]): string[] 
  * first, before checking it. Best-effort: a failed install surfaces as the
  * check's own failure, with the install log tail in its output.
  */
-async function installSeparatelyLockedPackages(containerId: string, workdir: string, packages: readonly string[]): Promise<void> {
+async function installSeparatelyLockedPackages(containerId: string, workdir: string, packages: readonly string[]): Promise<Set<string>> {
+  const separatelyLocked = new Set<string>();
   for (const pkg of packages) {
     if (pkg === "apps/web") continue;
     const ownLock = await execInSandbox(containerId, `test -f "${workdir}/${pkg}/pnpm-lock.yaml" && echo __yes__ || echo __no__`).catch(() => "");
     if (!ownLock.includes("__yes__")) continue;
+    separatelyLocked.add(pkg);
     await execInSandbox(
       containerId,
       `cd ${workdir}/${pkg} && { CI=true pnpm install --offline --frozen-lockfile >/tmp/dpf-pkg-install.log 2>&1 || CI=true pnpm install --frozen-lockfile >>/tmp/dpf-pkg-install.log 2>&1 || tail -20 /tmp/dpf-pkg-install.log; }`,
     ).catch(() => "");
   }
+  return separatelyLocked;
+}
+
+/**
+ * The type-check command for one package (BI-D2FE6931). A root-workspace
+ * package goes through scripts/run-tsc.mjs, the platform's one compiler entry
+ * point (TypeScript 7, pinned once at the root), so Build Studio grades with the
+ * compiler CI uses and follows its pin. A separately-locked package (apps/mobile:
+ * its own workspace and lockfile) keeps its own tsc, exactly as CI's mobile job.
+ */
+export function typecheckCommandFor(workdir: string, pkg: string, separatelyLocked: boolean): string {
+  const compiler = separatelyLocked ? "pnpm exec tsc" : `node ${workdir}/scripts/run-tsc.mjs`;
+  return `cd ${workdir}/${pkg} && ${compiler} --noEmit 2>&1 || true`;
 }
 
 const EXIT_MARKER = "__dpf_exit=";
@@ -444,10 +459,10 @@ export async function runSandboxTests(
     // FB-0C05A927: tsc ran in apps/web only, so a mobile (or any other package)
     // change was never type-checked and review could not pass it. Check every
     // package the change touches, plus apps/web as before, through pnpm exec.
-    await installSeparatelyLockedPackages(containerId, workdir, typecheckPackagesFor(opts?.changedFiles ?? []));
+    const separatelyLocked = await installSeparatelyLockedPackages(containerId, workdir, typecheckPackagesFor(opts?.changedFiles ?? []));
     const sections: string[] = [];
     for (const pkg of typecheckPackagesFor(opts?.changedFiles ?? [])) {
-      const out = await execInSandbox(containerId, `cd ${workdir}/${pkg} && pnpm exec tsc --noEmit 2>&1 || true`);
+      const out = await execInSandbox(containerId, typecheckCommandFor(workdir, pkg, separatelyLocked.has(pkg)));
       sections.push(`# ${pkg}\n${out}`);
     }
     typeCheckOutput = sections.join("\n\n");

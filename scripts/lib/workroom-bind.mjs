@@ -66,6 +66,11 @@ export function toPosixPath(p) {
 export function resolveSessionRef({ worktreePath, env = process.env } = {}) {
   return (
     env.DPF_SESSION_REF
+    // Claude Code exports CLAUDE_CODE_SESSION_ID, the same id a Claude agent
+    // passes to claim_backlog_item_for_work. Without it the bind sent the
+    // worktree fallback, the server saw another session, and refused the
+    // caller's own claim (BI-144E4F92, BI-4BEEC539).
+    || env.CLAUDE_CODE_SESSION_ID
     || env.CLAUDE_SESSION_ID
     || env.CODEX_SESSION_ID
     || env.GROK_SESSION_ID

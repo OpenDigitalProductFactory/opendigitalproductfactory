@@ -7,6 +7,7 @@ import Link from "next/link";
 import { configureProvider, testProviderAuth, discoverModels } from "@/lib/actions/ai-providers";
 import { startProviderOAuth, disconnectProviderOAuth } from "@/lib/actions/provider-oauth";
 import { ConnectGrokCard } from "./ConnectGrokCard";
+import { ProviderWorkspaceField } from "./ProviderWorkspaceField";
 import type { ProviderWithCredential, DiscoveredModelRow, ModelProfileRow } from "@/lib/ai-provider-types";
 import { ModelSection } from "@/components/platform/ModelSection";
 
@@ -53,6 +54,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
 
   // Secrets are write-only — never sent from server. Empty = no change on save.
   const [secretRef, setSecretRef]                   = useState("");
+  const [providerWorkspaceId, setProviderWorkspaceId] = useState(credential?.providerWorkspaceId ?? "");
   const [endpoint, setEndpoint]                     = useState(provider.endpoint ?? "");
   const [computeWatts, setComputeWatts]             = useState(String(provider.computeWatts ?? 150));
   const [electricityRate, setElectricityRate]       = useState(String(provider.electricityRateKwh ?? 0.12));
@@ -105,6 +107,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
       enabledFamilies,
       ...(shouldPersistAuthMethod && { authMethod: selectedAuthMethod }),
       ...(selectedAuthMethod === "api_key" && secretRef ? { secretRef } : {}),
+      ...(provider.providerId === "anthropic" && selectedAuthMethod === "api_key" ? { providerWorkspaceId } : {}),
       ...(selectedAuthMethod === "oauth2_client_credentials" && clientId       ? { clientId }       : {}),
       ...(selectedAuthMethod === "oauth2_client_credentials" && clientSecret   ? { clientSecret }   : {}),
       ...(selectedAuthMethod === "oauth2_client_credentials" && tokenEndpoint  ? { tokenEndpoint }  : {}),
@@ -360,7 +363,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
               isAnthropicSub
                 ? "Paste subscription token (sk-ant-oat...)"
                 : isAnthropicApi
-                  ? "Paste API key (sk-ant-api...)"
+                  ? "Paste Anthropic API key"
                   : isZaiCodingProvider && credential?.secretHint ? "Advanced override only"
                   : credential?.secretHint ? "Enter new key to replace" : "Enter API key"
             }
@@ -371,6 +374,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
               ...(isAnthropicApi && secretRef ? { borderColor: "color-mix(in srgb, var(--dpf-accent) 38%, transparent)" } : {}),
             }}
           />
+          {isAnthropicApi && <ProviderWorkspaceField id={`${fieldId}-workspace`} value={providerWorkspaceId} onChange={setProviderWorkspaceId} disabled={!canWrite || isPending} />}
           {isAnyAnthropic && secretRef && (
             <div style={{ fontSize: 11, marginTop: 4, color:
               (isAnthropicSub && !secretRef.startsWith("sk-ant-oat")) || (isAnthropicApi && !secretRef.startsWith("sk-ant-api"))

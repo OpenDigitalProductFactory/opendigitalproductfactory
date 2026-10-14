@@ -5,7 +5,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { receiptRows, txClient } = vi.hoisted(() => {
   const receiptRows = new Map<string, Record<string, unknown>>();
   const txClient = {
-    $queryRaw: async () => [{ id: "row-1" }],
+    $queryRaw: async (strings: TemplateStringsArray) => {
+      if (strings.join("?").includes("pg_advisory_xact_lock")) {
+        throw new Error("Failed to deserialize column of type 'void'");
+      }
+      return [{ id: "row-1" }];
+    },
+    $executeRaw: async () => 1,
     workroomActivity: {
       findFirst: async ({ where }: { where: { commandScopeKey: string; commandKey: string } }) =>
         receiptRows.get(`${where.commandScopeKey}#${where.commandKey}`) ?? null,

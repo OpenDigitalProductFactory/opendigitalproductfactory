@@ -94,9 +94,6 @@ export const KNOWN_VIOLATIONS = Object.freeze({
   // Agent at import. With prom-client made optional this is the NEXT failure
   // of the boot-time re-embed in the image.
   "apps/web/lib/network/off-threadpool-fetch.ts -> undici": "reembed-wiki-store: next image blocker after prom-client",
-  // issue-grok-credentials-client.ts (bootstrap) -> lib/auth/oauth-tokens ->
-  // oauth-policy -> canonical-host, which imports NextResponse at top level.
-  "apps/web/lib/canonical-host.ts -> next/server": "issue-grok-credentials-client: dies in the image",
   // approval-convergence-probe.ts reaches the whole MCP pack registry through
   // lib/mcp-tools. Its documented dev invocation maps server-only to a stub
   // (scripts/tsconfig.gpp-map.json); nothing covers the rest.

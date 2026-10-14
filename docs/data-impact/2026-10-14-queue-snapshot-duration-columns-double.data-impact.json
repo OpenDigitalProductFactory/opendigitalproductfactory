@@ -1,0 +1,89 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-governance",
+  "affectedCopies": [
+    "QueueMetricSnapshot duration columns, upserted by aggregateQueueMetrics (apps/web/lib/queue/queue-metrics-rollup.ts)",
+    "Read by queue health (lib/queue/queue-snapshot-service.ts), the coworker queue-awareness pack, the queue tiles and the workroom flow views; all read a JavaScript number before and after"
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "internal: per-queue duration percentiles in milliseconds",
+    "dataSubjectRights": "No content about a person.",
+    "reviewDisposition": "Type change only; columns keep the snapshot row's lifecycle."
+  },
+  "migration": {
+    "name": "20261014000000_queue_snapshot_duration_columns_double",
+    "backfill": "None: INTEGER converts to DOUBLE PRECISION in place without loss and NULL stays NULL; re-running on widened columns is a no-op.",
+    "rollback": "Forward-only. Narrowing back would overflow on multi-week durations; rollback means reverting code, never the column type."
+  },
+  "tests": [
+    "apps/web/lib/queue/queue-snapshot-durations.pg.test.ts",
+    "apps/web/lib/queue/queue-metrics-rollup.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:queue-metric-snapshot",
+      "prismaModel": "QueueMetricSnapshot",
+      "lifecycleDisposition": "Existing model; column types widen, lifecycle unchanged.",
+      "fields": [
+        {
+          "fieldId": "data:queue-metric-snapshot#waitP50Ms",
+          "resolution": "governed",
+          "reason": "Duration percentile in milliseconds, widened from INTEGER (24.8-day cap) to DOUBLE PRECISION so multi-week Workroom stage durations persist.",
+          "provenance": "BI-4ADFFEDB",
+          "flags": []
+        },
+        {
+          "fieldId": "data:queue-metric-snapshot#waitP95Ms",
+          "resolution": "governed",
+          "reason": "Duration percentile in milliseconds, widened from INTEGER (24.8-day cap) to DOUBLE PRECISION so multi-week Workroom stage durations persist.",
+          "provenance": "BI-4ADFFEDB",
+          "flags": []
+        },
+        {
+          "fieldId": "data:queue-metric-snapshot#processP50Ms",
+          "resolution": "governed",
+          "reason": "Duration percentile in milliseconds, widened from INTEGER (24.8-day cap) to DOUBLE PRECISION so multi-week Workroom stage durations persist.",
+          "provenance": "BI-4ADFFEDB",
+          "flags": []
+        },
+        {
+          "fieldId": "data:queue-metric-snapshot#processP95Ms",
+          "resolution": "governed",
+          "reason": "Duration percentile in milliseconds, widened from INTEGER (24.8-day cap) to DOUBLE PRECISION so multi-week Workroom stage durations persist.",
+          "provenance": "BI-4ADFFEDB",
+          "flags": []
+        },
+        {
+          "fieldId": "data:queue-metric-snapshot#cycleP50Ms",
+          "resolution": "governed",
+          "reason": "Duration percentile in milliseconds, widened from INTEGER (24.8-day cap) to DOUBLE PRECISION so multi-week Workroom stage durations persist.",
+          "provenance": "BI-4ADFFEDB",
+          "flags": []
+        },
+        {
+          "fieldId": "data:queue-metric-snapshot#cycleP95Ms",
+          "resolution": "governed",
+          "reason": "Duration percentile in milliseconds, widened from INTEGER (24.8-day cap) to DOUBLE PRECISION so multi-week Workroom stage durations persist.",
+          "provenance": "BI-4ADFFEDB",
+          "flags": []
+        },
+        {
+          "fieldId": "data:queue-metric-snapshot#heldP50Ms",
+          "resolution": "governed",
+          "reason": "Duration percentile in milliseconds, widened from INTEGER (24.8-day cap) to DOUBLE PRECISION so multi-week Workroom stage durations persist.",
+          "provenance": "BI-4ADFFEDB",
+          "flags": []
+        },
+        {
+          "fieldId": "data:queue-metric-snapshot#heldP95Ms",
+          "resolution": "governed",
+          "reason": "Duration percentile in milliseconds, widened from INTEGER (24.8-day cap) to DOUBLE PRECISION so multi-week Workroom stage durations persist.",
+          "provenance": "BI-4ADFFEDB",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

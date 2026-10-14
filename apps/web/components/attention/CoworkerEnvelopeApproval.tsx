@@ -173,7 +173,7 @@ export function CoworkerEnvelopeApproval({
         </p>
         <dl className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2">
           <Fact label="Action" value={decision.action} wide />
-          <Fact label="Where it lands" value={decision.target} wide />
+          <Fact label="Destination" value={decision.target} wide />
           {decision.subjectId ? <Fact label="Subject" value={decision.subjectId} /> : null}
           {decision.gate ? <Fact label="Gate" value={decision.gate} /> : null}
           {decision.decision ? <Fact label="Decision" value={decision.decision} /> : null}
@@ -190,8 +190,8 @@ export function CoworkerEnvelopeApproval({
           ) : null}
           {decision.reason ? <Fact label="Reason" value={decision.reason} wide /> : null}
           <Fact label="Consequence" value={decision.consequence} wide />
-          <Fact label="Why you are asked" value={decision.whyAPerson} wide />
-          <Fact label="What authorizing covers" value={decision.scope} wide />
+          <Fact label="Governing reason" value={decision.whyAPerson} wide />
+          <Fact label="Authorization scope" value={decision.scope} wide />
           <Fact label="Status" value={statusLabel(approval)} />
           <Fact label="Recommender" value={decision.recommenderLabel} />
           <Fact label="Accountable authorizer" value={decision.authorizerLabel} />
@@ -215,6 +215,16 @@ export function CoworkerEnvelopeApproval({
         <Effects decision={decision} />
         </section>
         )}
+        {decision.completeProposedContent ? (
+          <details className="mt-3">
+            <summary className="cursor-pointer text-dpf-caption font-semibold text-dpf-accent">
+              {COPY.completeContent}
+            </summary>
+            <pre tabIndex={0} aria-label={COPY.completeProposal} className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-dpf-md border border-dpf-border bg-dpf-surface-2 p-3 text-dpf-caption text-dpf-text">
+              {decision.completeProposedContent}
+            </pre>
+          </details>
+        ) : null}
       </Surface>
 
       {approval.expiredUnanswered ? (

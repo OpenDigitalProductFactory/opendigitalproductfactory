@@ -96,6 +96,7 @@ export type ProviderRow = {
 
 /** Client-safe credential info — secrets are never sent to the browser. */
 export type CredentialRow = {
+  providerWorkspaceId?: string | null;
   providerId: string;
   secretHint: string | null;
   clientId: string | null;

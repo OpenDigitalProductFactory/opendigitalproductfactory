@@ -2019,6 +2019,9 @@
       "docs/architecture/dependency-reduction-routine.md",
       "docs/architecture/enforced-ci-gates.md"
     ],
+    "scripts/audit-typescript-checker-currency.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     "scripts/backup-postgres.sh": [
       "docs/operations/disaster-recovery.md"
     ],
@@ -3959,6 +3962,7 @@
       "apps/web/lib/tools/integration-settings-href.ts",
       "docker-compose.local-ci.yml",
       "packages/dpf-skill-pack/hooks/pregate-evidence-guard.mjs",
+      "scripts/audit-typescript-checker-currency.mjs",
       "scripts/check-agent-principal-convergence-wired.mjs",
       "scripts/check-guard-conformance-marks.mjs",
       "scripts/check-guards.mjs",

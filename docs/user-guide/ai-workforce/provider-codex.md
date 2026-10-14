@@ -43,6 +43,8 @@ Codex is categorized as an "agent" provider, which means it behaves differently 
 
 - **Model discovery**: DPF automatically reads the connected sandbox's Codex model list. New models enter the catalog when that account and execution channel list them. A desktop client can show a different list because its version or account access differs. Saved profiles include history and do not prove current availability.
 - **Save & verify connection**: Saves settings, prepares the model catalog, and sends a small inference request using an active model. OAuth checks use the subscription backend. Only a completed response verifies the connection and clears a previously recorded capacity cooldown for this provider. Account and data-use rules still determine which work can route there.
+
+If OpenAI reports that the session token expired, verification attempts to renew it and checks the connection once more. If renewal cannot restore access, sign in again from Codex and retry verification. For the shared ChatGPT connection, use **Manage sign-in** in the panel above the connection form. Saving settings alone does not verify the connection.
 - **Advanced diagnostics**: Opens model history, routing details and a manual refresh for troubleshooting. A failed refresh retains the previous catalog; results report models returned by that refresh and genuinely new records separately.
 - **MCP service**: Codex has a linked MCP (Model Context Protocol) service called "OpenAI Codex Agent" that provides two tools: `codex` (start a coding session) and `codex-reply` (continue a thread). This service activates automatically when you connect via OAuth and deactivates when you disconnect.
 
@@ -79,7 +81,7 @@ When you connect Codex via OAuth, the platform automatically activates a second 
 
 The ChatGPT provider uses a different backend endpoint (`chatgpt.com/backend-api`) and the OpenAI Responses API format. This is necessary because ChatGPT subscription tokens cannot access the standard OpenAI platform API (`api.openai.com`).
 
-You can also sign in from the ChatGPT provider page directly -- it uses the same OpenAI OAuth. Either way, both providers share the token.
+The ChatGPT provider page links to Codex with **Manage sign-in**. Use that link to connect or reconnect the shared account; both default providers share the token.
 
 ## Technical Notes (Provider Integration)
 
