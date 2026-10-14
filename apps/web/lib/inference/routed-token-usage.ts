@@ -6,6 +6,7 @@
 
 import { logTokenUsage } from "@/lib/ai-inference";
 import type { RouteAndCallOptions } from "./routed-inference-options";
+import { conservativeQuotaScope } from "../routing/provider-capacity/scopes";
 
 // ─── Phase J: routed-call token usage persistence ──────────────────────────
 //
@@ -35,10 +36,22 @@ export function routedContextKey(options: RouteAndCallOptions | undefined): stri
   return options?.taskType ?? "routed-call";
 }
 
+/** Accepted starts need an attributed audit before completion tokens exist. */
+export async function persistAcceptedRoutedTokenUsage(input: {
+  traceId: string; agentId: string; providerId: string; contextKey: string; providerConnectionId?: string;
+}): Promise<void> {
+  await persistRoutedTokenUsage({ ...input,
+    ...(input.providerConnectionId ? { quotaScopeKey: conservativeQuotaScope(input.providerId) } : {}),
+    inputTokens: 0, outputTokens: 0, inferenceMs: 0, recordZeroUsage: true, requirePersistence: true,
+  });
+}
+
 export async function persistRoutedTokenUsage(input: {
   traceId?: string | null;
   agentId: string;
   providerId: string;
+  providerConnectionId?: string;
+  quotaScopeKey?: string;
   contextKey: string;
   inputTokens: number;
   outputTokens: number;

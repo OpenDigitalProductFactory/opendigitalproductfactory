@@ -1,0 +1,36 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": ["Provider account overview", "Inference routing capacity projection", "Provider health projection", "Token cost ledger", "Route outcome evidence", "Prisma-to-EA current-state mirror"],
+  "migration": {
+    "name": "20261014010000_provider_account_capacity_scopes",
+    "backfill": "Existing unique provider and CLI aliases receive namespaced scope keys; known CLI adapters receive typed kinds. No credentials, account health ownership, quota observations or usage history are replaced. New account/quota telemetry dimensions remain NULL on historical rows.",
+    "observedAt": "2026-10-14T01:10:55.380Z",
+    "observedRows": { "ProviderCapacityStatus": 8, "CliPoolStatus": 1, "AiProviderConnection": 23, "TokenUsage": 35192, "RouteOutcome": 54729 },
+    "observationMethod": "Authenticated read-only admin_query_db aggregate counts; migration has not been applied.",
+    "rollback": "Exclude additional execution identities while retaining expanded nullable columns and every observation. Do not restore NOT NULL aliases or drop populated columns. Old unscoped telemetry stays unattributed; no identity is inferred from current credentials."
+  },
+  "tests": ["apps/web/lib/routing/provider-capacity/provider-capacity-store.test.ts", "apps/web/lib/routing/provider-capacity/scopes.test.ts", "apps/web/lib/routing/capacity-routing-exclude.test.ts", "apps/web/lib/routing/fallback-account-isolation.test.ts", "apps/web/lib/routing/route-outcome.test.ts", "apps/web/lib/inference/provider-account-management.test.ts", "packages/db/src/provider-connection.test.ts"],
+  "changes": [
+    { "kind": "model", "assetId": "data:provider-capacity-status", "prismaModel": "ProviderCapacityStatus", "lifecycleDisposition": "Existing bounded current-state projection; one provider legacy observation or one opaque account/credential observation per scope. Existing lifecycle is inherited.", "fields": [
+      { "fieldId": "data:provider-capacity-status#providerId", "resolution": "governed", "reason": "Nullable legacy alias preserves old provider readers while scoped account health no longer overwrites provider health.", "provenance": "BI-385C0357 approved provider-account routing plan and capacity refactor detail" },
+      { "fieldId": "data:provider-capacity-status#scopeKey", "resolution": "governed", "reason": "Unique opaque identity separates account health from shared quota; credential replacement cannot inherit old authentication health.", "provenance": "provider-capacity/scopes.ts", "flags": ["sensitive"], "fieldPolicy": "Hash internal provider/account/credential identifiers; never store or derive from plaintext secrets, email, token payloads or upstream account claims." }
+    ] },
+    { "kind": "model", "assetId": "data:cli-pool-status", "prismaModel": "CliPoolStatus", "lifecycleDisposition": "Existing current quota projection; unknown shared ownership remains conservative and adds no independent allowance.", "fields": [
+      { "fieldId": "data:cli-pool-status#adapterType", "resolution": "governed", "reason": "Nullable unique legacy lookup is retained for existing clients.", "provenance": "Existing CliPoolStatus; BI-385C0357" },
+      { "fieldId": "data:cli-pool-status#adapterKind", "resolution": "governed", "reason": "Typed enum represents the closed adapter axis independently of pool identity.", "provenance": "CliPoolAdapterKind enum" },
+      { "fieldId": "data:cli-pool-status#scopeKey", "resolution": "governed", "reason": "Unique pool identity; legacy aliases are backfilled without asserting independently owned quota.", "provenance": "20261014010000_provider_account_capacity_scopes" }
+    ] },
+    { "kind": "model", "assetId": "data:ai-provider-connection", "prismaModel": "AiProviderConnection", "lifecycleDisposition": "Existing account configuration lifecycle; reset proof and pool links after credential replacement, retain historical evidence.", "fields": [
+      { "fieldId": "data:ai-provider-connection#quotaStatusId", "resolution": "governed", "reason": "Indexed optional many-to-one reference permits a shared quota owner without claiming separate quota for every credential. Existing unique capacity health ownership remains intact.", "provenance": "ACCOUNT_ACCESS_RESET and provider-capacity/store.ts" }
+    ] },
+    { "kind": "model", "assetId": "data:token-usage", "prismaModel": "TokenUsage", "lifecycleDisposition": "Inherit existing metering retention. Historical rows remain unattributed; identity dimensions are immutable like existing providerId and are not erased by account deletion.", "fields": [
+      { "fieldId": "data:token-usage#providerConnectionId", "resolution": "governed", "reason": "Attribute the actual executed account; never relabel old usage using today's account configuration.", "provenance": "BI-385C0357 account attempt and usage acceptance", "flags": ["sensitive"], "fieldPolicy": "Opaque internal immutable connection identifier only; no label, credential or token data." },
+      { "fieldId": "data:token-usage#quotaScopeKey", "resolution": "governed", "reason": "Attribute conservative shared quota scope without multiplying allowance.", "provenance": "provider-capacity/scopes.ts" }
+    ] },
+    { "kind": "model", "assetId": "data:route-outcome", "prismaModel": "RouteOutcome", "lifecycleDisposition": "Inherit existing route outcome retention; immutable telemetry dimensions survive account deletion and old rows remain NULL.", "fields": [
+      { "fieldId": "data:route-outcome#providerConnectionId", "resolution": "governed", "reason": "Record the actual attempted account independently of shared model profiles.", "provenance": "fallback.ts and route-outcome.ts", "flags": ["sensitive"], "fieldPolicy": "Opaque internal identifier only; no labels, secret values or upstream account identities." },
+      { "fieldId": "data:route-outcome#quotaScopeKey", "resolution": "governed", "reason": "Record the quota attribution known at dispatch, retaining unknown ownership conservatively.", "provenance": "provider-capacity/scopes.ts" }
+    ] }
+  ]
+}

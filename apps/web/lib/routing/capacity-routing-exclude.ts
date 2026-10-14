@@ -5,6 +5,8 @@
 // soft-excludes endpoints whose *in-memory* runtime circuit is open; this
 // module is the same idea for the *persisted* capacity snapshot so a 401-dead
 // or API-rate-limited provider is skipped while a healthy local floor remains.
+import { accountRuntimeKey } from "./provider-account-candidates";
+import { isAccountCapacityState } from "./provider-capacity/scopes";
 
 export type CapacitySnapshot = {
   state: string;
@@ -82,7 +84,7 @@ function formatRetry(retryAtMs: number | null | undefined): string {
   return ` until ${new Date(retryAtMs).toISOString()}`;
 }
 
-export type CapacitySoftExcludeInput<T extends { providerId: string }> = {
+export type CapacitySoftExcludeInput<T extends { providerId: string; providerConnectionId?: string }> = {
   endpoints: readonly T[];
   /** providerId → latest capacity snapshot (missing ⇒ available). */
   capacityByProvider: ReadonlyMap<string, CapacitySnapshot>;
@@ -100,7 +102,7 @@ export type CapacitySoftExcludeResult<T extends { providerId: string }> = {
  * at least one non-blocked peer remains (same degrade-not-lockout contract as
  * the runtime circuit breaker). Pure.
  */
-export function applyCapacitySoftExclusion<T extends { providerId: string }>(
+export function applyCapacitySoftExclusion<T extends { providerId: string; providerConnectionId?: string }>(
   input: CapacitySoftExcludeInput<T>,
 ): CapacitySoftExcludeResult<T> {
   const blocked: Array<{ endpoint: T; reason: string }> = [];
@@ -108,7 +110,9 @@ export function applyCapacitySoftExclusion<T extends { providerId: string }>(
 
   for (const ep of input.endpoints) {
     const snap = input.capacityByProvider.get(ep.providerId);
-    const reason = capacityRoutingExclusionReason(snap, input.nowMs);
+    const inheritedAccountHealth = ep.providerConnectionId && ep.providerConnectionId !== `provider-default-${ep.providerId}` && snap && isAccountCapacityState(snap.state);
+    const reason = capacityRoutingExclusionReason(inheritedAccountHealth ? null : snap, input.nowMs)
+      ?? capacityRoutingExclusionReason(ep.providerConnectionId ? input.capacityByProvider.get(accountRuntimeKey(ep.providerId, ep.providerConnectionId)) : null, input.nowMs);
     if (reason) blocked.push({ endpoint: ep, reason });
     else live.push(ep);
   }

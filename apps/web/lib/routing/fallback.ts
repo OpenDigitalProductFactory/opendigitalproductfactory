@@ -8,10 +8,14 @@ import { resolveLocalToolFidelityCeiling } from "./local-tool-fidelity";
 import type { ChatMessage, ToolCallEntry } from "./chat-message-types";
 import type { AsyncOperationStartResult } from "./adapter-types";
 import { prisma } from "@dpf/db";
+import { accountRuntimeKey, providerAccountExecutionBlock, ProviderAccountSelectionChangedError } from "./provider-account-candidates";
+import { NativeCliExecutionUncertainError } from "./cli-owned-runner";
+import { conservativeQuotaScope } from "./provider-capacity/scopes";
+import { accountAffinityKey, rememberAccountAffinity, reserveProviderAccount } from "./provider-account-allocation";
 import type { RouteDecision } from "./types";
 import type { RoutedExecutionPlan } from "./recipe-types";
-import { compileOpenRouterExecutionPolicy } from "./provider-suitability/openrouter-policy";
-import { resolveDefaultExecutionAdapter } from "./execution-plan";
+export { buildFallbackPlan } from "./execution-plan";
+import { buildFallbackPlan } from "./execution-plan";
 import {
   recordRequest,
   learnFromRateLimitResponse,
@@ -46,6 +50,8 @@ import {
 } from "@/lib/inference/data-screening/screen-inference-payload";
 
 type RouteOutcomeAttribution = {
+  /** Provider-managed conversation state is bound to the account that created it. */
+  previousResponseProviderConnectionId?: string;
   /** Request-scoped correlation shared by decision, attempts, outcomes, and usage. */
   traceId?: string | null;
   agentId?: string | null;
@@ -68,50 +74,10 @@ type RouteOutcomeAttribution = {
   threadId?: string | null;
 };
 
-function buildFallbackProviderSettings(
-  sourcePlan?: RoutedExecutionPlan,
-): RoutedExecutionPlan["providerSettings"] {
-  const settings = sourcePlan?.providerSettings ?? {};
-  const effort = (settings as Record<string, unknown>).effort;
-  return effort ? { effort } : {};
-}
-
-export function buildFallbackPlan(
-  entry: { providerId: string; modelId: string },
-  decision: RouteDecision,
-  tools?: Array<Record<string, unknown>>,
-  sourcePlan?: RoutedExecutionPlan,
-): RoutedExecutionPlan {
-  const toolPolicy: RoutedExecutionPlan["toolPolicy"] = {
-    ...(sourcePlan?.toolPolicy ?? {}),
-  };
-  if ((tools?.length ?? 0) > 0 && toolPolicy.toolChoice === undefined) {
-    toolPolicy.toolChoice = "auto";
-  }
-
-  const fallbackPlan: RoutedExecutionPlan = {
-    providerId: entry.providerId,
-    modelId: entry.modelId,
-    recipeId: null,
-    contractFamily: sourcePlan?.contractFamily ?? decision.taskType,
-    executionAdapter: resolveDefaultExecutionAdapter(entry.providerId),
-    maxTokens: sourcePlan?.maxTokens ?? 4096,
-    providerSettings: buildFallbackProviderSettings(sourcePlan),
-    toolPolicy,
-    responsePolicy: sourcePlan?.responsePolicy ?? {},
-    ...(sourcePlan?.temperature !== undefined ? { temperature: sourcePlan.temperature } : {}),
-    ...(sourcePlan?.openRouterObligations
-      ? { openRouterObligations: sourcePlan.openRouterObligations }
-      : {}),
-  };
-  if (entry.providerId === "openrouter" && sourcePlan?.openRouterObligations) {
-    fallbackPlan.openRouterPolicy = compileOpenRouterExecutionPolicy(sourcePlan.openRouterObligations);
-  }
-  return fallbackPlan;
-}
-
 export interface FallbackResult {
   providerId: string;
+  providerConnectionId?: string;
+  quotaScopeKey?: string;
   modelId: string;
   content: string;
   toolCalls: ToolCallEntry[];
@@ -237,6 +203,7 @@ export async function callWithFallbackChain(
     return {
       endpointId,
       providerId: eligibleCandidate?.providerId ?? endpointId,
+      ...(eligibleCandidate?.providerConnectionId ? { providerConnectionId: eligibleCandidate.providerConnectionId, providerConnectionVersion: eligibleCandidate.providerConnectionVersion, accountAuthMethod: eligibleCandidate.accountAuthMethod, executionChannel: eligibleCandidate.executionChannel } : {}),
       modelId: eligibleCandidate?.modelId ?? "",
     };
   };
@@ -260,7 +227,7 @@ export async function callWithFallbackChain(
   // Deduplicate using composite key (providerId + modelId)
   const seen = new Set<string>();
   const chain = allEntries.filter(e => {
-    const key = `${e.providerId}::${e.modelId}`;
+    const key = `${e.providerId}::${e.providerConnectionId ?? "legacy-default"}::${e.modelId}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -271,6 +238,7 @@ export async function callWithFallbackChain(
   const attempts: Array<{ endpointId: string; error: string; code?: string }> = [];
   const reconciledProviders = new Set<string>();
   const capacityDeferrals: LocalProviderCapacityDeferredError[] = [];
+  const changedAccounts: ProviderAccountSelectionChangedError[] = [];
   let rateLimitRetried = false;
   let overloadRetried = false;
   let transientRetried = false;
@@ -348,11 +316,25 @@ export async function callWithFallbackChain(
       select: { providerId: true, name: true, authMethod: true },
     });
 
+    const account = entry.providerConnectionId ? await prisma.aiProviderConnection.findUnique({
+      where: { connectionId: entry.providerConnectionId, providerId: entry.providerId },
+      select: { connectionId: true, providerId: true, status: true, authMethod: true, executionChannel: true,
+        credentialEntryId: true, credentialEntry: { select: { status: true, updatedAt: true } },
+        accessibleModelIds: true, modelsVerifiedAt: true, evidenceStatus: true, updatedAt: true },
+    }) : null;
+    const accountBlock = providerAccountExecutionBlock(account, entry);
+    if (accountBlock) {
+      attempts.push({ endpointId: entry.endpointId, error: accountBlock });
+      changedAccounts.push(new ProviderAccountSelectionChangedError(entry.providerId, accountBlock));
+      continue;
+    }
+
     if (!provider) {
       attempts.push({ endpointId: entry.providerId, error: "provider not found in database" });
       continue;
     }
 
+    const releaseAccount = reserveProviderAccount(entry);
     try {
       // A retry or fallback can happen well after routing. Re-screen the actual
       // dispatch payload at every provider attempt so route-time evidence cannot
@@ -370,7 +352,10 @@ export async function callWithFallbackChain(
         systemPrompt,
         tools,
         entryPlan,
-        i === 0 ? previousResponseId : undefined,
+        i === 0 && (outcomeAttribution?.previousResponseProviderConnectionId
+          ? outcomeAttribution.previousResponseProviderConnectionId === entry.providerConnectionId
+          : !entry.providerConnectionId || entry.providerConnectionId === `provider-default-${entry.providerId}`)
+          ? previousResponseId : undefined,
         mcpSession,
         { traceId, agentId, agentMessageId, buildId, threadId },
       );
@@ -382,11 +367,14 @@ export async function callWithFallbackChain(
       // Routing-resilience Slice A: a success closes any open runtime circuit
       // for this endpoint — it is demonstrably reachable again.
       clearEndpointUnavailable(entry.providerId, entry.modelId);
+      rememberAccountAffinity(accountAffinityKey(agentId, threadId), entry);
+      if (entry.providerConnectionId) clearEndpointUnavailable(accountRuntimeKey(entry.providerId, entry.providerConnectionId), entry.modelId);
 
       // EP-INF-006: Record route outcome (fire-and-forget)
       recordRouteOutcome({
         traceId,
         providerId: entry.providerId,
+        ...(entry.providerConnectionId ? { providerConnectionId: entry.providerConnectionId, quotaScopeKey: conservativeQuotaScope(entry.providerId) } : {}),
         modelId: entry.modelId,
         recipeId: i === 0 ? (plan?.recipeId ?? null) : null,
         contractFamily: plan?.contractFamily ?? decision.taskType,
@@ -419,6 +407,7 @@ export async function callWithFallbackChain(
       const routingEvidence = raw?.openRouterRoutingEvidence;
       return {
         providerId: entry.providerId,
+        ...(entry.providerConnectionId ? { providerConnectionId: entry.providerConnectionId, quotaScopeKey: conservativeQuotaScope(entry.providerId) } : {}),
         modelId: entry.modelId,
         content: result.content,
         toolCalls: result.toolCalls ?? [],
@@ -450,6 +439,11 @@ export async function callWithFallbackChain(
     } catch (e) {
       // A caller deadline is not provider failure and cannot authorize a retry.
       cancellation?.throwIfAborted();
+      if (e instanceof ProviderAccountSelectionChangedError) {
+        changedAccounts.push(e);
+        attempts.push({ endpointId: entry.providerId, error: e.message });
+        continue;
+      }
       if (e instanceof LocalProviderCapacityDeferredError) {
         capacityDeferrals.push(e);
         attempts.push({ endpointId: entry.providerId, error: e.reason, code: "capacity" });
@@ -463,7 +457,8 @@ export async function callWithFallbackChain(
       // fact about the catalog, not about the request. Learn it (benched for a
       // day, audited), drop the loader cache so the next route excludes it, and
       // ask for an on-demand re-discovery so the successor is known before 03:10.
-      if (isModelRefusalError(errMsg)) {
+      if (e instanceof NativeCliExecutionUncertainError) throw e;
+      if (!entry.providerConnectionId && isModelRefusalError(errMsg)) {
         await recordAuthEligibility(prisma, {
           providerId: entry.providerId,
           modelId: entry.modelId,
@@ -527,10 +522,10 @@ export async function callWithFallbackChain(
           }
 
           // EP-INF-004: Degrade the specific MODEL, not the provider
-          await markModelDegraded(entry.providerId, entry.modelId, "rate_limit");
+          if (!entry.providerConnectionId) await markModelDegraded(entry.providerId, entry.modelId, "rate_limit");
 
           // EP-INF-004: Schedule auto-recovery
-          scheduleRecovery(entry.providerId, entry.modelId);
+          if (!entry.providerConnectionId) scheduleRecovery(entry.providerId, entry.modelId);
 
         } else if (e.code === "overloaded") {
           // 529 is transient — retry once on the pinned endpoint before degrading.
@@ -575,6 +570,8 @@ export async function callWithFallbackChain(
             );
             await markModelDegraded(entry.providerId, entry.modelId, `local_${e.code}_misclassification`);
             scheduleRecovery(entry.providerId, entry.modelId);
+          } else if (entry.providerConnectionId && account) {
+            await prisma.aiProviderConnection.updateMany({ where: { connectionId: entry.providerConnectionId, providerId: entry.providerId, credentialEntryId: account.credentialEntryId, updatedAt: account.updatedAt, status: { in: ["active", "degraded"] } }, data: { status: "unconfigured" } });
           } else {
           // BI-D28A4F55: recorded as automatic and recovered on its own.
           const { autoDisableProvider } = await import("./provider-auto-disable");
@@ -594,6 +591,16 @@ export async function callWithFallbackChain(
           );
 
         } else if (e.code === "model_not_found") {
+          if (entry.providerConnectionId && account) {
+            // A scoped refusal proves an entitlement gap, not catalog retirement.
+            await prisma.aiProviderConnection.updateMany({
+              where: { connectionId: entry.providerConnectionId, providerId: entry.providerId,
+                credentialEntryId: account.credentialEntryId, accessibleModelIds: { equals: account.accessibleModelIds },
+                status: { in: ["active", "degraded"] } },
+              data: { accessibleModelIds: account.accessibleModelIds.filter(model => model !== entry.modelId) },
+            });
+            invalidateRoutingLoaderCache();
+          } else {
           // EP-INF-004: Retire the specific model, not the provider
           await prisma.modelProfile
             .updateMany({
@@ -621,6 +628,7 @@ export async function callWithFallbackChain(
               ),
             );
           }
+          }
 
         } else if (e.code === "auth") {
           // Auth errors are provider-level (credentials are shared). But an
@@ -646,11 +654,11 @@ export async function callWithFallbackChain(
             await markModelDegraded(entry.providerId, entry.modelId, "local_auth_misclassification");
             scheduleRecovery(entry.providerId, entry.modelId);
           } else {
-          const isOAuth = provider.authMethod?.startsWith("oauth2") ?? false;
+          const isOAuth = entry.accountAuthMethod?.startsWith("oauth2") ?? (provider.authMethod?.startsWith("oauth2") ?? false);
           if (isOAuth && !authRefreshRetried) {
             authRefreshRetried = true;
             const { refreshOAuthToken } = await import("@/lib/provider-oauth");
-            const refreshed = await refreshOAuthToken(entry.providerId);
+            const refreshed = entry.providerConnectionId ? await refreshOAuthToken(entry.providerId, entry.providerConnectionId) : await refreshOAuthToken(entry.providerId);
             if ("token" in refreshed) {
               console.log(
                 `[callWithFallbackChain] Auth error on OAuth provider ${entry.providerId}; refreshed token, retrying once before disabling.`,
@@ -665,14 +673,18 @@ export async function callWithFallbackChain(
           // Non-OAuth provider, refresh failed, or refresh-retry already
           // attempted: disable the provider — as an automatic disable that
           // schedules its own recovery (BI-D28A4F55), not a permanent one.
-          const { autoDisableProvider } = await import("./provider-auto-disable");
-          await autoDisableProvider({ providerId: entry.providerId, cause: "auth", source: "fallback-chain", detail: e.message?.slice(0, 160) })
+          if (entry.providerConnectionId && account) {
+            await prisma.aiProviderConnection.updateMany({ where: { connectionId: entry.providerConnectionId, providerId: entry.providerId, credentialEntryId: account.credentialEntryId, updatedAt: account.updatedAt, status: { in: ["active", "degraded"] } }, data: { status: "unconfigured" } });
+          } else {
+            const { autoDisableProvider } = await import("./provider-auto-disable");
+            await autoDisableProvider({ providerId: entry.providerId, cause: "auth", source: "fallback-chain", detail: e.message?.slice(0, 160) })
             .catch((err) =>
               console.error(
                 `[callWithFallbackChain] failed to mark ${entry.providerId} disabled:`,
                 err,
               ),
             );
+          }
           }
         } else if (shouldDegradeModelForInterfaceDrift(e.code, e.message)) {
           await markModelDegraded(entry.providerId, entry.modelId, "interface drift");
@@ -695,7 +707,7 @@ export async function callWithFallbackChain(
         // Process-local + auto-expiring; does NOT mutate ModelProvider.status.
         const cooldown = runtimeCooldownFor(e);
         markEndpointUnavailable(
-          entry.providerId,
+          ["auth", "billing", "model_not_found"].includes(e.code) ? accountRuntimeKey(entry.providerId, entry.providerConnectionId) : entry.providerId,
           entry.modelId,
           cooldown.reason,
           cooldown.ms,
@@ -711,6 +723,7 @@ export async function callWithFallbackChain(
         recordRouteOutcome({
           traceId,
           providerId: entry.providerId,
+          ...(entry.providerConnectionId ? { providerConnectionId: entry.providerConnectionId, quotaScopeKey: conservativeQuotaScope(entry.providerId) } : {}),
           modelId: entry.modelId,
           recipeId: i === 0 ? (plan?.recipeId ?? null) : null,
           contractFamily: plan?.contractFamily ?? decision.taskType,
@@ -726,8 +739,12 @@ export async function callWithFallbackChain(
           providerErrorCode: e.code,
         }).catch((err) => console.error("[outcome] Failed to record error:", err));
       }
+    } finally {
+      releaseAccount();
     }
   }
+
+  if (changedAccounts.length > 0) throw changedAccounts.at(-1)!;
 
   if (capacityDeferrals.length === chain.length) {
     throw capacityDeferrals.at(-1)!;

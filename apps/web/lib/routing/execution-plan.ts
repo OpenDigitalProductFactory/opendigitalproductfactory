@@ -9,7 +9,7 @@
 
 import { terminalWriterDispatchContract, type TerminalWriterDispatchContract } from "./execution-adapter-types";
 import type { RequestContract } from "./request-contract";
-import type { EndpointManifest } from "./types";
+import type { EndpointManifest, RouteDecision } from "./types";
 import type { RecipeRow, RoutedExecutionPlan } from "./recipe-types";
 import { resolveSamplingProfile, type ResolvedSampling } from "./sampling-profile";
 import { effectiveSampling } from "./vendor-sampling-catalog";
@@ -351,4 +351,49 @@ export function bindActivityExecutionPlan(
     ...plan,
     maxTokens: activity.tokenEnvelope.maxOutputTokens,
   }, harness);
+}
+
+function buildFallbackProviderSettings(
+  sourcePlan?: RoutedExecutionPlan,
+): RoutedExecutionPlan["providerSettings"] {
+  const settings = sourcePlan?.providerSettings ?? {};
+  const effort = (settings as Record<string, unknown>).effort;
+  return effort ? { effort } : {};
+}
+
+export function buildFallbackPlan(
+  entry: { providerId: string; modelId: string; providerConnectionId?: string; providerConnectionVersion?: string; accountAuthMethod?: string; executionChannel?: string },
+  decision: RouteDecision,
+  tools?: Array<Record<string, unknown>>,
+  sourcePlan?: RoutedExecutionPlan,
+): RoutedExecutionPlan {
+  const toolPolicy: RoutedExecutionPlan["toolPolicy"] = {
+    ...(sourcePlan?.toolPolicy ?? {}),
+  };
+  if ((tools?.length ?? 0) > 0 && toolPolicy.toolChoice === undefined) {
+    toolPolicy.toolChoice = "auto";
+  }
+
+  const fallbackPlan: RoutedExecutionPlan = {
+    providerId: entry.providerId,
+    ...(entry.providerConnectionId ? { providerConnectionId: entry.providerConnectionId, providerConnectionVersion: entry.providerConnectionVersion, accountAuthMethod: entry.accountAuthMethod, executionChannel: entry.executionChannel } : {}),
+    modelId: entry.modelId,
+    recipeId: null,
+    contractFamily: sourcePlan?.contractFamily ?? decision.taskType,
+    executionAdapter: entry.executionChannel === "direct-api" && (usesCliAdapter(entry.providerId) || usesCodexCli(entry.providerId))
+      ? usesCodexCli(entry.providerId) ? "responses" : "chat"
+      : resolveDefaultExecutionAdapter(entry.providerId),
+    maxTokens: sourcePlan?.maxTokens ?? 4096,
+    providerSettings: buildFallbackProviderSettings(sourcePlan),
+    toolPolicy,
+    responsePolicy: sourcePlan?.responsePolicy ?? {},
+    ...(sourcePlan?.temperature !== undefined ? { temperature: sourcePlan.temperature } : {}),
+    ...(sourcePlan?.openRouterObligations
+      ? { openRouterObligations: sourcePlan.openRouterObligations }
+      : {}),
+  };
+  if (entry.providerId === "openrouter" && sourcePlan?.openRouterObligations) {
+    fallbackPlan.openRouterPolicy = compileOpenRouterExecutionPolicy(sourcePlan.openRouterObligations);
+  }
+  return fallbackPlan;
 }

@@ -16,6 +16,8 @@ import { updateRecipePerformance } from "./recipe-performance";
 export interface RouteOutcomeInput {
   traceId?: string | null;
   providerId: string;
+  providerConnectionId?: string;
+  quotaScopeKey?: string;
   modelId: string;
   recipeId: string | null;
   contractFamily: string;
@@ -49,6 +51,7 @@ export async function recordRouteOutcome(outcome: RouteOutcomeInput): Promise<vo
         requestId,
         traceId: outcome.traceId ?? null,
         providerId: outcome.providerId,
+        ...(outcome.providerConnectionId ? { providerConnectionId: outcome.providerConnectionId, quotaScopeKey: outcome.quotaScopeKey ?? null } : {}),
         modelId: outcome.modelId,
         recipeId: outcome.recipeId,
         contractFamily: outcome.contractFamily,

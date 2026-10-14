@@ -148,6 +148,11 @@ function createMockProcess(stdout: string, exitCode = 0) {
 // ── Tests ───────────────────────────────────────────────────────────────────
 
 describe("cliAdapter", () => {
+  it("does not return partial native output as success after a failed child", async () => {
+    mockGetProviderBearerToken.mockResolvedValue({ token: "fake-oauth-token" });
+    mockSpawn.mockReturnValue(createMockProcess("Started native tool execution", 1));
+    await expect(cliAdapter.execute(makeRequest())).rejects.toMatchObject({ name: "NativeCliExecutionUncertainError" });
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mockExecAsync.mockResolvedValue({ stdout: "", stderr: "" });
@@ -200,7 +205,7 @@ describe("cliAdapter", () => {
     );
   });
 
-  it("reaps the in-sandbox process tree on dispatch timeout (BI-F36E7510)", async () => {
+  it("returns an uncertain execution after the container watchdog budget without guessing container PIDs", async () => {
     vi.useFakeTimers();
     try {
       mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-test" });
@@ -219,29 +224,25 @@ describe("cliAdapter", () => {
       const p = cliAdapter.execute(makeRequest());
       p.catch(() => {}); // prevent unhandled-rejection noise before we assert
 
-      // Advance past CLI_TIMEOUT_MS — the dispatch timer fires.
-      await vi.advanceTimersByTimeAsync(600_000);
+      // The host gives the container watchdog time to settle its owned child.
+      await vi.advanceTimersByTimeAsync(615_000);
 
       // The local docker-exec client is signalled...
       expect(proc.kill).toHaveBeenCalledWith("SIGTERM");
-      // ...AND the in-container tree is reaped (the actual fix): a docker exec
-      // that SIGTERMs the recorded pid + the runner sh.
+      // Container cleanup is owned by its supervisor, not a PID-file lookup.
       const calls = mockExecAsync.mock.calls.map((c) => String(c[0]));
-      const termReap = calls.find(
-        (cmd) => /kill -TERM/.test(cmd) && /(cli-pid-|cli-run-)/.test(cmd),
-      );
-      expect(termReap).toBeDefined();
+      expect(calls.some(cmd => /kill -TERM|pkill/.test(cmd))).toBe(false);
 
-      // After the grace period it escalates to SIGKILL.
+      // The host must never escalate against a potentially recycled PID.
       await vi.advanceTimersByTimeAsync(3_000);
       const killReap = mockExecAsync.mock.calls
         .map((c) => String(c[0]))
         .some((cmd) => /kill -KILL/.test(cmd) && /(cli-pid-|cli-run-)/.test(cmd));
-      expect(killReap).toBe(true);
+      expect(killReap).toBe(false);
 
       // The wrapper dies → the dispatch rejects as a timeout.
       proc.emit("close", null);
-      await expect(p).rejects.toThrow(/timed out/i);
+      await expect(p).rejects.toThrow(/did not return a settled result/i);
     } finally {
       vi.useRealTimers();
     }
@@ -318,30 +319,23 @@ describe("cliAdapter", () => {
     await cliAdapter.execute(makeRequest());
 
     const decodedScript = sandboxWriteFor("cli-run-")!.content;
+    const config = JSON.parse(decodedScript.match(/const config = (.+);/)![1]!);
+    expect(config.env.CLAUDE_CONFIG_DIR).toMatch(/^\/tmp\/dpf-claude-auth-/);
 
     // The regression itself: never cd into the project tree.
-    expect(decodedScript).not.toContain("cd /workspace");
-    // An empty per-run directory, created before use so `cd` cannot fail.
-    expect(decodedScript).toMatch(/mkdir -p \/tmp\/cli-cwd-/);
-    expect(decodedScript).toMatch(/cd \/tmp\/cli-cwd-/);
-    // Order matters: mkdir must precede cd.
-    expect(decodedScript.indexOf("mkdir -p /tmp/cli-cwd-"))
-      .toBeLessThan(decodedScript.indexOf("cd /tmp/cli-cwd-"));
+    expect(config.cwd).toBe(config.env.CLAUDE_CONFIG_DIR);
+    expect(config.cwd).not.toContain("/workspace");
+    expect(decodedScript).not.toContain("sk-ant-oat01-test-token");
   });
 
-  it("removes the neutral working directory when the call is cleaned up", async () => {
+  it("leaves a launched private directory's cleanup to its container supervisor", async () => {
     mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-test-token" });
     const cliOutput = JSON.stringify({ result: "OK", usage: {} });
     mockSpawn.mockReturnValue(createMockProcess(cliOutput));
 
     await cliAdapter.execute(makeRequest());
 
-    const cleanup = mockExecAsync.mock.calls
-      .map((c) => String(c[0]))
-      .find((cmd) => /rmdir \/tmp\/cli-cwd-/.test(cmd));
-    expect(cleanup).toBeDefined();
-    // Cleanup must never fail the call — the dir may already be gone.
-    expect(cleanup).toContain("|| true");
+    expect(mockExecAsync.mock.calls.some(([command]) => /rm -rf|rmdir/.test(String(command)))).toBe(false);
   });
 
   it("handles CLI process error with auth failure classification", async () => {
@@ -454,10 +448,10 @@ describe("cliAdapter", () => {
 
     await cliAdapter.execute(makeRequest());
 
-    // Verify cleanup exec was called with rm -f
-    const execCalls = mockExecAsync.mock.calls.map(c => c[0] as string);
-    const cleanupCall = execCalls.find(c => c.includes("rm -f"));
-    expect(cleanupCall).toBeDefined();
+    const runner = sandboxWriteFor("cli-run-")!.content;
+    const config = JSON.parse(runner.match(/const config = (.+);/)![1]!);
+    expect(config.promptFile.startsWith(`${config.home}/`)).toBe(true);
+    expect(config.systemPromptFile.startsWith(`${config.home}/`)).toBe(true);
   });
 
   // ── Native-MCP mode ────────────────────────────────────────────────────────
@@ -519,7 +513,7 @@ describe("cliAdapter", () => {
       const mcpWrite = sandboxWriteFor("cli-mcp-");
       expect(mcpWrite).toBeDefined();
       expect(mcpWrite!.chownNodeUser).toBe(true);
-      expect(mcpWrite!.mode).toBe("644");
+      expect(mcpWrite!.mode).toBe("600");
       // The short-lived JWT is carried in the config content, not in argv.
       expect(mcpWrite!.content).toContain("eyJ.test.jwt");
     });
@@ -626,9 +620,8 @@ describe("cliAdapter", () => {
 
       await cliAdapter.execute(makeMcpRequest());
 
-      const execCalls = mockExecAsync.mock.calls.map((c) => c[0] as string);
-      const cleanup = execCalls.find((c) => c.includes("rm -f"));
-      expect(cleanup).toContain("cli-mcp-");
+      const config = JSON.parse(sandboxWriteFor("cli-run-")!.content.match(/const config = (.+);/)![1]!);
+      expect(sandboxWriteFor("cli-mcp-")!.path.startsWith(`${config.home}/`)).toBe(true);
     });
 
     it("strips mcp__dpf__* tool_use blocks the CLI surfaces (Phase 6 double-dispatch protection)", async () => {

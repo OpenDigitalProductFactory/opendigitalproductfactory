@@ -273,7 +273,7 @@ describe("codexCliAdapter — E2BIG spawn error classification", () => {
     mockSpawn.mockImplementation(() => {
       spawnCallCount++;
       const proc = makeMockProcess();
-      if (spawnCallCount <= 2) {
+      if (spawnCallCount <= 3) {
         // Prompt + runner file writes — succeed synchronously on nextTick
         process.nextTick(() => proc.emit("close", 0));
       } else {
@@ -313,6 +313,36 @@ describe("codexCliAdapter — E2BIG spawn error classification", () => {
 });
 
 describe("Codex inference context isolation", () => {
+  it("keeps simultaneous account credentials in distinct private homes", async () => {
+    vi.clearAllMocks();
+    const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
+    vi.mocked(getDecryptedCredential).mockImplementation(async (_provider, connectionId) => ({ secretRef: connectionId === "account-a" ? "test-key-a" : "test-key-b", cachedToken: null } as never));
+    mockExecAsync.mockResolvedValue({ stdout: "", stderr: "" });
+    const writes: Array<{ path: string; content: string }> = [];
+    mockSpawn.mockImplementation((_command: string, args: string[]) => {
+      const proc = makeMockProcess();
+      if (args.includes("-i")) {
+        proc.stdin.write.mockImplementation((data: string, cb?: () => void) => {
+          writes.push({ path: args.at(-1)!, content: Buffer.from(data, "base64").toString("utf8") }); cb?.(); return true;
+        });
+        proc.stdin.end.mockImplementation(() => process.nextTick(() => proc.emit("close", 0)));
+      } else {
+        process.nextTick(() => { proc.stdout.emit("data", Buffer.from("Completed")); proc.emit("close", 0); });
+      }
+      return proc;
+    });
+    const { codexCliAdapter } = await import("./codex-cli-adapter");
+    await Promise.all(["account-a", "account-b"].map(providerConnectionId => codexCliAdapter.execute(makeRequest({ plan: makePlan({ providerConnectionId }) }))));
+    expect(getDecryptedCredential).toHaveBeenCalledWith("codex", "account-a");
+    expect(getDecryptedCredential).toHaveBeenCalledWith("codex", "account-b");
+    const homes = writes.filter(write => write.content.includes("const config =")).map(write => JSON.parse(write.content.match(/const config = (.+);/)![1]!).env.CODEX_HOME as string);
+    expect(new Set(homes).size).toBe(2);
+    for (const key of ["test-key-a", "test-key-b"]) {
+      const staged = writes.find(write => write.path.endsWith("auth.json") && JSON.parse(write.content).OPENAI_API_KEY === key)!;
+      expect(homes.some(home => staged.path.includes(`${home}/auth.json`))).toBe(true);
+      expect(mockExecAsync.mock.calls.some(([command]) => command.includes(key))).toBe(false);
+    }
+  });
   it("runs outside the shared checkout and cleans up its own context directory", async () => {
     vi.clearAllMocks();
     const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
@@ -338,12 +368,13 @@ describe("Codex inference context isolation", () => {
     });
     const { codexCliAdapter } = await import("./codex-cli-adapter");
     await codexCliAdapter.execute(makeRequest());
-    const runner = writes.find(value => value.startsWith("#!/bin/sh"))!;
-    const directory = runner.match(/cd (\/tmp\/codex-cwd-[\w-]+) \|\| exit 1/)?.[1];
-    expect(directory).toBeDefined();
-    expect(runner).not.toContain("cd /workspace");
-    expect(runner).toContain(`mkdir -p ${directory} || exit 1`);
-    expect(mockExecAsync.mock.calls.some(([command]) => command.includes(`rmdir ${directory}`))).toBe(true);
+    const runner = writes.find(value => value.includes("const config ="))!;
+    const config = JSON.parse(runner.match(/const config = (.+);/)![1]!);
+    expect(config.env.CODEX_HOME).toMatch(/^\/tmp\/dpf-codex-auth-/);
+    expect(runner).not.toContain("sk-test");
+    expect(config.cwd).toBe(config.env.CODEX_HOME);
+    expect(config.cwd).not.toContain("/workspace");
+    expect(mockSpawn.mock.calls.some(([, args]) => args.includes("node"))).toBe(true);
   });
 });
 

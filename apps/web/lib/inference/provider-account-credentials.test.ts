@@ -6,8 +6,16 @@ const db = vi.hoisted(() => ({
 }));
 vi.mock("@dpf/db", () => ({ prisma: db }));
 import { findProviderCredential } from "./provider-account-credentials";
+import { accountExecutionVersion, ProviderAccountSelectionChangedError } from "../routing/provider-account-candidates";
 
 describe("provider account credential boundary", () => {
+  it("refuses credential replacement between routing and the single credential read", async () => {
+    const selected = { connectionId: "account-a", providerId: "anthropic", status: "active", authMethod: "api-key", executionChannel: "direct-api", credentialEntryId: "selected", credentialEntry: { status: "ok", updatedAt: new Date("2026-10-14T00:00:00Z") }, accessibleModelIds: ["model"], modelsVerifiedAt: new Date("2026-10-14T00:00:00Z"), evidenceStatus: "unreviewed" };
+    db.aiProviderConnection.findUnique.mockResolvedValue({ ...selected, credentialEntryId: "replacement" });
+    await expect(findProviderCredential("anthropic", "account-a", accountExecutionVersion(selected))).rejects.toBeInstanceOf(ProviderAccountSelectionChangedError);
+    db.aiProviderConnection.findUnique.mockResolvedValue(selected);
+    await expect(findProviderCredential("anthropic", "account-a", accountExecutionVersion(selected))).resolves.toEqual(selected.credentialEntry);
+  });
   beforeEach(() => vi.resetAllMocks());
 
   it("keeps a provider-only caller on its legacy default credential", async () => {

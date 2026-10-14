@@ -54,6 +54,8 @@ import {
   resolveDefaultExecutionAdapter,
 } from "./execution-plan";
 import { buildRoutingConfidence } from "./route-confidence";
+import { accountCandidateExclusion, accountRuntimeKey, accountTraceProjector, bindProviderAccountExecution } from "./provider-account-candidates";
+import { compareAccountAllocation } from "./provider-account-allocation";
 
 // ── Stage 3: Hard filter (V2 — contract-based) ──────────────────────────────
 
@@ -108,6 +110,8 @@ export function getExclusionReasonV2(
   // accidental overlap cannot broaden eligibility.
   const providerConstraintReason = getProviderConstraintExclusionReason(ep, contract);
   if (providerConstraintReason) return providerConstraintReason;
+  const accountConstraintReason = accountCandidateExclusion(ep, contract);
+  if (accountConstraintReason) return accountConstraintReason;
 
   // Account/transport compatibility is a hard platform fact, not a score.
   // Preserve the endpoint in the excluded trace so runtime-health previews
@@ -364,7 +368,8 @@ function filterHardV2(
   const cooled: Array<{ ep: EndpointManifest; reason: string }> = [];
   const live: EndpointManifest[] = [];
   for (const ep of eligible) {
-    const runtime = getEndpointRuntimeState(ep.providerId, ep.modelId);
+    const providerRuntime = getEndpointRuntimeState(ep.providerId, ep.modelId);
+    const runtime = providerRuntime.unavailable ? providerRuntime : getEndpointRuntimeState(accountRuntimeKey(ep.providerId, ep.providerConnectionId), ep.modelId);
     if (runtime.unavailable) {
       cooled.push({ ep, reason: `runtime_cooldown:${runtime.reason ?? "unknown"}` });
     } else {
@@ -460,6 +465,7 @@ export async function routeEndpointV2(
     activityHarnessConfidenceOverrides?: ActivityHarnessConfidenceOverride[];
     /** Preferences are evaluated only after the complete eligibility pipeline. */
     preferences?: EndpointPreferences;
+    accountAffinityKey?: string;
     /**
      * Optional ProviderCapacityStatus map (providerId → snapshot). When
      * omitted, the pipeline loads fresh rows from the DB (BI-3607DDDA). Tests
@@ -470,6 +476,7 @@ export async function routeEndpointV2(
   },
 ): Promise<RouteDecision> {
   const timestamp = new Date();
+  const withAccountIdentity = accountTraceProjector(endpoints);
   const allCandidates: CandidateTrace[] = [];
   const allExcludedReasons: string[] = [];
   const sensitivity: SensitivityLevel = contract.sensitivity;
@@ -520,19 +527,8 @@ export async function routeEndpointV2(
   let capacityByProvider = opts?.capacityByProvider;
   if (!capacityByProvider) {
     try {
-      const { prisma } = await import("@dpf/db");
-      const rows = await prisma.providerCapacityStatus.findMany({
-        select: { providerId: true, state: true, retryAt: true, lastObservedAt: true },
-      });
-      const map = new Map<string, CapacitySnapshot>();
-      for (const row of rows) {
-        map.set(row.providerId, {
-          state: row.state,
-          retryAtMs: row.retryAt ? row.retryAt.getTime() : null,
-          observedAtMs: row.lastObservedAt ? row.lastObservedAt.getTime() : null,
-        });
-      }
-      capacityByProvider = map;
+      const { loadProviderCapacitySnapshots } = await import("./provider-capacity/store");
+      capacityByProvider = await loadProviderCapacitySnapshots();
     } catch {
       capacityByProvider = new Map();
     }
@@ -578,7 +574,7 @@ export async function routeEndpointV2(
       reason: `No eligible endpoints for task type '${contract.taskType}' with sensitivity '${sensitivity}'. ${allCandidates.length} endpoint(s) excluded.${clearanceBlocked ? ` No connected provider is cleared for '${sensitivity}' data.` : ""}`,
       fitnessScore: 0,
       fallbackChain: [],
-      candidates: allCandidates,
+      candidates: allCandidates.map(withAccountIdentity),
       excludedCount: allCandidates.length,
       excludedReasons: allExcludedReasons,
       policyRulesApplied: policyResult.applied,
@@ -664,6 +660,8 @@ export async function routeEndpointV2(
       const qualityDelta = qualityRank(a.endpoint) - qualityRank(b.endpoint);
       if (qualityDelta !== 0) return qualityDelta;
     }
+    if (a.rankScore === b.rankScore && a.endpoint.providerId === b.endpoint.providerId
+      && a.endpoint.modelId === b.endpoint.modelId) return compareAccountAllocation(a.endpoint, b.endpoint, opts?.accountAffinityKey, nowMs);
     return 0; // preserve prior rankScore order (stable sort)
   });
 
@@ -722,13 +720,14 @@ export async function routeEndpointV2(
     : opts?.skipRecipe
       ? undefined
       : buildDefaultPlan(winner.endpoint, contract);
-  const executionPlan =
+  let executionPlan =
     baseExecutionPlan && opts?.activityContract
       ? bindActivityExecutionPlan(baseExecutionPlan, opts.activityContract, {
           providerId: winner.endpoint.providerId,
           modelId: winner.endpoint.modelId,
         }, opts.activityHarnessConfidenceOverrides)
       : baseExecutionPlan;
+  executionPlan = bindProviderAccountExecution(executionPlan, winner.endpoint);
 
   // Build full candidate trace (eligible endpoints, with rankScore as fitnessScore)
   const eligibleTraces: CandidateTrace[] = ranked.map(
@@ -772,7 +771,7 @@ export async function routeEndpointV2(
     routingConfidence: buildRoutingConfidence(hardResult.qualityFloorRelaxed, ranked.length, preferenceSelection.resolution?.fallbackUsed),
     fitnessScore: winner.rankScore,
     fallbackChain: fullFallbackChain,
-    candidates: [...eligibleTraces, ...allCandidates],
+    candidates: [...eligibleTraces, ...allCandidates].map(withAccountIdentity),
     excludedCount: allCandidates.length,
     excludedReasons: allExcludedReasons,
     policyRulesApplied: policyResult.applied,

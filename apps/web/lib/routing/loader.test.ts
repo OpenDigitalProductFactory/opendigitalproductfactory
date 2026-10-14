@@ -13,6 +13,7 @@ import { MODEL_ROUTING_ENDPOINT_TYPES } from "./provider-eligibility";
 
 const { mockPrisma, mockProviderHasConfiguredCredential, mockServedContext } = vi.hoisted(() => ({
   mockPrisma: {
+    aiProviderConnection: { findMany: vi.fn().mockResolvedValue([]) },
     routeDecisionLog: {
       create: vi.fn().mockResolvedValue({ id: "decision-log-1" }),
     },
