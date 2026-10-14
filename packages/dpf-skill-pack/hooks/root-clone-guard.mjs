@@ -32,6 +32,7 @@
 // Emergency bypass: prefix the command with DPF_ALLOW_ROOT_CLONE_MUTATION=1.
 
 import { lstatSync, statSync } from "node:fs";
+import { executableCommandText, shellCommandPayloads, stripHeredocBodies } from "./command-text.mjs";
 import {
   readHookPayload,
   isShellTool,
@@ -123,9 +124,48 @@ export function isUnderRootSharedArea(resolved, cloneRoot) {
 
 // ── command parsing ──────────────────────────────────────────────────────────
 
-/** Split a compound command into segments on && || ; | and newlines. */
-function segments(command) {
-  return command.split(/&&|\|\||[;|\n]/g).map((s) => s.trim()).filter(Boolean);
+/** Shell syntax outside quoted data. Keep original offsets for path extraction. */
+function shellSyntaxPositions(command) {
+  const positions = new Set();
+  let quote = null;
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    if (ch === "\\" && quote !== "'") { i++; continue; }
+    if (quote) {
+      if (ch === quote) quote = null;
+    } else if (ch === "'" || ch === '"') {
+      quote = ch;
+    } else {
+      positions.add(i);
+    }
+  }
+  return positions;
+}
+
+/** Split shell commands, never interpreter input or separators inside quoted data. */
+function segments(command, depth = 0) {
+  const shell = stripHeredocBodies(command, (header) =>
+    /\b(?:bash|sh|zsh|dash)\b/.test(executableCommandText(header)));
+  const syntax = shellSyntaxPositions(shell);
+  const out = [];
+  let start = 0;
+  for (let i = 0; i < shell.length; i++) {
+    if (!syntax.has(i)) continue;
+    const pair = shell.slice(i, i + 2);
+    const width = pair === "&&" || pair === "||" ? 2 : /[;|\n]/.test(shell[i]) ? 1 : 0;
+    if (!width) continue;
+    out.push(shell.slice(start, i));
+    i += width - 1;
+    start = i + 1;
+  }
+  out.push(shell.slice(start));
+  const result = out.map((s) => s.trim()).filter(Boolean);
+  if (depth < 2) {
+    for (const payload of shellCommandPayloads(shell, (index) => syntax.has(index))) {
+      result.push(...segments(payload, depth + 1));
+    }
+  }
+  return result;
 }
 
 /** Tokenize a segment, honoring simple single/double quotes; strips the quotes. */
@@ -290,9 +330,11 @@ export function isRootCloneGitStateMutation(seg, cwd, isDir = () => false) {
 /** Redirect targets: `> f`, `>> f`, `2> f`, `&> f`. Heredocs land here too (`cat > f <<EOF`). */
 function redirectTargets(seg) {
   const out = [];
+  const syntax = shellSyntaxPositions(seg);
   const re = /(?:\d*|&)>{1,2}\s*("[^"]+"|'[^']+'|[^\s;|&<>]+)/g;
   let m;
   while ((m = re.exec(seg)) !== null) {
+    if (!syntax.has(m.index + m[0].indexOf(">"))) continue;
     const raw = m[1].replace(/^['"]|['"]$/g, "");
     if (raw && raw !== "/dev/null") out.push(raw);
   }
