@@ -244,7 +244,7 @@ _Certification exercises a real domain act, not a generic probe._
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
 - **Cadence** (level 0 of 3) — no recurring trigger — nothing makes this coworker act unasked
-- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 69 reachable tool(s)
+- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 73 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
 ### `AGT-101` — strategy-alignment-agent · deliberately-unstaffed · 48% attainable
@@ -252,7 +252,7 @@ _Certification exercises a real domain act, not a generic probe._
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
 - **Cadence** (level 0 of 3) — no recurring trigger — nothing makes this coworker act unasked
-- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 64 reachable tool(s)
+- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 68 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
 ### `AGT-102` — portfolio-backlog-agent · deliberately-unstaffed · 48% attainable
@@ -260,7 +260,7 @@ _Certification exercises a real domain act, not a generic probe._
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
 - **Cadence** (level 0 of 3) — no recurring trigger — nothing makes this coworker act unasked
-- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 102 reachable tool(s)
+- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 120 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
 ### `AGT-110` — portfolio-rationalization-agent · deliberately-unstaffed · 48% attainable
@@ -268,7 +268,7 @@ _Certification exercises a real domain act, not a generic probe._
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
 - **Cadence** (level 0 of 3) — no recurring trigger — nothing makes this coworker act unasked
-- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 64 reachable tool(s)
+- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 68 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
 ### `AGT-111` — investment-analysis-agent · deliberately-unstaffed · 48% attainable
@@ -276,7 +276,7 @@ _Certification exercises a real domain act, not a generic probe._
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
 - **Cadence** (level 0 of 3) — no recurring trigger — nothing makes this coworker act unasked
-- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 68 reachable tool(s)
+- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 72 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
 ### `AGT-112` — gap-analysis-agent · deliberately-unstaffed · 48% attainable
@@ -284,7 +284,7 @@ _Certification exercises a real domain act, not a generic probe._
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
 - **Cadence** (level 0 of 3) — no recurring trigger — nothing makes this coworker act unasked
-- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 69 reachable tool(s)
+- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 73 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
 ### `AGT-113` — scope-agreement-agent · deliberately-unstaffed · 48% attainable
@@ -292,7 +292,7 @@ _Certification exercises a real domain act, not a generic probe._
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
 - **Cadence** (level 0 of 3) — no recurring trigger — nothing makes this coworker act unasked
-- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 64 reachable tool(s)
+- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 68 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
 ### `AGT-120` — product-backlog-prioritization-agent · deliberately-unstaffed · 48% attainable
@@ -300,7 +300,7 @@ _Certification exercises a real domain act, not a generic probe._
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
 - **Cadence** (level 0 of 3) — no recurring trigger — nothing makes this coworker act unasked
-- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 102 reachable tool(s)
+- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 120 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
 ### `AGT-121` — architecture-definition-agent · deliberately-unstaffed · 48% attainable
@@ -308,7 +308,7 @@ _Certification exercises a real domain act, not a generic probe._
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
 - **Cadence** (level 0 of 3) — no recurring trigger — nothing makes this coworker act unasked
-- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 73 reachable tool(s)
+- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 77 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
 ### `AGT-122` — roadmap-assembly-agent · deliberately-unstaffed · 48% attainable
@@ -316,7 +316,7 @@ _Certification exercises a real domain act, not a generic probe._
 - **Identity** (level 1 of 3) — in the canonical registry only (status "defined"), never seeded onto the roster
 - **Shape** (level 0 of 2) — no declared work shape — nothing bounds what its standing work may do
 - **Cadence** (level 0 of 3) — no recurring trigger — nothing makes this coworker act unasked
-- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 68 reachable tool(s)
+- **Tools + Skills** (level 1 of 3) — no skill authored for it (10 wildcard only), 72 reachable tool(s)
 - **Evidence** (level 0 of 2) — not on the roster, so the certification sweep never exercises it
 
 ## assignTo health

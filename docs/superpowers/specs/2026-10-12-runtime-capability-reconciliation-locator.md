@@ -133,3 +133,12 @@ read-only, validated complete baselines without activating anything; apply carri
 explicit operator intent through the existing signed transition ledger. Combining
 these into one implicit read/write operation would obscure authority. Both stay
 in the existing platform-update pack and existing administrator grant categories.
+
+The shared grant leaf also required the completeness compiler to resolve named
+imports and spreads. Two regressions reproduced omitted existing/update mappings
+and false governance reachability for an unknown tool. The compiler now reuses
+its existing literal-map parser, resolves imported aliases/local spreads in
+declaration order, refuses unresolved/cyclic sources, and uses the existing
+default-deny reachability check for governance counts. All 35 compiler tests pass,
+including administrator/read-only boundaries. Regenerated reports describe
+source reachability; no live grant or funding record is changed.
