@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { parseArgs as utilParseArgs } from "node:util";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { chmod, copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { acquireRuntimeApplyLock } from "./installer/runtime-apply-lock.mjs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -36,14 +37,25 @@ const createTemporarySecret = async () => {
 };
 
 await mkdir(stateDir, { recursive: true, mode: 0o700 });
-try { await mkdir(lockPath); } catch { process.stderr.write("secret_rotation_in_progress\n"); process.exit(75); }
-let temporary;
+let temporary, applyLease, secretLockHeld = false;
 try {
+  // POSIX writers share one whole-operation boundary. Windows retains its
+  // existing ACL path; offline recovery remains unavailable there until a
+  // corresponding protected-filesystem protocol is implemented.
+  if (process.platform !== "win32") {
+    try { applyLease = await acquireRuntimeApplyLock({ stateDirectory: stateDir, runId: `key-${randomUUID()}` }); }
+    catch (error) {
+      if (error.message !== "runtime_apply_lock_contended") throw error;
+      const refusal = new Error("transition_in_progress"); refusal.code = "DPF_TRANSITION_IN_PROGRESS"; throw refusal;
+    }
+  }
+  try { await mkdir(lockPath); secretLockHeld = true; }
+  catch { const error = new Error("secret_rotation_in_progress"); error.code = "DPF_TRANSITION_IN_PROGRESS"; throw error; }
   try {
     await stat(authorityPath);
     const error = new Error("transition_in_progress"); error.code = "DPF_TRANSITION_IN_PROGRESS"; throw error;
   } catch (error) { if (error.code !== "ENOENT") throw error; }
-  try {
+  if (!applyLease) try {
     await stat(applyLockPath);
     // Do not rotate a receipt key while an unmeasured executor may use it.
     // Legacy apply-lock expiry does not establish executor settlement.
@@ -85,6 +97,10 @@ try {
 } catch (error) {
   process.stderr.write(`${error.message}\n`); process.exitCode = error.code === "DPF_TRANSITION_IN_PROGRESS" ? 75 : 78;
 } finally {
+  // There are no spawned POSIX writers here: each filesystem effect is awaited.
+  // An abrupt exit deliberately retains the shared boundary for settlement.
+  await applyLease?.assertOwned();
   if (temporary) await rm(temporary, { force: true });
-  await rm(lockPath, { recursive: true, force: true });
+  if (secretLockHeld) await rm(lockPath, { recursive: true, force: true });
+  await applyLease?.release();
 }
