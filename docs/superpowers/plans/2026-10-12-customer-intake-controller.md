@@ -66,7 +66,16 @@ A failed sweep can have partially ingested work. Existing retries already exist;
 
 ## Backlog coverage
 - Decision: decomposed
+- Parent: BI-FD40397B
 - Receipt: cmv7m317q128k01mxpqvjkbn6
+- Dependencies: controller depends on reconciliation, disposition, terminal and human-resumption; reconciliation depends on source-identity; disposition and terminal depend on reconciliation; source-identity and human-resumption: none.
+- Mappings:
+  - controller -> BI-FD40397B
+  - source-identity -> BI-952F08BA
+  - reconciliation -> BI-CCD8D841
+  - disposition -> BI-4C8A83AB
+  - terminal -> BI-AE9FCB4C
+  - human-resumption -> BI-8239CD30
 
 Receipt cmv7m317q128k01mxpqvjkbn6 maps six live items (BI-FD40397B, BI-952F08BA, BI-CCD8D841, BI-4C8A83AB, BI-AE9FCB4C, BI-8239CD30) and binds the immutable plan blob 3b406d4af2340a677469ad3ab5f53382a3ba88d3 at pushed commit c32d8250514d628d43c0609e1252912fabc63512. It supersedes cmv7loxoi0u0u01mx0m3dh2e5 (invalidated when the workroom declared delivery-medium@1.0.0) and the earlier receipt cmv674efp0vuw01o77l9sg4hd, which was recorded on the development install and does not exist on the controller install. Graph: controller depends on reconciliation, disposition, terminal and human-resumption; reconciliation depends on source-identity; disposition and terminal depend on reconciliation. All dependency work remains on its existing BI. This branch may deliver a verified controller repair increment, but BI-FD40397B remains open until all acceptance criteria are evidenced.
 
