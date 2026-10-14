@@ -35,6 +35,10 @@ const flow = (key: PortfolioFlowWithCost["key"], overrides: Partial<PortfolioFlo
   flowEfficiency: { value: 0.12, prior: 0.08 },
   throughput: { perWeek: 2.25, priorPerWeek: 1.5 },
   weeklyFlowTimeP50Ms: [50 * H, 45 * H, null, 40 * H, 38 * H, 35 * H, 32 * H, 30 * H],
+  weeklyFlowLoad: [9, 9, 8, 8, 8, 7, 7, 7],
+  weeklyFlowEfficiency: [0.05, 0.06, null, 0.08, 0.09, 0.1, 0.11, 0.12],
+  weeklyThroughput: [1, 1, 2, 2, 2, 3, 2, 3],
+  flowLoadPrior: 8,
   distribution: { feature: 4, defect: 2, risk: 1, debt: 0 },
   shapes: [{ shapeKey: "delivery-small", shapeRef: "delivery-small@1.0.0", roomsInFlow: 5, flowTimeP50Ms: 20 * H, runs: 6, bottleneck: { stageKey: "merge", roomsHeld: 3, cause: "awaiting-person" } }],
   points: { inFlight: 34, delivered: 21 },
@@ -53,6 +57,11 @@ describe("PortfolioFlowTiles", () => {
     expect(screen.getByText("34 pts")).toBeInTheDocument();
     expect(screen.getByText(/AI on these rooms, last 28 days: \$1\.50 recorded/)).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /Median flow time per week/ })).toBeInTheDocument();
+    // Every measure has its weekly trend; load also shows its change against four weeks ago.
+    expect(screen.getByRole("img", { name: /Rooms in flow at the end of each week/ })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /Flow efficiency per week/ })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /Runs finished per week/ })).toBeInTheDocument();
+    expect(screen.getByText(/−1 vs prior 28 days/)).toBeInTheDocument();
   });
 
   it("names subscription AI use as tokens, never as $0", () => {
