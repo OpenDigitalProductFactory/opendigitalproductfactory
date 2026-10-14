@@ -71,7 +71,7 @@ export function guardReceiptDirectory(cwd = process.cwd()) {
 
 export async function runWithGuardReceipt({ directory, stage, identify, execute, passed, now = Date.now, lockOptions = {} }) {
   const identity = identify();
-  if (!identity) return { result: await execute(), reused: false, executedAt: null };
+  if (!identity) return { result: await execute({ progress: () => {} }), reused: false, executedAt: null };
   mkdirSync(directory, { recursive: true });
   // Bound disk use to one receipt/claim per stage in this worktree. Different
   // identities cannot share PASS, even though they replace the same local slot.
@@ -99,10 +99,16 @@ export async function runWithGuardReceipt({ directory, stage, identify, execute,
     const completed = reusable();
     if (completed) return completed;
     writer.start();
-    const result = await execute();
+    const result = await execute({ progress: observation => writer.heartbeat(observation) });
     const eligible = passed(result) && stageIdentityMatches(identity, identify());
     writer.complete(eligible ? "passed" : "inconclusive", { result });
     return { result, reused: false, executedAt: writer.snapshot().completedAt };
+  } catch (error) {
+    if (writer.snapshot()?.status === "running") {
+      writer.complete("inconclusive", { error: { name: error.name ?? "Error",
+        code: error.code ?? null, message: String(error.message ?? error).slice(0, 1000) } });
+    }
+    throw error;
   } finally {
     releaseLocalConvergenceLock({ path: lock, token: claim.owner.token });
   }

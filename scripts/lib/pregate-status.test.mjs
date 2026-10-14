@@ -381,6 +381,18 @@ test("reconcile of nothing is NO-RECORD, never a pass", () => {
   assert.equal(reconcileSlots([]).verdict, "NO-RECORD");
 });
 
+test("same-source admitted progress wins over a queued sibling without inventing PASS", () => {
+  const queued = {slotKey:"slot-0",verdict:"INCONCLUSIVE",gateStatus:"queued",boundSha:HEAD,boundBranch:"fix/topic",recordedAt:"2026-10-13T00:00:00Z"};
+  const admitted = {...queued,slotKey:"slot-1",gateStatus:"admitted",recordedAt:"2026-10-13T01:00:00Z"};
+  for (const slots of [[queued, admitted], [admitted, queued]]) {
+    const result = reconcileSlots(slots);
+    assert.equal(result.slot,"slot-1");
+    assert.equal(result.verdict,"INCONCLUSIVE");
+    assert.equal(result.gateStatus,"admitted");
+  }
+  assert.equal(reconcileSlots([queued,{...admitted,boundSha:OLD}]).slot,"slot-0", "foreign source progress cannot replace this claim");
+});
+
 test("the report is short enough that nobody pipes it, and names the next step", () => {
   const lines = formatStatusReport(
     { verdict: "STALE", reason: "head moved", boundSha: OLD, boundBranch: "claude/topic", recordedAt: "2026-08-04T11:00:00.000Z", slot: "slot-0", logFile: "D:/x.log" },

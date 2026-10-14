@@ -141,7 +141,10 @@ export function createObservedProcessRunner({
   now = () => new Date().toISOString(),
   platform = process.platform,
 } = {}) {
-  return function runObservedProcess({ command, args, env = process.env, observation = {} }) {
+  return function runObservedProcess({ command, args, env = process.env, observation = {}, cwd, shell = platform === "win32", signal: cancellationSignal }) {
+    if (cancellationSignal?.aborted) return Promise.resolve({ ...observation, status: null,
+      signal: null, error: null, cancelled: true, childPid: null, outputTail: "", hostSamples: [],
+      startedAt: now(), completedAt: now(), deadlineExceeded: false });
     return new Promise((resolveAttempt) => {
       const output = new BoundedTextTail(outputTailBytes);
       const hostSamples = [];
@@ -153,8 +156,13 @@ export function createObservedProcessRunner({
         ? null
         : new Date(Date.parse(startedAt) + boundedDurationMs).toISOString();
       let spawnError = null;
+      let progressError = null;
+      const notify = event => {
+        try { onProgress(event); } catch (error) { progressError ??= error; }
+      };
       let settled = false;
       let deadlineExceeded = false;
+      let cancelled = false;
       let stopAttemptedAt = null;
       let stopResult = null;
       let forceAttemptedAt = null;
@@ -165,7 +173,8 @@ export function createObservedProcessRunner({
       let closeTimer = null;
       const child = spawnImpl(command, args, {
         env,
-        shell: platform === "win32",
+        cwd,
+        shell,
         detached: platform !== "win32" && boundedDurationMs !== null,
         stdio: ["ignore", "pipe", "pipe"],
         windowsHide: true,
@@ -175,7 +184,7 @@ export function createObservedProcessRunner({
         if (child.pid && hostSamples.length < MAX_HOST_SAMPLES) {
           const host = sampleHost(child.pid);
           hostSamples.push(host);
-          onProgress({
+          notify({
             ...observation,
             childPid: child.pid,
             host,
@@ -194,12 +203,13 @@ export function createObservedProcessRunner({
         clearTimeoutImpl(deadlineTimer);
         clearTimeoutImpl(forceTimer);
         clearTimeoutImpl(closeTimer);
+        cancellationSignal?.removeEventListener("abort", abort);
         sample();
         resolveAttempt({
           ...observation,
           status,
           signal,
-          error: spawnError,
+          error: spawnError ?? progressError,
           outputTail: output.toString(),
           childPid: child.pid ?? null,
           hostSamples,
@@ -208,6 +218,7 @@ export function createObservedProcessRunner({
           maxDurationMs: boundedDurationMs,
           deadlineAt,
           deadlineExceeded,
+          cancelled,
           stopAttemptedAt,
           stopResult,
           forceAttemptedAt,
@@ -217,6 +228,8 @@ export function createObservedProcessRunner({
         });
       };
       const stopTree = (force) => {
+        if (platform === "win32" && (child.exitCode != null || child.signalCode != null)) return { ok: false, force,
+          error: { code: "owned-process-exited", message: "Owned child exited; do not target a reused PID." } };
         try {
           return terminateProcessTreeImpl(child.pid, { force });
         } catch (error) {
@@ -239,14 +252,14 @@ export function createObservedProcessRunner({
         finish(status, signal);
       });
 
-      if (boundedDurationMs !== null) {
-        deadlineTimer = setTimeoutImpl(() => {
-          if (settled) return;
-          deadlineExceeded = true;
+      const stop = reason => {
+          if (settled || stopAttemptedAt) return;
+          deadlineExceeded = reason === "timeout";
+          cancelled = reason === "cancelled";
           sample();
           stopAttemptedAt = now();
           stopResult = stopTree(false);
-          onProgress({
+          notify({
             ...observation,
             childPid: child.pid ?? null,
             deadlineExceeded,
@@ -260,7 +273,7 @@ export function createObservedProcessRunner({
             if (settled) return;
             forceAttemptedAt = now();
             forceResult = stopTree(true);
-            onProgress({
+            notify({
               ...observation,
               childPid: child.pid ?? null,
               deadlineExceeded,
@@ -278,8 +291,11 @@ export function createObservedProcessRunner({
               finish(null, null, { closeTimedOut: true });
             }, closeGraceMs);
           }, terminationGraceMs);
-        }, boundedDurationMs);
-      }
+      };
+      const abort = () => stop("cancelled");
+      cancellationSignal?.addEventListener("abort", abort, { once: true });
+      if (cancellationSignal?.aborted) abort();
+      if (boundedDurationMs !== null) deadlineTimer = setTimeoutImpl(() => stop("timeout"), boundedDurationMs);
     });
   };
 }

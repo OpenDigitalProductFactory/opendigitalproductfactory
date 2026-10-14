@@ -481,6 +481,9 @@ export function reconcileSlots(slots) {
   let best = considered[0];
   for (const slot of considered.slice(1)) {
     if (rank(slot.verdict) > rank(best.verdict)) best = slot;
+    else if (slot.verdict === "INCONCLUSIVE" && best.verdict === "INCONCLUSIVE"
+      && slot.boundSha && slot.boundSha === best.boundSha && slot.boundBranch === best.boundBranch
+      && ["admitted", "running"].includes(slot.gateStatus) && best.gateStatus === "queued") best = slot;
   }
   return { ...best, slot: best.slotKey ?? null };
 }

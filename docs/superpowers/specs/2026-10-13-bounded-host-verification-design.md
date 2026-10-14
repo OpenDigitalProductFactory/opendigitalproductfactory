@@ -61,7 +61,7 @@ No dependency, table, scheduler, grant or parallel evidence store is added.
    preserve all existing callers' defaults. Validate process ownership before
    termination and test descendants on the actual supported host.
 3. Replace host guard synchronous execution with the observed runner, using
-   a documented 10-minute per-command default and existing environment
+   a documented 30-minute per-command default and existing environment
    classification. Await commands in the shared policy loop without changing
    CI's guard selection. Stop canceled runs instead of starting later guards.
 4. Pass progress through `runWithGuardReceipt` into existing heartbeats, and
@@ -82,6 +82,23 @@ must both fail closed for the same host verification contract. It may be
 implemented in ordered commits, without weakening a fence to unblock testing.
 
 ## Scope and dependencies
+
+WWMD `DI-6F05F6D7FF32` resolves the technical classification as Medium; governed
+claim `IRD-44D33C4C7CD3` admits implementation as `delivery-medium@1.0.0`.
+The operator is not asked to guess technical size. No initiative scope baseline
+was available to bind the initial coverage request; the admitted shape's live
+readiness determines its applicable gates rather than manufacturing a receipt.
+
+| Implementation owner | Requirements | Existing contracts | Verification |
+| --- | --- | --- | --- |
+| BI-6DE5A3B6 / WC-6CABA4D9 | OBJ-HOST-001 through OBJ-HOST-003 | Host resource admission, observed process runner, policy guard loop, stage receipts and status reader | AC-HOST-001 through AC-HOST-006, independent acceptance and publication gates |
+
+The same-source status reducer now prefers admitted/running over a queued
+sibling only when both remain inconclusive and bind the same branch and SHA.
+It cannot promote a different source or invent a pass. Source-only fixtures
+reproduce and verify the tie. Migration-inventory batching is owned separately.
+Cross-stage guard-cache consolidation is a separate follow-up: current stage
+and plan identities intentionally differ, and PR metadata must remain fresh.
 
 BI-D27ADE59's shared CI classification is already merged. Claim identity remains
 BI-2641F34A; semantic-review recovery remains BI-8ECEC429; readiness presentation

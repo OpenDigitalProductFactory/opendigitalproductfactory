@@ -161,6 +161,36 @@ test("thrown execution releases only its own claim, without caching a pass", asy
   assert.equal((await runWithGuardReceipt(f.options)).reused, false);
 });
 
+test("interrupted execution persists a terminal inconclusive outcome and keeps its last progress", async t => {
+  const f = fixture(t);
+  f.options.execute = async ({ progress } = {}) => {
+    progress?.({ guardId: "hanging-guard", phase: "started" });
+    throw new Error("runner interrupted");
+  };
+  await assert.rejects(runWithGuardReceipt(f.options), /runner interrupted/);
+  const { readdirSync } = await import("node:fs");
+  const path = join(f.options.directory, readdirSync(f.options.directory).find(name => name.endsWith(".json")));
+  const receipt = JSON.parse(readFileSync(path, "utf8"));
+  assert.equal(receipt.status, "inconclusive");
+  assert.equal(receipt.error.message, "runner interrupted");
+  assert.equal(receipt.observations.at(-1).guardId, "hanging-guard");
+  assert.ok(receipt.completedAt);
+});
+
+test("guard progress is durable before the command completes", async t => {
+  const f = fixture(t);
+  const { readdirSync } = await import("node:fs");
+  f.options.execute = async ({ progress }) => {
+    progress({ guardId: "slow-guard", phase: "started" });
+    const path = join(f.options.directory, readdirSync(f.options.directory).find(name => name.endsWith(".json")));
+    const receipt = JSON.parse(readFileSync(path, "utf8"));
+    assert.equal(receipt.status, "running");
+    assert.equal(receipt.observations.at(-1).guardId, "slow-guard");
+    return { ok: true, entries: [{ status: "passed" }] };
+  };
+  assert.equal((await runWithGuardReceipt(f.options)).reused, false);
+});
+
 test("precommit never shares fixed diagnostic logs across worktrees", () => {
   const hook = readFileSync(new URL("../../.githooks/pre-commit", import.meta.url), "utf8");
   assert.doesNotMatch(hook, /\/tmp\/pre-commit-(?:tc|prisma)\.log/);

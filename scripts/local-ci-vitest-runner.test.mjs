@@ -55,6 +55,44 @@ function fakeChild(pid = 4123) {
   return child;
 }
 
+test("observer cancellation stops the owned tree and cannot turn a late zero exit into success", async () => {
+  const child = fakeChild();
+  const controller = new AbortController();
+  const stopped = [];
+  let options;
+  const run = createObservedProcessRunner({ spawnImpl: (_command, _args, input) => { options = input; return child; },
+    sampleHost: () => ({}), stdout: { write() {} }, stderr: { write() {} },
+    maxDurationMs: 10000, terminateProcessTreeImpl: (pid, input) => { stopped.push({ pid, ...input }); return { ok: true }; } });
+  const pending = run({ command: "fixture", args: [], cwd: "/fixture", shell: false, signal: controller.signal });
+  controller.abort();
+  child.emit("close", 0, null);
+  const result = await pending;
+  assert.equal(result.cancelled, true);
+  assert.equal(result.deadlineExceeded, false);
+  assert.equal(options.cwd, "/fixture");
+  assert.equal(options.shell, false);
+  assert.deepEqual(stopped, [{ pid: child.pid, force: false }]);
+});
+
+test("an already cancelled observer never starts a child", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  const run = createObservedProcessRunner({ spawnImpl: () => { throw new Error("must not spawn"); } });
+  const result = await run({ command: "fixture", args: [], signal: controller.signal });
+  assert.equal(result.cancelled, true);
+  assert.equal(result.childPid, null);
+});
+
+test("failed progress recording is retained as an execution limitation rather than a zero-exit pass", async () => {
+  const child = fakeChild();
+  const run = createObservedProcessRunner({ spawnImpl: () => child, sampleHost: () => ({}),
+    stdout: { write() {} }, stderr: { write() {} }, onProgress: () => { throw new Error("receipt unavailable"); } });
+  const pending = run({ command:"fixture",args:[] });
+  child.emit("close",0,null);
+  const result = await pending;
+  assert.equal(result.error.message,"receipt unavailable");
+});
+
 test("Vitest stage duration defaults to 30 minutes and accepts only a positive override", () => {
   assert.equal(resolveVitestMaxDurationMs({}), 1_800_000);
   assert.equal(resolveVitestMaxDurationMs({ DPF_LOCAL_CI_VITEST_MAX_DURATION_MS: "45000" }), 45_000);

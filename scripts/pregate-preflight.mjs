@@ -14,6 +14,7 @@ import {
   PREFLIGHT_SKIP_ENV,
   planPreflight,
   runPreflight,
+  createDefaultExecute,
 } from "./lib/pregate-preflight.mjs";
 import { classifyChangedFiles } from "./ci-change-scope.mjs";
 import { checkStaleRootClone } from "./lib/stale-root-clone.mjs";
@@ -156,13 +157,24 @@ export async function main() {
   }
 
   const startedAt = Date.now();
-  const execution = await runWithGuardReceipt({
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  process.once("SIGINT", cancel);
+  process.once("SIGTERM", cancel);
+  let execution;
+  try { execution = await runWithGuardReceipt({
     directory: guardReceiptDirectory(),
     stage: "pregate-preflight",
     identify: () => process.env[PREFLIGHT_SKIP_ENV] ? null : identifyGuardExecution({ plan: planned.entries }),
     passed: result => !result.skipped && result.entries.length === planned.entries.length && result.entries.every(entry => entry.status === "passed"),
-    execute: () => runPreflight({
+    execute: ({ progress }) => runPreflight({
     plan: planned.entries,
+    signal: controller.signal,
+    execute: createDefaultExecute(process.env, { signal: controller.signal, progress(event) {
+      progress(event);
+      if (event.phase) process.stdout.write(`[pregate-preflight] ${event.guardId ?? "guard"}: ${event.phase}\n`);
+      else process.stdout.write(`[pregate-preflight] ${event.guardId ?? "guard"}: running (pid ${event.childPid ?? "unknown"})\n`);
+    } }),
     // Failure lines are printed from the FINAL classified entries below —
     // an env-degraded guard transiently looks "failed" at finish-time and
     // must not be announced as a failure here.
@@ -172,8 +184,15 @@ export async function main() {
       }
     },
     }),
-  });
+  }); } finally {
+    process.removeListener("SIGINT", cancel);
+    process.removeListener("SIGTERM", cancel);
+  }
   const { result } = execution;
+  const fullyVerified = !result.skipped && result.entries.length === planned.entries.length
+    && result.entries.every(entry => entry.status === "passed");
+  process.stdout.write(`DPF_HOST_PREFLIGHT_RESULT=${JSON.stringify({ status: fullyVerified ? "passed" : "inconclusive",
+    entries: result.entries.map(({ id, status }) => ({ id, status })) })}\n`);
   if (execution.reused) {
     process.stdout.write(`[pregate-preflight] REUSED ${result.entries.length} successful guards executed at ${execution.executedAt}; identical inputs, no guards rerun. Not integration evidence.\n`);
     return;
@@ -193,7 +212,13 @@ export async function main() {
   const runnerFailed = result.entries.filter(
     (entry) => entry.status === "runner_failed",
   );
+  const interrupted = result.entries.filter(entry => ["timed_out", "cancelled"].includes(entry.status));
   const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+  if (interrupted.length) {
+    for (const entry of interrupted) process.stderr.write(`[pregate-preflight] ${entry.name}: ${entry.status} — no passing verification; inspect the persisted host receipt before retry.\n`);
+    process.exitCode = 88;
+    return;
+  }
 
   for (const entry of environmentSkipped) {
     // BI-99CAE42F: never recommend a bare --filter install from the workspace root.
@@ -250,7 +275,7 @@ export async function main() {
     runnerFailed.length > 0 ? `${runnerFailed.length} host-could-not-run` : null,
   ].filter(Boolean);
   process.stdout.write(
-    `[pregate-preflight] OK — ${result.entries.length} guards clean in ${elapsed}s` +
+    `[pregate-preflight] ${fullyVerified ? "OK" : "INCONCLUSIVE"} — ${result.entries.filter(entry => entry.status === "passed").length}/${result.entries.length} guards verified in ${elapsed}s` +
       (caveats.length > 0 ? ` (${caveats.join(", ")}, see warnings)` : "") +
       "\n",
   );

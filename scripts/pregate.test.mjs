@@ -6,6 +6,36 @@ import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { readEarlyQuiescenceStatus, readQuiescenceStatus, quiescenceBlocksWrites } from "./lib/gate-quiescence.mjs";
 
+test("parent preflight never advertises environment-limited checks as passed", async () => {
+  let output = "";
+  const result = await pregate.runHostPreflight({ env: {}, readStatusImpl: async () => ({level:"normal"}),
+    spawnSyncImpl: () => ({status:0,stdout:'DPF_HOST_PREFLIGHT_RESULT={"status":"inconclusive"}\n'}),
+    stdout: text => { output += text; }, stderr: () => {} });
+  assert.equal(result, 0, "canonical CI still enforces environment-skipped guards");
+  assert.doesNotMatch(output, /preflight passed/);
+  assert.match(output, /inconclusive/i);
+});
+
+test("parent preflight timeout remains unrun even if the child exits zero", async () => {
+  const result = await pregate.runHostPreflight({ env: {}, readStatusImpl: async () => ({level:"normal"}),
+    spawnSyncImpl: () => ({status:0,deadlineExceeded:true,stdout:""}), stdout: () => {}, stderr: () => {} });
+  assert.equal(result, 88);
+});
+
+test("observed parent preflight passes cancellation and cleans its listeners", async () => {
+  const before = process.listenerCount("SIGINT");
+  let output = "";
+  const result = await pregate.runHostPreflight({ env: {}, readStatusImpl: async () => ({level:"normal"}),
+    runObservedImpl: async ({signal,shell}) => {
+      assert.equal(signal.aborted,false);
+      assert.equal(shell,false);
+      return {status:0,outputTail:'DPF_HOST_PREFLIGHT_RESULT={"status":"passed"}\n'};
+    }, stdout: text => {output += text;}, stderr: () => {} });
+  assert.equal(result,0);
+  assert.match(output,/preflight passed/);
+  assert.equal(process.listenerCount("SIGINT"),before);
+});
+
 import {
   EXIT_DURABLE_QUEUE_WAIT,
   WINDOWS_WRAPPER_TERMINATED_STATUS,
