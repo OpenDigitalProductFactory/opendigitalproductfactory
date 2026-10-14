@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { SelectField } from "@/components/ui/form/SelectField";
 import { TextField } from "@/components/ui/form/TextField";
@@ -9,12 +10,16 @@ import { Notice, StatusBadge } from "@/components/ui/report-kit";
 import { saveInvestmentBalanceAction, bindInstallationInvestmentAction } from "@/lib/actions/portfolio-budget";
 import type { OwnerInvestmentView } from "@/lib/portfolio/investment-balance-server";
 
-export function InvestmentBalance({ views, canManage, formatLocale }: { views: OwnerInvestmentView[]; canManage: boolean; formatLocale?: string }) {
+export function InvestmentBalance({ views, canManage, formatLocale, nextHref, firstHref }: { views: OwnerInvestmentView[]; canManage: boolean; formatLocale?: string; nextHref?: string; firstHref?: string }) {
   return <section id="investment-balance" className="mt-6 space-y-4" aria-labelledby="investment-balance-heading">
     <h3 id="investment-balance-heading" className="text-dpf-title font-dpf-semibold">Investment balance</h3>
-    <p className="text-dpf-body text-dpf-muted">Direction over time for the work you fund. Bug fixes normally count as repair.</p>
+    <p className="text-dpf-body text-dpf-muted">Direction for funded work. Bug fixes normally count as repair.</p>
     {views.length === 0 ? <p className="text-dpf-body text-dpf-muted">No funding scope is assigned to you. The recorded budget owner can set the allocation.</p> : null}
     {views.map((view) => <ScopeBalance key={`${view.scope.organizationId}:${view.scope.purpose}`} view={view} canManage={canManage} formatLocale={formatLocale} />)}
+    {nextHref || firstHref ? <nav aria-label="Funding organizations" className="flex flex-wrap gap-4 text-dpf-body text-dpf-accent">
+      {firstHref ? <Link href={firstHref} className="py-2 underline">First organizations</Link> : null}
+      {nextHref ? <Link href={nextHref} className="py-2 underline">More organizations</Link> : null}
+    </nav> : null}
   </section>;
 }
 
@@ -31,7 +36,7 @@ function ScopeBalance({ view, canManage, formatLocale }: { view: OwnerInvestment
   const [pending, startTransition] = useTransition();
   const purpose = view.scope.purpose === "shared-platform" ? "Shared platform" : "Archetype work";
   if (!report) return <Notice variant="warn" title={`${view.organizationName} · ${purpose}`}>
-    Allocation is unavailable. Recorded ownership or policy needs review before work can use this budget.
+    Allocation is unavailable. Recorded ownership or policy needs review before using this budget.
   </Notice>;
   const measured = report.observation;
   const number = new Intl.NumberFormat(formatLocale);

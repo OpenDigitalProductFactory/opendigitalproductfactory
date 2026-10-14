@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { loadInvestmentObservation } from "./investment-balance-observation";
+import { resolveRoomFunding } from "./investment-balance-binding";
 
 const now = new Date("2099-02-12T00:00:00Z");
 const scope = { principalId: `investment-${randomUUID()}`, organizationId: `investment-${randomUUID()}`, purpose: "shared-platform" as const };
@@ -59,8 +60,18 @@ const url = process.env.DPF_SQL_TEST_DATABASE_URL ?? ((process.env.CI === "true"
     expect(await loadInvestmentObservation(db, { ...input, scope: { ...scope, principalId: "other-owner" } })).toMatchObject({ knownAttempts: 0 });
     expect(await loadInvestmentObservation(db, { ...input, scope: { ...scope, organizationId: "other-org" } })).toMatchObject({ knownAttempts: 0 });
   });
-  it("uses the scoped index with one million measured attempts on the install", async () => {
+  it("resolves funding across 10,000 Workrooms and measures one million attempts within the response budget", async () => {
     await client.query("SET LOCAL statement_timeout = '180s'");
+    await client.query(`INSERT INTO "WorkCapsule" (id,"capsuleId",title,objective,source,status,"updatedAt")
+      SELECT $1 || ':room:' || n, $1 || ':room:' || n, 'Scale fixture', 'Funding resolution', 'manual', 'ready', now()
+      FROM generate_series(1,10000) n`, [scope.principalId]);
+    await client.query(`INSERT INTO "WorkCapsuleRelation" (id,"fromWorkroomId","toWorkroomId",relation)
+      SELECT $1 || ':link:' || n, $1 || ':room:10000', $1 || ':room:' || n, 'contains'
+      FROM generate_series(1,9999) n`, [scope.principalId]);
+    const funding = { investmentBalanceV1: { bindings: { "*": { version: 1, scope, installationRef: input.installationRef, boundAt: now.toISOString(), actorPrincipalId: scope.principalId, reason: "Scale fixture funding" } } } };
+    await client.query('UPDATE "WorkCapsule" SET "promotionPolicy"=$2::jsonb WHERE id=$1', [`${scope.principalId}:room:10000`, JSON.stringify(funding)]);
+    await client.query('ANALYZE "WorkCapsule"');
+    await client.query('ANALYZE "WorkCapsuleRelation"');
     await client.query(`INSERT INTO "AdapterRunTelemetry"
       (id,"adapterKind","adapterVersion","providerId","modelId","executionMode","startedAt",status,"capabilitiesUsed",
        "inputTokens","outputTokens","investmentPrincipalId","investmentOrganizationId","investmentPurpose","investmentClass","investmentInstallationRef","investmentCapturedAt")
@@ -72,10 +83,25 @@ const url = process.env.DPF_SQL_TEST_DATABASE_URL ?? ((process.env.CI === "true"
       AND "investmentPurpose"='sharedPlatform' AND "investmentInstallationRef"=$3
       AND "startedAt">='2099-01-01' AND "startedAt"<'2099-02-12'`, [scope.principalId, scope.organizationId, input.installationRef]);
     expect(JSON.stringify(plan.rows)).toContain("AdapterRunTelemetry_investment_scope_startedAt_idx");
+    const roomId = `${scope.principalId}:room:42`;
+    const roomPlan = await client.query('EXPLAIN (ANALYZE, FORMAT JSON) SELECT id,"promotionPolicy" FROM "WorkCapsule" WHERE id=$1', [roomId]);
+    expect(JSON.stringify(roomPlan.rows)).toContain("WorkCapsule_pkey");
     const started = performance.now();
+    const reads: string[] = [];
+    const resolved = await resolveRoomFunding(roomId, "BI-scale-fixture", async (id) => {
+      reads.push(id);
+      const row = (await client.query('SELECT id,"promotionPolicy" FROM "WorkCapsule" WHERE id=$1', [id])).rows[0];
+      if (!row) return null;
+      const parents = await client.query('SELECT "fromWorkroomId" FROM "WorkCapsuleRelation" WHERE "toWorkroomId"=$1 AND relation=\'contains\' LIMIT 65', [id]);
+      return { ...row, parentIds: parents.rows.map((parent) => parent.fromWorkroomId) };
+    }, input.installationRef);
+    expect(resolved).toMatchObject({ ok: true, data: { scope, sourceRoomId: `${scope.principalId}:room:10000` } });
+    expect(reads).toHaveLength(2);
     const observed = await loadInvestmentObservation(db, { ...input, scope: { ...scope, purpose: "archetype" } });
     expect(observed.knownAttempts).toBe(1000001);
     expect(observed.newTokens).toBe(200002048);
-    console.info("Investment million-attempt observation", { elapsedMs: performance.now() - started, plan: plan.rows });
+    const elapsedMs = performance.now() - started;
+    expect(elapsedMs).toBeLessThan(5000);
+    console.info("Investment scale fixture", { workrooms: 10000, attempts: 1000000, responseBudgetMs: 5000, elapsedMs, plan: plan.rows, roomPlan: roomPlan.rows });
   }, 240000);
 });

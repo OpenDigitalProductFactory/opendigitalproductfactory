@@ -260,21 +260,25 @@ export async function loadScopedBalanceReport(db: InvestmentIdentityDb & Pick<Pr
 }
 
 /** Only scopes canonically owned by the signed-in person are projected into the settings UI. */
-export async function loadOwnerInvestmentViews(db: PrismaClient, userId: string) {
+export type OwnerInvestmentView = { scope: FundingScope; organizationName: string; report: Awaited<ReturnType<typeof loadScopedBalanceReport>> };
+export async function loadOwnerInvestmentPage(db: PrismaClient, userId: string, afterOrganizationId: string | null = null): Promise<{ views: OwnerInvestmentView[]; nextCursor: string | null }> {
   const principalId = await resolvePrincipalRecordIdForSessionIdentity({ type: "admin", id: userId }, db as never);
-  if (!principalId) return [];
+  if (!principalId) return { views: [], nextCursor: null };
   const profile = await db.decisionPerspectiveProfile.findUnique({ where: { profileId: WWMD_PLATFORM_PROFILE_ID }, select: { ownerPrincipalId: true, ownerOrganizationId: true, status: true } });
   const founderOrg = profile?.status === "active" && profile.ownerPrincipalId === principalId ? profile.ownerOrganizationId : null;
-  const organizations = await db.organization.findMany({ where: { OR: [{ topAccountablePrincipalId: principalId }, ...(founderOrg ? [{ id: founderOrg }] : [])] }, select: { id: true, name: true }, orderBy: { name: "asc" } });
-  const views = [];
-  for (const organization of organizations) for (const purpose of ["shared-platform", "archetype"] as const) {
+  const organizations = await db.organization.findMany({ where: { OR: [{ topAccountablePrincipalId: principalId }, ...(founderOrg ? [{ id: founderOrg }] : [])], ...(afterOrganizationId ? { id: { gt: afterOrganizationId } } : {}) }, select: { id: true, name: true }, orderBy: { id: "asc" }, take: 17 });
+  const page = organizations.slice(0, 16);
+  const views: OwnerInvestmentView[] = [];
+  for (const organization of page) for (const purpose of ["shared-platform", "archetype"] as const) {
     const scope = { principalId, organizationId: organization.id, purpose };
     const report = await loadScopedBalanceReport(db, scope);
     views.push({ scope, organizationName: organization.name, report });
   }
-  return views;
+  return { views, nextCursor: organizations.length > 16 ? page.at(-1)!.id : null };
 }
-export type OwnerInvestmentView = Awaited<ReturnType<typeof loadOwnerInvestmentViews>>[number];
+export async function loadOwnerInvestmentViews(db: PrismaClient, userId: string) {
+  return (await loadOwnerInvestmentPage(db, userId)).views;
+}
 
 /** Bounded planning read. Never synthesizes tokens for candidates that have not run. */
 export async function loadInvestmentStartPreferences(db: FundingReadDb & Pick<Prisma.TransactionClient, "$queryRaw">, itemIds: readonly string[]) {

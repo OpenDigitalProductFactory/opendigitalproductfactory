@@ -19,7 +19,7 @@ import { loadPortfolioOwnership } from "@/lib/portfolio/accountable-owner-view";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { InvestmentBalance } from "@/components/ops/InvestmentBalance";
-import { loadOwnerInvestmentViews } from "@/lib/portfolio/investment-balance-server";
+import { loadOwnerInvestmentPage } from "@/lib/portfolio/investment-balance-server";
 
 export const dynamic = "force-dynamic";
 
@@ -32,9 +32,10 @@ export default async function DemandPage({
     businessProductId?: string;
     digitalProductId?: string;
     investment?: string;
+    investmentAfter?: string;
   }>;
 }) {
-  const { investment, ...scope } = (await searchParams) ?? {};
+  const { investment, investmentAfter, ...scope } = (await searchParams) ?? {};
   const [items, networkItems, shareContext, founderPortfolio, workSyncLinks, policyConfig, tieOutPanel, locale] = await Promise.all([
     getDemandItems(scope),
     getNetworkDemandItems(),
@@ -54,7 +55,13 @@ export default async function DemandPage({
     session?.user && can({ platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser }, "manage_platform"),
   );
   const canManageAllocation = Boolean(session?.user && can({ platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser }, "manage_backlog"));
-  const investmentViews = session?.user?.id ? await loadOwnerInvestmentViews(prisma, session.user.id) : [];
+  const investmentPage = session?.user?.id ? await loadOwnerInvestmentPage(prisma, session.user.id, investmentAfter) : { views: [], nextCursor: null };
+  const investmentHref = (cursor?: string) => {
+    const params = new URLSearchParams(Object.entries(scope).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
+    params.set("investment", "1");
+    if (cursor) params.set("investmentAfter", cursor);
+    return `/ops/demand?${params.toString()}#investment-balance`;
+  };
   const policy = resolveDemandPolicy(policyConfig);
   return (
     <div className="space-y-6">
@@ -92,7 +99,7 @@ export default async function DemandPage({
       <MessagesProvider locale={locale.language} messages={{ portfolio: namespaceMessages(locale.language, "portfolio") }}>
         <PortfolioTieOutPanel {...JSON.parse(JSON.stringify(tieOutPanel))} formatLocale={locale.formatLocale} initiallyOpen={investment === "1"}>
           <PortfolioOwnership view={ownership} canManage={canManageOwners} />
-          <InvestmentBalance views={investmentViews} canManage={canManageAllocation} formatLocale={locale.formatLocale} />
+          <InvestmentBalance views={investmentPage.views} canManage={canManageAllocation} formatLocale={locale.formatLocale} nextHref={investmentPage.nextCursor ? investmentHref(investmentPage.nextCursor) : undefined} firstHref={investmentAfter ? investmentHref() : undefined} />
         </PortfolioTieOutPanel>
       </MessagesProvider>
     </div>

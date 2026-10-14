@@ -26,4 +26,11 @@ describe("investment allocation presentation", () => {
     expect(html).not.toContain("<button");
     expect(html).toContain("No funding scope is assigned to you");
   });
+  it("keeps pagination as accessible navigation within the funding editor", () => {
+    const html = renderToStaticMarkup(<InvestmentBalance views={[]} canManage={false} nextHref="/ops/demand?investment=1&amp;investmentAfter=org-15#investment-balance" firstHref="/ops/demand?investment=1#investment-balance" />);
+    expect(html).toContain('aria-label="Funding organizations"');
+    expect(html).toContain("More organizations");
+    expect(html).toContain("First organizations");
+    expect(html).not.toContain("<button");
+  });
 });

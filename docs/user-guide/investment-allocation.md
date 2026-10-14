@@ -1,6 +1,7 @@
 # Investment allocation
 
 Open **Delivery Flow → Portfolio budgets → Investment balance** to review the work you fund. Installation settings links to the same editor.
+Owners with many organizations can use **More organizations** and **First organizations** to browse a bounded page of allocations. Existing Delivery Flow filters are preserved.
 
 Founder-funded shared platform work starts with an approximate target of **80% repair and refactoring, 20% new capability**. Organization and archetype work starts with **20% repair, 80% new capability**. These targets apply over time; they are not quotas for each task. Bug fixes normally count as repair.
 

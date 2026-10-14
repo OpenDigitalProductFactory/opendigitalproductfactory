@@ -3,7 +3,7 @@ vi.mock("@/lib/decision/caller-context", () => ({ WWMD_PLATFORM_PROFILE_ID: "mar
 vi.mock("@/lib/identity/principal-linking", () => ({ resolvePrincipalRecordIdForSessionIdentity: vi.fn(async () => "p1") }));
 const roomAccess = vi.hoisted(() => vi.fn(async () => ({ decision: { level: "none" } })));
 vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({ resolveHumanWorkroomAccess: roomAccess }));
-import { bindInvestmentFunding, loadBuildInvestmentContext, loadFundingAuthority, loadInvestmentStartPreferences, loadItemBalancePolicy, loadScopedBalancePolicy, loadScopedBalanceReport, projectItemInvestment, readInvestmentInstallationId, saveScopedBalancePolicy } from "./investment-balance-server";
+import { bindInvestmentFunding, loadBuildInvestmentContext, loadFundingAuthority, loadInvestmentStartPreferences, loadItemBalancePolicy, loadOwnerInvestmentPage, loadScopedBalancePolicy, loadScopedBalanceReport, projectItemInvestment, readInvestmentInstallationId, saveScopedBalancePolicy } from "./investment-balance-server";
 import { defaultBalancePolicy } from "./investment-balance";
 
 function fakeDb() {
@@ -19,6 +19,21 @@ function fakeDb() {
 const scope = { principalId: "p1", organizationId: "org1", purpose: "shared-platform" as const };
 
 describe("canonical funding authority reads", () => {
+  it("bounds owner listings and advances a stable organization cursor without crossing ownership", async () => {
+    const organizations = Array.from({ length: 18 }, (_, i) => ({ id: `org-${String(i).padStart(2, "0")}`, name: `Organization ${i}` }));
+    const findMany = vi.fn(async (args: { take: number; where: { id?: { gt: string } } }) => organizations.filter((org) => !args.where.id || org.id > args.where.id.gt).slice(0, args.take));
+    const base = fakeDb();
+    const db = { ...base, organization: { ...base.organization, findMany } };
+    const first = await loadOwnerInvestmentPage(db as never, "u1");
+    expect(first.views).toHaveLength(32);
+    expect(first.nextCursor).toBe("org-15");
+    const second = await loadOwnerInvestmentPage(db as never, "u1", first.nextCursor);
+    expect(second.views).toHaveLength(4);
+    expect(second.nextCursor).toBeNull();
+    expect(second.views[0]?.scope.organizationId).toBe("org-16");
+    expect(first.views.every((view) => view.scope.principalId === "p1")).toBe(true);
+    expect(findMany).toHaveBeenLastCalledWith(expect.objectContaining({ take: 17, orderBy: { id: "asc" }, where: expect.objectContaining({ id: { gt: "org-15" }, OR: expect.arrayContaining([{ topAccountablePrincipalId: "p1" }]) }) }));
+  });
   it("allows a funding owner to underwrite a portfolio managed by another person", async () => {
     const installationRef = `did_${"a".repeat(64)}`;
     const base = fakeDb();
@@ -109,7 +124,8 @@ describe("canonical funding authority reads", () => {
   });
   it("lets the verified owner inspect an expired revision for renewal without enabling execution", async () => {
     const revision = "00000000-0000-4000-8000-000000000001";
-    const stored = { version: 1, revision, previousRevision: null, scope, policy: { ...defaultBalancePolicy("founder", "shared-platform"), steeringEnabled: true }, actorPrincipalId: "p1", reason: "Time-limited allocation", effectiveAt: "2026-01-01T00:00:00Z", expiresAt: "2026-02-01T00:00:00Z" };
+    const epoch = Date.now();
+    const stored = { version: 1, revision, previousRevision: null, scope, policy: { ...defaultBalancePolicy("founder", "shared-platform"), steeringEnabled: true }, actorPrincipalId: "p1", reason: "Time-limited allocation", effectiveAt: new Date(epoch - 60 * 86400000).toISOString(), expiresAt: new Date(epoch - 30 * 86400000).toISOString() };
     const db = { ...fakeDb(), $queryRaw: vi.fn(async () => []) };
     db.platformConfig.findUnique.mockImplementation(async (args?: unknown) => {
       const key = (args as { where: { key: string } }).where.key;
