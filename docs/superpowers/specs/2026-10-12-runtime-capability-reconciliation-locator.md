@@ -1,0 +1,144 @@
+---
+status: draft
+date: 2026-10-12
+backlog: BI-5ACBAC50
+---
+
+# Existing-install capability reconciliation: implementation locator
+
+This is the immutable implementation/coverage entry for existing BI-5ACBAC50 and WC-0AD784CD. It introduces no new initiative, engine, architecture decision or desired live capability set. Normative architecture and the ordered repair remain in `docs/architecture/capability-driven-runtime-profiles.md` §Proposed existing-install reconciliation — BI-5ACBAC50, approved direction `DI-375608F0065D`.
+
+## Evidence and boundaries
+
+The historical prepared source is `e4ca1f1ad82e3b8355f7cdc2d03de77210a855c5`, with shared recursive signing, trusted packaged-probe primitives and ordinary version-2 apply. Its source tests and independent assessments are retained with original attribution. Continued atomic reconciliation is now implemented on owned branch `fix/runtime-capability-convergence`, HEAD `e8955429ed196c0eca27990636f8b142d410cc1a`, with uncommitted source changes. The packaged probe advertises implemented version-2 reconciliation; that metadata is not integration, publication or live acceptance evidence.
+
+Read-only observations on 2026-10-12 still show host schema2/win32/amd64 with core only, catalog52358eb9e4f8… and state76c08f072b16…, while the portal database has nine runtime rows, seven active. This is disagreement, not authorization to activate all seven. Ordinary coordinator validation binds previous keys to database active rows, while the host actuator compares its actual snapshot; it correctly refuses the inconsistent baseline.
+
+Use existing RuntimeCapabilityTransition JSON request/receipt storage, serializable admission, authority reservation, host journal and signed receipts. No new datastore or parallel writer is proposed. Preserve lifecycle overlays, optional volumes, independent operator state and explicit local-provider disable. No PROD action or direct install-file edit is in this source scope.
+
+## Acceptance
+
+AC-1: Reconciliation binds the validated actual host snapshot, keys, hashes and identity separately from the complete observed database state map.
+
+AC-2: Explicit desired host keys, desired database states and touched keys preserve every untouched database value and report residual disagreement.
+
+AC-3: Trusted immutable packaged protocol identity and version-2 reconciliation support are verified before authority reservation, database admission or journal creation.
+
+AC-4: Database and host admission compare their own observed baselines; replay retains its original immutable identity.
+
+AC-5: Compensation restores only this saga's still-owned applied state and never overwrites a subsequent writer; uncertain recovery stays explicit.
+
+AC-6: Fresh bootstrap is host-grounded, existing sync preserves operator state, and real persistence, shared gates and served reconciliation qualify completion.
+
+## Ordered atomic delivery
+
+All steps belong to the same capability-reconciliation fix. Internal signing, protocol, validation and apply commits are prerequisites; none completes the operator's capability-agreement objective independently. Keep one coherent reversible source change in the existing branch, and retain separate evidence for each completed prerequisite.
+
+1. Reuse prepared signing/probe proofs and reproduce the still-refused inconsistent baseline on the named source. Record native research with provenance, not a newly fabricated verification run.
+2. Extend existing protocol/coordinator/host boundaries with separate full baselines and desired results. Validate touched keys and preserve unknown operator intent; bind immutable replay. Reuse shared serialization/hash/projection helpers rather than another codec or engine.
+3. Wire trusted packaged discovery before reserve/admit/apply; add database baseline CAS and host baseline CAS. Exercise concurrent writers, intervening drift, owner/expiry failures and crash boundaries.
+4. Bind compensation to this saga's applied snapshot and managed database values; subsequent writers cause recovery-required. Keep legacy unsigned-health evidence explicitly unverified.
+5. Extend `packages/db/src/sync-capabilities.ts` and its existing tests for host-grounded fresh creation and state-preserving existing sync. Use the same governed preview/actuator, not a new activation path. Claim additional paths before edits.
+6. Run affected source checks, real PostgreSQL/shared qualification, independent review and protected publication. The designated publisher/advance coordinator owns canonical releases. After CAN-TEST, one authorized reconciliation must prove exact host/database results, residual drift, sandbox identity and subsequent upgrade behavior.
+
+- **Requirement CAP-RECON:** AC-1 through AC-6 above, with actual dual-baseline comparison and no blanket seed activation.
+- **Contract CAP-RECON:** existing `apps/web/lib/platform-runtime/transition-protocol.ts`, `transition-coordinator.ts`, `runtime-capability-executor.ts`, shared signer, packaged actuator and transition ledger. Metadata/support checks precede privileged side effects.
+- **Flow CAP-RECON:** observed host + complete observed DB → explicit desired results/touched set → trusted compatibility → reserve → DB CAS admission → host CAS apply → signed observed health → owned DB commit or owned compensation → truthful residual drift.
+- **Verification CAP-RECON:** meaningful red/green protocol/coordinator/host/sync tests, real PostgreSQL two-writer/crash tests, exact-tree shared gates and served acceptance. The inherited tests are source evidence only; new runs and unrun gates retain separate attribution.
+
+## Risks, rollback and coverage
+
+Risks are stale baseline adoption, incomplete DB maps, mutable caller identity across awaits, legacy health promoted to verified evidence, unowned rollback and transport/version disagreement. Refuse those cases before mutation or report recovery-required without forcing restoration. Source rollback is one PR revert; any live compensation follows the existing saga's owned comparison and keeps volumes.
+
+Declare delivery-medium@1.0.0. Existing native research receipt `initiative-25c7fd99-2ccd-4ab2-be31-fda3075d4e85`, atomic coverage `cmv5x77yo0cli01mr7dwpx9i8` against immutable locator commit `7465b88eac84a5184bb69ee34c5af8002f1b0039` / blob `4f9515a57e147c8a35f1cbe754d3481328c62647`, and implementation admission `IRD-963A57D5F5B5` were verified on continuation. CAP-RECON remains mapped only to existing BI-5ACBAC50. Workroom custody and these planning records do not establish delivery or parent completion.
+
+The first continued coordinator prerequisite reproduced seven failing identity,
+baseline and replay tests, then passed 114 affected tests across three executed
+files and both official web TypeScript programs. Its narrow independent source
+assessment found no blocking issues.
+
+The production executor now captures caller identity before observation and
+checks the immutable packaged protocol against the portal's baked Git identity
+and packaged actuator/signer hashes. Missing or conflicting identity refuses
+before host authority. Reconciliation remains unavailable even when the host
+advertises support; it never falls back to the ordinary transition. This
+prerequisite passed 121 affected tests across four files and both official web
+TypeScript programs after the identity regression failed on the earlier source.
+The prior executor correction received an independent source assessment with
+no blocking findings. That assessment does not cover later reconciliation edits.
+
+The continued implementation now shares dual-baseline validation between the
+portal and packaged host. Seven source-only failures became seven passes; the
+portal receipt probe also rejects a validly signed receipt for a different nested
+request. The coordinator source probes pass for independent baselines, refusing
+unsupported protocol before admission, touched-only database CAS, and rejecting
+an intervening database writer. These probes use simulated dependencies, not
+PostgreSQL or the full Vitest program.
+
+The host actuator accepts an explicitly signed reconciliation packet and checks
+its full observed install identity. Its subsequent-writer regression failed
+before the owned rollback check. The shared signer and actuator now pass 52
+executed Node tests across two files, including existing ordinary-transition and
+crash-recovery tests. Four new failures reproduced missing or different packaged
+code identity before the host identity check was added. A separate same-id replay
+failure reproduced adoption of a different promoter; replay now binds its original
+source, code hashes and immutable image. These source checks do not qualify a release.
+
+The production executor and restart adapter now use the original immutable
+promoter digest. Compensation persists its exact reverse packet before IO and
+retains that packet when recovery becomes uncertain. Source fixture probes pass
+for seven coordinator cases, three restart cases and two production cases.
+The first governed affected Vitest run executed 83 tests in five files: 82 passed,
+and an old compensation assertion failed because it omitted the newly recorded
+packet. The corrected assertion verifies the exact packet and persistence before
+rollback IO. Its never-admitted follow-up and the current typecheck wait were
+released through their normal native requests; neither earns an executed verdict.
+
+The existing platform-update tool pack now delegates read-only preview and explicit
+reconciliation to the authenticated runtime server action. Preview grants no apply
+authority and chooses no desired settings. Apply preserves the authenticated actor,
+complete baselines and original transition identity. Both tools reuse existing
+administrator grant categories; no live coworker grant was changed. Two entry
+source failures became two passes. Additional paths were normally claimed, with
+an audited two-path source co-claim for the grant table and operator guide.
+
+Fresh bootstrap now derives newly created runtime states from the validated
+host snapshot; existing rows keep operator state. Its source-only probe went
+from one failure/one pass to two passes. The initializer's read-only state mount
+is carried by the same source change, after an audited single-path Compose
+co-claim. The latest governed package run passed 164 tests in seven files;
+five PostgreSQL tests were skipped because no explicit test target was supplied.
+An incorrect grant-suite filename selected no tests from that suite; the correct
+grant suite subsequently passed 137 tests, and database bootstrap passed nine.
+Both web TypeScript programs then passed under governed admission after an
+unsupported tool-consequence label was corrected to existing platform authority
+and covered by an assertion. Earlier ten-second MCP admission timeouts remain
+unrun, with no owned active or queued lease on reconciliation. The PostgreSQL
+suite now also accepts the canonical slot's explicit test-database variable,
+without falling back to an installed database URL. Current grant and bootstrap
+package checks after the metadata correction, real PostgreSQL, independent final review, the governed gate and live acceptance
+remain owed. No partial source prerequisite is published as a completed fix.
+
+Independent assembled review of checkpoint `df16befe5ee` found a live-path
+compensation race when health failed after a later database writer. Two tests
+reproduced it before repair (41 existing passes). Live and restart compensation
+now share the complete persisted database-baseline fence; an unavailable fence
+refuses reverse host IO and retains the recorded packet for recovery. The focused
+coordinator/restart/tool-pack follow-up passed 59 tests in three files. A real
+PostgreSQL case covers a later writer and packet retention but remains unrun
+until admitted to the explicit test database. Final source qualification is owed.
+
+The two permanent tools earn separate selection-space entries: preview establishes
+read-only, validated complete baselines without activating anything; apply carries
+explicit operator intent through the existing signed transition ledger. Combining
+these into one implicit read/write operation would obscure authority. Both stay
+in the existing platform-update pack and existing administrator grant categories.
+
+The shared grant leaf also required the completeness compiler to resolve named
+imports and spreads. Two regressions reproduced omitted existing/update mappings
+and false governance reachability for an unknown tool. The compiler now reuses
+its existing literal-map parser, resolves imported aliases/local spreads in
+declaration order, refuses unresolved/cyclic sources, and uses the existing
+default-deny reachability check for governance counts. All 35 compiler tests pass,
+including administrator/read-only boundaries. Regenerated reports describe
+source reachability; no live grant or funding record is changed.

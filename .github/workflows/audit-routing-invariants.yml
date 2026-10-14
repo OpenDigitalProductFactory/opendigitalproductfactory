@@ -84,6 +84,12 @@ jobs:
       - name: Apply migrations
         run: pnpm --filter @dpf/db exec prisma migrate deploy
 
+      - name: Prepare the CI host capability fixture
+        run: |
+          node scripts/ci-runtime-install-state-fixture.mjs > "$RUNNER_TEMP/install-state.json"
+          sudo install -d /dpf-state
+          sudo install -m 0644 "$RUNNER_TEMP/install-state.json" /dpf-state/install-state.json
+
       - name: Run seed
         # The seed is the primary source of the violations the audit is
         # designed to detect. Running it before the audit is intentional —

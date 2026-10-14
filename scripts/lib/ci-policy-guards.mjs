@@ -290,6 +290,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-31F11C37: the installers' monitoring question.
         "scripts/installer/monitoring-choice.test.mjs",
       ),
+      conformanceTest("scripts/ci-runtime-install-state-fixture.test.mjs"),
       // BI-31F11C37: both installers ask, accept the flag and record the
       // choice before profiles resolve; reads the live installer sources.
       conformanceTest("scripts/installer/monitoring-choice-installer-contract.test.mjs"),
