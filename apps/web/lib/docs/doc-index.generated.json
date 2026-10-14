@@ -2374,7 +2374,9 @@
         "provider-account-identity",
         "governed-controls",
         "provider-ui-preservation-contract",
-        "migration-and-verification"
+        "account-presentation-boundaries",
+        "migration-and-verification",
+        "measured-route-integration"
       ]
     },
     "docs/architecture/review-reliability-recovery.md": {
@@ -11625,6 +11627,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "accounts-and-provider-setup",
         "routing-status-and-temporary-pauses",
         "authentication-methods",
         "api-key",

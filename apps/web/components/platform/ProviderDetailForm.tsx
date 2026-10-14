@@ -3,6 +3,7 @@
 import { useState, useTransition, useEffect, useId } from "react";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { configureProvider, testProviderAuth, discoverModels } from "@/lib/actions/ai-providers";
 import { startProviderOAuth, disconnectProviderOAuth } from "@/lib/actions/provider-oauth";
 import { ConnectGrokCard } from "./ConnectGrokCard";
@@ -34,6 +35,9 @@ type RoutingProfile = {
 };
 
 type Props = {
+  defaultConnectionId?: string;
+  /** Supply only when the server has validated shared sign-in ownership. */
+  sharedAuthRecovery?: { help: string; label: string };
   pw: ProviderWithCredential;
   canWrite: boolean;
   models: DiscoveredModelRow[];
@@ -43,7 +47,7 @@ type Props = {
   routingProfiles?: RoutingProfile[];
 };
 
-export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActiveProvider, routingProfiles }: Props) {
+export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActiveProvider, routingProfiles, sharedAuthRecovery, defaultConnectionId }: Props) {
   const t = useT("setup");
   const { provider, credential } = pw;
   const router = useRouter();
@@ -51,7 +55,10 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
   const [isPending, startTransition] = useTransition();
   const isClaudeSubscription = provider.providerId === "anthropic-sub";
   const isZaiCodingProvider = provider.providerId === "zai-coding";
-  const isSharedOpenAiConsumer = provider.providerId === "chatgpt";
+  const isSharedOpenAiConsumer = provider.providerId === "chatgpt" && Boolean(sharedAuthRecovery);
+  const signInLabel = credential?.status === "ok" && credential.tokenExpiresAt
+    && new Date(credential.tokenExpiresAt).getTime() > Date.now()
+    ? t("providerConnection.reconnect") : `Sign in with ${provider.name}`;
 
   // Secrets are write-only — never sent from server. Empty = no change on save.
   const [secretRef, setSecretRef]                   = useState("");
@@ -129,7 +136,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
     startTransition(async () => {
       setTestResult(null);
       try {
-        const result = await startProviderOAuth(provider.providerId);
+        const result = defaultConnectionId ? await startProviderOAuth(provider.providerId, defaultConnectionId) : await startProviderOAuth(provider.providerId);
         if ("authorizeUrl" in result) window.open(result.authorizeUrl, "_self");
         else setTestResult({ ok: false, message: result.error });
       } catch {
@@ -478,6 +485,11 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
         </>
       )}
 
+      {selectedAuthMethod === "oauth2_authorization_code" && isSharedOpenAiConsumer && sharedAuthRecovery && (
+        <p className="mb-3 text-sm text-[var(--dpf-muted)]">
+          {sharedAuthRecovery.help}{" "}<Link className="text-[var(--dpf-accent)] underline underline-offset-2" href="/platform/ai/providers/codex">{sharedAuthRecovery.label}</Link>
+        </p>
+      )}
       {selectedAuthMethod === "oauth2_authorization_code" && !isSharedOpenAiConsumer && (
         <div style={{ marginBottom: 16 }}>
           {/* BI-2DD7042A: judge connected/expired by the tokenExpiresAt TIMESTAMP,
@@ -494,21 +506,17 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
                   Sign-in saved · token expires {new Date(credential.tokenExpiresAt).toLocaleString()}
                 </span>
               </div>
-              <button type="button" disabled={!canWrite || isPending} onClick={handleSignIn}
-                style={{ background: "transparent", border: "1px solid var(--dpf-accent)", color: "var(--dpf-accent)", padding: "8px 14px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}>
-                {t("providerConnection.reconnect")}
-              </button>
               <details style={{ marginTop: 12 }}><summary style={{ color: "var(--dpf-muted)", fontSize: 12 }}>{t("providerConnection.accountActions")}</summary>
               {disconnectConfirm ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 12, color: "var(--dpf-muted)" }}>
-                    Disconnect this account? Linked services will be deactivated.
+                    {defaultConnectionId ? "Disconnect this account?" : "Disconnect this account? Linked services will be deactivated."}
                   </span>
                   <button
                     type="button"
                     disabled={!canWrite || isPending}
                     onClick={() => startTransition(async () => {
-                      const result = await disconnectProviderOAuth(provider.providerId);
+                      const result = defaultConnectionId ? await disconnectProviderOAuth(provider.providerId, defaultConnectionId) : await disconnectProviderOAuth(provider.providerId);
                       if (result.error) {
                         setTestResult({ ok: false, message: result.error });
                         setDisconnectConfirm(false);
@@ -548,30 +556,19 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
                   ? "Access token expired — it refreshes automatically on next use, or sign in again now"
                   : "Token expired — sign in again"}
               </div>
-              <button
-                type="button"
-                disabled={!canWrite || isPending}
-                onClick={handleSignIn}
-                style={{ background: "var(--dpf-accent)", color: "#fff", border: "none", padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}
-              >
-                Sign in with {provider.name}
-              </button>
             </div>
           ) : (
             <div>
               <div style={{ color: "var(--dpf-muted)", fontSize: 13, marginBottom: 8 }}>
                 No account linked
               </div>
-              <button
-                type="button"
-                disabled={!canWrite || isPending}
-                onClick={handleSignIn}
-                style={{ background: "var(--dpf-accent)", color: "#fff", border: "none", padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}
-              >
-                Sign in with {provider.name}
-              </button>
             </div>
           )}
+          {!disconnectConfirm && <button type="button" disabled={!canWrite || isPending}
+            onClick={handleSignIn}
+            style={{ background: "var(--dpf-accent)", color: "var(--dpf-on-accent)", border: "none", padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}>
+            {signInLabel}
+          </button>}
         </div>
       )}
 
