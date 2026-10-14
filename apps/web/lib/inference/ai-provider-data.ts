@@ -469,7 +469,7 @@ const CATEGORY_ORDER: Record<string, number> = {
 
 function getServiceGroupDisplayName(endpointType: string, category: string): string {
   if (category === "direct") {
-    if (endpointType === "responses") return "Subscription responses";
+    if (endpointType === "responses") return "Subscriptions";
     if (endpointType === "transcription") return "Speech transcription";
     if (endpointType === "router") return "Direct routers";
   }

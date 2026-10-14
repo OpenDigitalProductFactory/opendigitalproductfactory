@@ -33,4 +33,4 @@ Refresh rotates secrets, so the existing account boundary must retain ownership 
 
 ## Backlog coverage
 
-Atomic rationale: renewal, bounded verification and operator recovery are one connection repair; neither a new heading nor a retry alone completes the requested outcome. The peer form deliverable is already mapped to BI-7AA4EB6B and is a coordination dependency, not duplicated scope. Record governed immutable plan coverage before implementation; receipt is pending.
+Atomic rationale: renewal, bounded verification and operator recovery are one connection repair; neither a new heading nor a retry alone completes the requested outcome. The peer form deliverable is already mapped to BI-7AA4EB6B and is a coordination dependency, not duplicated scope. Governed immutable plan coverage receipt `cmv7eksmu04xs01qs8rwkfuzi` binds the plan at commit `9e7ecbecada86060d05377fd31055273fb676276` (blob `b6bca30fea5eee65176f7b901e1ad6de49f03fb5`).
