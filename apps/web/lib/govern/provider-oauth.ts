@@ -352,6 +352,14 @@ export interface ScopedOAuthRefreshGuard {
 
 class ScopedOAuthAccountChanged extends Error {}
 
+async function isOAuthGrantRefusal(response: Response): Promise<boolean> {
+  if (response.status === 401 || response.status === 403) return true;
+  if (response.status !== 400) return false;
+  const body = await response.json().catch(() => null) as { error?: string | { code?: string } } | null;
+  return body?.error === "invalid_grant"
+    || (typeof body?.error === "object" && body.error?.code === "invalid_grant");
+}
+
 export function matchesScopedOAuthConnection(current: ScopedOAuthRefreshGuard["connection"] | null, expected: ScopedOAuthRefreshGuard["connection"]) {
   return Boolean(current && current.id === expected.id && current.connectionId === expected.connectionId
     && current.providerId === expected.providerId && current.status === expected.status && current.status !== "disabled"
@@ -551,6 +559,11 @@ export async function refreshOAuthToken(
     });
 
     if (!res.ok) {
+      if (guard && !await isOAuthGrantRefusal(res)) {
+        return { error: res.status === 429 || res.status >= 500
+          ? `OAuth token renewal unavailable (HTTP ${res.status})`
+          : `OAuth token renewal failed (HTTP ${res.status})` };
+      }
       if (activeSnapshot) { await expireCapturedActive(); return { error: "Selected account re-authentication required" }; }
       if (guard) return { error: "Selected account re-authentication required" };
       await prisma.credentialEntry.update({
