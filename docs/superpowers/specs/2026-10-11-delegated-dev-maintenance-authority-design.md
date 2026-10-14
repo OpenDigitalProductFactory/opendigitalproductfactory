@@ -110,10 +110,10 @@ The small shared account-identity/verification helper and existing guarded renew
 
 ### Acceptance and ordered delivery
 
-- AC-1: The exact already-active default ChatGPT/Codex DEV verification proceeds under existing delegation with no fresh human approval envelope; expiry is a connection failure.
-- AC-2: Execution cannot activate inactive/disabled/disconnected accounts or modify another account after concurrent replacement/status change.
-- AC-3: Production/unknown stance, missing grants/scopes, restricted data, consequential cases, new credentials and peer ownership keep their boundaries.
-- AC-4: Classification, execution and concurrency regression tests plus source/typecheck, governed delivery and served DEV evidence are recorded honestly.
+- AC-1: The exact already-active default ChatGPT/Codex DEV verification proceeds under existing delegation with no fresh human approval envelope; expiry failure is reported as a connection failure, not an approval question.
+- AC-2: The execution path cannot turn inactive/disabled/disconnected accounts active or modify another account after classification, even under concurrent replacement/status change.
+- AC-3: Production/unknown context, insufficient grants/scopes, restricted data, consequential cases, new credentials and peer ownership retain existing boundaries.
+- AC-4: Regression tests exercise classification plus executed effects and concurrency; source/typecheck, governed delivery and served DEV evidence are recorded honestly.
 
 One atomic deliverable `active-account-verification`, mapped to BI-CFFB7ED7. References: requirement `AC-1`, contract `active-only-account-boundary`, flow `delegated-dev-verification`, verification `active-account-concurrency-regressions`.
 
