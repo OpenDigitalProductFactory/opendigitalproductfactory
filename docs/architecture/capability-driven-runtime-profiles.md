@@ -354,6 +354,13 @@ and provider navigation remain visible. This presentation preserves the canonica
 health projection and every service record; it changes neither capability intent
 nor observed availability.
 
+When all active entries are required services with the same availability and
+status, one visible status describes the group. Each service references that
+status with `aria-describedby`; its name, details and actions remain individual.
+Mixed, degraded and provider-managed groups keep individual status labels. Static
+view copy uses the request's existing admin translator, with the same catalog
+provided to the product-health client view.
+
 - Change physical service facts in the substrate manifest and regenerate the catalog; do not hand-edit the generated catalog.
 - Change capability dependencies or activation policy in the canonical capability seed/sync path; do not encode them in Compose.
 - Change enabled state only through the governed transition API/saga. Do not set `COMPOSE_PROFILES` to bypass capability authority.

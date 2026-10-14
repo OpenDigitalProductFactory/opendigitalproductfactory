@@ -1,9 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { measureUxBudget } from "@/lib/ux-budget/measure";
 import { describe, expect, it } from "vitest";
+import { DEFAULT_LOCALE, translate, type MessageArgs, type MessageKey } from "@dpf/i18n";
 
 import type { CapabilityServiceHealthProjection } from "@/lib/platform-runtime/service-health";
 import { CapabilityServiceHealth } from "./CapabilityServiceHealth";
+
+const t = (key: MessageKey<"admin">, args?: MessageArgs) => translate(DEFAULT_LOCALE, "admin", key, args);
 
 const projection: CapabilityServiceHealthProjection = {
   aggregate: {
@@ -56,8 +59,17 @@ const projection: CapabilityServiceHealthProjection = {
 };
 
 describe("CapabilityServiceHealth", () => {
+  it("uses the request translator for the heading, inactive disclosure and availability", () => {
+    const t = (key: MessageKey<"admin">, args?: MessageArgs) => translate("en-XA", "admin", key, args);
+    const localizedProps = { projection, t };
+    const html = renderToStaticMarkup(<CapabilityServiceHealth {...localizedProps} />);
+    expect(html).toContain(t("runtimeHealth.capabilityServices.heading"));
+    expect(html).toContain(t("runtimeHealth.capabilityServices.inactiveSummary", { count: 1 }));
+    expect(html).toContain(t("runtimeHealth.capabilityServices.availability.inactive"));
+    expect(html).toContain("speech-to-text");
+  });
   it("keeps active requirements visible and retains inactive services in a closed native disclosure", () => {
-    const html = renderToStaticMarkup(<CapabilityServiceHealth projection={projection} />);
+    const html = renderToStaticMarkup(<CapabilityServiceHealth t={t} projection={projection} />);
     const disclosure = html.match(/<details\b([^>]*)>([\s\S]*?)<\/details>/);
     expect(disclosure).not.toBeNull();
     expect(disclosure?.[1]).not.toMatch(/\bopen\b/);
@@ -73,8 +85,8 @@ describe("CapabilityServiceHealth", () => {
     const items = Array.from({ length: 18 }, (_, index) => ({ ...projection.items[1]!,
       key: `optional-${index}`, actionHref: "/admin/settings/monitoring" }));
     const active = projection.items.filter(item => item.state !== "optional_inactive");
-    const small = measureUxBudget(renderToStaticMarkup(<CapabilityServiceHealth projection={{ ...projection, items: active }} />));
-    const html = renderToStaticMarkup(<CapabilityServiceHealth projection={{ ...projection, items: [...active, ...items] }} />);
+    const small = measureUxBudget(renderToStaticMarkup(<CapabilityServiceHealth t={t} projection={{ ...projection, items: active }} />));
+    const html = renderToStaticMarkup(<CapabilityServiceHealth t={t} projection={{ ...projection, items: [...active, ...items] }} />);
     const measured = measureUxBudget(html);
     expect(measured.defaultVisibleWords).toBeLessThanOrEqual(small.defaultVisibleWords + 8);
     const links = [...html.matchAll(/<a\b[^>]*>/g)];
@@ -85,11 +97,11 @@ describe("CapabilityServiceHealth", () => {
 
   it("shows a shared required-service remedy once without hiding distinct critical actions", () => {
     const first = projection.items[0]!;
-    const html = renderToStaticMarkup(<CapabilityServiceHealth projection={{ ...projection, items: [
+    const html = renderToStaticMarkup(<CapabilityServiceHealth t={t} projection={{ ...projection, items: [
       first, { ...first, key: "postgres" }, projection.items[2]!, projection.items[3]!,
     ] }} />);
     expect(html.split(first.action)).toHaveLength(2);
-    expect(html).toContain("Required services:");
+    expect(html).toContain("Recovery:");
     expect(html).toContain(projection.items[2]!.action);
     expect(html).toContain(projection.items[3]!.action);
     expect(html).toContain("portal");
@@ -98,16 +110,18 @@ describe("CapabilityServiceHealth", () => {
 
   it("shares an identical required status while retaining every named service and per-card accessible status", () => {
     const items = Array.from({ length: 7 }, (_, index) => ({ ...projection.items[0]!, key: `required-${index}` }));
-    const html = renderToStaticMarkup(<CapabilityServiceHealth projection={{ ...projection, items }} />);
+    const html = renderToStaticMarkup(<CapabilityServiceHealth t={t} projection={{ ...projection, items }} />);
     expect(html).toContain("Required — unavailable (7)");
-    expect(html.match(/class="sr-only"/g)).toHaveLength(7);
+    expect(html.match(/aria-describedby="capability-shared-required-status"/g)).toHaveLength(7);
+    expect(html.match(/Required — unavailable/g)).toHaveLength(1);
+    expect(html).toContain('id="capability-shared-required-status"');
     for (const item of items) expect(html).toContain(item.key);
-    const mixed = renderToStaticMarkup(<CapabilityServiceHealth projection={projection} />);
-    expect(mixed).not.toContain('class="sr-only"');
+    const mixed = renderToStaticMarkup(<CapabilityServiceHealth t={t} projection={projection} />);
+    expect(mixed).not.toContain('aria-describedby="capability-shared-required-status"');
   });
 
   it("renders all requirement states with explicit non-color meaning", () => {
-    const html = renderToStaticMarkup(<CapabilityServiceHealth projection={projection} />);
+    const html = renderToStaticMarkup(<CapabilityServiceHealth t={t} projection={projection} />);
 
     expect(html).toContain("Required — unavailable");
     expect(html).toContain("Optional — inactive");
@@ -123,7 +137,7 @@ describe("CapabilityServiceHealth", () => {
   });
 
   it("uses a semantic labelled section and responsive grid", () => {
-    const html = renderToStaticMarkup(<CapabilityServiceHealth projection={projection} />);
+    const html = renderToStaticMarkup(<CapabilityServiceHealth t={t} projection={projection} />);
 
     expect(html).toContain("<section");
     expect(html).toContain('aria-labelledby="capability-service-health-title"');
@@ -134,8 +148,7 @@ describe("CapabilityServiceHealth", () => {
 
   it("distinguishes unknown and unhealthy provider observations without claiming availability", () => {
     const html = renderToStaticMarkup(
-      <CapabilityServiceHealth
-        projection={{
+      <CapabilityServiceHealth t={t} projection={{
           aggregate: { value: "Operational", tone: "success", detail: "Required services available" },
           items: [
             {

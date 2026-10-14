@@ -5,6 +5,9 @@
 // For other products, shows observation config and SLA compliance.
 
 import { prisma } from "@dpf/db";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ServiceHealthDashboard } from "@/components/monitoring/ServiceHealthDashboard";
@@ -25,7 +28,7 @@ type Props = {
 };
 
 export default async function ProductHealthPage({ params }: Props) {
-  const { id } = await params;
+  const [{ id }, { language }] = await Promise.all([params, getLocaleContext()]);
 
   const product = await prisma.digitalProduct.findUnique({
     where: { id },
@@ -72,6 +75,7 @@ export default async function ProductHealthPage({ params }: Props) {
           releaseHealth={releaseHealth}
           capabilityHealth={capabilityHealth}
           vmRestartOffer={vmRestartOffer}
+          language={language}
         />
       ) : (
         <ProductHealth
@@ -119,12 +123,14 @@ function PortalHealth({
   releaseHealth,
   capabilityHealth,
   vmRestartOffer,
+  language,
 }: {
   openBugs: number;
   productId: string;
   releaseHealth: ReleaseHealthCardData | null;
   capabilityHealth: CapabilityServiceHealthProjection | null;
   vmRestartOffer: DockerVmRestartCheck | null;
+  language: string;
 }) {
   // BI-F8F8C383: the restart control appears only while the VM is reported wedged.
   const showVmRestart = vmRestartOffer !== null
@@ -132,12 +138,14 @@ function PortalHealth({
   return (
     <>
       {showVmRestart ? <DockerVmRestartPanel offer={vmRestartOffer} /> : null}
-      <ServiceHealthDashboard
-        openBacklogItems={openBugs}
-        backlogHref={`/portfolio/product/${productId}/backlog`}
-        releaseHealth={releaseHealth}
-        capabilityHealth={capabilityHealth}
-      />
+      <MessagesProvider locale={language} messages={{ admin: namespaceMessages(language, "admin") }}>
+        <ServiceHealthDashboard
+          openBacklogItems={openBugs}
+          backlogHref={`/portfolio/product/${productId}/backlog`}
+          releaseHealth={releaseHealth}
+          capabilityHealth={capabilityHealth}
+        />
+      </MessagesProvider>
     </>
   );
 }

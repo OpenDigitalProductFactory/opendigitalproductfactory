@@ -5,8 +5,8 @@ import {
   CloudCog,
 } from "lucide-react";
 
+import type { MessageArgs, MessageKey } from "@dpf/i18n";
 import type {
-  CapabilityHealthAvailability,
   CapabilityHealthState,
   CapabilityHealthTone,
   CapabilityServiceHealthItem,
@@ -15,13 +15,7 @@ import type {
 
 type CapabilityServiceHealthProps = {
   projection: CapabilityServiceHealthProjection;
-};
-
-const AVAILABILITY_LABEL: Record<CapabilityHealthAvailability, string> = {
-  available: "Available",
-  unavailable: "Unavailable",
-  inactive: "Inactive",
-  unknown: "Unknown",
+  t: (key: MessageKey<"admin">, args?: MessageArgs) => string;
 };
 
 const TONE_CLASS: Record<CapabilityHealthTone, string> = {
@@ -40,8 +34,9 @@ const STATE_PRESENTATION: Record<
   external: { Icon: CloudCog, iconClass: "text-[var(--dpf-accent)]" },
 };
 
-function ServiceRequirements({ items, sharedAction, sharedLabel }: {
+function ServiceRequirements({ items, sharedAction, sharedLabel, t }: {
   items: CapabilityServiceHealthItem[]; sharedAction?: string; sharedLabel?: string;
+  t: CapabilityServiceHealthProps["t"];
 }) {
   return (
     <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -52,15 +47,17 @@ function ServiceRequirements({ items, sharedAction, sharedLabel }: {
         const { Icon, iconClass } = presentation;
         const hasSharedAction = item.state === "required" && !item.actionHref && item.action === sharedAction;
         return (
-          <li key={`${item.kind}:${item.key}`} className="min-w-0 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
+          <li key={`${item.kind}:${item.key}`} aria-describedby={sharedLabel === item.label ? "capability-shared-required-status" : undefined} className="min-w-0 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
             <div className="flex items-start gap-3">
               <Icon aria-hidden="true" className={`mt-0.5 h-4 w-4 shrink-0 ${iconClass}`} />
               <div className="min-w-0">
                 <h3 className="break-words text-xs font-semibold text-[var(--dpf-text)]">{item.key}</h3>
-                <p className={sharedLabel === item.label ? "sr-only" : "mt-1 text-xs font-medium text-[var(--dpf-text)]"}>{item.label}</p>
+                {sharedLabel !== item.label && <p className="mt-1 text-xs font-medium text-[var(--dpf-text)]">{item.label}</p>}
                 {!(item.state === "required" && item.availability === "unavailable" && item.label.toLowerCase().includes("unavailable")) && (
                   <p className={`mt-1 text-xs font-semibold ${TONE_CLASS[item.tone]}`}>
-                    Availability: {AVAILABILITY_LABEL[item.availability]}
+                    {t("runtimeHealth.capabilityServices.availabilityLabel", {
+                      value: t(`runtimeHealth.capabilityServices.availability.${item.availability}`),
+                    })}
                   </p>
                 )}
                 {item.detail && <p className="mt-1 text-xs leading-5 text-[var(--dpf-muted)]">{item.detail}</p>}
@@ -78,7 +75,7 @@ function ServiceRequirements({ items, sharedAction, sharedLabel }: {
   );
 }
 
-export function CapabilityServiceHealth({ projection }: CapabilityServiceHealthProps) {
+export function CapabilityServiceHealth({ projection, t }: CapabilityServiceHealthProps) {
   const inactive = projection.items.filter(item => item.state === "optional_inactive" && item.availability === "inactive");
   const active = projection.items.filter(item => !inactive.includes(item));
   const required = active.filter(item => item.state === "required" && !item.actionHref);
@@ -98,16 +95,16 @@ export function CapabilityServiceHealth({ projection }: CapabilityServiceHealthP
             id="capability-service-health-title"
             className="text-sm font-semibold text-[var(--dpf-text)]"
           >
-            Capability service requirements
+            {t("runtimeHealth.capabilityServices.heading")}
           </h2>
           <p className="mt-1 max-w-3xl text-xs leading-5 text-[var(--dpf-muted)]">
-            Inactive optional services do not reduce health.
+            {t("runtimeHealth.capabilityServices.explanation")}
           </p>
         </div>
         <div className="shrink-0 sm:max-w-xs sm:text-right">
           <p
             className="text-xs font-semibold text-[var(--dpf-text)]"
-            aria-label={`Platform capability health: ${projection.aggregate.value}`}
+            aria-label={t("runtimeHealth.capabilityServices.aggregateLabel", { value: projection.aggregate.value })}
           >
             {projection.aggregate.value}
           </p>
@@ -119,19 +116,19 @@ export function CapabilityServiceHealth({ projection }: CapabilityServiceHealthP
 
       {projection.items.length === 0 ? (
         <p className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 text-xs text-[var(--dpf-muted)]">
-          No capability-owned service requirements are configured.
+          {t("runtimeHealth.capabilityServices.empty")}
         </p>
       ) : (
         <>
-          {sharedAction && <p className="mb-3 text-xs leading-5 text-[var(--dpf-muted)]">Required services: {sharedAction}</p>}
-          {sharedLabel && <p className="mb-2 text-xs font-semibold text-[var(--dpf-text)]">{sharedLabel} ({active.length})</p>}
-          {active.length > 0 && <ServiceRequirements items={active} sharedAction={sharedAction} sharedLabel={sharedLabel} />}
+          {sharedAction && <p className="mb-3 text-xs leading-5 text-[var(--dpf-muted)]">{t("runtimeHealth.capabilityServices.requiredAdvice", { action: sharedAction })}</p>}
+          {sharedLabel && <p id="capability-shared-required-status" className="mb-2 text-xs font-semibold text-[var(--dpf-text)]">{sharedLabel} ({active.length})</p>}
+          {active.length > 0 && <ServiceRequirements items={active} sharedAction={sharedAction} sharedLabel={sharedLabel} t={t} />}
           {inactive.length > 0 && (
             <details className="mt-4 rounded-md border border-[var(--dpf-border)] p-3">
               <summary className="min-h-8 cursor-pointer py-1 text-sm font-medium text-[var(--dpf-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dpf-accent)]">
-                Inactive services ({inactive.length})
+                {t("runtimeHealth.capabilityServices.inactiveSummary", { count: inactive.length })}
               </summary>
-              <div className="mt-3"><ServiceRequirements items={inactive} /></div>
+              <div className="mt-3"><ServiceRequirements items={inactive} t={t} /></div>
             </details>
           )}
         </>
