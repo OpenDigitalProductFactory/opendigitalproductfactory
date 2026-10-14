@@ -86,6 +86,7 @@ import { LOAD_TOOLS_LISTED, buildLoadToolsResult, buildLoadToolsStatus, resolveL
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { invisibleRemovalNotice, looksLikeSmuggling, sanitizeUntrustedValue } from "@dpf/validators";
 import { sanitizeForLog } from "@/lib/security/safe-log";
+import { workroomBindingRefusal } from "@/lib/auth/workroom-session-token";
 // GPP Phase 2 PR-C: a replayed permit handle rides in tools/call params._meta.
 import { permitResultMeta, presentedPermitHandle } from "@/lib/gpp/permit-carriage";
 
@@ -554,6 +555,8 @@ async function handleToolsCall(
     return jsonRpcOk(id, quiescenceRefusal);
   }
 
+  const roomRefusal = workroomBindingRefusal(token, args); // BI-05715F4C
+  if (roomRefusal) return jsonRpcOk(id, roomRefusal);
   const userContext = await loadUserContext(token.userId);
   const executed = await governedExecuteTool({
     toolName,
@@ -633,7 +636,8 @@ async function handleToolsCall(
       dataForText = marker;
     }
   }
-  const text = JSON.stringify(
+  // BI-05715F4C: Claude's --permission-prompt-tool parses the text as the bare {behavior, ...} answer.
+  const text = toolName === "approve_runtime_permission" ? JSON.stringify(dataForText ?? {}) : JSON.stringify(
     {
       success: result.success,
       message: result.message,

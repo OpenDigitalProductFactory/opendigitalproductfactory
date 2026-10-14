@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { getMonitoringAuthority } from "@/lib/platform-runtime/monitoring-authority";
+
 // Proxies Prometheus's /api/v1/targets so the portal can render the platform
 // Health tab's Service Status grid driven by the actual scrape config — not a
 // hardcoded list that drifts out of sync. Each "active target" carries
@@ -15,6 +17,12 @@ const NO_CACHE_HEADERS = {
 };
 
 export async function GET() {
+  if ((await getMonitoringAuthority()) === "off") {
+    return NextResponse.json(
+      { status: "monitoring-off", data: { activeTargets: [] } },
+      { headers: NO_CACHE_HEADERS },
+    );
+  }
   try {
     const res = await fetch(`${PROMETHEUS_URL}/api/v1/targets?state=active`, {
       signal: AbortSignal.timeout(2_000),

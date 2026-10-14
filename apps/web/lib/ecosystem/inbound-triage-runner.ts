@@ -17,8 +17,13 @@ import {
 } from "./inbound-issue-triage";
 
 export type InboundTriageOutcome =
-  | ({ ran: true } & InboundTriageResult)
+  | ({ ran: true; complete: boolean; sourceErrors: InboundSourceError[] } & InboundTriageResult)
   | { ran: false; reason: string };
+
+export interface InboundSourceError {
+  source: "upstream-issue" | "peer-demand";
+  error: string;
+}
 
 export interface InboundTriageRunnerDeps {
   /** Injected wholesale so the runner is testable without Prisma or fetch. */
@@ -53,15 +58,22 @@ export async function runEcosystemInboundTriage(
   }
 
   const items: InboundEcosystemItem[] = [];
+  const sourceErrors: InboundSourceError[] = [];
 
   // Transport 1 — upstream issues filed by the relay.
   const readIssues = deps.readIssues ?? (async () => {
     const { readUpstreamIssues } = await import("./upstream-issue-reader");
     return readUpstreamIssues({ state: "open" });
   });
-  const issueResult = await readIssues();
-  if (issueResult.ok && Array.isArray(issueResult.issues)) {
-    items.push(...mapUpstreamIssues(issueResult.issues as Parameters<typeof mapUpstreamIssues>[0]));
+  try {
+    const issueResult = await readIssues();
+    if (!issueResult.ok || !Array.isArray(issueResult.issues)) {
+      sourceErrors.push({ source: "upstream-issue", error: ("error" in issueResult ? issueResult.error : null) ?? "Issue read returned no valid issue list" });
+    } else {
+      items.push(...mapUpstreamIssues(issueResult.issues as Parameters<typeof mapUpstreamIssues>[0]));
+    }
+  } catch (error) {
+    sourceErrors.push({ source: "upstream-issue", error: getErrorMessage(error) });
   }
 
   // Transport 2 — peer-side federated demand envelopes.
@@ -73,11 +85,15 @@ export async function runEcosystemInboundTriage(
       select: { mirrorId: true, payload: true },
     });
   });
-  const { decodeDemandMirrorPayload } = await import("@/lib/federation/demand-exchange");
-  items.push(...mapPeerDemandMirrors(
-    await readPeerDemand(),
-    decodeDemandMirrorPayload as Parameters<typeof mapPeerDemandMirrors>[1],
-  ));
+  try {
+    const { decodeDemandMirrorPayload } = await import("@/lib/federation/demand-exchange");
+    items.push(...mapPeerDemandMirrors(
+      await readPeerDemand(),
+      decodeDemandMirrorPayload as Parameters<typeof mapPeerDemandMirrors>[1],
+    ));
+  } catch (error) {
+    sourceErrors.push({ source: "peer-demand", error: getErrorMessage(error) });
+  }
 
   const ingest = deps.ingest ?? (async (input: unknown) => {
     const { ingestBacklogItem } = await import("@/lib/operate/backlog-ingest");
@@ -96,11 +112,6 @@ export async function runEcosystemInboundTriage(
     }),
   });
 
-  // A read that FAILED is reported, never silently folded into an empty sweep —
-  // "nothing inbound" and "could not look" are different verdicts.
-  if (!issueResult.ok) {
-    console.warn(`[ecosystem-inbound-triage] upstream issue read failed: ${issueResult.error ?? "unknown"}`);
-  }
-
-  return { ran: true, ...result };
+  // Keep partial work, but never project a failed source as a quiet, complete scan.
+  return { ran: true, ...result, complete: sourceErrors.length === 0 && result.failed === 0, sourceErrors };
 }

@@ -8,6 +8,7 @@ import { buildResponsesUrl, isChatGptBackend } from "@/lib/routing/responses-con
 import { assertResponsesCompleted } from "@/lib/routing/responses-readiness";
 import { clearProviderCapacityStatus } from "@/lib/routing/provider-capacity/store";
 import { resolveResponsesProbeBaseUrl } from "@/lib/routing/responses-provider";
+import { refreshOAuthToken } from "@/lib/provider-oauth";
 
 const OPENAI_OAUTH_LINKED_PROVIDERS = new Set(["codex", "chatgpt"]);
 const SHARED_ACCOUNT_LINKED_PROVIDERS = new Set(["zai"]);
@@ -28,6 +29,21 @@ export function getLinkedActivationOptions(
 function formatResponsesScopeError(body: string): string | null {
   if (!body.includes("api.responses.write")) return null;
   return "OAuth token is missing Responses API scope (api.responses.write) — disconnect and sign in again";
+}
+
+function isExpiredOAuthResponse(status: number, body: string): boolean {
+  if (status !== 401) return false;
+  try {
+    return JSON.parse(body)?.error?.code === "token_expired";
+  } catch {
+    return false;
+  }
+}
+
+function signInRecoveryMessage(providerId: string, connectionId?: string): string {
+  return providerId === "chatgpt" && connectionId === undefined
+    ? "Session expired. Open Manage sign-in in the shared Codex connection above and sign in again, then retry verification."
+    : "Session expired. Sign in again to this account, then retry verification.";
 }
 
 export async function testProviderAuthInternal(providerId: string, refreshCatalog = true, connectionId?: string): Promise<{ ok: boolean; message: string }> {
@@ -127,9 +143,9 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
       if (!model) return { ok: false, message: "No active model found — refresh the model catalog and retry" };
       const streaming = isChatGptBackend(providerId, baseUrl);
       headers["Content-Type"] = "application/json";
-      res = await fetch(attemptedUrl, {
+      const probe = () => fetch(attemptedUrl, {
         method: "POST",
-        headers,
+        headers: { ...headers },
         body: JSON.stringify({
           model: model.modelId,
           instructions: "Reply with OK only.",
@@ -140,7 +156,21 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
         signal: AbortSignal.timeout(30_000),
       });
 
-      const body = await res.text();
+      res = await probe();
+      let body = await res.text();
+      // Upstream expiry is authoritative even when our cached expiry is future.
+      // Renew once through the existing owner; explicit accounts never alias.
+      if (isExpiredOAuthResponse(res.status, body)) {
+        const refreshProviderId = providerId === "chatgpt" && connectionId === undefined ? "codex" : providerId;
+        const renewed = await refreshOAuthToken(refreshProviderId, connectionId);
+        if ("error" in renewed) return { ok: false, message: signInRecoveryMessage(providerId, connectionId) };
+        headers.Authorization = `Bearer ${renewed.token}`;
+        res = await probe();
+        body = await res.text();
+        if (isExpiredOAuthResponse(res.status, body)) {
+          return { ok: false, message: signInRecoveryMessage(providerId, connectionId) };
+        }
+      }
       if (res.ok) {
         assertResponsesCompleted(body, streaming);
         if (connectionId === undefined) await clearProviderCapacityStatus({ providerId, source: "oauth" });

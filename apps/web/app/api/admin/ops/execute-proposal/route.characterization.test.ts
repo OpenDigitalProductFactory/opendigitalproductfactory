@@ -7,11 +7,19 @@
 // user with a synthetic HR-000 role rather than a real session.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Approval convergence PR-C harness (BI-04E5A511): this route now runs
+// through convert-and-run (lib/actions/proposal-convert-and-run.ts), which
+// calls the reference monitor and claims the row with a compare-and-set. The
+// harness models the monitor ALLOWING the call (it hands the handler the
+// characterised { agentId, threadId }) and maps the claim's updateMany onto the
+// update mock, so every assertion below is unchanged. The real monitor's four
+// outcomes are covered in the *.governed.test.ts suites.
+
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   executeTool: vi.fn(),
   prisma: {
-    agentActionProposal: { findUnique: vi.fn(), update: vi.fn() },
+    agentActionProposal: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     featureBuild: { findFirst: vi.fn() },
     user: { findUnique: vi.fn() },
   },
@@ -22,6 +30,10 @@ vi.mock("@dpf/db", () => ({ prisma: mocks.prisma }));
 vi.mock("@/lib/mcp-tools", () => ({
   PLATFORM_TOOLS: [{ name: "contribute_to_hive", requiredCapability: "view_platform" }],
   executeTool: mocks.executeTool,
+}));
+vi.mock("@/lib/mcp-governed-execute", () => ({
+  governedExecuteTool: (args: { toolName: string; rawParams: Record<string, unknown>; userId: string; context?: { agentId?: string; threadId?: string } }) =>
+    mocks.executeTool(args.toolName, args.rawParams, args.userId, { agentId: args.context?.agentId, threadId: args.context?.threadId }),
 }));
 
 import { POST } from "./route";
@@ -49,6 +61,12 @@ beforeEach(() => {
   mocks.auth.mockResolvedValue({ user: { id: "user-su", isSuperuser: true, platformRole: "HR-000" } });
   mocks.prisma.agentActionProposal.findUnique.mockResolvedValue(proposal);
   mocks.prisma.agentActionProposal.update.mockResolvedValue({});
+  mocks.prisma.agentActionProposal.updateMany.mockImplementation(
+    async ({ where, data }: { where: { proposalId: string }; data: unknown }) => {
+      await mocks.prisma.agentActionProposal.update({ where: { proposalId: where.proposalId }, data });
+      return { count: 1 };
+    },
+  );
   mocks.executeTool.mockResolvedValue({ success: true, entityId: "HIVE-1", message: "Contributed" });
 });
 
@@ -67,21 +85,18 @@ describe("POST /api/admin/ops/execute-proposal — characterization", () => {
     expect(mocks.prisma.agentActionProposal.update.mock.calls.map(([arg]) => arg.data.status)).toEqual(["approved", "executed"]);
   });
 
-  it("ops-token path: acts as the build creator with a synthetic HR-000 role and no session", async () => {
+  // Approval convergence PR-C (plan C5, waiver W3): the shared-secret path is
+  // removed. This is the one named assertion delta in this suite.
+  it("an X-Ops-Token request without a session gets 401", async () => {
     process.env.HIVE_OPS_TOKEN = "secret";
+    mocks.auth.mockResolvedValue(null);
     mocks.prisma.featureBuild.findFirst.mockResolvedValue({ createdById: "user-creator" });
     mocks.prisma.user.findUnique.mockResolvedValue({ isSuperuser: false });
 
     const res = await POST(request({ proposalId: "AP-1" }, { "x-ops-token": "secret" }));
 
-    expect(res.status).toBe(200);
-    expect(mocks.auth).not.toHaveBeenCalled();
-    expect(mocks.executeTool).toHaveBeenCalledWith(
-      "contribute_to_hive",
-      { title: "Finding" },
-      "user-creator",
-      { agentId: "AGT-COWORKER", threadId: "thread-9" },
-    );
+    expect(res.status).toBe(401);
+    expect(mocks.executeTool).not.toHaveBeenCalled();
   });
 
   it("a tool failure is recorded on the proposal and returned as ok:false", async () => {

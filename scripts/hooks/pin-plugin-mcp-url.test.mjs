@@ -9,6 +9,7 @@ import {
   EXIT_NOTHING,
   EXIT_PINNED,
   pinPluginMcpUrl,
+  preserveQuery,
   resolvePinTarget,
 } from "./lib/pin-plugin-mcp-url.mjs";
 
@@ -183,6 +184,46 @@ test("a copy still on the legacy ${DPF_MCP_URL:-...} template is pinned from its
   try {
     pinPluginMcpUrl({ installedPath: sb.installedPath, root: sb.root, env: { DPF_MCP_URL: "http://[::1]:3000/api/mcp/v1?tier=full" } });
     assert.equal(sb.descriptor().url, "https://localhost/api/mcp/v1?tier=full");
+  } finally {
+    sb.cleanup();
+  }
+});
+
+// BI-DE1E6485: the pin replaces the origin and path, never the query a
+// descriptor carries, and a declaration header does not make it a bearer one.
+test("the pin keeps query parameters the target does not set", () => {
+  assert.equal(
+    preserveQuery("https://dpf.example.lan/api/mcp/v1", "${DPF_MCP_URL:-https://localhost/api/mcp/v1?tier=full&dpf_pack=0.3.0}"),
+    "https://dpf.example.lan/api/mcp/v1?tier=full&dpf_pack=0.3.0",
+  );
+  assert.equal(
+    preserveQuery("https://dpf.example.lan/api/mcp/v1?tier=core", "https://localhost/api/mcp/v1?tier=full&dpf_client=claude-code"),
+    "https://dpf.example.lan/api/mcp/v1?tier=core&dpf_client=claude-code",
+  );
+  assert.equal(preserveQuery("https://localhost/api/mcp/v1?tier=full", undefined), "https://localhost/api/mcp/v1?tier=full");
+});
+
+test("a descriptor with a declaration query keeps it when pinned", () => {
+  const sb = sandbox(oauthServer("${DPF_CLAUDE_MCP_URL:-https://localhost/api/mcp/v1?tier=full&dpf_pack=0.3.0&dpf_digest=0123456789abcdef&dpf_client=claude-code}"));
+  try {
+    const env = { DPF_CLAUDE_MCP_URL: "https://dpf.example.lan/api/mcp/v1?tier=full" };
+    assert.equal(pinPluginMcpUrl({ installedPath: sb.installedPath, root: sb.root, env }).code, EXIT_PINNED);
+    assert.equal(
+      sb.descriptor().url,
+      "https://dpf.example.lan/api/mcp/v1?tier=full&dpf_pack=0.3.0&dpf_digest=0123456789abcdef&dpf_client=claude-code",
+    );
+  } finally {
+    sb.cleanup();
+  }
+});
+
+test("a declaration header does not stop the pin; only Authorization does", () => {
+  const declared = { ...oauthServer(TEMPLATE), headers: { "X-DPF-Toolchain": "pack=0.3.0;digest=0123456789abcdef;client=claude-code" } };
+  const sb = sandbox(declared);
+  try {
+    assert.equal(pinPluginMcpUrl({ installedPath: sb.installedPath, root: sb.root, env: {} }).code, EXIT_PINNED);
+    assert.equal(sb.descriptor().url, "https://localhost/api/mcp/v1?tier=full");
+    assert.deepEqual(sb.descriptor().headers, declared.headers);
   } finally {
     sb.cleanup();
   }

@@ -769,6 +769,12 @@ model McpApiToken {
   // same DB but the FK semantics here are loose-coupled (we don't want a
   // build delete to cascade-delete the audit trail).
   buildId       String?
+  // BI-05715F4C: when kind = "workroom_session", the Workroom (capsuleId, WC-*)
+  // and run whose agent-CLI session this token authorizes. Loose references like
+  // buildId: the room issues and revokes the token, and a room delete must not
+  // erase the audit trail. The token is refused for any other room.
+  workroomRef   String?
+  runRef        String?
   name          String
   tokenHash     String    @unique
   prefix        String
@@ -814,6 +820,9 @@ model McpApiToken {
   // Lookup: "all active ephemeral tokens for build X" — used by the
   // ship-exit hook to find rows to revoke.
   @@index([buildId, revokedAt])
+  // Lookup: "every live session credential of room X" — revoked when the room's
+  // session stops, its executor changes, or it reaches a terminal status.
+  @@index([workroomRef, revokedAt])
   // Lookup: "revoke everything issued to this client" — the per-client revoke
   // control in Admin > Platform Development.
   @@index([oauthClientId, revokedAt])

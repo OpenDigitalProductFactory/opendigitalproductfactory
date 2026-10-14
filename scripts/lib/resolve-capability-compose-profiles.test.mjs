@@ -293,3 +293,25 @@ test("native macOS speech does not require the Docker speech service", async () 
     assert.equal(JSON.parse(result.stdout).requiredServices.includes("dpf-tts"), host !== "macos");
   }
 });
+
+// BI-0048E94D (AC-MON-09): an install-state with no monitoring decision keeps
+// its topology and records that nobody has chosen yet, so the portal can ask.
+test("write mode records an undecided monitoring decision without changing the enabled set", async () => {
+  const keys = ["runtime:core", "runtime:deep-observability"];
+  const result = await run({ ...snapshot(keys), schemaVersion: 2, installerVersion: "previous", platform: "linux", arch: "amd64" }, "--host", "linux", "--write");
+  assert.equal(result.status, 0, result.stderr);
+  const stored = JSON.parse(await readFile(result.statePath, "utf8"));
+  assert.deepEqual(stored.enabledRuntimeCapabilities, keys);
+  assert.equal(stored.runtimeCapabilityDecisions["runtime:deep-observability"].decision, "undecided");
+  assert.equal(stored.runtimeCapabilityDecisions["runtime:deep-observability"].source, "upgrade-carried");
+  assert.match(stored.runtimeCapabilityDecisions["runtime:deep-observability"].decidedAt, /^\d{4}-\d{2}-\d{2}T/);
+});
+
+test("write mode never overwrites a recorded monitoring decision", async () => {
+  const recorded = { decision: "disabled", source: "installer-prompt", decidedAt: "2026-10-13T00:00:00.000Z" };
+  const state = { ...snapshot(["runtime:core"]), schemaVersion: 2, installerVersion: "previous", platform: "linux", arch: "amd64", runtimeCapabilityDecisions: { "runtime:deep-observability": recorded } };
+  const result = await run(state, "--host", "linux", "--write");
+  assert.equal(result.status, 0, result.stderr);
+  const stored = JSON.parse(await readFile(result.statePath, "utf8"));
+  assert.deepEqual(stored.runtimeCapabilityDecisions["runtime:deep-observability"], recorded);
+});
