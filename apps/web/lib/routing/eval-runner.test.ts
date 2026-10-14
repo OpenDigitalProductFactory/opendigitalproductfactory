@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getTestsForDimension } from "./golden-tests";
 
 // Mocks for the runDimensionEval integration test. The pure-function tests in
 // this file don't touch either module, so the mocks are inert for them.
@@ -6,6 +7,8 @@ const evalState = vi.hoisted(() => ({
   profileUpdates: [] as Array<Record<string, unknown>>,
   callCount: 0,
   errorMessage: "The operation was aborted due to timeout",
+  truncatedAt: null as number | null,
+  expectedResponses: {} as Record<string, string>,
   // BI-C8164664: in-flight + reaper guard test fixtures
   inflightRun: null as { runId: string; startedAt: Date } | null,
   createCount: 0,
@@ -37,6 +40,12 @@ vi.mock("@/lib/ai-inference", () => {
       evalState.callCount++;
       evalState.executionPlans.push(args[5]);
       evalState.dispatchAttributions.push(args[8] as { traceId?: string; threadId?: string } | undefined);
+      if (evalState.truncatedAt !== null) {
+        const messages = args[2] as Array<{ content: string }>;
+        return { content: evalState.expectedResponses[messages[0]?.content ?? ""] ?? "OK",
+          truncated: evalState.callCount === evalState.truncatedAt, inputTokens: 1,
+          outputTokens: 1, inferenceMs: 1 };
+      }
       throw new InferenceError(evalState.errorMessage, "network");
     }),
   };
@@ -334,6 +343,43 @@ describe("errorEndsEvalCycle (whole-endpoint short-circuit predicate)", () => {
     expect(errorEndsEvalCycle("schema validation failed")).toBe(false);
     expect(errorEndsEvalCycle("Model not found on local")).toBe(false);
     expect(errorEndsEvalCycle(null)).toBe(false);
+  });
+});
+
+describe("known-incomplete golden calibration", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    evalState.profileUpdates.length = 0;
+    evalState.callCount = 0;
+    evalState.inflightRun = null;
+    evalState.lastEvalAt = null;
+    evalState.modelClass = "chat";
+    evalState.outputModalities = ["text"];
+    evalState.savedRuns.length = 0;
+    evalState.dispatchAttributions.length = 0;
+    evalState.expectedResponses = Object.fromEntries(getTestsForDimension("reasoning").map(t => [t.prompt, t.expectedOutput ?? "OK"]));
+  });
+  afterEach(() => { evalState.truncatedAt = null; evalState.expectedResponses = {}; vi.useRealTimers(); });
+
+  it.each([1, 6])("holds all quality/lifecycle writes when call %i is known-truncated", async truncatedAt => {
+    evalState.truncatedAt = truncatedAt;
+    const pending = runDimensionEval("local", "selected-model", "test", { force: true });
+    await vi.runAllTimersAsync();
+    const result = await pending;
+    expect(evalState.callCount).toBe(truncatedAt);
+    expect(result.hasDrift).toBe(false);
+    expect(result.hasSevereDrift).toBe(false);
+    expect(result.dimensions.every(d => d.newScore === d.previousScore)).toBe(true);
+    const qualityFields = ["reasoning", "codegen", "toolFidelity", "instructionFollowingScore", "structuredOutputScore",
+      "conversational", "contextRetention", "supportsToolUse", "capabilities", "profileSource", "profileConfidence",
+      "evalCount", "modelStatus", "retiredAt", "retiredReason"];
+    for (const update of evalState.profileUpdates) {
+      for (const field of qualityFields) expect(update).not.toHaveProperty(field);
+    }
+    expect(evalState.savedRuns[0]?.data).toMatchObject({ status: "incomplete", avgScore: null });
+    const observation = evalState.savedRuns[0]?.data.results.dimensions.at(-1)?.tests[0];
+    expect(observation).toMatchObject({ score: null, truncated: true, traceId: expect.stringMatching(/^[a-f0-9]{32}$/) });
+    expect(observation?.traceId).toBe(evalState.dispatchAttributions.at(-1)?.traceId);
   });
 });
 

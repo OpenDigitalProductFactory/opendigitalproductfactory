@@ -125,6 +125,14 @@ The auto-install hook (BI-98683E68) wires these into portal install + worktree c
 
 ## Standalone install and update
 
+The root-clone guard distinguishes shell syntax from quoted diagnostic text and
+interpreter heredoc input (BI-F6176C63). Read-only scripts with comparisons or
+HTML are allowed. Shell redirections, commands after a heredoc, shell-fed input,
+and interpreter file-write intent retain the existing root protections. The
+shared command-text helper owns heredoc boundaries; guards choose whether a
+body is executable shell input. Install the merged hook through the normal
+toolchain updater so every client uses the same correction.
+
 The DPF skill pack can be installed or updated without installing the full DPF
 project. This is the supported path for contributors who only need the governed
 Codex / Claude workflows and an existing DPF MCP endpoint.
@@ -302,6 +310,18 @@ Then the updater inside the verified pack runs, and the pin is written after it 
 - writes the declaration into each client's connector: the `X-DPF-Toolchain: pack=…;digest=…;client=…` header for Claude Code, Codex and Antigravity, and `dpf_pack`, `dpf_digest`, `dpf_client` on Grok's literal URL. The carrier per client is the manifest's `clients[kind].declarationCarrier`;
 - converges Claude local scope and every project-scope record, retires duplicate `dpf` servers in project `.mcp.json`, user scope and each project's local scope (backup first, then `claude mcp remove`), and gives every converged record's cached descriptor a literal endpoint;
 - with `--report-json`, writes one row per client and scope: `before` and `after` (`version`, `digest`, `authMode`), `action` (`updated`, `unchanged`, `retired`, `prunable` or `failed`), `backupPath`, `restartRequired`, and the client CLI's own `--version`. The agent records it through `record_surface_readiness`. A refusal writes `result: "refused"` with its reason.
+
+### What a connection declares, and what it is told
+
+A connector can declare the pack it loaded, with `dpf_pack`, `dpf_digest` (the first 16 hex of the delivered digest) and `dpf_client` on the MCP URL, or the `X-DPF-Toolchain: pack=…;digest=…;client=…` header (BI-54469E18, design §5.2). On every connection the server:
+
+- **Computes a verdict.** `current`, `stale`, `below-floor` or `undeclared`, from `apps/web/lib/agent-toolchain/toolchain-verdict.ts`. A User-Agent never decides it.
+- **Records the copy.** It goes in `AgentToolchainObservation`, keyed by the server-derived credential (`oauth:<OAuthClient.id>` or `token:<McpApiToken.id>`) and the loaded digest, with writes coalesced to one per five minutes. `initialize` also records `clientInfo`.
+- **Tells the agent.** A `TOOLCHAIN:` line is added to the `initialize` instructions, naming what is stale, the portal repair and the full installation id the updater must expect (`--expect-installation`). It is addressed to the agent and never hands the user a command.
+
+`get_fleet_readiness` returns a `toolchain` section: every credential with the copies it was seen loading and their verdicts, one page at a time. `record_surface_readiness` now keys an MCP caller's row by its own credential, so one token cannot overwrite another host's readiness.
+
+The floor's rules (pack below `minPackVersion`, a stored token where the credential policy says OAuth is available, Grok on anything but its client token) apply only once a release sets a floor in `toolchain-version.json`.
 
 ### Version bumps propagate automatically
 

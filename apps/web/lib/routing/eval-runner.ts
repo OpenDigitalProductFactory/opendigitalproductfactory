@@ -217,9 +217,9 @@ async function evalDimension(
     // identically. Each can burn up to 60s plus a log line. Stop now; the
     // dimension is inconclusive regardless. Turns ~30 duplicate error lines
     // (and minutes of wasted wall-clock) into one.
-    if (errorEndsEvalCycle(result.error ?? null)) {
+    if (result.score === null || errorEndsEvalCycle(result.error ?? null)) {
       console.warn(
-        `[eval-runner] ${endpointId}/${modelId}: endpoint/setup error on ${dimension} — skipping remaining tests this cycle: ${result.error}`,
+        `[eval-runner] ${endpointId}/${modelId}: ${result.score === null ? "incomplete generation" : "endpoint/setup error"} on ${dimension} — skipping remaining tests this cycle: ${result.error}`,
       );
       endpointAborted = true;
       break;
@@ -243,7 +243,7 @@ async function evalDimension(
     };
   }
 
-  const rawScore = scoreDimension(testResults.map((r) => r.score));
+  const rawScore = scoreDimension(testResults.map((r) => r.score).filter((score): score is number => score !== null));
   const drift = detectDrift(rawScore, previousScore);
   const newScore = computeNewScore(rawScore, previousScore, evalCount);
 
@@ -469,27 +469,33 @@ export async function runDimensionEval(
     // still correctly avoids retiring the model.
     const endpointUnusable =
       result.inconclusive &&
-      result.testResults.some((t) => errorEndsEvalCycle(t.error ?? null));
+      result.testResults.some((t) => t.score === null || errorEndsEvalCycle(t.error ?? null));
     if (endpointUnusable) {
       console.warn(
-        `[eval-runner] ${providerId}/${modelId}: endpoint unusable this cycle — skipping remaining dimensions`,
+        `[eval-runner] ${providerId}/${modelId}: ${result.testResults.some(t => t.score === null) ? "generation incomplete" : "endpoint unusable"} this cycle — skipping remaining dimensions`,
       );
       break;
     }
   }
 
+  // A partial generation cannot conclude this selected run, including metadata
+  // computed from earlier dimensions. Its actual observations remain recorded.
+  const generationIncomplete = dimensions.some(d => d.testResults.some(t => t.score === null));
+  if (generationIncomplete) {
+    for (const dimension of dimensions) dimension.newScore = dimension.previousScore;
+  }
   // Update ModelProfile with new scores (skip inconclusive dimensions)
   // Map dimension names to DB field names for the two that differ
   const scoreUpdates: Record<string, number> = {};
   for (const d of dimensions) {
-    if (!d.inconclusive) {
+    if (!generationIncomplete && !d.inconclusive) {
       const dbField = dimToDbField[d.dimension] ?? d.dimension;
       scoreUpdates[dbField] = d.newScore;
     }
   }
 
-  const hasDrift = dimensions.some((d) => d.drift.severity !== "none");
-  const hasSevereDrift = dimensions.some((d) => d.drift.severity === "severe");
+  const hasDrift = !generationIncomplete && dimensions.some((d) => d.drift.severity !== "none");
+  const hasSevereDrift = !generationIncomplete && dimensions.some((d) => d.drift.severity === "severe");
 
   // Only promote profileSource to "evaluated" when real scores were written.
   // An all-inconclusive eval preserves the previous scores unchanged — promoting
@@ -508,7 +514,7 @@ export async function runDimensionEval(
     capabilityOverrides: modelProfile.capabilityOverrides,
   });
   const toolUseUpdate =
-    evaluatedToolUse === undefined
+    generationIncomplete || evaluatedToolUse === undefined
       ? {}
       : {
           supportsToolUse: evaluatedToolUse,
@@ -543,12 +549,13 @@ export async function runDimensionEval(
   await prisma.endpointTestRun.update({
     where: { runId },
     data: {
-      status: allInconclusive ? "incomplete" : "completed",
+      status: generationIncomplete || allInconclusive ? "incomplete" : "completed",
       completedAt: new Date(),
-      avgScore: conclusiveDimensions.length > 0
+      avgScore: !generationIncomplete && conclusiveDimensions.length > 0
         ? conclusiveDimensions.reduce((a, d) => a + d.rawScore, 0) / conclusiveDimensions.length
         : null,
       results: {
+        ...(generationIncomplete ? { qualityWritesApplied: false } : {}),
         dimensions: dimensions.map((d) => ({
           dimension: d.dimension,
           rawScore: d.rawScore,
@@ -597,12 +604,12 @@ export async function runDimensionEval(
   // it fails with the generic "No AI model can handle this request right now"
   // (BI-32426CA0). Degrade instead: the model keeps ranking last but stays
   // reachable, and the operator gets a warning naming the exposed class.
-  const strandedClasses = allInconclusive && firstError
+  const strandedClasses = !generationIncomplete && allInconclusive && firstError
     ? await sensitivityClassesLeftUncoveredByRetiring(providerId, modelId)
     : [];
 
   if (
-    allInconclusive && firstError && !looksLikeInfrastructure && !looksLikeConfigGap &&
+    !generationIncomplete && allInconclusive && firstError && !looksLikeInfrastructure && !looksLikeConfigGap &&
     strandedClasses.length === 0
   ) {
     await prisma.modelProfile.update({
@@ -614,7 +621,7 @@ export async function runDimensionEval(
       },
     });
     console.log(`[eval-runner] Auto-retired ${providerId}/${modelId}: all tests failed — ${firstError.slice(0, 100)}`);
-  } else if (allInconclusive && firstError && strandedClasses.length > 0) {
+  } else if (!generationIncomplete && allInconclusive && firstError && strandedClasses.length > 0) {
     await prisma.modelProfile.update({
       where: { providerId_modelId: { providerId, modelId } },
       data: { modelStatus: "degraded" },

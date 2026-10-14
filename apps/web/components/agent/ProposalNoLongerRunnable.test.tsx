@@ -84,8 +84,12 @@ describe("legacy proposal card after a monitor refusal", () => {
     expect(screen.queryByRole("alert")).toBeNull();
     expect(mocks.refresh).not.toHaveBeenCalled();
 
+    // Refusal text can render before the async approval transition settles.
+    // Exercise the next decision only when the user can actually press it.
+    await waitFor(() => expect(screen.getByRole<HTMLButtonElement>("button", { name: "Decline" }).disabled).toBe(false));
     fireEvent.click(screen.getByRole("button", { name: "Decline" }));
     await waitFor(() => expect(mocks.rejectProposal).toHaveBeenCalledWith("AP-1", "Owner declined this action"));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Action declined."));
   });
 
   it("Needs-you card: an ordinary failure is still shown as an error with both buttons", async () => {
