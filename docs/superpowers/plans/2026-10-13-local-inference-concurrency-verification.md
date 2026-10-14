@@ -34,4 +34,4 @@ Observer mistakes could alter admission or leak caller context; isolate callback
 
 ## Backlog coverage
 
-One atomic deliverable mapped to BI-B550D9E5. Observer wiring without the diagnostic cannot close live acceptance, and the diagnostic without truthful events cannot prove contention. Live immutable plan coverage is required before source implementation; receipt pending.
+One atomic deliverable mapped to BI-B550D9E5. Observer wiring without the diagnostic cannot close live acceptance, and the diagnostic without truthful events cannot prove contention. Live immutable plan coverage was recorded before source implementation: initial receipt `cmv7mw4pk07gb01ob279xxzsk`, refreshed receipt `cmv7n7i6v0be401ob8obvc2ep` after claiming the diagnostic leaf files. Both bind the plan at `ec912b9ead04be27c9b30d3bb467a9278a1bda7c`, blob `e9707b36a800aad121023de05c9d29738debf3ba`. Tester/pack integration requires the current owner's normal scope handoff and fresh coverage for that enlarged edit scope.
