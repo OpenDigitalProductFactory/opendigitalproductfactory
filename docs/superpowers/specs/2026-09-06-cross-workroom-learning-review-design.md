@@ -356,6 +356,37 @@ index operations. Existing retention may delete expired rows: a cursor gap or
 denied/deleted source must remain visible and cannot count as reviewed evidence.
 Corrections append with original/supersedes identity and a new ingestion sequence.
 
+The implementation reuses `Workroom.activitySequence` and
+`WorkroomActivity.sequence` from BI-62514632 / PR 6294. WWMD reconciliation
+`DI-7588F40259CF` supersedes the separate ignored 64-bit candidate selected by
+`DI-633825E30706`: one canonical counter and trigger serve both log readers and
+review ingestion. Existing integer JSON and `afterSequence` contracts remain.
+The ingestion adapter exposes decimal strings and explicitly orders by the
+qualified numeric column, never the projected text alias.
+
+The hardening migration preserves every assigned position, rejects supplied
+insert positions and makes sequence/room identity immutable. Under table locks,
+legacy NULL rows receive positions after each room's committed maximum in
+deterministic timestamp/ID order. This is newly ingested retained evidence, not
+recovered chronology. Rooms without enough integer headroom retain NULL rows
+and unknown legacy coverage; the migration neither discards history nor wraps
+the counter. Existing integer capacity remains a compatibility limit requiring
+a separately qualified public cursor upgrade before exhaustion. Empty pages,
+legacy rows and allocation gaps retain `retention-unverified` coverage.
+
+The source adapter stores `workroomReviewIngestion` in the existing cycle's
+WorkItem evidence. Initialization commits before source reads or analysis; the
+output message and consumed positions then commit under the same parent lock,
+with a canonical JSON revision comparison and exact replay identity. Each turn
+reads at most 200 rows from one rotated room and retains the 1,000-row cycle
+budget. A later governed cycle carries consumed positions and rotation forward.
+The invoking handler supplies its existing authorization; this adapter creates
+no role, owner, permission or scheduler. Oversized evidence must use the existing
+offloaded references. A fully consumed frozen vector returns completion without
+another analysis or output; this never certifies retention coverage.
+Unit and synthetic-load results do not qualify the database
+transaction or establish operational acceptance.
+
 Required database qualification uses concurrent real PostgreSQL transactions:
 one delayed writer, a second writer, a highwater reader, rollback, multi-room
 bulk inserts in opposing orders, and concurrent reviewer replacements. Prove
