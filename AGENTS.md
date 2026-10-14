@@ -107,7 +107,7 @@ Read the [skill index](docs/architecture/agent-skill-index.md) only to find an a
 
 - **Kernel principles (Surface C) are the durable doctrine store.** `wiki_query` for lookup, `principle_decide` for decisions.
 
-Use WWMD for platform, WWWD for business and WSID for craft; [funding is owner-scoped](docs/user-guide/investment-allocation.md). `principle_decide` scores magnitude: for **cost** axes (`blast_radius`, `human_cognitive_load`, `vendor_lock_in`, `business_disruption`, `operator_effort`) **higher is worse**.
+Use WWMD for platform, WWWD for business and WSID for craft; [funding is owner-scoped](docs/user-guide/investment-allocation.md). `principle_decide` scores magnitude: on the five **cost** axes (`blast_radius`, `human_cognitive_load`, `vendor_lock_in`, `business_disruption`, `operator_effort`) **higher is worse**.
 
 Procedure and domain rules: [skill surfaces runbook](docs/architecture/skill-surfaces-runbook.md). Read before this phase.
 
