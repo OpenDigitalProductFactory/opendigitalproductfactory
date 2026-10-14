@@ -54,7 +54,7 @@ describe("toConnectedClientRows", () => {
 describe("buildConnectedClientsView", () => {
   it("returns no release and reads nothing when the image carries no pack", async () => {
     const findMany = vi.fn();
-    const view = await buildConnectedClientsView({ agentToolchainObservation: { findMany } }, { published: null, mcpEndpoint: "https://x/api/mcp/v1", now: new Date() });
+    const view = await buildConnectedClientsView({ agentToolchainObservation: { findMany }, oAuthClient: { findMany: vi.fn() }, mcpApiToken: { findMany: vi.fn() } }, { published: null, mcpEndpoint: "https://x/api/mcp/v1", now: new Date() });
     expect(view).toEqual({ release: null, clients: [], truncated: false });
     expect(findMany).not.toHaveBeenCalled();
   });

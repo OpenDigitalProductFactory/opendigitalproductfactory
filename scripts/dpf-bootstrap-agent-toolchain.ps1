@@ -320,9 +320,9 @@ exit 127
 '@ -replace "`r`n", "`n"
                 $clientOut = & docker exec $portal sh -c $grokIssuer issuer 2>$grokErr
                 if ($LASTEXITCODE -eq 0) {
-                    $clientOut | & node (Join-Path $RepoRoot "scripts\refresh-grok-mcp-credential.mjs") write-client --config $GrokConfigPath
+                    $clientOut | & node (Join-Path $RepoRoot "packages\dpf-skill-pack\scripts\refresh-grok-mcp-credential.mjs") write-client --config $GrokConfigPath
                     if ($LASTEXITCODE -eq 0) {
-                        & node (Join-Path $RepoRoot "scripts\refresh-grok-mcp-credential.mjs") refresh --mcp-url $McpEndpoint --config $GrokConfigPath
+                        & node (Join-Path $RepoRoot "packages\dpf-skill-pack\scripts\refresh-grok-mcp-credential.mjs") refresh --mcp-url $McpEndpoint --config $GrokConfigPath
                         if ($LASTEXITCODE -eq 0) {
                             Write-Ok "Grok credential refreshed into bearer_token_file."
                         } else {

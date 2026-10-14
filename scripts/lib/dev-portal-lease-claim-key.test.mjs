@@ -163,6 +163,10 @@ test('the policy claim-key suite runs without installed workspace dependencies',
     const shared = join(fixture, 'packages/integration-shared/src');
     mkdirSync(shared, { recursive: true });
     cpSync(join(source, '../../packages/integration-shared/src/delivery-readiness-contract.cjs'), join(shared, 'delivery-readiness-contract.cjs'));
+    // mcp-credential.mjs re-exports the client_credentials exchange from the skill pack (BI-84C1F526).
+    const packLib = join(fixture, 'packages/dpf-skill-pack/scripts/lib');
+    mkdirSync(packLib, { recursive: true });
+    cpSync(join(source, '../../packages/dpf-skill-pack/scripts/lib/client-credentials-exchange.mjs'), join(packLib, 'client-credentials-exchange.mjs'));
     const { NODE_TEST_CONTEXT: inheritedTestContext, ...env } = process.env;
     const result = spawnSync(process.execPath, ['--test', '--test-name-pattern=^the contributor-preview', join(fixture, 'scripts/lib/dev-portal-lease-claim-key.test.mjs')], { encoding: 'utf8', cwd: fixture, env });
     assert.equal(result.status, 0, result.stderr || result.stdout);

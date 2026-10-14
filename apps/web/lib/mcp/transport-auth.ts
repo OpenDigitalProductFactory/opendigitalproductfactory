@@ -26,12 +26,26 @@ export type McpAuthenticationResult =
   | (ActionSuccess & { token: ResolvedMcpTransportAuth; oauthGrantedScopes: PublicScope[] })
   | { ok: false; response: Response };
 
+/**
+ * BI-84C1F526 (AC-GROK): a refused credential carries the same repair the
+ * TOOLCHAIN notice names, so an agent whose client credential expired or went
+ * missing converges it through the portal instead of asking for a token.
+ */
+function toolchainRepairUrl(request: Request): string | null {
+  const origin = resolveResourceOrigin(request);
+  return origin ? `${origin}/api/agent-toolchain/manifest` : null;
+}
+
 function unauthorizedResponse(detail: string, request: Request): Response {
+  const repair = toolchainRepairUrl(request);
+  const message = repair
+    ? `unauthorized: ${detail}. Repair: run the DPF toolchain update from this portal (${repair}), then restart the client.`
+    : `unauthorized: ${detail}`;
   return new Response(
     JSON.stringify({
       jsonrpc: "2.0",
       id: null,
-      error: { code: -32600, message: `unauthorized: ${detail}` },
+      error: { code: -32600, message, ...(repair ? { data: { repair } } : {}) },
     }),
     {
       status: 401,

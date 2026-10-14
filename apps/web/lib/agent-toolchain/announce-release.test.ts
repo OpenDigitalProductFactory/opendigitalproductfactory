@@ -52,6 +52,8 @@ function fakeDb(observations: ToolchainObservationRow[] = [], existing: FakeNoti
     agentToolchainObservation: {
       findMany: vi.fn(async () => observations),
     },
+    oAuthClient: { findMany: vi.fn(async () => []) },
+    mcpApiToken: { findMany: vi.fn(async () => []) },
   };
   return db;
 }
