@@ -24,6 +24,7 @@ import {
   formatMessageForResponses,
 } from "./provider-message-format";
 import { isAnthropic } from "./provider-utils";
+import { isLocalProviderId } from "./provider-locality";
 import { formatMessagesForGemini } from "./gemini-messages";
 import { captureAnthropicWeeklyQuota } from "./cli-pool-status";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
@@ -192,6 +193,18 @@ export const chatAdapter: ExecutionAdapterHandler = {
     const { providerId, modelId, plan, provider, messages, systemPrompt, tools } = request;
     const { baseUrl, headers } = provider;
     let requestHeaders = headers;
+    const total = plan.completionAllowance;
+    if (total !== undefined && (!Number.isSafeInteger(total) || total <= 0 || plan.maxTokens !== total)) {
+      throw new Error("Invalid activity total completion allowance");
+    }
+    const boundedThinking = (budget: number): number => {
+      if (total === undefined) return budget;
+      const reserve = Math.max(2048, Math.ceil(total / 4));
+      if (!Number.isSafeInteger(budget) || budget < 1024 || total - reserve < 1024) {
+        throw new Error("Activity allowance cannot accommodate provider thinking budget");
+      }
+      return Math.min(budget, total - reserve);
+    };
 
     // Build provider-specific request
     let chatUrl: string;
@@ -223,14 +236,17 @@ export const chatAdapter: ExecutionAdapterHandler = {
         (body as Record<string, unknown>).thinking = plan.providerSettings.thinking;
         // Ensure max_tokens accommodates the explicitly set budget
         const explicitBudget = (plan.providerSettings.thinking as { budget_tokens?: number }).budget_tokens ?? 0;
-        body.max_tokens = Math.max(plan.maxTokens, explicitBudget + 2_048);
+        if (total !== undefined && (plan.providerSettings.thinking as { type?: string }).type === "enabled") {
+          (body as Record<string, unknown>).thinking = { ...(plan.providerSettings.thinking as object), budget_tokens: boundedThinking(explicitBudget) };
+        }
+        body.max_tokens = total ?? Math.max(plan.maxTokens, explicitBudget + 2_048);
         // Anthropic rejects temperature when thinking is enabled
         delete (body as Record<string, unknown>).temperature;
       } else if (effort && effort !== "low" && effortBudgets[effort]) {
-        const budget = effortBudgets[effort]!;
+        const budget = boundedThinking(effortBudgets[effort]!);
         (body as Record<string, unknown>).thinking = { type: "enabled", budget_tokens: budget };
         // max_tokens must be >= budget_tokens; add 2 048 for output headroom
-        body.max_tokens = Math.max(plan.maxTokens, budget + 2_048);
+        body.max_tokens = total ?? Math.max(plan.maxTokens, budget + 2_048);
         // Anthropic rejects temperature when thinking is enabled
         delete (body as Record<string, unknown>).temperature;
       }
@@ -383,6 +399,13 @@ export const chatAdapter: ExecutionAdapterHandler = {
         max_tokens: plan.maxTokens,
         keep_alive: -1,
       };
+      if (plan.providerSettings.thinking_budget_tokens !== undefined) {
+        const budget = plan.providerSettings.thinking_budget_tokens;
+        if (typeof budget !== "number" || !Number.isSafeInteger(budget) || budget <= 0 || budget >= plan.maxTokens) {
+          throw new Error("Invalid local thinking allowance");
+        }
+        (body as Record<string, unknown>).thinking_budget_tokens = budget;
+      }
 
       if (providerId === "openrouter" && plan.openRouterPolicy) {
         // One construction point makes the typed policy load-bearing for every
@@ -459,6 +482,16 @@ export const chatAdapter: ExecutionAdapterHandler = {
     try {
       // callProvider owns admission; governed queue wait consumes the parent budget.
       await assertGovernedInferenceAuthority(currentInferenceSignal());
+      if (plan.providerSettings.thinking_budget_tokens !== undefined) {
+        const expected = plan.localThinkingBudgetEvidence;
+        if (!isLocalProviderId(providerId) || !expected) throw new Error("Local thinking runtime evidence unavailable");
+        const root = baseUrl.replace(/\/(engines\/)?v1\/?$/, "");
+        const actual = await request.readLocalThinkingBudgetEvidence?.(root, modelId, request.fetchImpl);
+        if (!actual || ["dialect", "modelDigest", "engineIdentity", "templateDigest", "configDigest"].some(
+          key => actual[key as keyof typeof actual] !== expected[key as keyof typeof expected],
+        )) throw new Error("Local thinking runtime evidence changed or unavailable");
+        await assertGovernedInferenceAuthority(currentInferenceSignal());
+      }
       const execution = currentGovernedInferenceDeadline();
       const signal = currentInferenceSignal(execution?.signal);
       const timeout = createInferenceTimeoutSignal(resolveInferenceRuntimePolicy(providerId, modelId, {

@@ -240,6 +240,15 @@ describe("routing-loader cache (BI-OPT-ROUTING-CACHE)", () => {
     expect((await readEndpointManifests(100002, unavailableReader))[0]?.maxContextTokens).toBeNull();
   });
 
+  it("carries selected runtime support alongside observed capacity without trusting stored parameters", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([localProfile()]);
+    const evidence = { dialect: "llama.cpp-b9879" as const, modelDigest: "digest", engineIdentity: "engine", templateDigest: "template", configDigest: "config", observedAt: Date.now() };
+    const [manifest] = await readEndpointManifests(Date.now(), async () => ({ contextTokens: 131072, thinkingBudgetEvidence: evidence }));
+    expect(manifest).toMatchObject({ maxContextTokens: 131072, localThinkingBudgetEvidence: evidence });
+    const [unknown] = await readEndpointManifests(Date.now(), async () => ({ contextTokens: 131072 }));
+    expect(unknown?.localThinkingBudgetEvidence).toBeUndefined();
+  });
+
   it("leaves embedding capacity on its existing metadata path", async () => {
     mockPrisma.modelProfile.findMany.mockResolvedValue([{ ...localProfile(8192), modelClass: "embedding" }]);
     expect((await loadEndpointManifests())[0]).toMatchObject({ maxContextTokens: 262144, maxOutputTokens: 8192 });
