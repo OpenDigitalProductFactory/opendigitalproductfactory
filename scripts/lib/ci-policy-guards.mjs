@@ -283,6 +283,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-58C58CB6: these sat on the test-inventory allowlist, ran nowhere
         // in CI, and drifted on every host until BI-76334D21 caught them.
         "scripts/installer/install-state-transaction.test.mjs",
+        "scripts/installer/offline-recovery-authority.test.mjs",
+        "scripts/installer/offline-recovery-kit.test.mjs",
+        "scripts/installer/offline-recovery-kit-prepare.test.mjs",
+        "scripts/installer/runtime-apply-lock.test.mjs",
         "scripts/installer/migrate-install-state.test.mjs",
         "scripts/installer/resolve-host-identity.test.mjs",
         "scripts/installer/validate-install-state.test.mjs",
