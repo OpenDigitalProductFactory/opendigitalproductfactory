@@ -162,7 +162,20 @@ Reporting is not repair. The diagnosis says what diverged; it never decides whic
 authority wins, because reconciling without first finding the writer that moved
 state outside the transition protocol leaves the cause in place.
 
-## Proposed existing-install reconciliation — BI-5ACBAC50
+## Existing-install reconciliation — BI-5ACBAC50
+
+The current implementation supports version 2 reconciliation with distinct,
+complete host and database baselines, immutable packaged code identity, touched-only
+database updates, and persisted compensation. Preview reports disagreement without
+choosing desired settings; apply requires an explicit request. Browser actions
+authorize the session's `manage_platform` capability. Governed MCP checks the same
+capability and existing token/coworker grants, then passes its authenticated user
+to the shared command service; a browser cookie is not an MCP prerequisite.
+
+The backend checkpoint passed all six real PostgreSQL cases and its canonical
+gate; PR 6366 also passed protected integration and merged. Those are source and
+cloud proofs. Canonical deployment and live reconciliation remain separate
+acceptance gates, and no native review verdict is implied.
 
 The bounded design passed independent review; implementation is in progress
 and has not run on an installation.
@@ -272,6 +285,13 @@ owner's receipt. Keep authority, credential and destructive confirmation gates.
 At least 20% of this repair consolidates duplicated projection, signing and
 baseline validation. No source test, consultation, merged PR or healthy portal
 substitutes for the live reconciliation and build-engine acceptance.
+
+### Historical implementation evidence
+
+The following incremental notes preserve earlier test results and the boundaries
+that existed at each checkpoint. Their statements about unimplemented modes or
+pending source qualification are superseded by the current contract above; they
+do not describe the latest source or establish live acceptance.
 
 The first signing regression reproduced two failures before the repair, then
 passed all 13 shared-signing tests. The host actuator now imports that same

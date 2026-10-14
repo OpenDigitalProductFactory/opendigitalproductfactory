@@ -1,15 +1,14 @@
 "use server";
 
 import { requireCapability } from "@/lib/actions/shared/guards";
-import { executeProductionRuntimeCapabilityTransition, readProductionRuntimeCapabilityReconciliationPreview, rotateProductionRuntimeTransitionSecret } from "@/lib/platform-runtime/runtime-capability-executor";
+import { rotateProductionRuntimeTransitionSecret } from "@/lib/platform-runtime/runtime-capability-executor";
+import { previewRuntimeCapabilityReconciliationForActor, requestRuntimeCapabilityTransitionForActor, type RuntimeCapabilityMutationInput } from "@/lib/platform-runtime/runtime-capability-commands";
 import { assertRuntimeCapabilityTransitionAdmission } from "@/lib/platform-runtime/transition-recovery";
-import type { RuntimeReconciliationIntent } from "@/lib/platform-runtime/transition-protocol";
-
-export type RuntimeCapabilityMutationInput = { transitionId: string; desiredKeys: string[]; mode?: "transition" | "reconciliation"; reconciliation?: RuntimeReconciliationIntent };
+export type { RuntimeCapabilityMutationInput } from "@/lib/platform-runtime/runtime-capability-commands";
 
 export async function previewRuntimeCapabilityReconciliation() {
-  await requireCapability("manage_platform");
-  return readProductionRuntimeCapabilityReconciliationPreview();
+  const { userId } = await requireCapability("manage_platform");
+  return previewRuntimeCapabilityReconciliationForActor(userId);
 }
 
 /** Authenticated, serializable-only mutation boundary. Actor identity is always
@@ -17,8 +16,7 @@ export async function previewRuntimeCapabilityReconciliation() {
 export async function requestRuntimeCapabilityTransition(input: RuntimeCapabilityMutationInput) {
   input = structuredClone(input);
   const { userId } = await requireCapability("manage_platform");
-  await assertRuntimeCapabilityTransitionAdmission();
-  return executeProductionRuntimeCapabilityTransition({ ...input, requestedById: userId });
+  return requestRuntimeCapabilityTransitionForActor(input, userId);
 }
 
 /** Signing-key rotation is DB-aware and uses the same host reconciliation
