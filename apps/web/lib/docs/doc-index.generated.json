@@ -1266,7 +1266,8 @@
         "backup-and-health-semantics",
         "observation-and-diagnostics-boundary",
         "diagnosing-capability-drift-bi-5acbac50",
-        "proposed-existing-install-reconciliation-bi-5acbac50",
+        "existing-install-reconciliation-bi-5acbac50",
+        "historical-implementation-evidence",
         "safe-operating-rules",
         "how-self-upgrade-may-recreate-a-service"
       ]
