@@ -2884,7 +2884,8 @@
           "coworker_screen_read",
           "coworker_screen_drive",
           "initiative_evidence_write",
-          "workroom_evidence_write"
+          "workroom_evidence_write",
+          "web_search"
         ]
       }
     },
