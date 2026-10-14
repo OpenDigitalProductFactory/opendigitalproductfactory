@@ -360,6 +360,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/ci-evidence-workflow.test.mjs",
         "scripts/ci-build-artifact-workflow.test.mjs",
         "scripts/ci-policy-guards.test.mjs",
+        "scripts/daily-checkpoint-tag.test.mjs",
       ),
       node(
         "--test",
