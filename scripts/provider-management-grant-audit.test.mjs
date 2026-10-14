@@ -15,7 +15,9 @@ test("grant audit recognizes provider controls composed into the authorization m
   const providerErrors = report.findings.filter(finding => finding.severity === "error"
     && /add_provider|update_provider_category|add-provider/.test(finding.summary));
   assert.deepEqual(providerErrors, [], "existing provider controls retain their authorization");
-  for (const tool of ["get_provider_accounts", "manage_provider_account"]) {
+  for (const tool of ["get_provider_accounts", "manage_provider_account",
+    "apply_platform_update", "summarize_platform_update",
+    "preview_runtime_capability_reconciliation", "reconcile_runtime_capabilities"]) {
     assert.equal(report.findings.some(finding => finding.invariantId === "GRANT-002"
       && finding.summary.includes(`'${tool}'`)), false, `${tool} must resolve its declared grant`);
   }
