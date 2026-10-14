@@ -23,6 +23,7 @@ export const providerAccountDefinitions: ToolDefinition[] = [
       clientSecret: { type: "string", writeOnly: true },
       tokenEndpoint: { type: "string" },
       scope: { type: "string" },
+      providerWorkspaceId: { type: "string", description: "Anthropic API-key workspace ID (wrkspc_...). Required for organization-scoped keys; empty clears it." },
     }, required: ["operation"] },
     requiredCapability: "manage_provider_connections", sideEffect: true, consequence: "authority",
     consequenceForCall: providerAccountConsequence,

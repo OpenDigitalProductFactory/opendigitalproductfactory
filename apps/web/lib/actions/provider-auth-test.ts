@@ -3,6 +3,7 @@ import { getTestUrl } from "@/lib/ai-provider-types";
 import { getDecryptedCredential, getProviderExtraHeaders, getProviderBearerToken, isAnthropicProvider, ANTHROPIC_OAUTH_BETA_HEADERS } from "@/lib/ai-provider-internals";
 import { activateProvider } from "@/lib/govern/activate-provider";
 import { findProviderCredential } from "@/lib/inference/provider-account-credentials";
+import { providerWorkspaceHeaders } from "@/lib/inference/provider-workspace";
 import { buildResponsesUrl, isChatGptBackend } from "@/lib/routing/responses-contract";
 import { assertResponsesCompleted } from "@/lib/routing/responses-readiness";
 import { clearProviderCapacityStatus } from "@/lib/routing/provider-capacity/store";
@@ -83,6 +84,7 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
   if (provider.authMethod === "api_key") {
     const credential = await getDecryptedCredential(providerId, connectionId);
     if (!credential?.secretRef) return { ok: false, message: "No API key configured" };
+    Object.assign(headers, providerWorkspaceHeaders(providerId, credential.providerWorkspaceId));
 
     if (provider.authHeader) {
       headers[provider.authHeader] = provider.authHeader === "Authorization"
