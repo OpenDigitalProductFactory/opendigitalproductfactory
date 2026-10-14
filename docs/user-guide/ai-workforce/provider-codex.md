@@ -60,6 +60,12 @@ after exit, including when the client disconnects. Credentials travel over proce
 stdin, not command arguments, shared auth files, or provider error logs. External
 token login follows the [OpenAI app-server protocol](https://learn.chatgpt.com/docs/app-server).
 
+## Coworker Verification on Development Deployments
+
+On a platform-development deployment, an AI coworker with your existing delegated maintenance permissions can test an already active default ChatGPT or Codex subscription account without another approval request. The check sends a small verification request and can renew the account's existing session. It does not enable an account, change its data-use permissions, or switch to another account.
+
+Inactive or disconnected accounts must be enabled or signed in through the existing account controls. New credentials, account activation, production changes and restricted-data actions keep their existing approval requirements.
+
 ## Linked MCP Service
 
 When you connect Codex via OAuth, the platform automatically activates the "OpenAI Codex Agent" MCP service. This allows the platform's AI coworker agents to dispatch coding tasks to Codex.

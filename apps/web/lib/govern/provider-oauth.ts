@@ -5,6 +5,7 @@
 import { randomBytes, createHash } from "crypto";
 import { prisma } from "@dpf/db";
 import { encryptSecret, decryptSecret } from "@/lib/credential-crypto";
+import { activeAccountCredentialWhere, assertActiveAccountSnapshot, ACCOUNT_CHANGED, type ActiveAccountSnapshot } from "@/lib/inference/active-provider-account-verification";
 import { activateProvider } from "@/lib/govern/activate-provider";
 import { getStablePortalUrl } from "@/lib/portal-url";
 import { findProviderCredential } from "@/lib/inference/provider-account-credentials";
@@ -344,13 +345,22 @@ export async function exchangeOAuthCode(
 export async function refreshOAuthToken(
   providerId: string,
   connectionId?: string,
+  activeSnapshot?: ActiveAccountSnapshot,
 ): Promise<{ token: string } | { error: string }> {
+  if (activeSnapshot) {
+    try { await assertActiveAccountSnapshot(activeSnapshot); }
+    catch { return { error: ACCOUNT_CHANGED }; }
+  }
   const provider = await prisma.modelProvider.findUnique({ where: { providerId: connectionId && providerId === "chatgpt" ? "codex" : providerId } });
   if (!provider?.tokenUrl || !provider.oauthClientId) {
     return { error: "Provider missing tokenUrl or oauthClientId" };
   }
 
   const cred = await findProviderCredential(providerId, connectionId);
+  if (activeSnapshot && (connectionId !== activeSnapshot.connectionId || providerId !== activeSnapshot.providerId || cred?.id !== activeSnapshot.credentialEntryId)) {
+    return { error: ACCOUNT_CHANGED };
+  }
+  const guardedWhere = activeSnapshot && cred ? { ...activeAccountCredentialWhere(activeSnapshot), refreshToken: cred.refreshToken } : null;
   const credentialWhere = connectionId && cred ? { id: cred.id } : { providerId };
   if (!cred?.refreshToken) {
     // Nothing can renew this token. Once it is past expiry, say so on the row
@@ -359,7 +369,7 @@ export async function refreshOAuthToken(
     if (cred?.tokenExpiresAt && cred.tokenExpiresAt.getTime() <= Date.now()) {
       const sibling = OPENAI_PAIR[providerId];
       await prisma.credentialEntry.updateMany({
-        where: connectionId ? { id: cred.id } : { providerId: { in: sibling ? [providerId, sibling] : [providerId] } },
+        where: guardedWhere ?? (connectionId ? { id: cred.id } : { providerId: { in: sibling ? [providerId, sibling] : [providerId] } }),
         data: { status: "expired" },
       });
     }
@@ -387,15 +397,21 @@ export async function refreshOAuthToken(
     });
 
     if (!res.ok) {
-      await prisma.credentialEntry.update({
-        where: credentialWhere,
-        data: { status: "expired" },
-      });
+      if (guardedWhere) await prisma.credentialEntry.updateMany({ where: guardedWhere, data: { status: "expired" } });
+      else await prisma.credentialEntry.update({ where: credentialWhere, data: { status: "expired" } });
       return { error: "OAuth token expired — admin must re-authenticate" };
     }
 
     const body = await res.json() as { access_token: string; refresh_token?: string; expires_in: number };
     const expiresAt = new Date(Date.now() + body.expires_in * 1000);
+
+    if (guardedWhere) {
+      const renewed = await prisma.credentialEntry.updateMany({ where: guardedWhere, data: {
+        cachedToken: encryptSecret(body.access_token), refreshToken: body.refresh_token ? encryptSecret(body.refresh_token) : cred.refreshToken,
+        tokenExpiresAt: expiresAt, status: "ok",
+      } });
+      return renewed.count === 1 ? { token: body.access_token } : { error: ACCOUNT_CHANGED };
+    }
 
     // Optimistic concurrency: only write if refreshToken hasn't changed
     const currentCred = await prisma.credentialEntry.findUnique({ where: credentialWhere });
