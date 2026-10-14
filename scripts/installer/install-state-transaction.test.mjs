@@ -273,3 +273,21 @@ test("one held capability cannot run overlapping transactions or release mid-wri
     await assert.rejects(held.release(), /install_state_held_lock_busy/);
   } finally { resume(); await first; await held.release(); }
 });
+
+test("release after a refused borrowed transaction preserves a moved lock in a replaced parent", async () => {
+  const { dir, statePath } = await fixture(); const held = await acquireInstallStateLock(statePath);
+  const old = `${dir}-old`; const lockPath = `${statePath}.lock`;
+  const bytes = await readFile(lockPath);
+  await rename(dir, old); await mkdir(dir, { mode: 0o700 });
+  await rename(join(old, "install-state.json.lock"), lockPath);
+  await assert.rejects(updateInstallState(statePath, state => state, { heldLock: held }), /install_state_held_lock_invalid/);
+  await held.release();
+  assert.deepEqual(await readFile(lockPath), bytes);
+});
+test("release preserves a replacement lock file even when its owner metadata is copied", async () => {
+  const { statePath } = await fixture(); const held = await acquireInstallStateLock(statePath);
+  const lockPath = `${statePath}.lock`; const bytes = await readFile(lockPath);
+  await rename(lockPath, `${lockPath}.original`); await writeFile(lockPath, bytes);
+  await held.release();
+  assert.deepEqual(await readFile(lockPath), bytes);
+});

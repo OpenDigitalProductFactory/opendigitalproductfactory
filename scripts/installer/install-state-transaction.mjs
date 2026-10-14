@@ -122,11 +122,14 @@ export async function acquireInstallStateLock(statePath, options = {}) {
       const registration = { target, ownerBytes: JSON.stringify(owner), parent: await lstat(dirname(target)), file: await lstat(ownerPath), released: false };
       const lock = Object.freeze({ lockPath, owner: Object.freeze(owner), async release() {
         if (registration.borrowed) throw new Error("install_state_held_lock_busy");
-        if (registration.released) return;
-        registration.released = true;
-        let current;
-        try { current = JSON.parse(await readFile(ownerPath, "utf8")); } catch { return; }
-        if (current.ownerId === ownerId) await rm(ownerPath, { force: true });
+        if (registration.released || registration.releasing) return;
+        registration.releasing = true;
+        try {
+          if (await heldLockStillOwned(target, lock)) await rm(ownerPath, { force: true });
+        } finally {
+          registration.released = true;
+          registration.releasing = false;
+        }
       }});
       heldLocks.set(lock, registration);
       return lock;
@@ -173,7 +176,7 @@ async function transactionLock(target, options) {
   if (!Object.hasOwn(options, "heldLock")) return { lock: await acquireInstallStateLock(target, options), borrowed: false, finishBorrow: () => {} };
   const registration = heldLocks.get(options.heldLock);
   if (!registration) throw new Error("install_state_held_lock_invalid");
-  if (registration.borrowed) throw new Error("install_state_held_lock_busy");
+  if (registration.borrowed || registration.releasing) throw new Error("install_state_held_lock_busy");
   registration.borrowed = true;
   try { await verifyHeldLock(target, options.heldLock); }
   catch (error) { registration.borrowed = false; throw error; }
