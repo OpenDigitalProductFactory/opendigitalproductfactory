@@ -432,6 +432,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-5BCDB07C: the Grok refresher writes bearer_token_file and stops
       // when the credentials client is refused. Listed here so CI runs it.
       node("--test", "scripts/lib/grok-credential.test.mjs"),
+      // BI-84C1F526: Grok's SessionStart refreshes that file from the pack copy.
+      node("--test", "packages/dpf-skill-pack/hooks/grok-credential-refresh.test.mjs"),
       node("scripts/check-authoring-cost-dimensions.mjs"),
       node("scripts/check-ci-policy-test-inventory.mjs"),
     ]),

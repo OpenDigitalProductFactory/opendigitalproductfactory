@@ -1,7 +1,7 @@
 import "server-only";
 
 import { capabilityDriftFromObservations, capabilityDriftFromReports, type CapabilityDrift } from "./client-capability-drift";
-import { resolveToolchainVerdict, type PublishedToolchain, type ToolchainVerdict } from "./toolchain-verdict";
+import { credentialKindOf, resolveToolchainVerdict, type PublishedToolchain, type ToolchainVerdict } from "./toolchain-verdict";
 
 // BI-D6DFC0E7 (EP-COMPETENCE-FLYWHEEL, host-agent scope). Make agent-surface
 // readiness OBSERVABLE across the fleet, not just self-attested locally.
@@ -170,7 +170,22 @@ type SurfaceReadinessClient = {
 
 type ToolchainObservationClient = {
   agentToolchainObservation: { findMany: (args?: unknown) => Promise<ToolchainObservationRow[]> };
+  oAuthClient: { findMany: (args?: unknown) => Promise<Array<{ id: string; registrationKind: string; clientName: string }>> };
+  mcpApiToken: { findMany: (args?: unknown) => Promise<Array<{ id: string; kind: string }>> };
 };
+
+/** The credential kind behind each `oauth:` / `token:` reference, in two bounded reads. */
+async function credentialKindsFor(db: ToolchainObservationClient, refs: string[]): Promise<Map<string, string | null>> {
+  const ids = (prefix: string) => [...new Set(refs.filter((ref) => ref.startsWith(prefix)).map((ref) => ref.slice(prefix.length)))];
+  const [clients, tokens] = await Promise.all([
+    ids("oauth:").length ? db.oAuthClient.findMany({ where: { id: { in: ids("oauth:") } }, select: { id: true, registrationKind: true, clientName: true } }) : [],
+    ids("token:").length ? db.mcpApiToken.findMany({ where: { id: { in: ids("token:") } }, select: { id: true, kind: true } }) : [],
+  ]);
+  const kinds = new Map<string, string | null>();
+  for (const client of clients ?? []) kinds.set(`oauth:${client.id}`, credentialKindOf("oauth_access", client));
+  for (const token of tokens ?? []) kinds.set(`token:${token.id}`, token.kind);
+  return kinds;
+}
 
 /**
  * One page of the newest connection observations, rolled up per credential.
@@ -185,8 +200,9 @@ export async function getToolchainCopies(
   const limit = opts.limit ?? FLEET_PAGE_SIZE;
   const rows = (await db.agentToolchainObservation.findMany({ orderBy: { lastObservedAt: "desc" }, take: limit + 1 })) ?? [];
   const page = rows.slice(0, limit);
+  const credentialKinds = await credentialKindsFor(db, page.map((row) => row.credentialRef));
   return {
-    credentials: rollUpToolchainCopies(page, opts),
+    credentials: rollUpToolchainCopies(page, { ...opts, credentialKinds }),
     truncated: rows.length > limit,
     capabilityDrift: capabilityDriftFromObservations(page),
   };
@@ -269,7 +285,14 @@ const VERDICT_RANK: Record<ToolchainVerdict, number> = { "below-floor": 3, stale
 /** Pure: verdict per observed copy, rolled up per credential. */
 export function rollUpToolchainCopies(
   rows: ToolchainObservationRow[],
-  opts: { published: PublishedToolchain; mcpEndpoint: string; now: Date; staleAfterMs: number },
+  opts: {
+    published: PublishedToolchain;
+    mcpEndpoint: string;
+    now: Date;
+    staleAfterMs: number;
+    /** Credential kind per credentialRef (getToolchainCopies reads it). */
+    credentialKinds?: ReadonlyMap<string, string | null>;
+  },
 ): ToolchainCopyRollup[] {
   const cutoff = opts.now.getTime() - opts.staleAfterMs;
   const byCredential = new Map<string, ToolchainCopyRollup>();
@@ -280,9 +303,13 @@ export function rollUpToolchainCopies(
         : null;
     const { verdict } = resolveToolchainVerdict({
       declaration,
-      credential: { authSource: row.authMode === "oauth" ? "oauth" : row.authMode === "bearer" ? "pat" : "session-jwt" },
+      credential: {
+        authSource: row.authMode === "oauth" ? "oauth" : row.authMode === "bearer" ? "pat" : "session-jwt",
+        credentialKind: opts.credentialKinds?.get(row.credentialRef) ?? null,
+      },
       mcpEndpoint: opts.mcpEndpoint,
       published: opts.published,
+      now: opts.now,
     });
     const rollup = byCredential.get(row.credentialRef) ?? {
       credentialRef: row.credentialRef,

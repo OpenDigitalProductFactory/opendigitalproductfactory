@@ -362,6 +362,16 @@ export default async function ProviderDetailPage({ params, searchParams }: Props
             <ProviderUsageDetails provider={pw.provider} additional={Boolean(additionalAccount)} now={now} copy={copy} />
           </Suspense>
         </>
+      ) : !additionalAccount && (providerId === "local" || providerId === "ollama") ? (
+        <>
+          <ProviderDetailSections sections={[{ key: "settings", title: copy.providerSettings, content:
+            <ProviderDetailForm key={`provider-default-${providerId}`} pw={pw} canWrite={canWrite}
+              models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} routingProfiles={routingProfiles} />,
+          }]} />
+          <Suspense fallback={<Notice>{copy.loadingUsage}</Notice>}>
+            <ProviderUsageDetails provider={pw.provider} additional={false} now={now} copy={copy} />
+          </Suspense>
+        </>
       ) : null}
 
       <Suspense fallback={<Notice>{copy.loadingDiagnostics}</Notice>}>

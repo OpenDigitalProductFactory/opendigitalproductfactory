@@ -6,8 +6,9 @@ const db = vi.hoisted(() => ({
   prisma: {
     agentSurfaceReadiness: { upsert: vi.fn(), findMany: vi.fn() },
     agentToolchainObservation: { findMany: vi.fn() },
+    oAuthClient: { findMany: vi.fn(async () => []) },
     scheduledAgentTask: { findUnique: vi.fn() },
-    mcpApiToken: { findUnique: vi.fn() },
+    mcpApiToken: { findUnique: vi.fn(), findMany: vi.fn(async () => []) },
   },
 }));
 vi.mock("@dpf/db", () => db);

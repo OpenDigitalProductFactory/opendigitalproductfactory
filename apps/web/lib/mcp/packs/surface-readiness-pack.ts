@@ -6,6 +6,8 @@
 // report + read door:
 //   • record_surface_readiness — a build surface heartbeats its own computed state
 //   • get_fleet_readiness       — read the rolled-up fleet view (for the digest / an operator)
+//   • issue_grok_credentials_client — Grok's own OAuth credentials client, for
+//     the toolchain updater (BI-84C1F526). Grant-gated, never wider than the caller.
 //
 // Ungated: reporting your OWN toolchain readiness (like propose_improvement /
 // report_quality_issue) cannot exceed the caller's authority or affect anyone
@@ -85,6 +87,18 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: null,
     sideEffect: false,
+  },
+  {
+    name: "issue_grok_credentials_client",
+    description:
+      "Return, or create once, YOUR OWN Grok connection credential: the client_credentials OAuth client Grok uses (dpf.read dpf.work dpf.build). Call it while converging the DPF toolchain on a host where Grok is installed, then pass data.credentialsClient to the toolchain updater on standard input (--grok-client-stdin). Refused when your connection is narrower than that credential. Never show the secret to the user.",
+    inputSchema: { type: "object", properties: {}, required: [] },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    // creates the credential an external client acts with → consult-gated (TAK §8.4.1).
+    consequence: "authority",
+    secretResultKeys: ["credentialsClient"],
   },
 ];
 
@@ -227,17 +241,44 @@ async function getFleetReadinessHandler(
   return { success: true, message: msg, data: { ...summary, toolchain, capabilities } as unknown as Record<string, unknown> };
 }
 
+async function issueGrokCredentialsClientHandler(userId: string, context?: ToolExecutionContext): Promise<ToolResult> {
+  const [{ prisma }, { issueGrokCredentialsClientForCaller }, { GROK_CREDENTIALS_CLIENT_NAME }, { prepareClientSecret }, { decryptSecret }] =
+    await Promise.all([
+      import("@dpf/db"),
+      import("@/lib/agent-toolchain/grok-credential-issue"),
+      import("@/lib/auth/grok-credentials-client"),
+      import("@/lib/auth/oauth-tokens"),
+      import("@/lib/govern/credential-crypto"),
+    ]);
+  return issueGrokCredentialsClientForCaller(userId, context ?? {}, {
+    rows: (ownerUserId) =>
+      prisma.oAuthClient.findMany({
+        where: { ownerUserId, clientName: GROK_CREDENTIALS_CLIENT_NAME },
+        select: { oAuthClientId: true, clientName: true, registrationKind: true, ownerUserId: true, revokedAt: true, allowedScopes: true, clientSecretEnc: true },
+      }),
+    create: async (row) => {
+      await prisma.oAuthClient.create({ data: { ...row, allowedScopes: [...row.allowedScopes], redirectUris: [] } });
+    },
+    decrypt: decryptSecret,
+    prepareSecret: prepareClientSecret,
+  });
+}
+
 export const surfaceReadinessPack: ToolPack = {
   packId: "surface-readiness",
   definitions,
   handlers: {
     record_surface_readiness: (params, _userId, context) => recordSurfaceReadinessHandler(params, context),
     get_fleet_readiness: (params) => getFleetReadinessHandler(params),
+    issue_grok_credentials_client: (_params, userId, context) => issueGrokCredentialsClientHandler(userId, context),
   },
   // Mirrors TOOL_TO_GRANTS (BI-6AC65187): the heartbeat upserts on a
   // caller-supplied surfaceKey, so it rides the heartbeat tier.
   grants: {
     record_surface_readiness: ["work_capsule_write"],
     get_fleet_readiness: ["work_capsule_read"],
+    // The credential carries dpf.build, so issuing it needs a build grant; the
+    // handler also refuses anything wider than the caller (BI-84C1F526).
+    issue_grok_credentials_client: ["sandbox_execute"],
   },
 };

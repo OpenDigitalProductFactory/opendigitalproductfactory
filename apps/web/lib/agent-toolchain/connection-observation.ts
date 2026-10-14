@@ -11,7 +11,7 @@ import "server-only";
 
 import { deriveCallerClient } from "@/lib/mcp/caller-client";
 
-import { parseToolchainDeclaration, type ToolchainDeclaration } from "./toolchain-verdict";
+import { credentialKindOf, parseToolchainDeclaration, type ToolchainDeclaration } from "./toolchain-verdict";
 
 export const OBSERVATION_COALESCE_MS = 5 * 60 * 1000;
 const UNDECLARED = "undeclared";
@@ -90,11 +90,15 @@ export function _resetObservationMemo(): void {
 
 type CredentialLookupDb = {
   mcpApiToken: {
-    findUnique(args: unknown): Promise<{ oauthClientId: string | null; kind: string | null } | null>;
+    findUnique(args: unknown): Promise<{
+      oauthClientId: string | null;
+      kind: string | null;
+      oauthClient?: { registrationKind: string; clientName: string } | null;
+    } | null>;
   };
 };
 
-const credentialCache = new Map<string, { credentialRef: string; tokenKind: string | null }>();
+const credentialCache = new Map<string, { credentialRef: string; credentialKind: string | null }>();
 
 /**
  * The stable credential identity for a token. OAuth access tokens rotate
@@ -104,18 +108,19 @@ const credentialCache = new Map<string, { credentialRef: string; tokenKind: stri
 export async function resolveCredentialRef(
   db: CredentialLookupDb,
   token: { tokenId: string; source: ObservationAuthSource },
-): Promise<{ credentialRef: string; tokenKind: string | null } | null> {
+): Promise<{ credentialRef: string; credentialKind: string | null } | null> {
   if (token.source === "session-jwt") return null;
   const cached = credentialCache.get(token.tokenId);
   if (cached) return cached;
   const row = await db.mcpApiToken.findUnique({
     where: { id: token.tokenId },
-    select: { oauthClientId: true, kind: true },
+    select: { oauthClientId: true, kind: true, oauthClient: { select: { registrationKind: true, clientName: true } } },
   });
+  const credentialKind = credentialKindOf(row?.kind, row?.oauthClient);
   const resolved =
     token.source === "oauth" && row?.oauthClientId
-      ? { credentialRef: `oauth:${row.oauthClientId}`, tokenKind: row.kind ?? null }
-      : { credentialRef: `token:${token.tokenId}`, tokenKind: row?.kind ?? null };
+      ? { credentialRef: `oauth:${row.oauthClientId}`, credentialKind }
+      : { credentialRef: `token:${token.tokenId}`, credentialKind };
   if (credentialCache.size >= MEMO_LIMIT) credentialCache.clear();
   credentialCache.set(token.tokenId, resolved);
   return resolved;

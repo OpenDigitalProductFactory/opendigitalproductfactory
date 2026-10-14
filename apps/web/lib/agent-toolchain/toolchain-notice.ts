@@ -28,9 +28,10 @@ export async function toolchainNoticeFor(
     const userAgent = deriveCallerClient(request.headers.get("user-agent")) ?? "";
     const result = resolveToolchainVerdict({
       declaration,
-      credential: { authSource: token.source, tokenKind: credential?.tokenKind ?? null },
+      credential: { authSource: token.source, credentialKind: credential?.credentialKind ?? null },
       mcpEndpoint: `${origin}/api/mcp/v1`,
       published,
+      now: new Date(),
     });
     return formatToolchainNotice({
       result,
