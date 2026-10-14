@@ -27,6 +27,7 @@
 import { prisma } from "@dpf/db";
 import { inferProviderIdFromRouteContext } from "@/lib/ai-provider-route-context";
 import { promoteBacklogItemToBuildDraft } from "@/lib/governed-backlog-tee-up";
+import { assertEndpointConcurrencySelection } from "@/lib/operate/endpoint-concurrency-diagnostic";
 
 import type { EndpointTestRunRequest, ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
@@ -144,7 +145,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "run_endpoint_tests",
-    description: "Run the agent test harness against a scoped endpoint. On provider detail routes, omit endpointId to use the current provider and default to quick probes. Set allEndpoints=true or allModels=true only when the user explicitly asks for exhaustive diagnostics.",
+    description: "Run the agent test harness against a scoped endpoint. On provider detail routes, omit endpointId to use the current provider and default to quick probes. Set allEndpoints=true or allModels=true only for exhaustive diagnostics. Select concurrencyOnly=true with explicit local endpointId and modelId to observe two ordinary calls, queued handoff and complete answers without capability grading.",
     inputSchema: {
       type: "object",
       properties: {
@@ -152,6 +153,7 @@ const definitions: ToolDefinition[] = [
         modelId: { type: "string", description: "Optional model profile to test. Defaults to a representative active model for the endpoint." },
         taskType: { type: "string", description: "Run only scenarios for this task type (default: all)" },
         probesOnly: { type: "boolean", description: "Run only capability probes, skip scenarios (default: true for coworker calls)" },
+        concurrencyOnly: { type: "boolean", description: "Run exactly two local calls in one 30-second observation. Requires explicit endpointId and modelId; incompatible with probesOnly=true, taskType, allModels or allEndpoints. Preserves completion/admission evidence; never updates capability ratings." },
         allEndpoints: { type: "boolean", description: "Explicitly test every active LLM endpoint. Use only when the user asks for all endpoints." },
         allModels: { type: "boolean", description: "Test every active model profile for the endpoint. Use only for exhaustive diagnostics." },
       },
@@ -443,6 +445,18 @@ function buildEndpointTestRunRequest(
   const endpointId = explicitEndpointId ?? inferredEndpointId;
   const modelId = cleanEndpointTestString(params["modelId"]);
   const taskType = cleanEndpointTestString(params["taskType"]);
+  if (params["concurrencyOnly"] === true) {
+    try {
+      assertEndpointConcurrencySelection({ endpointId: explicitEndpointId, modelId, taskType,
+        probesOnly: params["probesOnly"] === true, allModels: params["allModels"] === true,
+        allEndpoints: params["allEndpoints"] === true });
+      return { endpointId: explicitEndpointId, modelId, concurrencyOnly: true,
+        probesOnly: false, allEndpoints: false, allModels: false };
+    } catch (error) {
+      return { probesOnly: false, allEndpoints: false, allModels: false,
+        error: error instanceof Error ? error.message : "Concurrency diagnostics selection is invalid" };
+    }
+  }
   const allEndpoints = endpointId ? false : params["allEndpoints"] === true;
 
   const base: EndpointTestRunRequest = {
@@ -509,13 +523,15 @@ async function runEndpointTestsHandler(
     ...(request.endpointId ? { endpointId: request.endpointId } : {}),
     ...(modelId ? { modelId } : {}),
     ...(request.taskType ? { taskType: request.taskType } : {}),
-    probesOnly: request.probesOnly,
+    ...(request.concurrencyOnly ? { concurrencyOnly: true } : { probesOnly: request.probesOnly }),
     triggeredBy: userId,
   });
 
   const summary = results.map((r) => {
-    // BI-91F0E312: deferred probes/scenarios never reached the model — report
-    // them as deferred, not failed, and flag the run as incomplete.
+    if (r.concurrency) {
+      return `**${r.endpointId} / ${r.modelId}**: Concurrency: ${r.concurrency.outcome} — ${r.concurrency.reason}`;
+    }
+    // Incomplete observations do not establish a model-quality failure.
     const probesPassed = r.probes.filter((p) => p.outcome === "passed").length;
     const probesFailed = r.probes.filter((p) => p.outcome === "failed").length;
     const probesDeferred = r.probes.filter((p) => p.outcome === "deferred").length;
@@ -524,7 +540,7 @@ async function runEndpointTestsHandler(
     const scenariosDeferred = r.scenarios.filter((s) => s.outcome === "deferred").length;
     const lines = [
       `**${r.endpointId}**: Probes ${probesPassed}/${probesPassed + probesFailed} passed` +
-        (probesDeferred > 0 ? ` (${probesDeferred} deferred — capacity held, run incomplete)` : ""),
+        (probesDeferred > 0 ? ` (${probesDeferred} unverified — run incomplete)` : ""),
     ];
     if (r.scenarios.length > 0) {
       lines.push(

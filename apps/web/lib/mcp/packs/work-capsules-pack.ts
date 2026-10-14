@@ -289,6 +289,73 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "resume_workroom_queue",
+    description:
+      "Release a Workroom's queue held after a provider failure (drive reason provider_held). " +
+      "The held stage is re-armed and runs on the next dispatch. A room with no hold is a no-op. " +
+      "Pass commandId to make a retry return the same answer (receipted).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
+        reason: { type: "string", description: "Why the queue may run again, e.g. the provider answers again." },
+        commandId: { type: "string", description: "Optional idempotency key; a retry with it replays the stored result." },
+      },
+      required: ["capsuleId", "reason"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+    // Restores the room's ability to dispatch agent work, and to spend on providers.
+    consequence: "authority",
+  },
+  {
+    name: "drive_workroom_runtime",
+    description:
+      "Drive an agent CLI (codex app-server or claude) as this Workroom's supervised runtime. " +
+      "start opens a session with its own room-scoped MCP credential (resumes the room's stored thread); " +
+      "turn sends input (queued when a turn is running); steer adds input to the running turn where the CLI supports it; " +
+      "interrupt stops the running turn; stop ends the session and revokes its credential; " +
+      "decide answers a request the room held for a decision (requestId from the room's question activity); status reports the session. " +
+      "Everything the session does is written to the room's log (get_workroom afterSequence).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
+        action: { type: "string", enum: ["start", "turn", "steer", "interrupt", "stop", "decide", "status"] },
+        provider: { type: "string", enum: ["codex", "claude"], description: "start: which CLI to run." },
+        prompt: { type: "string", description: "start (optional first turn), turn, steer: the input." },
+        model: { type: "string", description: "start: optional model id." },
+        cwd: { type: "string", description: "start: working directory inside the sandbox (default /workspace)." },
+        requestId: { type: "string", description: "decide: the held request." },
+        decision: { type: "string", enum: ["accept", "decline", "cancel"], description: "decide: the room's answer." },
+        reason: { type: "string", description: "stop, decide: why." },
+      },
+      required: ["capsuleId", "action"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+    // Issues a room-scoped credential to a CLI and lets it act in the sandbox.
+    consequence: "authority",
+  },
+  {
+    name: "approve_runtime_permission",
+    description:
+      "Claude Code's --permission-prompt-tool for a Workroom runtime session. Callable only with the session's own room credential; " +
+      "answers {behavior: allow|deny} by the room's runtime policy, and holds anything that reaches past the sandbox for a room decision.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tool_name: { type: "string", description: "The Claude Code tool asking to run." },
+        input: { type: "object", description: "The tool call's input." },
+        tool_use_id: { type: "string", description: "Claude's id for the call." },
+      },
+      required: ["tool_name", "input"],
+    },
+    requiredCapability: "manage_backlog",
+    // Answers a question and records it on the room; it changes no state the room acts on.
+    sideEffect: false,
+  },
+  {
     name: "rebind_workroom_shape",
     description:
       "Move a Workroom's pinned work shape (key@version) to the shape's current version (GPP §2.1.1). " +
@@ -343,6 +410,8 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
     // changes identity or authority → consult-gated (TAK §8.4.1).
     consequence: "authority",
+    consequenceForCall: (call) =>
+      import("@/lib/work-capsules/scope-release-consequence").then((module) => module.scopeReleaseConsequenceForCall(call)),
   },
   {
     name: "record_workroom_evidence",
@@ -477,6 +546,13 @@ export const workCapsulesPack: ToolPack = {
     heartbeat_workroom: (params, userId, context) => receipted("heartbeat", (m) => m.heartbeatCapsuleTool)(params, userId, context),
     update_workroom_status: (params, userId, context) => HANDLERS().then((m) => m.updateWorkCapsuleStatusTool(params, userId, context)),
     release_workroom_scope: (params, userId, context) => receipted("release-scope", (m) => m.releaseCapsuleScopeTool)(params, userId, context),
+    drive_workroom_runtime: (params, userId, context) =>
+      import("@/lib/workroom-runtime/runtime-tools").then((m) => m.driveWorkroomRuntimeTool(params, userId, context)),
+    approve_runtime_permission: (params, userId, context) =>
+      import("@/lib/workroom-runtime/runtime-tools").then((m) => m.approveRuntimePermissionTool(params, userId, context)),
+    resume_workroom_queue: (params, userId, context) =>
+      Promise.all([import("@/lib/work-capsules/resume-queue-handler"), import("@/lib/work-capsules/receipted-tool")])
+        .then(([m, r]) => r.receiptedWorkroomTool("resume-queue", m.resumeWorkroomQueueTool as never)(params, userId, context as never)),
     rebind_workroom_shape: (params, userId, context) =>
       import("@/lib/work-capsules/workroom-shape-rebind-handler").then((m) => m.rebindWorkroomShapeTool(params, userId, context)),
     record_workroom_evidence: (params, userId, context) => receipted("record-evidence", (m) => m.recordCapsuleEvidenceTool)(params, userId, context),
@@ -510,6 +586,9 @@ export const workCapsulesPack: ToolPack = {
     update_workroom_status: ["work_capsule_write"],
     release_workroom_scope: ["work_capsule_write"],
     rebind_workroom_shape: ["work_capsule_write"],
+    resume_workroom_queue: ["work_capsule_write"],
+    drive_workroom_runtime: ["work_capsule_write"],
+    approve_runtime_permission: ["work_capsule_write"],
     record_workroom_evidence: ["workroom_evidence_write"],
     reassign_workroom_executor: ["work_capsule_write"],
     start_external_work: ["work_capsule_adopt"],

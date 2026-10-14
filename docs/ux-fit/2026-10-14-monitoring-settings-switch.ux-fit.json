@@ -1,0 +1,15 @@
+{
+  "version": "1",
+  "decidedOption": "dedicated-page-button",
+  "decisionInteractionId": "DI-0FA6EC6037F7",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/admin/settings/monitoring/page.tsx",
+      "apps/web/components/admin/MonitoringSwitch.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["dedicated-page-button", "inline-toggle-runtime-health", "generic-capability-matrix"]
+  }
+}

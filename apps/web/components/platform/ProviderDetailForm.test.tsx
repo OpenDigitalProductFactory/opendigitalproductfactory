@@ -5,11 +5,17 @@ import type { ReactNode } from "react";
 import { namespaceMessages } from "@dpf/i18n";
 import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { configureProvider, testProviderAuth, discoverModels, profileModels } from "@/lib/actions/ai-providers";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToStaticMarkup as serverRender } from "react-dom/server";
 
 import type { ProviderWithCredential } from "@/lib/ai-provider-types";
+import { SOURCE_CATALOG } from "@dpf/i18n";
 import { ProviderDetailForm } from "./ProviderDetailForm";
+import { probeQuiescence } from "@/components/auth/UpgradeHold";
+import { startProviderOAuth, disconnectProviderOAuth } from "@/lib/actions/provider-oauth";
 const render = (ui: ReactNode) => testingRender(
+  <MessagesProvider locale="en-US" messages={{ setup: namespaceMessages("en-US", "setup") }}>{ui}</MessagesProvider>,
+);
+const renderToStaticMarkup = (ui: ReactNode) => serverRender(
   <MessagesProvider locale="en-US" messages={{ setup: namespaceMessages("en-US", "setup") }}>{ui}</MessagesProvider>,
 );
 
@@ -17,6 +23,8 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
 }));
+
+vi.mock("@/components/auth/UpgradeHold", () => ({ probeQuiescence: vi.fn().mockResolvedValue({ level: "normal", runId: null }) }));
 
 vi.mock("@/lib/actions/ai-providers", () => ({
   configureProvider: vi.fn(),
@@ -82,7 +90,21 @@ const providerFixture: ProviderWithCredential = {
 };
 
 describe("ProviderDetailForm", () => {
+  it("preserves exact-account recovery when default ChatGPT shared ownership is unproven", async () => {
+    const fixture: ProviderWithCredential = { ...providerFixture, provider: { ...providerFixture.provider, providerId: "chatgpt", name: "ChatGPT", authMethod: "oauth2_authorization_code", supportedAuthMethods: ["oauth2_authorization_code"] }, credential: { ...providerFixture.credential!, status: "ok", tokenExpiresAt: new Date(Date.now() + 3600000).toISOString() } };
+    vi.mocked(startProviderOAuth).mockResolvedValue({ error: "Fixture sign-in result" });
+    render(<ProviderDetailForm pw={fixture} canWrite models={[]} profiles={[]} hasActiveProvider defaultConnectionId="provider-default-chatgpt" />);
+    expect(screen.queryByRole("link", { name: "Manage shared sign-in" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
+    await waitFor(() => expect(startProviderOAuth).toHaveBeenCalledWith("chatgpt", "provider-default-chatgpt"));
+  });
   afterEach(() => { cleanup(); vi.clearAllMocks(); });
+  it("keeps OAuth mutations disabled for a read-only viewer while retaining diagnostics", () => {
+    const fixture: ProviderWithCredential = { ...providerFixture, provider: { ...providerFixture.provider, providerId: "codex", authMethod: "oauth2_authorization_code", supportedAuthMethods: ["oauth2_authorization_code"] } };
+    render(<ProviderDetailForm pw={fixture} canWrite={false} models={[]} profiles={[]} hasActiveProvider />);
+    expect((screen.getByRole("button", { name: "Sign in with Z.ai" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Advanced diagnostics" }) as HTMLButtonElement).disabled).toBe(false);
+  });
 
   it("keeps workspace editing open when clearing an ID to replace it", () => {
     const fixture = { ...providerFixture,
@@ -107,20 +129,43 @@ describe("ProviderDetailForm", () => {
   });
   it("keeps ChatGPT shared authentication changes in the Codex management page", () => {
     const fixture: ProviderWithCredential = { ...providerFixture, provider: { ...providerFixture.provider, providerId: "chatgpt", authMethod: "oauth2_authorization_code", supportedAuthMethods: ["oauth2_authorization_code"], authorizeUrl: "https://auth.openai.com/oauth/authorize" } };
-    render(<ProviderDetailForm pw={fixture} canWrite models={[]} profiles={[]} hasActiveProvider />);
+    render(<ProviderDetailForm pw={fixture} canWrite models={[]} profiles={[]} hasActiveProvider sharedAuthRecovery={{ help: SOURCE_CATALOG.providerAccounts.sharedSignInHelp, label: SOURCE_CATALOG.providerAccounts.manageSharedSignIn }} />);
     expect(screen.queryByRole("button", { name: /sign in|disconnect/i })).toBeNull();
+    expect(screen.getByRole("link", { name: "Manage shared sign-in" }).getAttribute("href")).toBe("/platform/ai/providers/codex");
   });
   it("recovers the ready button after a rejected save", async () => {
     vi.mocked(configureProvider).mockRejectedValue(new Error("network failure"));
     render(<ProviderDetailForm pw={providerFixture} canWrite models={[]} profiles={[]} hasActiveProvider />);
     fireEvent.click(screen.getByRole("button", { name: "Save & verify connection" }));
-    await waitFor(() => expect(screen.getByText(/Setup failed\. Retry\./)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/Reload this page/)).toBeTruthy());
     // The failure message is set inside the transition; the button label and
     // disabled state only reset once the transition settles, which can be a
     // later render than the one that shows the message.
     const button = await screen.findByRole("button", { name: "Save & verify connection" });
     expect((button as HTMLButtonElement).disabled).toBe(false);
     expect(testProviderAuth).not.toHaveBeenCalled();
+  });
+  it("explains an upgrade refusal rather than asking the operator to retry a paused setup", async () => {
+    vi.mocked(configureProvider).mockRejectedValue(new Error("Unexpected server response"));
+    vi.mocked(probeQuiescence).mockResolvedValueOnce({ level: "draining", runId: "QR-test" });
+    render(<ProviderDetailForm pw={providerFixture} canWrite models={[]} profiles={[]} hasActiveProvider />);
+    fireEvent.click(screen.getByRole("button", { name: "Save & verify connection" }));
+    await waitFor(() => expect(screen.getByText(/Connection setup is paused/)).toBeTruthy());
+    expect(screen.queryByText(/Setup failed/)).toBeNull();
+    expect(testProviderAuth).not.toHaveBeenCalled();
+  });
+  it("offers non-destructive reconnect for a saved OAuth token whose date has not expired", async () => {
+    vi.mocked(startProviderOAuth).mockResolvedValueOnce({ error: "Sign-in unavailable" });
+    const fixture: ProviderWithCredential = { ...providerFixture,
+      provider: { ...providerFixture.provider, providerId: "codex", authMethod: "oauth2_authorization_code", supportedAuthMethods: ["oauth2_authorization_code"] },
+      credential: { ...providerFixture.credential!, tokenExpiresAt: "2099-01-01T00:00:00Z" },
+    };
+    render(<ProviderDetailForm pw={fixture} canWrite models={[]} profiles={[]} hasActiveProvider />);
+    expect(screen.queryByText(/Connected · token expires/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
+    await waitFor(() => expect(startProviderOAuth).toHaveBeenCalledWith("codex"));
+    expect(disconnectProviderOAuth).not.toHaveBeenCalled();
+    expect(await screen.findByText(/Sign-in unavailable/)).toBeTruthy();
   });
   it("reuses the catalog prepared by saving and surfaces a failed probe", async () => {
     vi.mocked(configureProvider).mockResolvedValue({});
@@ -210,7 +255,7 @@ describe("ProviderDetailForm", () => {
     expect(html).toContain("Sign in with");
   });
 
-  it("shows Connected for a valid unexpired OAuth token", () => {
+  it("shows saved sign-in and reconnect for an unexpired OAuth token", () => {
     const html = renderToStaticMarkup(
       <ProviderDetailForm
         pw={oauthFixture(new Date(Date.now() + 24 * HOUR).toISOString(), true)}
@@ -220,6 +265,7 @@ describe("ProviderDetailForm", () => {
         hasActiveProvider={true}
       />,
     );
-    expect(html).toContain("Connected · token expires");
+    expect(html).toContain("Sign-in saved · token expires");
+    expect(html).toContain("Sign in again");
   });
 });

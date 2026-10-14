@@ -11,6 +11,8 @@ import { OwnerReleaseCard } from "@/components/ops/OwnerReleaseCard";
 import { PlatformTabNav } from "@/components/platform/PlatformTabNav";
 import { PlatformUpdateApplyPanel } from "@/components/admin/PlatformUpdateApplyPanel";
 import { LocalChangesLedger } from "@/components/ops/LocalChangesLedger";
+import { ConnectedAgentClients } from "@/components/ops/ConnectedAgentClients";
+import { loadConnectedAgentClients } from "@/lib/agent-toolchain/connected-clients";
 import { getLocalChangesLedger } from "@/lib/self-upgrade/local-changes-ledger";
 import { hasGovernedRecoveryPoint } from "@/lib/self-upgrade/rollback";
 import { NAV_MODE_COOKIE, resolveNavModeFromCookie, isSimpleNavMode } from "@/lib/navigation/nav-mode";
@@ -28,11 +30,14 @@ export default async function SelfUpgradePage() {
   // primary path; the source-merge sub-step (PlatformUpdateApplyPanel) is
   // folded in below and surfaces only when the install customises source
   // (updatePending). getPlatformDevConfig can be null on a fresh install.
-  const [status, runsResult, devConfig, localChanges] = await Promise.all([
+  const now = new Date();
+  const [status, runsResult, devConfig, localChanges, agentClients] = await Promise.all([
     getSelfUpgradeStatus().catch(() => null),
     listSelfUpgradeRuns().catch(() => ({ runs: [], nextCursor: null })),
     getPlatformDevConfig().catch(() => null),
     getLocalChangesLedger().catch(() => ({ available: false, note: "Local changes ledger temporarily unavailable.", changes: [] })),
+    // BI-E7974C18: which agent clients loaded the tools this update ships. Null renders "could not be read".
+    loadConnectedAgentClients(now).catch(() => null),
   ]);
 
   const runs = runsResult?.runs ?? [];
@@ -255,6 +260,10 @@ export default async function SelfUpgradePage() {
             />
           }
         />
+      </div>
+
+      <div className="mt-6">
+        <ConnectedAgentClients view={agentClients} now={now} />
       </div>
 
       {/* Run history, runtime/security ledgers and logs. BI-D77BF495: the

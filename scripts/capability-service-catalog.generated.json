@@ -314,6 +314,7 @@
           "service": "portal-init",
           "targetClassification": "ephemeral-lifecycle",
           "volumes": [
+            "${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro",
             "dpf-source-code:/workspace"
           ]
         },
@@ -1135,7 +1136,7 @@
       ]
     }
   ],
-  "catalogHash": "6b1288a316a5901fa2a692a5ad6b5a3ceedebed1ad3d224c090e985c6e8327a1",
+  "catalogHash": "c41a8c22e60fb47c03a82468f29c700d90bfd511980c8b3d0aaf7a3801762120",
   "catalogVersion": 1,
   "substrateManifestVersion": 2
 }

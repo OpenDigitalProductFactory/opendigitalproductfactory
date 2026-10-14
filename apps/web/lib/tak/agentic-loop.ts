@@ -14,7 +14,7 @@ import {
 import { isRedundantReaskQuestion } from "@/lib/tak/conversation-intent";
 import { PLATFORM_TOOLS, toolsToOpenAIFormat } from "@/lib/mcp-tools";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
-import { createAuthorizedSurfaceTurnGovernance } from "@/lib/coworker/authorized-surface-execution-context";
+import { loopToolContext, pendingApprovalEnvelopeId, type LoopToolContextInput } from "./agentic-loop-tool-context";
 import type { RoomAuthorityContext } from "@/lib/work-management/room-turn-authority";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle/types";
 import { LOAD_TOOLS_TOOL_NAME } from "@/lib/tak/tool-intent";
@@ -681,17 +681,17 @@ export function isSetupTourTurn(messages: ChatMessage[]): boolean {
   return /^\s*\[setup step:/i.test(latestUserText(messages));
 }
 
-function shouldAllowProviderStatusTextReply(params: {
+function shouldAllowFirstTurnTextReply(params: {
   routeContext: string;
   taskType?: string;
   providerId: string;
   messages: ChatMessage[];
   responseText: string;
+  conversationalSourceOnlyTurn?: boolean;
 }): boolean {
+  if (params.conversationalSourceOnlyTurn) return true;
   if (!params.routeContext.startsWith("/platform/ai/providers/")) return false;
-  // Provider-detail status questions are often classified as "unknown" or
-  // platform operations because the route carries most of the intent. The
-  // route and status-language checks below are the durable guard here.
+  // Provider-detail intent relies on the route and status-language checks.
   if (params.providerId === "local") return false;
 
   const latestUser = latestUserText(params.messages).toLowerCase();
@@ -706,10 +706,8 @@ function shouldAllowProviderStatusTextReply(params: {
 }
 
 /**
- * Clause 2.4: if a turn produces specific phase-evidence content in the
- * response text but does not call saveBuildEvidence with the matching field,
- * the evidence is ephemeral. Returns the field name that should have been
- * saved, or null. Conservative — only fires on clear evidence-content signals.
+ * Clause 2.4: specific phase evidence needs matching saveBuildEvidence.
+ * Return the missing field, or null; only clear evidence-content signals count.
  */
 export function detectUnsavedEvidence(
   responseText: string,
@@ -735,6 +733,7 @@ export function detectUnsavedEvidence(
 export type AgenticResult = {
   /** Final text response from the agent */
   content: string;
+  suppliedSourceEvidence?: boolean;
   /** Provider that generated the final response */
   providerId: string;
   modelId: string;
@@ -748,6 +747,8 @@ export type AgenticResult = {
   executedTools: ExecutedTool[];
   /** If a proposal tool was called, return it for approval card rendering */
   proposal: { name: string; arguments: Record<string, unknown>; content: string } | null;
+  /** Chat only (BI-7BCC87BB): the approval requests a declared-proposal call raised; the turn ended on them. */
+  pendingApproval?: { envelopeIds: string[] };
   failure?: InferenceDeadEndOutcome;
   /**
    * BI-2AC48661: the execution plan as it stood when the loop returned, when
@@ -1001,8 +1002,8 @@ export type RunAgenticLoopParams = {
   workroomPriority?: GoldenTrianglePreference | null;
   /**
    * BI-80532D5C — when true, a side-effecting non-artifact tool the model calls
-   * is diverted to an AgentActionProposal (status "proposed") instead of being
-   * executed. Set by the scheduler when the run's proactivity actionBoundary is
+   * is raised as an approval request through the monitor (BI-7BCC87BB) instead
+   * of being executed. Set by the scheduler when the run's proactivity actionBoundary is
    * "propose". Default false preserves the act path for every existing caller.
    */
   proposeSideEffects?: boolean;
@@ -1264,15 +1265,16 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   // finish (up to this many times) before falling through to the best partial.
   const MAX_TRUNCATION_CONTINUES = 2;
   let truncationContinues = 0;
-  // Evidence-integrity gate (INV-1). Decide once whether this turn's answer
-  // depends on live operational state (a route with authoritative domain tools +
-  // a live-state question); the terminal guard in the zero-tool branch enforces
-  // that such a turn never returns factual prose without a successful tool call.
+  // INV-1: decide once whether this answer needs live operational evidence.
+  // The zero-tool terminal guard withholds factual prose without verification.
+  // Supplied source supports its own analysis; mixed requests still owe live evidence.
+  const isConversationalRoute = !BUILD_ROUTE_PATTERN.test(routeContext ?? "");
   const evidenceRequirement = classifyEvidenceRequirement({
     routeContext,
     domainTools: resolveRouteContext(routeContext).domainTools,
     message: latestUserText(messages),
   });
+  const suppliedSourceEvidence = !!evidenceRequirement.suppliedSourceEvidence && isConversationalRoute && !requireTools;
   let evidenceRecoveryNudges = 0;
   let terminalToolNudges = 0;
   let terminalToolSurfaceOverride: string[] | null = null;
@@ -1290,6 +1292,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     totalOutputTokens,
     executedTools,
     proposal: null,
+    suppliedSourceEvidence: suppliedSourceEvidence && !extra.failure,
     ...extra,
   });
   const terminalFailure = (message: string, source = lastResult): AgenticResult =>
@@ -1336,7 +1339,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         `[turn] thread=${JSON.stringify(threadId)} agent=${JSON.stringify(agentId)} ` +
         `route=${JSON.stringify(routeContext)} provider=${provider} model=${model} ` +
         `dispatches=${inferenceCallCount} nudges=${continuationNudges} ` +
-        `toolsAttached=${toolsAttachedForTurn} executedTools=${executedTools.length} ` +
+        `toolsAttached=${toolsAttachedForTurn} executedTools=${executedTools.length} sourceEvidence=${suppliedSourceEvidence ? 1 : 0} ` +
         `totalMs=${Date.now() - startTime} ` +
         `ctxPeakTokens=${ctxPeakTokens} ctxZone=${ctxPressure.zone} ` +
         `toolSurface=${surface.toolCount} estToolTokens=${surface.estDefinitionTokens} surfaceZone=${surface.zone} ` +
@@ -2052,13 +2055,14 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           ),
         ),
         isSetupTourTurn: isSetupTourTurn(messages),
-        isConversationalRoute: !BUILD_ROUTE_PATTERN.test(routeContext ?? ""),
-        allowFirstTurnTextOnlyReply: shouldAllowProviderStatusTextReply({
+        isConversationalRoute,
+        allowFirstTurnTextOnlyReply: shouldAllowFirstTurnTextReply({
           routeContext,
           taskType,
           providerId: result.providerId,
           messages,
           responseText: trimmed,
+          conversationalSourceOnlyTurn: suppliedSourceEvidence,
         }),
         requireToolExecution: requireTools,
       });
@@ -2194,6 +2198,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
 
     // Collect all immediate tool results for this iteration
     const iterationResults: Array<{ tc: ToolCallEntry; toolResult: ToolResult }> = [];
+    const chatApprovalIds: string[] = []; // BI-7BCC87BB: declared-proposal requests raised in chat this step
 
     for (const providerToolCall of result.toolCalls) {
       let tc = providerToolCall;
@@ -2306,7 +2311,9 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
             preAuthorized = false;
           }
         }
-        if (!preAuthorized) {
+        // BI-7BCC87BB (spec D2 S1): in chat the call goes to the monitor, which raises the
+        // approval request bound to it; autonomous callers keep this return (FU-7).
+        if (!preAuthorized && interactionMode !== "chat") {
           logTurnSummary(result.providerId, result.modelId);
           return {
             content: result.content || `I'd like to ${tc.name.replace(/_/g, " ")} with the following details.`,
@@ -2324,7 +2331,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
             },
           };
         }
-        console.log(`[agentic-tool] auto-approved iter=${iteration} tool=${tc.name} (pre-authorized via platform config)`);
+        if (preAuthorized) console.log(`[agentic-tool] auto-approved iter=${iteration} tool=${tc.name} (pre-authorized via platform config)`);
         // Fall through to immediate execution below.
       }
 
@@ -2350,8 +2357,18 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       }
 
       // Propose-interception (BI-80532D5C): under a propose boundary, a
-      // side-effecting non-artifact tool is captured as an AgentActionProposal
-      // for the owner to approve instead of running now (null = execute normally).
+      // side-effecting non-artifact tool is raised as an approval request through
+      // the monitor for the owner to decide (null = execute normally; BI-7BCC87BB).
+      const contextInput: LoopToolContextInput = {
+        routeContext, agentId, threadId, taskRunId, apiTokenId, interactionMode, chatHistory,
+        tokenScope: params.tokenScope, tokenGrantScopes: params.tokenGrantScopes, skillId: tracker.activeSkillId,
+        workroomId: params.workroomId ?? null, externalAccessEnabled: params.externalAccessEnabled,
+        requiresExternalAccess: toolDef.requiresExternalAccess, roomAuthority: params.roomAuthority,
+        featureBuildId: params.featureBuildId, coworkerMode: params.coworkerMode, delegationChainId: params.delegationChainId,
+      };
+      // Server-set only (AC-TRANSPORT): the inline card keys on the turn's message id.
+      const chatMessage = interactionMode === "chat" && agentMessageId ? { chatMessageId: agentMessageId } : {};
+      const declaredProposalInChat = interactionMode === "chat" && toolDef.executionMode === "proposal";
       const proposalResult = await interceptToolCallAsProposal({
         toolDef,
         proposeSideEffects,
@@ -2361,6 +2378,10 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         threadId,
         routeContext,
         taskRunId: taskRunId ?? null,
+        execute: async (boundary) => governedExecuteTool({
+          toolName: tc.name, rawParams: tc.arguments, userId, userContext: await resolveUserContext(userId),
+          context: loopToolContext(contextInput, { ...boundary, ...chatMessage }), source: "agentic-loop",
+        }),
       });
       if (proposalResult) {
         console.log(`[agentic-tool] PROPOSED iter=${iteration} tool=${tc.name} (propose boundary)`);
@@ -2408,45 +2429,10 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           rawParams: tc.arguments,
           userId,
           userContext: await resolveUserContext(userId),
-          context: {
-            routeContext,
-            agentId,
-            threadId,
-            taskRunId: taskRunId ?? undefined,
-            apiTokenId: apiTokenId ?? undefined,
-            tokenScope: params.tokenScope, tokenGrantScopes: params.tokenGrantScopes,
-            skillId: tracker.activeSkillId ?? undefined,
-            // In-portal coworker chat turns attach COWORKER_READ_BASELINE_GRANTS
-            // to the tool surface (actions/agent-coworker.ts). Flag the turn so
-            // the governed grant check honours the same baseline at execution
-            // time (BI-FD7E4D72) — otherwise a coworker whose own grants lack a
-            // baseline read grant gets the tool attached but rejected on call.
-            // Autonomous turns leave this false, so their authority is unchanged.
-            coworkerReadBaseline: interactionMode === "chat",
-            ...createAuthorizedSurfaceTurnGovernance({
-              interactionMode,
-              apiTokenId,
-              route: routeContext,
-              workroomId: params.workroomId ?? null,
-              chatHistory,
-            }),
-            // The turn's SERVER-resolved external permission when the caller
-            // supplied one (chat turns: room + standing grant). Callers that
-            // predate the resolver keep the prior admission-by-attachment
-            // behaviour so autonomous runs are unchanged.
-            externalAccessEnabled: params.externalAccessEnabled !== undefined
-              ? (toolDef.requiresExternalAccess ? params.externalAccessEnabled : undefined)
-              : (toolDef.requiresExternalAccess || undefined),
-            ...(params.roomAuthority ? { roomAuthority: params.roomAuthority } : {}),
-            // BI-F4A30FCB: the build the user is messaging from, so phase-scoped tools
-            // (start_ideate_research, start_scout_research) target it, not "latest in phase".
-            featureBuildId: params.featureBuildId ?? undefined,
-            coworkerMode: params.coworkerMode,
-            // EP-31815F97 S2 (BI-F82F4E04): when this loop runs a delegated
-            // coworker, carry the active DelegationChain grouping id so each
-            // ToolExecution joins its chain-of-custody back to the human origin.
-            delegationChainId: params.delegationChainId ?? undefined,
-          },
+          context: loopToolContext(
+            { ...contextInput, skillId: tracker.activeSkillId },
+            declaredProposalInChat ? { approvalCompletion: "platform", ...chatMessage } : {},
+          ),
           source: "agentic-loop",
         });
       } catch (err) {
@@ -2484,10 +2470,25 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       }
       iterationResults.push({ tc, toolResult });
       onProgress?.({ type: "tool:complete", tool: tc.name, success: toolResult.success });
+      const raisedId = declaredProposalInChat ? pendingApprovalEnvelopeId(toolResult) : null;
+      // The turn ends on the raised request; later calls in this batch are not run.
+      if (raisedId) { chatApprovalIds.push(raisedId); break; }
       // Also bound a batch from one inference; varying arguments evade the
       // exact-call repetition detector. Keep all completed calls in the result.
       if (refusalStreak >= 3) return stopRefusedTurn();
+    }
 
+    // BI-7BCC87BB (spec D2 S1): a declared proposal in chat ends the turn on the request(s) it raised.
+    if (chatApprovalIds.length > 0) {
+      const firstName = iterationResults.find((r) => pendingApprovalEnvelopeId(r.toolResult) === chatApprovalIds[0])?.tc.name ?? "act";
+      logTurnSummary(result.providerId, result.modelId);
+      return {
+        content: result.content || `I'd like to ${firstName.replace(/_/g, " ")} with the following details.`,
+        providerId: result.providerId, modelId: result.modelId,
+        downgraded: result.downgraded, downgradeMessage: result.downgradeMessage,
+        totalInputTokens, totalOutputTokens, executedTools, proposal: null,
+        pendingApproval: { envelopeIds: chatApprovalIds },
+      };
     }
 
     // Append ONE assistant message (with toolCalls preserved) + N tool result messages.
@@ -2545,8 +2546,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // that predate the field fall back to the unavailable reading only when they
     // actually reported a downgrade.
     downgradeReason: lastResult?.downgradeReason ?? (downgraded ? "provider-unavailable" : null),
-    // The same binding cause the banner named, so the advice below it addresses
-    // the constraint the owner was actually told about (BI-FB184D69).
+    // Use the banner's binding cause so recovery addresses the actual constraint (BI-FB184D69).
     cause: lastResult?.downgradeCause ?? null,
     executedTools,
   });

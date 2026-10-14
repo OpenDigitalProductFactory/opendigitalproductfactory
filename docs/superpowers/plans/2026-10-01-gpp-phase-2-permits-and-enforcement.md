@@ -847,7 +847,7 @@ proposal paths. The promotion guard still refuses every promotion until those tw
 - [x] Characterization tests on the base for all four dynamic sites
 - [x] `demand-activation.ts` and `screen_dispatch_action` routed through the monitor; characterization unchanged
 - [x] Ratchet shrunk; the dynamic set is pinned to the two proposal paths
-- [ ] Proposal approval carried into the monitor as an approved authority envelope (follow-up)
+- [x] Proposal approval carried into the monitor as an approved authority envelope (follow-up; approval convergence PR-C, BI-04E5A511: convert-and-run, both proposal paths off the ratchet)
 
 ## Risks
 

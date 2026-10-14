@@ -10,6 +10,7 @@ import { CHANGE_REVIEW_TOOL_GRANTS } from "./change-review-tool-grants";
 import { CONTRIBUTOR_INVENTORY_TOOL_GRANTS } from "./contributor-inventory-tool-grants";
 import { PAYABLES_TOOL_GRANTS } from "./payables-tool-grants";
 import { PROVIDER_MANAGEMENT_TOOL_GRANTS } from "./provider-management-tool-grants";
+import { PLATFORM_UPDATE_TOOL_GRANTS } from "./platform-update-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 /**
  * Implications between agent grant categories. A grant on the left of the
@@ -242,6 +243,9 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   heartbeat_workroom: ["work_capsule_write"],
   update_workroom_status: ["work_capsule_write"],
   rebind_workroom_shape: ["work_capsule_write"],
+  resume_workroom_queue: ["work_capsule_write"],
+  drive_workroom_runtime: ["work_capsule_write"],
+  approve_runtime_permission: ["work_capsule_write"],
   release_workroom_scope: ["work_capsule_write"],
   reassign_workroom_executor: ["work_capsule_write"],
   get_runtime_coordination_map: ["work_capsule_read"],
@@ -779,10 +783,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // build can complete step 4 of routing a learning to the commons.
   contribute_finding_to_hive: ["backlog_write"],
   set_change_disposition: ["backlog_write"],
-  apply_platform_update:  ["admin_write"],
-  // BI-C26F7EE1: read-only operator preview of the upstream change set —
-  // paired with apply_platform_update's admin_write as the read tier.
-  summarize_upgrade_impact: ["admin_read"],
+  ...PLATFORM_UPDATE_TOOL_GRANTS,
 
   // Contributor inventory sync: on-demand trigger so an agent need not wait for the 10-minute cron (BI-063BDF1B Phase 5).
   trigger_contributor_inventory_sync: ["admin_write"],

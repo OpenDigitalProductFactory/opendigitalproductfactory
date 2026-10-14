@@ -1266,6 +1266,8 @@
         "backup-and-health-semantics",
         "observation-and-diagnostics-boundary",
         "diagnosing-capability-drift-bi-5acbac50",
+        "existing-install-reconciliation-bi-5acbac50",
+        "historical-implementation-evidence",
         "safe-operating-rules",
         "how-self-upgrade-may-recreate-a-service"
       ]
@@ -2172,6 +2174,7 @@
       "anchors": [
         "scoped-mcp-tool-packs",
         "the-shape",
+        "per-call-effects-under-existing-policy",
         "read-packs-for-standing-stages",
         "migration-discipline-parity-first",
         "first-pack",
@@ -2204,6 +2207,18 @@
         "worked-example-fail",
         "related-tooling",
         "change-control"
+      ]
+    },
+    "docs/architecture/offline-recovery-preparation.md": {
+      "publicHref": "/architecture/offline-recovery-preparation/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "offline-recovery-preparation-and-compatible-rollout",
+        "available-source-primitives",
+        "release-sequence",
+        "remaining-acceptance"
       ]
     },
     "docs/architecture/operational-precedent-corpus.md": {
@@ -2373,7 +2388,9 @@
         "provider-account-identity",
         "governed-controls",
         "provider-ui-preservation-contract",
-        "migration-and-verification"
+        "account-presentation-boundaries",
+        "migration-and-verification",
+        "measured-route-integration"
       ]
     },
     "docs/architecture/review-reliability-recovery.md": {
@@ -5704,6 +5721,8 @@
       "publishedPortal": false,
       "anchors": [
         "platform-support-watch-list-living-document",
+        "host-process-inventory-before-admission-bi-6de5a3b6",
+        "host-claim-transport-and-windows-command-launch-bi-091a2dcf",
         "windows-host-guard-interpreters-bi-ba5f777a",
         "macos-docker-memory-allocation-bi-dc4352e8",
         "repository-local-codex-endpoint-overrides-bi-9f258707",
@@ -11622,6 +11641,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "accounts-and-provider-setup",
         "routing-status-and-temporary-pauses",
         "authentication-methods",
         "api-key",
@@ -11745,6 +11765,7 @@
         "reading-the-skills-catalog",
         "related-routes",
         "reading-runtime-health",
+        "turning-monitoring-on-or-off",
         "coworker-routing",
         "context-budget-what-recent-turns-were-given",
         "capability-completeness",
@@ -11771,6 +11792,7 @@
         "path-1-static-seed-install-time",
         "path-2-dynamic-discovery-runtime",
         "when-the-connections-page-takes-longer-to-load",
+        "where-ai-may-run",
         "quality-tiers",
         "agent-model-configuration",
         "default-agent-tiers",
@@ -11833,6 +11855,7 @@
         "api-key-pay-per-token",
         "setting-up-oauth",
         "agent-provider-vs-standard-provider",
+        "coworker-verification-on-development-deployments",
         "linked-mcp-service",
         "chatgpt-provider-automatic",
         "technical-notes-provider-integration",
@@ -12739,6 +12762,7 @@
         "what-happens-if-you-do-nothing",
         "what-is-reversible",
         "recovery-and-help",
+        "connected-agent-clients",
         "what-to-watch",
         "when-required-services-are-degraded"
       ]
@@ -12769,10 +12793,12 @@
         "use-this-doc-for",
         "workflow",
         "read-the-routing-picture",
+        "confirm-a-routing-override",
         "architecture-and-evidence",
         "understanding-background-inference",
         "when-a-coworker-says-it-used-the-backup-model",
         "what-to-watch",
+        "repair-disagreement-in-installed-runtime-capabilities",
         "defaults-for-work-rooms"
       ]
     },

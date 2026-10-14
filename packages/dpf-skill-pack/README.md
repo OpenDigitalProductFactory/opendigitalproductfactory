@@ -125,6 +125,14 @@ The auto-install hook (BI-98683E68) wires these into portal install + worktree c
 
 ## Standalone install and update
 
+The root-clone guard distinguishes shell syntax from quoted diagnostic text and
+interpreter heredoc input (BI-F6176C63). Read-only scripts with comparisons or
+HTML are allowed. Shell redirections, commands after a heredoc, shell-fed input,
+and interpreter file-write intent retain the existing root protections. The
+shared command-text helper owns heredoc boundaries; guards choose whether a
+body is executable shell input. Install the merged hook through the normal
+toolchain updater so every client uses the same correction.
+
 The DPF skill pack can be installed or updated without installing the full DPF
 project. This is the supported path for contributors who only need the governed
 Codex / Claude workflows and an existing DPF MCP endpoint.
@@ -278,10 +286,42 @@ Until then, rows stay checklist-only in
 
 Each portal serves the pack its image ships, with no source checkout needed (BI-52934B3E, design `docs/superpowers/specs/2026-10-07-agent-toolchain-release-delivery-design.md` §5.1):
 
-- `GET /api/agent-toolchain/manifest` returns `packVersion`, `packDigest` (the delivered-content identity), `archiveSha256`, `releaseId`, `floor` and the per-client connector shape. It is signed with the installation's Ed25519 identity (`deviceId`, `signingPublicKey`, `signature` over the canonical manifest bytes).
+- `GET /api/agent-toolchain/manifest` returns `packVersion`, `packDigest` (the delivered-content identity), `archiveSha256`, `releaseId`, `floor` and the per-client connector shape, including each client's `declarationCarrier`. It is signed with the installation's Ed25519 identity (`deviceId`, `signingPublicKey`, `signature` over the canonical manifest bytes).
 - `GET /api/agent-toolchain/pack.tar.gz` returns a byte-stable archive of this package whose sha256 is `archiveSha256`.
 
 The delivered digest has one definition in two languages: `delivered_digest()` in `scripts/installed_copy_freshness.py` and `apps/web/lib/agent-toolchain/pack-digest.ts`. Both are pinned to the same fixture. Files are ordered by case-sensitive path segments, so a Windows client and the Linux portal agree.
+
+### Converging from the portal
+
+An agent updates a host from the portal it is connected to, with no source checkout (BI-DE1E6485, design §5.3):
+
+```text
+update_agent_toolchain.py --from-portal <origin> --expect-installation did_<64 hex> --report-json <file>
+```
+
+The agent asks the user once before it runs this, and never shows the user the command. `scripts/portal_source.py` checks, in order, and refuses (exit 3, nothing run) at the first failure:
+
+1. The origin is https or loopback http, and is one this host already uses as a DPF connector (the shared copy's descriptor, Codex, Grok or Antigravity config, or `DPF_MCP_URL`). A host with no DPF connector yet accepts the installer's origin.
+2. The manifest's Ed25519 signature verifies (`scripts/ed25519_verify.py`, pure Python, RFC 8032), and its device id equals `--expect-installation`, the full device id from the agent's authenticated DPF connection. It must also equal the pin in `~/.dpf/trusted-installations.json`. A changed identity needs the user's approval and `--approve-identity-change`.
+3. The pack's sha256 equals `archiveSha256`; it extracts with no absolute path, `..` or link; and its delivered digest equals `packDigest`.
+
+Then the updater inside the verified pack runs, and the pin is written after it succeeds. That run (`scripts/toolchain_convergence.py`):
+
+- writes the declaration into each client's connector: the `X-DPF-Toolchain: pack=…;digest=…;client=…` header for Claude Code, Codex and Antigravity, and `dpf_pack`, `dpf_digest`, `dpf_client` on Grok's literal URL. The carrier per client is the manifest's `clients[kind].declarationCarrier`;
+- converges Claude local scope and every project-scope record, retires duplicate `dpf` servers in project `.mcp.json`, user scope and each project's local scope (backup first, then `claude mcp remove`), and gives every converged record's cached descriptor a literal endpoint;
+- with `--report-json`, writes one row per client and scope: `before` and `after` (`version`, `digest`, `authMode`), `action` (`updated`, `unchanged`, `retired`, `prunable` or `failed`), `backupPath`, `restartRequired`, and the client CLI's own `--version`. The agent records it through `record_surface_readiness`. A refusal writes `result: "refused"` with its reason.
+
+### What a connection declares, and what it is told
+
+A connector can declare the pack it loaded, with `dpf_pack`, `dpf_digest` (the first 16 hex of the delivered digest) and `dpf_client` on the MCP URL, or the `X-DPF-Toolchain: pack=…;digest=…;client=…` header (BI-54469E18, design §5.2). On every connection the server:
+
+- **Computes a verdict.** `current`, `stale`, `below-floor` or `undeclared`, from `apps/web/lib/agent-toolchain/toolchain-verdict.ts`. A User-Agent never decides it.
+- **Records the copy.** It goes in `AgentToolchainObservation`, keyed by the server-derived credential (`oauth:<OAuthClient.id>` or `token:<McpApiToken.id>`) and the loaded digest, with writes coalesced to one per five minutes. `initialize` also records `clientInfo`.
+- **Tells the agent.** A `TOOLCHAIN:` line is added to the `initialize` instructions, naming what is stale, the portal repair and the full installation id the updater must expect (`--expect-installation`). It is addressed to the agent and never hands the user a command.
+
+`get_fleet_readiness` returns a `toolchain` section: every credential with the copies it was seen loading and their verdicts, one page at a time. `record_surface_readiness` now keys an MCP caller's row by its own credential, so one token cannot overwrite another host's readiness.
+
+The floor's rules (pack below `minPackVersion`, a stored token where the credential policy says OAuth is available, Grok on anything but its client token) apply only once a release sets a floor in `toolchain-version.json`.
 
 ### Version bumps propagate automatically
 

@@ -156,6 +156,28 @@ upgrade. Nothing is lost by waiting.
 - Deployment windows and change-request lifecycle are managed from the wider
   Operations area.
 
+## Connected agent clients
+
+This section lists the AI coding tools, such as Claude Code, Codex and Grok,
+that connect to this install. For each one it shows the version of the DPF
+agent tools it loaded, how it signs in, and when it was last seen. The
+fingerprint next to a version identifies the exact files that client loaded.
+
+Each client gets one of these labels:
+
+- **Up to date**: it loaded the tools this update ships.
+- **Behind**: it loaded an older copy. It is told on its next connection and
+  asked to update itself.
+- **Too old**: its copy is older than this install accepts. It can still
+  read, but changes will be refused once the grace period ends.
+- **Version unknown**: it did not say which tools it loaded, usually because
+  its copy predates this check.
+- **Not seen this week**: it has not connected in the last 7 days.
+
+After an update that ships new agent tools, the portal posts one notification
+that names the clients still behind. Restarting the portal without an update
+posts nothing. You do not need to run anything.
+
 ## What To Watch
 
 - triggering an upgrade outside an approved deployment window

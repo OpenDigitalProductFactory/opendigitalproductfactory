@@ -119,7 +119,7 @@ describe("RuntimeHealthPage", () => {
     expect(html).toContain("Model Selection &amp; Runtime Health");
     expect(html).toContain("All phases route to cloud providers.");
     expect(html).toContain('href="/platform/ai/readiness"');
-    expect(html).toContain("Capability service requirements");
+    expect(html).toContain("Service requirements");
     expect(html).toContain("Optional — inactive");
     expect(html).toContain('data-testid="phase-routing-table-scroll"');
     expect(html).toContain('min-width:0');

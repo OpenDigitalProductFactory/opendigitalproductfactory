@@ -20,27 +20,23 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
-import { mcpClientBearerHeaderRequired, type McpClient } from "@dpf/integration-shared/mcp-client-credential-policy";
+import { mcpClientBearerHeaderRequired } from "@dpf/integration-shared/mcp-client-credential-policy";
 
 import { buildPackArchive } from "./pack-archive";
 import { deliveredDigest, listPackFiles } from "./pack-digest";
+import { DECLARING_CLIENT_KINDS } from "./toolchain-verdict";
 
 export const TOOLCHAIN_MANIFEST_SCHEMA_VERSION = 1;
 
-/** The client kinds that load the dpf-platform pack, and their credential-policy key. */
-export const TOOLCHAIN_CLIENT_KINDS: Readonly<Record<string, McpClient>> = Object.freeze({
-  "claude-code": "claude",
-  codex: "codex",
-  grok: "grok",
-  antigravity: "antigravity",
-});
+/** The client kinds that load the dpf-platform pack; one home, in toolchain-verdict.ts. */
+export const TOOLCHAIN_CLIENT_KINDS = DECLARING_CLIENT_KINDS;
 
 export type ToolchainFloor = { minPackVersion: string | null; graceStartsAt: string | null };
 
 export type ToolchainClientShape = {
   /** Auth the connector uses at this endpoint, from mcpClientBearerHeaderRequired. */
   authMode: "oauth" | "bearer";
-  /** How the declaration rides the connection (design §5.2); query until the P1 spike says otherwise. */
+  /** How the declaration rides the connection (design §5.2); see DECLARATION_CARRIERS. */
   declarationCarrier: "query" | "header";
   /** False until the carrier spike verifies it for this client. */
   carrierVerified: boolean;
@@ -98,17 +94,39 @@ function readVersionSource(root: string): { packVersion: string; floor: Toolchai
   };
 }
 
+/**
+ * How each client's connector carries its declaration (BI-DE1E6485, design §5.2).
+ * The header leaves the connector URL alone, so the OAuth resource, the stored
+ * sign-in and the desktop app's URL check do not change with each release, and
+ * a `${DPF_MCP_URL:-…}` template never needs a query appended after it. Grok
+ * authenticates with a bearer and its descriptor URL is literal, so it keeps
+ * the query. The updater (toolchain_convergence.DEFAULT_CARRIERS) reads this
+ * map from the signed manifest. Unverified until the carrier spike measures it.
+ */
+export const DECLARATION_CARRIERS: Readonly<Record<string, ToolchainClientShape["declarationCarrier"]>> = Object.freeze({
+  "claude-code": "header",
+  codex: "header",
+  grok: "query",
+  antigravity: "header",
+});
+
 export function clientShapes(mcpEndpoint: string): Record<string, ToolchainClientShape> {
   return Object.fromEntries(
     Object.entries(TOOLCHAIN_CLIENT_KINDS).map(([kind, policyClient]) => [
       kind,
       {
         authMode: mcpClientBearerHeaderRequired(mcpEndpoint, policyClient) ? "bearer" : "oauth",
-        declarationCarrier: "query",
+        declarationCarrier: DECLARATION_CARRIERS[kind] ?? "header",
         carrierVerified: false,
       } satisfies ToolchainClientShape,
     ]),
   );
+}
+
+/** Version, delivered digest and floor of one pack tree: what a connection is compared with. */
+export function readPublishedToolchain(packRoot: string): { packVersion: string; packDigest: string; floor: ToolchainFloor } {
+  const { packVersion, floor } = readVersionSource(packRoot);
+  return { packVersion, packDigest: deliveredDigest(packRoot), floor };
 }
 
 /** Pure: build the archive and unsigned manifest for one pack tree. */

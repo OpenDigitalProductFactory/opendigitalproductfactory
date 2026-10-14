@@ -335,6 +335,54 @@ export async function loadCoworkerEnvelopeItems(
 }
 
 /**
+ * BI-7BCC87BB (plan B8, AC-OVERRIDE; WWMD DI-18258852EB33): another person's
+ * waiting request, opened by an admin through its exact link. The caller (the
+ * inbox page) has already checked the user-management capability; this only
+ * loads the one request, never a list, so the delegate-isolation rule above
+ * still holds for every queue. The card it projects offers "Decide on their
+ * behalf" instead of Authorize / Decline, and names the owner as the
+ * accountable authorizer.
+ */
+export async function loadOnBehalfEnvelopeItem(
+  db: Db,
+  envelopeId: string,
+  readerUserId: string,
+  nowMs: number = Date.now(),
+): Promise<AttentionItem[]> {
+  const now = new Date(nowMs);
+  const row = await db.coworkerActionEnvelope.findFirst({
+    where: {
+      id: envelopeId,
+      status: DECIDABLE_STATUS,
+      NOT: { delegatingUserId: readerUserId },
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+    },
+    select: {
+      id: true, coworkerAgentId: true, delegatingUserId: true, manifestActionId: true, rationale: true,
+      status: true, taskRunId: true, expiresAt: true, createdAt: true, argsJson: true,
+      taskRun: { select: { a2aMetadata: true } },
+    },
+  }) as unknown as CoworkerEnvelopeRow | null;
+  if (!row) return [];
+  const [owner, proposed, consequences] = await Promise.all([
+    db.user.findUnique({ where: { id: row.delegatingUserId }, select: { email: true } }).catch(() => null),
+    loadProposedParameters(db, [row]),
+    loadDeclaredConsequences([row.manifestActionId]),
+  ]);
+  const ownerLabel = owner?.email ?? row.delegatingUserId;
+  const item = coworkerEnvelopeToAttentionItem({
+    ...row,
+    ...(proposed.has(row.id) ? { proposedParameters: proposed.get(row.id) } : {}),
+    consequence: consequences.get(row.manifestActionId) ?? null,
+  }, nowMs);
+  if (!item.envelope) return [item];
+  return [{
+    ...item,
+    envelope: { ...item.envelope, onBehalf: { ownerLabel }, decision: { ...item.envelope.decision, authorizerLabel: ownerLabel } },
+  }];
+}
+
+/**
  * The reader's requests that closed unanswered in the last seven days and have
  * not been asked again (BI-0012E6CA).
  *
