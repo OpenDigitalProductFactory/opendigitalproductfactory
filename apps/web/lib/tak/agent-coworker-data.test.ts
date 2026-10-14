@@ -28,6 +28,29 @@ describe("serializeMessage — proposal join (BI-867263F4)", () => {
     });
   });
 
+  it("a still-proposed row carrying a refusal reason renders as no longer runnable (PR-C review finding 5)", () => {
+    const reason = "create_backlog_item rejected: not admitted to that room";
+    const row = serializeMessage(assistantMsg, {
+      proposalId: "prop-1", actionType: "create_backlog_item", parameters: {},
+      status: "proposed", resultEntityId: null, resultError: reason,
+    });
+    expect(row.proposal).toEqual({
+      proposalId: "prop-1", actionType: "create_backlog_item", parameters: {},
+      status: "proposed", noLongerRunnable: reason,
+    });
+  });
+
+  it("a failed row keeps its resultError as before", () => {
+    const row = serializeMessage(assistantMsg, {
+      proposalId: "prop-1", actionType: "create_backlog_item", parameters: {},
+      status: "failed", resultEntityId: null, resultError: "duplicate_title",
+    });
+    expect(row.proposal).toEqual({
+      proposalId: "prop-1", actionType: "create_backlog_item", parameters: {},
+      status: "failed", resultError: "duplicate_title",
+    });
+  });
+
   it("leaves proposal undefined when the message has none", () => {
     expect(serializeMessage(assistantMsg, null).proposal).toBeUndefined();
   });

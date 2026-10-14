@@ -71,6 +71,8 @@ export function parseToolResponse(response) {
   if (typeof response === "string") return parseJsonObject(response);
   if (Array.isArray(response)) return fromContentBlocks(response);
   if (!response || typeof response !== "object") return null;
+  // Codex passes the raw MCP call result (BI-C3D3762B); a failed call says so here.
+  if (response.isError === true) return null;
   if (response.structuredContent && typeof response.structuredContent === "object") return response.structuredContent;
   if (Array.isArray(response.content)) return fromContentBlocks(response.content);
   return response;

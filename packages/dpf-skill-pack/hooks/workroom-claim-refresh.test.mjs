@@ -67,6 +67,8 @@ test("a failed call or an unreadable answer is no answer", () => {
   assert.equal(parseToolResponse('Error: {"success":false,"error":"portal_quiescing"}'), null);
   assert.equal(parseToolResponse("not json"), null);
   assert.equal(parseToolResponse(undefined), null);
+  // Codex sends the raw MCP call result; an error result is no answer even if its text parses
+  assert.equal(parseToolResponse({ isError: true, content: [{ type: "text", text: JSON.stringify({ capsule: capsule() }) }] }), null);
 });
 
 test("the capsule is found in each tool's answer shape", () => {

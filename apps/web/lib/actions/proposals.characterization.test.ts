@@ -7,12 +7,20 @@
 // the only authority checked is the approving human's capability.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Approval convergence PR-C harness (BI-04E5A511): the generic branch now runs
+// through convert-and-run (lib/actions/proposal-convert-and-run.ts), which
+// calls the reference monitor and claims the row with a compare-and-set. The
+// harness models the monitor ALLOWING the call (it hands the handler the
+// characterised { agentId, threadId }) and maps the claim's updateMany onto the
+// update mock, so every assertion below is unchanged. The real monitor's four
+// outcomes are covered in the *.governed.test.ts suites.
+
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   executeTool: vi.fn(),
   persistProactivityFact: vi.fn(),
   prisma: {
-    agentActionProposal: { findUnique: vi.fn(), update: vi.fn() },
+    agentActionProposal: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     authorizationDecisionLog: { create: vi.fn() },
     agentMessage: { create: vi.fn() },
   },
@@ -25,6 +33,10 @@ vi.mock("@/lib/mcp-tools", () => ({
   executeTool: mocks.executeTool,
 }));
 vi.mock("@/lib/actions/leave", () => ({ approveLeaveRequest: vi.fn(), rejectLeaveRequest: vi.fn() }));
+vi.mock("@/lib/mcp-governed-execute", () => ({
+  governedExecuteTool: (args: { toolName: string; rawParams: Record<string, unknown>; userId: string; context?: { agentId?: string; threadId?: string } }) =>
+    mocks.executeTool(args.toolName, args.rawParams, args.userId, { agentId: args.context?.agentId, threadId: args.context?.threadId }),
+}));
 
 import { approveProposal, rejectProposal } from "./proposals";
 
@@ -42,6 +54,12 @@ beforeEach(() => {
   mocks.auth.mockResolvedValue({ user: { id: "user-admin", platformRole: "HR-000", isSuperuser: false } });
   mocks.prisma.agentActionProposal.findUnique.mockResolvedValue(proposal);
   mocks.prisma.agentActionProposal.update.mockResolvedValue({});
+  mocks.prisma.agentActionProposal.updateMany.mockImplementation(
+    async ({ where, data }: { where: { proposalId: string }; data: unknown }) => {
+      await mocks.prisma.agentActionProposal.update({ where: { proposalId: where.proposalId }, data });
+      return { count: 1 };
+    },
+  );
   mocks.prisma.authorizationDecisionLog.create.mockResolvedValue({});
   mocks.prisma.agentMessage.create.mockResolvedValue({});
   mocks.executeTool.mockResolvedValue({ success: true, entityId: "HIVE-1", message: "Contributed" });
@@ -103,13 +121,16 @@ describe("approveProposal / rejectProposal — convergence characterisation", ()
     });
   });
 
-  it("reads then updates: approved is written before the run, with no compare-and-set", async () => {
+  // Named PR-C delta (spec D5 step 1): base read-then-updated with no
+  // compare-and-set, leaving the double-approve race open. The claim is now a
+  // compare-and-set on status "proposed"; approved is still written before the run.
+  it("claims the row with a compare-and-set on proposed before the run (PR-C delta, spec D5)", async () => {
     await approveProposal("AP-1");
-    expect(mocks.prisma.agentActionProposal.update.mock.calls[0][0]).toEqual({
-      where: { proposalId: "AP-1" },
+    expect(mocks.prisma.agentActionProposal.updateMany.mock.calls[0][0]).toEqual({
+      where: { proposalId: "AP-1", status: "proposed" },
       data: { status: "approved", decidedAt: expect.any(Date), decidedById: "user-admin" },
     });
-    expect(mocks.prisma.agentActionProposal.update.mock.invocationCallOrder[0])
+    expect(mocks.prisma.agentActionProposal.updateMany.mock.invocationCallOrder[0])
       .toBeLessThan(mocks.executeTool.mock.invocationCallOrder[0]!);
   });
 
