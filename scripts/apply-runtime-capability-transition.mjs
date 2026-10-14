@@ -2,7 +2,7 @@
 import { parseArgs as utilParseArgs } from "node:util";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { validateInstallState } from "./installer/validate-install-state.mjs";
@@ -37,11 +37,11 @@ const contend = (reason) => { process.stderr.write(JSON.stringify({ status: "con
 
 const acquireApplyLock = () => {
   try { mkdirSync(applyLock); }
-  catch {
-    const expiresAt = Date.parse(readFileSync(join(applyLock, "expires-at"), "utf8").trim());
-    if (!Number.isFinite(expiresAt) || expiresAt >= Date.now()) contend("transition_apply_in_progress");
-    rmSync(applyLock, { recursive: true, force: true });
-    try { mkdirSync(applyLock); } catch { contend("transition_apply_in_progress"); }
+  catch (error) {
+    // Legacy locks carry no process-start or descendant settlement evidence.
+    // Expiry is a deadline, never proof that the previous writer stopped.
+    if (error.code === "EEXIST") contend("transition_apply_in_progress");
+    throw error;
   }
   writeFileSync(join(applyLock, "expires-at"), new Date(Date.now() + 10 * 60_000).toISOString(), { flag: "wx", mode: 0o600 });
 };
