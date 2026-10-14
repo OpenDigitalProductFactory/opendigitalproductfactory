@@ -45,6 +45,5 @@ account denylist still blocks that default, and additional accounts never borrow
 the shared key. Local's default continues to report shared host capacity without
 requiring a credential.
 
-The [delivery plan](../../superpowers/plans/2026-10-14-provider-account-capacity-refactor.md)
-records qualification and acceptance. This guide describes the account-aware
-contract; it does not claim that an installation has received the release.
+This guide describes the account-aware routing contract. An installation's
+release status determines whether these routing changes are available there.
