@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
@@ -71,4 +71,16 @@ test("a lost directory generation invalidates the held capability", posix, async
   await assert.rejects(lease.assertOwned(), /runtime_apply_lock_not_owned/);
   assert.equal(await lease.release(), false);
   assert.equal(await readFile(join(f.path, "owner.json"), "utf8"), "replacement");
+});
+
+test("state directory replacement invalidates ownership even when the lock inode survives", posix, async t => {
+  const f = await fixture(t); const lease = await acquireRuntimeApplyLock(f);
+  const old = `${f.stateDirectory}-old`;
+  t.after(() => rm(old, { recursive: true, force: true }));
+  await rename(f.stateDirectory, old);
+  await mkdir(f.stateDirectory, { mode: 0o700 });
+  await rename(join(old, ".runtime-transition-apply.lock"), f.path);
+  await assert.rejects(lease.assertOwned(), /runtime_apply_lock_not_owned/);
+  assert.equal(await lease.release(), false);
+  assert.deepEqual(JSON.parse(await readFile(join(f.path, "owner.json"))), lease.owner);
 });

@@ -20,6 +20,7 @@ export async function acquireRuntimeApplyLock({ stateDirectory, runId }) {
   if (process.platform === "win32") fail("permissions_unavailable");
   if (typeof runId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$/.test(runId)) fail("run_id");
   const directory = await protectedDirectory(stateDirectory);
+  const directoryIdentity = await lstat(directory);
   const processIdentity = readProcessIdentity(process.pid);
   if (!processIdentity) fail("identity_unavailable");
   const path = join(directory, ".runtime-transition-apply.lock");
@@ -43,11 +44,13 @@ export async function acquireRuntimeApplyLock({ stateDirectory, runId }) {
     if (readProcessIdentity(process.pid) !== owner.processIdentity) return false;
     try {
       if (await protectedDirectory(stateDirectory) !== directory
+        || !sameDirectory(await lstat(directory), directoryIdentity)
         || await protectedDirectory(path) !== path
         || !sameDirectory(await lstat(path), identity)) return false;
       return (await protectedRead(ownerPath)).toString("utf8") === canonicalJson(owner);
     } catch { return false; }
   };
+  if (!await owned()) fail("not_owned");
   return Object.freeze({ path, owner,
     async assertOwned() { if (released || !await owned()) fail("not_owned"); },
     async release() {
