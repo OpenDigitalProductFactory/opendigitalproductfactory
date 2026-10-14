@@ -21,7 +21,7 @@ test("estate fixture populates a complete repeatable discovery before shell boot
   const persist = async (facts, meta) => {
     calls++;
     assert.deepEqual(facts, uxSweepEstateFacts());
-    assert.equal(facts.items.length, 8);
+    assert.equal(facts.items.length, 10);
     assert.equal(facts.relationships.filter(r => r.relationshipType === "MEMBER_OF").length, 3);
     rows.run = { id: "canonical-run", ...meta, status: "completed" };
     return { runId: rows.run.id };

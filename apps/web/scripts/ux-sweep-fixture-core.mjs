@@ -206,6 +206,8 @@ export function uxSweepEstateFacts() {
     ["network_interface", "Interface 10.1.0.10", "nic:02AABBCCDD10", { address: "10.1.0.10", mac: "02:AA:BB:CC:DD:10" }],
     ["docker_runtime", "Docker", "socket:/var/run/docker.sock", { socketPath: "/var/run/docker.sock", serverVersion: "26.0.0" }],
     ["docker_container", "Fixture portal", "container:ux-sweep-portal", { containerName: "ux-sweep-portal" }],
+    ["gateway", "Docker GW fixture (172.18.0.1)", "docker-gw:fixture", { address: "172.18.0.1" }],
+    ["gateway", "Docker GW bridge (172.17.0.1)", "docker-gw:bridge", { address: "172.17.0.1" }],
   ].map(([itemType, name, externalRef, attributes]) => ({
     sourceKind: "dpf_bootstrap", itemType, name, externalRef, attributes,
   }));

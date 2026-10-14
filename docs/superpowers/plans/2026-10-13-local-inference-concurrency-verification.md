@@ -42,6 +42,8 @@ The b41 protected sweep verified the first-login fix and reduced the estate to 9
 
 ## Risk and rollback
 
+The 33fed protected run 38557436950 confirms the canonical persistence fix restored review and subnet sections, but the fixture still omits the bootstrap runner's gateway-connection follow-up. The original measured estate has one physical and two Docker gateways with three Configure actions. Reuse `flagUnconfiguredGateways` as an exported existing helper after fixture convergence, including replay, only when the nonfixture guard permits the declared CI estate. Add two fixed Docker gateway facts to represent the same actionable issue states. Test the helper's real issue writer, covered-gateway preservation and replay repair; avoid full bootstrap execution, live collectors, promotion, renderer changes or baseline adjustments.
+
 Observer mistakes could alter admission or leak caller context; isolate callbacks and test thrown observers and terminal cleanup. A faster first call may finish before the second queues; report that observation as inconclusive rather than manufacturing contention. Caller budgets may expire before answer content; preserve that evidence rather than relabeling it complete. Revert the optional diagnostic and observer together; the delivered reliability behavior remains independently present in PR #6270.
 
 ## Backlog coverage

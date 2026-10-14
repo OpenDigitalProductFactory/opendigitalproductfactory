@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { normalizeDiscoveredFacts } from "../../../packages/db/src/discovery-normalize";
 import { isDockerOriginEntityKey } from "../../../packages/db/src/docker-origin";
 import { uxSweepEstateFacts } from "./ux-sweep-fixture-core.mjs";
+import { flagUnconfiguredGateways } from "../../../packages/db/src/discovery-runner";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { PortfolioQualityIssuesPanel } from "@/components/inventory/PortfolioQualityIssuesPanel";
 
 const state = vi.hoisted(() => ({ entities: [] as unknown[], relations: [] as unknown[], graph: vi.fn() }));
 vi.mock("@dpf/db", () => ({
@@ -26,6 +30,30 @@ import { getInventoryEntitiesGroupedBySubnet } from "@/lib/discovery-data";
 import { syncInventoryEntityAsInfraCI } from "../../../packages/db/src/graph-sync";
 
 describe("declared estate uses the actual discovery read-model contract", () => {
+  it("renders the three uncovered gateway connection actions from normal follow-up", async () => {
+    const normalized = normalizeDiscoveredFacts(uxSweepEstateFacts());
+    const gateways = normalized.inventoryEntities.filter(e => e.entityType === "gateway")
+      .map(e => ({ id: e.entityKey, ...e }));
+    type PanelIssue = Parameters<typeof PortfolioQualityIssuesPanel>[0]["issues"][number];
+    const issues: PanelIssue[] = [];
+    await flagUnconfiguredGateways({
+      inventoryEntity: { findMany: async () => gateways },
+      discoveryConnection: { findMany: async () => [] },
+      portfolioQualityIssue: {
+        upsert: async ({ create }) => {
+          issues.push({
+            id: String(create.issueKey), issueType: String(create.issueType),
+            severity: String(create.severity), summary: String(create.summary), details: create.details,
+            inventoryEntity: null, portfolio: null, taxonomyNode: null, digitalProduct: null,
+          });
+        },
+        updateMany: async () => ({ count: 0 }),
+      },
+    });
+    const html = renderToStaticMarkup(createElement(PortfolioQualityIssuesPanel, { issues }));
+    expect(issues).toHaveLength(3);
+    expect(html.match(/>Configure<\/button>/g)).toHaveLength(3);
+  });
   it("has physical subnet members, review candidates and graph-mirror nodes", async () => {
     const normalized = normalizeDiscoveredFacts(uxSweepEstateFacts(), {
       taxonomyNodes: [

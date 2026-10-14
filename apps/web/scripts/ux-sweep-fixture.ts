@@ -22,6 +22,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { Prisma, prisma, loadDiscoveryAttributionInputs, normalizeDiscoveredFacts, persistBootstrapDiscoveryRun } from "@dpf/db";
+import { flagUnconfiguredGateways } from "../../../packages/db/src/discovery-runner";
 
 import { convergeUxSweepFixture, convergeUxSweepEstate } from "./ux-sweep-fixture-core.mjs";
 import { SWEEP_ROUTE_PARAMS_REL } from "@/lib/ux-budget/route-shells";
@@ -35,6 +36,9 @@ void (async () => {
         const inputs = await loadDiscoveryAttributionInputs(prisma);
         return persistBootstrapDiscoveryRun(prisma, normalizeDiscoveredFacts(facts, inputs), meta);
       });
+      // Complete the same gateway follow-up as bootstrap, including replay.
+      // A real discovery context is preserved by convergeUxSweepEstate.
+      if (estate) await flagUnconfiguredGateways(prisma);
       console.error(estate
         ? `[ux-sweep-fixture] canonical estate ${estate.reused ? "reused" : "populated"}: ${estate.runId}`
         : "[ux-sweep-fixture] preserved existing discovery context");
