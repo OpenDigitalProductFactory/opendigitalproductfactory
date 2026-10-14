@@ -16,9 +16,8 @@ vi.mock("./rate-tracker", () => ({ recordRequest: vi.fn(), learnFromRateLimitRes
 vi.mock("./rate-recovery", () => ({ scheduleRecovery: vi.fn() }));
 vi.mock("./loader", () => ({ invalidateRoutingLoaderCache: vi.fn() }));
 vi.mock("./route-outcome", () => ({ recordRouteOutcome: vi.fn(async () => {}) }));
-vi.mock("@/lib/ai-provider-internals", () => ({ autoDiscoverAndProfile: vi.fn(async () => {}), requestProviderCatalogRefresh: vi.fn(async () => {}) }));
+vi.mock("@/lib/ai-provider-internals", () => ({ autoDiscoverAndProfile: vi.fn(async () => {}), requestProviderCatalogRefresh: vi.fn(async () => {}), getProviderBearerToken: mocks.bearer }));
 vi.mock("@/lib/provider-oauth", () => ({ refreshOAuthToken: mocks.refresh }));
-vi.mock("@/lib/inference/provider-account-credentials", () => ({ getProviderBearerToken: mocks.bearer }));
 import { InferenceError } from "@/lib/ai-inference";
 import { callWithFallbackChain } from "./fallback";
 import { accountExecutionVersion, ProviderAccountSelectionChangedError } from "./provider-account-candidates";

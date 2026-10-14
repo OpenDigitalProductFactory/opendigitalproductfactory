@@ -653,7 +653,7 @@ export async function callWithFallbackChain(
             let refreshed: { token: string } | { error: string } | undefined;
             try {
               if (entry.providerConnectionId) {
-                const { getProviderBearerToken } = await import("@/lib/inference/provider-account-credentials");
+          const { getProviderBearerToken } = await import("@/lib/ai-provider-internals");
                 refreshed = await getProviderBearerToken(entry.providerId, entry.providerConnectionId, entry.providerConnectionVersion, { forceRefresh: true });
               } else {
                 const { refreshOAuthToken } = await import("@/lib/provider-oauth");
