@@ -16,6 +16,12 @@
   --dpf-text: #1a1a2e;
   --dpf-text-secondary: #4a4a5e;
   --dpf-accent: #2563eb;
+  /* Portfolio identity colours (BI-0FB4A049): one token per root portfolio,
+     darker in light mode so the swatch keeps contrast on a white surface. */
+  --dpf-portfolio-foundational: #4f5bd5;
+  --dpf-portfolio-manufacturing-and-delivery: #c2410c;
+  --dpf-portfolio-for-employees: #7c3aed;
+  --dpf-portfolio-products-and-services-sold: #db2777;
   --dpf-accent-soft: color-mix(in srgb, var(--dpf-accent) 12%, var(--dpf-surface-1));
   /* Label color for text/icons sitting ON a solid accent (or error) fill.
      Light accent #2563eb vs #ffffff = 5.2:1 (WCAG AA). Never hardcode
@@ -50,6 +56,10 @@
     --dpf-text: #e2e2f0;
     --dpf-text-secondary: #b8b8cc;
     --dpf-accent: #7c8cf8;
+    --dpf-portfolio-foundational: #7c8cf8;
+    --dpf-portfolio-manufacturing-and-delivery: #fb923c;
+    --dpf-portfolio-for-employees: #a78bfa;
+    --dpf-portfolio-products-and-services-sold: #f472b6;
     --dpf-accent-soft: color-mix(in srgb, var(--dpf-accent) 18%, var(--dpf-surface-1));
     /* Dark accent #7c8cf8 is light — white fails AA on it (3.0:1). The dark
        bg color gives 6.3:1 and reads as "punched out of the page". */

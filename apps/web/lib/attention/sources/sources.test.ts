@@ -219,6 +219,14 @@ describe("agentProposalToAttentionItem", () => {
     expect(item.author?.roleLabel).toBe("COO");
   });
 
+  it("carries a persisted monitor refusal so the card offers Decline only after a reload (PR-C review finding 5)", () => {
+    const base = { proposalId: "AP-2", actionType: "create_invoice", parameters: {}, proposedAt: new Date("2026-06-23T07:00:00.000Z"), agentId: "coo" };
+    expect(agentProposalToAttentionItem({ ...base, resultError: "create_invoice rejected: no grant" }).noLongerRunnable)
+      .toBe("create_invoice rejected: no grant");
+    expect(agentProposalToAttentionItem({ ...base, resultError: null })).not.toHaveProperty("noLongerRunnable");
+    expect(agentProposalToAttentionItem(base)).not.toHaveProperty("noLongerRunnable");
+  });
+
   it("projects an activity-harness proposal with routing-specific context", () => {
     const item = agentProposalToAttentionItem({
       proposalId: "AP-ROUTE",

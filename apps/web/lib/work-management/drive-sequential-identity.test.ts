@@ -495,7 +495,9 @@ describe("AC-3C-SEQ-IDENTICAL: sequential rooms are byte-identical to the pre-3c
     // A review stage's unsendable reviewer request (BI-2C8750FC) is reached only
     // through the readiness review overlay, which this golden harness does not
     // compose; workroom-drive-review-stages.test.ts reaches it.
-    const reviewStageOnly = new Set<string>(["reviewer_dispatch_unavailable"]);
+    // A provider hold (BI-2B6A8A74) is reached only with a stored queueHold, which
+    // this harness does not compose; workroom-drive.test.ts reaches it on both paths.
+    const reviewStageOnly = new Set<string>(["reviewer_dispatch_unavailable", "provider_held"]);
     const expected = [
       ...Object.values(DRIVE_REASONS_BY_ACTION).flat(),
       "executor_writeback_unavailable",
