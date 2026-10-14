@@ -6,6 +6,7 @@ const { mockPrisma, mockRefreshOAuthToken, mockGetProviderBearerToken, mockActiv
     modelProfile: { findFirst: vi.fn() },
     credentialEntry: { findUnique: vi.fn(), update: vi.fn() },
     aiProviderConnection: { findUnique: vi.fn(), updateMany: vi.fn() },
+    providerCapacityStatus: { findUnique: vi.fn(), updateMany: vi.fn() },
   },
   mockRefreshOAuthToken: vi.fn(),
   mockGetProviderBearerToken: vi.fn(),
@@ -28,6 +29,8 @@ import { testProviderAuthInternal as testProviderAuth } from "./provider-auth-te
 describe("expired OAuth verification recovery", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPrisma.providerCapacityStatus.findUnique.mockReset().mockResolvedValue(null);
+    mockPrisma.providerCapacityStatus.updateMany.mockReset().mockResolvedValue({ count: 1 });
     mockPrisma.modelProfile.findFirst.mockResolvedValue({ modelId: "discovered-current-model" });
     vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => new Response('data: {"type":"response.completed","response":{"status":"completed"}}\n')));
   });
@@ -93,6 +96,71 @@ describe("expired OAuth verification recovery", () => {
     expect(mockPrisma.credentialEntry.update).toHaveBeenCalledWith({ where: { id: "credential-b" }, data: { status: "ok" } });
     expect(mockClearCapacity).not.toHaveBeenCalled();
     expect(mockActivateProvider).not.toHaveBeenCalled();
+  });
+
+  function restoredDefaultAccount() {
+    expiredSubscription();
+    vi.mocked(fetch).mockReset().mockResolvedValue(new Response('data: {"type":"response.completed","response":{"status":"completed"}}\n'));
+    const version = new Date("2026-10-14T04:00:00Z");
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({
+      providerId: "chatgpt", connectionId: "provider-default-chatgpt", credentialEntryId: "credential-default", authMethod: "oauth",
+      status: "active", updatedAt: version, credentialEntry: { id: "credential-default", status: "ok", cachedToken: "encrypted" },
+    });
+    mockPrisma.credentialEntry.findUnique.mockResolvedValue({ id: "credential-default", status: "ok", cachedToken: "encrypted", providerConnection: { connectionId: "provider-default-chatgpt" } });
+    mockPrisma.providerCapacityStatus.findUnique.mockResolvedValue({
+      id: "old-capacity", providerId: "chatgpt", state: "quota_resets_at", updatedAt: version,
+      providerConnection: null,
+    });
+    mockPrisma.aiProviderConnection.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.providerCapacityStatus.updateMany.mockResolvedValue({ count: 1 });
+    Object.assign(mockPrisma, { $transaction: async (fn: (tx: typeof mockPrisma) => Promise<unknown>) => fn(mockPrisma) });
+    return version;
+  }
+
+  it("reconciles the selected default account's stale quota after completed verification", async () => {
+    const version = restoredDefaultAccount();
+    expect(await testProviderAuth("chatgpt", false, "provider-default-chatgpt")).toMatchObject({ ok: true });
+    expect(mockPrisma.providerCapacityStatus.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ id: "old-capacity", providerId: "chatgpt", updatedAt: version }),
+      data: expect.objectContaining({ state: "available", source: "oauth", retryAt: null }),
+    }));
+    expect(mockRefreshOAuthToken).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([401, 429, 500])("retains the selected account's quota after HTTP %s", async (status) => {
+    restoredDefaultAccount();
+    vi.mocked(fetch).mockResolvedValue(new Response('{"error":{"code":"provider_rejected"}}', { status }));
+    expect(await testProviderAuth("chatgpt", false, "provider-default-chatgpt")).toMatchObject({ ok: false });
+    expect(mockPrisma.providerCapacityStatus.updateMany).not.toHaveBeenCalled();
+    expect(mockPrisma.aiProviderConnection.updateMany).not.toHaveBeenCalled();
+    expect(mockRefreshOAuthToken).not.toHaveBeenCalled();
+  });
+
+  it.each(["network", "timeout", "incomplete"])("retains quota after %s verification failure", async (failure) => {
+    restoredDefaultAccount();
+    if (failure === "incomplete") vi.mocked(fetch).mockResolvedValue(new Response('data: {"type":"response.in_progress"}\n'));
+    else vi.mocked(fetch).mockRejectedValue(new Error(failure));
+    expect(await testProviderAuth("chatgpt", false, "provider-default-chatgpt")).toMatchObject({ ok: false });
+    expect(mockPrisma.providerCapacityStatus.updateMany).not.toHaveBeenCalled();
+    expect(mockPrisma.aiProviderConnection.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("retains quota when the selected connection changes during verification", async () => {
+    restoredDefaultAccount();
+    mockPrisma.aiProviderConnection.updateMany.mockResolvedValue({ count: 0 });
+    expect(await testProviderAuth("chatgpt", false, "provider-default-chatgpt")).toMatchObject({ ok: false, message: expect.stringContaining("Account changed") });
+    expect(mockPrisma.providerCapacityStatus.updateMany).not.toHaveBeenCalled();
+    expect(mockPrisma.credentialEntry.update).not.toHaveBeenCalled();
+  });
+
+  it("reports successful authentication separately from a changed routing restriction", async () => {
+    restoredDefaultAccount();
+    mockPrisma.providerCapacityStatus.updateMany.mockResolvedValue({ count: 0 });
+    expect(await testProviderAuth("chatgpt", false, "provider-default-chatgpt")).toMatchObject({
+      ok: true, message: expect.stringContaining("routing restriction changed during verification and was preserved"),
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
 });

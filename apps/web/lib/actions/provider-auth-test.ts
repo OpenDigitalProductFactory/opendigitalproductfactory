@@ -9,6 +9,7 @@ import { assertResponsesCompleted } from "@/lib/routing/responses-readiness";
 import { clearProviderCapacityStatus } from "@/lib/routing/provider-capacity/store";
 import { resolveResponsesProbeBaseUrl } from "@/lib/routing/responses-provider";
 import { refreshOAuthToken } from "@/lib/provider-oauth";
+import { captureProviderQuotaObservation, reconcileProviderQuotaObservation, type ProviderQuotaObservation } from "./provider-quota-revalidation";
 
 const OPENAI_OAUTH_LINKED_PROVIDERS = new Set(["codex", "chatgpt"]);
 const SHARED_ACCOUNT_LINKED_PROVIDERS = new Set(["zai"]);
@@ -55,13 +56,14 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
   if (connection?.status === "disabled") return { ok: false, message: "Enable this account before testing authentication" };
   const accountAuth = connection?.authMethod;
   const provider = { ...catalog, authMethod: accountAuth === "oauth" ? "oauth2_authorization_code" : accountAuth === "api-key" ? "api_key" : accountAuth === "workload-identity" ? "oauth2_client_credentials" : catalog.authMethod };
-  const markAuthenticated = async () => {
+  const markAuthenticated = async (quotaObservation?: ProviderQuotaObservation | null): Promise<boolean | undefined> => {
     if (connectionId !== undefined) {
-      await prisma.$transaction(async (tx) => {
+      return prisma.$transaction(async (tx) => {
         if (!connection?.credentialEntryId) throw new Error("Account credential not found");
         const activated = await tx.aiProviderConnection.updateMany({ where: { connectionId, credentialEntryId: connection.credentialEntryId, updatedAt: connection.updatedAt, status: { not: "disabled" } }, data: { status: "active" } });
         if (activated.count !== 1) throw new Error("Account changed during authentication — retry with its current credentials");
         await tx.credentialEntry.update({ where: { id: connection.credentialEntryId }, data: { status: "ok" } });
+        return quotaObservation ? reconcileProviderQuotaObservation(tx, quotaObservation) : undefined;
       });
     } else await activateProvider(providerId, { trigger: "test_auth", skipDiscovery: !refreshCatalog, ...getLinkedActivationOptions(providerId, provider.authMethod) });
   };
@@ -141,6 +143,7 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
         select: { modelId: true },
       });
       if (!model) return { ok: false, message: "No active model found — refresh the model catalog and retry" };
+      const quotaObservation = connection ? await captureProviderQuotaObservation(connection) : null;
       const streaming = isChatGptBackend(providerId, baseUrl);
       headers["Content-Type"] = "application/json";
       const probe = () => fetch(attemptedUrl, {
@@ -173,8 +176,12 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
       }
       if (res.ok) {
         assertResponsesCompleted(body, streaming);
+        const quotaReconciled = await markAuthenticated(quotaObservation);
         if (connectionId === undefined) await clearProviderCapacityStatus({ providerId, source: "oauth" });
-        await markAuthenticated();
+        if (quotaReconciled === false) return {
+          ok: true,
+          message: "Connected via OAuth — Responses API verified. The routing restriction changed during verification and was preserved; check its current status.",
+        };
         return { ok: true, message: "Connected via OAuth — Responses API verified" };
       }
 
