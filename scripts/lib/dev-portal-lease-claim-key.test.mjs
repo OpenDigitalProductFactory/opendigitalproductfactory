@@ -3,6 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, cpSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -60,9 +61,10 @@ test('admission compares filesystem identity and rejects ambiguous or foreign pa
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const other = join(directory, 'other');
   mkdirSync(other);
-  await assertAdmittedWorktreePath(directory.replace(/\\/g, '/'), directory);
+  const canonical = await realpath(directory);
+  await assertAdmittedWorktreePath(directory.replace(/\\/g, '/'), canonical);
   for (const invalid of [undefined, null, '', 'relative/worktree', other, join(directory, 'missing')]) {
-    await assert.rejects(assertAdmittedWorktreePath(invalid, directory), /admission_binding_mismatch/);
+    await assert.rejects(assertAdmittedWorktreePath(invalid, canonical), /admission_binding_mismatch/);
   }
 });
 test('configuration rejects the original root checkout mount and missing prerequisites before mutations', () => {
