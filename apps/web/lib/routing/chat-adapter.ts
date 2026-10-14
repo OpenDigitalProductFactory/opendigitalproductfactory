@@ -460,6 +460,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
       // callProvider owns admission; governed queue wait consumes the parent budget.
       await assertGovernedInferenceAuthority(currentInferenceSignal());
       const execution = currentGovernedInferenceDeadline();
+      const signal = currentInferenceSignal(execution?.signal);
       const timeout = createInferenceTimeoutSignal(resolveInferenceRuntimePolicy(providerId, modelId, {
         defaultTimeoutMs: process.env.DPF_INFERENCE_TIMEOUT_MS,
         localTimeoutMs: process.env.DPF_LOCAL_INFERENCE_TIMEOUT_MS,
@@ -468,7 +469,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
         method: "POST",
         headers: requestHeaders,
         body: JSON.stringify(body),
-        signal: execution ? AbortSignal.any([timeout, execution.signal]) : timeout,
+        signal: signal ? AbortSignal.any([timeout, signal]) : timeout,
       });
     } catch (e) {
       currentInferenceSignal()?.throwIfAborted();
