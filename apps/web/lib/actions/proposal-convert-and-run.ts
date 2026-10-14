@@ -81,10 +81,12 @@ type ProposalDb = {
   agentMessage: { create(args: unknown): Promise<unknown> };
 };
 
-type ApproveEnvelope = (envelopeId: string, userId: string) => Promise<{ ok: true } | { ok: false; reason: string }>;
+/** An envelope decision as convert-and-run reads it (EnvelopeActionResult fits it). */
+type EnvelopeDecision = { ok: boolean; reason?: string };
+type ApproveEnvelope = (envelopeId: string, userId: string) => Promise<EnvelopeDecision>;
 type RunApproved = (envelopeId: string) => Promise<PlatformRequestRun | null>;
 type RecordOutcome = (envelopeId: string, userId: string, outcome: ApprovedRequestRun) => Promise<void>;
-type CancelEnvelope = (envelopeId: string, userId: string) => Promise<{ ok: true } | { ok: false; reason: string }>;
+type CancelEnvelope = (envelopeId: string, userId: string) => Promise<EnvelopeDecision>;
 
 export type ConvertAndRunDeps = {
   db?: ProposalDb;
@@ -242,7 +244,7 @@ async function runClaimed(
     const envelopeId = typeof governed.data?.envelopeId === "string" ? governed.data.envelopeId : null;
     if (!envelopeId) return revert("refused", governed);
     const approved = await (deps.approveEnvelope ?? approveEnvelopeLive)(envelopeId, approver.userId);
-    if (!approved.ok) return revert("refused", { success: false, error: "approval_unavailable", message: approved.reason });
+    if (!approved.ok) return revert("refused", { success: false, error: "approval_unavailable", message: approved.reason ?? "The approval could not be recorded." });
     const run: PlatformRequestRun = await (deps.runApproved ?? runApprovedLive)(envelopeId)
       .then((platform) => platform ?? {
         status: "not-run" as const, reason: "no-pending-call" as const,
