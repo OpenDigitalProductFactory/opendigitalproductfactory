@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { validateInstallState } from "./installer/validate-install-state.mjs";
-import { canonicalTransitionPayload, signTransitionPayload } from "./lib/transition-signing.mjs";
+import { canonicalTransitionPayload, signTransitionPayload, prepareRuntimeReconciliationIntent } from "./lib/transition-signing.mjs";
 import { computeCapabilityStateVersion } from "./lib/capability-state-hash.mjs";
 
 // strict: false keeps the old tolerance for flags this script does not read.
@@ -20,17 +20,29 @@ if (flags["runtime-capability-protocol-info"]) {
     process.exit(64);
   }
   const digest = (url) => createHash("sha256").update(readFileSync(url)).digest("hex");
+  let validatedSnapshotSha256;
+  if (process.env.DPF_RUNTIME_VALIDATE_SNAPSHOT !== undefined) {
+    const encoded = process.env.DPF_RUNTIME_VALIDATE_SNAPSHOT;
+    try {
+      if (!/^[A-Za-z0-9_-]+$/.test(encoded) || encoded.length > 64 * 1024) throw new Error();
+      const bytes = Buffer.from(encoded, "base64url");
+      if (!(await validateInstallState(JSON.parse(bytes.toString("utf8")))).valid) throw new Error();
+      validatedSnapshotSha256 = createHash("sha256").update(bytes).digest("hex");
+    } catch { process.stderr.write("runtime_protocol_snapshot_invalid\n"); process.exit(78); }
+  }
   process.stdout.write(JSON.stringify({
     schemaVersion: 1,
     sourceSha: process.env.DPF_CANDIDATE_SOURCE_SHA ?? "unknown",
-    signingVersions: [1, 2], applyVersions: [1, 2], reconciliationVersions: [],
+    signingVersions: [1, 2], applyVersions: [1, 2], reconciliationVersions: [2],
     actuatorSha256: digest(new URL(import.meta.url)),
     signerSha256: digest(new URL("./lib/transition-signing.mjs", import.meta.url)),
+    ...(validatedSnapshotSha256 ? { validatedSnapshotSha256 } : {}),
   }) + "\n");
   process.exit(0);
 }
 
 const stable = (v) => Array.isArray(v) ? v.map(stable) : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, stable(v[k])])) : v;
+const sameInstallState = (left, right) => JSON.stringify(stable(left)) === JSON.stringify(stable(right));
 const canonical = canonicalTransitionPayload;
 const catalogBytes = (v) => `${JSON.stringify(stable(v), null, 2)}\n`;
 const sha = (v) => createHash("sha256").update(v).digest("hex");
@@ -78,10 +90,18 @@ try { envelope = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
 const expected = sign(envelope, secret);
 if (!timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) await fail("tampered_envelope");
 const issued = Date.parse(envelope.issuedAt), expires = Date.parse(envelope.expiresAt), now = Date.now();
-if (envelope.version === 2 && envelope.mode !== "transition") await fail("unsupported_runtime_transition_mode");
+if (envelope.version === 2 && envelope.mode !== "transition"
+  && !(envelope.mode === "reconciliation" && envelope.reconciliation)) await fail("unsupported_runtime_transition_mode");
 if (![1, 2].includes(envelope.version) || argvId !== envelope.transitionId || !/^RCT-[A-Za-z0-9-]{1,48}$/.test(envelope.transitionId) || !Number.isFinite(issued) || !Number.isFinite(expires) || issued > now + 30_000 || expires < now || expires - issued > 600_000) await fail("expired_or_invalid_envelope");
 for (const k of ["catalogHash", "previousStateHash", "desiredStateHash"]) if (!/^[a-f0-9]{64}$/.test(envelope[k])) await fail("invalid_envelope_hash");
 for (const k of ["previousKeys", "desiredKeys", "previousProfiles", "desiredProfiles", "previousServices", "desiredServices"]) if (!Array.isArray(envelope[k]) || JSON.stringify(envelope[k]) !== JSON.stringify([...new Set(envelope[k])].sort()) || envelope[k].some((x) => typeof x !== "string" || (k.endsWith("Keys") ? !/^runtime:[a-z0-9-]+$/.test(x) : !/^[a-z0-9][a-z0-9-]*$/.test(x)))) await fail("invalid_envelope_projection");
+if (envelope.version === 2 && envelope.mode === "reconciliation") {
+  const identity = envelope.protocolIdentity;
+  if (!identity || !/^[a-f0-9]{40}$/.test(identity.sourceSha ?? "") || !/^sha256:[a-f0-9]{64}$/.test(identity.promoterDigest ?? "")
+    || identity.sourceSha !== process.env.DPF_CANDIDATE_SOURCE_SHA
+    || identity.actuatorSha256 !== sha(await readFile(new URL(import.meta.url)))
+    || identity.signerSha256 !== sha(await readFile(new URL("./lib/transition-signing.mjs", import.meta.url)))) await fail("runtime_protocol_identity_mismatch");
+}
 
 await mkdir(receiptDir, { recursive: true });
 const receiptPath = join(receiptDir, `${envelope.transitionId}.json`);
@@ -148,6 +168,15 @@ let beforeValidation;
 try { beforeValidation = await validateInstallState(before, schemaPath); } catch { await fail("install_state_schema_unreadable"); }
 if (!beforeValidation.valid) await fail("install_state_schema_invalid");
 if (before.capabilityCatalogHash !== envelope.catalogHash || before.capabilityStateVersion !== envelope.previousStateHash || canonical(before.enabledRuntimeCapabilities) !== canonical(envelope.previousKeys)) await fail("install_state_stale");
+if (envelope.version === 2 && envelope.mode === "reconciliation") {
+  let intent;
+  try { intent = prepareRuntimeReconciliationIntent(envelope.reconciliation, {
+    catalogHash, capabilityIds: catalog.capabilities.map(capability => capability.capabilityId),
+  }); } catch (error) { await fail(error.message); }
+  if (!sameInstallState(intent.observedHost, before)) await fail("reconciliation_host_identity_mismatch");
+  if (canonical(intent.observedHost.enabledRuntimeCapabilities) !== canonical(envelope.previousKeys)
+    || canonical(intent.desiredHostEnabledKeys) !== canonical(envelope.desiredKeys)) await fail("reconciliation_projection_mismatch");
+}
 const files = String(process.env.PROMOTE_COMPOSE_FILES ?? "docker-compose.yml").split(/\s+/).filter(Boolean); const composeProject = process.env.PROMOTE_COMPOSE_PROJECT;
 if (!composeProject || !/^[a-z0-9][a-z0-9_-]*$/.test(composeProject) || files.length === 0 || files.some((f) => !/^[A-Za-z0-9._-]+$/.test(f))) await fail("invalid_compose_configuration");
 const baseArgs = ["compose", "--project-name", composeProject]; for (const f of files) baseArgs.push("-f", join("/host-source", f)); if (process.env.PROMOTE_COMPOSE_ENV_FILE) baseArgs.push("--env-file", process.env.PROMOTE_COMPOSE_ENV_FILE);
@@ -175,9 +204,9 @@ const exact = (projection, observed, health) => projection.required.every((servi
 const next = { ...before, enabledRuntimeCapabilities: desired.enabledKeys, capabilityCatalogHash: catalogHash, capabilityStateVersion: desired.stateHash };
 const nextValidation = await validateInstallState(next, schemaPath);
 if (!nextValidation.valid) await fail("install_state_schema_invalid");
-if (journal && (canonical(journal.before) !== canonical(before) || canonical(journal.next) !== canonical(next))) await fail("invalid_transition_journal");
-const currentIsBefore = canonical(currentState) === canonical(before);
-const currentIsNext = canonical(currentState) === canonical(next);
+if (journal && (!sameInstallState(journal.before, before) || !sameInstallState(journal.next, next))) await fail("invalid_transition_journal");
+const currentIsBefore = sameInstallState(currentState, before);
+const currentIsNext = sameInstallState(currentState, next);
 if (!journal && !currentIsBefore) await fail("install_state_journal_mismatch");
 if (journal?.phase === "prepared" && !currentIsBefore && !currentIsNext) await fail("install_state_journal_mismatch");
 if (journal && journal.phase !== "prepared" && !currentIsNext) await fail("install_state_journal_mismatch");
@@ -196,11 +225,26 @@ if (journal.phase === "prepared") {
   await atomicJson(journalPath, journal);
   if (process.env.DPF_TEST_CRASH_AFTER_PHASE === "state-written") process.exit(86);
 }
+const assertOwnedInstallState = async () => {
+  let owned;
+  try { owned = JSON.parse(await readFile(statePath, "utf8")); } catch { await fail("install_state_ownership_changed", "rollback_failed"); }
+  if (!sameInstallState(owned, next)) await fail("install_state_ownership_changed", "rollback_failed");
+};
+const rollbackOwnedInstallState = async (reason) => {
+  await assertOwnedInstallState();
+  await atomicJson(statePath, before);
+  const rolled = reconcile(desired, previous), observed = observe();
+  await rm(claim, { recursive: true, force: true });
+  const restored = rolled.status === 0 && observed.ps.status === 0 && exact(previous, observed.services, observed.health);
+  if (restored) await rm(journalPath, { force: true });
+  await fail(reason + (restored ? "_rolled_back" : "_rollback_failed"), restored ? "rolled_back" : "rollback_failed");
+};
 const applied = reconcile(previous, desired);
-if (applied.status !== 0) { await atomicJson(statePath, before); const rolled = reconcile(desired, previous); const rollbackObserved = observe(); await rm(claim, { recursive: true, force: true }); if (rolled.status === 0 && rollbackObserved.ps.status === 0 && exact(previous, rollbackObserved.services, rollbackObserved.health)) await rm(journalPath, { force: true }); await fail(rolled.status === 0 && rollbackObserved.ps.status === 0 && exact(previous, rollbackObserved.services, rollbackObserved.health) ? "compose_reconcile_failed_rolled_back" : "compose_reconcile_failed_rollback_failed", rolled.status === 0 && rollbackObserved.ps.status === 0 && exact(previous, rollbackObserved.services, rollbackObserved.health) ? "rolled_back" : "rollback_failed"); }
+if (applied.status !== 0) await rollbackOwnedInstallState("compose_reconcile_failed");
 if (process.env.DPF_TEST_CRASH_AFTER_PHASE === "runtime-mutated") process.exit(86);
 if (journal.phase !== "runtime-reconciled") { const { signature: _stateSignature, ...stateJournal } = journal; journal = { ...stateJournal, phase: "runtime-reconciled" }; journal.signature = createHmac("sha256", secret).update(JSON.stringify(stable(journal))).digest("hex"); await atomicJson(journalPath, journal); }
 if (process.env.DPF_TEST_CRASH_AFTER_PHASE === "runtime-reconciled") process.exit(86);
 const { ps, services: observed, health: observedHealth } = observe();
-if (ps.status !== 0 || !exact(desired, observed, observedHealth)) { await atomicJson(statePath, before); const rolled = reconcile(desired, previous); const rollbackObserved = observe(); await rm(claim, { recursive: true, force: true }); if (rolled.status === 0 && rollbackObserved.ps.status === 0 && exact(previous, rollbackObserved.services, rollbackObserved.health)) await rm(journalPath, { force: true }); await fail(rolled.status === 0 && rollbackObserved.ps.status === 0 && exact(previous, rollbackObserved.services, rollbackObserved.health) ? "required_health_failed_rolled_back" : "required_health_failed_rollback_failed", rolled.status === 0 && rollbackObserved.ps.status === 0 && exact(previous, rollbackObserved.services, rollbackObserved.health) ? "rolled_back" : "rollback_failed"); }
+if (ps.status !== 0 || !exact(desired, observed, observedHealth)) await rollbackOwnedInstallState("required_health_failed");
+await assertOwnedInstallState();
 await writeReceipt("applied", undefined, observed, observedHealth); await rm(journalPath, { force: true }); await rm(claim, { recursive: true, force: true }); process.stdout.write(await readFile(receiptPath, "utf8"));

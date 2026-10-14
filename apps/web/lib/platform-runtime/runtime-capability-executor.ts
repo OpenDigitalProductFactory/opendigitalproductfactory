@@ -6,7 +6,8 @@ import catalogSeed from "../../../../scripts/capability-service-catalog.generate
 import { isPromoterAvailable, resolvePromoterArtifact, runPromoter, runRuntimeCapabilityProtocolProbe } from "@/lib/self-upgrade/promoter";
 import { countAttributedWork, createPrismaWorkAttributionStore } from "./work-attribution";
 import { computeCapabilityStateVersion, coordinateRuntimeCapabilityTransition, createPrismaRuntimeTransitionReceipts } from "./transition-coordinator";
-import type { RuntimeTransitionReceipt } from "./transition-protocol";
+import { canonicalTransitionPayload, prepareRuntimeReconciliationIntent, type RuntimeReconciliationIntent, type RuntimeTransitionReceipt } from "./transition-protocol";
+import { computeCapabilityStateVersion as computeHostStateVersion } from "../../../../scripts/lib/capability-state-hash.mjs";
 
 type CatalogEntry = { capabilityId: string; dependencies: string[]; services: Array<{ service: string; profiles: string[]; dependsOn: string[]; targetClassification?: string; healthSemantics?: string }> };
 const catalog = catalogSeed as { catalogHash: string; capabilities: CatalogEntry[] };
@@ -62,7 +63,7 @@ export async function rotateProductionRuntimeTransitionSecret() {
 /** The portal image carries the same source closure used to build its promoter.
  * Expected bytes come from that packaged closure, never the host install or a
  * caller-supplied digest. This probe has no host mounts or launch authority. */
-async function inspectPackagedReconciliationProtocol() {
+async function inspectPackagedReconciliationProtocol(observedHostSnapshot?: RuntimeReconciliationIntent["observedHost"]) {
   const image = await readImageVersion();
   if (!image || image.source !== "git-sha" || !/^[a-f0-9]{40}$/.test(image.raw)) throw new Error("runtime_protocol_server_identity_missing");
   const sourceSha = image.raw;
@@ -73,27 +74,65 @@ async function inspectPackagedReconciliationProtocol() {
   ]);
   const expected = { sourceSha, actuatorSha256: createHash("sha256").update(actuator).digest("hex"), signerSha256: createHash("sha256").update(signer).digest("hex") };
   const artifact = await resolvePromoterArtifact({ targetSha: sourceSha });
-  const info = await runRuntimeCapabilityProtocolProbe({ artifact, expected, containerName: `dpf-runtime-protocol-${randomUUID()}` });
+  const info = await runRuntimeCapabilityProtocolProbe({ artifact, expected, containerName: `dpf-runtime-protocol-${randomUUID()}`, ...(observedHostSnapshot ? { observedHostSnapshot } : {}) });
   if (!info.signingVersions.includes(2) || !info.applyVersions.includes(2) || !info.reconciliationVersions.includes(2)) throw new Error("runtime_reconciliation_protocol_unsupported");
-  return info;
+  return { info, artifact };
 }
 
-export async function executeProductionRuntimeCapabilityTransition(input: { transitionId: string; desiredKeys: string[]; requestedById: string; mode?: "transition" | "reconciliation" }) {
-  input = { ...input, desiredKeys: [...input.desiredKeys] };
+/** Observe both authorities without proposing defaults or reserving apply rights. */
+export async function readProductionRuntimeCapabilityReconciliationPreview() {
+  const [hostBytes, rows] = await Promise.all([
+    readFile("/dpf-state/install-state.json", "utf8"),
+    prisma.platformCapability.findMany({ where: { capabilityId: { startsWith: "runtime:" } }, select: { capabilityId: true, state: true } }),
+  ]);
+  const observedHost = JSON.parse(hostBytes) as RuntimeReconciliationIntent["observedHost"];
+  const observedDatabaseStates = Object.fromEntries(rows.map(row => [row.capabilityId, row.state]));
+  const prepared = prepareRuntimeReconciliationIntent({ observedHost, observedDatabaseStates,
+    desiredHostEnabledKeys: observedHost.enabledRuntimeCapabilities, desiredDatabaseStates: observedDatabaseStates, touchedKeys: [] },
+  { catalogHash: catalog.catalogHash, capabilityIds: catalog.capabilities.map(entry => entry.capabilityId) });
+  const protocol = await inspectPackagedReconciliationProtocol(prepared.observedHost);
+  return { observedHost: prepared.observedHost, observedDatabaseStates: prepared.observedDatabaseStates,
+    residualDriftKeys: prepared.residualDriftKeys,
+    capabilities: catalog.capabilities.map(entry => ({ capabilityId: entry.capabilityId, dependencies: entry.dependencies })),
+    protocolIdentity: { ...protocol.info, promoterDigest: protocol.artifact.digest } };
+}
+
+export async function executeProductionRuntimeCapabilityTransition(input: { transitionId: string; desiredKeys: string[]; requestedById: string; mode?: "transition" | "reconciliation"; reconciliation?: RuntimeReconciliationIntent }) {
+  input = { ...input, desiredKeys: [...input.desiredKeys], ...(input.reconciliation ? { reconciliation: structuredClone(input.reconciliation) } : {}) };
+  let prepared: ReturnType<typeof prepareRuntimeReconciliationIntent> | undefined;
+  let protocol: Awaited<ReturnType<typeof inspectPackagedReconciliationProtocol>> | undefined;
   if (input.mode === "reconciliation") {
-    try { await inspectPackagedReconciliationProtocol(); } catch { /* Missing or incompatible packaged evidence cannot authorize an apply. */ }
-    // Server reconciliation is not implemented yet. In particular, host support
-    // cannot authorize falling back to the ordinary consistent-baseline saga.
-    return { status: "failed" as const, failure: "runtime_reconciliation_protocol_unavailable" as const };
+    try {
+      if (input.reconciliation) {
+        prepared = prepareRuntimeReconciliationIntent(input.reconciliation, { catalogHash: catalog.catalogHash, capabilityIds: catalog.capabilities.map(entry => entry.capabilityId) });
+        const actualHost = JSON.parse(await readFile("/dpf-state/install-state.json", "utf8")) as unknown;
+        const identity = (host: unknown) => canonicalTransitionPayload({ version: 2, kind: "runtime-capability-transition", host });
+        if (identity(actualHost) !== identity(prepared.observedHost)) return { status: "failed" as const, failure: "runtime_reconciliation_host_stale" as const };
+        if (JSON.stringify([...input.desiredKeys].sort()) !== JSON.stringify(prepared.desiredHostEnabledKeys)) return { status: "failed" as const, failure: "runtime_reconciliation_request_mismatch" as const };
+      }
+      protocol = await inspectPackagedReconciliationProtocol(prepared?.observedHost);
+    } catch { return { status: "failed" as const, failure: "runtime_reconciliation_protocol_unavailable" as const }; }
+    // A host advertisement alone cannot authorize an implicit correction.
+    if (!prepared) return { status: "failed" as const, failure: "runtime_reconciliation_protocol_unavailable" as const };
+  } else if (input.reconciliation) {
+    return { status: "failed" as const, failure: "runtime_reconciliation_request_mismatch" as const };
   }
   const rows = await prisma.platformCapability.findMany({ where: { capabilityId: { startsWith: "runtime:" } }, select: { capabilityId: true, state: true, manifest: true } });
   const previousStates = Object.fromEntries(rows.map((row) => [row.capabilityId, row.state]));
-  const previousKeys = rows.filter((row) => row.state === "active").map((row) => row.capabilityId).sort();
+  if (prepared && (Object.keys(previousStates).length !== Object.keys(prepared.observedDatabaseStates).length || Object.keys(previousStates).some(key => previousStates[key] !== prepared.observedDatabaseStates[key]))) {
+    return { status: "failed" as const, failure: "runtime_reconciliation_database_stale" as const };
+  }
+  const previousKeys = prepared ? [...prepared.observedHost.enabledRuntimeCapabilities] : rows.filter((row) => row.state === "active").map((row) => row.capabilityId).sort();
   const desiredSet = new Set(input.desiredKeys);
-  const desiredStates = Object.fromEntries(rows.map((row) => [row.capabilityId, desiredSet.has(row.capabilityId) ? "active" : "disabled"]));
-  const previousProjection = resolveProjection(previousKeys, previousStates);
-  const desiredProjection = resolveProjection(input.desiredKeys, desiredStates);
-  const disabling = rows.filter((row) => row.state === "active" && !desiredSet.has(row.capabilityId));
+  const desiredStates = prepared ? { ...prepared.desiredDatabaseStates } : Object.fromEntries(rows.map((row) => [row.capabilityId, desiredSet.has(row.capabilityId) ? "active" : "disabled"]));
+  const hostStates = (keys: readonly string[]) => Object.fromEntries(catalog.capabilities.map(entry => [entry.capabilityId, keys.includes(entry.capabilityId) ? "active" : "disabled"]));
+  const previousProjection = resolveProjection(previousKeys, prepared ? hostStates(previousKeys) : previousStates);
+  const desiredProjection = resolveProjection(input.desiredKeys, prepared ? hostStates(input.desiredKeys) : desiredStates);
+  if (prepared) {
+    previousProjection.stateHash = prepared.observedHost.capabilityStateVersion;
+    desiredProjection.stateHash = computeHostStateVersion(catalog.catalogHash, input.desiredKeys, catalog.capabilities.map(entry => entry.capabilityId));
+  }
+  const disabling = rows.filter((row) => (row.state === "active" && desiredStates[row.capabilityId] !== "active") || (previousKeys.includes(row.capabilityId) && !desiredSet.has(row.capabilityId)));
   const guards = [...new Set(disabling.flatMap((row) => {
     const runtime = row.manifest && typeof row.manifest === "object" && !Array.isArray(row.manifest) ? (row.manifest as { runtime?: { workGuards?: unknown } }).runtime : undefined;
     return Array.isArray(runtime?.workGuards) ? runtime.workGuards.filter((guard): guard is string => typeof guard === "string") : [];
@@ -102,14 +141,15 @@ export async function executeProductionRuntimeCapabilityTransition(input: { tran
   const protocolSecret = (await readFile("/dpf-state/runtime-transition.secret", "utf8")).trim();
   const hostInstallPath = process.env.DPF_HOST_INSTALL_PATH, stateDirHostPath = process.env.DPF_STATE_DIR_HOST, protocolSecretFileHostPath = process.env.DPF_RUNTIME_TRANSITION_SECRET_FILE_HOST;
   if (!hostInstallPath || !stateDirHostPath || !protocolSecretFileHostPath) throw new Error("runtime_transition_host_configuration_missing");
-  const promoterParams = { hostInstallPath, stateDirHostPath, runtimeCapabilitySecretFileHostPath: protocolSecretFileHostPath, targetSha: process.env.DEPLOYED_SHA ?? "runtime-capability-transition", backupPath: "/backups/runtime-capability-transition", healthUrl: `${process.env.APP_URL ?? "http://localhost:3000"}/api/health`, composeFiles: (process.env.DPF_SELF_UPGRADE_COMPOSE_FILES ?? "docker-compose.yml").split(/\s+/).filter(Boolean), composeProject: process.env.COMPOSE_PROJECT_NAME ?? "dpf" };
+  const promoterParams = { hostInstallPath, stateDirHostPath, runtimeCapabilitySecretFileHostPath: protocolSecretFileHostPath, targetSha: protocol?.artifact.sourceSha ?? process.env.DEPLOYED_SHA ?? "runtime-capability-transition", ...(protocol ? { promoterImage: protocol.artifact.digest } : {}), backupPath: "/backups/runtime-capability-transition", healthUrl: `${process.env.APP_URL ?? "http://localhost:3000"}/api/health`, composeFiles: (process.env.DPF_SELF_UPGRADE_COMPOSE_FILES ?? "docker-compose.yml").split(/\s+/).filter(Boolean), composeProject: process.env.COMPOSE_PROJECT_NAME ?? "dpf" };
   if (!(await reconcileAuthority(promoterParams))) return { status: "transition_in_progress" as const };
   const reserve = await runPromoter({ ...promoterParams, runtimeCapabilityTransitionId: input.transitionId, runtimeTransitionAuthorityOperation: "reserve", containerName: `dpf-promoter-authority-${input.transitionId}`, timeoutMs: 60_000 });
   if (reserve.exitCode !== 0) return { status: "transition_in_progress" as const };
   const authorityToken = (() => { try { const parsed = JSON.parse(reserve.stdout) as { ownershipToken?: unknown }; return typeof parsed.ownershipToken === "string" ? parsed.ownershipToken : null; } catch { return null; } })();
   if (!authorityToken) throw new Error("runtime_transition_authority_token_missing");
   try {
-    return await coordinateRuntimeCapabilityTransition({ transitionId: input.transitionId, catalogHash: catalog.catalogHash, previousKeys, desiredKeys: desiredProjection.enabledKeys, previousStates, desiredStates, requestedById: input.requestedById }, {
+    return await coordinateRuntimeCapabilityTransition({ transitionId: input.transitionId, catalogHash: catalog.catalogHash, previousKeys, desiredKeys: desiredProjection.enabledKeys, previousStates, desiredStates, requestedById: input.requestedById, ...(prepared ? { reconciliation: prepared } : {}) }, {
+    ...(prepared && protocol ? { reconciliationProtocol: protocol.info, reconciliationPromoterDigest: protocol.artifact.digest, catalogCapabilityIds: catalog.capabilities.map(entry => entry.capabilityId) } : {}),
     receipts: createPrismaRuntimeTransitionReceipts(prisma as never), isPromoterAvailable, runPromoter, protocolSecret, protocolSecretFileHostPath, recheckAttributedWork, readHostReceipt: readReceipt,
     resolveProjection: async (keys) => keys.join("\0") === previousKeys.join("\0") ? previousProjection : desiredProjection,
     verifyRequiredHealth: async (desired, observed, observedHealth) => {

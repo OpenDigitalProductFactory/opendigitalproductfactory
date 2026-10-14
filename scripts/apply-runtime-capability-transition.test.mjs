@@ -26,7 +26,7 @@ test("protocol probe reports packaged support without reading secrets or creatin
   assert.equal(info.sourceSha, "probe-fixture-source");
   assert.deepEqual(info.signingVersions, [1, 2]);
   assert.deepEqual(info.applyVersions, [1, 2]);
-  assert.deepEqual(info.reconciliationVersions, []);
+  assert.deepEqual(info.reconciliationVersions, [2]);
   assert.match(info.actuatorSha256, /^[a-f0-9]{64}$/);
   assert.match(info.signerSha256, /^[a-f0-9]{64}$/);
   assert.deepEqual(await readdir(dir), []);
@@ -43,6 +43,24 @@ test("a protocol probe cannot be combined with a state-changing invocation", asy
     assert.match(result.stderr, /invalid_runtime_protocol_probe_arguments/);
     assert.deepEqual(await readdir(dir), []);
   }
+});
+
+test("the packaged read-only probe validates and binds the supplied host snapshot", async () => {
+  const snapshot = JSON.stringify({ schemaVersion: 1, installerVersion: "fixture", platform: "linux", arch: "amd64" });
+  const result = spawnSync(process.execPath, [script, "--runtime-capability-protocol-info"], {
+    env: { ...process.env, DPF_RUNTIME_VALIDATE_SNAPSHOT: Buffer.from(snapshot).toString("base64url") }, encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).validatedSnapshotSha256, createHash("sha256").update(snapshot).digest("hex"));
+});
+
+test("the packaged read-only probe rejects a schema-invalid snapshot without host mutation", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-transition-invalid-snapshot-probe-"));
+  const result = spawnSync(process.execPath, [script, "--runtime-capability-protocol-info"], {
+    env: { ...process.env, DPF_PROMOTER_STATE_DIR: dir, DPF_RUNTIME_VALIDATE_SNAPSHOT: Buffer.from('{"schemaVersion":2}').toString("base64url") }, encoding: "utf8",
+  });
+  assert.notEqual(result.status, 0);
+  assert.deepEqual(await readdir(dir), []);
 });
 
 async function validTransition(dir, health = "healthy", version = 1) {
@@ -86,7 +104,7 @@ test("version 2 ordinary apply recursively authenticates health and preserves re
   assert.deepEqual(JSON.parse(replay.stdout), receipt);
 });
 
-test("version 2 reconciliation cannot enter the ordinary actuator before its protocol is implemented", async () => {
+test("version 2 reconciliation without its explicit packet never enters the ordinary actuator", async () => {
   const dir = await mkdtemp(join(tmpdir(), "dpf-transition-v2-mode-"));
   const fixture = await validTransition(dir, "healthy", 2);
   const value = { ...fixture.value, mode: "reconciliation" };
@@ -97,6 +115,101 @@ test("version 2 reconciliation cannot enter the ordinary actuator before its pro
   assert.equal(await readFile(join(dir, "install-state.json"), "utf8"), before);
   const files = await readdir(join(dir, "runtime-capability-transitions"));
   assert.ok(files.every(file => !file.endsWith(".journal.json") && !file.endsWith(".claim")));
+});
+
+async function reconciliationFixture(dir) {
+  const fixture = await validTransition(dir, "healthy", 2);
+  const catalog = JSON.parse(await readFile(fixture.catalogPath, "utf8"));
+  const observedHost = JSON.parse(await readFile(join(dir, "install-state.json"), "utf8"));
+  const touchedKeys = fixture.value.desiredKeys.filter(key => !fixture.value.previousKeys.includes(key));
+  const observedDatabaseStates = Object.fromEntries(catalog.capabilities.map(capability => [capability.capabilityId,
+    fixture.value.desiredKeys.includes(capability.capabilityId) ? "active" : "disabled"]));
+  const value = { ...fixture.value, mode: "reconciliation", protocolIdentity: {
+    sourceSha: "a".repeat(40), promoterDigest: `sha256:${"d".repeat(64)}`,
+    actuatorSha256: createHash("sha256").update(await readFile(script)).digest("hex"),
+    signerSha256: createHash("sha256").update(await readFile(new URL("./lib/transition-signing.mjs", import.meta.url))).digest("hex"),
+  }, reconciliation: {
+    observedHost, observedDatabaseStates, desiredHostEnabledKeys: fixture.value.desiredKeys,
+    desiredDatabaseStates: { ...observedDatabaseStates }, touchedKeys,
+  } };
+  const env = () => ({ ...fixture.env, DPF_CANDIDATE_SOURCE_SHA: "a".repeat(40), DPF_RUNTIME_TRANSITION_ENVELOPE: Buffer.from(JSON.stringify(value)).toString("base64url"),
+    DPF_RUNTIME_TRANSITION_SIGNATURE: signTransitionPayload(value, secret) });
+  return { value, env };
+}
+
+test("reconciliation refuses missing immutable protocol identity before journaling", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-reconciliation-missing-protocol-")), fixture = await reconciliationFixture(dir);
+  delete fixture.value.protocolIdentity;
+  const result = run(fixture.env());
+  assert.equal(result.status, 78, result.stderr);
+  assert.match(result.stderr, /runtime_protocol_identity_mismatch/);
+  assert.ok((await readdir(join(dir, "runtime-capability-transitions"))).every(file => !file.endsWith(".journal.json")));
+});
+for (const member of ["sourceSha", "actuatorSha256", "signerSha256"]) test(`reconciliation refuses the wrong packaged ${member} before journaling`, async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-reconciliation-wrong-protocol-")), fixture = await reconciliationFixture(dir);
+  fixture.value.protocolIdentity[member] = "f".repeat(member === "sourceSha" ? 40 : 64);
+  const result = run(fixture.env());
+  assert.equal(result.status, 78, result.stderr);
+  assert.match(result.stderr, /runtime_protocol_identity_mismatch/);
+  assert.ok((await readdir(join(dir, "runtime-capability-transitions"))).every(file => !file.endsWith(".journal.json")));
+});
+
+test("signed reconciliation applies the actual host baseline despite independent database disagreement", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-transition-reconciliation-"));
+  const fixture = await reconciliationFixture(dir);
+  const result = run(fixture.env());
+  assert.equal(result.status, 0, result.stderr);
+  const receipt = JSON.parse(result.stdout);
+  assert.deepEqual(receipt.reconciliation, fixture.value.reconciliation);
+  assert.equal(receipt.mode, "reconciliation");
+  const replay = run(fixture.env());
+  assert.equal(replay.status, 0, replay.stderr);
+  assert.deepEqual(JSON.parse(replay.stdout), receipt);
+});
+
+test("reconciliation refuses a signed but different host identity before journaling or state mutation", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-transition-reconciliation-identity-"));
+  const fixture = await reconciliationFixture(dir);
+  const before = await readFile(join(dir, "install-state.json"), "utf8");
+  fixture.value.reconciliation.observedHost.arch = "arm64";
+  const result = run(fixture.env());
+  assert.equal(result.status, 78, result.stderr);
+  assert.match(result.stderr, /reconciliation_host_identity_mismatch/);
+  assert.equal(await readFile(join(dir, "install-state.json"), "utf8"), before);
+  assert.ok((await readdir(join(dir, "runtime-capability-transitions"))).every(file => !file.endsWith(".journal.json")));
+});
+
+test("failed reconciliation never restores over a subsequent host writer", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-transition-reconciliation-writer-"));
+  const fixture = await reconciliationFixture(dir);
+  const actuator = join(dir, "intervening-writer.mjs"), calls = join(dir, "calls.jsonl"), statePath = join(dir, "install-state.json");
+  await writeFile(actuator, `import fs from 'node:fs';
+const args = process.argv.slice(2); fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify(args)+'\\n');
+if(args.includes('up')) { const state=JSON.parse(fs.readFileSync(${JSON.stringify(statePath)},'utf8')); state.capabilityStateVersion=${JSON.stringify("f".repeat(64))}; fs.writeFileSync(${JSON.stringify(statePath)},JSON.stringify(state)); process.exit(1); }
+`);
+  const result = run({ ...fixture.env(), DPF_DOCKER_PREFIX_ARGS: JSON.stringify([actuator]) });
+  assert.equal(result.status, 78, result.stderr);
+  assert.match(result.stderr, /install_state_ownership_changed/);
+  assert.equal(JSON.parse(await readFile(statePath, "utf8")).capabilityStateVersion, "f".repeat(64));
+  const commands = (await readFile(calls, "utf8")).trim().split("\n").map(JSON.parse);
+  assert.equal(commands.filter(args => args.includes("up")).length, 1);
+});
+
+test("prepared reconciliation never overwrites a subsequent nested install-state writer", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-reconciliation-nested-resume-"));
+  const fixture = await reconciliationFixture(dir), statePath = join(dir, "install-state.json");
+  const original = JSON.parse(await readFile(statePath, "utf8"));
+  original.edge = { enabled: false, mode: null };
+  await writeFile(statePath, JSON.stringify(original));
+  fixture.value.reconciliation.observedHost = original;
+  const crash = run({ ...fixture.env(), DPF_TEST_CRASH_AFTER_PHASE: "prepared" });
+  assert.equal(crash.status, 86, crash.stderr);
+  const later = { ...original, edge: { enabled: true, mode: "local" } };
+  await writeFile(statePath, JSON.stringify(later));
+  const resumed = run(fixture.env());
+  assert.equal(resumed.status, 78, resumed.stderr);
+  assert.match(resumed.stderr, /install_state_journal_mismatch/);
+  assert.deepEqual(JSON.parse(await readFile(statePath, "utf8")), later);
 });
 
 for (const version of [1, 2]) for (const [crashPoint, durablePhase] of [["prepared", "prepared"], ["install-state-renamed-before-journal", "prepared"], ["state-written", "state-written"], ["runtime-mutated", "state-written"], ["runtime-reconciled", "runtime-reconciled"]]) test(`version ${version} recovers atomically from a crash after ${crashPoint}`, async () => {

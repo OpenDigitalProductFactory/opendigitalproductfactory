@@ -10,7 +10,7 @@ This is the immutable implementation/coverage entry for existing BI-5ACBAC50 and
 
 ## Evidence and boundaries
 
-The prepared source is `e4ca1f1ad82e3b8355f7cdc2d03de77210a855c5`, with shared recursive signing, trusted packaged-probe primitives and ordinary version-2 apply. Its source tests and independent assessments are retained with original attribution; full integration, real PostgreSQL and live reconciliation are unrun. The packaged probe truthfully advertises no reconciliation support yet.
+The historical prepared source is `e4ca1f1ad82e3b8355f7cdc2d03de77210a855c5`, with shared recursive signing, trusted packaged-probe primitives and ordinary version-2 apply. Its source tests and independent assessments are retained with original attribution. Continued atomic reconciliation is now implemented on owned branch `fix/runtime-capability-convergence`, HEAD `e8955429ed196c0eca27990636f8b142d410cc1a`, with uncommitted source changes. The packaged probe advertises implemented version-2 reconciliation; that metadata is not integration, publication or live acceptance evidence.
 
 Read-only observations on 2026-10-12 still show host schema2/win32/amd64 with core only, catalog52358eb9e4f8… and state76c08f072b16…, while the portal database has nine runtime rows, seven active. This is disagreement, not authorization to activate all seven. Ordinary coordinator validation binds previous keys to database active rows, while the host actuator compares its actual snapshot; it correctly refuses the inconsistent baseline.
 
@@ -64,6 +64,57 @@ before host authority. Reconciliation remains unavailable even when the host
 advertises support; it never falls back to the ordinary transition. This
 prerequisite passed 121 affected tests across four files and both official web
 TypeScript programs after the identity regression failed on the earlier source.
-Independent assessment of this executor correction is pending. Dual-baseline
-reconciliation, owned compensation, bootstrap sync, real PostgreSQL, the full
-governed gate and live acceptance remain incomplete.
+The prior executor correction received an independent source assessment with
+no blocking findings. That assessment does not cover later reconciliation edits.
+
+The continued implementation now shares dual-baseline validation between the
+portal and packaged host. Seven source-only failures became seven passes; the
+portal receipt probe also rejects a validly signed receipt for a different nested
+request. The coordinator source probes pass for independent baselines, refusing
+unsupported protocol before admission, touched-only database CAS, and rejecting
+an intervening database writer. These probes use simulated dependencies, not
+PostgreSQL or the full Vitest program.
+
+The host actuator accepts an explicitly signed reconciliation packet and checks
+its full observed install identity. Its subsequent-writer regression failed
+before the owned rollback check. The shared signer and actuator now pass 52
+executed Node tests across two files, including existing ordinary-transition and
+crash-recovery tests. Four new failures reproduced missing or different packaged
+code identity before the host identity check was added. A separate same-id replay
+failure reproduced adoption of a different promoter; replay now binds its original
+source, code hashes and immutable image. These source checks do not qualify a release.
+
+The production executor and restart adapter now use the original immutable
+promoter digest. Compensation persists its exact reverse packet before IO and
+retains that packet when recovery becomes uncertain. Source fixture probes pass
+for seven coordinator cases, three restart cases and two production cases.
+The first governed affected Vitest run executed 83 tests in five files: 82 passed,
+and an old compensation assertion failed because it omitted the newly recorded
+packet. The corrected assertion verifies the exact packet and persistence before
+rollback IO. Its never-admitted follow-up and the current typecheck wait were
+released through their normal native requests; neither earns an executed verdict.
+
+The existing platform-update tool pack now delegates read-only preview and explicit
+reconciliation to the authenticated runtime server action. Preview grants no apply
+authority and chooses no desired settings. Apply preserves the authenticated actor,
+complete baselines and original transition identity. Both tools reuse existing
+administrator grant categories; no live coworker grant was changed. Two entry
+source failures became two passes. Additional paths were normally claimed, with
+an audited two-path source co-claim for the grant table and operator guide.
+
+Fresh bootstrap now derives newly created runtime states from the validated
+host snapshot; existing rows keep operator state. Its source-only probe went
+from one failure/one pass to two passes. The initializer's read-only state mount
+is carried by the same source change, after an audited single-path Compose
+co-claim. The latest governed package run passed 164 tests in seven files;
+five PostgreSQL tests were skipped because no explicit test target was supplied.
+An incorrect grant-suite filename selected no tests from that suite; the correct
+grant suite subsequently passed 137 tests, and database bootstrap passed nine.
+Both web TypeScript programs then passed under governed admission after an
+unsupported tool-consequence label was corrected to existing platform authority
+and covered by an assertion. Earlier ten-second MCP admission timeouts remain
+unrun, with no owned active or queued lease on reconciliation. The PostgreSQL
+suite now also accepts the canonical slot's explicit test-database variable,
+without falling back to an installed database URL. Current grant and bootstrap
+package checks after the metadata correction, real PostgreSQL, independent final review, the governed gate and live acceptance
+remain owed. No partial source prerequisite is published as a completed fix.

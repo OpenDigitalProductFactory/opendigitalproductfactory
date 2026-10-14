@@ -1,7 +1,6 @@
 import type { PromoterParams, PromoterResult } from "@/lib/self-upgrade/promoter";
-import { createHash } from "node:crypto";
 import { computeCapabilityStateVersion as computeSharedCapabilityStateVersion } from "../../../../scripts/lib/capability-state-hash.mjs";
-import { signTransitionPayload, type RuntimeTransitionEnvelope, type RuntimeTransitionReceipt, verifyHistoricalTransitionReceipt, verifyTransitionReceipt } from "./transition-protocol";
+import { canonicalTransitionPayload, createRuntimeCompensationEnvelope, prepareRuntimeReconciliationIntent, signTransitionPayload, type RuntimeCapabilityProtocolInfo, type RuntimeCompensationPacket, type RuntimeReconciliationIntent, type RuntimeTransitionEnvelope, type RuntimeTransitionReceipt, verifyHistoricalTransitionReceipt, verifyTransitionReceipt } from "./transition-protocol";
 
 export const ACTIVE_RUNTIME_TRANSITION_STATUSES = ["pending", "applying", "host_applied", "compensating"] as const;
 
@@ -17,6 +16,7 @@ export type RuntimeCapabilityTransitionRequest = {
   previousStates: Readonly<Record<string, string>>;
   desiredStates: Readonly<Record<string, string>>;
   requestedById: string;
+  reconciliation?: RuntimeReconciliationIntent;
 };
 
 export interface RuntimeCapabilityTransitionReceipts {
@@ -31,7 +31,7 @@ export interface RuntimeCapabilityTransitionReceipts {
   markHostOutcome?(transitionId: string, receipt: RuntimeTransitionReceipt): Promise<void>;
   markHostApplied(transitionId: string): Promise<void>;
   commitSuccess?(transitionId: string, receipt: RuntimeTransitionReceipt, desiredStates: Readonly<Record<string, string>>): Promise<void>;
-  markCompensating?(transitionId: string, failure: string): Promise<void>;
+  markCompensating?(transitionId: string, failure: string, compensation?: RuntimeCompensationPacket): Promise<void>;
   markRolledBack?(transitionId: string, receipt: RuntimeTransitionReceipt): Promise<void>;
   markRollbackFailed?(transitionId: string, failure: string): Promise<void>;
 }
@@ -48,11 +48,14 @@ export type RuntimeCapabilityCoordinatorDeps = {
   readHostReceipt?(transitionId: string): Promise<RuntimeTransitionReceipt>;
   verifyRequiredHealth?(desiredKeys: readonly string[], observedServices: readonly string[], observedHealth?: Readonly<Record<string, string>>): Promise<boolean>;
   now?: () => number;
+  catalogCapabilityIds?: readonly string[];
+  reconciliationProtocol?: RuntimeCapabilityProtocolInfo;
+  reconciliationPromoterDigest?: string;
 };
 
 type TransitionModel = {
   findFirst(args: unknown): Promise<{ transitionId: string; status: string } | null>;
-  findUnique(args: unknown): Promise<{ status: string; requestedById: string; previousStates: Readonly<Record<string, string>>; desiredStates: Readonly<Record<string, string>>; catalogHash: string; previousStateHash: string; desiredStateHash: string; previousKeys: string[]; desiredKeys: string[]; previousProfiles: string[]; desiredProfiles: string[]; previousServices: string[]; desiredServices: string[]; envelope: RuntimeTransitionEnvelope | null; envelopeSignature: string | null } | null>;
+  findUnique(args: unknown): Promise<{ status: string; requestedById: string; previousStates: Readonly<Record<string, string>>; desiredStates: Readonly<Record<string, string>>; catalogHash: string; previousStateHash: string; desiredStateHash: string; previousKeys: string[]; desiredKeys: string[]; previousProfiles: string[]; desiredProfiles: string[]; previousServices: string[]; desiredServices: string[]; envelope: RuntimeTransitionEnvelope | null; envelopeSignature: string | null; failure?: RuntimeTransitionReconcileRow["failure"] } | null>;
   create(args: unknown): Promise<unknown>;
   updateMany(args: unknown): Promise<{ count: number }>;
 };
@@ -82,6 +85,13 @@ export function createPrismaRuntimeTransitionReceipts(prisma: TransitionPrisma):
         const same = replay.catalogHash === input.catalogHash && replay.previousStateHash === input.previousStateHash && replay.desiredStateHash === input.desiredStateHash && JSON.stringify(replay.previousKeys) === JSON.stringify([...input.previousKeys].sort()) && JSON.stringify(replay.desiredKeys) === JSON.stringify([...input.desiredKeys].sort()) && JSON.stringify(replay.previousProfiles) === JSON.stringify(input.previousProfiles) && JSON.stringify(replay.desiredProfiles) === JSON.stringify(input.desiredProfiles) && JSON.stringify(replay.previousServices) === JSON.stringify(input.previousServices ?? []) && JSON.stringify(replay.desiredServices) === JSON.stringify(input.desiredServices ?? []);
         if (!same || replay.requestedById !== input.requestedById || !sameStateMap(replay.previousStates, input.previousStates) || !sameStateMap(replay.desiredStates, input.desiredStates)) throw new Error("transition_id_conflict");
         if (!replay.envelope || !replay.envelopeSignature) throw new Error("transition_envelope_identity_missing");
+        if (replay.envelope.version !== input.envelope.version
+          || (replay.envelope.version === 2 && (input.envelope.version !== 2 || replay.envelope.mode !== input.envelope.mode))) throw new Error("transition_id_conflict");
+        if (input.envelope.version === 2 && input.envelope.mode === "reconciliation") {
+          if (replay.envelope.version !== 2 || replay.envelope.mode !== "reconciliation"
+            || canonicalTransitionPayload({ version: 2, kind: "runtime-capability-transition", reconciliation: replay.envelope.reconciliation, protocolIdentity: replay.envelope.protocolIdentity })
+              !== canonicalTransitionPayload({ version: 2, kind: "runtime-capability-transition", reconciliation: input.envelope.reconciliation, protocolIdentity: input.envelope.protocolIdentity })) throw new Error("transition_id_conflict");
+        }
         return { created: false, kind: "replay", status: replay.status, envelope: replay.envelope, envelopeSignature: replay.envelopeSignature };
       }
       const active = await tx.runtimeCapabilityTransition.findFirst({ where: { status: { in: [...ACTIVE_RUNTIME_TRANSITION_STATUSES] } }, select: { transitionId: true, status: true } });
@@ -119,17 +129,40 @@ export function createPrismaRuntimeTransitionReceipts(prisma: TransitionPrisma):
     commitSuccess: (transitionId, receipt, desiredStates) => prisma.$transaction(async (tx) => {
       // BI-8BA6AC56: $executeRaw — void-returning advisory lock crashes $queryRaw under Prisma 7.8.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('runtime-capability-transition'))`;
-      for (const [capabilityId, state] of Object.entries(desiredStates)) {
-        const updated = await tx.platformCapability.updateMany({ where: { capabilityId }, data: { state } });
+      let managed = Object.keys(desiredStates);
+      let baseline: Readonly<Record<string, string>> | undefined;
+      if (receipt.version === 2 && receipt.mode === "reconciliation") {
+        const row = await tx.runtimeCapabilityTransition.findUnique({ where: { transitionId }, select: { status: true, envelope: true, previousStates: true, desiredStates: true } });
+        if (!row || row.status !== "host_applied" || row.envelope?.version !== 2 || row.envelope.mode !== "reconciliation"
+          || canonicalTransitionPayload(row.envelope) !== canonicalTransitionPayload(Object.fromEntries(Object.keys(row.envelope).map(key => [key, receipt[key as keyof typeof receipt]])))
+          || !sameStateMap(row.desiredStates, desiredStates)) throw new Error("runtime_transition_cas_failed");
+        const rows = await tx.platformCapability.findMany({ where: { capabilityId: { startsWith: "runtime:" } }, select: { capabilityId: true, state: true } });
+        if (!sameStateMap(Object.fromEntries(rows.map(capability => [capability.capabilityId, capability.state])), row.previousStates)) throw new Error("runtime_transition_database_stale");
+        baseline = row.previousStates;
+        managed = [...row.envelope.reconciliation.touchedKeys];
+      }
+      for (const capabilityId of managed) {
+        const state = desiredStates[capabilityId];
+        const updated = await tx.platformCapability.updateMany({ where: { capabilityId, ...(baseline ? { state: baseline[capabilityId] } : {}) }, data: { state } });
         if (updated.count !== 1) throw new Error(`runtime_capability_missing:${capabilityId}`);
       }
       const completed = await tx.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: "host_applied" }, data: { status: "succeeded", hostReceipt: receipt, completedAt: new Date() } });
       if (completed.count !== 1) throw new Error("runtime_transition_cas_failed");
       await tx.runtimeCapabilityTransitionEvent.create({ data: { transitionId, outcome: "succeeded", detail: { receipt } } });
     }, { isolationLevel: "Serializable" }),
-    markCompensating: async (transitionId, failure) => { const r = await prisma.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: "host_applied" }, data: { status: "compensating", failure: { code: failure } } }); if (r.count !== 1) throw new Error("runtime_transition_cas_failed"); },
+    markCompensating: (transitionId, failure, compensation) => prisma.$transaction(async (tx) => {
+      const r = await tx.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: "host_applied" }, data: { status: "compensating", failure: { code: failure, ...(compensation ? { compensation } : {}) } } });
+      if (r.count !== 1) throw new Error("runtime_transition_cas_failed");
+      await tx.runtimeCapabilityTransitionEvent.create({ data: { transitionId, outcome: "compensating", detail: { failure, compensation: compensation ?? null } } });
+    }, { isolationLevel: "Serializable" }),
     markRolledBack: async (transitionId, receipt) => { const r = await prisma.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: "compensating" }, data: { status: "rolled_back", hostReceipt: receipt, completedAt: new Date() } }); if (r.count !== 1) throw new Error("runtime_transition_cas_failed"); },
-    markRollbackFailed: async (transitionId, failure) => { const r = await prisma.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: "compensating" }, data: { status: "rollback_failed", failure: { code: failure }, completedAt: new Date() } }); if (r.count !== 1) throw new Error("runtime_transition_cas_failed"); },
+    markRollbackFailed: (transitionId, failure) => prisma.$transaction(async (tx) => {
+      const row = await tx.runtimeCapabilityTransition.findUnique({ where: { transitionId }, select: { status: true, failure: true } });
+      if (row?.status !== "compensating") throw new Error("runtime_transition_cas_failed");
+      const r = await tx.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: "compensating" }, data: { status: "rollback_failed", failure: { ...row.failure, code: failure, recoveryRequired: true }, completedAt: new Date() } });
+      if (r.count !== 1) throw new Error("runtime_transition_cas_failed");
+      await tx.runtimeCapabilityTransitionEvent.create({ data: { transitionId, outcome: "rollback_failed", detail: { failure } } });
+    }, { isolationLevel: "Serializable" }),
   };
 }
 
@@ -139,6 +172,7 @@ export type RuntimeTransitionReconcileRow = {
   previousServices: string[]; desiredServices: string[];
   previousStates: Readonly<Record<string, string>>; desiredStates: Readonly<Record<string, string>>; createdAt: Date;
   envelope: RuntimeTransitionEnvelope | null; envelopeSignature: string | null;
+  failure?: { code?: string; recoveryRequired?: boolean; compensation?: RuntimeCompensationPacket } | null;
 };
 
 type InstallStateIdentity = { schemaVersion?: unknown; installerVersion?: unknown; platform?: unknown; arch?: unknown; enabledRuntimeCapabilities?: unknown; capabilityCatalogHash?: unknown; capabilityStateVersion?: unknown };
@@ -181,6 +215,11 @@ export async function reconcileRuntimeCapabilityTransitions(deps: {
       }
     } catch (error) {
       await deps.markRecoveryRequired(row, error instanceof Error ? error.message : "invalid_transition_envelope");
+      continue;
+    }
+    if (row.status === "compensating") {
+      try { await deps.compensate(row, row.failure?.code ?? "interrupted_compensation"); }
+      catch (error) { await deps.markRecoveryRequired(row, error instanceof Error ? error.message : "runtime_transition_compensation_failed"); }
       continue;
     }
     const receipt = await deps.readHostReceipt(row.transitionId);
@@ -226,6 +265,7 @@ function validateRequest(request: RuntimeCapabilityTransitionRequest): void {
   for (const [label, keys, states] of [["previous", request.previousKeys, request.previousStates], ["desired", request.desiredKeys, request.desiredStates]] as const) {
     if (new Set(keys).size !== keys.length || JSON.stringify(keys) !== JSON.stringify([...keys].sort())) throw new Error(`invalid_${label}_keys`);
     if (keys.some((key) => !/^runtime:[a-z0-9-]+$/.test(key))) throw new Error(`invalid_${label}_keys`);
+    if (request.reconciliation) continue; // Complete independent maps are validated by the shared reconciliation contract.
     if (Object.values(states).some((state) => state !== "active" && state !== "disabled")) throw new Error(`invalid_${label}_state`);
     const activeKeys = Object.entries(states).filter(([, state]) => state === "active").map(([key]) => key).sort();
     if (JSON.stringify(activeKeys) !== JSON.stringify(keys)) throw new Error(`invalid_${label}_state_map`);
@@ -242,14 +282,27 @@ export async function coordinateRuntimeCapabilityTransition(
   deps: RuntimeCapabilityCoordinatorDeps,
 ) {
   // Capture caller-owned maps and arrays before the first asynchronous boundary.
-  request = { ...request, previousKeys: [...request.previousKeys], desiredKeys: [...request.desiredKeys], previousStates: { ...request.previousStates }, desiredStates: { ...request.desiredStates } };
+  request = { ...request, previousKeys: [...request.previousKeys], desiredKeys: [...request.desiredKeys], previousStates: { ...request.previousStates }, desiredStates: { ...request.desiredStates },
+    ...(request.reconciliation ? { reconciliation: structuredClone(request.reconciliation) } : {}) };
   validateRequest(request);
+  if (request.reconciliation) {
+    const protocol = deps.reconciliationProtocol;
+    if (!deps.catalogCapabilityIds || !protocol?.signingVersions.includes(2) || !protocol.applyVersions.includes(2) || !protocol.reconciliationVersions.includes(2)
+      || !/^sha256:[a-f0-9]{64}$/.test(deps.reconciliationPromoterDigest ?? "") || !/^[a-f0-9]{40}$/.test(protocol.sourceSha)) {
+      return { status: "failed" as const, failure: "runtime_reconciliation_protocol_unavailable" as const };
+    }
+    const intent = prepareRuntimeReconciliationIntent(request.reconciliation, { catalogHash: request.catalogHash, capabilityIds: deps.catalogCapabilityIds });
+    if (JSON.stringify(intent.observedHost.enabledRuntimeCapabilities) !== JSON.stringify(request.previousKeys)
+      || JSON.stringify(intent.desiredHostEnabledKeys) !== JSON.stringify(request.desiredKeys)
+      || !sameStateMap(intent.observedDatabaseStates, request.previousStates) || !sameStateMap(intent.desiredDatabaseStates, request.desiredStates)) throw new Error("reconciliation_request_mismatch");
+    request.reconciliation = intent;
+  }
   const normalized = {
     ...request,
     previousKeys: [...request.previousKeys].sort(),
     desiredKeys: [...request.desiredKeys].sort(),
-    previousStateHash: computeCapabilityStateVersion(request.catalogHash, request.previousStates),
-    desiredStateHash: computeCapabilityStateVersion(request.catalogHash, request.desiredStates),
+    previousStateHash: request.reconciliation?.observedHost.capabilityStateVersion ?? computeCapabilityStateVersion(request.catalogHash, request.previousStates),
+    desiredStateHash: request.reconciliation ? computeSharedCapabilityStateVersion(request.catalogHash, request.desiredKeys, deps.catalogCapabilityIds) : computeCapabilityStateVersion(request.catalogHash, request.desiredStates),
   };
   if (!request.requestedById) throw new Error("requested_by_required");
   let result: PromoterResult;
@@ -270,7 +323,9 @@ export async function coordinateRuntimeCapabilityTransition(
     return { status: "failed" as const, failure: "capability_projection_mismatch" as const };
   }
   const proposedEnvelope: RuntimeTransitionEnvelope = {
-    version: 1, transitionId: request.transitionId, issuedAt: new Date(now).toISOString(), expiresAt: new Date(now + 10 * 60 * 1000).toISOString(),
+    ...(request.reconciliation ? { version: 2 as const, kind: "runtime-capability-transition" as const, mode: "reconciliation" as const, reconciliation: request.reconciliation } : { version: 1 as const }),
+    ...(request.reconciliation ? { protocolIdentity: { sourceSha: deps.reconciliationProtocol!.sourceSha, actuatorSha256: deps.reconciliationProtocol!.actuatorSha256, signerSha256: deps.reconciliationProtocol!.signerSha256, promoterDigest: deps.reconciliationPromoterDigest! } } : {}),
+    transitionId: request.transitionId, issuedAt: new Date(now).toISOString(), expiresAt: new Date(now + 10 * 60 * 1000).toISOString(),
     catalogHash: request.catalogHash, previousStateHash: normalized.previousStateHash, desiredStateHash: normalized.desiredStateHash,
     previousKeys: normalized.previousKeys, desiredKeys: normalized.desiredKeys,
     previousProfiles: previousProjection.composeProfiles, desiredProfiles: desiredProjection.composeProfiles,
@@ -330,15 +385,19 @@ export async function coordinateRuntimeCapabilityTransition(
       await deps.receipts.markFailed(request.transitionId, failure);
       return { status: "failed" as const, failure: "host_apply_failed" as const };
     }
-    await deps.receipts.markCompensating(request.transitionId, failure);
-    const rollbackNow = deps.now?.() ?? Date.now();
-    const rollbackTransitionId = `RCT-${createHash("sha256").update(request.transitionId).digest("hex").slice(0, 24)}-rb`;
-    const rollbackEnvelope: RuntimeTransitionEnvelope = { ...envelope, transitionId: rollbackTransitionId, issuedAt: new Date(rollbackNow).toISOString(), expiresAt: new Date(rollbackNow + 600_000).toISOString(), previousKeys: normalized.desiredKeys, desiredKeys: normalized.previousKeys, previousProfiles: desiredProjection.composeProfiles, desiredProfiles: previousProjection.composeProfiles, previousServices: desiredProjection.requiredServices, desiredServices: previousProjection.requiredServices, previousStateHash: normalized.desiredStateHash, desiredStateHash: normalized.previousStateHash };
+    const rollbackEnvelope = createRuntimeCompensationEnvelope(envelope, deps.now?.() ?? Date.now());
+    const rollbackTransitionId = rollbackEnvelope.transitionId;
+    const compensation = { envelope: rollbackEnvelope, envelopeSignature: signTransitionPayload(rollbackEnvelope, deps.protocolSecret) };
+    await deps.receipts.markCompensating(request.transitionId, failure, compensation);
+    if (request.reconciliation && failure === "runtime_transition_database_stale") {
+      await deps.receipts.markRollbackFailed(request.transitionId, failure);
+      return { status: "rollback_failed" as const, failure };
+    }
     try {
-      const rollback = await deps.runPromoter({ ...deps.promoterParams, runtimeCapabilityTransitionId: rollbackTransitionId, containerName: `dpf-promoter-${rollbackTransitionId}`, timeoutMs: 600_000, runtimeCapabilityEnvelope: Buffer.from(JSON.stringify(rollbackEnvelope)).toString("base64url"), runtimeCapabilitySignature: signTransitionPayload(rollbackEnvelope, deps.protocolSecret), runtimeCapabilitySecretFileHostPath: deps.protocolSecretFileHostPath });
+      const rollback = await deps.runPromoter({ ...deps.promoterParams, runtimeCapabilityTransitionId: rollbackTransitionId, containerName: `dpf-promoter-${rollbackTransitionId}`, timeoutMs: 600_000, runtimeCapabilityEnvelope: Buffer.from(JSON.stringify(rollbackEnvelope)).toString("base64url"), runtimeCapabilitySignature: compensation.envelopeSignature, runtimeCapabilitySecretFileHostPath: deps.protocolSecretFileHostPath });
       if (rollback.exitCode !== 0) throw new Error("rollback_host_apply_failed");
       const receipt = await deps.readHostReceipt(rollbackTransitionId);
-      verifyTransitionReceipt(receipt, deps.protocolSecret, rollbackEnvelope, deps.now?.() ?? Date.now());
+      if (verifyTransitionReceipt(receipt, deps.protocolSecret, rollbackEnvelope, deps.now?.() ?? Date.now()) !== "applied") throw new Error("rollback_host_receipt_not_applied");
       await deps.receipts.markRolledBack(request.transitionId, receipt);
       return { status: "rolled_back" as const, failure };
     } catch (rollbackError) {
