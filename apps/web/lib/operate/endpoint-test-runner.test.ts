@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-const { mockPrisma, mockCallProvider } = vi.hoisted(() => ({
+const { mockPrisma, mockCallProvider, mockGrade, mockPerformanceUpdate } = vi.hoisted(() => ({
   mockPrisma: {
     modelProvider: { findMany: vi.fn() },
     modelProfile: { findMany: vi.fn(), update: vi.fn() },
@@ -8,6 +8,8 @@ const { mockPrisma, mockCallProvider } = vi.hoisted(() => ({
     taskEvaluation: { create: vi.fn() },
   },
   mockCallProvider: vi.fn(),
+  mockGrade: vi.fn(),
+  mockPerformanceUpdate: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({ prisma: mockPrisma }));
@@ -22,11 +24,11 @@ vi.mock("@/lib/prompt-assembler", () => ({
   }),
 }));
 vi.mock("@/lib/orchestrator-evaluator", () => ({
-  evaluateResponseForTest: vi.fn().mockResolvedValue(null),
-  updatePerformanceProfile: vi.fn(),
+  evaluateResponseForTest: mockGrade,
+  updatePerformanceProfile: mockPerformanceUpdate,
 }));
 
-import { checkScenarioAssertions } from "./endpoint-test-registry";
+import { CAPABILITY_PROBES, checkScenarioAssertions } from "./endpoint-test-registry";
 import { InferenceError } from "@/lib/routing/inference-error";
 import { currentInferenceSignal, withInferenceCancellation } from "@/lib/routing/governed-inference-deadline";
 import {
@@ -206,6 +208,7 @@ describe("mapScoresToCodingCapability", () => {
 });
 
 describe("selected endpoint diagnostics (BI-0C5858D1)", () => {
+  afterEach(() => { vi.restoreAllMocks(); });
   beforeEach(() => {
     vi.clearAllMocks();
     mockPrisma.modelProvider.findMany.mockImplementation(async ({ where }) => {
@@ -219,6 +222,7 @@ describe("selected endpoint diagnostics (BI-0C5858D1)", () => {
     mockPrisma.endpointTestRun.create.mockResolvedValue({ id: "diagnostic-run", runId: "TR-SELECTED" });
     mockPrisma.endpointTestRun.update.mockResolvedValue({});
     mockCallProvider.mockResolvedValue({ content: "OK", toolCalls: undefined });
+    mockGrade.mockResolvedValue(null);
   });
 
   it("executes the selected Responses model without redirecting to another endpoint", async () => {
@@ -313,6 +317,81 @@ describe("selected endpoint diagnostics (BI-0C5858D1)", () => {
     const results = await pending;
     expect(results[0]?.probes[0]).toMatchObject({ outcome: "deferred", passed: null });
     expect(mockCallProvider).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.modelProfile.update).not.toHaveBeenCalled();
+  });
+
+  it("keeps scenario grading inside the original observation deadline", async () => {
+    for (const probe of CAPABILITY_PROBES) vi.spyOn(probe, "assert").mockReturnValue({ pass: true, reason: "observed" });
+    vi.useFakeTimers();
+    let gradingSignal: AbortSignal | undefined;
+    let generations = 0;
+    mockCallProvider.mockImplementation(() => ++generations <= CAPABILITY_PROBES.length
+      ? Promise.resolve({ content: "OK" })
+      : new Promise(resolve => { setTimeout(() => resolve({ content: "OK" }), 20_000); }));
+    mockGrade.mockImplementation(() => { gradingSignal = currentInferenceSignal(); return new Promise(() => {}); });
+    try {
+      const pending = runEndpointTests({ endpointId: "chatgpt", modelId: "gpt-6-luna", taskType: "reasoning", triggeredBy: "test" });
+      await vi.advanceTimersByTimeAsync(30_001);
+      const results = await pending;
+      expect(mockGrade).toHaveBeenCalledTimes(1);
+      expect(gradingSignal?.aborted).toBe(true);
+      expect(results[0]?.scenarios[0]).toMatchObject({ outcome: "deferred", orchestratorScore: null });
+      expect(mockPrisma.taskEvaluation.create).not.toHaveBeenCalled();
+      expect(mockPrisma.modelProfile.update).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("does not retain earlier scenario quality updates when a later scenario is unobserved", async () => {
+    for (const probe of CAPABILITY_PROBES) vi.spyOn(probe, "assert").mockReturnValue({ pass: true, reason: "observed" });
+    mockGrade.mockResolvedValue({ score: 5, notes: "observed" });
+    let calls = 0;
+    mockCallProvider.mockImplementation(async () => {
+      if (++calls > CAPABILITY_PROBES.length + 3) throw new InferenceError("expired credential", "auth", "chatgpt", 401);
+      return { content: "OK" };
+    });
+    const results = await runEndpointTests({ endpointId: "chatgpt", modelId: "gpt-6-luna", triggeredBy: "test" });
+    expect(results[0]?.scenarios.some(s => s.orchestratorScore === 5)).toBe(true);
+    expect(results[0]?.scenarios.some(s => s.outcome === "deferred")).toBe(true);
+    expect(mockPrisma.taskEvaluation.create).not.toHaveBeenCalled();
+    expect(mockPerformanceUpdate).not.toHaveBeenCalled();
+    expect(mockPrisma.modelProfile.update).not.toHaveBeenCalled();
+  });
+
+  it("records observed quality once a complete selected scenario finishes", async () => {
+    for (const probe of CAPABILITY_PROBES) vi.spyOn(probe, "assert").mockReturnValue({ pass: true, reason: "observed" });
+    mockGrade.mockResolvedValue({ score: 5, notes: "observed" });
+    const results = await runEndpointTests({ endpointId: "chatgpt", modelId: "gpt-6-luna", taskType: "reasoning", triggeredBy: "test" });
+    expect(results[0]?.scenarios[0]?.orchestratorScore).toBe(5);
+    expect(mockPrisma.taskEvaluation.create).toHaveBeenCalledTimes(1);
+    expect(mockPerformanceUpdate).toHaveBeenCalledWith("chatgpt", "reasoning", 5);
+    expect(mockPrisma.modelProfile.update).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not complete a scenario when its required grader produces no score", async () => {
+    for (const probe of CAPABILITY_PROBES) vi.spyOn(probe, "assert").mockReturnValue({ pass: true, reason: "observed" });
+    mockGrade.mockResolvedValue(null);
+    const results = await runEndpointTests({ endpointId: "chatgpt", modelId: "gpt-6-luna", taskType: "reasoning", triggeredBy: "test" });
+    expect(results[0]?.scenarios[0]).toMatchObject({ outcome: "deferred", orchestratorScore: null });
+    expect(mockPrisma.modelProfile.update).not.toHaveBeenCalled();
+    expect(mockPrisma.taskEvaluation.create).not.toHaveBeenCalled();
+  });
+
+  it("keeps parent cancellation authoritative even when grading swallows it", async () => {
+    for (const probe of CAPABILITY_PROBES) vi.spyOn(probe, "assert").mockReturnValue({ pass: true, reason: "observed" });
+    const parent = new AbortController();
+    let markStarted!: () => void;
+    const started = new Promise<void>(resolve => { markStarted = resolve; });
+    mockGrade.mockImplementation(() => new Promise(resolve => {
+      currentInferenceSignal()?.addEventListener("abort", () => resolve(null), { once: true });
+      markStarted();
+    }));
+    const pending = withInferenceCancellation(parent.signal, () => runEndpointTests({ endpointId: "chatgpt", modelId: "gpt-6-luna", taskType: "reasoning", triggeredBy: "test" }));
+    await started;
+    parent.abort(new Error("owning request ended"));
+    const results = await pending;
+    expect(results[0]?.scenarios[0]).toMatchObject({ outcome: "deferred", orchestratorScore: null });
+    expect(mockPrisma.taskEvaluation.create).not.toHaveBeenCalled();
+    expect(mockPerformanceUpdate).not.toHaveBeenCalled();
     expect(mockPrisma.modelProfile.update).not.toHaveBeenCalled();
   });
 });

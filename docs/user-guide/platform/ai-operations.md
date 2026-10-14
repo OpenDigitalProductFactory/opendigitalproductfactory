@@ -96,12 +96,15 @@ Selected endpoint diagnostics also support Responses providers such as ChatGPT.
 They use the selected discovered model and report unavailable targets without
 substituting a default. Each probe allows 512 output tokens and waits at most
 30 seconds; scenarios allow 1,024 output tokens with the same waiting limit.
+That allowance includes prompt assembly and any required scenario grading.
 A failed sign-in, capacity hold, timeout or truncated response leaves the run
 incomplete and does not lower the model's capability rating. The runner stops
 that model's remaining tests after an incomplete call. A provider may continue
 computing after client cancellation if its transport cannot stop the operation.
 Probe and scenario traces link adapter telemetry to the recorded test run;
 older runs without those traces remain unattributed at the individual-call level.
+Scenario quality updates are recorded after the selected run finishes completely;
+a missing required grader score leaves it unverified.
 
 Background evaluations and endpoint probes use the background admission lane,
 so queued interactive requests take priority. A concurrent first-time evaluation

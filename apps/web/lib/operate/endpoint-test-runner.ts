@@ -27,25 +27,29 @@ import { awaitInferenceCancellation, currentInferenceSignal, GovernedInferenceDe
 
 class DiagnosticIncompleteError extends Error {}
 
-/** Bound observation without replacing dispatch admission or parent authority. */
-async function callDiagnostic(
-  providerId: string, modelId: string, messages: ChatMessage[], systemPrompt: string,
-  tools: Array<Record<string, unknown>> | undefined, runId: string, traceId: string, maxTokens: number,
-) {
+/** One allowance covers prompt assembly, generation, assertions and grading. */
+async function withDiagnosticObservation<T>(observe: () => Promise<T>): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(new DiagnosticIncompleteError("Diagnostic timed out after 30 seconds")), 30_000);
   timer.unref?.();
   try {
-    const result = await withInferenceCancellation(controller.signal, () => awaitInferenceCancellation(callProvider(
+    return await withInferenceCancellation(controller.signal, () => awaitInferenceCancellation(observe(), currentInferenceSignal()!));
+  } finally { clearTimeout(timer); }
+}
+
+async function callDiagnostic(
+  providerId: string, modelId: string, messages: ChatMessage[], systemPrompt: string,
+  tools: Array<Record<string, unknown>> | undefined, runId: string, traceId: string, maxTokens: number,
+) {
+    const result = await callProvider(
       providerId, modelId, messages, systemPrompt, tools,
       { providerId, modelId, recipeId: null, contractFamily: "model-calibration.endpoint-diagnostic",
         executionAdapter: resolveDefaultExecutionAdapter(providerId), maxTokens,
         providerSettings: {}, toolPolicy: tools?.length ? { toolChoice: "auto" } : {}, responsePolicy: {} },
       undefined, undefined, { traceId, threadId: `test-${runId}` },
-    ), currentInferenceSignal()!));
+    );
     if (result.truncated) throw new DiagnosticIncompleteError("Diagnostic output was truncated; capability remains unverified");
     return result;
-  } finally { clearTimeout(timer); }
 }
 
 function isUnobservedDiagnostic(err: unknown): boolean {
@@ -143,40 +147,42 @@ async function runProbe(
 ): Promise<ProbeRunResult> {
   const traceId = createRoutingTraceId();
   try {
-    const promptInput: PromptInput = { ...TEST_PROMPT_DEFAULTS, ...probe.promptOverrides };
-    const systemPrompt = await assembleSystemPrompt(promptInput);
+    return await withDiagnosticObservation<ProbeRunResult>(async () => {
+      const promptInput: PromptInput = { ...TEST_PROMPT_DEFAULTS, ...probe.promptOverrides };
+      const systemPrompt = await assembleSystemPrompt(promptInput);
 
-    const messages: ChatMessage[] = [{ role: "user", content: probe.userMessage }];
+      const messages: ChatMessage[] = [{ role: "user", content: probe.userMessage }];
 
-    const probeToolsFormatted = probe.tools?.map((t) => ({ type: "function" as const, function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
+      const probeToolsFormatted = probe.tools?.map((t) => ({ type: "function" as const, function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
 
-    // Resolves BI-INST-007: probes used routeAndCall, which requires
-    // active endpoint manifests in EndpointTaskPerformance. Probes are
-    // SUPPOSED to be the thing that creates those manifests — a
-    // chicken-and-egg that broke every fresh-install probe with
-    // "No eligible endpoints for task 'conversation'" before any model
-    // had ever been profiled. Since the probe runner already knows both
-    // providerId AND modelId (it's testing a SPECIFIC model), there's no
-    // routing decision to make — call the model directly.
-    const result = await callDiagnostic(
-      providerId,
-      modelId,
-      messages,
-      systemPrompt,
-      probeToolsFormatted,
-      runId, traceId, 512,
-    );
+      // Resolves BI-INST-007: probes used routeAndCall, which requires
+      // active endpoint manifests in EndpointTaskPerformance. Probes are
+      // SUPPOSED to be the thing that creates those manifests — a
+      // chicken-and-egg that broke every fresh-install probe with
+      // "No eligible endpoints for task 'conversation'" before any model
+      // had ever been profiled. Since the probe runner already knows both
+      // providerId AND modelId (it's testing a SPECIFIC model), there's no
+      // routing decision to make — call the model directly.
+      const result = await callDiagnostic(
+        providerId,
+        modelId,
+        messages,
+        systemPrompt,
+        probeToolsFormatted,
+        runId, traceId, 512,
+      );
 
-    // Extract tool calls from response
-    const toolCalls = result.toolCalls as unknown[] | undefined;
+      // Extract tool calls from response
+      const toolCalls = result.toolCalls as unknown[] | undefined;
 
-    const assertionResult = probe.assert(result.content, toolCalls);
-    return {
-      traceId, probeId: probe.id, category: probe.category, name: probe.name,
-      ...assertionResult,
-      passed: assertionResult.pass,
-      outcome: assertionResult.pass ? "passed" as const : "failed" as const,
-    };
+      const assertionResult = probe.assert(result.content, toolCalls);
+      return {
+        traceId, probeId: probe.id, category: probe.category, name: probe.name,
+        ...assertionResult,
+        passed: assertionResult.pass,
+        outcome: assertionResult.pass ? "passed" as const : "failed" as const,
+      };
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown";
     if (isUnobservedDiagnostic(err)) {
@@ -204,60 +210,63 @@ async function runScenario(
 ): Promise<ScenarioRunResult> {
   const traceId = createRoutingTraceId();
   try {
-    const promptInput: PromptInput = { ...TEST_PROMPT_DEFAULTS, ...scenario.promptOverrides };
-    const systemPrompt = await assembleSystemPrompt(promptInput);
+    return await withDiagnosticObservation<ScenarioRunResult>(async () => {
+      const promptInput: PromptInput = { ...TEST_PROMPT_DEFAULTS, ...scenario.promptOverrides };
+      const systemPrompt = await assembleSystemPrompt(promptInput);
 
-    const messages: ChatMessage[] = [{ role: "user", content: scenario.userMessage }];
+      const messages: ChatMessage[] = [{ role: "user", content: scenario.userMessage }];
 
-    const scenarioToolsFormatted = scenario.tools?.map((t) => ({ type: "function" as const, function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
+      const scenarioToolsFormatted = scenario.tools?.map((t) => ({ type: "function" as const, function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
 
-    // BI-INST-007: same direct-call rationale as runProbe — scenario runner
-    // already targets a specific providerId+modelId, no routing needed.
-    const result = await callDiagnostic(
-      providerId,
-      modelId,
-      messages,
-      systemPrompt,
-      scenarioToolsFormatted,
-      runId, traceId, 1024,
-    );
+      // BI-INST-007: same direct-call rationale as runProbe — scenario runner
+      // already targets a specific providerId+modelId, no routing needed.
+      const result = await callDiagnostic(
+        providerId,
+        modelId,
+        messages,
+        systemPrompt,
+        scenarioToolsFormatted,
+        runId, traceId, 1024,
+      );
 
-    const toolCalls = (result as unknown as Record<string, unknown>).toolCalls as unknown[] | undefined;
+      const toolCalls = (result as unknown as Record<string, unknown>).toolCalls as unknown[] | undefined;
 
-    // Check programmatic assertions
-    const assertionResults = checkScenarioAssertions(result.content, toolCalls, scenario.assertions);
+      // Check programmatic assertions
+      const assertionResults = checkScenarioAssertions(result.content, toolCalls, scenario.assertions);
 
-    // Check orchestrator score if any assertion requires it
-    let orchestratorScore: number | null = null;
-    const scoreAssertions = scenario.assertions.filter((a) => a.type === "orchestrator_score_gte");
-    if (scoreAssertions.length > 0) {
-      const evalResult = await evaluateResponseForTest({
-        endpointId: providerId,
-        taskType: scenario.taskType,
-        userMessage: scenario.userMessage,
-        aiResponse: result.content,
-      });
-      if (evalResult) {
-        orchestratorScore = evalResult.score;
-        for (const sa of scoreAssertions) {
-          assertionResults.push({
-            assertion: sa,
-            passed: evalResult.score >= Number(sa.value),
-            detail: `Orchestrator score ${evalResult.score} >= ${sa.value}: ${evalResult.score >= Number(sa.value)}`,
-          });
+      // Check orchestrator score if any assertion requires it
+      let orchestratorScore: number | null = null;
+      const scoreAssertions = scenario.assertions.filter((a) => a.type === "orchestrator_score_gte");
+      if (scoreAssertions.length > 0) {
+        const evalResult = await evaluateResponseForTest({
+          endpointId: providerId,
+          taskType: scenario.taskType,
+          userMessage: scenario.userMessage,
+          aiResponse: result.content,
+        });
+        if (!evalResult) throw new DiagnosticIncompleteError("Required scenario grader produced no verified score");
+        if (evalResult) {
+          orchestratorScore = evalResult.score;
+          for (const sa of scoreAssertions) {
+            assertionResults.push({
+              assertion: sa,
+              passed: evalResult.score >= Number(sa.value),
+              detail: `Orchestrator score ${evalResult.score} >= ${sa.value}: ${evalResult.score >= Number(sa.value)}`,
+            });
+          }
         }
       }
-    }
 
-    const allPassed = assertionResults.every((r) => r.passed);
+      const allPassed = assertionResults.every((r) => r.passed);
 
-    return {
-      traceId, scenarioId: scenario.id, taskType: scenario.taskType, name: scenario.name,
-      passed: allPassed,
-      outcome: allPassed ? "passed" : "failed",
-      assertionResults: assertionResults.map((r) => ({ description: r.assertion.description, passed: r.passed, detail: r.detail })),
-      orchestratorScore, response: result.content,
-    };
+      return {
+        traceId, scenarioId: scenario.id, taskType: scenario.taskType, name: scenario.name,
+        passed: allPassed,
+        outcome: allPassed ? "passed" : "failed",
+        assertionResults: assertionResults.map((r) => ({ description: r.assertion.description, passed: r.passed, detail: r.detail })),
+        orchestratorScore, response: result.content,
+      };
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown";
     if (isUnobservedDiagnostic(err)) {
@@ -364,24 +373,6 @@ export async function runEndpointTests(opts: {
         scenarioResults.push(result);
         if (result.outcome === "deferred") break;
 
-        // Record TaskEvaluation for scenarios with orchestrator scores
-        if (result.orchestratorScore !== null) {
-          await prisma.taskEvaluation.create({
-            data: {
-              threadId: `test-${testRun.runId}`,
-              endpointId: providerId,
-              taskType: scenario.taskType,
-              qualityScore: result.orchestratorScore,
-              evaluationNotes: result.assertionResults.map((r) => `${r.passed ? "PASS" : "FAIL"}: ${r.description}`).join("; "),
-              taskContext: `TEST: ${scenario.name} [${friendlyName}]`,
-              routeContext: scenario.routeContext,
-              source: "test_harness",
-            },
-          });
-
-          // Update performance profile
-          await updatePerformanceProfile(providerId, scenario.taskType, result.orchestratorScore);
-        }
       }
     }
 
@@ -393,6 +384,19 @@ export async function runEndpointTests(opts: {
     const probesDeferred = probeResults.filter((p) => p.outcome === "deferred").length;
     const scenariosDeferred = scenarioResults.filter((s) => s.outcome === "deferred").length;
     const runIncomplete = probesDeferred > 0 || scenariosDeferred > 0;
+
+    // Publish quality evidence only after every selected observation completes.
+    if (!runIncomplete) for (const result of scenarioResults) {
+      const scenario = TASK_SCENARIOS.find(s => s.id === result.scenarioId);
+      if (!scenario || result.orchestratorScore === null) continue;
+      await prisma.taskEvaluation.create({ data: {
+        threadId: `test-${runId}`, endpointId: providerId, taskType: scenario.taskType,
+        qualityScore: result.orchestratorScore,
+        evaluationNotes: result.assertionResults.map(r => `${r.passed ? "PASS" : "FAIL"}: ${r.description}`).join("; "),
+        taskContext: `TEST: ${scenario.name} [${friendlyName}]`, routeContext: scenario.routeContext, source: "test_harness",
+      } });
+      await updatePerformanceProfile(providerId, scenario.taskType, result.orchestratorScore);
+    }
 
     const instructionFollowing = runIncomplete ? null : mapProbeResultsToInstructionFollowing(probePassMap);
     const codeScores = scenarioResults.filter((s) => s.taskType === "code-gen" && s.orchestratorScore !== null).map((s) => s.orchestratorScore!);
