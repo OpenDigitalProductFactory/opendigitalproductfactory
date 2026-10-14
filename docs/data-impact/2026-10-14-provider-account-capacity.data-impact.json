@@ -3,7 +3,7 @@
   "accountableOwner": "platform-architecture",
   "affectedCopies": ["Provider account overview", "Inference routing capacity projection", "Provider health projection", "Token cost ledger", "Route outcome evidence", "Prisma-to-EA current-state mirror"],
   "migration": {
-    "name": "20261014010000_provider_account_capacity_scopes + 20261014053000_provider_account_health_ownership + 20261014060000_provider_account_usage_refs",
+    "name": "20261014010100_provider_account_capacity_scopes + 20261014053000_provider_account_health_ownership + 20261014060000_provider_account_usage_refs",
     "backfill": "Existing unique provider and CLI aliases receive namespaced scope keys; known CLI adapters receive typed kinds. No credentials, account health ownership, quota observations or usage history are replaced. New account/quota telemetry dimensions remain NULL on historical rows.",
     "observedAt": "2026-10-14T01:10:55.380Z",
     "observedRows": { "ProviderCapacityStatus": 8, "CliPoolStatus": 1, "AiProviderConnection": 23, "TokenUsage": 35192, "RouteOutcome": 54729 },
@@ -21,7 +21,7 @@
     { "kind": "model", "assetId": "data:cli-pool-status", "prismaModel": "CliPoolStatus", "lifecycleDisposition": "Declared operational/domain current quota projection bounded by configured provider/adapter pairs; unknown shared ownership remains conservative and adds no independent allowance. Legacy aliases are retained; token refresh creates no pool identity.", "fields": [
       { "fieldId": "data:cli-pool-status#adapterType", "resolution": "governed", "reason": "Nullable unique legacy lookup is retained for existing clients.", "provenance": "Existing CliPoolStatus; BI-385C0357" },
       { "fieldId": "data:cli-pool-status#adapterKind", "resolution": "governed", "reason": "Typed enum represents the closed adapter axis independently of pool identity.", "provenance": "CliPoolAdapterKind enum" },
-      { "fieldId": "data:cli-pool-status#scopeKey", "resolution": "governed", "reason": "Unique pool identity; legacy aliases are backfilled without asserting independently owned quota.", "provenance": "20261014010000_provider_account_capacity_scopes" }
+      { "fieldId": "data:cli-pool-status#scopeKey", "resolution": "governed", "reason": "Unique pool identity; legacy aliases are backfilled without asserting independently owned quota.", "provenance": "20261014010100_provider_account_capacity_scopes" }
     ] },
     { "kind": "model", "assetId": "data:ai-provider-connection", "prismaModel": "AiProviderConnection", "lifecycleDisposition": "Existing account configuration lifecycle; reset proof and pool links after credential replacement, retain historical evidence.", "fields": [
       { "fieldId": "data:ai-provider-connection#quotaStatusId", "resolution": "governed", "reason": "Indexed optional many-to-one reference permits a shared quota owner without claiming separate quota for every credential. Existing unique capacity health ownership remains intact.", "provenance": "ACCOUNT_ACCESS_RESET and provider-capacity/store.ts" }

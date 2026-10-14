@@ -30,7 +30,7 @@ describe.runIf(enabled)("provider account capacity migration on PostgreSQL", () 
       INSERT INTO "TokenUsage" VALUES ('old-usage', NOW(), 'codex');
       INSERT INTO "RouteOutcome" VALUES ('old-outcome', NOW(), 'codex');
     `);
-    await db.query(readFileSync(resolve(__dirname, "../../../../../packages/db/prisma/migrations/20261014010000_provider_account_capacity_scopes/migration.sql"), "utf8"));
+    await db.query(readFileSync(resolve(__dirname, "../../../../../packages/db/prisma/migrations/20261014010100_provider_account_capacity_scopes/migration.sql"), "utf8"));
     await db.query(readFileSync(resolve(__dirname, "../../../../../packages/db/prisma/migrations/20261014053000_provider_account_health_ownership/migration.sql"), "utf8"));
     await db.query(readFileSync(resolve(__dirname, "../../../../../packages/db/prisma/migrations/20261014060000_provider_account_usage_refs/migration.sql"), "utf8"));
   });
