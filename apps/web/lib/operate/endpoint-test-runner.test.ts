@@ -248,11 +248,13 @@ describe("selected endpoint diagnostics (BI-0C5858D1)", () => {
   });
 
   it("caps synthetic output and links the dispatch to its durable test run", async () => {
-    await runEndpointTests({ endpointId: "chatgpt", modelId: "gpt-6-luna", probesOnly: true, triggeredBy: "test" });
+    const results = await runEndpointTests({ endpointId: "chatgpt", modelId: "gpt-6-luna", probesOnly: true, triggeredBy: "test" });
     const persistedRunId = mockPrisma.endpointTestRun.create.mock.calls[0]![0].data.runId;
+    expect(results[0]?.testRunId).toBe(persistedRunId);
     for (const args of mockCallProvider.mock.calls) {
       expect(args[5]).toMatchObject({ providerId: "chatgpt", modelId: "gpt-6-luna", maxTokens: 512 });
-      expect(args[8]).toMatchObject({ threadId: `test-${persistedRunId}`, traceId: expect.stringMatching(/^[a-f0-9]{32}$/) });
+      expect(args[8]).toMatchObject({ traceId: expect.stringMatching(/^[a-f0-9]{32}$/) });
+      expect(args[8]).not.toHaveProperty("threadId");
     }
     const recorded = mockPrisma.endpointTestRun.update.mock.calls[0]![0].data.results.probes;
     expect(recorded.map((p: { traceId: string }) => p.traceId)).toEqual(mockCallProvider.mock.calls.map(args => args[8].traceId));

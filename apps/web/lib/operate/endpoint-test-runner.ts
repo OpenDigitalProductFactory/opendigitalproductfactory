@@ -39,17 +39,17 @@ async function withDiagnosticObservation<T>(observe: () => Promise<T>): Promise<
 
 async function callDiagnostic(
   providerId: string, modelId: string, messages: ChatMessage[], systemPrompt: string,
-  tools: Array<Record<string, unknown>> | undefined, runId: string, traceId: string, maxTokens: number,
+  tools: Array<Record<string, unknown>> | undefined, traceId: string, maxTokens: number,
 ) {
-    const result = await callProvider(
+  const result = await callProvider(
       providerId, modelId, messages, systemPrompt, tools,
       { providerId, modelId, recipeId: null, contractFamily: "model-calibration.endpoint-diagnostic",
         executionAdapter: resolveDefaultExecutionAdapter(providerId), maxTokens,
         providerSettings: {}, toolPolicy: tools?.length ? { toolChoice: "auto" } : {}, responsePolicy: {} },
-      undefined, undefined, { traceId, threadId: `test-${runId}` },
+      undefined, undefined, { traceId },
     );
-    if (result.truncated) throw new DiagnosticIncompleteError("Diagnostic output was truncated; capability remains unverified");
-    return result;
+  if (result.truncated) throw new DiagnosticIncompleteError("Diagnostic output was truncated; capability remains unverified");
+  return result;
 }
 
 function isUnobservedDiagnostic(err: unknown): boolean {
@@ -111,7 +111,7 @@ export type ModelTestResult = {
 };
 
 // Keep backward compat alias
-export type EndpointTestResult = ModelTestResult & { endpointId: string };
+export type EndpointTestResult = ModelTestResult & { endpointId: string; testRunId?: string };
 
 // ─── Evidence Mapping (exported for testing) ─────────────────────────────────
 
@@ -143,7 +143,6 @@ async function runProbe(
   probe: CapabilityProbe,
   providerId: string,
   modelId: string,
-  runId: string,
 ): Promise<ProbeRunResult> {
   const traceId = createRoutingTraceId();
   try {
@@ -169,7 +168,7 @@ async function runProbe(
         messages,
         systemPrompt,
         probeToolsFormatted,
-        runId, traceId, 512,
+        traceId, 512,
       );
 
       // Extract tool calls from response
@@ -206,7 +205,6 @@ async function runScenario(
   scenario: TestScenario,
   providerId: string,
   modelId: string,
-  runId: string,
 ): Promise<ScenarioRunResult> {
   const traceId = createRoutingTraceId();
   try {
@@ -226,7 +224,7 @@ async function runScenario(
         messages,
         systemPrompt,
         scenarioToolsFormatted,
-        runId, traceId, 1024,
+        traceId, 1024,
       );
 
       const toolCalls = (result as unknown as Record<string, unknown>).toolCalls as unknown[] | undefined;
@@ -350,7 +348,7 @@ export async function runEndpointTests(opts: {
     // Probes stay on the selected model; dispatch still enforces shared admission.
     const probeResults: ProbeRunResult[] = [];
     for (const probe of CAPABILITY_PROBES) {
-      const result = await runProbe(probe, providerId, modelId, runId);
+      const result = await runProbe(probe, providerId, modelId);
       probeResults.push(result);
       if (result.outcome === "deferred") break;
     }
@@ -369,7 +367,7 @@ export async function runEndpointTests(opts: {
       ).filter((s) => s.requiredProbes.every((rp) => probePassMap[rp]));
 
       for (const scenario of eligibleScenarios) {
-        const result = await runScenario(scenario, providerId, modelId, runId);
+        const result = await runScenario(scenario, providerId, modelId);
         scenarioResults.push(result);
         if (result.outcome === "deferred") break;
 
@@ -444,6 +442,7 @@ export async function runEndpointTests(opts: {
     });
 
     results.push({
+      testRunId: runId,
       endpointId: providerId,
       providerId,
       modelId,
