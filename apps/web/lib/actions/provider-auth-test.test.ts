@@ -154,6 +154,17 @@ describe("expired OAuth verification recovery", () => {
     expect(mockPrisma.credentialEntry.update).not.toHaveBeenCalled();
   });
 
+  it("reports local quota-reader failure before sending paid provider work", async () => {
+    restoredDefaultAccount();
+    mockPrisma.providerCapacityStatus.findUnique.mockRejectedValue(new Error("quota store unavailable"));
+    expect(await testProviderAuth("chatgpt", false, "provider-default-chatgpt")).toMatchObject({
+      ok: false, message: expect.stringContaining("No provider verification request was sent"),
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(mockPrisma.aiProviderConnection.updateMany).not.toHaveBeenCalled();
+    expect(mockPrisma.providerCapacityStatus.updateMany).not.toHaveBeenCalled();
+  });
+
   it("reports successful authentication separately from a changed routing restriction", async () => {
     restoredDefaultAccount();
     mockPrisma.providerCapacityStatus.updateMany.mockResolvedValue({ count: 0 });

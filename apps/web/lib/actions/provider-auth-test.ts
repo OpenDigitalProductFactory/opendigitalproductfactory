@@ -143,7 +143,14 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
         select: { modelId: true },
       });
       if (!model) return { ok: false, message: "No active model found — refresh the model catalog and retry" };
-      const quotaObservation = connection ? await captureProviderQuotaObservation(connection) : null;
+      let quotaObservation: ProviderQuotaObservation | null = null;
+      if (connection) {
+        try {
+          quotaObservation = await captureProviderQuotaObservation(connection);
+        } catch {
+          return { ok: false, message: "DPF could not read this account's routing restriction. No provider verification request was sent; retry when DPF is available." };
+        }
+      }
       const streaming = isChatGptBackend(providerId, baseUrl);
       headers["Content-Type"] = "application/json";
       const probe = () => fetch(attemptedUrl, {
