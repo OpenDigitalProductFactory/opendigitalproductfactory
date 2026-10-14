@@ -10,7 +10,7 @@ import { policyScopeKey } from "./investment-balance-policy";
 import { fundingAuthority, recordedFundingOwner, readCurrentPolicy, readStoredCurrentPolicy, policyRevisionIsActive, writePolicyRevision, type BalancePolicyDb, type FundingAuthorityFacts, type FundingScope, type PolicyRevision } from "./investment-balance-policy";
 import { resolvePrincipalRecordIdForSessionIdentity } from "../identity/principal-linking";
 import { parseFundingScope, resolveRoomFunding, ROOM_INVESTMENT_FIELD, type ItemInvestmentClassification } from "./investment-balance-binding";
-import { loadInvestmentObservation } from "./investment-balance-observation";
+import { loadInvestmentObservation, loadUnassignedInvestmentAttempts } from "./investment-balance-observation";
 
 export type InvestmentIdentityDb = Pick<Prisma.TransactionClient, "principal" | "principalAlias" | "user" | "organization" | "decisionPerspectiveProfile" | "platformConfig">;
 
@@ -250,13 +250,15 @@ export async function loadScopedBalanceReport(db: InvestmentIdentityDb & Pick<Pr
   const now = new Date();
   const policyActive = stored.data === null || policyRevisionIsActive(stored.data, now);
   const observed = await loadInvestmentObservation(db, { scope, installationRef, windowDays: policy.windowDays, now });
+  const attributionGap = { level: ownerKind === "founder" ? "installation" as const : "organization" as const,
+    unassignedAttempts: await loadUnassignedInvestmentAttempts(db, policy.windowDays, now, ownerKind === "founder" ? null : scope.organizationId) };
   const row = await db.platformConfig.findUnique({ where: { key: bindingKey({ kind: "installation", purpose: scope.purpose }, installationRef, scope.organizationId) } });
   const binding = row ? parseBinding(row.value, installationRef) : null;
   const canSucceedBinding = binding !== null && binding.scope.organizationId === scope.organizationId
     && binding.scope.principalId !== scope.principalId && !recordedFundingOwner(binding.scope, await loadFundingAuthority(db, binding.scope));
   return ok({ ...value, policyActive, guidance: policyActive ? formatInvestmentGuidance(value) : UNRESOLVED_INVESTMENT_GUIDANCE,
     observation: evaluateInvestmentBalance(policyActive ? policy : { ...policy, steeringEnabled: false }, observed, now),
-    installationBinding: binding, canSucceedBinding, externalInferenceCoverage: "unobserved" as const });
+    installationBinding: binding, canSucceedBinding, attributionGap, externalInferenceCoverage: "unobserved" as const });
 }
 
 /** Only scopes canonically owned by the signed-in person are projected into the settings UI. */

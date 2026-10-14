@@ -46,13 +46,14 @@ export async function loadInvestmentObservation(db: ObservationDb, input: {
   };
 }
 
-/** Installation-wide unknown attribution is a separate gap, never an owner's denominator. */
-export async function loadUnassignedInvestmentAttempts(db: ObservationDb, windowDays = 42, now = new Date()): Promise<number> {
+/** Unassigned attribution is a separate gap. Organization viewers see only their known organization. */
+export async function loadUnassignedInvestmentAttempts(db: ObservationDb, windowDays = 42, now = new Date(), organizationId: string | null = null): Promise<number> {
   if (!Number.isInteger(windowDays) || windowDays < 1 || windowDays > 180) throw new RangeError("Observation window must be 1–180 days");
   if (!Number.isFinite(now.getTime())) throw new RangeError("Observation time must be valid");
   const start = new Date(now.getTime() - windowDays * 86_400_000);
   const rows = await db.$queryRaw<Array<{ count: bigint }>>`SELECT COUNT(*) AS "count" FROM "AdapterRunTelemetry"
     WHERE "startedAt" >= ${start} AND "startedAt" < ${now}
+      AND (${organizationId}::text IS NULL OR "investmentOrganizationId" = ${organizationId})
       AND ("investmentPrincipalId" IS NULL OR "investmentOrganizationId" IS NULL OR "investmentCapturedAt" IS NULL OR "investmentInstallationRef" IS NULL)`;
   return count(rows[0]?.count ?? 0);
 }

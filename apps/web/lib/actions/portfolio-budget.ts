@@ -20,14 +20,16 @@ import { requireCapabilityContext } from "@/lib/actions/shared/guards";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import type { FundingScope } from "@/lib/portfolio/investment-balance-policy";
 import type { BalancePolicy } from "@/lib/portfolio/investment-balance";
+import { getT } from "@/lib/i18n/t.server";
 
 async function runInvestmentTool(toolName: string, rawParams: Record<string, unknown>): Promise<ActionResult<string>> {
   const { userId, userContext } = await requireCapabilityContext("manage_backlog");
+  const t = await getT("portfolio");
   const result = await governedExecuteTool({ toolName, rawParams, userId, userContext, context: { routeContext: "/ops/demand" }, source: "rest" });
-  if (!result.success) return err(result.message ?? "Allocation could not be updated.");
+  if (!result.success) return err(t(result.error === "stale-revision" || result.error === "stale-binding" ? "investment.concurrentChange" : result.error === "not-owner" || result.error === "unresolved-authority" ? "investment.ownerRequired" : "investment.saveFailed"));
   revalidatePath("/ops/demand");
   revalidatePath("/ops/installation");
-  return ok(result.message ?? "Allocation saved.");
+  return ok(t("investment.saved"));
 }
 
 export async function saveInvestmentBalanceAction(input: { scope: FundingScope; policy: BalancePolicy; expectedRevision: string | null; reason: string }) {

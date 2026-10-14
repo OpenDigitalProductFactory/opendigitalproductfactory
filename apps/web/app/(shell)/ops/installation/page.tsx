@@ -31,6 +31,7 @@ import { getPairedEstatePosture } from "@/lib/federation/operational-posture-rea
 import { prismaInstanceStanceStore } from "@/lib/install/instance-stance";
 import { loadInstallationIdentityView } from "@/lib/installation-journey/installation-identity-view";
 import { can } from "@/lib/permissions";
+import { getT } from "@/lib/i18n/t.server";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,7 @@ export default async function InstallationIdentityPage() {
     "manage_platform",
   );
   if (!canManageInstallation) redirect("/workspace");
+  const t = await getT("portfolio");
 
   const store = prismaInstanceStanceStore(prisma);
   const [view, estate, identity] = await Promise.all([
@@ -71,7 +73,7 @@ export default async function InstallationIdentityPage() {
     <div className="mx-auto w-full max-w-4xl">
       <InstallationIdentityPanel view={view} />
       <p className="px-4 pb-4 text-dpf-body text-dpf-muted sm:px-6">
-        Funding follows its owner and purpose. <Link className="text-dpf-accent underline" href="/ops/demand?investment=1#investment-balance">Review investment allocation</Link>
+        {t("investment.installationLinkIntro")} <Link className="text-dpf-accent underline" href="/ops/demand?investment=1#investment-balance">{t("investment.installationLink")}</Link>
       </p>
       <div className="px-4 pb-6 sm:px-6">
         <EstateNameField

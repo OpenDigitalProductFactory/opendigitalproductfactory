@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { loadInvestmentObservation } from "./investment-balance-observation";
+import { loadInvestmentObservation, loadUnassignedInvestmentAttempts } from "./investment-balance-observation";
 import { resolveRoomFunding } from "./investment-balance-binding";
 
 const now = new Date("2099-02-12T00:00:00Z");
@@ -32,6 +32,7 @@ const url = process.env.DPF_SQL_TEST_DATABASE_URL ?? ((process.env.CI === "true"
     await client.query("BEGIN");
     await client.query('INSERT INTO "Principal" (id,"principalId",kind,"displayName","updatedAt") VALUES ($1,$1,\'human\',\'Investment test\',now())', [scope.principalId]);
     await client.query('INSERT INTO "Organization" (id,"orgId",name,slug,"updatedAt") VALUES ($1,$1,\'Investment test\',$1,now())', [scope.organizationId]);
+    await client.query('INSERT INTO "Organization" (id,"orgId",name,slug,"updatedAt") VALUES ($1,$1,\'Other test\',$1,now())', [`${scope.organizationId}:other`]);
   });
   afterAll(async () => { await client?.query("ROLLBACK"); await client?.end(); });
 
@@ -55,6 +56,12 @@ const url = process.env.DPF_SQL_TEST_DATABASE_URL ?? ((process.env.CI === "true"
     await add("new", 999, { purpose: "archetype" });
     await add("new", 999, { at: now }); // Exclusive upper boundary.
     await add("new", 999, { at: new Date("2098-12-31") });
+    for (const organizationId of [scope.organizationId, `${scope.organizationId}:other`]) {
+      await client.query(`INSERT INTO "AdapterRunTelemetry" (id,"adapterKind","adapterVersion","providerId","modelId","executionMode","startedAt",status,"capabilitiesUsed","investmentOrganizationId")
+        VALUES ($1,'test','1','test','test','single','2099-02-01','success','{}',$2)`, [randomUUID(), organizationId]);
+    }
+    expect(await loadUnassignedInvestmentAttempts(db, 42, now)).toBe(2);
+    expect(await loadUnassignedInvestmentAttempts(db, 42, now, scope.organizationId)).toBe(1);
     expect(await loadInvestmentObservation(db, input)).toEqual({ knownAttempts: 4, unknownAttempts: 2,
       refactorTokens: 500, newTokens: 150, unclassifiedTokens: 100, latestAt: "2099-02-01T00:00:00.000Z" });
     expect(await loadInvestmentObservation(db, { ...input, scope: { ...scope, principalId: "other-owner" } })).toMatchObject({ knownAttempts: 0 });
