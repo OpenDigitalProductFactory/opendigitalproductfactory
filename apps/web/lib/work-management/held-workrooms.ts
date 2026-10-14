@@ -11,8 +11,10 @@ import type { prisma } from "@dpf/db";
 import { isRecord } from "@/lib/shared/coerce";
 
 import { driveDeviationCodes, readDriveHold } from "./workroom-drive-hold";
+import { loadRoomAccountabilityBatch, type RoomWorkforceDb } from "./room-workforce.server";
+import { resolveDriveConclusion } from "./drive-conclusion";
 
-type Db = Pick<typeof prisma, "workroom">;
+type Db = Pick<typeof prisma, "workroom"> & Partial<RoomWorkforceDb>;
 
 export const HELD_WORKROOM_LIMIT = 100;
 
@@ -28,6 +30,8 @@ export type HeldWorkroomRow = {
   /** Consecutive 15-minute ticks without advancing, when the hold records it. */
   stuckTicks: number | null;
   notifiedAt: string | null;
+  accountableName?: string | null;
+  recoveryCondition?: string | null;
 };
 
 export async function loadHeldWorkrooms(db: Db, limit = HELD_WORKROOM_LIMIT): Promise<HeldWorkroomRow[]> {
@@ -40,15 +44,21 @@ export async function loadHeldWorkrooms(db: Db, limit = HELD_WORKROOM_LIMIT): Pr
         { workspaceState: { path: ["workroomDrive", "action"], equals: "escalate" } },
       ],
     },
-    select: { capsuleId: true, title: true, workspaceState: true },
+    select: { id: true, capsuleId: true, title: true, workspaceState: true },
     take: limit,
   });
+  const owners = db.workroomParticipant && db.workroomRelation && db.organization
+    ? await loadRoomAccountabilityBatch(db as RoomWorkforceDb, rooms.map(room => room.id)) : new Map();
   return rooms.flatMap((room): HeldWorkroomRow[] => {
     const drive = isRecord(room.workspaceState) && isRecord(room.workspaceState.workroomDrive)
       ? room.workspaceState.workroomDrive : null;
     const action = drive?.action;
     if (!drive || (action !== "pause" && action !== "escalate")) return [];
     const hold = readDriveHold(room.workspaceState);
+    const owner = owners.get(room.id);
+    const conclusion = owner ? resolveDriveConclusion({ action,
+      reason: typeof drive.reason === "string" ? drive.reason : "unknown",
+      accountability: owner.accountability }) : null;
     return [{
       capsuleId: room.capsuleId,
       title: room.title,
@@ -59,6 +69,8 @@ export async function loadHeldWorkrooms(db: Db, limit = HELD_WORKROOM_LIMIT): Pr
       since: hold?.stuckSince ?? (typeof drive.lastRunAt === "string" ? drive.lastRunAt : null),
       stuckTicks: hold ? hold.stuckTicks : null,
       notifiedAt: hold?.notifiedAt ?? null,
+      accountableName: owner?.accountableDisplayName ?? null,
+      recoveryCondition: conclusion?.blockage?.unblockedBy ?? null,
     }];
   }).sort((a, b) => (a.since ?? "").localeCompare(b.since ?? ""));
 }

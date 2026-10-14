@@ -15,6 +15,7 @@ import { projectWorkroomRecovery } from "./workroom-recovery-projection";
 import { readBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
 import { projectPrFollowThroughStatus } from "@/lib/build/pr-follow-through";
 import { projectInvocationAttribution, recordedDriveTask } from "./invocation-attribution";
+import { readStoredWorkroomDriveState, projectStoredWorkroomDriveObservation } from "@/lib/work-management/workroom-drive-state";
 
 const INVENTORY_SELECT = {
   capsuleId: true,
@@ -80,14 +81,16 @@ export type CapsuleLivenessSummary = {
  */
 export async function loadCapsuleLivenessInventory(
   db: InventoryDb,
-  args: { where: Record<string, unknown>; take: number; compact?: boolean },
+  args: { where: Record<string, unknown>; take: number; compact?: boolean; portalSummary?: boolean },
   now: Date = new Date(),
 ): Promise<{ capsulesAll: Array<Record<string, unknown>>; livenessSummary: CapsuleLivenessSummary }> {
   const rows = await db.workroom.findMany({
     where: args.where,
     orderBy: [{ updatedAt: "desc" }, { capsuleId: "asc" }],
     take: args.take,
-    select: args.compact ? { ...INVENTORY_SELECT, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false } : INVENTORY_SELECT,
+    select: args.portalSummary
+      ? { ...INVENTORY_SELECT, id: true, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false }
+      : args.compact ? { ...INVENTORY_SELECT, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false } : INVENTORY_SELECT,
   });
 
   const taskIds = rows.map((row) => recordedDriveTask(row)?.taskId).filter((id): id is string => Boolean(id));
@@ -125,6 +128,7 @@ export async function loadCapsuleLivenessInventory(
     || (normalize(row.headBranch) && normalize(lease.branchName) === normalize(row.headBranch)));
 
   const capsulesAll = rows.map((row) => {
+    const drive = args.portalSummary ? readStoredWorkroomDriveState(row.workspaceState) : null;
     const featureBuild = row.featureBuildId ? buildsById.get(row.featureBuildId) ?? null : null;
     const lease = leaseFor(row);
     const verdict = classifyWorkCapsuleLiveness({
@@ -139,6 +143,8 @@ export async function loadCapsuleLivenessInventory(
     const { featureBuildId: _omit, taskRun: _taskRun, workspaceState: _workspace, activities: _activities, ...rest } = row;
     return {
       ...rest,
+      ...(drive ? { drive: { action: drive.lastAction, reason: drive.lastReason,
+        attentionRecorded: Boolean(projectStoredWorkroomDriveObservation(row.workspaceState).attentionReason) } } : {}),
       attribution: projectInvocationAttribution(row, tasksById.get(recordedDriveTask(row)?.taskId ?? "")),
       recovery: projectWorkroomRecovery({ ...row, taskRun: row.taskRun }),
       liveness: verdict.liveness,
