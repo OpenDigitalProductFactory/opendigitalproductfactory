@@ -27,8 +27,9 @@ export function projectWorkroomOperatorSummary(room: {
   const state = projectWorkCaseState({ capsule: { capsuleId: room.capsuleId, status: room.status } });
   if (room.status === "ready-for-promotion") return result("attention", "inventory.status.closeout", "inventory.nextAction.closeout");
   if (state.terminal || (!room.isLive && room.liveness !== "no-signal" && room.liveness !== "recovery-required")) {
-    const delivered = room.liveness === "delivered" || state.state === "closed";
-    return result("history", delivered ? "inventory.status.delivered" : room.status === "complete" ? "inventory.status.closed" : "inventory.status.ended", "inventory.nextAction.history");
+    const delivered = room.liveness === "delivered";
+    const closed = room.status === "complete" || state.state === "closed";
+    return result("history", delivered ? "inventory.status.delivered" : closed ? "inventory.status.closed" : "inventory.status.ended", "inventory.nextAction.history");
   }
   if (room.accountability?.state === "setup-required") {
     return result("attention", "inventory.status.ownerNeeded", "inventory.nextAction.owner");

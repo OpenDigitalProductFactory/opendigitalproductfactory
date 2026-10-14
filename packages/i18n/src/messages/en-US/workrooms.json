@@ -21,7 +21,7 @@
     "cleanup": "Cleanup",
     "executing": "Executing",
     "status": {
-      "closeout": "Ready for closeout", "delivered": "Delivered", "closed": "Closed",
+      "closeout": "Ready for closeout", "delivered": "Source merged", "closed": "Closed",
       "ended": "Session ended", "ownerNeeded": "Owner needed", "attention": "Needs attention",
       "check": "Check required", "capacity": "Waiting for capacity", "paused": "Worker paused",
       "idle": "No recent progress", "verifying": "Checking result", "working": "Working", "unknown": "State not recorded"
