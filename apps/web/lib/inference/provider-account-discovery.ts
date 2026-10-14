@@ -5,6 +5,7 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { isLocalProviderId } from "@/lib/routing/provider-locality";
 import { getDecryptedCredential, getProviderBearerToken, getProviderExtraHeaders, profileModelsInternal, upsertDiscoveredModels } from "./ai-provider-internals";
 import { discoverCodexCliModels } from "./codex-cli-catalog-auth";
+import { providerWorkspaceHeaders } from "./provider-workspace";
 
 /** Account availability is independent of the shared vendor model catalog. No absence here retires another account's models. */
 export async function discoverProviderAccountModels(connectionId: string): Promise<ActionResult<{ modelIds: string[] }>> {
@@ -17,6 +18,7 @@ export async function discoverProviderAccountModels(connectionId: string): Promi
   if (connection.authMethod === "api-key") {
     const credential = await getDecryptedCredential(connection.providerId, connectionId);
     if (!credential?.secretRef) return err("Account API key not configured");
+    Object.assign(headers, providerWorkspaceHeaders(connection.providerId, credential.providerWorkspaceId));
     if (provider.authHeader) headers[provider.authHeader] = provider.authHeader === "Authorization" ? `Bearer ${credential.secretRef}` : credential.secretRef;
   } else if (!subscriptionCli && (connection.authMethod !== "local" || !isLocalProviderId(connection.providerId))) {
     const bearer = await getProviderBearerToken(connection.providerId, connectionId);

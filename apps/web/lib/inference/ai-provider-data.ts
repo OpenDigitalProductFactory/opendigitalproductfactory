@@ -42,6 +42,7 @@ function maskSecret(value: string | null): string | null {
 
 /** Strip secrets before sending credential data to the client. */
 function maskCredential(cred: {
+  providerWorkspaceId?: string | null;
   providerId: string | null;
   secretRef: string | null;
   clientId: string | null;
@@ -56,6 +57,7 @@ function maskCredential(cred: {
   return {
     providerId,
     secretHint:       maskSecret(cred.secretRef),
+    providerWorkspaceId: cred.providerWorkspaceId ?? null,
     clientId:         cred.clientId,
     clientSecretHint: maskSecret(cred.clientSecret),
     tokenEndpoint:    cred.tokenEndpoint,
