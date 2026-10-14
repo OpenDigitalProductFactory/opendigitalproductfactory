@@ -115,6 +115,11 @@ Priority is explicit at the producer:
 The bounded queue-depth setting remains aggregate across both queues. Cancellation
 or failure removes exactly one waiter; release remains idempotent.
 
+Each queued callback captures its submitting async context. Dispatch restores
+that context so the preceding holder cannot supply another caller's authority,
+deadline, transport or origin. Regression coverage includes an unscoped waiter
+and two distinct governed parent scopes.
+
 ### 5.2 One local execution boundary
 
 `callProvider` uses the local ResourceLane around `adapter.execute` for local

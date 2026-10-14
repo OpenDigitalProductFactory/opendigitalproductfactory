@@ -16,6 +16,7 @@
 // bounded aging promotes the oldest autonomous waiter. Each call still gets the
 // full resource, and one failure never wedges the rest. Spec §4.3.
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { QueueTransitionInput } from "./queue-telemetry";
 import {
   createInferenceAdmissionTimeoutError,
@@ -119,7 +120,9 @@ export class ResourceLane {
 
     const run = new Promise<T>((resolve, reject) => {
       const entry = {
-        fn,
+        // The pump runs from the previous holder's completion context. Restore
+        // this submitter's authority, deadline and origin when its turn starts.
+        fn: AsyncLocalStorage.bind(fn),
         resolve: resolve as (value: unknown) => void,
         reject,
         itemId,
