@@ -221,7 +221,7 @@ async function runAdmittedPreview(env, cleanupState) {
   };
   const terminate = async () => { runner.terminate(); try { await stopOwned(); } finally { finish(); } };
   const mcpUrl = env.DPF_MCP_URL || 'http://127.0.0.1:3000/api/mcp/v1';
-  const call = (tool, args) => mcpCall(tool, args, { mcpUrl, bearerToken: resolveMcpCredential({ mcpUrl, env }).bearer });
+  const call = (tool, args) => callPreviewMcp(tool, args, { mcpUrl, bearerToken: resolveMcpCredential({ mcpUrl, env }).bearer });
 
   const release = async () => {
     const result = await call('release_nonprod_environment_lease', { leaseId, ownerSessionId });
@@ -295,6 +295,16 @@ async function runAdmittedPreview(env, cleanupState) {
     await rm(overridePath, { force: true });
 
   }
+}
+
+export function callPreviewMcp(tool, args, options) {
+  // Renewal can succeed before the governed transport finishes responding.
+  // Keep this request bounded inside the unchanged two-minute authority window;
+  // the supervisor still terminates at its last acknowledged expiry.
+  return mcpCall(tool, args, {
+    ...options,
+    ...(tool === 'renew_nonprod_environment_lease' ? { timeoutMs: 30_000 } : {}),
+  });
 }
 
 export async function main(env = process.env) {
