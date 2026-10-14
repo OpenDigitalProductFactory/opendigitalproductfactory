@@ -1,3 +1,6 @@
+---
+status: active
+---
 # Local supplied-source answer completion
 
 Primary: BI-285EF102; related deliverable: BI-C145F650; Workroom WC-1EBA9720.
