@@ -24,6 +24,7 @@ on:
       # Also trigger when the guard machinery itself changes so a guard
       # regression can't slip through without exercising the CI path.
       - "packages/db/scripts/migration-safety-guard.mjs"
+      - "packages/db/scripts/migration-safety-inventory.test.mjs"
       - "packages/db/scripts/migration-timestamp-collision-guard.mjs"
       - ".github/workflows/migration-safety-guard.yml"
 
@@ -35,6 +36,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      - name: Verify migration inventory semantics and bounded Git calls
+        run: node --test packages/db/scripts/migration-safety-inventory.test.mjs
 
       - name: Detect unattested tightening migrations
         # Scans each NEW migration.sql (absent at origin/main) for tightening
