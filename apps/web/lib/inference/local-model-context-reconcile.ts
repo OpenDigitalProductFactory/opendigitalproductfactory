@@ -33,7 +33,7 @@ import {
   estimateModelVramGb,
   type HostMemory,
 } from "./local-model-policy";
-import { getServedContextTokens, setServedContextTokens } from "./dmr-runtime-config";
+import { getServedContextTokens, setServedContextTokens, getLocalThinkingBudgetEvidence } from "./dmr-runtime-config";
 import { canonicalLocalModelKey } from "./local-model-management";
 import type { LocalPresence } from "@/lib/routing/local-tool-ceiling";
 
@@ -346,6 +346,18 @@ export async function resolveLocalServedContextTokens(
   const probe = await probeLocalGenerationModel(fetchImpl, selected);
   const tokens = probe.status === "served" ? probe.contextTokens : null;
   return tokens !== null && Number.isSafeInteger(tokens) && tokens > 0 ? tokens : null;
+}
+
+/** Selected runtime facts for routing, without mutating or loading the model. */
+export async function resolveLocalRoutingRuntime(
+  fetchImpl: typeof fetch = fetch,
+  selected: { modelId: string; provider?: Parameters<typeof getOllamaBaseUrl>[0] },
+): Promise<{ contextTokens: number | null; thinkingBudgetEvidence?: import("@/lib/routing/types").LocalThinkingBudgetEvidence }> {
+  const contextTokens = await resolveLocalServedContextTokens(fetchImpl, selected);
+  const thinkingBudgetEvidence = contextTokens === null ? undefined : await getLocalThinkingBudgetEvidence(
+    getOllamaApiRoot(selected.provider), selected.modelId, fetchImpl,
+  );
+  return { contextTokens, ...(thinkingBudgetEvidence ? { thinkingBudgetEvidence } : {}) };
 }
 
 /**

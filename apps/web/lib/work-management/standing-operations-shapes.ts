@@ -297,6 +297,10 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       "The portfolio advisor classifies inbound issues, checks each against the existing "
       + "backlog for duplication, and proposes a backlog item. Inbound issues are backlog "
       + "items in status triaging, read with query_backlog; there is no separate issue queue. "
+      + "Use the room's repository scope and verified submitter relationship to distinguish "
+      + "external/customer, internal and unknown origin; a GitHub author or bot is transport identity, "
+      + "not proof of a customer. Review external acknowledgements and overdue follow-through before "
+      + "routine internal suggestions, while urgent safety and service-blocking reports remain first. "
       + "Admission to the backlog is a "
       + "human decision — an agent that could admit its own proposals would grow the backlog "
       + "without anyone choosing to.",
@@ -308,7 +312,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         accountablePrincipalRef: "agent:portfolio-advisor",
         advance: {
           kind: "status-change",
-          condition: "Every backlog item in status triaging is classified by kind and severity.",
+          condition: "Every backlog item in status triaging is classified by kind, severity and evidenced external/customer, internal or unknown origin. Unknown relationships remain visible. External acknowledgement and triage precede routine internal suggestions; delivery still uses existing demand scoring and capacity. Revenue or reputation impact is recorded only with evidence.",
         },
         evidence: ["assurance-run"],
         tools: ["list_backlog_items", "query_backlog"],
@@ -319,7 +323,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         accountablePrincipalRef: "agent:portfolio-advisor",
         advance: {
           kind: "status-change",
-          condition: "Each triaging backlog item is matched to an existing backlog item (query_backlog, find_duplicate_candidates) or carries a proposed new one.",
+          condition: "Each triaging backlog item is matched to an existing backlog item (query_backlog, find_duplicate_candidates) or carries a proposed new one. Review unresolved external requests and due deferrals too: findings name the accountable owner, next action, due date, blocker and source link, and flag unanswered requests or stale updates. Distinguish delivered fixes from duplicate retirement and standing reports; retain links to delivery evidence. An unread source is incomplete coverage, never a quiet week.",
         },
         evidence: ["assurance-finding"],
         tools: ["query_backlog", "find_duplicate_candidates"],
@@ -330,7 +334,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         accountablePrincipalRef: "role:backlog-owner",
         advance: {
           kind: "governed-decision",
-          condition: "The accountable owner admits, merges into an existing item, or declines.",
+          condition: "The accountable owner admits, merges into an existing item, or declines, and assigns an accountable owner and due next action. Public status uses the existing sanitized, governed outbound path; this watch grants no send authority. An unavailable owner leaves a durable pending decision, never automatic consent.",
           decisionScope: "backlog-admission",
         },
         evidence: ["decision-record"],

@@ -1,3 +1,4 @@
+import { envelopeApproveRoute, envelopeDeclineRoute } from "@/lib/coworker/envelope-routes";
 import { prisma } from "@dpf/db";
 
 import { resolveAIDocForAgent, type InternalAIDoc } from "@/lib/identity/aidoc-resolver";
@@ -12,7 +13,7 @@ import type {
   RuntimeSupervisorDecisionState,
 } from "./agent-card-types";
 
-type AgentCardDb = Pick<typeof prisma, "agent" | "agentActionProposal" | "toolExecution">;
+type AgentCardDb = Pick<typeof prisma, "agent" | "agentActionProposal" | "coworkerActionEnvelope" | "user" | "toolExecution">;
 
 type AgentCardAgent = {
   agentId: string;
@@ -96,6 +97,9 @@ const SECURITY_REQUIREMENTS = [
 const EMPTY_SUPERVISOR_DECISION_STATE: RuntimeSupervisorDecisionState = {
   pendingProposalCount: 0,
   latestPendingProposal: null,
+  pendingEnvelopeCount: 0,
+  latestPendingEnvelope: null,
+  latestPendingKind: null,
   recentReceiptCount: 0,
   latestReceipt: null,
 };
@@ -374,6 +378,8 @@ async function getSupervisorDecisionStateForAgents(
     });
   }
 
+  await addPendingEnvelopes(stateByAgentId, agentIds, db);
+
   for (const execution of receiptExecutions) {
     if (!execution.receipt) continue;
     const current = stateByAgentId.get(execution.agentId) ?? createEmptySupervisorDecisionState();
@@ -398,6 +404,67 @@ async function getSupervisorDecisionStateForAgents(
   }
 
   return stateByAgentId;
+}
+
+/**
+ * BI-7BCC87BB (founder decision DI-FFD78D222548): the agent's waiting approval
+ * requests beside its legacy proposals, and which of the two is newest. A
+ * request is decided through the envelope routes (lib/coworker/envelope-routes),
+ * never the v1 proposal endpoint.
+ */
+async function addPendingEnvelopes(
+  stateByAgentId: Map<string, RuntimeSupervisorDecisionState>,
+  agentIds: string[],
+  db: AgentCardDb,
+): Promise<void> {
+  const now = new Date();
+  const waiting = { status: "proposed", OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] };
+  // Counted per agent, and the newest read per agent, so a busy agent neither
+  // caps its own count nor pushes another agent's request out of the read.
+  const counts = await db.coworkerActionEnvelope.groupBy({
+    by: ["coworkerAgentId"],
+    where: { coworkerAgentId: { in: agentIds }, ...waiting },
+    _count: { _all: true },
+  });
+  const countByAgent = new Map(counts.map((row) => [row.coworkerAgentId, row._count._all]));
+  const envelopes = countByAgent.size === 0 ? [] : await db.coworkerActionEnvelope.findMany({
+    where: { coworkerAgentId: { in: [...countByAgent.keys()] }, ...waiting },
+    orderBy: { createdAt: "desc" },
+    distinct: ["coworkerAgentId"],
+    select: { id: true, coworkerAgentId: true, delegatingUserId: true, manifestActionId: true, rationale: true, createdAt: true, expiresAt: true },
+  });
+  const ownerIds = [...new Set(envelopes.map((envelope) => envelope.delegatingUserId))];
+  const owners = ownerIds.length > 0
+    ? await db.user.findMany({ where: { id: { in: ownerIds } }, select: { id: true, email: true } })
+    : [];
+  const ownerLabel = new Map(owners.map((owner) => [owner.id, owner.email]));
+  for (const envelope of envelopes) {
+    const current = stateByAgentId.get(envelope.coworkerAgentId) ?? createEmptySupervisorDecisionState();
+    stateByAgentId.set(envelope.coworkerAgentId, {
+      ...current,
+      pendingEnvelopeCount: countByAgent.get(envelope.coworkerAgentId) ?? 1,
+      latestPendingEnvelope: current.latestPendingEnvelope ?? {
+        envelopeId: envelope.id,
+        delegatingUserId: envelope.delegatingUserId,
+        ownerLabel: ownerLabel.get(envelope.delegatingUserId) ?? envelope.delegatingUserId,
+        toolName: envelope.manifestActionId,
+        actionLabel: envelope.manifestActionId.replace(/_/g, " "),
+        rationale: envelope.rationale,
+        proposedAt: envelope.createdAt.toISOString(),
+        expiresAt: envelope.expiresAt?.toISOString() ?? null,
+        approveHref: envelopeApproveRoute(envelope.id),
+        declineHref: envelopeDeclineRoute(envelope.id),
+      },
+    });
+  }
+  for (const [agentId, state] of stateByAgentId) {
+    const proposal = state.latestPendingProposal;
+    const envelope = state.latestPendingEnvelope ?? null;
+    const latestPendingKind = proposal && envelope
+      ? (Date.parse(envelope.proposedAt) >= Date.parse(proposal.proposedAt) ? "envelope" : "proposal")
+      : proposal ? "proposal" : envelope ? "envelope" : null;
+    stateByAgentId.set(agentId, { ...state, latestPendingKind });
+  }
 }
 
 export async function resolveInternalAgentCard(

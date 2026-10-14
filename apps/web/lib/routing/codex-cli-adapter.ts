@@ -44,6 +44,11 @@ const CLI_AUTH_FAILURE_PATTERNS: RegExp[] = [
   /\b401\b/,
   /re-?authenticat/i,
   /please log ?in/i,
+  // BI-07EC0FB4: a revoked ChatGPT sign-in reports only "Your access token could
+  // not be refreshed ... Please sign in again." on its ERROR: line.
+  /\bsign ?in again\b/i,
+  /please sign ?in/i,
+  /access token could not be refreshed/i,
   /session (?:has )?expired/i,
   /token (?:has )?expired/i,
   /not authenticated/i,

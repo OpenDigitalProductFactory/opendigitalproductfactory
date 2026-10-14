@@ -535,6 +535,26 @@ active. A capacity refusal before dispatch is infrastructure-inconclusive;
 transport loss remains uncertain. Neither is a failed code review or permission
 to publish. Workroom history retains the reviewer checkpoints and receipts.
 
+HTTP 200 is not review completion. A local response that exhausts its completion
+allowance on reasoning, has no final content, or ends with `finish_reason=length`
+remains inconclusive. Never parse its scratchpad as a verdict. JSON review
+requirements must participate in route capability selection and actual dispatch.
+The activity completion allowance includes both reasoning and final output; a
+fallback must not enlarge that total to accommodate thinking.
+
+Numeric local thinking limits require fresh selected-model runtime evidence,
+not an optimistic model-family prior. The verified llama.cpp b9879 dialect uses
+`thinking_budget_tokens` and requires a compatible thinking end delimiter.
+Read-only configuration, engine status and model metadata bind that dialect to
+the selected model digest, template and configuration; only an audited exact
+template digest can establish compatibility in this dialect. Delimiter text in
+comments or unreachable Jinja branches is insufficient. Unknown or overridden
+templates leave effort unexpressed. Recheck the evidence after admission before
+inference, preserving authority and the original deadline. No global configure
+write or model reload is needed. The initial final-output reserve is a candidate
+to validate with complete reviews and paired clean/defective controls, not a
+quality claim or a general tool-surface calibration result.
+
 When a local review fails near five minutes, inspect the actual transport as
 well as the model deadline. The process-lived provider transport uses the
 canonical local inference ceiling for headers and body inactivity; caller

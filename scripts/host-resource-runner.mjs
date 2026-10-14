@@ -156,33 +156,50 @@ export function readMcpConnection(env = process.env) {
   }
 }
 
-function readProcessRows() {
-  if (process.platform === "win32") {
-    const command = [
-      "Get-CimInstance Win32_Process |",
-      "Select-Object ProcessId,ParentProcessId,CommandLine |",
-      "ConvertTo-Json -Compress",
-    ].join(" ");
-    const result = spawnSync("powershell.exe", ["-NoProfile", "-Command", command], {
-      encoding: "utf8",
-      windowsHide: true,
-    });
-    if (result.status !== 0 || !result.stdout.trim()) return [];
-    const parsed = JSON.parse(result.stdout);
-    return (Array.isArray(parsed) ? parsed : [parsed]).map((row) => ({
-      pid: row.ProcessId,
-      parentPid: row.ParentProcessId,
-      commandLine: row.CommandLine ?? "",
+export function readProcessRows({ platform = process.platform, spawnSyncImpl = spawnSync } = {}) {
+  let result;
+  const unavailable = reason => {
+    // Neither producer output nor JSON.parse's excerpt may leave this reader:
+    // process command lines can contain credentials belonging to other work.
+    const error = new Error(`Host process inventory unavailable (${reason}); no command was admitted. Retry the same governed command after inventory collection recovers.`);
+    Object.assign(error, { code: "host_inventory_unavailable", reason,
+      producerStatus: result?.status ?? null, producerSignal: result?.signal ?? null,
+      stdoutBytes: Buffer.byteLength(String(result?.stdout ?? ""), "utf8") });
+    throw error;
+  };
+  const command = [
+    "$ErrorActionPreference = 'Stop';",
+    "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false);",
+    "$rows = @(Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,CommandLine);",
+    "ConvertTo-Json -InputObject $rows -Compress -Depth 3",
+  ].join(" ");
+  try {
+    result = spawnSyncImpl(platform === "win32" ? "powershell.exe" : "ps",
+      platform === "win32" ? ["-NoProfile", "-NonInteractive", "-Command", command] : ["-eo", "pid=,ppid=,args="],
+      { encoding: "utf8", windowsHide: true, timeout: 15_000, maxBuffer: 8 * 1024 * 1024 });
+  } catch { unavailable("producer-failed"); }
+  if (result?.error?.code === "ETIMEDOUT") unavailable("producer-timeout");
+  if (result?.error?.code === "ENOBUFS") unavailable("producer-output-limit");
+  if (result?.error || result?.status !== 0) unavailable("producer-failed");
+  const text = String(result.stdout ?? "").replace(/^\uFEFF/, "").trim();
+  if (!text) unavailable("empty-output");
+  let rows;
+  if (platform === "win32") {
+    let parsed;
+    try { parsed = JSON.parse(text); } catch { unavailable("malformed-output"); }
+    rows = (Array.isArray(parsed) ? parsed : [parsed]).map(row => ({
+      pid: row?.ProcessId, parentPid: row?.ParentProcessId, commandLine: row?.CommandLine ?? "",
     }));
+  } else {
+    rows = text.split(/\r?\n/).map(line => {
+      const match = line.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/);
+      if (!match) unavailable("invalid-rows");
+      return { pid: Number(match[1]), parentPid: Number(match[2]), commandLine: match[3] };
+    });
   }
-  const result = spawnSync("ps", ["-eo", "pid=,ppid=,args="], {
-    encoding: "utf8",
-  });
-  if (result.status !== 0) return [];
-  return result.stdout.split(/\r?\n/).flatMap((line) => {
-    const match = line.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/);
-    return match ? [{ pid: Number(match[1]), parentPid: Number(match[2]), commandLine: match[3] }] : [];
-  });
+  if (!rows.length || rows.some(row => !Number.isSafeInteger(row.pid) || row.pid < 0
+    || !Number.isSafeInteger(row.parentPid) || row.parentPid < 0 || typeof row.commandLine !== "string")) unavailable("invalid-rows");
+  return rows;
 }
 
 async function runCommand({ command, commandArgs }) {
@@ -343,5 +360,12 @@ async function main() {
 }
 
 if (isEntryModule(import.meta.url)) {
-  await main();
+  try { await main(); } catch (error) {
+    if (error.code !== "host_inventory_unavailable") throw error;
+    process.stderr.write(JSON.stringify({ status: "unrun", reason: error.code,
+      commandExecuted: false, failure: { reason: error.reason, producerStatus: error.producerStatus,
+        producerSignal: error.producerSignal, stdoutBytes: error.stdoutBytes },
+      recovery: error.message }) + "\n");
+    process.exitCode = 88;
+  }
 }

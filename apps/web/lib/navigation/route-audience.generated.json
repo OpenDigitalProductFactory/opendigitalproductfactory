@@ -1,9 +1,9 @@
 {
   "generator": "apps/web/scripts/build-route-audience.ts",
-  "pageRouteCount": 371,
+  "pageRouteCount": 372,
   "summary": {
     "byAudience": {
-      "admin": 151,
+      "admin": 152,
       "auth-setup": 10,
       "builder": 3,
       "customer": 11,
@@ -16,7 +16,7 @@
       "detail": 256,
       "legacy-internal": 38,
       "section-home": 32,
-      "settings-config": 12,
+      "settings-config": 13,
       "workflow-step": 9
     },
     "overrideCount": 9,
@@ -173,6 +173,13 @@
     },
     {
       "routePath": "/admin/settings",
+      "audience": "admin",
+      "destinationKind": "settings-config",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/settings/monitoring",
       "audience": "admin",
       "destinationKind": "settings-config",
       "confidence": "high",
