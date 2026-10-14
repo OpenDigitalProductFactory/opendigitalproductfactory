@@ -14,6 +14,39 @@ wins and this doc is the bug — fix it.
 
 ## The contract (read this first)
 
+Host policy commands use the existing observed-process runner with a 30-minute
+command budget, bounded diagnostic tails and graceful/forced tree termination.
+The parent preflight has a 60-minute outer budget. Full source guard loops have
+exceeded ten minutes on developer hosts, so that shorter budget is unsuitable.
+Cancellation and deadline
+expiry are unrun outcomes (exit 88), including a late zero child exit. Guard
+violations, environment limitations and interrupted execution remain distinct.
+Environment-limited host checks may continue to canonical CI, but are reported
+inconclusive and cannot produce reusable passing host receipts.
+
+Progress and results live in the existing per-worktree Git directory's
+`dpf-host-guard-receipts` slot. Interrupted exceptions settle inconclusive; an
+externally killed process retains its running receipt and PID for reconciliation.
+Only complete successful results with unchanged source, policy, dependency and
+environment identity are reused. Inspect the receipt before retrying an
+interrupted command. A queued sibling cannot hide admitted progress for the
+same branch and SHA; neither queued nor admitted is a verification pass.
+
+Host resource admission shares the existing lease-call allowance: 60 seconds
+by default, tunable through `DPF_GATE_MCP_TIMEOUT_MS`, while ordinary MCP probes
+retain their 10-second default. The transport bounds the complete response,
+including a stream that continues to send bytes. A timed-out host claim gets
+one bounded lease reconciliation and at most one same-key replacement inside
+a finite elapsed deadline; an empty listing does not prove no admission exists.
+Uncertain admission returns unrun88 with the same source-bound resume pin.
+Authoritative refusal, foreign identity and active authority owned by another
+process stop recovery. A wrapped executable that cannot spawn is also unrun88;
+an executed child's nonzero exit remains a code result. Windows package-manager
+shims use the existing command resolver.
+Cleanup refusal or uncertainty is reported separately with the original
+lease/session recovery action; it cannot be presented as a verified release
+or change an executed child's nonzero result to success.
+
 Begin [failure analysis](../architecture/failure-analysis-and-recovery.md) in design, refine it during implementation, and give the independent reviewer executed evidence for the final change. Local integration reports now bind their output to the owning Workroom, source tree and diff. An empty checklist, stale report or skipped run cannot satisfy that requirement. Technical review outages follow internal recovery; they are not business-owner approval requests.
 
 Cross-session drift happens when each session reconstructs the workflow from
