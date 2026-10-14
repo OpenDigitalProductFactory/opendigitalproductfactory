@@ -96,3 +96,21 @@ test("source mutation after verification cannot replace the captured approved by
   assert.deepEqual(await readFile(join(destination, "manifest.json")), manifest);
   await loadOfflineRecoveryKit({ ...f.args, kitDirectory: destination });
 });
+
+test("late directory flush failure preserves a complete kit without reporting preparation success", posix, async t => {
+  const f = await fixture(t); const destination = join(f.dir, "prepared");
+  const canonicalDestination = join(await realpath(f.dir), "prepared");
+  const originalOpen = fsPromises.open; let injected = false;
+  const mocked = t.mock.method(fsPromises, "open", async (path, ...args) => {
+    const handle = await originalOpen(path, ...args);
+    if (path === canonicalDestination && args[0] === "r") {
+      handle.sync = async () => { injected = true; throw Object.assign(new Error("fixture flush failed"), { code: "EIO" }); };
+    }
+    return handle;
+  });
+  syncBuiltinESMExports(); t.after(() => { mocked.mock.restore(); syncBuiltinESMExports(); });
+  await assert.rejects(prepareOfflineRecoveryKit({ ...f.args, destination }), { code: "EIO" });
+  assert.equal(injected, true);
+  const loaded = await loadOfflineRecoveryKit({ ...f.args, kitDirectory: destination });
+  assert.equal(loaded.envelopeDigest, hash(f.envelopeBytes));
+});

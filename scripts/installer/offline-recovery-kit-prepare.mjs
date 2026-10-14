@@ -30,7 +30,9 @@ export async function prepareOfflineRecoveryKit({ destination, ...source }) {
       || await protectedDirectory(target) !== target
       || !same(await lstat(target), identity)) fail("changed");
   };
-  // Signatures last: any interrupted preparation is rejected by normal loading.
+  // Signatures last: incomplete artifacts are rejected by normal loading.
+  // A late write/sync failure can leave a complete, valid kit. Preserve it;
+  // preparation failure is not evidence that no usable artifact exists.
   for (const name of ["manifest.json", "envelope.json", "manifest-signatures.json", "envelope-signatures.json"]) {
     await unchanged();
     const file = await open(join(target, name), "wx", 0o600);
