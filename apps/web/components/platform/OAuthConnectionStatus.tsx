@@ -89,7 +89,7 @@ export function OAuthConnectionStatus({ credential, authMethod, authorizeUrl, pr
         {/* Status text */}
         <span style={{ fontSize: 12, color: "var(--dpf-text)" }}>
           {isConnected && !isExpired
-            ? `Connected · ${relativeTime(credential.tokenExpiresAt!)}`
+            ? `Sign-in saved · ${relativeTime(credential.tokenExpiresAt!)}`
             : willSelfHeal
               ? "Access token expired — refreshes automatically on next use"
               : isExpired
