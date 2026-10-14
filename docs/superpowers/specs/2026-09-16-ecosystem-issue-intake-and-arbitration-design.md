@@ -483,10 +483,37 @@ and acquires the existing scheduler's single-run protection. A development peer
 with read-only authority cannot pass this predicate even if its purpose is
 `evolve-dpf`. The scheduled-job record remains one per job identifier; the standing
 workroom supplies roles and evidence, not another polling timer. Revocation or
-owner reassignment invalidates the next run. The current purpose-only runner does
-not enforce this predicate yet; activation is blocked until this extension and
-the negative tests pass. This is local controller fencing, not a claim of a global
-distributed lock across untrusted independent installations.
+owner reassignment invalidates the next run. This is local controller fencing, not
+a claim of a global distributed lock across untrusted independent installations.
+
+**AC-1 controller predicate (operator decision, 2026-10-13).** The runner and the
+commissioning action evaluate one predicate, and refuse with
+`not commissioned: <reason>` unless every clause holds:
+
+1. `ScheduledJob[ecosystem-inbound-issue-triage].metadata.intakeControllerCommission`
+   names a Workroom, the repository, `issue-triage-watch@1.0.0`, the commissioning
+   principal and the time. Schedule edits and enable toggles merge metadata, so they
+   never drop this reference.
+2. The Workroom exists, is not archived and is not `complete`, `abandoned` or `archived`.
+3. It declares `issue-triage-watch@1.0.0`.
+4. It is locally owned: no peer-canonical `FederatedRecordMirror` points at it, and
+   its bound BacklogItem carries no `[origin:federatedWork:…]` marker.
+5. `PlatformDevConfig.upstreamRemoteUrl` is set and parses to a GitHub repository,
+   and that repository matches both the Workroom and the commission. The reader's
+   fallback repository is never used.
+6. An active `accountable` or `coordinator` participant is an active local principal
+   (an `external-agent` federated principal does not count), and the commissioning
+   principal still holds one of those roles.
+7. **Install identity:** the environment class resolved by the instance-stance
+   precedence chain is a declared `production`. A development or test peer, or an
+   install whose class is only the undeclared cautious default, cannot become the
+   controller even with a local Workroom.
+8. The installation operating intent is valid, confirmed and has `evolve-dpf` as its
+   primary purpose.
+
+Only a user with `manage_platform` whose active human principal owns the Workroom may
+commission it. The queue function runs with a concurrency limit of one. A failing or
+uncommissioned scan reaches Attention and links to `/admin/scheduled-jobs`.
 
 For existing installs, add the optional metadata reference first and treat absence
 as uncommissioned. Populate it only through owner-authorized commissioning after
