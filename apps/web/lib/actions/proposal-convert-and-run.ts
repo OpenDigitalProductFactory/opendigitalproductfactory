@@ -41,6 +41,8 @@ import * as crypto from "crypto";
 
 import { prisma } from "@dpf/db";
 
+import { getErrorMessage } from "@/lib/shared/get-error-message";
+
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import type { GovernedExecuteResult } from "@/lib/mcp-governed-execute-types";
 import type { ToolResult } from "@/lib/mcp-tool-types";
@@ -105,10 +107,6 @@ const recordOutcomeLive: RecordOutcome = async (envelopeId, userId, outcome) =>
 const cancelEnvelopeLive: CancelEnvelope = async (envelopeId, userId) =>
   (await import("@/lib/coworker/envelope-actions")).cancelEnvelope(envelopeId, userId);
 
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 /** A settled run is recorded as its outcome, as the envelope approve route does. */
 function recordable(run: PlatformRequestRun): ApprovedRequestRun {
   if (run.status !== "settled") return run;
@@ -164,20 +162,20 @@ export async function convertAndRunProposal(
     if (finalised) {
       console.error(
         "[proposal-convert-and-run] record after the run failed proposal=%s: %s",
-        JSON.stringify(proposalId), JSON.stringify(errorText(error)),
+        JSON.stringify(proposalId), JSON.stringify(getErrorMessage(error)),
       );
       return finalised;
     }
     // Never strand the row `approved`: only the claimed row moves, so a row
     // another path already settled is left alone.
-    const message = errorText(error) || "Execution failed";
+    const message = getErrorMessage(error) || "Execution failed";
     await db.agentActionProposal.updateMany({
       where: { proposalId, status: "approved" },
       data: { status: "failed", resultError: message },
     }).catch((writeError: unknown) => {
       console.error(
         "[proposal-convert-and-run] could not mark proposal=%s failed: %s",
-        JSON.stringify(proposalId), JSON.stringify(errorText(writeError)),
+        JSON.stringify(proposalId), JSON.stringify(getErrorMessage(writeError)),
       );
     });
     return { kind: "threw", error: message };
@@ -258,7 +256,7 @@ async function runClaimed(
       console.error(
         "[proposal-convert-and-run] approval outcome not recorded envelope=%s: %s",
         JSON.stringify(envelopeId),
-        error instanceof Error ? JSON.stringify(error.message) : JSON.stringify(String(error)),
+        JSON.stringify(getErrorMessage(error)),
       );
     });
     if (run.status === "not-run") {
@@ -268,7 +266,7 @@ async function runClaimed(
       await (deps.cancelEnvelope ?? cancelEnvelopeLive)(envelopeId, approver.userId).catch((error: unknown) => {
         console.error(
           "[proposal-convert-and-run] approved envelope not cancelled after not-run envelope=%s: %s",
-          JSON.stringify(envelopeId), JSON.stringify(errorText(error)),
+          JSON.stringify(envelopeId), JSON.stringify(getErrorMessage(error)),
         );
       });
       return revert("refused", { success: false, error: run.reason, message: run.message });
