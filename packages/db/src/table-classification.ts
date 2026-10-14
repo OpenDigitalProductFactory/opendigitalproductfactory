@@ -35,6 +35,9 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   // PII. Short-TTL, swept by its own expiry (see stewardship-exemptions.txt).
   // Candidate company/device coordinates learned from trusted introducers are
   // operator-only until independent SAS pairing establishes a relationship.
+  // BI-54469E18: which DPF toolchain copy each MCP credential connected with —
+  // credential refs, pack versions, client names. Operational telemetry, no PII.
+  AgentToolchainObservation: "internal",
   Portfolio: "internal",
   DigitalProduct: "internal",
   // Outcome narratives/provenance and linked demand evidence can carry

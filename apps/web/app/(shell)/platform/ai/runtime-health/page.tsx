@@ -215,7 +215,7 @@ export default async function RuntimeHealthPage() {
 
       <div className="mb-5">
         {capabilityHealth ? (
-          <CapabilityServiceHealth projection={capabilityHealth} />
+          <CapabilityServiceHealth projection={capabilityHealth} t={t} />
         ) : (
           <section
             aria-labelledby="capability-service-health-title"

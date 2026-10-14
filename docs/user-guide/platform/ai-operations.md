@@ -180,6 +180,31 @@ the wording of that message matches the same cause.
 - capacity work that produces token spend without durable evidence, backlog movement, or reviewable output
 - capability needs without submitter context, route context, or a clear backlog follow-up
 
+## Repair disagreement in installed runtime capabilities
+
+When runtime health reports that installed services and saved capability settings
+disagree, ask your platform coworker to inspect the runtime reconciliation preview.
+The preview changes nothing. It reports the validated installation snapshot,
+saved settings, disagreement and the packaged code that can apply a repair.
+
+Choose which capabilities should be enabled before applying the repair. Optional
+services are never enabled merely because their initial saved settings say active.
+The coworker submits the complete observed baselines, explicitly chosen enabled
+capabilities, desired saved settings and the keys allowed to change through the
+same governed runtime transition. Untouched settings, including custom operator
+states, remain unchanged. Active attributed work can require a drain first.
+
+A changed baseline refuses the repair. An interrupted request keeps its original
+transition identity, signed recovery packet and immutable promoter image. Keep
+that request for supported recovery; starting another request does not settle an
+uncertain outcome. Completion requires a signed host result, required service
+health and the owned saved-state commit. Remaining disagreement stays visible.
+
+Coworker tools: `preview_runtime_capability_reconciliation` is read-only;
+`reconcile_runtime_capabilities` applies explicit intent with platform-management
+authority. Unavailable compatibility evidence requires the qualified platform
+update before the repair can proceed.
+
 ## Defaults for work rooms
 
 Priority & Models also carries the default for **work rooms** — how hard rooms push and

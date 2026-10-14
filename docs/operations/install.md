@@ -52,6 +52,20 @@ recorded decision is written as `undecided` / `upgrade-carried`, and its enabled
 capabilities are left exactly as they were, so the portal can offer the choice
 instead of silently changing the install (BI-83260BB3).
 
+On a fresh install, and on a re-run where no choice is recorded yet, both
+installers ask one question before the platform first starts: turn monitoring
+(Prometheus + Grafana) on? The prompt states the memory and CPU monitoring
+uses, summed from `config/install-resource-budgets.json`, and defaults to no.
+`-Monitoring On|Off` (`install-dpf.ps1`) or `--monitoring on|off`
+(`install-dpf.sh`) answers it without a prompt, recorded with source
+`installer-flag`; an answered prompt is recorded as `installer-prompt`. A
+headless run without the flag does not ask: monitoring stays off and the
+decision is `undecided` / `headless-default`, so the portal offers the choice.
+The answer is written before the capability profiles resolve, so the first
+`compose up` already includes or omits monitoring. A recorded `enabled` or
+`disabled` decision is never asked again or overwritten by the installer; change
+it in Settings → Monitoring (BI-31F11C37).
+
 When upgrading a previous-release state that predates these fields, the adapter
 preserves the capabilities that were active in that release: core, build,
 browser automation, durable automation, local speech, deep observability, and

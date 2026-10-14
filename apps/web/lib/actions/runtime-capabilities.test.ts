@@ -1,19 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { requireCapability, assertAdmission, execute, rotate } = vi.hoisted(() => ({
+const { requireCapability, assertAdmission, execute, rotate, preview } = vi.hoisted(() => ({
   requireCapability: vi.fn(),
   assertAdmission: vi.fn(),
   execute: vi.fn(),
   rotate: vi.fn(),
+  preview: vi.fn(),
 }));
 vi.mock("@/lib/actions/shared/guards", () => ({ requireCapability }));
 vi.mock("@/lib/platform-runtime/transition-recovery", () => ({ assertRuntimeCapabilityTransitionAdmission: assertAdmission }));
-vi.mock("@/lib/platform-runtime/runtime-capability-executor", () => ({ executeProductionRuntimeCapabilityTransition: execute, rotateProductionRuntimeTransitionSecret: rotate }));
+vi.mock("@/lib/platform-runtime/runtime-capability-executor", () => ({ executeProductionRuntimeCapabilityTransition: execute, rotateProductionRuntimeTransitionSecret: rotate, readProductionRuntimeCapabilityReconciliationPreview: preview }));
 
-import { requestRuntimeCapabilityTransition, rotateRuntimeTransitionSecret } from "./runtime-capabilities";
+import { requestRuntimeCapabilityTransition, rotateRuntimeTransitionSecret, previewRuntimeCapabilityReconciliation } from "./runtime-capabilities";
 
 describe("runtime capability mutation action", () => {
   beforeEach(() => { vi.clearAllMocks(); });
+  it("requires platform management for preview without opening mutation admission", async () => {
+    requireCapability.mockResolvedValue({ userId: "operator-1" }); preview.mockResolvedValue({ observedDatabaseStates: {} });
+    await expect(previewRuntimeCapabilityReconciliation()).resolves.toEqual({ observedDatabaseStates: {} });
+    expect(requireCapability).toHaveBeenCalledWith("manage_platform"); expect(assertAdmission).not.toHaveBeenCalled(); expect(execute).not.toHaveBeenCalled();
+  });
 
   it("requires manage_platform before invoking the durable coordinator", async () => {
     requireCapability.mockRejectedValue(new Error("Unauthorized"));
@@ -28,6 +34,14 @@ describe("runtime capability mutation action", () => {
     execute.mockResolvedValue({ status: "succeeded" });
     await expect(requestRuntimeCapabilityTransition({ transitionId: "RCT-1", desiredKeys: ["runtime:core"] })).resolves.toEqual({ status: "succeeded" });
     expect(execute).toHaveBeenCalledWith({ transitionId: "RCT-1", desiredKeys: ["runtime:core"], requestedById: "operator-1" });
+  });
+
+  it("owns caller arrays before awaiting authentication", async () => {
+    const request = { transitionId: "RCT-original", desiredKeys: ["runtime:core"] };
+    requireCapability.mockImplementation(async () => { request.transitionId = "RCT-mutated"; request.desiredKeys.push("runtime:build"); return { userId: "operator-1" }; });
+    assertAdmission.mockResolvedValue(undefined); execute.mockResolvedValue({ status: "succeeded" });
+    await requestRuntimeCapabilityTransition(request);
+    expect(execute).toHaveBeenCalledWith({ transitionId: "RCT-original", desiredKeys: ["runtime:core"], requestedById: "operator-1" });
   });
 
   it.each([

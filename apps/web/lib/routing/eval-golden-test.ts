@@ -7,10 +7,11 @@ export interface TestResult {
   testId: string;
   version: number;
   scoring: ScoringMethod;
-  score: number;       // 0-10
+  score: number | null; // 0-10 when measured; null for an incomplete observation
   response: string;
   error?: string;
   traceId?: string;
+  truncated?: boolean; // absent historical/legacy evidence stays unknown
 }
 
 /** Score a single response using the appropriate scoring method. */
@@ -76,6 +77,11 @@ export async function runGoldenTest(
       undefined,
       { traceId },
     );
+    if (result.truncated === true) {
+      return { testId: test.id, version: test.version, scoring: test.scoring,
+        score: null, response: result.content.slice(0, 500), traceId, truncated: true,
+        error: "Golden test output was truncated; quality is unverified." };
+    }
     const score = scoreResponse(test, result.content, result.toolCalls ?? []);
     return {
       testId: test.id,
@@ -84,6 +90,7 @@ export async function runGoldenTest(
       score,
       response: result.content.slice(0, 500),
       traceId,
+      ...(result.truncated === undefined ? {} : { truncated: result.truncated }),
     };
   };
 

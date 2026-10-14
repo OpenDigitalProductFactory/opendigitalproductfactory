@@ -311,6 +311,18 @@ Then the updater inside the verified pack runs, and the pin is written after it 
 - converges Claude local scope and every project-scope record, retires duplicate `dpf` servers in project `.mcp.json`, user scope and each project's local scope (backup first, then `claude mcp remove`), and gives every converged record's cached descriptor a literal endpoint;
 - with `--report-json`, writes one row per client and scope: `before` and `after` (`version`, `digest`, `authMode`), `action` (`updated`, `unchanged`, `retired`, `prunable` or `failed`), `backupPath`, `restartRequired`, and the client CLI's own `--version`. The agent records it through `record_surface_readiness`. A refusal writes `result: "refused"` with its reason.
 
+### What a connection declares, and what it is told
+
+A connector can declare the pack it loaded, with `dpf_pack`, `dpf_digest` (the first 16 hex of the delivered digest) and `dpf_client` on the MCP URL, or the `X-DPF-Toolchain: pack=…;digest=…;client=…` header (BI-54469E18, design §5.2). On every connection the server:
+
+- **Computes a verdict.** `current`, `stale`, `below-floor` or `undeclared`, from `apps/web/lib/agent-toolchain/toolchain-verdict.ts`. A User-Agent never decides it.
+- **Records the copy.** It goes in `AgentToolchainObservation`, keyed by the server-derived credential (`oauth:<OAuthClient.id>` or `token:<McpApiToken.id>`) and the loaded digest, with writes coalesced to one per five minutes. `initialize` also records `clientInfo`.
+- **Tells the agent.** A `TOOLCHAIN:` line is added to the `initialize` instructions, naming what is stale, the portal repair and the full installation id the updater must expect (`--expect-installation`). It is addressed to the agent and never hands the user a command.
+
+`get_fleet_readiness` returns a `toolchain` section: every credential with the copies it was seen loading and their verdicts, one page at a time. `record_surface_readiness` now keys an MCP caller's row by its own credential, so one token cannot overwrite another host's readiness.
+
+The floor's rules (pack below `minPackVersion`, a stored token where the credential policy says OAuth is available, Grok on anything but its client token) apply only once a release sets a floor in `toolchain-version.json`.
+
 ### Version bumps propagate automatically
 
 When this package's `.claude-plugin/plugin.json` version bumps (e.g. `0.1.0` → `0.2.0`), the `scripts/dpf-bootstrap-agent-toolchain.{ps1,sh}` adapter reads the new version from the manifest at install time and the planning library at `packages/dpf-bootstrap/` plans an upgrade write for contributors whose installed entry is at the older version. No manual `claude plugin install` is required. Contributors pick up the new skills on the next time the installer (or `install-dpf`, `fresh-install`, `setup`, or a fresh `git worktree add`) runs — and a re-run when nothing has drifted is a true no-op.
