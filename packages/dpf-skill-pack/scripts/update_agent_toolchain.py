@@ -1630,6 +1630,15 @@ GROK_STOP_SCRIPTS = ("uncommitted-work-guard.mjs",)
 GROK_SESSION_START_SCRIPT = GROK_SESSION_START_SCRIPTS[0]
 GROK_SESSION_END_SCRIPT = GROK_SESSION_END_SCRIPTS[0]
 
+# PostToolUse (BI-AB4EA033, BI-C3D3762B): re-cache the claim guard's marker from
+# each dpf claim/heartbeat answer, so a lease renewed over MCP stops the guard
+# denying edits. Non-blocking. The matcher mirrors hooks.json (drift-tested).
+CLAIM_REFRESH_SCRIPT = "workroom-claim-refresh.mjs"
+CLAIM_REFRESH_MATCHER = (
+    "^mcp__.+__(adopt_worktree|heartbeat_workroom|claim_workroom_scope"
+    "|claim_backlog_item_for_work|create_workroom)$"
+)
+
 
 def grok_hooks_file(home: Path) -> Path:
     return home / ".grok" / "hooks" / "dpf-guards.json"
@@ -1670,6 +1679,16 @@ def _grok_matched_group(
     return {"matcher": matcher, "hooks": hooks}
 
 
+def claim_refresh_post_tool_use_groups(hooks_dir: Path, *, dry_run: bool) -> list[dict[str, Any]]:
+    """The PostToolUse group that re-caches the Workroom claim marker, or none."""
+    if not (dry_run or (hooks_dir / CLAIM_REFRESH_SCRIPT).exists()):
+        return []
+    return [{
+        "matcher": CLAIM_REFRESH_MATCHER,
+        "hooks": [_managed_hook_command(hooks_dir, CLAIM_REFRESH_SCRIPT, timeout=15, event="PostToolUse")],
+    }]
+
+
 def build_grok_hooks_payload(managed: Path, dry_run: bool = False) -> dict[str, Any]:
     """Build the global Grok hooks payload (PreToolUse + SessionStart + SessionEnd/Stop)."""
     hooks_dir = managed / "hooks"
@@ -1681,6 +1700,9 @@ def build_grok_hooks_payload(managed: Path, dry_run: bool = False) -> dict[str, 
     payload: dict[str, Any] = {"hooks": {}}
     if pre_entries:
         payload["hooks"]["PreToolUse"] = pre_entries
+    post_entries = claim_refresh_post_tool_use_groups(hooks_dir, dry_run=dry_run)
+    if post_entries:
+        payload["hooks"]["PostToolUse"] = post_entries
     start = [
         _grok_command_entry(hooks_dir, script, timeout=30, event="SessionStart")
         for script in GROK_SESSION_START_SCRIPTS
@@ -1829,6 +1851,8 @@ CODEX_BASH_GUARDS = (
     "workroom-claim-guard.mjs",
 )
 CODEX_ASK_GUARDS = ("decision-routing-guard.mjs",)
+# Tool events whose DPF-owned entries the fallback copy writes and prunes.
+CODEX_DPF_TOOL_EVENTS = ("PreToolUse", "PostToolUse")
 CODEX_WRITE_GUARDS = (
     "root-clone-guard.mjs",
     "plan-backlog-coverage-guard.mjs",
@@ -1846,7 +1870,7 @@ def _dpf_hook_command(command: str, managed_hooks_dir: Path) -> bool:
     managed_prefix = str(managed_hooks_dir)
     if managed_prefix in command and ".mjs" in command:
         return True
-    return any(name in command for name in (*CODEX_BASH_GUARDS, *CODEX_ASK_GUARDS, *CODEX_WRITE_GUARDS))
+    return any(name in command for name in (*CODEX_BASH_GUARDS, *CODEX_ASK_GUARDS, *CODEX_WRITE_GUARDS, CLAIM_REFRESH_SCRIPT))
 
 
 def _build_codex_pre_tool_use_groups(managed: Path, *, dry_run: bool) -> list[dict[str, Any]]:
@@ -1877,40 +1901,36 @@ def _build_codex_pre_tool_use_groups(managed: Path, *, dry_run: bool) -> list[di
 
 
 def prune_codex_hooks_payload(existing: dict[str, Any], hooks_dir: Path) -> dict[str, Any]:
-    """Drop DPF-owned PreToolUse entries; keep foreign hooks, drop emptied groups."""
+    """Drop DPF-owned PreToolUse/PostToolUse entries; keep foreign hooks, drop emptied groups."""
     payload = dict(existing) if isinstance(existing, dict) else {}
     events = payload.get("hooks")
     events = dict(events) if isinstance(events, dict) else {}
     payload["hooks"] = events
-    pre_tool_use = events.get("PreToolUse")
-    if not isinstance(pre_tool_use, list):
-        pre_tool_use = []
-    cleaned: list[Any] = []
-    for group in pre_tool_use:
-        if not isinstance(group, dict):
-            cleaned.append(group)
-            continue
-        kept = [
-            hook
-            for hook in group.get("hooks", [])
-            if isinstance(hook, dict)
-            and not _dpf_hook_command(str(hook.get("command", "")), hooks_dir)
-        ]
-        if kept:
-            cleaned.append({**group, "hooks": kept})
-    if cleaned:
-        events["PreToolUse"] = cleaned
-    else:
-        events.pop("PreToolUse", None)
+    for event in CODEX_DPF_TOOL_EVENTS:
+        groups = events.get(event)
+        if not isinstance(groups, list):
+            groups = []
+        cleaned: list[Any] = []
+        for group in groups:
+            if not isinstance(group, dict):
+                cleaned.append(group)
+                continue
+            kept = [
+                hook
+                for hook in group.get("hooks", [])
+                if isinstance(hook, dict)
+                and not _dpf_hook_command(str(hook.get("command", "")), hooks_dir)
+            ]
+            if kept:
+                cleaned.append({**group, "hooks": kept})
+        if cleaned:
+            events[event] = cleaned
+        else:
+            events.pop(event, None)
     return payload
 
 
-def merge_codex_hooks_payload(existing: dict[str, Any], managed: Path, *, dry_run: bool) -> dict[str, Any]:
-    """Fallback: upsert DPF guards into ~/.codex/hooks.json without clobbering other hooks."""
-    payload = prune_codex_hooks_payload(existing, managed / "hooks")
-    events = payload["hooks"]
-    cleaned: list[Any] = list(events.get("PreToolUse", []))
-    dpf_groups = _build_codex_pre_tool_use_groups(managed, dry_run=dry_run)
+def _upsert_dpf_groups(cleaned: list[Any], dpf_groups: list[dict[str, Any]]) -> list[Any]:
     for dpf_group in dpf_groups:
         matcher = dpf_group.get("matcher")
         merged = False
@@ -1930,7 +1950,22 @@ def merge_codex_hooks_payload(existing: dict[str, Any], managed: Path, *, dry_ru
                 break
         if not merged:
             cleaned.insert(0, dpf_group)
-    events["PreToolUse"] = cleaned
+    return cleaned
+
+
+def merge_codex_hooks_payload(existing: dict[str, Any], managed: Path, *, dry_run: bool) -> dict[str, Any]:
+    """Fallback: upsert DPF guards into ~/.codex/hooks.json without clobbering other hooks."""
+    payload = prune_codex_hooks_payload(existing, managed / "hooks")
+    events = payload["hooks"]
+    events["PreToolUse"] = _upsert_dpf_groups(
+        list(events.get("PreToolUse", [])), _build_codex_pre_tool_use_groups(managed, dry_run=dry_run)
+    )
+    post = _upsert_dpf_groups(
+        list(events.get("PostToolUse", [])),
+        claim_refresh_post_tool_use_groups(managed / "hooks", dry_run=dry_run),
+    )
+    if post:
+        events["PostToolUse"] = post
     return payload
 
 

@@ -2257,5 +2257,70 @@ class CodexProjectConfigTest(unittest.TestCase):
             converge.assert_called_once_with(project, "https://selected.example/mcp", True)
 
 
+class ClaimRefreshParityTest(unittest.TestCase):
+    """BI-C3D3762B: the claim-marker refresh reaches Grok and the Codex fallback copy."""
+
+    SKILL_PACK = Path(__file__).resolve().parents[1]
+
+    def _plugin_refresh_group(self) -> dict[str, Any]:
+        data = json.loads((self.SKILL_PACK / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+        return next(
+            g for g in data["hooks"]["PostToolUse"]
+            if any(updater.CLAIM_REFRESH_SCRIPT in h["command"] for h in g["hooks"])
+        )
+
+    def test_matcher_mirrors_the_plugin_hooks_json(self) -> None:
+        self.assertEqual(updater.CLAIM_REFRESH_MATCHER, self._plugin_refresh_group()["matcher"])
+        self.assertTrue((self.SKILL_PACK / "hooks" / updater.CLAIM_REFRESH_SCRIPT).exists())
+
+    def test_matcher_covers_each_surface_tool_name_form(self) -> None:
+        matcher = re.compile(updater.CLAIM_REFRESH_MATCHER)
+        for name in ("mcp__plugin_dpf-platform_dpf__heartbeat_workroom", "mcp__dpf__adopt_worktree", "mcp__dpf__claim_backlog_item_for_work"):
+            self.assertTrue(matcher.search(name), name)
+        for name in ("Shell", "mcp__dpf__get_workroom", "mcp__dpf__heartbeat_workroom_v2"):
+            self.assertFalse(matcher.search(name), name)
+
+    def test_grok_payload_runs_the_refresh_after_claim_tools(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            managed = home / ".agents" / "plugins" / "plugins" / "dpf-platform"
+            updater.copy_skill_pack(self.SKILL_PACK, managed, dry_run=False)
+            updater.install_grok_hooks(managed, home, dry_run=False)
+            data = json.loads(updater.grok_hooks_file(home).read_text())
+            post = data["hooks"]["PostToolUse"]
+            self.assertEqual(len(post), 1)
+            self.assertEqual(post[0]["matcher"], updater.CLAIM_REFRESH_MATCHER)
+            self.assertIn(str(managed / "hooks" / updater.CLAIM_REFRESH_SCRIPT), post[0]["hooks"][0]["command"])
+
+    def test_codex_fallback_copy_carries_the_refresh_and_keeps_foreign_post_hooks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            managed = home / "managed"
+            hooks_dir = managed / "hooks"
+            hooks_dir.mkdir(parents=True)
+            for script in (*updater.CODEX_BASH_GUARDS, *updater.CODEX_ASK_GUARDS, updater.CLAIM_REFRESH_SCRIPT):
+                (hooks_dir / script).write_text("// stub\n", encoding="utf-8")
+            (home / ".codex").mkdir()
+            foreign = {"hooks": {"PostToolUse": [{"matcher": ".*", "hooks": [{"type": "command", "command": "node /foreign/audit.js"}]}]}}
+            (home / ".codex" / "hooks.json").write_text(json.dumps(foreign), encoding="utf-8")
+
+            updater.install_codex_hooks(managed, home, dry_run=False)
+            merged = json.loads((home / ".codex" / "hooks.json").read_text())
+            post_cmds = [h["command"] for g in merged["hooks"]["PostToolUse"] for h in g["hooks"]]
+            self.assertIn("node /foreign/audit.js", post_cmds)
+            self.assertTrue(any(updater.CLAIM_REFRESH_SCRIPT in c for c in post_cmds))
+
+            # rerun is idempotent: one refresh entry, not two
+            updater.install_codex_hooks(managed, home, dry_run=False)
+            again = json.loads((home / ".codex" / "hooks.json").read_text())
+            refresh = [h for g in again["hooks"]["PostToolUse"] for h in g["hooks"] if updater.CLAIM_REFRESH_SCRIPT in h["command"]]
+            self.assertEqual(len(refresh), 1)
+
+            # pruning (plugin plane proven) removes the DPF refresh and keeps the foreign hook
+            pruned = updater.prune_codex_hooks_payload(again, hooks_dir)
+            pruned_cmds = [h["command"] for g in pruned["hooks"].get("PostToolUse", []) for h in g["hooks"]]
+            self.assertEqual(pruned_cmds, ["node /foreign/audit.js"])
+
+
 if __name__ == "__main__":
     unittest.main()
