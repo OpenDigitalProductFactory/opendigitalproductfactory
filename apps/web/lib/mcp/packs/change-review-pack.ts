@@ -3,6 +3,7 @@ import { prisma, type Prisma } from "@dpf/db";
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
 import { enqueueSemanticReview, retryPersistedSemanticReview } from "@/lib/change-review/semantic-review-background";
 import { resolveFailureAnalysisEvidence } from "@/lib/change-review/failure-analysis-evidence";
+import { validateFailureAnalysis } from "@/lib/change-review/failure-analysis";
 import { createSemanticReviewRequest, REVIEW_ARTIFACT_TYPES, REVIEW_RISKS, REVIEW_PROFILES } from "@/lib/change-review/semantic-review-request";
 import {
   runSemanticChangeReview,
@@ -198,6 +199,16 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
     sensitivityFloor,
     mode: reviewMode(),
   };
+  const failureValidation = validateFailureAnalysis(operationInput.failureAnalysis,
+    operationInput.identity, operationInput.resolvedFailureEvidence ?? []);
+  if (!failureValidation.valid) {
+    return {
+      success: false,
+      error: "invalid_failure_analysis",
+      message: "Review was not started. Correct the failure analysis, reconcile the Workroom head, and cite current passing verification evidence bound to this Workroom and exact change.",
+      data: { reasons: failureValidation.reasons },
+    };
+  }
   let singleFlight: SemanticReviewSingleFlightClaim | null = null;
 
   try {
