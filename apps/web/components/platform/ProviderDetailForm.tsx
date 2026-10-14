@@ -6,6 +6,8 @@ import { useSearchParams } from "next/navigation";
 import { configureProvider, testProviderAuth, discoverModels } from "@/lib/actions/ai-providers";
 import { startProviderOAuth, disconnectProviderOAuth } from "@/lib/actions/provider-oauth";
 import { ConnectGrokCard } from "./ConnectGrokCard";
+import { probeQuiescence } from "@/components/auth/UpgradeHold";
+import { useT } from "@/lib/i18n/use-t";
 import { ProviderWorkspaceField } from "./ProviderWorkspaceField";
 import type { ProviderWithCredential, DiscoveredModelRow, ModelProfileRow } from "@/lib/ai-provider-types";
 import { ModelSection } from "@/components/platform/ModelSection";
@@ -42,6 +44,7 @@ type Props = {
 };
 
 export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActiveProvider, routingProfiles }: Props) {
+  const t = useT("setup");
   const { provider, credential } = pw;
   const router = useRouter();
   const fieldId = useId();
@@ -115,6 +118,26 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
     };
   }
 
+  async function reportSetupFailure() {
+    const state = await probeQuiescence();
+    setTestResult({ ok: false, message: state.level === "draining" || state.level === "swapping"
+      ? t("providerConnection.upgradePaused")
+      : t("providerConnection.setupUnavailable") });
+  }
+
+  function handleSignIn() {
+    startTransition(async () => {
+      setTestResult(null);
+      try {
+        const result = await startProviderOAuth(provider.providerId);
+        if ("authorizeUrl" in result) window.open(result.authorizeUrl, "_self");
+        else setTestResult({ ok: false, message: result.error });
+      } catch {
+        await reportSetupFailure();
+      }
+    });
+  }
+
   function handleReadyProvider() {
     startTransition(async () => {
       setPipelineStatus("Saving provider settings...");
@@ -134,7 +157,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
         setPipelineStatus("Checking connection...");
         setTestResult(await testProviderAuth(provider.providerId, false));
       } catch {
-        setTestResult({ ok: false, message: "Setup failed. Retry." });
+        await reportSetupFailure();
       } finally {
         setPipelineStatus(null);
         router.refresh();
@@ -468,9 +491,14 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--dpf-success)", display: "inline-block" }} />
                 <span style={{ color: "var(--dpf-text)", fontSize: 13 }}>
-                  Connected · token expires {new Date(credential.tokenExpiresAt).toLocaleString()}
+                  Sign-in saved · token expires {new Date(credential.tokenExpiresAt).toLocaleString()}
                 </span>
               </div>
+              <button type="button" disabled={!canWrite || isPending} onClick={handleSignIn}
+                style={{ background: "transparent", border: "1px solid var(--dpf-accent)", color: "var(--dpf-accent)", padding: "8px 14px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}>
+                {t("providerConnection.reconnect")}
+              </button>
+              <details style={{ marginTop: 12 }}><summary style={{ color: "var(--dpf-muted)", fontSize: 12 }}>{t("providerConnection.accountActions")}</summary>
               {disconnectConfirm ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 12, color: "var(--dpf-muted)" }}>
@@ -478,7 +506,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
                   </span>
                   <button
                     type="button"
-                    disabled={isPending}
+                    disabled={!canWrite || isPending}
                     onClick={() => startTransition(async () => {
                       const result = await disconnectProviderOAuth(provider.providerId);
                       if (result.error) {
@@ -503,13 +531,14 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
               ) : (
                 <button
                   type="button"
-                  disabled={isPending}
+                  disabled={!canWrite || isPending}
                   onClick={() => setDisconnectConfirm(true)}
                   style={{ background: "transparent", border: "1px solid var(--dpf-error)", color: "var(--dpf-error)", padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontSize: 12 }}
                 >
                   Disconnect
                 </button>
               )}
+              </details>
             </div>
           ) : credential?.status === "expired" ||
               (credential?.tokenExpiresAt && new Date(credential.tokenExpiresAt).getTime() <= Date.now()) ? (
@@ -521,15 +550,8 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
               </div>
               <button
                 type="button"
-                disabled={isPending}
-                onClick={() => startTransition(async () => {
-                  const result = await startProviderOAuth(provider.providerId);
-                  if ("authorizeUrl" in result) {
-                    window.open(result.authorizeUrl, "_self");
-                  } else {
-                    setTestResult({ ok: false, message: result.error });
-                  }
-                })}
+                disabled={!canWrite || isPending}
+                onClick={handleSignIn}
                 style={{ background: "var(--dpf-accent)", color: "#fff", border: "none", padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}
               >
                 Sign in with {provider.name}
@@ -542,15 +564,8 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
               </div>
               <button
                 type="button"
-                disabled={isPending}
-                onClick={() => startTransition(async () => {
-                  const result = await startProviderOAuth(provider.providerId);
-                  if ("authorizeUrl" in result) {
-                    window.open(result.authorizeUrl, "_self");
-                  } else {
-                    setTestResult({ ok: false, message: result.error });
-                  }
-                })}
+                disabled={!canWrite || isPending}
+                onClick={handleSignIn}
                 style={{ background: "var(--dpf-accent)", color: "#fff", border: "none", padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}
               >
                 Sign in with {provider.name}
