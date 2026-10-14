@@ -191,6 +191,58 @@ export async function convergeUxSweepFixture(db, now = new Date(), { dbNull } = 
 }
 
 /**
+ * Populated CI estate, before the authenticated shell's first-run host scan.
+ * Constant keys make both fixture passes idempotent. Never replace real runs,
+ * delete observations or alter business products. Publish the completed run
+ * only after every entity, link and review issue exists.
+ */
+export async function convergeUxSweepEstate(db, now) {
+  const existing = await db.discoveryRun.findFirst({
+    orderBy: { startedAt: "desc" }, select: { id: true, sourceSlug: true },
+  });
+  if (existing && existing.sourceSlug !== "ux-route-sweep") return null;
+  const runId = "ux-sweep-discovery-run";
+  const nodes = [
+    ["host", "host:hostname:ux-sweep-host", "Fixture host", { hostname: "ux-sweep-host", address: "10.1.0.10", macAddress: "02:AA:BB:CC:DD:10" }],
+    ["gateway", "gateway:gateway:10.1.0.1", "Gateway 10.1.0.1", { address: "10.1.0.1" }],
+    ["subnet", "subnet:subnet:10.1.0.0/24", "10.1.0.0/24", { cidr: "10.1.0.0/24" }],
+    ["network_interface", "nic:mac:02AABBCCDD10", "Interface 10.1.0.10", { address: "10.1.0.10", macAddress: "02:AA:BB:CC:DD:10", subnetCidr: "10.1.0.0/24" }],
+    ["runtime", "runtime:socket:/var/run/docker.sock", "Docker", { socketPath: "/var/run/docker.sock" }],
+    ["container", "container:ux-sweep-portal", "Fixture portal", { containerName: "ux-sweep-portal" }],
+  ];
+  const entities = [];
+  for (const [entityType, entityKey, name, properties] of nodes) {
+    const data = { entityType, name, status: "active", confidence: 0.8,
+      attributionStatus: "needs_review", firstSeenAt: now, lastSeenAt: now,
+      properties: { ...properties, fixture: "ux-route-sweep" } };
+    entities.push(await db.inventoryEntity.upsert({ where: { entityKey },
+      create: { entityKey, ...data }, update: data }));
+  }
+  for (const [from, to, relationshipType] of [[0, 3, "HAS_INTERFACE"], [4, 5, "HOSTS"]]) {
+    const tuple = { fromEntityId: entities[from].id, toEntityId: entities[to].id, relationshipType };
+    const data = { relationshipKey: `ux-sweep:${relationshipType}`, status: "active", confidence: 1,
+      firstSeenAt: now, lastSeenAt: now, properties: { fixture: "ux-route-sweep" } };
+    await db.inventoryRelationship.upsert({ where: { fromEntityId_toEntityId_relationshipType: tuple },
+      create: { ...tuple, ...data }, update: data });
+  }
+  for (const [index, issueType, summary] of [
+    [0, "attribution_missing", "Fixture host requires taxonomy review"],
+    [1, "gateway_connection_needed", "Gateway requires a discovery connection"],
+  ]) {
+    const issueKey = `ux-sweep:${issueType}`;
+    const data = { issueType, status: "open", severity: "warn", summary,
+      inventoryEntityId: entities[index].id, firstDetectedAt: now, lastDetectedAt: now,
+      details: { fixture: "ux-route-sweep" } };
+    await db.portfolioQualityIssue.upsert({ where: { issueKey }, create: { issueKey, ...data }, update: data });
+  }
+  const run = { runKey: "DISC-UX-SWEEP", sourceSlug: "ux-route-sweep", trigger: "fixture",
+    status: "completed", startedAt: now, completedAt: now, itemCount: 6, relationshipCount: 2,
+    notes: { fixture: "ux-route-sweep", observedHostCollection: false } };
+  await db.discoveryRun.upsert({ where: { id: runId }, create: { id: runId, ...run }, update: run });
+  return { runId, entities: 6, relationships: 2, issues: 2 };
+}
+
+/**
  * Idempotent: one storefront on the seeded platform organisation, one
  * animals-available section, four listed animals with stable refs. Returns
  * null (and provisions nothing) when the seed carries no pet-rescue archetype,

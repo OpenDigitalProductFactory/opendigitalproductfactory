@@ -32,6 +32,12 @@ Reuse `docs/superpowers/specs/2026-10-04-local-inference-reliability-fix.md`, th
 
 Reference anchors for coverage: `CONTRACT-existing-admission`, `FLOW-two-ordinary-callers`, `VERIFY-source-regressions`, `VERIFY-canonical-two-caller-answers`.
 
+## Published CI correction: repeatable estate context
+
+PR #6370's run 38535433884 confirmed Estate Discovery at 977 visible words against a 972-word baseline, with unchanged semantic structure. Captured content includes the CI runner's real host and network. The authenticated shell (`apps/web/app/(shell)/layout.tsx`) executes bootstrap discovery whenever no discovery run exists. The current sweep fixture supplies no estate, so first login collects uncontrolled host data.
+
+Extend the existing fixture before authentication with a fixed completed run, six physical/internal entities, two relationships and two review issues. Reuse existing tables and constant fixture keys; preserve pre-existing nonfixture discovery and all business products. No empty-run sentinel, baseline increase, production renderer change or collector override. Test populated context, idempotence, existing-estate preservation and failure propagation. Earlier b790 canonical 6,788-test and qualified native-review passes retain their original identity. The correction requires affected source checks and independent delta assessment; final integration belongs to protected GitHub checks. AC-4 remains open until canonical deployment and actual two-caller evidence.
+
 ## Risk and rollback
 
 Observer mistakes could alter admission or leak caller context; isolate callbacks and test thrown observers and terminal cleanup. A faster first call may finish before the second queues; report that observation as inconclusive rather than manufacturing contention. Caller budgets may expire before answer content; preserve that evidence rather than relabeling it complete. Revert the optional diagnostic and observer together; the delivered reliability behavior remains independently present in PR #6270.
