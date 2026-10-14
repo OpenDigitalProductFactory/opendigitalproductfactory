@@ -1,13 +1,19 @@
+import { effectiveBacklogSensitivity } from "@/lib/federation/cross-org-sharing";
 type Room = { title: string; backlogItemId?: string | null };
-type Db = { backlogItem?: { findMany(args: unknown): Promise<Array<{ itemId: string; title: string }>> } };
+export type WorkroomTitleDb = { backlogItem?: { findMany(args: unknown): Promise<Array<{
+  itemId: string; title: string; sensitivity: string; scopeKind: string | null;
+}>> } };
 
 /** Resolve only generated ID labels. Human-authored room titles remain authoritative. */
-export async function loadWorkroomDisplayTitles(db: Db, rooms: readonly Room[]): Promise<Map<string, string>> {
+export async function loadWorkroomDisplayTitles(db: WorkroomTitleDb, rooms: readonly Room[]): Promise<Map<string, string>> {
   const ids = [...new Set(rooms.flatMap(room => room.backlogItemId ? [room.backlogItemId] : []))];
   const items = ids.length && db.backlogItem ? await db.backlogItem.findMany({
-    where: { itemId: { in: ids } }, select: { itemId: true, title: true }, take: ids.length,
+    where: { itemId: { in: ids } }, select: { itemId: true, title: true, sensitivity: true, scopeKind: true }, take: ids.length,
   }) : [];
-  return new Map(items.map(item => [item.itemId, item.title]));
+  // Area inventory metadata does not confer access to private request content.
+  // Only publicly classified request names enrich generated room labels.
+  return new Map(items.filter(item => effectiveBacklogSensitivity(item) === "public")
+    .map(item => [item.itemId, item.title]));
 }
 
 export function workroomDisplayTitle(room: Room, titles: ReadonlyMap<string, string>): string {

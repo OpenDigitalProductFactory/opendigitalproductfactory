@@ -16,7 +16,7 @@ import { readBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
 import { projectPrFollowThroughStatus } from "@/lib/build/pr-follow-through";
 import { projectInvocationAttribution, recordedDriveTask } from "./invocation-attribution";
 import { readStoredWorkroomDriveState, projectStoredWorkroomDriveObservation } from "@/lib/work-management/workroom-drive-state";
-import { loadWorkroomDisplayTitles, workroomDisplayTitle } from "./workroom-display-titles.server";
+import { loadWorkroomDisplayTitles, workroomDisplayTitle, type WorkroomTitleDb } from "./workroom-display-titles.server";
 
 const INVENTORY_SELECT = {
   capsuleId: true,
@@ -52,7 +52,7 @@ const INVENTORY_SELECT = {
 } as const satisfies Prisma.WorkroomSelect;
 
 export type InventoryDb = {
-  backlogItem?: { findMany(args: unknown): Promise<Array<{ itemId: string; title: string }>> };
+  backlogItem?: WorkroomTitleDb["backlogItem"];
   workroom: { findMany(args: unknown): Promise<any[]> };
   featureBuild: { findMany(args: unknown): Promise<any[]> };
   scheduledAgentTask?: { findMany(args: unknown): Promise<Array<{ taskId: string; agentId: string }>> };
