@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash, createHmac } from "node:crypto";
@@ -281,4 +281,21 @@ test("fails closed before mutation when the signed catalog projection is unavail
   const result = run({ DPF_RUNTIME_TRANSITION_SECRET_FILE: await secretFile(dir), DPF_RUNTIME_TRANSITION_ENVELOPE: Buffer.from(JSON.stringify(value)).toString("base64url"), DPF_RUNTIME_TRANSITION_SIGNATURE: signature, DPF_PROMOTER_STATE_DIR: dir, PROMOTE_COMPOSE_PROJECT: "dpf" });
   assert.equal(result.status, 78); assert.match(result.stderr, /capability_catalog_unreadable/);
   assert.equal(JSON.parse(await readFile(join(dir, "install-state.json"), "utf8")).capabilityCatalogHash, "f".repeat(64));
+});
+
+
+test("expired apply timestamp cannot evict an unmeasured owner", async t => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-transition-lock-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const fixture = await validTransition(dir);
+  const lock = join(dir, ".runtime-transition-apply.lock");
+  await mkdir(lock);
+  const expired = new Date(Date.now() - 60_000).toISOString();
+  await writeFile(join(lock, "expires-at"), expired);
+  const before = await readFile(join(dir, "install-state.json"));
+  const result = run(fixture.env);
+  assert.equal(result.status, 75, result.stderr);
+  assert.match(result.stderr, /transition_apply_in_progress/);
+  assert.equal(await readFile(join(lock, "expires-at"), "utf8"), expired);
+  assert.deepEqual(await readFile(join(dir, "install-state.json")), before);
 });

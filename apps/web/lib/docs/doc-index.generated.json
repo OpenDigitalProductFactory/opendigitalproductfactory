@@ -1266,7 +1266,8 @@
         "backup-and-health-semantics",
         "observation-and-diagnostics-boundary",
         "diagnosing-capability-drift-bi-5acbac50",
-        "proposed-existing-install-reconciliation-bi-5acbac50",
+        "existing-install-reconciliation-bi-5acbac50",
+        "historical-implementation-evidence",
         "safe-operating-rules",
         "how-self-upgrade-may-recreate-a-service"
       ]
@@ -2206,6 +2207,18 @@
         "worked-example-fail",
         "related-tooling",
         "change-control"
+      ]
+    },
+    "docs/architecture/offline-recovery-preparation.md": {
+      "publicHref": "/architecture/offline-recovery-preparation/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "offline-recovery-preparation-and-compatible-rollout",
+        "available-source-primitives",
+        "release-sequence",
+        "remaining-acceptance"
       ]
     },
     "docs/architecture/operational-precedent-corpus.md": {
