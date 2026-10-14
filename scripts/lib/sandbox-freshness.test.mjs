@@ -9,6 +9,7 @@ import {
 } from "./local-integration-status.mjs";
 import {
   CRITICAL_PACKAGES,
+  EXIT_CANDIDATE_MERGE_CONFLICT,
   EXIT_CHILD_SIGNAL_DEATH,
   EXIT_VITEST_RUNNER_TERMINATION,
   EXIT_CONTROL_PLANE_STARVATION,
@@ -633,6 +634,7 @@ test("every status classifyGateOutcome can emit is one the recorder accepts", ()
     EXIT_CONTROL_PLANE_STARVATION,
     EXIT_VITEST_RUNNER_TERMINATION,
     EXIT_CHILD_SIGNAL_DEATH,
+    EXIT_CANDIDATE_MERGE_CONFLICT,
     75,
     130,
     143,
@@ -654,6 +656,30 @@ test("every status classifyGateOutcome can emit is one the recorder accepts", ()
       + "Add it to LOCAL_INTEGRATION_STATUSES in scripts/lib/local-integration-status.mjs.",
     );
   }
+});
+
+// BI-FCC1DCB2. A candidate that does not merge onto origin/main was recorded as
+// blocked_control_plane_starvation, and authors retried for hours. It is an
+// author-actionable verdict: the recorder's existing `conflict` status, naming
+// the paths, never infrastructure, and never a product-evidence run that owes
+// a completion checkpoint (that demand is what turned it into starvation).
+test("a candidate merge conflict is a `conflict` verdict naming the paths, not starvation", () => {
+  const mergeConflict = { mergedRef: "abc123", baseRef: "origin/main", paths: ["agent_registry.json", "coworker-grants.ts"] };
+  for (const freshnessVerdict of [null, "", "green", "drifted"]) {
+    const outcome = classifyGateOutcome({ freshnessVerdict, gateExitCode: EXIT_CANDIDATE_MERGE_CONFLICT, mergeConflict });
+    assert.equal(outcome.status, "conflict", String(freshnessVerdict));
+    assert.equal(outcome.gatePassed, false);
+    assert.equal(outcome.productEvidence, false, "a run that stopped at the merge owes no completion checkpoint");
+    assert.match(outcome.summary, /merge origin\/main into your branch and resolve: agent_registry\.json, coworker-grants\.ts/);
+    assert.doesNotMatch(outcome.summary, /infrastructure/i);
+    assert.deepEqual(outcome.mergeConflict, mergeConflict);
+  }
+});
+
+test("a merge conflict whose paths were not recorded still names the remedy", () => {
+  const outcome = classifyGateOutcome({ gateExitCode: EXIT_CANDIDATE_MERGE_CONFLICT });
+  assert.equal(outcome.status, "conflict");
+  assert.match(outcome.summary, /merge origin\/main into your branch and resolve/);
 });
 
 test("a status the recorder does not know still records rather than dropping the write", () => {

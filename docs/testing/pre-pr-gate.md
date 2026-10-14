@@ -824,6 +824,15 @@ the wrapper reads that exact path. This prevents the two linked worktrees'
 different gitdirs from turning a green preflight into `freshness: unknown`, and
 prevents a stale prior report from classifying a new run.
 
+The integration plan's first step merges the candidate onto the accepted base.
+If that merge stops on conflicts, the runner reads the unmerged paths from git's
+index, aborts the merge, writes them to `execution.mergeConflict` in the run
+metadata, and exits 10 (`EXIT_CANDIDATE_MERGE_CONFLICT`). The wrapper records
+the existing `conflict` status. A run that stopped at its merge graded nothing,
+so the wrapper owes no completion checkpoint and does not rewrite the result as
+infrastructure. `pregate:status` reports FAIL and names the remedy: merge
+`origin/main` into the branch and resolve the listed paths (BI-FCC1DCB2).
+
 The sandbox-freshness step checks the load-bearing runtime and gate packages,
 including the Vitest runner used by the next step. Vitest is checked for both
 locked version and runnable entrypoint imports, so an incomplete package cannot

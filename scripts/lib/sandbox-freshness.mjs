@@ -465,6 +465,19 @@ export const EXIT_RUNNER_PREREQUISITE_UNAVAILABLE = 8;
  * way until the container runs, so the status names the container and remedy.
  */
 export const EXIT_SLOT_SUBSTRATE_UNAVAILABLE = 9;
+/**
+ * BI-FCC1DCB2: the candidate does not merge cleanly onto the accepted base, so
+ * the integration tree was never built and nothing was graded. Unlike every
+ * other non-pass code here, this one is about the author's branch, and the
+ * remedy is the author's: merge origin/main into the branch and resolve the
+ * named paths. Re-running fails identically until they do.
+ *
+ * It used to leave the runner as git's raw exit 1. The wrapper read 1 as a
+ * product run, demanded a completion checkpoint a run stopped at its merge
+ * cannot have, and rewrote the result to blocked_control_plane_starvation.
+ * Authors then retried for hours a gate that needed a merge.
+ */
+export const EXIT_CANDIDATE_MERGE_CONFLICT = 10;
 export const EXIT_VITEST_RUNNER_TERMINATION = 86;
 /**
  * The local-CI child was killed by a SIGNAL rather than exiting (BI-F22B4EEE).
@@ -496,6 +509,19 @@ export const EXIT_WAIT_CANCELLED = 81;
  */
 export const EXIT_SOURCE_DRIFT = 82;
 
+/**
+ * The one sentence that tells an author what to do about a candidate merge
+ * conflict (BI-FCC1DCB2). Shared by the gate's summary and pregate:status so
+ * they cannot word the remedy differently.
+ */
+export function mergeConflictRemedy(mergeConflict) {
+  const paths = Array.isArray(mergeConflict?.paths) ? mergeConflict.paths.filter(Boolean) : [];
+  const base = mergeConflict?.baseRef || "origin/main";
+  return paths.length > 0
+    ? `merge ${base} into your branch and resolve: ${paths.join(", ")}`
+    : `merge ${base} into your branch and resolve the conflicts git reports`;
+}
+
 export function exitCodeForVerdict(verdict) {
   if (verdict === "green") return EXIT_GREEN;
   if (verdict === "sandbox_not_ready") return EXIT_SANDBOX_NOT_READY;
@@ -507,7 +533,21 @@ export function exitCodeForVerdict(verdict) {
  * evidence. `freshnessVerdict` is the verdict that applied when the product
  * command ran (or the preflight verdict when the product command never ran).
  */
-export function classifyGateOutcome({ freshnessVerdict, gateExitCode }) {
+export function classifyGateOutcome({ freshnessVerdict, gateExitCode, mergeConflict = null }) {
+  // BI-FCC1DCB2: decided before freshness. The merge is the first thing the
+  // runner does and freshness runs after it, so any freshness report beside a
+  // merge conflict belongs to an earlier run.
+  if (gateExitCode === EXIT_CANDIDATE_MERGE_CONFLICT) {
+    return {
+      status: "conflict",
+      gatePassed: false,
+      // Nothing was graded, so there is no completion checkpoint to demand.
+      // Demanding one is what used to turn this into control-plane starvation.
+      productEvidence: false,
+      mergeConflict,
+      summary: `local-CI gate stopped before grading: the candidate does not merge cleanly onto ${mergeConflict?.baseRef || "origin/main"}. Re-running cannot change this. ${mergeConflictRemedy(mergeConflict)}.`,
+    };
+  }
   if (freshnessVerdict && freshnessVerdict !== "green") {
     return {
       status: "blocked_sandbox_drift",
