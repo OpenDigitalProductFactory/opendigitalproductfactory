@@ -36,13 +36,15 @@ export function readHostAttemptContext(input, env = process.env) {
 export function resolveHostAttempt(context, resumePin, newId = randomUUID) {
   const fingerprint = digest(context);
   const pin = resumePin ? JSON.parse(resumePin) : { attemptId: newId(), fingerprint };
+  const uncertain = pin.phase === "claim-uncertain" && pin.leaseId == null;
   if (!/^[a-f0-9-]{36}$/.test(pin?.attemptId ?? "") || pin.fingerprint !== fingerprint
-    || (resumePin && (typeof pin.leaseId !== "string" || !pin.leaseId))) {
+    || (resumePin && !uncertain && (typeof pin.leaseId !== "string" || !pin.leaseId))) {
     throw new Error("host_resource_resume_identity_changed");
   }
   return { ...pin, claimKey: `host-resource:v2:${pin.attemptId}:${fingerprint}` };
 }
 
 export function hostResumePin(attempt, leaseId) {
-  return JSON.stringify({ attemptId: attempt.attemptId, fingerprint: attempt.fingerprint, leaseId });
+  return JSON.stringify({ attemptId: attempt.attemptId, fingerprint: attempt.fingerprint,
+    ...(leaseId ? { leaseId } : { phase: "claim-uncertain", leaseId: null }) });
 }

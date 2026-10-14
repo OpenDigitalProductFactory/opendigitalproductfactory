@@ -85,6 +85,12 @@ actually occurred. The existing supervisor owns release; failed cleanup must
 not turn a failed command into success. No grant, approval or force-release
 changes are part of this repair.
 
+The host adapter confirms the release response before reporting cleanup. A
+refusal or uncertain release is a separate `cleanup-unproven` outcome with the
+exact supported lease/session recovery action. It retains the executed child's
+real exit code. Supplying the original owner session to the existing release
+API is caller provenance, not a permission override or a server classifier fix.
+
 ## Ordered implementation and coverage
 
 One atomic host admission/execution boundary is owned by BI-091A2DCF.

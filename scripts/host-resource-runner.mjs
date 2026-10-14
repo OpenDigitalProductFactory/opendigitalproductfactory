@@ -9,7 +9,9 @@ import { spawn, spawnSync } from "node:child_process";
 import { gitTextOrNull } from "./lib/git.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { mcpCall } from "./lib/mcp-client.mjs";
-import { MCP_CREDENTIAL_HELP, resolveMcpCredential } from "./lib/mcp-credential.mjs";
+import { leaseQueueCallOptions, resolveLeaseQueueTimeoutMs } from "./lib/lease-queue-call-options.mjs";
+import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
+import { resolveMcpCredential } from "./lib/mcp-credential.mjs";
 import { admittedLeaseTtlMs, superviseLeaseRun } from "./lib/lease-supervisor.mjs";
 import { readProcessIdentity } from "./lib/local-sandbox-fence.mjs";
 import { spawnDurableWaitResumer } from "./lib/durable-wait-resumer.mjs";
@@ -137,6 +139,85 @@ function gitValue(args) {
   return gitTextOrNull(args, { cwd: process.cwd() }) ?? "";
 }
 
+/** At most one same-key replacement, after authoritative reconciliation. */
+export async function claimHostResourceAdmission({ claimArgs, connection, attempt,
+  call = mcpCall, env = process.env, now = () => performance.now(), onProgress = () => {} }) {
+  const started = now();
+  const deadline = started + 3 * resolveLeaseQueueTimeoutMs(env);
+  const safeLeaseId = value => /^NPEL-[A-Z0-9-]{1,80}$/.test(value ?? "");
+  let knownLeaseId = safeLeaseId(attempt.leaseId) ? attempt.leaseId : undefined;
+  let resumeLeaseId = knownLeaseId;
+  const unavailable = reason => Object.assign(new Error("Host admission is unproven; wrapped command unrun."), {
+    code: "host_admission_unavailable", reason, commandExecuted: false,
+    resumePin: hostResumePin(attempt, knownLeaseId), ...(knownLeaseId ? { leaseId: knownLeaseId } : {}),
+  });
+  if (claimArgs.claimKey !== attempt.claimKey || (attempt.leaseId && !knownLeaseId)) {
+    throw unavailable("claim-identity-conflict");
+  }
+  const request = async (name, args) => {
+    const remainingMs = deadline - now();
+    if (remainingMs <= 0) throw unavailable("claim-deadline");
+    const options = leaseQueueCallOptions(connection.mcpUrl, connection.bearerToken, { env, remainingMs });
+    const callStarted = now();
+    const result = await call(name, args, options);
+    if (name === "claim_nonprod_environment_lease" && result?.success === true) {
+      const id = result.entityId ?? result.data?.lease?.leaseId;
+      if (safeLeaseId(id)) knownLeaseId = id;
+    }
+    if (now() >= deadline) throw unavailable("claim-deadline");
+    if (now() - callStarted >= options.timeoutMs) {
+      throw Object.assign(new Error("Lease call completed after its allowance."), { code: "ETIMEDOUT" });
+    }
+    if (name === "claim_nonprod_environment_lease" && typeof result?.success !== "boolean") {
+      throw unavailable("claim-response-unproven");
+    }
+    return result;
+  };
+  const reconcile = async () => {
+    let result;
+    try { result = await request("list_nonprod_environment_leases", {}); }
+    catch { throw unavailable("reconciliation-unavailable"); }
+    if (result?.success !== true || !Array.isArray(result.data?.leases) || !Array.isArray(result.data?.queued)) {
+      throw unavailable("reconciliation-unproven");
+    }
+    const matches = [...result.data.leases, ...result.data.queued]
+      .filter(row => row?.claimKey === claimArgs.claimKey);
+    if (matches.length > 1) throw unavailable("claim-identity-conflict");
+    if (matches.length === 0) return;
+    const lease = matches[0];
+    if (!safeLeaseId(lease.leaseId)
+      || (knownLeaseId && lease.leaseId !== knownLeaseId)
+      || ["environmentKey", "ownerProvider", "ownerSessionId", "worktreePath", "branchName", "resourceClass", "purpose"]
+        .some(field => lease[field] !== claimArgs[field])
+      || Number(lease.expectedMemoryBytes) !== claimArgs.expectedMemoryBytes
+      || !["queued", "active"].includes(lease.status)) throw unavailable("claim-identity-conflict");
+    knownLeaseId = lease.leaseId;
+    // A queued handoff uses the existing server resume fence. An active claim
+    // can only be observed again by its original process; never transfer it.
+    if (lease.status === "active" && lease.ownerPid !== claimArgs.ownerProcessId) {
+      throw unavailable("active-claim-not-resumable");
+    }
+    resumeLeaseId = lease.status === "queued" ? knownLeaseId : undefined;
+  };
+  if (attempt.phase === "claim-uncertain") await reconcile();
+  const claim = () => request("claim_nonprod_environment_lease", {
+    ...claimArgs, ...(resumeLeaseId ? { resumeLeaseId } : {}),
+  });
+  try { return await claim(); } catch (error) {
+    if (error.code === "host_admission_unavailable") throw error;
+    if (error.code !== "ETIMEDOUT" && error.name !== "TimeoutError"
+      && error.cause?.name !== "TimeoutError") throw unavailable("claim-transport-unavailable");
+  }
+  try {
+    await onProgress({ status: "claim-uncertain", reason: "claim-timeout", commandExecuted: false,
+      elapsedMs: Math.max(0, now() - started) });
+  } catch { throw unavailable("progress-unavailable"); }
+  await reconcile();
+  try { return await claim(); } catch {
+    throw unavailable("claim-outcome-uncertain");
+  }
+}
+
 /**
  * The admission connection: DPF_MCP_URL (operator intent, persisted by setup)
  * or the local default, with the credential every gate script resolves
@@ -203,27 +284,36 @@ export function readProcessRows({ platform = process.platform, spawnSyncImpl = s
 }
 
 async function runCommand({ command, commandArgs }) {
-  const child = spawn(command, commandArgs, {
+  const invocation = resolveHostCommandInvocation(command, commandArgs);
+  const child = spawn(invocation.command, invocation.args, {
     stdio: "inherit",
     windowsHide: true,
     shell: false,
   });
+  let commandExecuted = false;
+  child.once("spawn", () => { commandExecuted = true; });
   return await new Promise((resolve, reject) => {
-    child.once("error", reject);
+    child.once("error", () => reject(Object.assign(new Error("Wrapped command could not start."),
+      { code: "host_command_unavailable", commandExecuted })));
     child.once("exit", (code, signal) => resolve(signal ? 1 : code ?? 1));
   });
 }
 
 function createOwnedChild({ command, commandArgs }) {
-  const child = spawn(command, commandArgs, {
+  const invocation = resolveHostCommandInvocation(command, commandArgs);
+  const child = spawn(invocation.command, invocation.args, {
     stdio: "inherit",
     windowsHide: true,
     shell: false,
     detached: process.platform !== "win32",
   });
+  let commandExecuted = false;
+  child.once("spawn", () => { commandExecuted = true; });
   return {
+    get commandExecuted() { return commandExecuted; },
     run: () => new Promise((resolveRun, reject) => {
-      child.once("error", reject);
+      child.once("error", () => reject(Object.assign(new Error("Wrapped command could not start."),
+        { code: "host_command_unavailable", commandExecuted })));
       child.once("exit", (code, signal) => resolveRun(signal ? 1 : code ?? 1));
     }),
     terminate: async () => {
@@ -245,7 +335,8 @@ async function main() {
   }
   const cwd = process.cwd();
   const connection = readMcpConnection();
-  if (!connection) throw new Error(`DPF MCP admission is unavailable. ${MCP_CREDENTIAL_HELP}`);
+  if (!connection) throw Object.assign(new Error("MCP admission connection unavailable."),
+    { code: "host_admission_unavailable", reason: "connection-unavailable", commandExecuted: false });
 
   const processRows = readProcessRows();
   const findings = findUngovernedHeavyProcesses(processRows, { governedPids: [process.pid] });
@@ -281,7 +372,8 @@ async function main() {
     inferenceResident: processRows.some((row) => classifyHeavyProcess(row.commandLine) === "inference"),
     ungovernedProcesses: findings.slice(0, 20),
   });
-  const claim = await mcpCall("claim_nonprod_environment_lease", claimArgs, connection);
+  const claim = await claimHostResourceAdmission({ claimArgs, connection, attempt,
+    onProgress: progress => process.stderr.write(`[host-resource-runner] ${JSON.stringify(progress)}\n`) });
   const leaseId = claim?.entityId ?? claim?.data?.lease?.leaseId;
   if (claim?.success !== true || !leaseId) {
     if (claim?.error === "lease_terminal" || (parsed.resumePin && /^nonprod_resume_/.test(claim?.error ?? ""))) {
@@ -289,7 +381,10 @@ async function main() {
       process.exitCode = 81;
       return;
     }
-    throw new Error(`host resource admission failed: ${claim?.error ?? "unknown"}`);
+    const reason = typeof claim?.error === "string" && /^[a-z0-9_]{1,100}$/.test(claim.error)
+      ? claim.error : "admission-response-unproven";
+    throw Object.assign(new Error("Host admission refused or unproven."),
+      { code: "host_admission_refused", reason, commandExecuted: false });
   }
   if (claim?.data?.admission?.status === "terminal") {
     process.stderr.write(JSON.stringify({ status: "unrun", reason: "terminal-lease", leaseId }) + "\n");
@@ -333,9 +428,10 @@ async function main() {
     return;
   }
 
-  if (claim?.data?.admission?.status !== "admitted") throw new Error("host resource admission was not granted");
+  if (claim?.data?.admission?.status !== "admitted") throw Object.assign(new Error("Host admission unproven."),
+    { code: "host_admission_refused", reason: "admission-response-unproven", commandExecuted: false });
   try { resolveHostAttempt(identify(), hostResumePin(attempt, leaseId)); } catch {
-    await mcpCall("release_nonprod_environment_lease", { leaseId }, connection);
+    await mcpCall("release_nonprod_environment_lease", { leaseId, ownerSessionId }, connection);
     process.exitCode = 82;
     return;
   }
@@ -351,7 +447,16 @@ async function main() {
       ownerSessionId,
       ttlMinutes: 10,
     }, connection),
-    release: () => mcpCall("release_nonprod_environment_lease", { leaseId }, connection),
+    release: async () => {
+      const reply = await mcpCall("release_nonprod_environment_lease", { leaseId, ownerSessionId }, connection);
+      if (reply?.success !== true) throw new Error("host_lease_cleanup_unproven");
+    },
+    onEvent: event => {
+      if (event.type === "release-failed") process.stderr.write(JSON.stringify({
+        status: "cleanup-unproven", cleanupVerified: false, commandExecuted: child.commandExecuted, leaseId,
+        recovery: { tool: "release_nonprod_environment_lease", arguments: { leaseId, ownerSessionId } },
+      }) + "\n");
+    },
   });
   if (result.status !== "completed") {
     process.stderr.write(`host-resource-runner: lease ${leaseId} ${result.status} (${result.reason}); the command was stopped.\n`);
@@ -361,11 +466,26 @@ async function main() {
 
 if (isEntryModule(import.meta.url)) {
   try { await main(); } catch (error) {
-    if (error.code !== "host_inventory_unavailable") throw error;
-    process.stderr.write(JSON.stringify({ status: "unrun", reason: error.code,
-      commandExecuted: false, failure: { reason: error.reason, producerStatus: error.producerStatus,
-        producerSignal: error.producerSignal, stdoutBytes: error.stdoutBytes },
-      recovery: error.message }) + "\n");
-    process.exitCode = 88;
+    if (error.code === "host_admission_refused") {
+      process.stderr.write(JSON.stringify({ status: "unrun", reason: error.reason,
+        commandExecuted: false, recovery: "Resolve the recorded admission refusal before any further claim." }) + "\n");
+      process.exitCode = 88;
+    } else if (error.code === "host_admission_unavailable") {
+      process.stderr.write(JSON.stringify({ status: "unrun", reason: error.reason,
+        commandExecuted: false, resumePin: error.resumePin, ...(error.leaseId ? { leaseId: error.leaseId } : {}),
+        recovery: "Reconcile this exact admission identity; resume its pin only with unchanged source and invocation." }) + "\n");
+      process.exitCode = 88;
+    } else if (error.code === "host_command_unavailable") {
+      process.stderr.write(JSON.stringify({ status: "unrun", reason: error.code,
+        commandExecuted: Boolean(error.commandExecuted), recovery: "Resolve the wrapped executable and resume through normal admission." }) + "\n");
+      process.exitCode = 88;
+    } else if (error.code !== "host_inventory_unavailable") throw error;
+    else {
+      process.stderr.write(JSON.stringify({ status: "unrun", reason: error.code,
+        commandExecuted: false, failure: { reason: error.reason, producerStatus: error.producerStatus,
+          producerSignal: error.producerSignal, stdoutBytes: error.stdoutBytes },
+        recovery: error.message }) + "\n");
+      process.exitCode = 88;
+    }
   }
 }
