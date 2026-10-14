@@ -40,6 +40,7 @@ import {
 import { deriveCallerClient } from "@/lib/mcp/caller-client";
 import { observeConnection } from "@/lib/agent-toolchain/connection-observation";
 import { toolchainNoticeFor } from "@/lib/agent-toolchain/toolchain-notice";
+import { refuseBelowToolchainFloor } from "@/lib/mcp/toolchain-floor";
 import { connectionDelegationFor } from "@/lib/mcp/connection-delegation";
 import { normalizeTokenScope, requiredTokenScopeForTool, tokenAdmitsTool, tokenScopeSatisfies } from "@/lib/mcp/token-tool-scope";
 import { buildMcpInitializeResult } from "@/lib/mcp/initialize";
@@ -683,11 +684,11 @@ export async function POST(request: Request): Promise<Response> {
       "request must have jsonrpc='2.0' and method string",
     );
   }
-
   observeConnection({ request, token, method: body.method, params: body.params });
-
   // Notifications (no id) — return 202 Accepted, no body, per spec.
   const isNotification = body.id === undefined;
+  const floorRefusal = isNotification ? null : await refuseBelowToolchainFloor(request, token, body); // BI-DFC0270C
+  if (floorRefusal) return floorRefusal;
 
   // MCP 2025-11-25 protocol negotiation: a non-initialize request MAY carry an
   // MCP-Protocol-Version header. When present it must be a version we speak;

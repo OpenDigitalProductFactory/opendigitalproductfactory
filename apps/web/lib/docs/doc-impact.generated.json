@@ -1083,6 +1083,9 @@
       "docs/architecture/agent-standards-dpf-conformance.md",
       "docs/architecture/context-engineering-standards.md"
     ],
+    "apps/web/lib/mcp/toolchain-floor.ts": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
     "apps/web/lib/mdm/domain-registry.ts": [
       "docs/professions/data-architect/wiki/mdm-what-it-does-and-does-not-do.md"
     ],
@@ -3335,6 +3338,7 @@
       "apps/web/lib/gpp/binding-enforcement.ts",
       "apps/web/lib/gpp/permit-carriage.ts",
       "apps/web/lib/mcp/protocol-versions.ts",
+      "apps/web/lib/mcp/toolchain-floor.ts",
       "apps/web/lib/tak/mcp-tool-policy.ts",
       "apps/web/lib/tak/tool-result-budget.ts",
       "apps/web/lib/tak/tool-result-provenance.ts",
