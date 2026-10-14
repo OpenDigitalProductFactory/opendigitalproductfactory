@@ -7,7 +7,8 @@
  */
 
 import { getErrorMessage } from "@/lib/shared/get-error-message";
-import { INSTALLATION_OPERATING_INTENT_KEY } from "@/lib/installation-journey/operating-intent";
+import type { RepoIdentity } from "@/lib/contributor-change-lanes/github-rest-reader";
+import type { IntakeControllerVerdict } from "./intake-controller-authority";
 import {
   mapPeerDemandMirrors,
   mapUpstreamIssues,
@@ -26,47 +27,48 @@ export interface InboundSourceError {
 }
 
 export interface InboundTriageRunnerDeps {
-  /** Injected wholesale so the runner is testable without Prisma or fetch. */
-  loadPurpose?: () => Promise<string | null>;
-  readIssues?: () => Promise<{ ok: boolean; issues?: unknown[]; error?: string }>;
+  /** Injected wholesale so the runner is testable without Prisma or fetch.
+   *  Resolves the repository-controller commission (BI-FD40397B AC-1). */
+  loadCommission?: () => Promise<IntakeControllerVerdict>;
+  /** Reads issues from the commissioned repository — never a fallback one. */
+  readIssues?: (repo: RepoIdentity) => Promise<{ ok: boolean; issues?: unknown[]; error?: string }>;
   readPeerDemand?: () => Promise<Array<{ mirrorId: string; payload: unknown }>>;
   ingest?: (input: unknown) => Promise<{ itemId: string; created: boolean }>;
   onFailure?: (item: InboundEcosystemItem, error: unknown) => void;
 }
 
-/** Only a platform-development install has anywhere to put ecosystem submissions.
- *  On an operate-organization install this sweep is not merely useless — it would
- *  fill a customer's backlog with other installs' defects. */
-const TRIAGING_PURPOSE = "evolve-dpf";
-
-async function defaultLoadPurpose(): Promise<string | null> {
-  const { prisma } = await import("@dpf/db");
-  const row = await prisma.platformConfig.findUnique({
-    where: { key: INSTALLATION_OPERATING_INTENT_KEY },
-    select: { value: true },
-  });
-  const value = row?.value as { primaryPurpose?: unknown } | null | undefined;
-  return typeof value?.primaryPurpose === "string" ? value.primaryPurpose : null;
+/** Only the commissioned repository-controller installation may sweep: on any
+ *  other install this would fill a backlog with other installs' defects, and a
+ *  development peer must not become a competing controller (spec §6.1). The
+ *  purpose-only gate this replaces could not tell the two apart. */
+async function defaultLoadCommission(): Promise<IntakeControllerVerdict> {
+  const { loadIntakeControllerCommission } = await import("./intake-controller-authority");
+  return loadIntakeControllerCommission();
 }
 
 export async function runEcosystemInboundTriage(
   deps: InboundTriageRunnerDeps = {},
 ): Promise<InboundTriageOutcome> {
-  const purpose = await (deps.loadPurpose ?? defaultLoadPurpose)();
-  if (purpose !== TRIAGING_PURPOSE) {
-    return { ran: false, reason: `installation purpose is ${purpose ?? "undeclared"}, not ${TRIAGING_PURPOSE}` };
+  let commission: IntakeControllerVerdict;
+  try {
+    commission = await (deps.loadCommission ?? defaultLoadCommission)();
+  } catch (error) {
+    // Could not prove the commission: refuse, never run on an unverified controller.
+    return { ran: false, reason: `not commissioned: commission check failed: ${getErrorMessage(error)}` };
   }
+  if (!commission.ok) return { ran: false, reason: commission.reason };
+  const { repo } = commission;
 
   const items: InboundEcosystemItem[] = [];
   const sourceErrors: InboundSourceError[] = [];
 
   // Transport 1 — upstream issues filed by the relay.
-  const readIssues = deps.readIssues ?? (async () => {
+  const readIssues = deps.readIssues ?? (async (target: RepoIdentity) => {
     const { readUpstreamIssues } = await import("./upstream-issue-reader");
-    return readUpstreamIssues({ state: "open" });
+    return readUpstreamIssues({ state: "open", repo: target });
   });
   try {
-    const issueResult = await readIssues();
+    const issueResult = await readIssues(repo);
     if (!issueResult.ok || !Array.isArray(issueResult.issues)) {
       sourceErrors.push({ source: "upstream-issue", error: ("error" in issueResult ? issueResult.error : null) ?? "Issue read returned no valid issue list" });
     } else {

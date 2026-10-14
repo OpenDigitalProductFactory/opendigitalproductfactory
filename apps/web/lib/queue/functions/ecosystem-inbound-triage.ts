@@ -33,10 +33,17 @@ async function recordScanOutcome(result: InboundTriageOutcome): Promise<void> {
 // platform could only POST an issue upstream; nothing ever read one back, so a
 // platform-development install could not see what the ecosystem had submitted.
 //
-// Weekly, matching the ballot cadence in the ecosystem intake spec. No-ops on
-// any install whose purpose is not evolve-dpf.
+// Weekly, matching the ballot cadence in the ecosystem intake spec. No-ops
+// ("not commissioned") unless this install holds the verified repository-
+// controller commission (BI-FD40397B, spec §6.1). Concurrency 1 is the local
+// single-run protection: a cron fire and a retry never scan concurrently.
 export const ecosystemInboundTriage = jobs.createFunction(
-  { id: "ecosystem/inbound-issue-triage", retries: 2, triggers: [cron("17 6 * * 1")] },
+  {
+    id: "ecosystem/inbound-issue-triage",
+    retries: 2,
+    concurrency: { limit: 1, scope: "fn" },
+    triggers: [cron("17 6 * * 1")],
+  },
   async ({ step }) => {
     const gate = await gateAtEntry(step, "ecosystem/inbound-issue-triage");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
