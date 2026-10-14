@@ -70,13 +70,18 @@ function serializeMessage(
     }));
   }
   if (proposal) {
+    // A still-proposed row carries a resultError only when the reference
+    // monitor refused its approval (convert-and-run, BI-04E5A511): it can no
+    // longer run as proposed, so the card offers Decline only, even after a reload.
+    const refusedReason = proposal.status === "proposed" && proposal.resultError ? proposal.resultError : null;
     row.proposal = {
       proposalId: proposal.proposalId,
       actionType: proposal.actionType,
       parameters: proposal.parameters as Record<string, unknown>,
       status: proposal.status,
       ...(proposal.resultEntityId ? { resultEntityId: proposal.resultEntityId } : {}),
-      ...(proposal.resultError ? { resultError: proposal.resultError } : {}),
+      ...(refusedReason ? { noLongerRunnable: refusedReason }
+        : proposal.resultError ? { resultError: proposal.resultError } : {}),
     };
   }
   if (provider) {

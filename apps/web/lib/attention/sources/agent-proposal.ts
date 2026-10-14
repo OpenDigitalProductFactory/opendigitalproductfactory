@@ -29,6 +29,11 @@ export type AgentActionProposalRow = {
   proposedAt: Date;
   /** The coworker that proposed this — drives the honest byline (BI-AB12B3D3). */
   agentId: string;
+  /**
+   * Set on a still-proposed row only when the reference monitor refused its
+   * approval (convert-and-run, BI-04E5A511): the reason it can no longer run.
+   */
+  resultError?: string | null;
 };
 
 /** Pure projection of one proposed agent action into an attention item. */
@@ -115,6 +120,7 @@ export function agentProposalToAttentionItem(row: AgentActionProposalRow): Atten
   return {
     id: `agent-proposal:${row.proposalId}`,
     source: "agent-proposal",
+    ...(row.resultError ? { noLongerRunnable: row.resultError } : {}),
     title: `Approve: ${presentation.title}`,
     context: isActivityRoutingAction
       ? presentation.summary
@@ -145,7 +151,7 @@ export async function loadAgentProposalItems(db: Db): Promise<AttentionItem[]> {
     where: { status: "proposed" },
     orderBy: { proposedAt: "desc" },
     take: 50,
-    select: { proposalId: true, actionType: true, parameters: true, proposedAt: true, agentId: true },
+    select: { proposalId: true, actionType: true, parameters: true, proposedAt: true, agentId: true, resultError: true },
   });
   return rows.map(agentProposalToAttentionItem);
 }
