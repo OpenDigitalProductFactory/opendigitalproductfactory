@@ -78,6 +78,15 @@ class Declarations:
         self.digest = delivered_digest(skill_pack)
         self.manifest = manifest or {}
 
+    @classmethod
+    def of(cls, pack: str, digest: str, manifest: Optional[Mapping[str, Any]] = None) -> "Declarations":
+        """A declaration for a known pack version and digest, without reading a pack tree."""
+        declared = cls.__new__(cls)
+        declared.pack = pack.split("+", 1)[0]
+        declared.digest = digest
+        declared.manifest = manifest or {}
+        return declared
+
     def enabled(self) -> bool:
         return bool(_SEMVER.match(self.pack))
 

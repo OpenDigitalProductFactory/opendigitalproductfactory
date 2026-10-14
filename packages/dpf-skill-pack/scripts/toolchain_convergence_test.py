@@ -31,13 +31,9 @@ class _Result:
     stderr = ""
 
 
-class _Declared(convergence.Declarations):
+def _Declared(manifest: Any = None) -> convergence.Declarations:
     """A declaration with a fixed digest, so a test needs no pack tree."""
-
-    def __init__(self, manifest: Any = None) -> None:
-        self.pack = "0.3.0"
-        self.digest = "0123456789abcdef" + "0" * 48
-        self.manifest = manifest or {}
+    return convergence.Declarations.of("0.3.0", "0123456789abcdef" + "0" * 48, manifest)
 
 
 class DeclarationTest(unittest.TestCase):
@@ -234,7 +230,7 @@ class ReportJsonTest(unittest.TestCase):
             self.assertEqual(report["packDigest"], digest)
             self.assertEqual(report["source"], {"kind": "local"})
             for row in report["clients"]:
-                self.assertTrue({"before", "after", "action", "restartRequired", "cliVersion"} <= set(row))
+                self.assertLessEqual({"before", "after", "action", "restartRequired", "cliVersion"}, set(row))
                 self.assertIn(row["action"], ("updated", "unchanged", "retired", "prunable", "failed"))
             shared = rows[("shared", "copy")]
             self.assertEqual((shared["before"]["digest"], shared["after"]["digest"]), (None, digest))
