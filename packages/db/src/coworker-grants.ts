@@ -32,6 +32,11 @@
 //   query_ontology_graph. Read-only; ea_graph_write stays off.
 // All three are already in the development token template, so a write-scoped
 // development token reaches them once the agent holds the grant.
+// - approval_probe_read (BI-129EFFD1): the read-only AC-PROBE dry run, so the
+//   coordinating session can record it as evidence. The tool still requires
+//   the human's platform-administration capability. All three external roles
+//   hold it: a grant on one only would split their authority signature and
+//   stop OAuth from resolving the external profile by client name.
 // Deliberately NOT granted: agent_control_read. establish_coworker and
 // manage_coworker_tool_grant change coworker authority, so dpf-establish-coworker
 // and dpf-add-archetype keep those steps in-portal and do not list them on
@@ -43,6 +48,7 @@ const EXTERNAL_DEVELOPMENT_GRANTS = [
   "backlog_read", "backlog_write", "file_read", "code_graph_read",
   "build_lifecycle", "sandbox_execute", "initiative_evidence_write",
   "decision_record_create", "backlog_triage", "document_write", "ea_graph_read",
+  "approval_probe_read",
   "coworker_catalog_read", "coworker_engagement_write",
 ];
 
@@ -205,7 +211,7 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     "policy_read",
     "spec_plan_read",
   ],
-  "admin-assistant": ["admin_read", "admin_write", "agent_control_read", "registry_read", "web_search", "file_read"],
+  "admin-assistant": ["admin_read", "admin_write", "agent_control_read", "registry_read", "web_search", "file_read", "approval_probe_read"],
   coo: ["portfolio_read", "registry_read", "backlog_read", "backlog_write", "agent_control_read", "email_config", "thread_write"],
   "doc-specialist": ["file_read", "registry_read", "portfolio_read", "document_read", "document_write", "document_publish"],
   "compliance-officer": [

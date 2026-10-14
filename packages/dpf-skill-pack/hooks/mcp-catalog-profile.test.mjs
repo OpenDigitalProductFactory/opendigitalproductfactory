@@ -31,7 +31,7 @@ test("Claude and Antigravity descriptors are URL-only on the canonical https ori
   const claude = readJson("claude.mcp.json").mcpServers.dpf;
   const antigravity = readJson("antigravity.mcp.json").mcpServers.dpf;
 
-  assert.equal(claude.url, "${DPF_MCP_URL:-https://localhost/api/mcp/v1?tier=full}");
+  assert.equal(claude.url, "${DPF_CLAUDE_MCP_URL:-https://localhost/api/mcp/v1?tier=full}");
   assert.equal(claude.headers, undefined);
   assert.deepEqual(claude.oauth, { scopes: "dpf.read dpf.work dpf.build" });
 

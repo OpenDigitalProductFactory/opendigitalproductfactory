@@ -891,10 +891,30 @@ green (BI-3ACFD254).
 `DrivePlan.reason`, the drive's plan constructor and the drive job's overrides
 are now typed from that list. A reason the drive emits but the list omits fails
 typecheck. A writeback-paused room now concludes as blocked, and clears when the
-executor records evidence or a writeback for the dispatched stage. A room with
-no owner user for its agent stage concludes as blocked, and clears when an owner
-user is bound. A finished cycle and a lease held by another worker conclude as
-in motion.
+executor records evidence or a writeback for the dispatched stage. A finished
+cycle and a lease held by another worker conclude as in motion.
+
+### An undispatched stage is a pause, and its task owner is the accountable person
+
+`missing_task_owner` was filed under `dispatch_agent`, and the drive overwrote
+only the reason when it could not schedule a task. On 2026-10-13, 127 Build
+Studio delivery rooms recorded `dispatch_agent` with an in-motion conclusion
+and had no ScheduledAgentTask. Build Studio rooms record no requester or
+creator principal, and the drive read the task owner only from those
+(`roomOwnerUserId`). The false dispatch also tripped the writeback latch, so
+those rooms were then reported as `executor_writeback_unavailable` (BI-D13FA12A).
+
+The drive now settles the task owner before it records anything about the tick
+(`workroom-drive-task-owner.ts`). A room that records its owner user keeps it.
+Otherwise the owner is the room's accountable person, from the same
+accountability walk the conclusions use (explicit room, inherited room, then the
+organization's recorded owner), mapped to that person's one active user. The
+snapshot's `taskOwner` and the trail line name the source. When nobody can be
+named, the tick becomes `pause / missing_task_owner` before its hold and
+conclusion are computed. It takes no lease, schedules nothing, counts as stuck
+for the stall notice, and its conclusion names the missing owner. A graph room
+whose aggregate plan is `dispatch_agent` follows the same rule. No administrator
+or other guess is substituted.
 
 ### Every stage is a queue
 
