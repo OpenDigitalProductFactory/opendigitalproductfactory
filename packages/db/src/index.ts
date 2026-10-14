@@ -25,6 +25,7 @@ export type {
   CapacityAllocationState,
 } from "../generated/client/client";
 export { WriteGateRequirement } from "../generated/client/client";
+export type { InvestmentWorkClass, InvestmentWorkPurpose } from "../generated/client/client";
 // Worker classification: the legally-consequential axis, distinct from the
 // organisation's EmploymentType label (BI-C61CEEA9). Exported as a value so the
 // app composes from the generated enum instead of re-typing its members.

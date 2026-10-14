@@ -14,6 +14,7 @@
 // than blocking on that refactor.
 
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
 import { prisma } from "@dpf/db";
 
@@ -69,6 +70,9 @@ export default async function InstallationIdentityPage() {
   return (
     <div className="mx-auto w-full max-w-4xl">
       <InstallationIdentityPanel view={view} />
+      <p className="px-4 pb-4 text-dpf-body text-dpf-muted sm:px-6">
+        Funding follows its owner and purpose. <Link className="text-dpf-accent underline" href="/ops/demand?investment=1#investment-balance">Review investment allocation</Link>
+      </p>
       <div className="px-4 pb-6 sm:px-6">
         <EstateNameField
           estateName={estate.tier === "organization-name" ? null : estate.estateName}

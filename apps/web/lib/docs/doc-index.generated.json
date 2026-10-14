@@ -12610,6 +12610,15 @@
         "documentation-freshness"
       ]
     },
+    "docs/user-guide/investment-allocation.md": {
+      "publicHref": "/user-guide/investment-allocation/",
+      "portalHref": "/docs/investment-allocation",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "investment-allocation"
+      ]
+    },
     "docs/user-guide/market-archetypes.md": {
       "publicHref": "/user-guide/market-archetypes/",
       "portalHref": "/docs/market-archetypes",

@@ -9,6 +9,7 @@ const {
   mockAiInferenceTokensInc,
   mockAiInferenceErrorsInc,
   mockProviderFetch,
+  mockInvestmentContext,
   mockGpuFree,
   mockAcquireSlot,
   mockReleaseSlot,
@@ -26,6 +27,7 @@ const {
   mockAiInferenceTokensInc: vi.fn(),
   mockAiInferenceErrorsInc: vi.fn(),
   mockProviderFetch: vi.fn(),
+  mockInvestmentContext: vi.fn(),
   mockGpuFree: vi.fn(),
   mockAcquireSlot: vi.fn(),
   mockReleaseSlot: vi.fn(),
@@ -41,6 +43,8 @@ vi.mock("./inference-admission", async importOriginal => {
     return () => { release(); mockReleaseSlot(); };
   } };
 });
+
+vi.mock("../portfolio/investment-balance-server", () => ({ loadBuildInvestmentContext: mockInvestmentContext, UNRESOLVED_INVESTMENT_GUIDANCE: "Funding unresolved." }));
 
 vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
@@ -107,6 +111,8 @@ describe("callProvider", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAdapterExecute.mockReset();
+    mockInvestmentContext.mockResolvedValue({ snapshot: null, guidance: "Funding unresolved." });
     mockGpuFree.mockReset().mockResolvedValue(undefined);
     mockAdapterExecute.mockReset();
     mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ status: "active" });
@@ -145,6 +151,31 @@ describe("callProvider", () => {
     expect(mockGpuFree).not.toHaveBeenCalled();
     expect(mockAcquireSlot.mock.invocationCallOrder[0]).toBeLessThan(mockAdapterExecute.mock.invocationCallOrder[0]);
     expect(mockReleaseSlot).toHaveBeenCalledOnce();
+  });
+
+  it.each([false, true])("captures funding before dispatch and preserves it when error=%s", async (fails) => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({ providerId: "openai", status: "active", authMethod: "api_key", authHeader: "Authorization", baseUrl: "https://api.openai.com/v1", endpoint: null });
+    mockGetDecryptedCredential.mockResolvedValue({ secretRef: "test-key" });
+    const snapshot = { investmentPrincipalId: "original-owner", investmentOrganizationId: "org", investmentItemId: "item", investmentPurpose: "sharedPlatform", investmentClass: "refactor", investmentPolicyRef: "revision", investmentInstallationRef: "install", investmentCapturedAt: new Date() };
+    mockInvestmentContext.mockResolvedValue({ snapshot, guidance: "Scoped target: 80% refactoring." });
+    mockAdapterExecute.mockImplementation(async (request) => {
+      expect(mockInvestmentContext).toHaveBeenCalledWith(mockPrisma, "build-1");
+      expect(request.systemPrompt).toContain("Scoped target: 80% refactoring.");
+      // A later ownership change must not cause a second resolution for telemetry.
+      mockInvestmentContext.mockResolvedValue({ snapshot: { ...snapshot, investmentPrincipalId: "new-owner" }, guidance: "Changed" });
+      if (fails) throw new Error("provider failed");
+      return { text: "ok", toolCalls: [], usage: { inputTokens: 4, outputTokens: 2 }, inferenceMs: 1, raw: {} };
+    });
+    const write = vi.fn().mockResolvedValue(undefined);
+    _setAdapterTelemetryWriteOverrideForTests(write);
+    try {
+      const run = callProvider("openai", "test", [], "system", undefined, undefined, undefined, undefined, { buildId: "build-1" });
+      if (fails) await expect(run).rejects.toThrow("provider failed");
+      else await run;
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(mockInvestmentContext).toHaveBeenCalledTimes(1);
+      expect(write).toHaveBeenCalledWith(expect.objectContaining(snapshot));
+    } finally { _setAdapterTelemetryWriteOverrideForTests(null); }
   });
 
   it.each(["active", "degraded"])("preserves %s legacy activation while its default account is unconfigured", async status => {

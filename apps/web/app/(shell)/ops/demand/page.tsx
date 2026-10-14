@@ -18,6 +18,8 @@ import { PortfolioOwnership } from "@/components/portfolio/PortfolioOwnership";
 import { loadPortfolioOwnership } from "@/lib/portfolio/accountable-owner-view";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { InvestmentBalance } from "@/components/ops/InvestmentBalance";
+import { loadOwnerInvestmentViews } from "@/lib/portfolio/investment-balance-server";
 
 export const dynamic = "force-dynamic";
 
@@ -29,9 +31,10 @@ export default async function DemandPage({
     productLineId?: string;
     businessProductId?: string;
     digitalProductId?: string;
+    investment?: string;
   }>;
 }) {
-  const scope = (await searchParams) ?? {};
+  const { investment, ...scope } = (await searchParams) ?? {};
   const [items, networkItems, shareContext, founderPortfolio, workSyncLinks, policyConfig, tieOutPanel, locale] = await Promise.all([
     getDemandItems(scope),
     getNetworkDemandItems(),
@@ -50,6 +53,8 @@ export default async function DemandPage({
   const canManageOwners = Boolean(
     session?.user && can({ platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser }, "manage_platform"),
   );
+  const canManageAllocation = Boolean(session?.user && can({ platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser }, "manage_backlog"));
+  const investmentViews = session?.user?.id ? await loadOwnerInvestmentViews(prisma, session.user.id) : [];
   const policy = resolveDemandPolicy(policyConfig);
   return (
     <div className="space-y-6">
@@ -85,8 +90,9 @@ export default async function DemandPage({
         activeFramework={policy.framework}
       />
       <MessagesProvider locale={locale.language} messages={{ portfolio: namespaceMessages(locale.language, "portfolio") }}>
-        <PortfolioTieOutPanel {...JSON.parse(JSON.stringify(tieOutPanel))} formatLocale={locale.formatLocale}>
+        <PortfolioTieOutPanel {...JSON.parse(JSON.stringify(tieOutPanel))} formatLocale={locale.formatLocale} initiallyOpen={investment === "1"}>
           <PortfolioOwnership view={ownership} canManage={canManageOwners} />
+          <InvestmentBalance views={investmentViews} canManage={canManageAllocation} formatLocale={locale.formatLocale} />
         </PortfolioTieOutPanel>
       </MessagesProvider>
     </div>

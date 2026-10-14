@@ -16,6 +16,27 @@ import { setPortfolioOwner } from "@/lib/portfolio/accountable-owner";
 import { confirmEpicPortfolios } from "@/lib/portfolio/epic-portfolio-attribution";
 import { quarterBounds } from "@/lib/portfolio/investment-points";
 import { setPortfolioBudget } from "@/lib/portfolio/portfolio-budget";
+import { requireCapabilityContext } from "@/lib/actions/shared/guards";
+import { governedExecuteTool } from "@/lib/mcp-governed-execute";
+import type { FundingScope } from "@/lib/portfolio/investment-balance-policy";
+import type { BalancePolicy } from "@/lib/portfolio/investment-balance";
+
+async function runInvestmentTool(toolName: string, rawParams: Record<string, unknown>): Promise<ActionResult<string>> {
+  const { userId, userContext } = await requireCapabilityContext("manage_backlog");
+  const result = await governedExecuteTool({ toolName, rawParams, userId, userContext, context: { routeContext: "/ops/demand" }, source: "rest" });
+  if (!result.success) return err(result.message ?? "Allocation could not be updated.");
+  revalidatePath("/ops/demand");
+  revalidatePath("/ops/installation");
+  return ok(result.message ?? "Allocation saved.");
+}
+
+export async function saveInvestmentBalanceAction(input: { scope: FundingScope; policy: BalancePolicy; expectedRevision: string | null; reason: string }) {
+  return runInvestmentTool("set_investment_balance", input);
+}
+
+export async function bindInstallationInvestmentAction(input: { scope: FundingScope; expectedBoundAt: string | null; reason: string }) {
+  return runInvestmentTool("bind_investment_funding", { ...input, target: { kind: "installation", purpose: input.scope.purpose } });
+}
 
 async function currentUserId(): Promise<string | null> {
   const session = await auth();

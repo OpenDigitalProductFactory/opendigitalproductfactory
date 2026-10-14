@@ -219,6 +219,9 @@ export async function getWorkCapsuleTool(params: Record<string, unknown>, userId
     };
   }
   const { projectWorkroomRecovery } = await import("./workroom-recovery-projection");
+  const investment = capsule.backlogItemId
+    ? await (await import("../portfolio/investment-balance-server")).projectItemInvestment(prisma, { itemId: capsule.backlogItemId, roomId: capsule.id })
+    : null;
   const nestedCoordination = userId && context?.agentId
     ? await (await import("@/lib/work-management/nested-room-coordination.server")).loadNestedRoomCoordination(prisma as never, {
       roomId: capsule.id,
@@ -234,7 +237,7 @@ export async function getWorkCapsuleTool(params: Record<string, unknown>, userId
     success: true,
     entityId: capsule.capsuleId,
     message: `Loaded ${capsule.capsuleId}.`,
-    data: { capsule: { ...capsule, recovery: projectWorkroomRecovery(capsule), nestedCoordination }, ...(log ? { log } : {}) },
+    data: { capsule: { ...capsule, recovery: projectWorkroomRecovery(capsule), nestedCoordination, investment }, ...(log ? { log } : {}) },
   };
 }
 
