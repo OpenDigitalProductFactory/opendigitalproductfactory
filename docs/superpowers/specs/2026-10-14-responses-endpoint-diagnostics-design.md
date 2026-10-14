@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Selected Responses endpoint diagnostics
 
 Implementation owner: BI-0C5858D1, Workroom WC-E0A3D976. This is an atomic fix under EP-D38F463C and the task-aware inference routing design. Provider account authentication remains BI-C4FCC089 and BI-385C0357; this fix changes no account credentials, authority, provider preference or unattended OAuth policy.

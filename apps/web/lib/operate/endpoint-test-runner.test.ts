@@ -27,6 +27,8 @@ vi.mock("@/lib/orchestrator-evaluator", () => ({
 }));
 
 import { checkScenarioAssertions } from "./endpoint-test-registry";
+import { InferenceError } from "@/lib/routing/inference-error";
+import { currentInferenceSignal } from "@/lib/routing/governed-inference-deadline";
 import {
   isCapacityDeferral,
   mapProbeResultsToInstructionFollowing,
@@ -200,5 +202,103 @@ describe("mapScoresToCodingCapability", () => {
   });
   it("returns null for empty scores", () => {
     expect(mapScoresToCodingCapability([])).toBeNull();
+  });
+});
+
+describe("selected endpoint diagnostics (BI-0C5858D1)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.modelProvider.findMany.mockImplementation(async ({ where }) => {
+      const provider = { providerId: "chatgpt", status: "active", endpointType: "responses" };
+      if (where.endpointType && where.endpointType !== "responses") return [];
+      return [provider];
+    });
+    mockPrisma.modelProfile.findMany.mockResolvedValue([
+      { id: "subscription-model", providerId: "chatgpt", modelId: "gpt-6-luna", friendlyName: "GPT" },
+    ]);
+    mockPrisma.endpointTestRun.create.mockResolvedValue({ id: "diagnostic-run", runId: "TR-SELECTED" });
+    mockPrisma.endpointTestRun.update.mockResolvedValue({});
+    mockCallProvider.mockResolvedValue({ content: "OK", toolCalls: undefined });
+  });
+
+  it("executes the selected Responses model without redirecting to another endpoint", async () => {
+    const results = await runEndpointTests({ endpointId: "chatgpt", modelId: "gpt-6-luna", probesOnly: true, triggeredBy: "test" });
+    expect(results).toHaveLength(1);
+    expect(mockCallProvider).toHaveBeenCalled();
+    for (const [provider, model] of mockCallProvider.mock.calls) {
+      expect([provider, model]).toEqual(["chatgpt", "gpt-6-luna"]);
+    }
+  });
+
+  it("does not replace a missing explicit model with the provider default", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([]);
+    await expect(runEndpointTests({ endpointId: "chatgpt", modelId: "missing", probesOnly: true, triggeredBy: "test" })).rejects.toThrow(/model.*missing.*not available/i);
+    expect(mockCallProvider).not.toHaveBeenCalled();
+    expect(mockPrisma.endpointTestRun.create).not.toHaveBeenCalled();
+  });
+
+  it("reports an unavailable explicit provider instead of an empty successful test", async () => {
+    mockPrisma.modelProvider.findMany.mockResolvedValue([]);
+    await expect(runEndpointTests({ endpointId: "paused", modelId: "gpt-6-luna", probesOnly: true, triggeredBy: "test" })).rejects.toThrow(/provider.*paused.*not available/i);
+    expect(mockCallProvider).not.toHaveBeenCalled();
+  });
+
+  it("caps synthetic output and links the dispatch to its durable test run", async () => {
+    await runEndpointTests({ endpointId: "chatgpt", modelId: "gpt-6-luna", probesOnly: true, triggeredBy: "test" });
+    const persistedRunId = mockPrisma.endpointTestRun.create.mock.calls[0]![0].data.runId;
+    for (const args of mockCallProvider.mock.calls) {
+      expect(args[5]).toMatchObject({ providerId: "chatgpt", modelId: "gpt-6-luna", maxTokens: 512 });
+      expect(args[8]).toMatchObject({ threadId: `test-${persistedRunId}`, traceId: expect.stringMatching(/^[a-f0-9]{32}$/) });
+    }
+    const recorded = mockPrisma.endpointTestRun.update.mock.calls[0]![0].data.results.probes;
+    expect(recorded.map((p: { traceId: string }) => p.traceId)).toEqual(mockCallProvider.mock.calls.map(args => args[8].traceId));
+  });
+
+  it.each(["embedding", "image", "transcription", "service"])("does not chat-probe a %s endpoint", async endpointType => {
+    mockPrisma.modelProvider.findMany.mockResolvedValue([{ providerId: "non-chat", endpointType }]);
+    await expect(runEndpointTests({ endpointId: "non-chat", modelId: "selected", probesOnly: true, triggeredBy: "test" })).rejects.toThrow(/not available/);
+    expect(mockCallProvider).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { modelClass: "embedding", outputModalities: ["embeddings"], modelStatus: "active" },
+    { modelClass: "chat", outputModalities: ["text"], modelStatus: "retired" },
+    { modelClass: "chat", outputModalities: ["text"], modelStatus: "disabled" },
+  ])("does not probe an incompatible or unavailable model %j", async metadata => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([{ id: "profile", providerId: "chatgpt", modelId: "selected", friendlyName: "Selected", ...metadata }]);
+    await expect(runEndpointTests({ endpointId: "chatgpt", modelId: "selected", probesOnly: true, triggeredBy: "test" })).rejects.toThrow(/not available/);
+    expect(mockCallProvider).not.toHaveBeenCalled();
+  });
+
+  it("stops on authentication failure without writing a model-quality verdict", async () => {
+    mockCallProvider.mockRejectedValue(new InferenceError("expired credential", "auth", "chatgpt", 401));
+    const results = await runEndpointTests({ endpointId: "chatgpt", modelId: "gpt-6-luna", triggeredBy: "test" });
+    expect(mockCallProvider).toHaveBeenCalledTimes(1);
+    expect(results[0]?.instructionFollowing).toBeNull();
+    expect(mockPrisma.modelProfile.update).not.toHaveBeenCalled();
+    expect(mockPrisma.endpointTestRun.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "incomplete", probesFailed: 0 }) }));
+  });
+
+  it("leaves truncated probe output unverified", async () => {
+    mockCallProvider.mockResolvedValue({ content: "OK", truncated: true });
+    const results = await runEndpointTests({ endpointId: "chatgpt", modelId: "gpt-6-luna", probesOnly: true, triggeredBy: "test" });
+    expect(results[0]?.instructionFollowing).toBeNull();
+    expect(results[0]?.probes[0]).toMatchObject({ outcome: "deferred", passed: null });
+    expect(mockPrisma.modelProfile.update).not.toHaveBeenCalled();
+  });
+
+  it("cancels a hung diagnostic and preserves an incomplete run", async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    mockCallProvider.mockImplementation(() => { signal = currentInferenceSignal(); return new Promise(() => {}); });
+    try {
+      const pending = runEndpointTests({ endpointId: "chatgpt", modelId: "gpt-6-luna", probesOnly: true, triggeredBy: "test" });
+      await vi.advanceTimersByTimeAsync(30_001);
+      const results = await pending;
+      expect(signal?.aborted).toBe(true);
+      expect(results[0]?.probes[0]).toMatchObject({ outcome: "deferred", passed: null });
+      expect(mockCallProvider).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.modelProfile.update).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
   });
 });
