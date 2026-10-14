@@ -217,6 +217,7 @@ export function DataTable<T>({
                 >
                   {columns.map((col) => {
                     const content = col.cell(row);
+                    const cellContent = href ? <Link href={href} className="block">{content}</Link> : content;
                     return (
                       <td
                         key={col.key}
@@ -231,13 +232,7 @@ export function DataTable<T>({
                           .join(" ")}
                       >
                         {responsive && !col.hideMobileLabel && <span aria-hidden="true" className="mb-1 block text-[var(--dpf-muted)] lg:hidden">{col.header}</span>}
-                        {responsive ? <div className="min-w-0" style={{ overflowWrap: "anywhere" }}>{href ? <Link href={href} className="block">{content}</Link> : content}</div> : href ? (
-                          <Link href={href} className="block">
-                            {content}
-                          </Link>
-                        ) : (
-                          content
-                        )}
+                        {responsive ? <div className="min-w-0" style={{ overflowWrap: "anywhere" }}>{cellContent}</div> : cellContent}
                       </td>
                     );
                   })}
