@@ -687,9 +687,9 @@ function shouldAllowFirstTurnTextReply(params: {
   providerId: string;
   messages: ChatMessage[];
   responseText: string;
-  suppliedSourceEvidence?: boolean;
+  conversationalSourceOnlyTurn?: boolean;
 }): boolean {
-  if (params.suppliedSourceEvidence) return true;
+  if (params.conversationalSourceOnlyTurn) return true;
   if (!params.routeContext.startsWith("/platform/ai/providers/")) return false;
   // Provider-detail intent relies on the route and status-language checks.
   if (params.providerId === "local") return false;
@@ -2062,7 +2062,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           providerId: result.providerId,
           messages,
           responseText: trimmed,
-          suppliedSourceEvidence,
+          conversationalSourceOnlyTurn: suppliedSourceEvidence,
         }),
         requireToolExecution: requireTools,
       });

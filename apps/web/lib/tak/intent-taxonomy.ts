@@ -1,3 +1,4 @@
+import { classifyTurnMutationIntent } from "./conversation-intent";
 // apps/web/lib/tak/intent-taxonomy.ts
 //
 // EP-E431FC8A Phase 2 (BI-DF3092F4). A data-driven task-class taxonomy that
@@ -190,7 +191,8 @@ export function isSuppliedSourceAnalysis(message: string): boolean {
   const liveRequest = hasVerdictFormat
     ? request.replace(verdictFormat, "$1<verdict-enum>").replace(/(^|[.!?\n]\s*)(?:a\s+)?PASS(?=\s+(?:(?:requires?|means?|needs?)\b[^.!?\n]{0,60}\b(?:empty|no)\b[^.!?\n]{0,40}\bissues?\b|means?\b[^.!?\n]{0,40}\bissues?\b[^.!?\n]{0,40}\bempty\b))/gi, "$1A positive verdict")
     : request;
-  return !LIVE_STATE_CUES.some((cue) => cue.test(liveRequest));
+  return classifyTurnMutationIntent(liveRequest) !== "authorized"
+    && !LIVE_STATE_CUES.some((cue) => cue.test(liveRequest));
 }
 
 /**

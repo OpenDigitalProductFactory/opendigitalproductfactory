@@ -106,4 +106,13 @@ describe("supplied-source completion regression (BI-C145F650)", () => {
     expect(result.suppliedSourceEvidence).not.toBe(true);
     expect(result.content).not.toBe(answer);
   });
+
+  it("does not classify explicit save authorization as source-only reading", async () => {
+    const message = `Review this function. Please save this assessment. Return JSON verdict PASS or FAIL.\n${clean}`;
+    expect(isSuppliedSourceAnalysis(message)).toBe(false);
+    vi.mocked(routeAndCall).mockResolvedValue({ content: controls[0]!.answer, providerId: "local", modelId: "qwen", truncated: false, toolCalls: [], inputTokens: 10, outputTokens: 10, downgraded: false, downgradeMessage: null, toolsStripped: false, routeDecision: {} } as never);
+    const result = await runAgenticLoop(params(message));
+    expect(result.content).not.toBe(controls[0]!.answer);
+    expect(result.suppliedSourceEvidence).not.toBe(true);
+  });
 });
