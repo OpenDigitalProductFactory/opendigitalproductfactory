@@ -69,6 +69,25 @@ describe("existing cycle transaction adapter", () => {
 });
 
 describe("atomic review output and checkpoint", () => {
+  it("preserves consumed source identity when analysis mutates activity objects", async () => {
+    const f = storeFixture();
+    let recorded: unknown;
+    const store: ReviewCommitStore = {withinCycleLock: callback => f.store.withinCycleLock(tx => callback({
+      ...tx, appendOutput: async input => {recorded = structuredClone(input.output); return tx.appendOutput(input);},
+    }))};
+    await runReviewIngestionBatch({store,
+      reader: async () => ({rows: [{id: "original", roomId: "a", ingestionSequence: "1"}], coverage: "retention-unverified"}),
+      analyze: async rows => {
+        await Promise.resolve();
+        rows[0].id = "changed";
+        rows[0].roomId = "other-room";
+        rows[0].ingestionSequence = "99";
+        return {finding: "one"};
+      }});
+    expect(recorded).toMatchObject({sourceRows: [{id: "original", roomId: "a", ingestionSequence: "1"}]});
+    expect(f.checkpoint().rooms[0].consumed).toBe("1");
+  });
+
   it("persists the fingerprinted request when caller objects change while awaiting the parent lock", async () => {
     const f = storeFixture();
     const output = {finding: "Original result"};

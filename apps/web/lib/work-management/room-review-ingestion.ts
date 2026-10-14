@@ -162,10 +162,12 @@ export async function runReviewIngestionBatch<T extends ReviewRow>(input: {
   }
   const batch = await readReviewBatch(expected, input.reader);
   if (batch.budgetExhausted && batch.rows.length === 0) return {kind: "budget-exhausted" as const, checkpoint: expected};
+  const sourceRows = batch.rows.map(row => ({
+    id: row.id, roomId: row.roomId, ingestionSequence: row.ingestionSequence,
+  }));
   const output = await input.analyze(batch.rows, batch.coverage);
   const receipt = await commitReviewBatch({store: input.store, batchId: `revision:${expected.revision}`,
-    expected, next: batch.checkpoint, output: {result: output, sourceRows: batch.rows.map(row => ({
-      id: row.id, roomId: row.roomId, ingestionSequence: row.ingestionSequence,
-    })), coverage: batch.coverage, remaining: batch.remaining}});
+    expected, next: batch.checkpoint, output: {result: output, sourceRows,
+      coverage: batch.coverage, remaining: batch.remaining}});
   return {kind: "recorded" as const, ...receipt, checkpoint: batch.checkpoint, remaining: batch.remaining};
 }
