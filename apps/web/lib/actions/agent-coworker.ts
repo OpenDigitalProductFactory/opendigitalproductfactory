@@ -81,7 +81,6 @@ import {
 } from "@/lib/tak/autonomous-work-run";
 import { deriveEffortWarrant } from "@/lib/tak/effort-warrant";
 import { applyLocalDegradationCaveat } from "@/lib/tak/local-degradation-caveat";
-import { isSuppliedSourceAnalysis } from "@/lib/tak/intent-taxonomy";
 import { coworkerUnavailableResult } from "./coworker-send-eligibility";
 import {
   classifyTurnMutationIntent,
@@ -2016,11 +2015,12 @@ export async function sendMessage(input: {
     };
     responseIsSystemFailure = Boolean(agenticResult.failure);
 
+    // Caveat blind local answers; preserve the loop's evidence provenance.
     responseContent = applyLocalDegradationCaveat(result.content, {
       providerId: result.providerId,
       executedToolCount: agenticResult.executedTools.length,
       authoritativeSurfaceEvidence: agenticResult.authoritativeSurfaceEvidence,
-      suppliedSourceEvidence: !responseIsSystemFailure && isSuppliedSourceAnalysis(trimmedContent),
+      suppliedSourceEvidence: !responseIsSystemFailure && agenticResult.suppliedSourceEvidence,
     });
     responseProviderId = result.providerId;
     responseModelId = result.modelId;

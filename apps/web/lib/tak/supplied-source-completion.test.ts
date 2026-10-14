@@ -49,10 +49,15 @@ describe("supplied-source completion regression (BI-C145F650)", () => {
     expect(result.content).toBe(answer);
     expect(routeAndCall).toHaveBeenCalledTimes(1);
     expect(result.executedTools).toEqual([]);
+    expect(result.suppliedSourceEvidence).toBe(true);
   });
 
   it("accepts a declared verdict enum beside a closed fenced source", () => {
     expect(isSuppliedSourceAnalysis(`Review this code snippet. Return JSON verdict PASS or FAIL.\n\`\`\`js\n${clean}\n\`\`\``)).toBe(true);
+  });
+
+  it.each(["PASS means the issues array is empty.", "A PASS needs no issues."])("recognizes equivalent declared verdict semantics: %s", (semantics) => {
+    expect(isSuppliedSourceAnalysis(`Review this function. Return JSON verdict PASS or FAIL. ${semantics}\n${clean}`)).toBe(true);
   });
 
   it.each([
@@ -86,7 +91,19 @@ describe("supplied-source completion regression (BI-C145F650)", () => {
       terminalToolPolicy: { writerToolName: writer, readerToolNames: ["read_source_at_version"], minimumSuccessfulReaderCalls: 1, maximumReaderCalls: 3, terminalPhase: "writer-only", persistedEvidenceAvailable: true },
     });
     expect(result.failure?.kind).toBe("terminal-writer-missing");
+    expect(result.suppliedSourceEvidence).not.toBe(true);
     expect(result.content).not.toBe(answer);
     expect(result.executedTools).toEqual([]);
+  });
+
+  it.each([
+    { message: controls[0]!.message, routeContext: "/build" },
+    { message: controls[0]!.message + "\nWhat is the current provider health?", routeContext: "/platform/ai/providers/local" },
+  ])("does not project source-only provenance for a build or mixed live turn: $routeContext", async ({ message, routeContext }) => {
+    const answer = controls[0]!.answer;
+    vi.mocked(routeAndCall).mockResolvedValue({ content: answer, providerId: "local", modelId: "qwen", truncated: false, toolCalls: [], inputTokens: 10, outputTokens: 10, downgraded: false, downgradeMessage: null, toolsStripped: false, routeDecision: {} } as never);
+    const result = await runAgenticLoop({ ...params(message), routeContext });
+    expect(result.suppliedSourceEvidence).not.toBe(true);
+    expect(result.content).not.toBe(answer);
   });
 });

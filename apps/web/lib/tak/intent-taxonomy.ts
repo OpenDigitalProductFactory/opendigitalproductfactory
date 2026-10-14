@@ -180,7 +180,7 @@ export function isSuppliedSourceAnalysis(message: string): boolean {
     inDiff = false;
     return true;
   }).join("\n");
-  if (!suppliedSource || !/\b(?:read|summari[sz]e|explain|review|analy[sz]e|compare)\b[^.!?\n]{0,160}\b(?:diff|patch|source code|code snippet|synthetic function|function snippet)\b/i.test(request)) return false;
+  if (!suppliedSource || !/\b(?:read|summari[sz]e|explain|review|analy[sz]e|compare)\b[^.!?\n]{0,160}\b(?:diff|patch|source code|code snippet|function)\b/i.test(request)) return false;
   // Mixed source/live questions still owe live evidence, wherever they appear.
   // An explicitly requested verdict enum describes the answer format, not
   // the running system. Preserve the surrounding request and any separate
@@ -188,7 +188,7 @@ export function isSuppliedSourceAnalysis(message: string): boolean {
   const verdictFormat = /(\b(?:return|output)\b[^.!?\n]{0,160}\bjson\b[^.!?\n]{0,160}\bverdict\b[^.!?\n]{0,40})\(?\s*PASS\s+(?:or|\/|\|)\s+FAIL\s*\)?/i;
   const hasVerdictFormat = verdictFormat.test(request);
   const liveRequest = hasVerdictFormat
-    ? request.replace(verdictFormat, "$1<verdict-enum>").replace(/\bPASS(?=\s+requires\s+an?\s+empty\s+issues\s+array\b)/i, "A positive verdict")
+    ? request.replace(verdictFormat, "$1<verdict-enum>").replace(/(^|[.!?\n]\s*)(?:a\s+)?PASS(?=\s+(?:(?:requires?|means?|needs?)\b[^.!?\n]{0,60}\b(?:empty|no)\b[^.!?\n]{0,40}\bissues?\b|means?\b[^.!?\n]{0,40}\bissues?\b[^.!?\n]{0,40}\bempty\b))/gi, "$1A positive verdict")
     : request;
   return !LIVE_STATE_CUES.some((cue) => cue.test(liveRequest));
 }
