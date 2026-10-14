@@ -12,9 +12,14 @@
 // The `github-pr-sync` credential is deliberately not counted: Build Studio
 // may fall back to it, but it is not a contribution identity a person chose,
 // so it must not hide this question.
+//
+// BI-985F4EC9: an install that develops the platform also needs a working
+// login to the repository it manages. Once contribution is settled, the item
+// stays open as "repository" until that repository's status is Connected.
 
 import type { prisma } from "@dpf/db";
 import { hasContributionToken } from "@/lib/actions/platform-dev-config";
+import type { ManagedRepositoryStatus } from "@/lib/forge/managed-repository-access";
 import type { AttentionItem } from "../types";
 
 export const CONTRIBUTION_SETUP_ROUTE = "/admin/platform-development";
@@ -28,10 +33,24 @@ export type ContributionSetupState = {
   hasContributionCredential: boolean;
   /** The installation's declared primary purpose, when one is recorded. */
   installationPurpose?: string | null;
+  /** Managed-repository status (BI-985F4EC9); omitted when it was not read. */
+  managedRepositoryStatus?: ManagedRepositoryStatus | null;
 };
 
+export type ContributionSetupGap = "decide" | "connect" | "repository";
+
 /** Pure: which part of contribution setup is still open, if any. */
-export function contributionSetupGap(state: ContributionSetupState): "decide" | "connect" | null {
+export function contributionSetupGap(state: ContributionSetupState): ContributionSetupGap | null {
+  const contribution = contributionGap(state);
+  if (contribution) return contribution;
+  const managesRepository = state.installationPurpose === "evolve-dpf";
+  if (managesRepository && state.managedRepositoryStatus && state.managedRepositoryStatus !== "connected") {
+    return "repository";
+  }
+  return null;
+}
+
+function contributionGap(state: ContributionSetupState): "decide" | "connect" | null {
   const keepsPrivate = state.contributionMode === "private" || state.contributionMode === "fork_only";
   // The seed writes "private" with no person behind it: a default, not a
   // decision. The open question is only raised on an install whose purpose is
@@ -44,7 +63,8 @@ export function contributionSetupGap(state: ContributionSetupState): "decide" | 
   return state.hasContributionCredential ? null : "connect";
 }
 
-export function contributionSetupToAttentionItem(gap: "decide" | "connect", nowIso: string): AttentionItem {
+export function contributionSetupToAttentionItem(gap: ContributionSetupGap, nowIso: string): AttentionItem {
+  if (gap === "repository") return managedRepositoryItem(nowIso);
   const connect = gap === "connect";
   const href = connect ? `${CONTRIBUTION_SETUP_ROUTE}#connect-github` : CONTRIBUTION_SETUP_ROUTE;
   return {
@@ -72,6 +92,29 @@ export function contributionSetupToAttentionItem(gap: "decide" | "connect", nowI
   };
 }
 
+function managedRepositoryItem(nowIso: string): AttentionItem {
+  const href = `${CONTRIBUTION_SETUP_ROUTE}#managed-repository`;
+  return {
+    id: "contribution-setup:repository",
+    source: "contribution-setup",
+    title: "Connect your repository",
+    context: "Issue intake needs a working GitHub login.",
+    decisionClass: { scorability: "unscorable" },
+    riskClass: "bounded-write",
+    triage: {
+      timeToAct: "none",
+      residueReason: "needs-credential",
+      blastRadius: "Managed repository issue intake",
+      decideEffort: "one-tap",
+      irreversible: false,
+    },
+    createdAtIso: nowIso,
+    actions: [{ kind: "open-in-context", label: "Connect", href }],
+    deepLink: href,
+    audience: { operator: true },
+  };
+}
+
 type Db = typeof prisma;
 
 export async function loadContributionSetupItems(db: Db, now: Date = new Date()): Promise<AttentionItem[]> {
@@ -85,11 +128,19 @@ export async function loadContributionSetupItems(db: Db, now: Date = new Date())
     select: { value: true },
   });
   const purpose = (intent?.value as { primaryPurpose?: unknown } | null | undefined)?.primaryPurpose;
+  // Read only for an install that manages a repository; cached five minutes,
+  // so the inbox never asks GitHub on every load.
+  let managedRepositoryStatus: ManagedRepositoryStatus | null = null;
+  if (purpose === "evolve-dpf") {
+    const { loadManagedRepositoryStatus } = await import("@/lib/forge/managed-repository-access");
+    managedRepositoryStatus = (await loadManagedRepositoryStatus(db).catch(() => null))?.status ?? null;
+  }
   const gap = contributionSetupGap({
     contributionMode: config?.contributionMode ?? null,
     decidedByPerson: Boolean(config?.configuredById),
     hasContributionCredential: await hasContributionToken(),
     installationPurpose: typeof purpose === "string" ? purpose : null,
+    managedRepositoryStatus,
   });
   return gap ? [contributionSetupToAttentionItem(gap, now.toISOString())] : [];
 }

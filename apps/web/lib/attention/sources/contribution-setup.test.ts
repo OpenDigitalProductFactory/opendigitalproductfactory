@@ -32,3 +32,33 @@ describe("contributionSetupToAttentionItem", () => {
     expect(item.actions[0]).toMatchObject({ label: "Connect GitHub", href: "/admin/platform-development#connect-github" });
   });
 });
+
+// BI-985F4EC9: the nudge stays open for a platform-development install until
+// its managed repository is Connected.
+describe("managed repository gap", () => {
+  const settled = { contributionMode: "private", decidedByPerson: true, hasContributionCredential: false, installationPurpose: "evolve-dpf" };
+
+  it.each(["not-connected", "read-only", "no-access", "login-expired", "check-failed"] as const)(
+    "stays open while the repository is %s",
+    (status) => {
+      expect(contributionSetupGap({ ...settled, managedRepositoryStatus: status })).toBe("repository");
+    },
+  );
+
+  it("closes when the repository is Connected", () => {
+    expect(contributionSetupGap({ ...settled, managedRepositoryStatus: "connected" })).toBeNull();
+  });
+
+  it("does not raise it for installs that do not develop the platform", () => {
+    expect(contributionSetupGap({ ...settled, installationPurpose: "operate-organization", managedRepositoryStatus: "not-connected" })).toBeNull();
+  });
+
+  it("asks the contribution question first", () => {
+    expect(contributionSetupGap({ ...settled, decidedByPerson: false, managedRepositoryStatus: "not-connected" })).toBe("decide");
+  });
+
+  it("leads to the Managed repository section", () => {
+    const item = contributionSetupToAttentionItem("repository", "2026-10-14T00:00:00.000Z");
+    expect(item).toMatchObject({ id: "contribution-setup:repository", deepLink: "/admin/platform-development#managed-repository" });
+  });
+});
