@@ -199,7 +199,7 @@ Each area's **Work** view opens with the same five measures, so the four portfol
 | **Finished per week** | Runs that reached a success stop. |
 | **Cost** | Points in flight, points delivered this quarter, and the AI used by this area's rooms over the last four weeks. AI use is counted only from conversations and dispatched work that name a room, so it is never guessed. Recorded dollars are shown when a provider records a cost. Work on a subscription records no per-call cost, so it shows as subscription tokens (for example *subscription: $0 recorded, 832.3k tokens*) and never as a bare $0. |
 
-Each measure has a small trend line for the last eight weeks, and its change against the four weeks before. **In flow now** compares with four weeks ago. A run that was abandoned (a recurring cycle the next one replaced before it finished) stops counting as in flow when it was replaced.
+**Flow time**, **flow efficiency** and **finished per week** each have a small trend line for the last eight weeks, and their change against the four weeks before. **In flow now** shows today's count only, with no trend yet: a room that ends without a recorded stop does not yet close its history, so a past count would overstate it.
 
 Below the measures:
 

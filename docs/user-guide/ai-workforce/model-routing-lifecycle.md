@@ -60,6 +60,22 @@ provider or local service failed. You can keep waiting or choose **Refresh page*
 to request the page again. The loading message does not change credentials,
 connection settings, model availability, or routing eligibility.
 
+## Where AI may run
+
+The **Where AI may run** control on [AI providers](connecting-providers.md)
+applies to DPF coding and coworker tasks. It does not enable coding or configure
+an external desktop coding app.
+
+- **Local and allowed cloud providers:** DPF may select enabled providers that
+  satisfy your other routing rules, permissions and task requirements.
+- **Local only:** Cloud providers are excluded. Work stops when no suitable
+  local model is available; DPF does not relax this restriction to finish a task.
+
+The selection changes after the server confirms the save. If saving fails,
+the previous setting remains selected. If DPF cannot read the policy after its
+short cache expires, the request stops instead of assuming cloud is allowed.
+Once the policy can be read again, later requests can proceed normally.
+
 ## Quality Tiers
 
 Every model is assigned a quality tier based on its model ID prefix. The tier system replaces opaque 0-100 scores as the primary configuration surface for admins.

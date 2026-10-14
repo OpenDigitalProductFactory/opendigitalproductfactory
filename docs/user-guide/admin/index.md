@@ -131,3 +131,14 @@ immediately, a coworker task is queued for the next dispatcher tick. **Edit**
 opens on the cadence the job actually runs at, accepts either a frequency or a
 cron expression, and previews the next fire before you save. Coworker work cannot
 be scheduled more often than daily.
+
+The **Agent task dispatch** job starts coworker work every five minutes, up to 20
+due tasks per tick. Those tasks run side by side rather than one after another.
+How many run at once is the lower of two limits: the coworker's own concurrency
+limit (a coworker with a limit of 2 never runs more than two of its tasks at
+once) and the free slots in the shared AI CLI pool (four by default). When a
+provider in that pool reports it is rate-limited or out of its weekly allowance,
+the tick runs tasks one at a time. A task that fails
+does not stop the rest of the tick. If a platform upgrade starts draining
+work part-way through a tick, tasks that have not started yet wait for the next
+tick after the upgrade.

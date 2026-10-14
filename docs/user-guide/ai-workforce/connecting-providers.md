@@ -35,6 +35,16 @@ check shows **Connection verified**. Neither label grants access to every saved
 model or overrides workload rules. Open **Advanced diagnostics** to inspect model
 history or refresh the catalog. Routine discovery runs automatically.
 
+**Sign-in saved** means DPF holds an OAuth token; it does not confirm current
+access. If verification fails, use **Sign in again** on the provider page. You
+can reconnect without disconnecting first. For ChatGPT, follow the link to Codex
+to renew their shared sign-in. **Account actions** contains Disconnect.
+
+During an upgrade, connection setup pauses. Wait for the upgrade to finish before
+trying again. If the page cannot complete setup and no upgrade is detected, reload
+it and retry. A subscription usage limit is separate from authentication: signing
+in again does not reset that limit.
+
 ### API Key
 
 The standard method for providers with pay-per-token billing. Obtain a key from the provider's developer console and paste it into the provider detail page. The platform uses the key for every inference request.

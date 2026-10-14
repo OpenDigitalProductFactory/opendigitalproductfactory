@@ -45,6 +45,9 @@ Codex is categorized as an "agent" provider, which means it behaves differently 
 - **Save & verify connection**: Saves settings, prepares the model catalog, and sends a small inference request using an active model. OAuth checks use the subscription backend. Only a completed response verifies the connection and clears a previously recorded capacity cooldown for this provider. Account and data-use rules still determine which work can route there.
 
 If OpenAI reports that the session token expired, verification attempts to renew it and checks the connection once more. If renewal cannot restore access, sign in again from Codex and retry verification. For the shared ChatGPT connection, use **Manage sign-in** in the panel above the connection form. Saving settings alone does not verify the connection.
+
+When the default Codex and ChatGPT connections have the same verified sign-in, session renewal keeps both current. Separately signed-in accounts keep their own credentials; a failed renewal does not replace another account's session.
+
 - **Advanced diagnostics**: Opens model history, routing details and a manual refresh for troubleshooting. A failed refresh retains the previous catalog; results report models returned by that refresh and genuinely new records separately.
 - **MCP service**: Codex has a linked MCP (Model Context Protocol) service called "OpenAI Codex Agent" that provides two tools: `codex` (start a coding session) and `codex-reply` (continue a thread). This service activates automatically when you connect via OAuth and deactivates when you disconnect.
 
@@ -61,6 +64,12 @@ The catalog process has a container-owned watchdog and removes its private state
 after exit, including when the client disconnects. Credentials travel over process
 stdin, not command arguments, shared auth files, or provider error logs. External
 token login follows the [OpenAI app-server protocol](https://learn.chatgpt.com/docs/app-server).
+
+## Coworker Verification on Development Deployments
+
+On a platform-development deployment, an AI coworker with your existing delegated maintenance permissions can test an already active default ChatGPT or Codex subscription account without another approval request. The check sends a small verification request and can renew the account's existing session. It does not enable an account, change its data-use permissions, or switch to another account.
+
+Inactive or disconnected accounts must be enabled or signed in through the existing account controls. New credentials, account activation, production changes and restricted-data actions keep their existing approval requirements.
 
 ## Linked MCP Service
 

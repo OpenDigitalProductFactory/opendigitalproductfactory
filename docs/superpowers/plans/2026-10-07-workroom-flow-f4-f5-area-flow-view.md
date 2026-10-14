@@ -43,6 +43,8 @@ status: active
 - **AC-F5-3:** flow load, flow time, flow efficiency and throughput each show an 8-week trend, and flow load shows its change against four weeks earlier. A cancelled run stops counting as in flow when it was cancelled.
 - **AC-F5-4:** `PORTFOLIO_COLOURS` values are `--dpf-portfolio-*` tokens, defined for light and dark.
 
+Live verification (2026-10-14) found the flow-load history overstated: 119 open runs against 23 rooms in flow. Rooms that end without a recorded drive stop never close their run. The tile therefore shows no flow-load trend or change until a room ending closes its run (BI-B0E285FB). Flow time, efficiency and throughput use only finished work and keep their trends.
+
 AC-F5-3 and AC-F5-4 shipped after #6151, which drew a trend only on flow time. The series come from the stage telemetry the tiles already read; no new store. The tiles use the existing token-styled `Trend` sparkline rather than report-kit `Chart`, which is sized for full charts, not 96-pixel inline trends.
 - **AC-F4-1:** a shape renders across every room on it, with each step's queue. Versions with data can be compared. Choosing a step lists the rooms at that step.
 - **AC-F4-2:** each step has a data box: its queue (an inventory triangle for rooms not being worked), typical dwell, process time and first-pass yield, or "too few to measure" below 5 exits.

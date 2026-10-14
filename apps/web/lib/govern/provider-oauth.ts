@@ -5,6 +5,7 @@
 import { randomBytes, createHash } from "crypto";
 import { prisma } from "@dpf/db";
 import { encryptSecret, decryptSecret } from "@/lib/credential-crypto";
+import { activeAccountCredentialWhere, assertActiveAccountSnapshot, matchesCredentialRevision, ACCOUNT_CHANGED, type ActiveAccountSnapshot } from "@/lib/inference/active-provider-account-verification";
 import { activateProvider } from "@/lib/govern/activate-provider";
 import { getStablePortalUrl } from "@/lib/portal-url";
 import { findProviderCredential } from "@/lib/inference/provider-account-credentials";
@@ -341,22 +342,160 @@ export async function exchangeOAuthCode(
 
 // ─── Token refresh ────────────────────────────────────────────────────────────
 
+/** Internal selected-account renewal; token claims validate identity, never grants. */
+export interface ScopedOAuthRefreshGuard {
+  signal: AbortSignal;
+  connection: { id: string; connectionId: string; providerId: string; authMethod: string; status: string; credentialEntryId: string | null; updatedAt: Date; organizationId?: string | null };
+  credential: { id: string; updatedAt: Date; cachedToken: string | null; refreshToken: string | null };
+  validateAccessToken: (token: string) => void;
+}
+
+class ScopedOAuthAccountChanged extends Error {}
+
+export function matchesScopedOAuthConnection(current: ScopedOAuthRefreshGuard["connection"] | null, expected: ScopedOAuthRefreshGuard["connection"]) {
+  return Boolean(current && current.id === expected.id && current.connectionId === expected.connectionId
+    && current.providerId === expected.providerId && current.status === expected.status && current.status !== "disabled"
+    && current.organizationId === expected.organizationId
+    && current.credentialEntryId === expected.credentialEntryId && current.authMethod === expected.authMethod
+    && current.updatedAt.getTime() === expected.updatedAt.getTime());
+}
+
+type OAuthCredential = NonNullable<Awaited<ReturnType<typeof findProviderCredential>>>;
+type OAuthParticipant = { connection: ScopedOAuthRefreshGuard["connection"]; credential: OAuthCredential };
+
+function matchesScopedOAuthCredential(current: ScopedOAuthRefreshGuard["credential"] | null, expected: ScopedOAuthRefreshGuard["credential"]) {
+  return matchesCredentialRevision({ credentialEntryId: expected.id, credentialRevision: expected }, current);
+}
+
+function readOAuthTokenClaims(token: string | null): Record<string, unknown> | null {
+  if (!token || token.split(".").length !== 3) return null;
+  try {
+    const claims = JSON.parse(Buffer.from(token.split(".")[1]!, "base64url").toString("utf8"));
+    return claims && typeof claims === "object" && !Array.isArray(claims) ? claims : null;
+  } catch { return null; }
+}
+
+/** Claims identify an existing credential or reject its cached lifetime; they never grant authority. */
+export function chatgptTokenIdentity(token: string | null): string | null {
+  const auth = readOAuthTokenClaims(token)?.["https://api.openai.com/auth"] as { chatgpt_account_id?: unknown } | undefined;
+  const accountId = auth?.chatgpt_account_id;
+  return typeof accountId === "string" && accountId.trim() ? accountId : null;
+}
+
+export function oauthTokenExpiryMs(token: string): number | null {
+  const exp = readOAuthTokenClaims(token)?.exp;
+  return typeof exp === "number" && Number.isFinite(exp * 1000) ? exp * 1000 : null;
+}
+
+/** Private proof, never a provider-name assertion or a credential projection. */
+async function readDefaultOAuthLineage(providerId: string, connectionId: string) {
+  if (!["codex", "chatgpt"].includes(providerId) || connectionId !== `provider-default-${providerId}`) return null;
+  const providers = ["codex", "chatgpt"];
+  const rows = await Promise.all(providers.map((id) => prisma.aiProviderConnection.findUnique({ where: { connectionId: `provider-default-${id}` }, include: { credentialEntry: true } })));
+  const participants: OAuthParticipant[] = [];
+  for (let index = 0; index < providers.length; index++) {
+    const row = rows[index], id = providers[index]!;
+    if (!row || row.providerId !== id || row.connectionId !== `provider-default-${id}`
+      || row.organizationId !== null || row.status === "disabled" || !["oauth", "oauth2_authorization_code"].includes(row.authMethod) || !row.credentialEntry
+      || row.credentialEntry.id !== row.credentialEntryId || row.credentialEntry.providerId !== id) return null;
+    participants.push({ connection: { ...row, updatedAt: new Date(row.updatedAt) }, credential: { ...row.credentialEntry, updatedAt: new Date(row.credentialEntry.updatedAt) } });
+  }
+  const accountIds = participants.map((entry) => chatgptTokenIdentity(entry.credential.cachedToken && decryptSecret(entry.credential.cachedToken)));
+  const refreshTokens = participants.map((entry) => entry.credential.refreshToken && decryptSecret(entry.credential.refreshToken));
+  if (!accountIds[0] || accountIds[0] !== accountIds[1] || !refreshTokens[0] || refreshTokens[0] !== refreshTokens[1]) return null;
+  return { participants, accountId: accountIds[0] };
+}
+
+/** Server read model: an unproven default needs independent recovery. No secrets leave. */
+export async function hasProvenDefaultOAuthLineage(providerId: string, connectionId: string): Promise<boolean> {
+  return Boolean(await readDefaultOAuthLineage(providerId, connectionId));
+}
+
 export async function refreshOAuthToken(
   providerId: string,
   connectionId?: string,
+  activeSnapshot?: ActiveAccountSnapshot,
+  guard?: ScopedOAuthRefreshGuard,
 ): Promise<{ token: string } | { error: string }> {
+  const activeCaller = activeSnapshot;
+  activeSnapshot = activeSnapshot ? { ...activeSnapshot, updatedAt: new Date(activeSnapshot.updatedAt),
+    credentialRevision: { ...activeSnapshot.credentialRevision, updatedAt: new Date(activeSnapshot.credentialRevision.updatedAt) } } : undefined;
+  guard = guard ? { ...guard, connection: { ...guard.connection, updatedAt: new Date(guard.connection.updatedAt) },
+    credential: { ...guard.credential, updatedAt: new Date(guard.credential.updatedAt) } } : undefined;
+  if (activeSnapshot) {
+    try { await assertActiveAccountSnapshot(activeSnapshot); }
+    catch { return { error: ACCOUNT_CHANGED }; }
+  }
+  if (guard) {
+    if (guard.signal.aborted || !connectionId || connectionId !== guard.connection.connectionId
+      || providerId !== guard.connection.providerId || !["oauth", "oauth2_authorization_code"].includes(guard.connection.authMethod)
+      || guard.connection.credentialEntryId !== guard.credential.id) return { error: "Selected account renewal is unavailable" };
+    const current = await prisma.aiProviderConnection.findUnique({ where: { connectionId } });
+    if (guard.signal.aborted || !matchesScopedOAuthConnection(current, guard.connection)) return { error: "Selected account changed during renewal" };
+  }
   const provider = await prisma.modelProvider.findUnique({ where: { providerId: connectionId && providerId === "chatgpt" ? "codex" : providerId } });
   if (!provider?.tokenUrl || !provider.oauthClientId) {
     return { error: "Provider missing tokenUrl or oauthClientId" };
   }
 
   const cred = await findProviderCredential(providerId, connectionId);
+  if (activeSnapshot && (connectionId !== activeSnapshot.connectionId || providerId !== activeSnapshot.providerId
+    || !matchesCredentialRevision(activeSnapshot, cred))) return { error: ACCOUNT_CHANGED };
+  if (activeSnapshot && !guard && cred) {
+    const selected = await prisma.aiProviderConnection.findUnique({ where: { connectionId: activeSnapshot.connectionId } });
+    if (!selected || selected.credentialEntryId !== cred.id || selected.providerId !== providerId
+      || selected.updatedAt.getTime() !== activeSnapshot.updatedAt.getTime() || selected.status !== "active"
+      || selected.organizationId !== null || !["oauth", "oauth2_authorization_code"].includes(selected.authMethod)) return { error: ACCOUNT_CHANGED };
+    const selectedIdentity = chatgptTokenIdentity(cred.cachedToken && decryptSecret(cred.cachedToken));
+    guard = { signal: new AbortController().signal,
+      connection: { ...selected, updatedAt: new Date(selected.updatedAt) },
+      credential: { id: cred.id, updatedAt: new Date(cred.updatedAt), cachedToken: cred.cachedToken, refreshToken: cred.refreshToken },
+      validateAccessToken: (token) => { if (!selectedIdentity || chatgptTokenIdentity(token) !== selectedIdentity) throw new Error("Selected default identity changed"); } };
+  }
+  if (guard && (guard.signal.aborted || !matchesScopedOAuthCredential(cred, guard.credential))) return { error: "Selected account credential changed" };
+  const defaultConnection = connectionId && ["codex", "chatgpt"].includes(providerId) && connectionId === `provider-default-${providerId}`;
+  const lineage = defaultConnection ? await readDefaultOAuthLineage(providerId, connectionId!) : null;
+  if (lineage) {
+    const selected = lineage.participants.find((entry) => entry.connection.connectionId === connectionId)!;
+    if (!cred || !matchesScopedOAuthCredential(selected.credential, cred) || (guard && !matchesScopedOAuthConnection(selected.connection, guard.connection))) {
+      return { error: "Selected default changed during renewal" };
+    }
+  }
+  if (defaultConnection && !guard && cred) {
+    const selected = await prisma.aiProviderConnection.findUnique({ where: { connectionId: connectionId! } });
+    const identity = chatgptTokenIdentity(cred.cachedToken && decryptSecret(cred.cachedToken));
+    if (!selected || selected.credentialEntryId !== cred.id || selected.providerId !== providerId || selected.authMethod !== "oauth" || selected.status === "disabled" || !identity) {
+      return { error: "Default sign-in identity is unproven — recover this account independently" };
+    }
+    guard = { signal: new AbortController().signal, connection: { ...selected, updatedAt: new Date(selected.updatedAt) }, credential: { id: cred.id, updatedAt: new Date(cred.updatedAt), cachedToken: cred.cachedToken, refreshToken: cred.refreshToken },
+      validateAccessToken: (token) => { if (chatgptTokenIdentity(token) !== identity) throw new Error("Default identity changed"); } };
+  }
   const credentialWhere = connectionId && cred ? { id: cred.id } : { providerId };
+  const renewalFailure = (error: unknown) => ({ error: error instanceof ScopedOAuthAccountChanged
+    ? activeSnapshot ? ACCOUNT_CHANGED : "Selected account changed during renewal"
+    : "Token refresh network error" });
+  const expireCapturedActive = async () => {
+    if (!activeSnapshot || !guard) return;
+    const captured = activeSnapshot, expected = guard;
+    await prisma.$transaction(async tx => {
+      expected.signal.throwIfAborted();
+      const owners = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "AiProviderConnection" WHERE "connectionId" = ${expected.connection.connectionId} FOR UPDATE`;
+      const current = await tx.aiProviderConnection.findUnique({ where: { connectionId: expected.connection.connectionId } });
+      if (owners.length !== 1 || owners[0]!.id !== expected.connection.id || !matchesScopedOAuthConnection(current, expected.connection)) {
+        throw new ScopedOAuthAccountChanged();
+      }
+      const expired = await tx.credentialEntry.updateMany({ where: activeAccountCredentialWhere(captured), data: { status: "expired" } });
+      expected.signal.throwIfAborted();
+      if (expired.count !== 1) throw new ScopedOAuthAccountChanged();
+    });
+  };
   if (!cred?.refreshToken) {
     // Nothing can renew this token. Once it is past expiry, say so on the row
     // (and its codex/chatgpt sibling, which holds the same token) instead of
     // leaving status "ok" on a dead credential.
-    if (cred?.tokenExpiresAt && cred.tokenExpiresAt.getTime() <= Date.now()) {
+    if (activeSnapshot && cred?.tokenExpiresAt && cred.tokenExpiresAt.getTime() <= Date.now()) {
+      try { await expireCapturedActive(); } catch (error) { return renewalFailure(error); }
+    } else if (!guard && cred?.tokenExpiresAt && cred.tokenExpiresAt.getTime() <= Date.now()) {
       const sibling = OPENAI_PAIR[providerId];
       await prisma.credentialEntry.updateMany({
         where: connectionId ? { id: cred.id } : { providerId: { in: sibling ? [providerId, sibling] : [providerId] } },
@@ -366,7 +505,14 @@ export async function refreshOAuthToken(
     return { error: "Re-authentication required" };
   }
 
-  const decryptedRefresh = decryptSecret(cred.refreshToken);
+  if (defaultConnection && !chatgptTokenIdentity(cred.cachedToken && decryptSecret(cred.cachedToken))) {
+    return { error: "Default sign-in identity is unproven — recover this account independently" };
+  }
+
+  // Both proven defaults represent the existing Codex grant. Additional accounts
+  // never enter this normalization and retain their exact selected credential.
+  const refreshOwner = lineage?.participants.find((entry) => entry.connection.providerId === "codex")?.credential ?? cred;
+  const decryptedRefresh = decryptSecret(refreshOwner.refreshToken!);
   if (!decryptedRefresh) return { error: "Re-authentication required — credential key may have changed" };
 
   const isAnthropicToken = isAnthropicHost(provider.tokenUrl);
@@ -379,14 +525,34 @@ export async function refreshOAuthToken(
   const refreshBody = isAnthropicToken ? JSON.stringify(refreshData) : new URLSearchParams(refreshData).toString();
 
   try {
+    guard?.signal.throwIfAborted();
+    if (activeSnapshot) await assertActiveAccountSnapshot(activeSnapshot);
+    if (guard) {
+      const current = await prisma.aiProviderConnection.findUnique({ where: { connectionId: guard.connection.connectionId }, include: { credentialEntry: true } });
+      const credential = current?.credentialEntry;
+      if (!matchesScopedOAuthConnection(current, guard.connection) || !matchesScopedOAuthCredential(credential ?? null, guard.credential)) {
+        return { error: activeSnapshot ? ACCOUNT_CHANGED : "Selected account changed during renewal" };
+      }
+    }
+    if (lineage) {
+      for (const participant of lineage.participants) {
+        guard?.signal.throwIfAborted();
+        const current = await prisma.aiProviderConnection.findUnique({ where: { connectionId: participant.connection.connectionId }, include: { credentialEntry: true } });
+        if (!matchesScopedOAuthConnection(current, participant.connection)
+          || !matchesScopedOAuthCredential(current?.credentialEntry ?? null, participant.credential)) throw new ScopedOAuthAccountChanged();
+      }
+    }
+    guard?.signal.throwIfAborted();
     const res = await fetch(provider.tokenUrl, {
       method: "POST",
       headers: { "Content-Type": contentType },
       body: refreshBody,
-      signal: AbortSignal.timeout(10_000),
+      signal: guard ? AbortSignal.any([guard.signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000),
     });
 
     if (!res.ok) {
+      if (activeSnapshot) { await expireCapturedActive(); return { error: "Selected account re-authentication required" }; }
+      if (guard) return { error: "Selected account re-authentication required" };
       await prisma.credentialEntry.update({
         where: credentialWhere,
         data: { status: "expired" },
@@ -395,7 +561,56 @@ export async function refreshOAuthToken(
     }
 
     const body = await res.json() as { access_token: string; refresh_token?: string; expires_in: number };
+    if (guard) {
+      guard.signal.throwIfAborted();
+      if (typeof body.access_token !== "string" || !body.access_token.trim()
+        || !Number.isFinite(body.expires_in) || body.expires_in <= 0
+        || (body.refresh_token !== undefined && (typeof body.refresh_token !== "string" || !body.refresh_token.trim()))) {
+        return { error: "Malformed selected account renewal" };
+      }
+      guard.validateAccessToken(body.access_token);
+      if (lineage && chatgptTokenIdentity(body.access_token) !== lineage.accountId) return { error: "Shared default identity changed" };
+    }
     const expiresAt = new Date(Date.now() + body.expires_in * 1000);
+
+    if (guard) {
+      if (!Number.isFinite(expiresAt.getTime())) return { error: "Malformed selected account renewal" };
+      const selectedRevision = await prisma.$transaction(async (tx) => {
+        guard.signal.throwIfAborted();
+        // Lock the owner row while checking and saving; a relation predicate
+        // alone can observe ownership from an earlier statement snapshot.
+        const participants: OAuthParticipant[] = lineage?.participants ?? [{ connection: guard.connection, credential: { ...cred!, updatedAt: guard.credential.updatedAt } }];
+        participants.sort((a, b) => a.connection.connectionId.localeCompare(b.connection.connectionId));
+        for (const participant of participants) {
+          const ownerId = participant.connection.connectionId;
+          const owners = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "AiProviderConnection" WHERE "connectionId" = ${ownerId} FOR UPDATE`;
+          guard.signal.throwIfAborted();
+          const owner = await tx.aiProviderConnection.findUnique({ where: { connectionId: ownerId } });
+          if (owners.length !== 1 || owners[0]!.id !== participant.connection.id || !matchesScopedOAuthConnection(owner, participant.connection)) throw new ScopedOAuthAccountChanged();
+        }
+        let selectedRevision: ActiveAccountSnapshot["credentialRevision"] | undefined;
+        for (const { credential } of participants) {
+          guard.signal.throwIfAborted();
+          const revision = { updatedAt: new Date(), cachedToken: encryptSecret(body.access_token),
+            refreshToken: body.refresh_token ? encryptSecret(body.refresh_token) : credential.refreshToken };
+          const capturedWhere = { id: credential.id, updatedAt: credential.updatedAt,
+            cachedToken: credential.cachedToken, refreshToken: credential.refreshToken };
+          const selected = credential.id === guard.credential.id;
+          const written = await tx.credentialEntry.updateMany({
+            where: selected && activeSnapshot ? { AND: [capturedWhere, activeAccountCredentialWhere(activeSnapshot)] } : capturedWhere,
+            data: { ...revision, tokenExpiresAt: expiresAt, status: "ok" },
+          });
+          if (selected) selectedRevision = revision;
+          guard.signal.throwIfAborted();
+          if (written.count !== 1) throw new ScopedOAuthAccountChanged();
+        }
+        if (!selectedRevision) throw new ScopedOAuthAccountChanged();
+        return selectedRevision;
+      });
+      if (activeCaller) activeCaller.credentialRevision = selectedRevision;
+      guard.signal.throwIfAborted();
+      return { token: body.access_token };
+    }
 
     // Optimistic concurrency: only write if refreshToken hasn't changed
     const currentCred = await prisma.credentialEntry.findUnique({ where: credentialWhere });
@@ -428,7 +643,7 @@ export async function refreshOAuthToken(
     }
 
     return { token: body.access_token };
-  } catch {
-    return { error: "Token refresh network error" };
+  } catch (error) {
+    return renewalFailure(error);
   }
 }
