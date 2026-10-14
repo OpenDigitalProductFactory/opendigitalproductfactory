@@ -34,8 +34,11 @@ function formatResponsesScopeError(body: string): string | null {
 
 function isExpiredOAuthResponse(status: number, body: string): boolean {
   if (status !== 401) return false;
-  try { return JSON.parse(body)?.error?.code === "token_expired"; }
-  catch { return false; }
+  try {
+    return JSON.parse(body)?.error?.code === "token_expired";
+  } catch {
+    return false;
+  }
 }
 
 function signInRecoveryMessage(providerId: string, connectionId?: string): string {
@@ -174,7 +177,9 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
         headers.Authorization = `Bearer ${renewed.token}`;
         res = await probe();
         body = await res.text();
-        if (isExpiredOAuthResponse(res.status, body)) return { ok: false, message: signInRecoveryMessage(providerId, connectionId) };
+        if (isExpiredOAuthResponse(res.status, body)) {
+          return { ok: false, message: signInRecoveryMessage(providerId, connectionId) };
+        }
       }
       if (res.ok) {
         assertResponsesCompleted(body, streaming);
