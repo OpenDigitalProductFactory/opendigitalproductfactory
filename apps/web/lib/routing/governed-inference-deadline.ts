@@ -1,6 +1,32 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createOffThreadpoolFetchTransport, type OffThreadpoolFetchTransport } from "@/lib/network/off-threadpool-fetch";
 
+export type InferenceOrigin = "interactive" | "autonomous";
+const originStore = new AsyncLocalStorage<{ origin?: InferenceOrigin; signal?: AbortSignal }>();
+
+/** Shared caller context lives below admission and provider adapters. */
+export function withInferenceOrigin<T>(origin: InferenceOrigin, fn: () => T): T {
+  return originStore.run({ ...originStore.getStore(), origin }, fn);
+}
+
+export function currentInferenceOrigin(): InferenceOrigin {
+  return originStore.getStore()?.origin ?? "interactive";
+}
+
+/** Caller cancellation never grants or replaces governed parent authority. */
+export function withInferenceCancellation<T>(signal: AbortSignal, fn: () => T): T {
+  const inherited = currentInferenceSignal();
+  return originStore.run({ ...originStore.getStore(),
+    signal: inherited && inherited !== signal ? AbortSignal.any([inherited, signal]) : signal,
+  }, fn);
+}
+
+export function currentInferenceSignal(parentSignal?: AbortSignal): AbortSignal | undefined {
+  const callerSignal = originStore.getStore()?.signal;
+  return callerSignal && parentSignal && callerSignal !== parentSignal
+    ? AbortSignal.any([callerSignal, parentSignal]) : callerSignal ?? parentSignal;
+}
+
 type DeadlineScope = Readonly<{
   deadlineAt: number;
   signal: AbortSignal;

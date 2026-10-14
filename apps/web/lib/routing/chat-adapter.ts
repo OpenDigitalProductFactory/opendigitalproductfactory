@@ -43,8 +43,8 @@ import {
   resolveInferenceRuntimePolicy,
 } from "./local-inference-runtime-policy";
 import { isRecord } from "@/lib/shared/coerce";
-import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
-import { currentInferenceSignal } from "@/lib/inference/inference-admission";
+import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline,
+  currentInferenceSignal } from "./governed-inference-deadline";
 
 // ─── Inference HTTP timeouts ──────────────────────────────────────────────────
 // The runtime-policy module separates the governed, deliberately slower 27B

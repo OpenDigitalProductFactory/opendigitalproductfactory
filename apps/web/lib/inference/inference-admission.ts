@@ -27,45 +27,15 @@
 // in-process semaphore is a correct bound for a single-portal install. A
 // distributed lane (for multi-replica portals) is a documented follow-up.
 
-import { AsyncLocalStorage } from "node:async_hooks";
 import { isLocalProviderId } from "@/lib/routing/provider-locality";
-
-export type InferenceOrigin = "interactive" | "autonomous";
+import { currentInferenceSignal, type InferenceOrigin } from "@/lib/routing/governed-inference-deadline";
+export { currentInferenceOrigin, currentInferenceSignal, withInferenceOrigin,
+  withInferenceCancellation, type InferenceOrigin } from "@/lib/routing/governed-inference-deadline";
 
 /** Coarse engine bucket. Local models are the scarce, easily-overloaded backend
  *  and get their own tight budget; every remote provider shares an aggregate
  *  outbound budget (a conservative cap on concurrent cost/rate-limit exposure). */
 export type EngineKey = "local" | "remote";
-
-const originStore = new AsyncLocalStorage<{ origin?: InferenceOrigin; signal?: AbortSignal }>();
-
-/** Run `fn` with the given inference origin bound for its whole async subtree.
- *  Every `callProvider` beneath it reads this origin without any signature
- *  threading. */
-export function withInferenceOrigin<T>(origin: InferenceOrigin, fn: () => T): T {
-  return originStore.run({ ...originStore.getStore(), origin }, fn);
-}
-
-/** The origin of the currently-executing inference call. Defaults to
- *  "interactive" when unset — background callers must opt in via
- *  withInferenceOrigin("autonomous", …). */
-export function currentInferenceOrigin(): InferenceOrigin {
-  return originStore.getStore()?.origin ?? "interactive";
-}
-
-/** One caller-owned cancellation boundary, preserved by nested origin scopes. */
-export function withInferenceCancellation<T>(signal: AbortSignal, fn: () => T): T {
-  const inherited = currentInferenceSignal();
-  return originStore.run({ ...originStore.getStore(),
-    signal: inherited && inherited !== signal ? AbortSignal.any([inherited, signal]) : signal,
-  }, fn);
-}
-
-export function currentInferenceSignal(parentSignal?: AbortSignal): AbortSignal | undefined {
-  const callerSignal = originStore.getStore()?.signal;
-  return callerSignal && parentSignal && callerSignal !== parentSignal
-    ? AbortSignal.any([callerSignal, parentSignal]) : callerSignal ?? parentSignal;
-}
 
 export function engineKeyForProvider(providerId: string): EngineKey {
   return isLocalProviderId(providerId) ? "local" : "remote";

@@ -576,3 +576,20 @@ The b1f8ee0b035 snapshot passed canonical integration with evidence
 cmv6c8wo10j6l01n1x41ed4f0 and received an independent read-only client assessment
 with no blocking source finding in the requested boundaries. Neither attests
 this subsequent GPU-lane change; this final tree requires fresh verification.
+
+The subsequent 28d0c7c preflight caught a reverse dependency from routing to
+inference. The existing caller context now lives in the routing deadline module,
+below both admission and adapters; inference admission re-exports its public
+origin and cancellation functions for existing callers. The application boundary
+guard passes without changing its exception baseline. This refactor needs fresh
+commit-bound verification and assessment; the earlier gate and assessments do
+not attest the changed tree.
+
+The 694a476c integration attempt stopped at merge conflicts with refreshed main
+ad9c4d14da5. Its controller also rejected the completion checkpoint because of a
+gate-key mismatch; no integration tests ran and its inconclusive receipt is not
+a pass. The branch was reconciled onto that main ref, preserving canonical local
+provider classification and the peer's GPU admission regressions. Those tests
+now observe real admission while retaining call-order assertions. The expanded
+affected run passed 342 tests in 23 suites; the reconciled tree needs its own
+commit-bound gate and source assessment.
