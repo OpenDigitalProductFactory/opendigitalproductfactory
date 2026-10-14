@@ -210,6 +210,10 @@ async function main() {
     || git(["rev-parse", "--abbrev-ref", "HEAD"]).trim() !== repo.branch;
   repo.statusPorcelain = git(["status", "--porcelain"]);
   const verdict = evaluateReadiness({ repo, gateResults, prBody: args.prBody, gateContext, localCiRecords: readPublicationGateRecords() });
+  if (args.runGates && !execution.identityVerified) {
+    verdict.ready = false;
+    verdict.blockers.push("Host guard execution lacks a complete unchanged source/environment identity; inspect its receipt and recover those prerequisites before publication.");
+  }
   if (execution.reused) verdict.notes.push(`Local guard results reused from ${execution.executedAt}; no guard scripts rerun. Repository and PR metadata inspected now. Protected GitHub checks remain the integration authority.`);
   process.stdout.write(formatReadinessReport(verdict));
   if (args.json) {

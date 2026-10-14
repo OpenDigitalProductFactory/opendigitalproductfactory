@@ -107,7 +107,7 @@ export async function main() {
   const staleRoot = checkStaleRootClone({ worktreeRoot: process.cwd() });
   if (!staleRoot.ok) {
     process.stderr.write(`[pregate-preflight] ${staleRoot.message}\n`);
-    process.exitCode = 1;
+    process.exitCode = 88;
     return;
   }
   if (staleRoot.behind === 0 && staleRoot.rootClonePath) {
@@ -135,7 +135,7 @@ export async function main() {
         `(${readinessGate.reason}) — guards cannot run and would env-skip. Provision it, then re-run. ` +
         `Emergency skip (recorded honesty, CI still enforces): set DPF_SKIP_COMPILE_READY_GATE="<why>".\n`,
     );
-    process.exitCode = 1;
+    process.exitCode = 88;
     return;
   }
   if (readinessGate.action === "healed") {
@@ -189,7 +189,7 @@ export async function main() {
     process.removeListener("SIGTERM", cancel);
   }
   const { result } = execution;
-  const fullyVerified = !result.skipped && result.entries.length === planned.entries.length
+  const fullyVerified = execution.identityVerified && !result.skipped && result.entries.length === planned.entries.length
     && result.entries.every(entry => entry.status === "passed");
   process.stdout.write(`DPF_HOST_PREFLIGHT_RESULT=${JSON.stringify({ status: fullyVerified ? "passed" : "inconclusive",
     entries: result.entries.map(({ id, status }) => ({ id, status })) })}\n`);
@@ -281,6 +281,17 @@ export async function main() {
   );
 }
 
-if (isEntryModule(import.meta.url)) {
-  await main();
+export async function runPreflightEntrypoint(run = main, report = text => process.stderr.write(text)) {
+  try {
+    await run();
+    return process.exitCode ?? 0;
+  } catch (error) {
+    // An orchestration/receipt exception supplies no guard verdict. Parser
+    // excerpts and arbitrary exception text can carry private source material.
+    const code = /^[A-Z0-9_]{1,64}$/.test(error?.code ?? "") ? error.code : "execution-exception";
+    report(`[pregate-preflight] execution inconclusive (${code}); no passing verification was recorded. Inspect the host receipt and restore its execution/recording prerequisites before retry.\n`);
+    return 88;
+  }
 }
+
+if (isEntryModule(import.meta.url)) process.exitCode = await runPreflightEntrypoint();

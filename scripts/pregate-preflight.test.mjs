@@ -652,3 +652,12 @@ test("a zero-exit guard with failed progress recording cannot supply PASS", asyn
   assert.equal(result.outcome,"runner_failed");
   assert.notEqual(result.exitCode,0);
 });
+
+test("preflight receipt exceptions report unrun without leaking exception contents", async () => {
+  const {runPreflightEntrypoint} = await import("./pregate-preflight.mjs");
+  let output="";
+  const status=await runPreflightEntrypoint(async () => {throw Object.assign(new Error("fixture-secret"),{code:"ENOSPC"});},text=>{output+=text;});
+  assert.equal(status,88);
+  assert.match(output,/inconclusive.*ENOSPC/);
+  assert.doesNotMatch(output,/fixture-secret/);
+});

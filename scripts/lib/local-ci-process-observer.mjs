@@ -138,6 +138,8 @@ export function createObservedProcessRunner({
   terminateProcessTreeImpl = terminateProcessTree,
   setTimeoutImpl = setTimeout,
   clearTimeoutImpl = clearTimeout,
+  setIntervalImpl = setInterval,
+  clearIntervalImpl = clearInterval,
   now = () => new Date().toISOString(),
   platform = process.platform,
 } = {}) {
@@ -181,9 +183,10 @@ export function createObservedProcessRunner({
       });
 
       const sample = () => {
-        if (child.pid && hostSamples.length < MAX_HOST_SAMPLES) {
+        if (child.pid) {
           const host = sampleHost(child.pid);
           hostSamples.push(host);
+          if (hostSamples.length > MAX_HOST_SAMPLES) hostSamples.shift();
           notify({
             ...observation,
             childPid: child.pid,
@@ -193,13 +196,13 @@ export function createObservedProcessRunner({
         }
       };
       sample();
-      const sampler = setInterval(sample, sampleIntervalMs);
+      const sampler = setIntervalImpl(sample, sampleIntervalMs);
       sampler.unref();
 
       const finish = (status, signal, { closeTimedOut = false } = {}) => {
         if (settled) return;
         settled = true;
-        clearInterval(sampler);
+        clearIntervalImpl(sampler);
         clearTimeoutImpl(deadlineTimer);
         clearTimeoutImpl(forceTimer);
         clearTimeoutImpl(closeTimer);

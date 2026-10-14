@@ -121,7 +121,8 @@ test("identity drift while running prevents publication of reusable evidence", a
   const f = fixture(t);
   const execute = f.options.execute;
   f.options.execute = async () => { const result = await execute(); f.identity({ ...f.current(), tree: "new" }); return result; };
-  await runWithGuardReceipt(f.options);
+  const execution = await runWithGuardReceipt(f.options);
+  assert.equal(execution.identityVerified, false);
   f.options.execute = execute;
   assert.equal((await runWithGuardReceipt(f.options)).reused, false);
 });

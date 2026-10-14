@@ -93,6 +93,20 @@ test("failed progress recording is retained as an execution limitation rather th
   assert.equal(result.error.message,"receipt unavailable");
 });
 
+test("progress continues after the retained host sample window fills", async () => {
+  const child = fakeChild();
+  let sample, observations = 0;
+  const run = createObservedProcessRunner({ spawnImpl: () => child, sampleHost: () => ({}),
+    stdout: {write() {}},stderr: {write() {}},onProgress: () => observations++,
+    setIntervalImpl: callback => {sample=callback;return {unref() {}};},clearIntervalImpl: () => {} });
+  const pending = run({command:"fixture",args:[]});
+  for(let i=0;i<125;i++) sample();
+  child.emit("close",0,null);
+  const result=await pending;
+  assert.equal(result.hostSamples.length,120,"history remains bounded");
+  assert.equal(observations,127,"start, all heartbeats and completion remain observable");
+});
+
 test("Vitest stage duration defaults to 30 minutes and accepts only a positive override", () => {
   assert.equal(resolveVitestMaxDurationMs({}), 1_800_000);
   assert.equal(resolveVitestMaxDurationMs({ DPF_LOCAL_CI_VITEST_MAX_DURATION_MS: "45000" }), 45_000);

@@ -71,7 +71,7 @@ export function guardReceiptDirectory(cwd = process.cwd()) {
 
 export async function runWithGuardReceipt({ directory, stage, identify, execute, passed, now = Date.now, lockOptions = {} }) {
   const identity = identify();
-  if (!identity) return { result: await execute({ progress: () => {} }), reused: false, executedAt: null };
+  if (!identity) return { result: await execute({ progress: () => {} }), reused: false, executedAt: null, identityVerified: false };
   mkdirSync(directory, { recursive: true });
   // Bound disk use to one receipt/claim per stage in this worktree. Different
   // identities cannot share PASS, even though they replace the same local slot.
@@ -83,7 +83,7 @@ export async function runWithGuardReceipt({ directory, stage, identify, execute,
     try {
       if (age >= 0 && age < TTL_MS && reusablePassedStage({ receipt: prior, stage, identity }) && prior.result && passed(prior.result)
         && stageIdentityMatches(identity, identify())) {
-        return { result: prior.result, reused: true, executedAt: prior.completedAt };
+        return { result: prior.result, reused: true, executedAt: prior.completedAt, identityVerified: true };
       }
     } catch { /* Malformed result payloads are misses, not cached passes. */ }
     return null;
@@ -102,7 +102,7 @@ export async function runWithGuardReceipt({ directory, stage, identify, execute,
     const result = await execute({ progress: observation => writer.heartbeat(observation) });
     const eligible = passed(result) && stageIdentityMatches(identity, identify());
     writer.complete(eligible ? "passed" : "inconclusive", { result });
-    return { result, reused: false, executedAt: writer.snapshot().completedAt };
+    return { result, reused: false, executedAt: writer.snapshot().completedAt, identityVerified: eligible };
   } catch (error) {
     if (writer.snapshot()?.status === "running") {
       writer.complete("inconclusive", { error: { name: error.name ?? "Error",
