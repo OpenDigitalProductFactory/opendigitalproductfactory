@@ -82,8 +82,8 @@ The source supervisor fixtures separately exercise concurrent child lifetime,
 timeout settlement and cleanup. Known Codex and Anthropic subscription channels
 may enter routing only with the selected account's verified model access.
 
-Credential decryption now lives in the existing account boundary, retaining the
-legacy export. Its single row read checks the routed metadata revision before
+Credential decryption and bearer-token exchange now live in the existing account
+boundary, retaining the legacy exports from provider internals. Its single row read checks the routed metadata revision before
 decryption; renewal rebuilds stale selection instead of silently substituting
 replacement credentials. Capacity links also compare credential revisions.
 Provider-managed response IDs require their originating account; otherwise the
