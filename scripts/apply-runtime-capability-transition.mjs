@@ -201,7 +201,22 @@ const observe = () => {
 const transitionServices = [...new Set([...envelope.previousServices, ...envelope.desiredServices])];
 const healthSemantics = new Map(catalog.capabilities.flatMap((capability) => capability.services).map((service) => [service.service, service.healthSemantics]));
 const exact = (projection, observed, health) => projection.required.every((service) => observed.includes(service) && (healthSemantics.get(service) !== "compose-healthcheck" || health[service] === "healthy")) && transitionServices.filter((service) => !projection.required.includes(service)).every((service) => !observed.includes(service));
-const next = { ...before, enabledRuntimeCapabilities: desired.enabledKeys, capabilityCatalogHash: catalogHash, capabilityStateVersion: desired.stateHash };
+// BI-28D2919A: a portal change to an operator-decided capability is the
+// operator's decision; record it so the install stops reading as "undecided".
+// Inlined, not imported from lib/resolve-capability-compose-profiles.mjs: the
+// signed protocol identity hashes only this file and transition-signing.mjs,
+// so an extra import would extend the trusted closure outside that identity.
+// Keep in step with OPERATOR_DECIDED_CAPABILITIES there.
+const OPERATOR_DECIDED_CAPABILITIES = ["runtime:deep-observability"];
+// decidedAt is the SIGNED issuedAt, never the wall clock: crash replay
+// recomputes `next` and must equal the journaled one byte for byte.
+const decidedAt = new Date(issued).toISOString();
+const decidedKeys = before.schemaVersion !== 2 ? [] : OPERATOR_DECIDED_CAPABILITIES.filter((key) =>
+  (envelope.version === 2 && envelope.mode === "reconciliation" && envelope.reconciliation.touchedKeys.includes(key))
+  || envelope.previousKeys.includes(key) !== envelope.desiredKeys.includes(key));
+const next = { ...before, enabledRuntimeCapabilities: desired.enabledKeys, capabilityCatalogHash: catalogHash, capabilityStateVersion: desired.stateHash,
+  ...(decidedKeys.length ? { runtimeCapabilityDecisions: { ...(before.runtimeCapabilityDecisions ?? {}), ...Object.fromEntries(decidedKeys.map((key) =>
+    [key, { decision: desired.enabledKeys.includes(key) ? "enabled" : "disabled", source: "portal", decidedAt }])) } } : {}) };
 const nextValidation = await validateInstallState(next, schemaPath);
 if (!nextValidation.valid) await fail("install_state_schema_invalid");
 if (journal && (!sameInstallState(journal.before, before) || !sameInstallState(journal.next, next))) await fail("invalid_transition_journal");

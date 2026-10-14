@@ -63,7 +63,7 @@ test("the packaged read-only probe rejects a schema-invalid snapshot without hos
   assert.deepEqual(await readdir(dir), []);
 });
 
-async function validTransition(dir, health = "healthy", version = 1) {
+async function validTransition(dir, health = "healthy", version = 1, { previousRequested = [], desiredRequested, stateExtras = {} } = {}) {
   const catalogPath = new URL("./capability-service-catalog.generated.json", import.meta.url);
   const catalog = JSON.parse(await readFile(catalogPath, "utf8"));
   const project = (requested) => {
@@ -76,13 +76,13 @@ async function validTransition(dir, health = "healthy", version = 1) {
     const services = catalog.capabilities.filter((capability) => enabled.has(capability.capabilityId)).flatMap((capability) => capability.services).filter((service) => service.targetClassification !== "ephemeral-lifecycle");
     return { keys, profiles: [...new Set(services.flatMap((service) => service.profiles))].sort(), required: [...new Set(services.map((service) => service.service))].sort(), hash: createHash("sha256").update(`${catalog.catalogHash}\n${catalog.capabilities.map((capability) => `${capability.capabilityId}=${enabled.has(capability.capabilityId) ? "active" : "disabled"}`).sort().join("\n")}`).digest("hex") };
   };
-  const previous = project([]);
+  const previous = project(previousRequested);
   const optional = catalog.capabilities.find((capability) => capability.activationPolicy !== "always");
   assert.ok(optional, "fixture needs an optional runtime capability");
-  const desired = project([optional.capabilityId]);
+  const desired = project(desiredRequested ?? [optional.capabilityId]);
   const value = { ...envelope(), version, ...(version === 2 ? { kind: "runtime-capability-transition", mode: "transition" } : {}), catalogHash: catalog.catalogHash, previousStateHash: previous.hash, desiredStateHash: desired.hash, previousKeys: previous.keys, desiredKeys: desired.keys, previousProfiles: previous.profiles, desiredProfiles: desired.profiles, previousServices: previous.required, desiredServices: desired.required };
   const signature = signTransitionPayload(value, secret);
-  await writeFile(join(dir, "install-state.json"), JSON.stringify({ schemaVersion: 1, installerVersion: "test", platform: "linux", arch: "amd64", enabledRuntimeCapabilities: previous.keys, capabilityCatalogHash: catalog.catalogHash, capabilityStateVersion: previous.hash }));
+  await writeFile(join(dir, "install-state.json"), JSON.stringify({ schemaVersion: 1, installerVersion: "test", platform: "linux", arch: "amd64", enabledRuntimeCapabilities: previous.keys, capabilityCatalogHash: catalog.catalogHash, capabilityStateVersion: previous.hash, ...stateExtras }));
   const fakeDocker = join(dir, "fake-docker.mjs");
   const psRows = desired.required.map((Service) => ({ Service, State: "running", Health: health }));
   await writeFile(fakeDocker, `const args = process.argv.slice(2).join(" ");\nif (args.includes("ps --format json")) process.stdout.write(${JSON.stringify(JSON.stringify(psRows))});\n`);
@@ -117,12 +117,12 @@ test("version 2 reconciliation without its explicit packet never enters the ordi
   assert.ok(files.every(file => !file.endsWith(".journal.json") && !file.endsWith(".claim")));
 });
 
-async function reconciliationFixture(dir) {
-  const fixture = await validTransition(dir, "healthy", 2);
+async function reconciliationFixture(dir, { touched, databaseStates, ...options } = {}) {
+  const fixture = await validTransition(dir, "healthy", 2, options);
   const catalog = JSON.parse(await readFile(fixture.catalogPath, "utf8"));
   const observedHost = JSON.parse(await readFile(join(dir, "install-state.json"), "utf8"));
-  const touchedKeys = fixture.value.desiredKeys.filter(key => !fixture.value.previousKeys.includes(key));
-  const observedDatabaseStates = Object.fromEntries(catalog.capabilities.map(capability => [capability.capabilityId,
+  const touchedKeys = touched ?? fixture.value.desiredKeys.filter(key => !fixture.value.previousKeys.includes(key));
+  const observedDatabaseStates = databaseStates?.observed ?? Object.fromEntries(catalog.capabilities.map(capability => [capability.capabilityId,
     fixture.value.desiredKeys.includes(capability.capabilityId) ? "active" : "disabled"]));
   const value = { ...fixture.value, mode: "reconciliation", protocolIdentity: {
     sourceSha: "a".repeat(40), promoterDigest: `sha256:${"d".repeat(64)}`,
@@ -130,7 +130,7 @@ async function reconciliationFixture(dir) {
     signerSha256: createHash("sha256").update(await readFile(new URL("./lib/transition-signing.mjs", import.meta.url))).digest("hex"),
   }, reconciliation: {
     observedHost, observedDatabaseStates, desiredHostEnabledKeys: fixture.value.desiredKeys,
-    desiredDatabaseStates: { ...observedDatabaseStates }, touchedKeys,
+    desiredDatabaseStates: { ...observedDatabaseStates, ...(databaseStates?.desired ?? {}) }, touchedKeys,
   } };
   const env = () => ({ ...fixture.env, DPF_CANDIDATE_SOURCE_SHA: "a".repeat(40), DPF_RUNTIME_TRANSITION_ENVELOPE: Buffer.from(JSON.stringify(value)).toString("base64url"),
     DPF_RUNTIME_TRANSITION_SIGNATURE: signTransitionPayload(value, secret) });
@@ -298,4 +298,70 @@ test("expired apply timestamp cannot evict an unmeasured owner", async t => {
   assert.match(result.stderr, /transition_apply_in_progress/);
   assert.equal(await readFile(join(lock, "expires-at"), "utf8"), expired);
   assert.deepEqual(await readFile(join(dir, "install-state.json")), before);
+});
+
+// BI-28D2919A: a portal change to an operator-decided capability records the
+// operator's decision in install-state, so the installer and the settings page
+// stop treating monitoring as undecided after the operator chose.
+const MONITORING = "runtime:deep-observability";
+const v2State = (decisions) => ({ schemaVersion: 2, ...(decisions ? { runtimeCapabilityDecisions: decisions } : {}) });
+const carried = { [MONITORING]: { decision: "undecided", source: "upgrade-carried", decidedAt: "2026-10-01T00:00:00.000Z" } };
+
+test("a normal-mode enable of monitoring records the operator's enabled decision from the portal", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-transition-decision-enable-"));
+  const fixture = await validTransition(dir, "healthy", 2, { desiredRequested: [MONITORING], stateExtras: v2State(carried) });
+  const result = run(fixture.env);
+  assert.equal(result.status, 0, result.stderr);
+  const state = JSON.parse(await readFile(join(dir, "install-state.json"), "utf8"));
+  assert.ok(state.enabledRuntimeCapabilities.includes(MONITORING));
+  assert.deepEqual(state.runtimeCapabilityDecisions[MONITORING], { decision: "enabled", source: "portal", decidedAt: fixture.value.issuedAt });
+});
+
+test("a reconciliation touching monitoring records the disabled decision even when the host is unchanged", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-reconciliation-decision-disable-"));
+  // The live drift: host core-only, the monitoring record says active.
+  const catalog = JSON.parse(await readFile(new URL("./capability-service-catalog.generated.json", import.meta.url), "utf8"));
+  const observed = Object.fromEntries(catalog.capabilities.map(capability => [capability.capabilityId,
+    capability.activationPolicy === "always" || capability.capabilityId === MONITORING ? "active" : "disabled"]));
+  const fixture = await reconciliationFixture(dir, { desiredRequested: [], stateExtras: v2State(carried), touched: [MONITORING],
+    databaseStates: { observed, desired: { [MONITORING]: "disabled" } } });
+  assert.deepEqual(fixture.value.previousKeys, fixture.value.desiredKeys);
+  const result = run(fixture.env());
+  assert.equal(result.status, 0, result.stderr);
+  const state = JSON.parse(await readFile(join(dir, "install-state.json"), "utf8"));
+  assert.ok(!state.enabledRuntimeCapabilities.includes(MONITORING));
+  assert.deepEqual(state.runtimeCapabilityDecisions[MONITORING], { decision: "disabled", source: "portal", decidedAt: fixture.value.issuedAt });
+});
+
+test("a transition that leaves monitoring alone leaves the recorded decisions untouched", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-transition-decision-unrelated-"));
+  const fixture = await validTransition(dir, "healthy", 2, { stateExtras: v2State(carried) });
+  assert.ok(!fixture.value.desiredKeys.includes(MONITORING));
+  const result = run(fixture.env);
+  assert.equal(result.status, 0, result.stderr);
+  const state = JSON.parse(await readFile(join(dir, "install-state.json"), "utf8"));
+  assert.deepEqual(state.runtimeCapabilityDecisions, carried);
+});
+
+test("a schema v1 install-state gains no decision map", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-transition-decision-v1-"));
+  const fixture = await validTransition(dir, "healthy", 2, { desiredRequested: [MONITORING] });
+  const result = run(fixture.env);
+  assert.equal(result.status, 0, result.stderr);
+  const state = JSON.parse(await readFile(join(dir, "install-state.json"), "utf8"));
+  assert.equal(state.schemaVersion, 1);
+  assert.equal(state.runtimeCapabilityDecisions, undefined);
+});
+
+for (const crashPoint of ["prepared", "state-written", "runtime-reconciled"]) test(`a recorded decision survives crash replay after ${crashPoint} (journal equality)`, async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-transition-decision-crash-"));
+  const fixture = await validTransition(dir, "healthy", 2, { desiredRequested: [MONITORING], stateExtras: v2State(carried) });
+  const crashed = run({ ...fixture.env, DPF_TEST_CRASH_AFTER_PHASE: crashPoint });
+  assert.equal(crashed.status, 86, crashed.stderr);
+  // A recomputed next must not depend on the wall clock.
+  await new Promise(resolve => setTimeout(resolve, 20));
+  const recovered = run(fixture.env);
+  assert.equal(recovered.status, 0, recovered.stderr);
+  const state = JSON.parse(await readFile(join(dir, "install-state.json"), "utf8"));
+  assert.deepEqual(state.runtimeCapabilityDecisions[MONITORING], { decision: "enabled", source: "portal", decidedAt: fixture.value.issuedAt });
 });

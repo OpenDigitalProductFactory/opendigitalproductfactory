@@ -25,6 +25,17 @@ describe("mapMonitoringTransitionOutcome", () => {
     });
   });
 
+  it.each([
+    ["runtime_reconciliation_host_stale", "warning", "monitoringSettings.outcome.hostStale"],
+    ["runtime_reconciliation_database_stale", "warning", "monitoringSettings.outcome.databaseStale"],
+    ["runtime_reconciliation_request_mismatch", "warning", "monitoringSettings.outcome.requestMismatch"],
+    ["runtime_reconciliation_protocol_unavailable", "critical", "monitoringSettings.outcome.protocolUnavailable"],
+    ["runtime_capability_reconciliation_in_progress", "neutral", "monitoringSettings.outcome.inProgress"],
+    ["runtime_capability_recovery_required", "critical", "monitoringSettings.outcome.recoveryRequired"],
+  ] as const)("maps a returned %s failure to its own copy", (failure, tone, messageKey) => {
+    expect(mapMonitoringTransitionOutcome({ status: "failed", failure }, "RCT-abc")).toMatchObject({ tone, messageKey });
+  });
+
   it("treats an unknown result as a failure rather than success", () => {
     expect(mapMonitoringTransitionOutcome({ status: "something_new" }, "RCT-abc").tone).toBe("critical");
     expect(mapMonitoringTransitionOutcome(null, "RCT-abc").messageKey).toBe("monitoringSettings.outcome.unknown");
