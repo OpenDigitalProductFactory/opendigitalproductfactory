@@ -19,7 +19,75 @@ BI-02E5CE5A owns integration execution recovery. BI-7A4E70E9 owns offline
 restoration. The latter is independently shippable and must have its own reviewed
 delivery; both outcomes are required to finish the operator's request.
 
-## Verified starting point
+## Current implementation checkpoint (2026-10-14)
+
+The implementation parent for the integration sequence is BI-02E5CE5A, claimed
+as WC-F96489BD on `codex/integration-recovery-followthrough`, based on
+`ebbf5eeb9686d972245a3a6bd7c43dd4f0b4a63b`. BI-7A4E70E9 remains the separate
+offline-restoration deliverable. The original review rejected this design;
+neither this correction nor historical test results constitute approval.
+
+Current source supersedes these historical implementation observations below:
+
+- `scripts/gate-worktree.mjs` now classifies executable/entry-point roles and
+  actual descendants. Sleeping shell text is no longer itself a mutator.
+  Its `retryDelayMs` has bounded exponential delay and jitter, and
+  `createRetryableRelease` remembers only confirmed release completion.
+- `scripts/lib/lease-supervisor.mjs` bounds execution by granted lease expiry
+  and retries uncertain renewal. This is authority supervision, not proof of a
+  progress watchdog or fairness during a dependency outage.
+- `scripts/host-resource-runner.mjs` exists and uses the existing process fence
+  and lease supervisor. The historical claim that no worker substrate exists
+  must not justify adding a competing executor. Dispatch, cleanup and durable
+  retry behavior still need end-to-end verification.
+- `inspectLocalSandboxFence` still calls a heartbeat stale before checking the
+  live process/start identity. Acquisition can therefore replace a live owner.
+  Evidence cmv6b4rpp0c4a01miewinud05 reproduces this with owned processes and an
+  injected nine-minute clock; the relevant source remains unchanged. It is not
+  an elapsed nine-minute canonical exercise.
+- `writeLocalCiGateState` preserves a PASS against `blocked_*`, but not
+  `queued`, `admitted` or `running`. These observations do not revoke a verdict.
+  Genuine new failed/conflicting code results must retain their existing
+  ability to supersede evidence; a new source identity must never inherit PASS.
+
+### Ordered integration implementation
+
+This is the ordered fix plan for BI-02E5CE5A, not a new parallel initiative.
+The integration phases jointly prove CON-IT-1, CON-IT-2, CON-IT-3 and FLOW-IT-1;
+the complete AC-IT-1 through AC-IT-8 remain the acceptance boundary.
+
+1. Reproduce live-owner takeover and nonterminal PASS replacement in the
+   existing fence/state tests. Preserve identity and verdict under these cases.
+   Separate unhealthy heartbeat reporting from permission to replace an owner;
+   unavailable process identity or permission-denied liveness stays fail-closed.
+   Dead/reused-PID reconciliation must not delete a changed token's successor.
+   Check callers of the inspection result before changing its status contract.
+2. Exercise current classifier, lease supervisor, retry observer and cleanup
+   together. Reproduce the historical short-child/root-never-observed cleanup
+   failure; retain its primary diagnostic without weakening cleanup confirmation.
+   Use owned process fixtures only. Repeated cleanup must never kill a successor.
+3. Under the canonical shared test lease, run VER-IT-1 and VER-IT-2: request A's
+   DNS outage/restoration, unrelated queued request B, runner/executor death,
+   duplicate supervisor delivery, stale reservation, misleading shell wrapper,
+   quiet valid stage and separately expired stalled stage. Isolate injected
+   failures to the exercise target; never interrupt a peer or production service.
+   Record immutable request/source, owner generations, actual runner counts,
+   release/admission times, diagnostics and final evidence before and after.
+4. Repair only demonstrated remaining contract failures in the existing owners,
+   with test-first coverage and refreshed path-impact obligations. Any required
+   persistent schema/dispatch change first revises this design and its review;
+   the historical proposed nullable fields below are not an instruction to add
+   unused fields. Update operating docs, complete exact-source review and
+   protected delivery, then repeat only invalidated canonical acceptance.
+
+The fence/state repair is a bounded internal implementation step, not completion
+of the integration outcome. Offline restoration is independently shippable under
+BI-7A4E70E9 and does not inherit integration acceptance. No unavailable exercise
+is reported as passed. Source rollback preserves queue identity, archives and
+completed receipts; it cannot restore the live-owner takeover behavior as a
+recovery mechanism. Unknown ownership requires intervention.
+
+## Historical starting point (2026-10-02)
 
 Source: `7ff008013f16a82da0352df700c2153a17943a83`.
 `scripts/gate-worktree.mjs:532-564` matches runner paths anywhere in command
