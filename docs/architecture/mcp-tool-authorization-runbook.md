@@ -233,7 +233,7 @@ Codex Desktop can retain a stale top-level model registry even after the server 
 - **Minimal recovery (interactive session).** Run `/mcp`, select `dpf`, choose **reconnect** (current builds also accept `/mcp reconnect dpf`). This reuses the existing config — no token re-entry, no workspace-trust re-prompt. If reconnect still fails, restart the client. **Confirm with a read-only call** (e.g. `get_backlog_item`), not just the `/mcp` status line — a status of `connected` is structural; a successful tool call is functional.
 - **Non-interactive sessions (headless / cron / SDK) cannot run `/mcp`.** There a dropped `dpf` server stays down for the life of the process, and **restarting the process is the only recovery**. Keep unattended runs short, or gate them on a health probe, so a self-upgrade mid-run does not silently strand every governed tool.
 - **Startup advisory.** The `hooks/mcp-health` SessionStart hook (`scripts/hooks/mcp-health.{ps1,sh}`, wired in `.claude/settings.json`) probes the endpoint the plugin connector uses — `DPF_MCP_URL`, then the default in `packages/dpf-skill-pack/claude.mcp.json` — at every session start / resume / `clear` / `compact`, passing `NODE_EXTRA_CA_CERTS` to curl on https, and prints reachability plus the reconnect recipe above, so a strand is loud rather than silent. It probes the **endpoint only** — it cannot see the client's MCP attach state, so treat a healthy probe beside absent `dpf` tools as proof of a client-side drop. Silence with `DPF_SKIP_MCP_HEALTH=1`.
-- **Stale installed copy (BI-16EAAB62).** `mcp-health` reads the repository's descriptor, not the copy a client loaded. The `hooks/plugin-copy-freshness` SessionStart hook (`scripts/hooks/plugin-copy-freshness.{ps1,sh}`, wired in `.claude/settings.json`) covers that: it runs `packages/dpf-skill-pack/scripts/installed_copy_freshness.py`, which walks the copy locations `update_agent_toolchain.installed_plugin_copies()` names — the shared managed copy, the Codex managed copy, and the Claude plugin-cache copy for this checkout or user scope — and compares each with the root clone's pack: version, delivered content at an equal version, and, for the copies Claude reads its connector from, the `dpf` endpoint and auth mode the updater would write for this environment. It prints one `WARN:` line per stale copy naming the path and the repair (rerun `update_agent_toolchain.py` from the root clone, then restart the client). A copy newer than the root clone is not reported. Warn-only, never writes, exits 0. Silence with `DPF_SKIP_PLUGIN_COPY_CHECK=1`.
+- **Stale installed copy (BI-16EAAB62, BI-A67B65F4).** `mcp-health` reads the repository's descriptor, not the copy a client loaded. The plugin's own SessionStart hook `hooks/toolchain-freshness.mjs` covers that, so it also runs in installed-runtime sessions with no checkout. It runs `scripts/installed_copy_freshness.py --json` from the plugin. That walks the copy locations `update_agent_toolchain.installed_plugin_copies()` names (the shared managed copy, the Codex managed copy, and the Claude plugin-cache copy for this folder or user scope) and compares each with a reference: first the manifest the portal serves at `/api/agent-toolchain/manifest` (from `--manifest-url` or the shared copy's connector origin), then the root clone's pack. It checks version, delivered content at an equal version, and, for the copies Claude reads its connector from, the `dpf` endpoint and auth mode the updater would write. With no Python the hook compares versions only, so a version match is `unknown`. The manifest wait is 2 seconds; offline is `unknown`, never `current`. Every run prints one `DPF toolchain: current|stale|unknown` line. A copy newer than the reference is not reported. Advisory only, never writes, exits 0. Grok runs it through `grok-session-start.mjs`. Silence with `DPF_SKIP_PLUGIN_COPY_CHECK=1`.
 - **`localhost` caveat.** The client must target the `127.0.0.1` literal, not `localhost`. On hosts where `localhost` resolves to `::1` and IPv6 is not answering, the client cannot connect even though `127.0.0.1:3000` is healthy; anything that re-resolves `localhost` re-breaks it.
 
 **Operator conformance probe:** after deploying a candidate, run `node scripts/mcp-progressive-disclosure-conformance.mjs --url <nonproduction-MCP-URL>` with `DPF_MCP_BEARER_TOKEN` present only in the environment. The probe never logs the credential. It validates Codex Desktop/CLI and Claude Code full-catalog defaults, the generic-client core default, initialize guidance, exact and intent loading, append-not-swap, notification-aware SSE, notification-blind re-list, same-session use, structured unknown recovery, and authentication-vs-disconnection classification. A protocol-profile pass is not live host acceptance: separately prove a fresh Codex task can find and call a non-core tool from its host registry.
@@ -534,6 +534,26 @@ execution classification and next action. Polling helps only while execution is
 active. A capacity refusal before dispatch is infrastructure-inconclusive;
 transport loss remains uncertain. Neither is a failed code review or permission
 to publish. Workroom history retains the reviewer checkpoints and receipts.
+
+HTTP 200 is not review completion. A local response that exhausts its completion
+allowance on reasoning, has no final content, or ends with `finish_reason=length`
+remains inconclusive. Never parse its scratchpad as a verdict. JSON review
+requirements must participate in route capability selection and actual dispatch.
+The activity completion allowance includes both reasoning and final output; a
+fallback must not enlarge that total to accommodate thinking.
+
+Numeric local thinking limits require fresh selected-model runtime evidence,
+not an optimistic model-family prior. The verified llama.cpp b9879 dialect uses
+`thinking_budget_tokens` and requires a compatible thinking end delimiter.
+Read-only configuration, engine status and model metadata bind that dialect to
+the selected model digest, template and configuration; only an audited exact
+template digest can establish compatibility in this dialect. Delimiter text in
+comments or unreachable Jinja branches is insufficient. Unknown or overridden
+templates leave effort unexpressed. Recheck the evidence after admission before
+inference, preserving authority and the original deadline. No global configure
+write or model reload is needed. The initial final-output reserve is a candidate
+to validate with complete reviews and paired clean/defective controls, not a
+quality claim or a general tool-surface calibration result.
 
 When a local review fails near five minutes, inspect the actual transport as
 well as the model deadline. The process-lived provider transport uses the

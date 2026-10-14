@@ -48,6 +48,15 @@ export type SensitivityLevel = PrincipalSensitivity | "development";
  */
 export type ProviderTier = "bundled" | "user_configured";
 
+export type LocalThinkingBudgetEvidence = {
+  dialect: "llama.cpp-b9879";
+  modelDigest: string;
+  engineIdentity: string;
+  templateDigest: string;
+  configDigest: string;
+  observedAt: number;
+};
+
 export interface EndpointManifest {
   // Identity
   id: string;
@@ -130,6 +139,7 @@ export interface EndpointManifest {
   capabilities: import("./model-card-types").ModelCardCapabilities;
   pricing: import("./model-card-types").ModelCardPricing;
   supportedParameters: string[];
+  localThinkingBudgetEvidence?: LocalThinkingBudgetEvidence;
   deprecationDate: Date | null;
   metadataSource: string;
   metadataConfidence: string;

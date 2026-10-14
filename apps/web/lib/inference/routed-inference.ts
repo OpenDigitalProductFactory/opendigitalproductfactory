@@ -8,7 +8,8 @@
  * champion/challenger, rate tracking, and outcome telemetry.
  */
 
-import { resolveLocalServedContextTokens } from "@/lib/inference/local-model-context-reconcile";
+import { resolveLocalRoutingRuntime } from "@/lib/inference/local-model-context-reconcile";
+import { currentInferenceSignal } from "./inference-admission";
 import type { ChatMessage, ToolCallEntry } from "@/lib/routing/chat-message-types";
 import type {
   RouteDecision,
@@ -256,7 +257,7 @@ async function prepareRoute(
   });
 
   const [manifests, policies, overrides] = await Promise.all([
-    loadEndpointManifests(Date.now(), resolveLocalServedContextTokens),
+    loadEndpointManifests(Date.now(), resolveLocalRoutingRuntime),
     loadPolicyRules(),
     loadOverrides(taskType),
   ]);
@@ -388,6 +389,8 @@ async function routeAndCallAttempt(
   // prediction can never drift from what this live path actually picks. The
   // live path keeps recipe selection (skipRecipe defaults false) so the
   // executionPlan is built for dispatch below.
+  const cancellation = currentInferenceSignal();
+  cancellation?.throwIfAborted();
   const prepared = await prepareRoute(messages, systemPrompt, sensitivity, options);
   const { contract, manifests, policies, overrides, taskType } = prepared;
   messages = prepared.screenInput.messages;
@@ -405,6 +408,7 @@ async function routeAndCallAttempt(
   // (EP-GOLDEN-TRIANGLE Slice 3). Balanced/no posture leaves effort untouched.
   if (decision.executionPlan) {
     decision.executionPlan = applyCallerExecutionPlanOverrides(decision.executionPlan, {
+      maxOutputTokens: options?.activityContract?.tokenEnvelope.maxOutputTokens,
       effort: options?.effort ?? prepared.posture?.effort,
       toolChoice: options?.toolChoice,
       terminalWriterToolName: options?.terminalWriterToolName,
@@ -662,6 +666,7 @@ async function routeAndCallAttempt(
       options?.mcpSession,
       { traceId, agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null, buildId: options?.buildId ?? null, threadId: options?.threadId ?? null },
       dispatchScreenInput,
+      ...(cancellation ? [cancellation] as [AbortSignal] : [] as []),
     );
     applyObservedRouterEvidence(decision, result.routingEvidence, routeDecisionLogId);
 
@@ -706,6 +711,7 @@ async function routeAndCallAttempt(
     options?.mcpSession,
     { traceId, agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null, buildId: options?.buildId ?? null, threadId: options?.threadId ?? null },
     dispatchScreenInput,
+    ...(cancellation ? [cancellation] as [AbortSignal] : [] as []),
   );
   applyObservedRouterEvidence(decision, result.routingEvidence, routeDecisionLogId);
 

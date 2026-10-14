@@ -87,10 +87,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-903FB5F9: no checked-in recipe may drop the Docker VM page cache by hand.
       node("--test", "scripts/check-no-manual-vm-cache-drop.test.mjs"),
       node("--test", "scripts/host-resource-runner.test.mjs"),
-      node("--test", "scripts/lib/semantic-review-artifact.test.mjs", "scripts/semantic-review-gate.test.mjs"),
+      node("--test", "scripts/lib/semantic-review-artifact.test.mjs", "scripts/semantic-review-gate.test.mjs", "scripts/semantic-review-cli-role.test.mjs"),
       // BI-2B8D67A9: run-tsc selects TS7 by default and TS6 under DPF_TSC=6,
       // and a signal-killed native compiler still exits 88 (BI-27D3DCCD).
       node("--test", "scripts/lib/tsc-compiler.test.mjs"),
+      // BI-D2FE6931: the weekly TS7 pin currency audit classifies correctly.
+      node("--test", "scripts/audit-typescript-checker-currency.test.mjs"),
       node("scripts/check-guards.mjs"),
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
       node("scripts/check-capability-compose-profiles.mjs"),
@@ -358,6 +360,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/ci-evidence-workflow.test.mjs",
         "scripts/ci-build-artifact-workflow.test.mjs",
         "scripts/ci-policy-guards.test.mjs",
+        "scripts/daily-checkpoint-tag.test.mjs",
       ),
       node(
         "--test",
@@ -868,9 +871,6 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-1229E42C: the installed plugin descriptor carries a literal URL so
         // the desktop app can start sign-in.
         "scripts/hooks/pin-plugin-mcp-url.test.mjs",
-        // BI-16EAAB62: SessionStart names an installed plugin copy that drifted
-        // from the root clone's pack (version, content, loaded connector).
-        "scripts/hooks/plugin-copy-freshness.test.mjs",
         "scripts/lib/root-clone-refresh.test.mjs",
         "scripts/lib/compose-safety.test.mjs",
         "scripts/lib/promoter-compose-mounts.test.mjs",
@@ -1061,6 +1061,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "packages/dpf-skill-pack/hooks/pretooluse-guard-selftest.test.mjs",
       ),
+      // BI-A67B65F4 (supersedes the BI-16EAAB62 settings.json hook): the
+      // plugin's SessionStart freshness advisory, with and without Python.
+      // Unlisted = unrun.
+      node(
+        "--test",
+        "packages/dpf-skill-pack/hooks/toolchain-freshness.test.mjs",
+      ),
       // BI-0B292D84: AGENTS.md 12 requires a Workroom claim before work on
       // every surface. It was prose - 30 of 79 live worktree branches carried
       // no WorkCapsule binding when measured 2026-08-26. Hand-enumerated like
@@ -1068,6 +1075,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "packages/dpf-skill-pack/hooks/workroom-claim-guard.test.mjs",
+      ),
+      // BI-AB4EA033: re-caches the guard's marker from claim/heartbeat answers.
+      node(
+        "--test",
+        "packages/dpf-skill-pack/hooks/workroom-claim-refresh.test.mjs",
       ),
       node(
         "--test",

@@ -73,7 +73,7 @@ export function terminalWriterDispatchContractForProvider(
 export type ParameterizationContext = Pick<
   EndpointManifest,
   "providerId" | "modelId" | "modelFamily" | "modelClass" | "maxOutputTokens" | "capabilities"
-> & { sampling?: import("./model-card-types").ModelCardSampling | null };
+> & { sampling?: import("./model-card-types").ModelCardSampling | null; localThinkingBudgetEvidence?: EndpointManifest["localThinkingBudgetEvidence"] };
 
 /**
  * Resolve effort and sampling for one call, and fold them into the plan.
@@ -90,10 +90,11 @@ function resolvePlanEffort(contract: RequestContract, ctx: ParameterizationConte
     capabilities: ctx.capabilities,
   });
 
-  return expressEffort(ctx.providerId, effort, ctx.capabilities, {
+  return { ...expressEffort(ctx.providerId, effort, ctx.capabilities, {
     modelClass: ctx.modelClass,
     isLocalNative: isLocalNativeProvider(ctx.providerId),
-  });
+    localThinkingBudgetEvidence: ctx.localThinkingBudgetEvidence,
+  }), requestedBudgetTokens: effort.budgetTokens };
 
 }
 
@@ -118,6 +119,8 @@ function applySituationalParameters(
   const next: RoutedExecutionPlan = {
     ...plan,
     providerSettings: { ...plan.providerSettings, ...expression.settings },
+    ...(expression.settings.thinking_budget_tokens !== undefined && ctx.localThinkingBudgetEvidence
+      ? { localThinkingBudgetEvidence: ctx.localThinkingBudgetEvidence } : {}),
     maxTokens: plan.maxTokens + expression.extraMaxTokens,
     sampling: {
       values: sampling.values,
@@ -127,6 +130,12 @@ function applySituationalParameters(
     },
     ...(expression.effortUnexpressed ? { effortUnexpressed: true } : {}),
   };
+  if (expression.settings.thinking_budget_tokens !== undefined && expression.requestedBudgetTokens !== null) {
+    next.localThinkingBudgetRequest = expression.requestedBudgetTokens;
+    const reserve = Math.min(next.maxTokens - 1, Math.max(2048, Math.ceil(next.maxTokens / 4)));
+    if (!Number.isSafeInteger(next.maxTokens) || next.maxTokens <= 1) throw new Error("Invalid local completion allowance");
+    next.providerSettings.thinking_budget_tokens = Math.min(expression.requestedBudgetTokens, next.maxTokens - reserve);
+  }
 
   // `temperature` stays the canonical top-level field the adapters already read;
   // the sampling record carries the rest plus provenance for the explanation.
@@ -347,8 +356,38 @@ export function bindActivityExecutionPlan(
   const harness = applyHarnessConfidenceOverride(
     bindHarnessRecipeForActivity(activity, hint), hint, overrides,
   );
+  const total = activity.tokenEnvelope.maxOutputTokens;
+  if (!Number.isSafeInteger(total) || total <= 0) throw new Error("Invalid activity completion allowance");
+  const reserve = Math.min(total - 1, Math.max(2048, Math.ceil(total / 4)));
+  const bounded = (value: unknown): number => {
+    if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+      throw new Error("Invalid activity thinking allowance");
+    }
+    if (total <= 1) throw new Error("Activity completion allowance leaves no final output room");
+    return Math.min(value, total - reserve);
+  };
+  const providerSettings = { ...plan.providerSettings };
+  if (providerSettings.thinking_budget_tokens !== undefined) {
+    providerSettings.thinking_budget_tokens = bounded(plan.localThinkingBudgetRequest ?? providerSettings.thinking_budget_tokens);
+  }
+  const thinking = providerSettings.thinking as { type?: string; budget_tokens?: unknown } | undefined;
+  if (thinking?.type === "enabled") {
+    const budget = bounded(thinking.budget_tokens);
+    if (budget < 1024) throw new Error("Activity allowance cannot accommodate provider minimum thinking budget");
+    providerSettings.thinking = { ...thinking, budget_tokens: budget };
+  }
+  const thinkingConfig = providerSettings.thinkingConfig as { thinkingBudget?: unknown } | undefined;
+  if (thinkingConfig?.thinkingBudget !== undefined) {
+    providerSettings.thinkingConfig = { ...thinkingConfig, thinkingBudget: bounded(thinkingConfig.thinkingBudget) };
+  }
   return attachHarnessRecipeToPlan({
     ...plan,
-    maxTokens: activity.tokenEnvelope.maxOutputTokens,
+    providerSettings,
+    maxTokens: total,
+    completionAllowance: total,
+    responsePolicy: {
+      ...plan.responsePolicy,
+      strictSchema: plan.responsePolicy.strictSchema || harness.responsePolicy.strictSchema || activity.successShape === "json",
+    },
   }, harness);
 }

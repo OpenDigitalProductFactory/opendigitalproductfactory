@@ -71,12 +71,30 @@ export type PortfolioFlow = {
   throughput: { perWeek: number; priorPerWeek: number };
   /** Median flow time of runs finished in each of the last TREND_WEEKS weeks, oldest first. */
   weeklyFlowTimeP50Ms: (number | null)[];
+  /** Runs in flow at the end of each of the last TREND_WEEKS weeks, oldest first. */
+  weeklyFlowLoad: number[];
+  /** Flow efficiency of the steps finished in each week, oldest first; null for a week that finished none. */
+  weeklyFlowEfficiency: (number | null)[];
+  /** Successful runs finished in each week, oldest first. */
+  weeklyThroughput: number[];
+  /** Runs in flow four weeks ago, for flow load's change; null when the telemetry does not reach back that far. */
+  flowLoadPrior: number | null;
   /** Rooms in flow by item type. */
   distribution: Record<FlowItemType, number>;
   shapes: ShapeFlowRow[];
 };
 
-type Run = { capsuleId: string; startedAt: Date; endedAt: Date | null; success: boolean };
+type Run = {
+  capsuleId: string;
+  startedAt: Date;
+  /** False when the run's first step was entered before the telemetry window: its start is a lower bound. */
+  startKnown: boolean;
+  /** Finished (its newest event closes a step). */
+  endedAt: Date | null;
+  /** No longer in flow: finished, or cancelled when a new cycle superseded it. */
+  closedAt: Date | null;
+  success: boolean;
+};
 
 function runsFrom(rows: readonly QueueTelemetryRow[]): Map<string, Run> {
   const byItem = new Map<string, QueueTelemetryRow[]>();
@@ -88,15 +106,18 @@ function runsFrom(rows: readonly QueueTelemetryRow[]): Map<string, Run> {
   const runs = new Map<string, Run>();
   for (const [itemId, itemRows] of byItem) {
     const ordered = [...itemRows].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
-    const first = ordered.find((row) => row.transition === "enqueued");
+    const entered = ordered.find((row) => row.transition === "enqueued");
     const last = ordered.at(-1)!;
-    if (!first) continue;
-    // A run is over when its newest event finishes a step and nothing re-opened.
+    // A run is over when its newest event finishes a step and nothing re-opened;
+    // a cancelled run is no longer in flow but did not finish.
     const ended = last.transition === "finished";
+    const cancelled = last.transition === "cancelled";
     runs.set(itemId, {
       capsuleId: itemId.split(":")[0]!,
-      startedAt: first.occurredAt,
+      startedAt: (entered ?? ordered[0]!).occurredAt,
+      startKnown: !!entered,
       endedAt: ended ? last.occurredAt : null,
+      closedAt: ended || cancelled ? last.occurredAt : null,
       success: ended && last.outcome !== "failed",
     });
   }
@@ -126,6 +147,10 @@ export function computePortfolioFlow(input: {
     flowEfficiency: { value: null, prior: null },
     throughput: { perWeek: 0, priorPerWeek: 0 },
     weeklyFlowTimeP50Ms: Array.from({ length: TREND_WEEKS }, () => null),
+    weeklyFlowLoad: Array.from({ length: TREND_WEEKS }, () => 0),
+    weeklyFlowEfficiency: Array.from({ length: TREND_WEEKS }, () => null),
+    weeklyThroughput: Array.from({ length: TREND_WEEKS }, () => 0),
+    flowLoadPrior: null,
     distribution: { feature: 0, defect: 0, risk: 0, debt: 0 },
     shapes: [],
   }]));
@@ -169,7 +194,7 @@ export function computePortfolioFlow(input: {
   }
   const shapeRunTimes = new Map<string, number[]>();
   for (const run of runs.values()) {
-    if (!inRange(run.endedAt, windowStart, now)) continue;
+    if (!run.startKnown || !inRange(run.endedAt, windowStart, now)) continue;
     const bucket = roomBucket.get(run.capsuleId);
     const shapeRef = roomShape.get(run.capsuleId);
     if (!bucket || !shapeRef) continue;
@@ -182,6 +207,7 @@ export function computePortfolioFlow(input: {
 
   const stepCapsule = (itemId: string) => itemId.split("\x00")[1]!.split(":")[0]!;
   const efficiency = new Map<PortfolioFlow["key"], { now: [number, number]; prior: [number, number] }>();
+  const finishedSteps = new Map<PortfolioFlow["key"], { at: Date; processMs: number; cycleMs: number }[]>();
   const stepRows = new Map<string, QueueTelemetryRow[]>();
   for (const row of input.rows) {
     const key = `${row.queueKey}\x00${row.itemId}`;
@@ -196,6 +222,9 @@ export function computePortfolioFlow(input: {
     if (!bucket) continue;
     const durations = computeFlowDurations(timeline);
     if (durations.cycleMs == null || durations.processMs == null) continue;
+    const steps = finishedSteps.get(bucket) ?? [];
+    steps.push({ at: timeline.finishedAt, processMs: durations.processMs, cycleMs: durations.cycleMs });
+    finishedSteps.set(bucket, steps);
     const entry = efficiency.get(bucket) ?? { now: [0, 0], prior: [0, 0] };
     const slot = inRange(timeline.finishedAt, windowStart, now) ? entry.now : inRange(timeline.finishedAt, priorStart, windowStart) ? entry.prior : null;
     if (!slot) continue;
@@ -207,7 +236,7 @@ export function computePortfolioFlow(input: {
   for (const [key, flow] of out) {
     const bucketRuns = runsByBucket.get(key) ?? [];
     const durationsIn = (from: Date, to: Date) => bucketRuns
-      .filter((run) => inRange(run.endedAt, from, to))
+      .filter((run) => run.startKnown && inRange(run.endedAt, from, to))
       .map((run) => run.endedAt!.getTime() - run.startedAt.getTime());
     const current = durationsIn(windowStart, now);
     flow.flowTime = { p50Ms: percentile(current, 0.5), priorP50Ms: percentile(durationsIn(priorStart, windowStart), 0.5), runs: current.length };
@@ -216,10 +245,23 @@ export function computePortfolioFlow(input: {
       perWeek: successIn(windowStart, now) / (FLOW_WINDOW_DAYS / 7),
       priorPerWeek: successIn(priorStart, windowStart) / (FLOW_WINDOW_DAYS / 7),
     };
-    flow.weeklyFlowTimeP50Ms = Array.from({ length: TREND_WEEKS }, (_, i) => {
-      const to = new Date(now.getTime() - (TREND_WEEKS - 1 - i) * 7 * DAY_MS);
-      return percentile(durationsIn(new Date(to.getTime() - 7 * DAY_MS), to), 0.5);
+    const weekEnds = Array.from({ length: TREND_WEEKS }, (_, i) => new Date(now.getTime() - (TREND_WEEKS - 1 - i) * 7 * DAY_MS));
+    const weekOf = (to: Date) => new Date(to.getTime() - 7 * DAY_MS);
+    flow.weeklyFlowTimeP50Ms = weekEnds.map((to) => percentile(durationsIn(weekOf(to), to), 0.5));
+    // In flow at a week's end: entered before it, not closed by it.
+    flow.weeklyFlowLoad = weekEnds.map((to) => bucketRuns.filter((run) =>
+      run.startedAt.getTime() < to.getTime() && (!run.closedAt || run.closedAt.getTime() >= to.getTime())).length);
+    flow.weeklyThroughput = weekEnds.map((to) => successIn(weekOf(to), to));
+    const bucketSteps = finishedSteps.get(key) ?? [];
+    flow.weeklyFlowEfficiency = weekEnds.map((to) => {
+      const inWeek = bucketSteps.filter((step) => inRange(step.at, weekOf(to), to));
+      const cycle = inWeek.reduce((sum, step) => sum + step.cycleMs, 0);
+      return cycle > 0 ? inWeek.reduce((sum, step) => sum + step.processMs, 0) / cycle : null;
     });
+    // Four weeks back is only measurable when the telemetry window reaches it.
+    const earliest = input.rows.reduce<number | null>((min, row) => (min == null || row.occurredAt.getTime() < min ? row.occurredAt.getTime() : min), null);
+    const fourWeeksAgo = weekEnds[TREND_WEEKS - 5]!;
+    flow.flowLoadPrior = earliest != null && earliest <= fourWeeksAgo.getTime() ? flow.weeklyFlowLoad[TREND_WEEKS - 5]! : null;
     const eff = efficiency.get(key);
     flow.flowEfficiency = {
       value: eff && eff.now[1] > 0 ? eff.now[0] / eff.now[1] : null,

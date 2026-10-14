@@ -86,6 +86,13 @@ Its mode is the source of truth for receipt enforcement; a skill must not presen
 a shadow observation as an enforced refusal. This procedure applies to external
 Claude, Codex and Grok delivery. Build Studio keeps its own transition contract.
 
+New requests use the role-bound v2 request contract and produce v3 receipts.
+Historical v1 requests and v2 receipts remain readable, but cannot satisfy a new
+role-bound review. Publication expects `code-change` by default. Document callers
+must supply their expected role with `--artifact-type spec` or `--artifact-type plan`
+when recording and validating a receipt; the expected role comes from the caller,
+not from the receipt. A receipt for one role cannot authorize another role.
+
 1. Freeze a clean DCO-signed commit and produce its required gate evidence.
    Call `review_semantic_change` with the governing Workroom, immutable base/head
    trees, committed diff digest and failure analysis bound to that evidence.
@@ -157,6 +164,7 @@ TypeScript errors only surface in `next build`, not in `vitest` or IDE checks. R
 2. **Never interrupt it.** A killed run writes a canonical FAIL evidence record with **no recorded reason**, and every subsequent run *replays that cached fail* — the same tree can never pass again. `pregate:status` says so explicitly ("gate record status failed with NO recorded reason for THIS run … this is not evidence that the diff is bad"). The only escape is a **fresh SHA**, and a plain rebase is not always enough: the gate key is content-derived, so a rebase that preserves the tree replays the same evidence. A real content change is required.
 3. **`pregate:status` is the verdict, not the console text.** The command's own tail says this; believe it.
 4. **Exit 5 / `blocked_control_plane_starvation` is infrastructure, not your diff.** The gate labels it that way itself. It fires when the portal, MCP, Docker or Postgres degrades mid-build — most often because the install self-upgraded underneath the run, which drains the control plane. Re-run once the stack is settled; do not "fix" the diff.
+   **Exit 10 / status `conflict` is your branch, not infrastructure (BI-FCC1DCB2).** The runner's first step merges the candidate onto `origin/main`. When that merge stops on conflicts, the runner names the unmerged paths, aborts the merge and exits 10. The gate records `conflict`, and `pregate:status` reports FAIL with `next merge origin/main into your branch and resolve: <paths>`. Re-running cannot change it. Merge main, resolve, commit, and gate the new SHA. Before this, the stopped run was rewritten to `blocked_control_plane_starvation`, and authors retried it for hours.
 5. **A preflight where *every* guard fails at once is the clone, not the change.** On a shallow clone whose `origin/main` has advanced past the shallow boundary, `git diff origin/main...HEAD` returns `fatal: no merge base` and each guard fails on the same missing diff. Fix with `git fetch --deepen=300`.
 6. **A red suite of filesystem-walking or DB-touching tests, all timing out, is host load.** Timeouts and mass-failures are load; assertion failures are code. One session saw 27 failed files / 1 failed test under memory pressure, and 165 files / 2086 tests green on a quiet re-run.
 

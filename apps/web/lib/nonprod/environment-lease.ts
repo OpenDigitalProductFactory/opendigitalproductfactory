@@ -23,7 +23,7 @@ import { isImmutableGateClaimKey, type LocalCiEvidenceValidity } from "@/lib/gat
 import { settleTerminalGateLease } from "./environment-lease-terminal-evidence";
 import { resolveResumeClaim, validateHostResourceClaim } from "./environment-lease-resume";
 import { admittedLeaseTtlMs, DEFAULT_LEASE_TTL_MS, requestedTtlMs } from "./environment-lease-timing";
-import { afterNonprodLeaseRelease, publishNonprodCapacityForHead } from "./durable-wait";
+import { afterNonprodLeaseRelease, publishNonprodCapacityForHead, settleExpiredNonprodLeaseWaits } from "./durable-wait";
 export { NONPROD_OWNER_PROVIDERS, type NonprodOwnerProvider } from "./nonprod-owner-provider";
 export {
   admittedLeaseTtlMs,
@@ -47,9 +47,9 @@ type LeaseModel = typeof prisma.nonProductionEnvironmentLease;
 type LeaseTx = Pick<
   typeof prisma,
   "$executeRaw" | "nonProductionEnvironmentLease" | "externalEvidenceRecord" | "workroom"
->;
+> & Partial<Pick<typeof prisma, "taskRun">>;
 type LeaseDb = Pick<typeof prisma, "nonProductionEnvironmentLease"> & Partial<Pick<
-  typeof prisma, "$transaction" | "$executeRaw" | "platformConfig" | "externalEvidenceRecord" | "workroom"
+  typeof prisma, "$transaction" | "$executeRaw" | "platformConfig" | "externalEvidenceRecord" | "workroom" | "taskRun"
 >>;
 type LeaseRow = NonNullable<Awaited<ReturnType<LeaseModel["findUnique"]>>>;
 
@@ -101,10 +101,6 @@ function isSelfAdmittingEnvironment(environmentKey: string): boolean {
     || environmentKey === "host-heavy-resource";
 }
 
-function queueKey(environmentKey: string): string {
-  return `compute:nonprod-${environmentKey}`;
-}
-
 type LeaseTransitionInput = {
   lease: LeaseRow;
   transition: "enqueued" | "started" | "finished" | "cancelled";
@@ -117,7 +113,7 @@ type LeaseTransitionInput = {
 
 function emitLeaseTransition(input: LeaseTransitionInput) {
   return recordQueueTransition({
-    queueKey: queueKey(input.lease.environmentKey),
+    queueKey: `compute:nonprod-${input.lease.environmentKey}`,
     itemKind: "nonprod-environment-lease",
     itemId: input.lease.leaseId,
     transition: input.transition,
@@ -199,6 +195,13 @@ async function reconcileEnvironmentInTransaction(input: {
         ownerProcessIdentity: null,
       },
     });
+    // Expiry ends the durable wait as well as the reservation. Do both under
+    // the environment lock, so a committed expiry cannot strand a submitted
+    // Task that no subsequent active/queued janitor scan can see.
+    if (input.tx.taskRun) {
+      await settleExpiredNonprodLeaseWaits({ db: input.tx as never,
+        leaseIds: plan.expiredLeaseIds, now: input.now });
+    }
   }
 
   const byId = new Map(rows.map((row) => [row.id, row]));

@@ -5,7 +5,8 @@ import { setImmediate } from "node:timers/promises";
 
 import { describe, expect, it } from "vitest";
 
-import { providerInferenceFetch } from "./provider-inference-transport";
+import { providerInferenceFetch, withInferenceCancellationFetch } from "./provider-inference-transport";
+import { withInferenceCancellation } from "./inference-admission";
 
 // Undici exports this clock specifically for tests. Advance its real HTTP
 // parser timers while retaining real sockets, rather than waiting ten minutes.
@@ -34,6 +35,18 @@ async function withProvider(
 }
 
 describe("provider inference transport deadlines", () => {
+  it("combines the utility deadline with an adapter's longer signal", async () => {
+    await withProvider(async (url, dispatched) => {
+      const controller = new AbortController();
+      const outcome = withInferenceCancellation(controller.signal, () =>
+        providerInferenceFetch(url, { signal: AbortSignal.timeout(600_000) }))
+        .catch((error: unknown) => error);
+      await dispatched;
+      controller.abort(new DOMException("utility deadline reached", "AbortError"));
+      expect(await outcome).toMatchObject({ name: "AbortError" });
+    });
+  });
+
   it("accepts reviewer headers after the old five-minute transport cutoff", async () => {
     await withProvider(async (url, dispatched) => {
       const outcome = providerInferenceFetch(url, { signal: AbortSignal.timeout(600_000) })
@@ -117,6 +130,42 @@ describe("provider inference transport deadlines", () => {
 import { currentGovernedInferenceDeadline, withGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
 
 describe("parent-bound local inference transport", () => {
+  it("stops a shorter caller when the transport's authority recheck hangs", async () => {
+    let checks = 0;
+    await withGovernedInferenceDeadline({ deadlineAt: new Date(Date.now() + 900_000).toISOString(),
+      verifyAuthority: async () => ++checks === 1 ? true : new Promise<boolean>(() => {}) }, async () => {
+      const caller = new AbortController();
+      const parent = currentGovernedInferenceDeadline()!;
+      const request = withInferenceCancellation(caller.signal, () =>
+        withInferenceCancellationFetch(parent.localFetch)("http://127.0.0.1:1/")).catch(error => error);
+      const reason = new Error("utility expired before transport dispatch");
+      caller.abort(reason);
+      expect(await request).toBe(reason);
+      expect(parent.signal.aborted).toBe(false);
+    });
+  });
+
+  it.each(["caller", "parent"])("honors %s cancellation on the governed local transport", async (source) => {
+    expect(typeof withInferenceCancellationFetch).toBe("function");
+    let authorized = true;
+    await withGovernedInferenceDeadline({ deadlineAt: new Date(Date.now() + 900_000).toISOString(),
+      verifyAuthority: async () => authorized }, async () => {
+      await withProvider(async (url, dispatched) => {
+        const caller = new AbortController();
+        const scope = currentGovernedInferenceDeadline()!;
+        const request = withInferenceCancellation(caller.signal, () =>
+          withInferenceCancellationFetch(scope.localFetch)(url)).catch(error => error);
+        await dispatched;
+        if (source === "caller") caller.abort(new Error("utility expired"));
+        else {
+          authorized = false;
+          await scope.assertAuthority().catch(() => undefined);
+        }
+        expect(await request).toBe(source === "caller" ? caller.signal.reason : scope.signal.reason);
+      });
+    });
+  });
+
   it("accepts one real HTTP response beyond 600 seconds only inside the admitted window", async () => {
     await withGovernedInferenceDeadline({ deadlineAt: new Date(Date.now() + 900_000).toISOString(),
       verifyAuthority: async () => true }, async () => {
