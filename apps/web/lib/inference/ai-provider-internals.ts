@@ -21,7 +21,7 @@ import { recordDiscoveredAuthEligibility } from "@/lib/routing/model-auth-eligib
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { persistDiscoveredInventory } from "./discovered-model-inventory";
 import { decryptProviderCredential, findDefaultProviderCredential, findProviderCredential, getDecryptedCredential, resolveCredentialProviderId } from "./provider-account-credentials";
-import { ProviderAccountSelectionChangedError } from "../routing/provider-account-candidates";
+import { accountExecutionVersion, ProviderAccountSelectionChangedError } from "../routing/provider-account-candidates";
 export { getDecryptedCredential, resolveCredentialProviderId } from "./provider-account-credentials";
 import { supportsTextGeneration } from "@/lib/routing/model-classifier";
 import { providerWorkspaceHeaders } from "./provider-workspace";
@@ -195,14 +195,18 @@ export async function getProviderBearerToken(providerId: string, connectionId?: 
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) return { error: "Provider not found" };
 
-  const connection = connectionId ? await prisma.aiProviderConnection.findUnique({ where: { connectionId } }) : null;
+  const connection = connectionId ? await prisma.aiProviderConnection.findUnique({ where: { connectionId }, include: { credentialEntry: true } }) : null;
   if (connectionId && (!connection || connection.providerId !== providerId)) return { error: "Provider connection not found" };
+  if (connection?.status === "disabled") return { error: "Provider account is disabled" };
+  if (connection && expectedExecutionVersion && accountExecutionVersion(connection) !== expectedExecutionVersion) {
+    throw new ProviderAccountSelectionChangedError(providerId, "Selected provider account changed before token exchange");
+  }
   if (["oauth", "oauth2_authorization_code"].includes(connection?.authMethod ?? provider.authMethod)) {
     const { refreshOAuthToken } = await import("@/lib/provider-oauth");
     const credential = await getDecryptedCredential(providerId, connectionId, expectedExecutionVersion);
     if (!credential) return { error: "No credential configured" };
 
-    if (credential.cachedToken && credential.tokenExpiresAt) {
+    if (credential.status === "ok" && credential.cachedToken && credential.tokenExpiresAt) {
       const buffer = 5 * 60 * 1000;
       if (credential.tokenExpiresAt.getTime() > Date.now() + buffer) {
         return { token: credential.cachedToken };
@@ -216,7 +220,7 @@ export async function getProviderBearerToken(providerId: string, connectionId?: 
   }
 
   // Existing client_credentials flow
-  const storedCredential = connectionId ? await findProviderCredential(providerId, connectionId, expectedExecutionVersion) : null;
+  const storedCredential = connectionId ? connection?.credentialEntry ?? null : null;
   const credential = connectionId ? storedCredential && decryptProviderCredential(storedCredential, providerId) : await getDecryptedCredential(providerId);
   if (!credential) return { error: "No credential configured" };
   if (!credential.clientId || !credential.clientSecret || !credential.tokenEndpoint) {
@@ -224,7 +228,7 @@ export async function getProviderBearerToken(providerId: string, connectionId?: 
   }
 
   // Return cached token if still valid (5-minute buffer)
-  if (credential.cachedToken && credential.tokenExpiresAt) {
+  if (credential.status === "ok" && credential.cachedToken && credential.tokenExpiresAt) {
     const buffer = 5 * 60 * 1000;
     if (credential.tokenExpiresAt.getTime() > Date.now() + buffer) {
       return { token: credential.cachedToken };
@@ -256,7 +260,8 @@ export async function getProviderBearerToken(providerId: string, connectionId?: 
       const written = await prisma.credentialEntry.updateMany({ where: {
         id: credential.id, updatedAt: credential.updatedAt,
         ...(storedCredential ? { secretRef: storedCredential.secretRef, clientSecret: storedCredential.clientSecret, cachedToken: storedCredential.cachedToken, refreshToken: storedCredential.refreshToken } : {}),
-        providerConnection: { is: { connectionId, providerId, credentialEntryId: credential.id, status: { in: ["active", "degraded"] } } },
+        providerConnection: { is: { connectionId, providerId, credentialEntryId: credential.id,
+          updatedAt: connection!.updatedAt, status: connection!.status } },
       }, data });
       if (written.count !== 1) {
         const error = "Selected provider account changed during token exchange";

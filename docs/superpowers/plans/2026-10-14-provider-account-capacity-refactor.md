@@ -114,3 +114,11 @@ accounts show their own current sign-in, billing or model-access restriction;
 shared provider quotas and reset times remain explicitly shared. Unknown
 independent allowance stays unknown. Integrate the overview consumer after the
 qualified compact UI is merged, rather than maintaining a second health registry.
+
+Bearer cache reuse requires an `ok` credential; a future stored expiry does not
+override an expired status. Explicit initial workload authentication retains the
+captured unconfigured account state until verification activates it. Its token
+write compares that account's status and revision along with the encrypted
+credential snapshot, and disabled accounts cannot start the exchange. Guarded
+OAuth renewal and decoded expiry still require the qualified shared service API;
+these source-local corrections alone do not prove that integration or deployment.
