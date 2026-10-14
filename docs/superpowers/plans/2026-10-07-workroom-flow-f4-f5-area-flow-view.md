@@ -40,7 +40,16 @@ status: active
 
 - **AC-F5-1:** every portfolio shows the same five measures over the same window, each with its change against the prior window. Rooms with no portfolio appear as their own Unplaced column.
 - **AC-F5-2:** a step that was only waited on counts as zero touch time, so flow efficiency is never overstated.
+- **AC-F5-3:** flow load, flow time, flow efficiency and throughput each show an 8-week trend, and flow load shows its change against four weeks earlier. A cancelled run stops counting as in flow when it was cancelled.
+- **AC-F5-4:** `PORTFOLIO_COLOURS` values are `--dpf-portfolio-*` tokens, defined for light and dark.
+
+AC-F5-3 and AC-F5-4 shipped after #6151, which drew a trend only on flow time. The series come from the stage telemetry the tiles already read; no new store. The tiles use the existing token-styled `Trend` sparkline rather than report-kit `Chart`, which is sized for full charts, not 96-pixel inline trends.
 - **AC-F4-1:** a shape renders across every room on it, with each step's queue. Versions with data can be compared. Choosing a step lists the rooms at that step.
+- **AC-F4-2:** each step has a data box: its queue (an inventory triangle for rooms not being worked), typical dwell, process time and first-pass yield, or "too few to measure" below 5 exits.
+- **AC-F4-3:** a timeline ladder shows each measured step's process time above and wait below, with the shape's flow efficiency (process ÷ dwell).
+- **AC-F4-4:** a step whose last 7 days differ from its 4-week baseline by 25% or more is marked slower or faster, with both values. A step with fewer than 5 exits on either side is not marked.
+
+AC-F4-2 to AC-F4-4 shipped after the first drill-in (PR #6151). That PR met only AC-F4-1, and this plan had not recorded the gap. They are computed in `lib/work-management/shape-step-measures.ts` from the existing `QueueMetricSnapshot` per-stage percentiles and live counts, and rendered by `components/ops/workrooms/ShapeStepMeasures.tsx` under the drill-in's map.
 
 ## Recorded limitations
 

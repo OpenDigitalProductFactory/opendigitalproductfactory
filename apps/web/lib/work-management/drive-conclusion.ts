@@ -78,7 +78,9 @@ export const DRIVE_REASONS_BY_ACTION = Object.freeze({
   // when another worker holds the stage.
   // `reviewer_dispatch_unavailable`: a review stage's reviewer packet could not
   // be sent (BI-2C8750FC, workroom-drive-review-stages.ts).
-  dispatch_agent: ["agent_stage", "lease_held", "reviewer_dispatch_unavailable"],
+  // `provider_held`: no provider could answer the room's last stage, and its
+  // queue holds until resume_workroom_queue (BI-2B6A8A74).
+  dispatch_agent: ["agent_stage", "lease_held", "reviewer_dispatch_unavailable", "provider_held"],
 } as const);
 
 export type DriveReasonsByAction = typeof DRIVE_REASONS_BY_ACTION;
@@ -148,6 +150,10 @@ const BLOCKAGES: Record<string, { what: string; unblockedBy: string }> = {
   executor_writeback_unavailable: {
     what: "The last dispatched stage produced no writeback from its executor, so the drive will not dispatch it again blind.",
     unblockedBy: "the executor records evidence or a writeback for the dispatched stage",
+  },
+  provider_held: {
+    what: "No AI provider could answer this room's last agent stage, so the room's queue is held rather than retried against the outage.",
+    unblockedBy: "resume_workroom_queue is called for the room once a provider answers again",
   },
   missing_task_owner: {
     what: "An agent stage is ready but no accountable person with an active user account can be named to run its scheduled task, so nothing was dispatched.",

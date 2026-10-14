@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "off-notice",
+  "decisionInteractionId": "DI-36C927FC81B4",
+  "scope": {
+    "files": [
+      "apps/web/components/monitoring/MonitoringOffNotice.tsx",
+      "apps/web/components/monitoring/LogIssuesPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "off-notice",
+      "reuse-offline-banner",
+      "hide-surfaces"
+    ]
+  }
+}

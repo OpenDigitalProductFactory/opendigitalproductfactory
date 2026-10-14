@@ -27,6 +27,7 @@ import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-
 import { buildStageBrief, stageBriefInputFromDefinition, stageEvidenceKinds } from "@/lib/work-management/stage-briefing";
 import { type WorkroomStageTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
 import { driveTickIsNews, nextDriveHold, readDriveHold, stallNoticeDue, type WorkroomDriveHold } from "@/lib/work-management/workroom-drive-hold";
+import { readWorkroomQueueHold } from "@/lib/work-capsules/workroom-queue-hold";
 
 import {
   loadCoordinationBindings,
@@ -320,6 +321,13 @@ export async function applyDrivePlan(input: {
 
   if (plan.action === "dispatch_agent") {
     if (!plan.taskId || !plan.agentId) return "skipped";
+    if (readWorkroomQueueHold(room.workspaceState)) {
+      // BI-2B6A8A74: no provider answered the last stage; dispatching again would retry the outage.
+      const held = { ...snapshot, reason: "provider_held" satisfies DriveReasonFor<"dispatch_agent"> };
+      await persist({ roomId: room.id, snapshot: held, activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
+        summary: "Queue held after a provider failure; resume_workroom_queue releases it.", payload: held });
+      return "skipped";
+    }
     const expiresAt = new Date(now.getTime() + WORKROOM_DRIVE_LEASE_MS);
     const lease = await effects.acquireLease({
       roomId: room.id,

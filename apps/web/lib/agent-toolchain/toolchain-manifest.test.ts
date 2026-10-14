@@ -1,7 +1,7 @@
 // BI-52934B3E — the published toolchain: one digest definition, a byte-stable
 // archive, and a manifest signed by the installation identity.
-import { createHash, createPublicKey, verify } from "node:crypto";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { createHash, createPrivateKey, createPublicKey, verify } from "node:crypto";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
@@ -87,6 +87,37 @@ describe("toolchain manifest", () => {
     expect(verify(null, Buffer.from(canonicalJson(unsigned)), publicKey, Buffer.from(signature, "base64"))).toBe(true);
     const tampered = { ...unsigned, packDigest: "0".repeat(64) };
     expect(verify(null, Buffer.from(canonicalJson(tampered)), publicKey, Buffer.from(signature, "base64"))).toBe(false);
+  });
+
+  // BI-DE1E6485: the Python updater verifies this same fixture
+  // (packages/dpf-skill-pack/scripts/portal_source_test.py), so the two
+  // canonical forms cannot drift. The key is RFC 8032 test 1, never a real one.
+  it("signs the shared fixture byte-for-byte as the Python updater verifies it", () => {
+    const fixture = JSON.parse(
+      readFileSync(join(__dirname, "__fixtures__", "signed-toolchain-manifest.json"), "utf8"),
+    ) as Record<string, unknown>;
+    const { deviceId, signingPublicKey, signature, ...unsigned } = fixture;
+    const rfc8032Test1Seed = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60";
+    const pkcs8 = Buffer.concat([Buffer.from("302e020100300506032b657004220420", "hex"), Buffer.from(rfc8032Test1Seed, "hex")]);
+    const publicKey = createPublicKey(createPrivateKey({ key: pkcs8, format: "der", type: "pkcs8" }))
+      .export({ type: "spki", format: "der" })
+      .toString("base64");
+    const signed = signToolchainManifest(unsigned as never, {
+      deviceId: deriveDeviceId(publicKey),
+      signingPublicKey: publicKey,
+      signingPrivateKey: pkcs8.toString("base64"),
+    });
+    expect(signed.deviceId).toBe(deviceId);
+    expect(signed.signingPublicKey).toBe(signingPublicKey);
+    expect(signed.signature).toBe(signature);
+  });
+
+  it("names each client's declaration carrier", () => {
+    const shapes = clientShapes("https://dpf.example/api/mcp/v1");
+    expect(shapes["claude-code"]!.declarationCarrier).toBe("header");
+    expect(shapes.codex!.declarationCarrier).toBe("header");
+    expect(shapes.antigravity!.declarationCarrier).toBe("header");
+    expect(shapes.grok!.declarationCarrier).toBe("query");
   });
 
   it("derives each client's auth mode from the canonical credential policy", () => {

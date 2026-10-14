@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "packVersion": "0.3.0",
+  "packDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "archiveSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "releaseId": "v2026.10.13-é",
+  "mcpEndpoint": "https://dpf.example/api/mcp/v1",
+  "floor": {
+    "minPackVersion": null,
+    "graceStartsAt": null
+  },
+  "clients": {
+    "claude-code": {
+      "authMode": "oauth",
+      "declarationCarrier": "header",
+      "carrierVerified": false
+    },
+    "codex": {
+      "authMode": "oauth",
+      "declarationCarrier": "header",
+      "carrierVerified": false
+    },
+    "grok": {
+      "authMode": "bearer",
+      "declarationCarrier": "query",
+      "carrierVerified": false
+    },
+    "antigravity": {
+      "authMode": "oauth",
+      "declarationCarrier": "header",
+      "carrierVerified": false
+    }
+  },
+  "updater": {
+    "path": "scripts/update_agent_toolchain.py"
+  },
+  "deviceId": "did_06e3fd8fda29bb60ab59557de61edb0aecdb231134be30e75b455f8e1b792fa9",
+  "signingPublicKey": "MCowBQYDK2VwAyEA11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=",
+  "signature": "frg2x9bpoMB3edA9UVB7WhIa+M2YYIWf5IbVoMWQglsq1ABlR7Vz9dY0uNJEbnU9IFmhiuVEVDNiOUHWoQf/Cw=="
+}

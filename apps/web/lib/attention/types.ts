@@ -241,6 +241,10 @@ export type AttentionItem = {
   /** The governed coworker action awaiting this reader's decision. Set only by
    * the `coworker-envelope` source (BI-7CB2CCDE). */
   envelope?: AttentionEnvelopeApproval;
+  /** A legacy proposal whose approval the reference monitor refused: why it
+   * can no longer run as proposed. Set only by the `agent-proposal` source
+   * (convert-and-run, BI-04E5A511); the card then offers Decline only. */
+  noLongerRunnable?: string;
 };
 
 /**
