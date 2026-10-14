@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Batch migration-safety inventory
 
 Backlog: BI-9775778F. Workroom: WC-A45355AA. Delivery: small.
