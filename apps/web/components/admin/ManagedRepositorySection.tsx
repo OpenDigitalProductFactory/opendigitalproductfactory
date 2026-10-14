@@ -8,61 +8,36 @@
 // flow ("repository-controller" purpose), and sees one status per repository.
 // The suggested repository fills the field but is only stored on Save; "Not
 // now" stores nothing. The device-flow polling mirrors ConnectGitHubCard.
+// Copy lives in the admin catalog (managedRepository.*); the status colour
+// resolves through the report-kit registry (domain "managedRepository").
 
 import { useEffect, useRef, useState } from "react";
 
-import { StatusBadge } from "@/components/ui/report-kit";
+import { Button, ButtonLink } from "@/components/ui/Button";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { StatusBadge } from "@/components/ui/report-kit";
+import { Surface } from "@/components/ui/Surface";
 import { initiateDeviceFlow, pollDeviceFlow } from "@/lib/actions/github-device-flow";
 import { checkManagedRepository, saveManagedRepository } from "@/lib/actions/managed-repository";
 import type { ManagedRepositoryStatus, ManagedRepositoryStatusView } from "@/lib/forge/managed-repository-access";
-import type { Intent } from "@/lib/ui-model/statusColors";
-
-// Kept local (not imported from the forge module) so this client bundle does
-// not pull in the server-side GitHub adapter.
-const STATUS_LABEL: Record<ManagedRepositoryStatus, string> = {
-  connected: "Connected",
-  "read-only": "Read only",
-  "no-access": "No access",
-  "login-expired": "Login expired",
-  "not-connected": "Not connected",
-  "check-failed": "Couldn't check",
-};
-
-const STATUS_INTENT: Record<ManagedRepositoryStatus, Intent> = {
-  connected: "success",
-  "read-only": "warning",
-  "no-access": "danger",
-  "login-expired": "warning",
-  "not-connected": "neutral",
-  "check-failed": "warning",
-};
-
-const STATUS_HINT: Record<ManagedRepositoryStatus, string | null> = {
-  connected: null,
-  "read-only": "This login can read but not label issues. Use an account with triage access.",
-  "no-access": "This login cannot see the repository. Log in with an account that can.",
-  "login-expired": "Log in again.",
-  "not-connected": "Log in so the platform can read and label its issues.",
-  "check-failed": "GitHub did not answer. Try again shortly.",
-};
+import { useT } from "@/lib/i18n/use-t";
 
 export type ManagedRepositoryPresentation = {
-  label: string;
-  intent: Intent;
-  hint: string | null;
+  status: ManagedRepositoryStatus;
+  /** Whether a "what to do next" hint is shown (every status but Connected). */
+  hasHint: boolean;
   /** The one primary action for the first viewport. */
   primary: "connect" | "check";
 };
 
+const NEEDS_LOGIN: ReadonlySet<ManagedRepositoryStatus> = new Set(["not-connected", "login-expired", "no-access", "read-only"]);
+
 /** Pure: what the section shows for a status view. */
 export function presentManagedRepository(view: ManagedRepositoryStatusView): ManagedRepositoryPresentation {
-  const needsLogin = view.status === "not-connected" || view.status === "login-expired" || view.status === "no-access" || view.status === "read-only";
   return {
-    label: STATUS_LABEL[view.status],
-    intent: STATUS_INTENT[view.status],
-    hint: STATUS_HINT[view.status],
-    primary: needsLogin ? "connect" : "check",
+    status: view.status,
+    hasHint: view.status !== "connected",
+    primary: NEEDS_LOGIN.has(view.status) ? "connect" : "check",
   };
 }
 
@@ -78,10 +53,10 @@ export interface ManagedRepositorySectionProps {
   suggestion: string;
 }
 
-const BUTTON = "rounded border border-[var(--dpf-border)] px-3 py-1.5 text-xs font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] disabled:opacity-50";
-const PRIMARY = "rounded border border-[var(--dpf-accent)] bg-[var(--dpf-accent)] px-3 py-1.5 text-xs font-medium text-[var(--dpf-on-accent)] hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)] disabled:opacity-50";
+type HintStatus = Exclude<ManagedRepositoryStatus, "connected">;
 
 export function ManagedRepositorySection({ initialStatus, suggestion }: ManagedRepositorySectionProps) {
+  const t = useT("admin");
   const [view, setView] = useState(initialStatus);
   const [editing, setEditing] = useState(initialStatus.repository === null);
   const [skipped, setSkipped] = useState(false);
@@ -91,6 +66,8 @@ export function ManagedRepositorySection({ initialStatus, suggestion }: ManagedR
   const [login, setLogin] = useState<LoginState>({ kind: "idle" });
   const [announcement, setAnnouncement] = useState("");
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const statusLabel = (status: ManagedRepositoryStatus) => t(`managedRepository.status.${status}`);
 
   const stopPolling = () => {
     if (timer.current) clearInterval(timer.current);
@@ -105,7 +82,7 @@ export function ManagedRepositorySection({ initialStatus, suggestion }: ManagedR
       const result = await checkManagedRepository();
       if (result.ok) {
         setView(result.data);
-        setAnnouncement(`Status: ${STATUS_LABEL[result.data.status]}`);
+        setAnnouncement(t("managedRepository.live.status", { status: statusLabel(result.data.status) }));
       } else {
         setError(result.error);
       }
@@ -134,7 +111,7 @@ export function ManagedRepositorySection({ initialStatus, suggestion }: ManagedR
   const poll = (sessionId: string, intervalSec: number) => {
     stopPolling();
     timer.current = setInterval(async () => {
-      const result = await pollDeviceFlow(sessionId).catch(() => ({ status: "error" as const, error: "GitHub did not answer." }));
+      const result = await pollDeviceFlow(sessionId).catch(() => ({ status: "error" as const, error: t("managedRepository.error.unreachable") }));
       if (result.status === "pending") return;
       if (result.status === "slow_down") {
         poll(sessionId, result.interval);
@@ -143,13 +120,13 @@ export function ManagedRepositorySection({ initialStatus, suggestion }: ManagedR
       stopPolling();
       if (result.status === "success") {
         setLogin({ kind: "idle" });
-        setAnnouncement("Logged in. Checking the repository.");
+        setAnnouncement(t("managedRepository.live.loggedIn"));
         await recheck();
         return;
       }
       if (/expired/i.test(result.error)) {
         setLogin({ kind: "expired" });
-        setAnnouncement("The code expired.");
+        setAnnouncement(t("managedRepository.live.expired"));
         return;
       }
       setLogin({ kind: "idle" });
@@ -163,12 +140,12 @@ export function ManagedRepositorySection({ initialStatus, suggestion }: ManagedR
     const result = await initiateDeviceFlow({ purpose: "repository-controller" }).catch(() => null);
     if (!result || !result.success) {
       setLogin({ kind: "idle" });
-      setError(result?.error ?? "Could not reach GitHub.");
+      setError(result?.error ?? t("managedRepository.error.unreachable"));
       return;
     }
     const { sessionId, userCode, verificationUri, interval } = result.data;
     setLogin({ kind: "awaiting", sessionId, userCode, verificationUri, copied: false });
-    setAnnouncement("Waiting for you to approve on GitHub.");
+    setAnnouncement(t("managedRepository.live.waiting"));
     poll(sessionId, interval);
   };
 
@@ -191,20 +168,21 @@ export function ManagedRepositorySection({ initialStatus, suggestion }: ManagedR
   const repository = view.repository;
 
   return (
-    <section
+    <Surface
+      as="section"
       id="managed-repository"
       aria-labelledby="managed-repository-heading"
-      className="mb-6 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
+      className="mb-6"
       data-testid="managed-repository-section"
     >
       <h2 id="managed-repository-heading" className="mb-2 text-base font-semibold text-[var(--dpf-text)]">
-        Managed repository
+        {t("managedRepository.heading")}
       </h2>
 
       {editing && !skipped && (
         <div className="flex flex-col gap-2" data-testid="managed-repository-form">
           <label htmlFor="managed-repository-input" className="text-sm text-[var(--dpf-text)]">
-            GitHub repository
+            {t("managedRepository.repositoryLabel")}
           </label>
           <input
             id="managed-repository-input"
@@ -217,17 +195,17 @@ export function ManagedRepositorySection({ initialStatus, suggestion }: ManagedR
             className="w-full min-w-0 rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-3 py-2 font-mono text-sm text-[var(--dpf-text)]"
           />
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={save} disabled={busy || !draft.trim()} className={PRIMARY} data-testid="managed-repository-save">
-              Save
-            </button>
+            <Button size="sm" onClick={save} disabled={busy || !draft.trim()} data-testid="managed-repository-save">
+              {t("managedRepository.save")}
+            </Button>
             {repository ? (
-              <button type="button" onClick={() => setEditing(false)} className={BUTTON}>
-                Cancel
-              </button>
+              <Button variant="secondary" size="sm" onClick={() => setEditing(false)}>
+                {t("managedRepository.cancel")}
+              </Button>
             ) : (
-              <button type="button" onClick={() => setSkipped(true)} className={BUTTON} data-testid="managed-repository-not-now">
-                Not now
-              </button>
+              <Button variant="secondary" size="sm" onClick={() => setSkipped(true)} data-testid="managed-repository-not-now">
+                {t("managedRepository.notNow")}
+              </Button>
             )}
           </div>
         </div>
@@ -235,62 +213,64 @@ export function ManagedRepositorySection({ initialStatus, suggestion }: ManagedR
 
       {editing && skipped && (
         <div className="flex flex-wrap items-center gap-2" data-testid="managed-repository-skipped">
-          <StatusBadge intent="neutral" label="Not set" />
-          <button type="button" onClick={() => setSkipped(false)} className={BUTTON}>
-            Set repository
-          </button>
+          <StatusBadge intent="neutral" label={t("managedRepository.notSet")} />
+          <Button variant="secondary" size="sm" onClick={() => setSkipped(false)}>
+            {t("managedRepository.setRepository")}
+          </Button>
         </div>
       )}
 
       {!editing && repository && (
         <div className="flex flex-col gap-2">
-          <ul className="flex flex-col gap-2" aria-label="Repositories">
+          <ul className="flex flex-col gap-2" aria-label={t("managedRepository.repositoriesLabel")}>
             <li className="flex flex-wrap items-center gap-2" data-testid="managed-repository-row">
               <span className="break-all font-mono text-sm text-[var(--dpf-text)]">{repository.fullName}</span>
               <span data-testid="managed-repository-status">
-                <StatusBadge intent={presentation.intent} label={presentation.label} />
+                <StatusBadge domain="managedRepository" status={view.status} label={statusLabel(view.status)} />
               </span>
             </li>
           </ul>
-          {presentation.hint && <p className="text-xs text-[var(--dpf-muted)]">{presentation.hint}</p>}
+          {presentation.hasHint && (
+            <p className="text-xs text-[var(--dpf-muted)]">{t(`managedRepository.hint.${view.status as HintStatus}`)}</p>
+          )}
           {view.status === "check-failed" && view.lastAnsweredAt && (
-            <p className="text-xs text-[var(--dpf-muted)]">
-              Last checked: <LocalTime value={view.lastAnsweredAt} />
+            <p className="text-xs text-[var(--dpf-muted)]" data-testid="managed-repository-last-checked">
+              {t("managedRepository.lastChecked")} <LocalTime value={view.lastAnsweredAt} />
             </p>
           )}
 
           {login.kind === "awaiting" ? (
             <div className="flex flex-col gap-2" data-testid="managed-repository-device-code">
-              <p className="text-xs text-[var(--dpf-text)]">Enter this code on GitHub:</p>
+              <p className="text-xs text-[var(--dpf-text)]">{t("managedRepository.enterCode")}</p>
               <div className="flex flex-wrap items-center gap-2">
                 <code className="select-all rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-3 py-2 font-mono text-lg tracking-widest text-[var(--dpf-text)]">
                   {login.userCode}
                 </code>
-                <button type="button" onClick={() => copyCode(login.userCode)} className={BUTTON}>
-                  {login.copied ? "Copied" : "Copy code"}
-                </button>
-                <a href={login.verificationUri} target="_blank" rel="noopener noreferrer" className={PRIMARY}>
-                  Open GitHub
-                </a>
-                <button type="button" onClick={cancelLogin} className={BUTTON}>
-                  Cancel
-                </button>
+                <Button variant="secondary" size="sm" onClick={() => copyCode(login.userCode)}>
+                  {login.copied ? t("managedRepository.copied") : t("managedRepository.copyCode")}
+                </Button>
+                <ButtonLink size="sm" href={login.verificationUri} target="_blank" rel="noopener noreferrer">
+                  {t("managedRepository.openGitHub")}
+                </ButtonLink>
+                <Button variant="secondary" size="sm" onClick={cancelLogin}>
+                  {t("managedRepository.cancel")}
+                </Button>
               </div>
             </div>
           ) : (
             <div className="flex flex-wrap gap-2">
               {presentation.primary === "connect" ? (
-                <button type="button" onClick={connect} disabled={busy || login.kind === "starting"} className={PRIMARY} data-testid="managed-repository-connect">
-                  {login.kind === "expired" ? "Get a new code" : "Connect GitHub"}
-                </button>
+                <Button size="sm" onClick={connect} disabled={busy || login.kind === "starting"} data-testid="managed-repository-connect">
+                  {login.kind === "expired" ? t("managedRepository.newCode") : t("managedRepository.connect")}
+                </Button>
               ) : (
-                <button type="button" onClick={recheck} disabled={busy} className={PRIMARY} data-testid="managed-repository-check">
-                  Check again
-                </button>
+                <Button size="sm" onClick={recheck} disabled={busy} data-testid="managed-repository-check">
+                  {t("managedRepository.checkAgain")}
+                </Button>
               )}
-              <button type="button" onClick={() => setEditing(true)} className={BUTTON}>
-                Change
-              </button>
+              <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
+                {t("managedRepository.change")}
+              </Button>
             </div>
           )}
         </div>
@@ -304,6 +284,6 @@ export function ManagedRepositorySection({ initialStatus, suggestion }: ManagedR
           {error}
         </p>
       )}
-    </section>
+    </Surface>
   );
 }

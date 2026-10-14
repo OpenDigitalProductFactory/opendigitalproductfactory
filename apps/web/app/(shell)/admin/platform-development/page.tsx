@@ -100,7 +100,9 @@ export default async function AdminPlatformDevelopmentPage() {
       <TokenExpiryBanner />
       <LegacyTokenOverrideBanner />
       {managedRepositoryStatus && (
-        <ManagedRepositorySection initialStatus={managedRepositoryStatus} suggestion={SUGGESTED_MANAGED_REPOSITORY} />
+        <MessagesProvider locale={language} messages={{ admin: namespaceMessages(language, "admin") }}>
+          <ManagedRepositorySection initialStatus={managedRepositoryStatus} suggestion={SUGGESTED_MANAGED_REPOSITORY} />
+        </MessagesProvider>
       )}
       {/* BI-D43EB266: the source-merge "Apply update" control moved to the
           single operator update surface at Ops -> Self-Upgrade. This page keeps

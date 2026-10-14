@@ -5,7 +5,9 @@
 // and the polite live region.
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render as rtlRender, screen } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { namespaceMessages } from "@dpf/i18n";
 
 vi.mock("@/lib/actions/github-device-flow", () => ({
   initiateDeviceFlow: vi.fn(),
@@ -19,7 +21,14 @@ vi.mock("@/lib/actions/managed-repository", () => ({
 import { initiateDeviceFlow, pollDeviceFlow } from "@/lib/actions/github-device-flow";
 import { checkManagedRepository, saveManagedRepository } from "@/lib/actions/managed-repository";
 import type { ManagedRepositoryStatus, ManagedRepositoryStatusView } from "@/lib/forge/managed-repository-access";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { ManagedRepositorySection, presentManagedRepository } from "./ManagedRepositorySection";
+
+function render(ui: ReactElement) {
+  return rtlRender(
+    <MessagesProvider locale="en-US" messages={{ admin: namespaceMessages("en-US", "admin") }}>{ui}</MessagesProvider>,
+  );
+}
 
 const REPO = { forge: "github" as const, owner: "acme", repo: "widgets", fullName: "acme/widgets" };
 
@@ -35,21 +44,27 @@ afterEach(() => {
 
 describe("presentManagedRepository", () => {
   it.each([
-    ["connected", "Connected", "success", "check"],
-    ["read-only", "Read only", "warning", "connect"],
-    ["no-access", "No access", "danger", "connect"],
-    ["login-expired", "Login expired", "warning", "connect"],
-    ["not-connected", "Not connected", "neutral", "connect"],
-    ["check-failed", "Couldn't check", "warning", "check"],
-  ] as const)("%s → %s", (status, label, intent, primary) => {
-    expect(presentManagedRepository(view(status))).toMatchObject({ label, intent, primary });
+    ["connected", "check", false],
+    ["read-only", "connect", true],
+    ["no-access", "connect", true],
+    ["login-expired", "connect", true],
+    ["not-connected", "connect", true],
+    ["check-failed", "check", true],
+  ] as const)("%s → primary %s", (status, primary, hasHint) => {
+    expect(presentManagedRepository(view(status))).toEqual({ status, primary, hasHint });
   });
 
-  it("tells the operator what to do next for every status but Connected", () => {
-    expect(presentManagedRepository(view("connected")).hint).toBeNull();
-    for (const s of ["read-only", "no-access", "login-expired", "not-connected", "check-failed"] as const) {
-      expect(presentManagedRepository(view(s)).hint).toBeTruthy();
-    }
+  it.each([
+    ["connected", "Connected"],
+    ["read-only", "Read only"],
+    ["no-access", "No access"],
+    ["login-expired", "Login expired"],
+    ["not-connected", "Not connected"],
+    ["check-failed", "Couldn't check"],
+  ] as const)("renders the %s chip as %s, with a next step unless Connected", (status, label) => {
+    render(<ManagedRepositorySection initialStatus={view(status)} suggestion="" />);
+    expect(screen.getByTestId("managed-repository-status")).toHaveTextContent(label);
+    expect(screen.queryByText(/managedRepository\./)).toBeNull();
   });
 });
 
@@ -109,7 +124,7 @@ describe("ManagedRepositorySection", () => {
 
   it("shows the last answered time when GitHub could not be checked", () => {
     render(<ManagedRepositorySection initialStatus={view("check-failed")} suggestion="" />);
-    expect(screen.getByText(/Last checked/)).toBeInTheDocument();
+    expect(screen.getByTestId("managed-repository-last-checked")).toHaveTextContent("Last checked:");
   });
 
   it("logs in with the repository-controller purpose and announces progress", async () => {

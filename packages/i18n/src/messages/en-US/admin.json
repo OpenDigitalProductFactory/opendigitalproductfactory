@@ -134,5 +134,48 @@
     "unresolvedTitle": "{$unresolved} of {$total} phases unresolved",
     "attentionTitle": "Phase routing needs attention",
     "resolvedSummary": "{$resolved} resolved: {$local} local, {$cloud} cloud."
+  },
+  "managedRepository": {
+    "heading": "Managed repository",
+    "repositoryLabel": "GitHub repository",
+    "repositoriesLabel": "Repositories",
+    "save": "Save",
+    "cancel": "Cancel",
+    "notNow": "Not now",
+    "notSet": "Not set",
+    "setRepository": "Set repository",
+    "change": "Change",
+    "connect": "Connect GitHub",
+    "newCode": "Get a new code",
+    "checkAgain": "Check again",
+    "enterCode": "Enter this code on GitHub:",
+    "copyCode": "Copy code",
+    "copied": "Copied",
+    "openGitHub": "Open GitHub",
+    "lastChecked": "Last checked:",
+    "status": {
+      "connected": "Connected",
+      "read-only": "Read only",
+      "no-access": "No access",
+      "login-expired": "Login expired",
+      "not-connected": "Not connected",
+      "check-failed": "Couldn't check"
+    },
+    "hint": {
+      "read-only": "This login can read but not label issues. Use an account with triage access.",
+      "no-access": "This login cannot see the repository. Log in with an account that can.",
+      "login-expired": "Log in again.",
+      "not-connected": "Log in so the platform can read and label its issues.",
+      "check-failed": "GitHub did not answer. Try again shortly."
+    },
+    "live": {
+      "status": "Status: {$status}",
+      "waiting": "Waiting for you to approve on GitHub.",
+      "loggedIn": "Logged in. Checking the repository.",
+      "expired": "The code expired."
+    },
+    "error": {
+      "unreachable": "Could not reach GitHub."
+    }
   }
 }
