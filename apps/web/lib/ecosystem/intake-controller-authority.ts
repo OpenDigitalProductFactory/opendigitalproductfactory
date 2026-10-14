@@ -32,6 +32,7 @@ import {
   parseIntakeControllerCommission,
   type IntakeControllerCommission,
 } from "@/lib/operate/scheduled-jobs/intake-controller-commission";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-nesting";
 import { readWorkShapeClaimRef } from "@/lib/work-management/workroom-shape-claim";
@@ -75,10 +76,10 @@ export interface IntakeControllerFacts {
 }
 
 export type IntakeControllerVerdict =
-  | { ok: true; repo: RepoIdentity; workroomCapsuleId: string }
-  | { ok: false; reason: string };
+  | { commissioned: true; repo: RepoIdentity; workroomCapsuleId: string }
+  | { commissioned: false; reason: string };
 
-const refuse = (reason: string): IntakeControllerVerdict => ({ ok: false, reason: `not commissioned: ${reason}` });
+const refuse = (reason: string): IntakeControllerVerdict => ({ commissioned: false, reason: `not commissioned: ${reason}` });
 const sameRepo = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const fullName = (repo: RepoIdentity) => `${repo.owner}/${repo.name}`;
 
@@ -143,7 +144,7 @@ export function evaluateIntakeControllerAuthority(facts: IntakeControllerFacts):
   if (intent.intent.primaryPurpose !== REQUIRED_PURPOSE) {
     return refuse(`installation purpose is ${intent.intent.primaryPurpose}, not ${REQUIRED_PURPOSE}`);
   }
-  return { ok: true, repo, workroomCapsuleId: workroom.capsuleId };
+  return { commissioned: true, repo, workroomCapsuleId: workroom.capsuleId };
 }
 
 // ── impure edge ───────────────────────────────────────────────────────────────
@@ -263,9 +264,8 @@ export async function loadIntakeControllerCommission(deps: IntakeControllerDeps 
   );
 }
 
-export type CommissionIntakeControllerResult =
-  | { ok: true; commission: IntakeControllerCommission }
-  | { ok: false; reason: string };
+/** `data` is the commission written; `error` is the `not commissioned: <reason>` refusal. */
+export type CommissionIntakeControllerResult = ActionResult<IntakeControllerCommission>;
 
 /**
  * Write the commission reference after validating the same predicate the runner
@@ -294,7 +294,7 @@ export async function commissionIntakeController(input: IntakeControllerDeps & {
     const verdict = evaluateIntakeControllerAuthority(
       await loadFacts(db, candidate, input.loadEnvironment ?? environmentLoader(db)),
     );
-    if (!verdict.ok) return verdict;
+    if (!verdict.commissioned) return err(verdict.reason);
 
     const commission = { ...candidate, repositoryFullName: fullName(verdict.repo) };
     const entry = ECOSYSTEM_JOB_CATALOG_ENTRIES.find((job) => job.jobId === INTAKE_CONTROLLER_JOB_ID)!;
@@ -308,8 +308,8 @@ export async function commissionIntakeController(input: IntakeControllerDeps & {
       create: { jobId: INTAKE_CONTROLLER_JOB_ID, name: entry.name, schedule: entry.cron!, metadata },
       update: { metadata },
     });
-    return { ok: true, commission };
+    return ok(commission);
   } catch (error) {
-    return { ok: false, reason: `not commissioned: ${getErrorMessage(error)}` };
+    return err(`not commissioned: ${getErrorMessage(error)}`);
   }
 }

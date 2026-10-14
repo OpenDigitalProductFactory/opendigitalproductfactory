@@ -59,7 +59,7 @@ const facts = (overrides: Partial<IntakeControllerFacts> = {}): IntakeController
 
 const refusal = (input: IntakeControllerFacts) => {
   const verdict = evaluateIntakeControllerAuthority(input);
-  if (verdict.ok) throw new Error("expected a refusal");
+  if (verdict.commissioned) throw new Error("expected a refusal");
   expect(verdict.reason).toMatch(/^not commissioned: /);
   return verdict.reason;
 };
@@ -67,7 +67,7 @@ const refusal = (input: IntakeControllerFacts) => {
 describe("evaluateIntakeControllerAuthority", () => {
   it("accepts a locally owned, production, confirmed evolve-dpf controller on the explicit repository", () => {
     expect(evaluateIntakeControllerAuthority(facts())).toEqual({
-      ok: true,
+      commissioned: true,
       workroomCapsuleId: "WC-CONTROLLER",
       repo: { owner: "OpenDigitalProductFactory", name: "opendigitalproductfactory" },
     });
@@ -113,7 +113,7 @@ describe("evaluateIntakeControllerAuthority", () => {
   it("compares repository names case-insensitively", () => {
     expect(evaluateIntakeControllerAuthority(facts({
       upstreamRemoteUrl: "https://github.com/opendigitalproductfactory/OpenDigitalProductFactory",
-    })).ok).toBe(true);
+    })).commissioned).toBe(true);
   });
 
   it("refuses when the commission names a different repository than the workroom", () => {
@@ -196,7 +196,7 @@ describe("loadIntakeControllerCommission", () => {
   it("resolves the commission recorded on the scheduled job", async () => {
     const db = fakeDb();
     expect(await loadIntakeControllerCommission({ db, loadEnvironment: production })).toMatchObject({
-      ok: true, workroomCapsuleId: "WC-CONTROLLER",
+      commissioned: true, workroomCapsuleId: "WC-CONTROLLER",
     });
     expect(db.scheduledJob.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { jobId: "ecosystem-inbound-issue-triage" } }));
   });
@@ -204,7 +204,7 @@ describe("loadIntakeControllerCommission", () => {
   it("treats a job row without the reference as uncommissioned without loading a workroom", async () => {
     const db = fakeDb({ metadata: { lastEditedBy: "ops" } });
     const verdict = await loadIntakeControllerCommission({ db, loadEnvironment: production });
-    expect(verdict).toMatchObject({ ok: false, reason: expect.stringMatching(/^not commissioned: no controller workroom/) });
+    expect(verdict).toMatchObject({ commissioned: false, reason: expect.stringMatching(/^not commissioned: no controller workroom/) });
     expect(db.workroom.findFirst).not.toHaveBeenCalled();
   });
 
@@ -214,13 +214,13 @@ describe("loadIntakeControllerCommission", () => {
       backlogBody: "Peer item\n[origin:federatedWork:inst_peer:BI-PEER]",
     });
     expect(await loadIntakeControllerCommission({ db, loadEnvironment: production }))
-      .toMatchObject({ ok: false, reason: expect.stringMatching(/peer-owned/) });
+      .toMatchObject({ commissioned: false, reason: expect.stringMatching(/peer-owned/) });
   });
 
   it("flags a workroom that a peer-canonical federated record mirrors", async () => {
     const db = fakeDb({ peerMirror: true });
     expect(await loadIntakeControllerCommission({ db, loadEnvironment: production }))
-      .toMatchObject({ ok: false, reason: expect.stringMatching(/peer-owned/) });
+      .toMatchObject({ commissioned: false, reason: expect.stringMatching(/peer-owned/) });
     expect(db.federatedRecordMirror.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ canonicalSide: "peer" }),
     }));
@@ -229,7 +229,7 @@ describe("loadIntakeControllerCommission", () => {
   it("refuses rather than falling back when the upstream URL is unset", async () => {
     const db = fakeDb({ upstreamRemoteUrl: null });
     expect(await loadIntakeControllerCommission({ db, loadEnvironment: production }))
-      .toMatchObject({ ok: false, reason: expect.stringMatching(/no explicit upstream repository/) });
+      .toMatchObject({ commissioned: false, reason: expect.stringMatching(/no explicit upstream repository/) });
   });
 });
 
@@ -255,7 +255,7 @@ describe("commissionIntakeController", () => {
     const result = await commissionIntakeController({
       workroomCapsuleId: "WC-CONTROLLER", principalRecordId: "not-an-owner", db, loadEnvironment: production,
     });
-    expect(result).toMatchObject({ ok: false, reason: expect.stringMatching(/commissioning principal no longer owns|does not own/) });
+    expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/commissioning principal no longer owns/) });
     expect(db.scheduledJob.upsert).not.toHaveBeenCalled();
   });
 
@@ -264,7 +264,7 @@ describe("commissionIntakeController", () => {
     const result = await commissionIntakeController({
       workroomCapsuleId: "WC-CONTROLLER", principalRecordId: OWNER, db, loadEnvironment: production,
     });
-    expect(result).toMatchObject({ ok: false, reason: expect.stringMatching(/is complete/) });
+    expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/is complete/) });
     expect(db.scheduledJob.upsert).not.toHaveBeenCalled();
   });
 
@@ -274,7 +274,7 @@ describe("commissionIntakeController", () => {
       workroomCapsuleId: "WC-CONTROLLER", principalRecordId: OWNER, db,
       loadEnvironment: async () => ({ environmentClass: "development", declared: true }),
     });
-    expect(result).toMatchObject({ ok: false, reason: "not commissioned: installation is not a production install" });
+    expect(result).toMatchObject({ ok: false, error: "not commissioned: installation is not a production install" });
     expect(db.scheduledJob.upsert).not.toHaveBeenCalled();
   });
 });

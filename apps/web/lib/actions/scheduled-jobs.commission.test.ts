@@ -50,7 +50,7 @@ describe("commissionIntakeControllerAction (BI-FD40397B)", () => {
   });
 
   it("commissions as the caller's principal and reports the predicate's refusal verbatim", async () => {
-    mocks.commission.mockResolvedValueOnce({ ok: false, reason: "not commissioned: installation is not a production install" });
+    mocks.commission.mockResolvedValueOnce({ ok: false, error: "not commissioned: installation is not a production install" });
     expect(await commissionIntakeControllerAction("WC-CONTROLLER"))
       .toEqual({ ok: false, error: "not commissioned: installation is not a production install" });
     expect(mocks.commission).toHaveBeenCalledWith({ workroomCapsuleId: "WC-CONTROLLER", principalRecordId: "principal-row-owner" });
@@ -61,7 +61,7 @@ describe("commissionIntakeControllerAction (BI-FD40397B)", () => {
   it("revalidates the register after a successful commission", async () => {
     mocks.commission.mockResolvedValueOnce({
       ok: true,
-      commission: { workroomCapsuleId: "WC-CONTROLLER", repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory" },
+      data: { workroomCapsuleId: "WC-CONTROLLER", repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory" },
     });
     const result = await commissionIntakeControllerAction("WC-CONTROLLER");
     expect(result).toMatchObject({ ok: true, data: expect.stringContaining("WC-CONTROLLER") });

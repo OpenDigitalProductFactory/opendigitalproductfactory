@@ -14,7 +14,7 @@ const failing: ScheduledJobAttentionRow = {
   schedule: "17 6 * * 1",
   enabled: true,
   lastRunAt: new Date("2026-10-13T06:17:00.000Z"),
-  nextRunAt: new Date("2026-10-20T06:17:00.000Z"),
+  nextRunAt: new Date("2026-10-20T06:17:00.000Z"), // clock-bomb-guard: allow projection takes an explicit `now`; no wall-clock comparison
   lastStatus: "failed",
   lastError: "upstream-issue: GitHub auth failed (401)",
   lastRunSummary: "Incomplete scan: 0 new, 0 matched, 0 failed; 1 unread source(s).",

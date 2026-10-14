@@ -8,7 +8,7 @@ vi.mock("@/lib/federation/demand-exchange", () => ({
 }));
 
 const commissioned = async () => ({
-  ok: true as const,
+  commissioned: true as const,
   workroomCapsuleId: "WC-CONTROLLER",
   repo: { owner: "OpenDigitalProductFactory", name: "opendigitalproductfactory" },
 });
@@ -78,7 +78,7 @@ describe("runEcosystemInboundTriage", () => {
     const readIssues = vi.fn();
     const readPeerDemand = vi.fn();
     const result = await runEcosystemInboundTriage({
-      loadCommission: async () => ({ ok: false, reason: "not commissioned: installation is not a production install" }),
+      loadCommission: async () => ({ commissioned: false as const, reason: "not commissioned: installation is not a production install" }),
       ingest, readIssues, readPeerDemand,
     });
 

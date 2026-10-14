@@ -56,7 +56,7 @@ export async function runEcosystemInboundTriage(
     // Could not prove the commission: refuse, never run on an unverified controller.
     return { ran: false, reason: `not commissioned: commission check failed: ${getErrorMessage(error)}` };
   }
-  if (!commission.ok) return { ran: false, reason: commission.reason };
+  if (!commission.commissioned) return { ran: false, reason: commission.reason };
   const { repo } = commission;
 
   const items: InboundEcosystemItem[] = [];

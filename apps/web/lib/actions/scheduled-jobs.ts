@@ -113,7 +113,7 @@ export async function commissionIntakeControllerAction(
   }
   const { commissionIntakeController } = await import("@/lib/ecosystem/intake-controller-authority");
   const result = await commissionIntakeController({ workroomCapsuleId, principalRecordId });
-  if (!result.ok) return err(result.reason);
+  if (!result.ok) return err(result.error);
   revalidatePath(JOBS_PATH);
-  return ok(`Issue intake commissioned to ${result.commission.workroomCapsuleId} for ${result.commission.repositoryFullName}.`);
+  return ok(`Issue intake commissioned to ${result.data.workroomCapsuleId} for ${result.data.repositoryFullName}.`);
 }
