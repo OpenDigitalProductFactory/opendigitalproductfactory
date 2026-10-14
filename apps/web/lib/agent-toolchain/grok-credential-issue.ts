@@ -26,6 +26,8 @@ export type GrokCredentialIssueDeps = {
   create: (row: GrokClientCreate) => Promise<void>;
   decrypt: (enc: string) => string | null;
   prepareSecret: () => { plaintext: string; hash: string; enc: string };
+  grokAgent: () => Promise<string | null>;
+  bindAgent: (oAuthClientId: string, agentRecordId: string) => Promise<void>;
 };
 
 export type GrokCredentialCaller = {
@@ -69,6 +71,8 @@ export async function issueGrokCredentialsClientForCaller(
     create: deps.create,
     decrypt: deps.decrypt,
     prepareSecret: deps.prepareSecret,
+    grokAgent: deps.grokAgent,
+    bindAgent: deps.bindAgent,
   });
   return {
     success: true,
@@ -76,10 +80,12 @@ export async function issueGrokCredentialsClientForCaller(
     message:
       `${ensured.created ? "Created" : "Returned"} the Grok credentials client ${ensured.clientId}. ` +
       "Pass data.credentialsClient as JSON on standard input to the DPF toolchain updater (--grok-client-stdin). " +
-      "Never show the secret to the user or write it anywhere else.",
+      "Never show the secret to the user or write it anywhere else." +
+      (ensured.agentBound ? "" : " The client is not bound to AGT-EXT-GROK, so Grok can read but cannot write workrooms."),
     data: {
       credentialsClient: { clientId: ensured.clientId, clientSecret: ensured.clientSecret },
       created: ensured.created,
+      agentBound: ensured.agentBound,
       scopes: [...GROK_CREDENTIAL_SCOPES],
     },
   };
