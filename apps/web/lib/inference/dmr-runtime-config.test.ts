@@ -1,7 +1,28 @@
 import { describe, it, expect } from "vitest";
-import { getServedContextTokens, setServedContextTokens } from "./dmr-runtime-config";
+import { getServedContextTokens, setServedContextTokens, getLocalThinkingBudgetEvidence } from "./dmr-runtime-config";
 
 const API_ROOT = "http://model-runner.docker.internal";
+
+describe("selected runtime thinking budget evidence", () => {
+  const digest = `sha256:${"a".repeat(64)}`;
+  const template = "{{ '<think>\\n' }}{{ '\\n</think>\\n\\n' }}";
+  function probe(overrides: { template?: string; config?: object; engine?: string; digest?: string; duplicate?: boolean } = {}) {
+    return (async (url: string) => ({ ok: true, status: 200, json: async () =>
+      url.includes("_configure") ? Array(overrides.duplicate ? 2 : 1).fill({ Backend: "llama.cpp", Model: "ai/test", ModelID: digest, Mode: "completion", Config: overrides.config ?? { "context-size": 131072 } }) :
+      url.includes("/status") ? { "llama.cpp": overrides.engine ?? "Running: llama.cpp b9879-metal (sha256:engine) build" } :
+      { id: overrides.digest ?? digest, config: { gguf: { "tokenizer.chat_template": overrides.template ?? template } } },
+    })) as unknown as typeof fetch;
+  }
+  it("binds the numeric dialect to the selected digest, runtime and template", async () => {
+    expect(await getLocalThinkingBudgetEvidence(API_ROOT, "ai/test", probe())).toMatchObject({ dialect: "llama.cpp-b9879", modelDigest: digest });
+  });
+  it.each([
+    { template: "ordinary answer template" }, { config: { "context-size": 131072, "raw-runtime-flags": "--chat-template custom" } },
+    { engine: "Running: llama.cpp b7000-metal" }, { digest: `sha256:${"b".repeat(64)}` }, { duplicate: true },
+  ])("leaves unsupported, overridden or ambiguous evidence unknown: %j", async overrides => {
+    expect(await getLocalThinkingBudgetEvidence(API_ROOT, "ai/test", probe(overrides))).toBeUndefined();
+  });
+});
 
 describe("getServedContextTokens", () => {
   it.each([0, -1, 1.5, NaN, Infinity, "40960", null])("rejects an invalid explicit context override: %s", async (size) => {

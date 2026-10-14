@@ -118,7 +118,7 @@ export async function dispatchRoutedSemanticReview(
           title: "Review committed change",
           distributionShape: "edge",
           riskClass: "high",
-          successShape: "decision",
+          successShape: "json",
           contextPolicy: "work-case-packet",
           tokenEnvelope: {
             maxInputTokens: minimumContext - SEMANTIC_REVIEW_RESPONSE_RESERVE_TOKENS,

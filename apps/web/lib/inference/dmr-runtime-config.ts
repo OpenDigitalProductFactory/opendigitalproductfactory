@@ -28,6 +28,10 @@
 // `getOllamaApiRoot()`, which strips the OpenAI-compatible inference prefix.
 
 /** DMR `_configure` GET response shape (array, one entry per backend/model). */
+import { createHash } from "node:crypto";
+import { canonicalLocalModelKey, validateLocalModelReference } from "./local-model-management";
+import type { LocalThinkingBudgetEvidence } from "@/lib/routing/types";
+
 type DmrConfigureEntry = {
   Backend?: string;
   Model?: string;
@@ -54,6 +58,50 @@ export type ApplyContextResult = {
 
 function configureUrl(apiRoot: string): string {
   return `${apiRoot.replace(/\/$/, "")}/engines/_configure`;
+}
+
+/** Read-only support proof for the exact installed parser; never infer it from a provider label. */
+export async function getLocalThinkingBudgetEvidence(
+  apiRoot: string, model: string, fetchImpl: typeof fetch = fetch,
+): Promise<LocalThinkingBudgetEvidence | undefined> {
+  try {
+    validateLocalModelReference(model);
+    const root = apiRoot.replace(/\/$/, "");
+    const read = async (url: string): Promise<unknown> => {
+      const res = await fetchImpl(url, { method: "GET", signal: AbortSignal.timeout(2500) });
+      if (!res.ok) throw new Error("Runtime evidence unavailable");
+      return res.json();
+    };
+    const [configs, engines, metadata] = await Promise.all([
+      read(`${configureUrl(root)}?model=${encodeURIComponent(model)}`),
+      read(`${root}/engines/status`),
+      read(`${root}/models/${model.split("/").map(encodeURIComponent).join("/")}`),
+    ]);
+    if (!Array.isArray(configs) || configs.length !== 1) return undefined;
+    const entry = configs[0] as DmrConfigureEntry;
+    if (entry?.Backend !== "llama.cpp" || entry.Mode !== "completion" ||
+        typeof entry.Model !== "string" || canonicalLocalModelKey(entry.Model) !== canonicalLocalModelKey(model) ||
+        !/^sha256:[a-f0-9]{64}$/.test(entry.ModelID ?? "")) return undefined;
+    // Unknown flags may override the template/parser. A narrow observed config
+    // is preferable to silently claiming support for an unverified override.
+    if (!entry.Config || Object.keys(entry.Config).some(key => key !== "context-size")) return undefined;
+    const context = entry.Config["context-size"];
+    if (context !== undefined && (typeof context !== "number" || !Number.isSafeInteger(context) || context <= 0)) return undefined;
+    const statuses = engines as Record<string, unknown>;
+    const identity = statuses?.["llama.cpp"];
+    if (typeof identity !== "string" || !/^Running: llama\.cpp b9879(?:-|\s)/.test(identity) ||
+        Object.entries(statuses).some(([key, value]) => key !== "llama.cpp" && typeof value === "string" && value.startsWith("Running"))) return undefined;
+    const card = metadata as { id?: string; config?: { gguf?: Record<string, unknown> } };
+    if (card?.id !== entry.ModelID) return undefined;
+    const template = card.config?.gguf?.["tokenizer.chat_template"];
+    // The verified generic parser recognizes this rendered start/end pair.
+    // A name containing Qwen or a version alone establishes neither delimiter.
+    if (typeof template !== "string" || !template.includes("'<think>\\n'") ||
+        !template.includes("\\n</think>\\n\\n'")) return undefined;
+    const digest = (value: string) => createHash("sha256").update(value).digest("hex");
+    return { dialect: "llama.cpp-b9879", modelDigest: entry.ModelID!, engineIdentity: identity,
+      templateDigest: digest(template), configDigest: digest(JSON.stringify(entry.Config)), observedAt: Date.now() };
+  } catch { return undefined; }
 }
 
 /**
