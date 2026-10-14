@@ -219,7 +219,43 @@ receipt, activity rows, state rows, outbox rows.
   deterministic command ids, never from in-memory timers.
 - Queue order puts delegated results ahead of new work in the same room.
 
+**Amendment (2026-10-14, delivered).** DPF has no per-room run queue: a chat
+turn runs inline and scheduled agent tasks are not ordered per room. The
+room's work is what the Workroom drive dispatches, so the hold lives there:
+
+- A drive-dispatched stage (or any scheduled task that serves a room) that fails
+  because no provider answered (`connection`, `rate-limit`,
+  `provider-unavailable`, `config` from `classifyInferenceFailure`; not
+  `empty-response`) writes `workspaceState.queueHold`, takes that task off the
+  schedule (`nextRunAt = null`) and records `provider-blocked` on the room
+  (`lib/work-capsules/workroom-queue-hold.ts`).
+- While it holds, both drive paths pause the room with reason `provider_held`
+  (blocked, owner-visible) and dispatch nothing; graph tokens stay where they
+  were.
+- `resume_workroom_queue` clears the hold, re-arms the held task and records
+  `provider-unblocked`; with a `commandId` it is receipted.
+- "Delegated results ahead of new work" has no subject until a child result can
+  start a parent turn (`BI-AD979E79`, deferred): today it is a message in the
+  parent thread. It moves to that item.
+- Usage-limit auto-resume (release a hold at the provider's reset time) is a
+  follow-up; the hold records the failure kind it needs.
+
 ### 4.7 Agent CLIs as supervised runtimes (`BI-05715F4C`)
+
+**Delivered 2026-10-14** (`apps/web/lib/workroom-runtime/`): the adapter
+contract (`types.ts`); a Codex `app-server` adapter over its JSON-RPC
+(initialize → account/login/start → thread/start | thread/resume → turn/start,
+turn/steer, turn/interrupt; approvals answered, never bypassed); a Claude
+adapter over one long-lived `claude -p` in stream-json mode (the transport the
+Agent SDK drives, so no new dependency) with `--permission-prompt-tool
+mcp__dpf__approve_runtime_permission`; a room-scoped credential (`McpApiToken`
+kind `workroom_session`, `dpfroom_` prefix, bound to `workroomRef`/`runRef`,
+24 h idle expiry, dead with its room, refused for any other room); a runtime
+request policy (workspace-local work accepted, anything past the sandbox held
+as a room `question` and answered with `drive_workroom_runtime action=decide`);
+and a supervisor that writes every event to the room's sequenced log. A live
+session is process-bound: after a restart the next start records
+`cancelled_after_process_loss` and resumes the stored provider thread.
 
 An executor adapter contract with DPF-owned ids and provider ids as references:
 `openSession`, `ensureThread`, `resumeThread`, `startTurn`, `steerTurn`,
