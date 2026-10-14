@@ -152,3 +152,25 @@ account, disable during HTTP, unchanged-timestamp credential replacement, and
 concurrent owner-lock contention. It accepts only an explicit test database or
 the governed CI database and cleans up its generated schema. Host execution
 without that database is skipped, not evidence of database qualification.
+
+## Executed integration and host prerequisites
+
+The shared PostgreSQL run at source `538bf29ec5f8` executed all six workload/OAuth
+composition cases and all three migration cases successfully. The containing
+full gate `cmv809mlw0a8a01pcivkk2sz5` failed elsewhere; those nine results are
+specific database evidence, not a passing full gate or live migration apply.
+
+The exhaustive run found stale discovery mocks after the credential-boundary
+refactor and an old three-argument quota assertion. Fixtures now model absent
+legacy default connections, use the decrypted credential boundary for workspace
+headers, and retain the unscoped legacy pool explicitly. The affected 69 cases
+and both typecheck programs passed after these alignments.
+
+On this Windows host, literal `sh` and POSIX `mkdir` were absent from the process
+PATH although the official Git for Windows binaries were installed. Use verified
+Git `bin` and `usr/bin` directories in the gate's process environment; do not
+change global PATH or substitute scripts. The legacy bootstrap fixture now uses
+the existing shared promotion-test hang budget: its measured 38-second run
+exceeded its old 30-second budget. The targeted Git-clone and legacy bootstrap
+suites passed all 16 cases after the environment and budget corrections. Preserve
+the earlier failures and obtain a new exact-tree full gate before publication.
