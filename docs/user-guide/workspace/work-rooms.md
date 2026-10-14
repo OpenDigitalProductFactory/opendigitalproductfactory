@@ -210,6 +210,12 @@ Choose a shape to see it drawn across all of its rooms:
 - A version picker lets you compare the same shape before and after a change.
 - Choose a step to list the rooms at that step, then open any room.
 
+Under the picture, **Where the time goes, step by step** puts the numbers on each step:
+
+- **A box per step** shows how many rooms are waiting there (▽) and how many are in the step. It also shows the step's usual **dwell** (how long a room stays), **process** time (how long it is actually worked) and **first pass** (how often it finished without being sent back). A step that has finished fewer than five times says *too few to measure* instead of showing a number.
+- **Slower lately** or **Faster lately** appears on a step whose last seven days differ from its usual time by a quarter or more, with both times shown.
+- **The timeline** lays the measured steps side by side, with process time on the upper line and waiting time on the lower line. Below it is the total of each and the shape's **flow efficiency**: the share of the time the work was actually being worked.
+
 **Products** (`/portfolio`) shows the four portfolios side by side on the same measures. Rooms with no portfolio are shown in their own **Unplaced** column and never counted in another.
 
 ### The main value stream on your home page
