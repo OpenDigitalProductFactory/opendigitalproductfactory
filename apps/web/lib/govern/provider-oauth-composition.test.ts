@@ -95,8 +95,32 @@ describe("active and scoped OAuth renewal composition", () => {
 
   it("cannot expire a credential after Disable while refresh failure is pending", async () => {
     const active = snapshot();
-    vi.mocked(fetch).mockImplementation(async () => { rows.codex!.status = "disabled"; return { ok: false } as Response; });
+    vi.mocked(fetch).mockImplementation(async () => { rows.codex!.status = "disabled"; return new Response("expired", { status: 401 }); });
     expect(await refreshOAuthToken("codex", active.connectionId, active)).toEqual({ error: expect.stringContaining("changed") });
+    expect(db.credentialEntry.updateMany).not.toHaveBeenCalled();
+  });
+
+  it.each([429, 500, 503])("does not expire the active grant or request reauthentication for HTTP %s", async status => {
+    const active = snapshot();
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ error: "temporarily_unavailable" }), { status }));
+    const result = await refreshOAuthToken("codex", active.connectionId, active);
+    expect(result).toEqual({ error: expect.stringContaining("unavailable") });
+    expect(JSON.stringify(result)).not.toContain("re-authentication");
+    expect(db.credentialEntry.updateMany).not.toHaveBeenCalled();
+    expect(db.credentialEntry.update).not.toHaveBeenCalled();
+  });
+
+  it.each([401, 403, 400])("preserves a genuine grant refusal for HTTP %s", async status => {
+    const active = snapshot();
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ error: "invalid_grant" }), { status }));
+    expect(await refreshOAuthToken("codex", active.connectionId, active)).toEqual({ error: "Selected account re-authentication required" });
+    expect(db.credentialEntry.updateMany).toHaveBeenCalledExactlyOnceWith({ where: expect.objectContaining({ id: active.credentialEntryId }), data: { status: "expired" } });
+  });
+
+  it("keeps an unknown OAuth 400 distinct from invalid credentials", async () => {
+    const active = snapshot();
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ error: "invalid_client" }), { status: 400 }));
+    expect(await refreshOAuthToken("codex", active.connectionId, active)).toEqual({ error: expect.stringContaining("failed") });
     expect(db.credentialEntry.updateMany).not.toHaveBeenCalled();
   });
 
