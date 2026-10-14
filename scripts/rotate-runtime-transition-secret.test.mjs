@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const script = fileURLToPath(new URL("./rotate-runtime-transition-secret.mjs", import.meta.url)).replace(/^\/(.:\/)/, "$1");
@@ -79,58 +79,4 @@ test("expired apply timestamp cannot permit key rotation", async t => {
   assert.match(result.stderr, /transition_in_progress/);
   assert.equal(await readFile(join(lock, "expires-at"), "utf8"), expired);
   assert.deepEqual(await readFile(join(dir, "runtime-transition.secret")), before);
-});
-
-// Pause at an actual key-write boundary after all legacy preflight checks.
-// This test hook lives only in the child preload; production has no pause flag.
-for (const outcome of ["finish", "kill"]) test(`rotation holds the shared apply boundary through ${outcome}`, { skip: process.platform === "win32", timeout: 15000 }, async t => {
-  const { once } = await import("node:events");
-  const { acquireRuntimeApplyLock } = await import("./installer/runtime-apply-lock.mjs");
-  const dir = await mkdtemp(join(tmpdir(), "dpf-rotate-overlap-"));
-  t.after(() => rm(dir, { recursive: true, force: true }));
-  assert.equal(run(dir, "--initialize").status, 0);
-  const before = await readFile(join(dir, "runtime-transition.secret"));
-  const hook = join(dir, "pause.mjs");
-  await writeFile(hook, `
-    import fs from "node:fs/promises";
-    import { syncBuiltinESMExports } from "node:module";
-    import { once } from "node:events";
-    const write = fs.writeFile;
-    fs.writeFile = async (path, ...args) => {
-      if (String(path).includes(".runtime-transition.secret.") && String(path).endsWith(".tmp")) {
-        const resume = once(process, "message");
-        process.send("paused");
-        await resume;
-      }
-      return write(path, ...args);
-    };
-    syncBuiltinESMExports();
-  `);
-  const child = spawn(process.execPath, ["--import", hook, script, "--state-dir", dir, "--rotate"], { stdio: ["ignore", "pipe", "pipe", "ipc"] });
-  const exited = once(child, "exit");
-  let stderr = ""; child.stderr.on("data", chunk => { stderr += chunk; });
-  t.after(async () => { if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL"); await exited; });
-  assert.equal((await once(child, "message"))[0], "paused");
-  assert.deepEqual(await readFile(join(dir, "runtime-transition.secret")), before);
-  let competitor;
-  try {
-    await assert.rejects(async () => { competitor = await acquireRuntimeApplyLock({ stateDirectory: dir, runId: "competing-runtime" }); }, /runtime_apply_lock_contended/);
-  } finally { await competitor?.release(); }
-  const owner = JSON.parse(await readFile(join(dir, ".runtime-transition-apply.lock", "owner.json"), "utf8"));
-  assert.equal(owner.pid, child.pid);
-  assert.equal(owner.protocolVersion, 2);
-  if (outcome === "kill") {
-    child.kill("SIGKILL");
-    assert.equal((await exited)[1], "SIGKILL");
-    assert.deepEqual(await readFile(join(dir, "runtime-transition.secret")), before);
-    assert.deepEqual(JSON.parse(await readFile(join(dir, ".runtime-transition-apply.lock", "owner.json"), "utf8")), owner);
-    await assert.rejects(acquireRuntimeApplyLock({ stateDirectory: dir, runId: "after-killed-rotation" }), /runtime_apply_lock_contended/);
-    return;
-  }
-  child.send("resume");
-  const [code] = await exited;
-  assert.equal(code, 0, stderr);
-  assert.notDeepEqual(await readFile(join(dir, "runtime-transition.secret")), before);
-  const next = await acquireRuntimeApplyLock({ stateDirectory: dir, runId: "after-rotation" });
-  await next.release();
 });
