@@ -57,11 +57,12 @@ describe("PortfolioFlowTiles", () => {
     expect(screen.getByText("34 pts")).toBeInTheDocument();
     expect(screen.getByText(/AI on these rooms, last 28 days: \$1\.50 recorded/)).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /Median flow time per week/ })).toBeInTheDocument();
-    // Every measure has its weekly trend; load also shows its change against four weeks ago.
-    expect(screen.getByRole("img", { name: /Rooms in flow at the end of each week/ })).toBeInTheDocument();
+    // Flow time, efficiency and throughput each have a weekly trend.
+    // Load has no trend or change until a room ending closes its run (BI-B0E285FB).
+    expect(screen.queryByRole("img", { name: /Rooms in flow at the end of each week/ })).toBeNull();
     expect(screen.getByRole("img", { name: /Flow efficiency per week/ })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /Runs finished per week/ })).toBeInTheDocument();
-    expect(screen.getByText(/−1 vs prior 28 days/)).toBeInTheDocument();
+    expect(screen.queryByText(/−1 vs prior 28 days/)).toBeNull();
   });
 
   it("names subscription AI use as tokens, never as $0", () => {
