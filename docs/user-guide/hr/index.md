@@ -244,6 +244,12 @@ same approver rules apply as above: if you are not the approver, the platform re
 There is no generic Approve or Reject on a leave recommendation. Approving the recommendation never
 decides the leave by itself.
 
+The **Time off** page shows the recommendation beside each pending request. When a hard rule fires
+(the balance would go negative, or cover would drop below the minimum), the page says **Needs a human
+approver** with the rules that fire as of now. Every pending request also appears in **Needs you** as
+one item that opens the Time off page. When you approve or deny, your decision is recorded against the
+advisor's recommendation, so the platform can tell how often its advice was followed.
+
 Similarly, the lifecycle timeline is visible evidence, but the current page does not provide a general-purpose control for manually appending every possible lifecycle event.
 
 ## Evidence and Recovery Checklist
