@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
+    $transaction: vi.fn(async (run) => run(prisma)),
+    $queryRaw: vi.fn().mockResolvedValue([{ id: "immutable-a" }]),
     aiProviderConnection: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
     providerCapacityStatus: {
       upsert: vi.fn(),
@@ -11,6 +13,7 @@ vi.mock("@dpf/db", () => ({
 }));
 
 import { prisma } from "@dpf/db";
+import { capacityCredentialRevision } from "./scopes";
 import {
   clearProviderCapacityStatus,
   recordProviderCapacityStatus,
@@ -19,13 +22,44 @@ import {
 
 const mockUpsert = prisma.providerCapacityStatus.upsert as ReturnType<typeof vi.fn>;
 const NOW = new Date("2026-06-29T20:00:00.000Z");
+const credential = { id: "credential-a", status: "ok", updatedAt: NOW, secretRef: "encrypted-test", clientSecret: null, cachedToken: null, refreshToken: null };
+const identity = { accountId: "immutable-a", connectionId: "account-a", credentialEntryId: credential.id, credentialUpdatedAt: NOW, credentialRevision: capacityCredentialRevision(credential) };
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockUpsert.mockResolvedValue({ id: "capacity-row" });
+  vi.mocked(prisma.$queryRaw).mockResolvedValue([{ ...credential, id: "immutable-a", credentialId: credential.id }]);
 });
 
 describe("provider capacity store", () => {
+  it("does not write either health or shared quota for a replaced account", async () => {
+    vi.mocked(prisma.$queryRaw).mockResolvedValueOnce([]);
+    await recordProviderCapacityStatus({ providerId: "openai", source: "api",
+      account: identity,
+      classification: { state: "rate_limited", action: "retry_with_backoff", safeSummary: "Wait before retrying.", confidence: "exact", isHumanActionRequired: false },
+    });
+    expect(mockUpsert).not.toHaveBeenCalled();
+    expect(prisma.aiProviderConnection.updateMany).not.toHaveBeenCalled();
+  });
+  it("rejects replacement ciphertext even when timestamp and credential id are unchanged", async () => {
+    vi.mocked(prisma.$queryRaw).mockResolvedValueOnce([{ ...credential, id: "immutable-a", credentialId: credential.id, secretRef: "replacement-ciphertext" }]);
+    await clearProviderCapacityStatus({ providerId: "openai", source: "api", account: identity });
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+  it("updates one current health row across token rotations", async () => {
+    await clearProviderCapacityStatus({ providerId: "openai", source: "api", account: identity });
+    const rotated = { ...credential, updatedAt: new Date(NOW.getTime()+1000), cachedToken: "rotated-ciphertext" };
+    vi.mocked(prisma.$queryRaw).mockResolvedValueOnce([{ ...rotated, id: "immutable-a", credentialId: credential.id }]);
+    await clearProviderCapacityStatus({ providerId: "openai", source: "api", account: { ...identity, credentialUpdatedAt: rotated.updatedAt, credentialRevision: capacityCredentialRevision(rotated) } });
+    expect(mockUpsert.mock.calls[0]![0].where).toEqual(mockUpsert.mock.calls[1]![0].where);
+    expect(mockUpsert.mock.calls[1]![0].update.observedCredentialRevision).not.toBe(mockUpsert.mock.calls[0]![0].update.observedCredentialRevision);
+    expect(vi.mocked(prisma.$queryRaw).mock.invocationCallOrder[0]).toBeLessThan(mockUpsert.mock.invocationCallOrder[0]!);
+  });
+  it("ignores obsolete credential health on the current account projection", async () => {
+    vi.mocked(prisma.providerCapacityStatus.findMany).mockResolvedValue([{ providerId: null, scopeKey: "account:obsolete", state: "reauth_required", retryAt: null, lastObservedAt: NOW,
+      observedCredentialRevision: "old-revision", ownedAccount: { id: identity.accountId, providerId: "openai", connectionId: identity.connectionId, status: "active", credentialEntry: credential } }] as never);
+    expect((await loadProviderCapacitySnapshots()).size).toBe(0);
+  });
   it("shares a conservative consumer quota restriction across aliases while keeping authentication local", async () => {
     vi.mocked(prisma.providerCapacityStatus.findMany).mockResolvedValue([
       { providerId: "codex", state: "quota_resets_at", retryAt: new Date("2026-10-15T00:00:00Z"), lastObservedAt: NOW, providerConnection: null },
@@ -37,7 +71,7 @@ describe("provider capacity store", () => {
   });
   it("binds capacity attachment to the credential revision even when its row identity is reused", async () => {
     await recordProviderCapacityStatus({ providerId: "openai", source: "api",
-      account: { connectionId: "account-a", credentialEntryId: "credential-a", credentialUpdatedAt: NOW },
+      account: identity,
       classification: { state: "reauth_required", action: "reconnect", safeSummary: "Reconnect this account.", confidence: "exact", isHumanActionRequired: true },
     });
     expect(prisma.aiProviderConnection.updateMany).toHaveBeenCalledWith(expect.objectContaining({
@@ -46,7 +80,7 @@ describe("provider capacity store", () => {
   });
   it("records scoped authentication failures without overwriting provider health", async () => {
     await recordProviderCapacityStatus({ providerId: "openai", source: "api",
-      account: { connectionId: "account-a", credentialEntryId: "credential-a" },
+      account: identity,
       classification: { state: "reauth_required", action: "reconnect", safeSummary: "Reconnect this account.", confidence: "exact", isHumanActionRequired: true },
     });
     expect(mockUpsert).toHaveBeenCalledWith(expect.objectContaining({

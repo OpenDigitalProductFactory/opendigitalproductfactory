@@ -1,8 +1,13 @@
 import { createHash } from "node:crypto";
 
 /** Authentication/entitlements belong to the exact account, never a sibling. */
-export function accountCapacityScope(providerId: string, connectionId: string, credentialEntryId?: string | null, credentialUpdatedAt?: Date): string {
-  return `account:${createHash("sha256").update(JSON.stringify([providerId, connectionId, credentialEntryId ?? null, ...(credentialUpdatedAt ? [credentialUpdatedAt.toISOString()] : [])])).digest("hex")}`;
+export function accountCapacityScope(providerId: string, accountId: string): string {
+  return `account:${createHash("sha256").update(JSON.stringify([providerId, accountId])).digest("hex")}`;
+}
+
+/** One-way revision of encrypted storage, never plaintext credentials. */
+export function capacityCredentialRevision(credential: { id: string; updatedAt: Date; secretRef: string | null; clientSecret: string | null; cachedToken: string | null; refreshToken: string | null }): string {
+  return createHash("sha256").update(JSON.stringify([credential.id, credential.updatedAt.toISOString(), credential.secretRef, credential.clientSecret, credential.cachedToken, credential.refreshToken])).digest("hex");
 }
 
 /** Credentials alone do not establish separate upstream quota ownership. */

@@ -95,3 +95,8 @@ claiming shared authentication lineage.
 Rollback excludes additional execution candidates while retaining account,
 credential, pool and usage history. It does not restore singleton constraints
 over additional rows or erase recorded observations.
+
+## Stable capacity projection correction
+The live catalog had no lifecycle declaration for ProviderCapacityStatus or CliPoolStatus. The earlier inherited-retention assumption is superseded. New health rows are stable per immutable account row, unique by ownedAccountId, and removed with that account; credential refresh updates the same current-state row. Legacy provider observations remain unchanged, and immutable TokenUsage/RouteOutcome attribution survives account deletion. CLI quota scopes are bounded by configured provider/adapter pairs and remain conservative where upstream quota ownership is unknown.
+
+Before any account-origin health or shared-quota write, a short database transaction locks the exact active account and its credential, checks the captured encrypted-storage revision, then upserts and attaches the observation. Same-timestamp credential replacement is fenced by a one-way fingerprint of encrypted storage. No network work runs while these locks are held. The projection ignores observations whose credential revision is obsolete. This follows the coordinator's independent platform/data architecture recommendation; advisory kernel insufficient-signal interactions are not claimed as approval or autonomous proceed verdicts.

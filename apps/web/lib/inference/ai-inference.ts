@@ -36,6 +36,7 @@ import { writeAdapterTelemetry } from "../routing/adapter-telemetry-writer";
 import { getCliPoolStatus } from "../routing/cli-pool-status";
 import {
   clearProviderCapacityStatus,
+  capacityAccountIdentity,
   recordProviderCapacityStatus,
 } from "../routing/provider-capacity/store";
 import "../routing/chat-adapter"; // side-effect: registers "chat" adapter
@@ -133,9 +134,9 @@ async function readSelectedProviderAccount(providerId: string, modelId: string, 
   if (plan.providerId !== providerId || plan.modelId !== modelId) throw new ProviderAccountSelectionChangedError(providerId, "Selected provider account plan does not match the request");
   const [account, lifecycle] = await Promise.all([
     prisma.aiProviderConnection.findUnique({ where: { connectionId: plan.providerConnectionId, providerId },
-      select: { connectionId: true, providerId: true, status: true, authMethod: true, executionChannel: true,
-        credentialEntryId: true, credentialEntry: { select: { status: true, updatedAt: true } },
-        accessibleModelIds: true, modelsVerifiedAt: true, evidenceStatus: true, updatedAt: true } }),
+      select: { id: true, connectionId: true, providerId: true, status: true, authMethod: true, executionChannel: true,
+        credentialEntryId: true, credentialEntry: { select: { id: true, status: true, updatedAt: true, secretRef: true, clientSecret: true, cachedToken: true, refreshToken: true } },
+        accessibleModelIds: true, modelsVerifiedAt: true, evidenceStatus: true, updatedAt: true, accountClass: true, supplierContractId: true, lastReviewedAt: true } }),
     prisma.modelProvider.findUnique({ where: { providerId }, select: { status: true } }),
   ]);
   const block = providerAccountExecutionBlock(account, plan);
@@ -272,6 +273,7 @@ export async function callProvider(
   // Transcription uses its registry adapter and has no model-routing connection.
   const needsModelConnection = executionAdapterRaw !== "transcription";
   const selectedAccount = needsModelConnection ? await readSelectedProviderAccount(providerId, modelId, effectivePlan) : null;
+  const capacityAccount = selectedAccount ? capacityAccountIdentity(selectedAccount) : undefined;
   const localProvider = needsModelConnection && (!selectedAccount || isLocalProviderId(providerId)) ? await readEnabledRoutingProvider(providerId) : null;
   // 0. EP-COST-001 Phase 2 — pre-call budget gate.
   // Check the agent's daily token budget before dispatching. If the agent has
@@ -454,10 +456,10 @@ export async function callProvider(
       skillId: attribution?.skillId ?? undefined,
       agentMessageId: attribution?.agentMessageId ?? undefined,
     });
-    if (err instanceof InferenceError && err.capacity) {
+    if (err instanceof InferenceError && err.capacity && (!selectedAccount || capacityAccount)) {
       void recordProviderCapacityStatus({
         providerId,
-        ...(selectedAccount ? { account: { connectionId: selectedAccount.connectionId, credentialEntryId: selectedAccount.credentialEntryId, credentialUpdatedAt: selectedAccount.credentialEntry?.updatedAt } } : {}),
+        ...(capacityAccount ? { account: capacityAccount } : {}),
         classification: err.capacity,
         source: "api",
         rawSnippet: err.rawBody ?? err.message,
@@ -470,7 +472,7 @@ export async function callProvider(
     releaseInferenceSlot?.();
   }
 
-  void clearProviderCapacityStatus({ providerId, source: "api", ...(selectedAccount ? { account: { connectionId: selectedAccount.connectionId, credentialEntryId: selectedAccount.credentialEntryId, credentialUpdatedAt: selectedAccount.credentialEntry?.updatedAt } } : {}) }).catch((capacityErr) => {
+  if (!selectedAccount || capacityAccount) void clearProviderCapacityStatus({ providerId, source: "api", ...(capacityAccount ? { account: capacityAccount } : {}) }).catch((capacityErr) => {
     console.warn("[ai-inference] Failed to clear provider capacity:", capacityErr);
   });
 

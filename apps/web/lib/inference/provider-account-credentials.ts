@@ -37,6 +37,11 @@ export async function getDecryptedCredential(providerId: string, connectionId?: 
     console.warn(`[credentials] getDecryptedCredential(${JSON.stringify(providerId)}) → null: row not found`);
     return null;
   }
+  return decryptProviderCredential(cred, providerId);
+}
+
+/** Decrypt one captured row; token writers retain its encrypted CAS snapshot. */
+export function decryptProviderCredential(cred: NonNullable<Awaited<ReturnType<typeof findProviderCredential>>>, providerId: string) {
   const secretRef    = cred.secretRef    ? decryptSecret(cred.secretRef)    : null;
   const clientSecret = cred.clientSecret ? decryptSecret(cred.clientSecret) : null;
   const cachedToken  = cred.cachedToken  ? decryptSecret(cred.cachedToken)  : null;
@@ -60,7 +65,7 @@ export async function getDecryptedCredential(providerId: string, connectionId?: 
     // PROVIDER-ACTIVATION-AUDIT.md F-16.
     if (cred.status !== "key_rotated") {
       prisma.credentialEntry
-        .update({ where: { id: cred.id }, data: { status: "key_rotated" } })
+        .updateMany({ where: { id: cred.id, updatedAt: cred.updatedAt, secretRef: cred.secretRef, clientSecret: cred.clientSecret, cachedToken: cred.cachedToken, refreshToken: cred.refreshToken }, data: { status: "key_rotated" } })
         // CodeQL #47 (js/tainted-format-string) + js/log-injection:
         // providerId is user-influenced. JSON.stringify is the recognised
         // sanitiser; the format string is constant so %s can't be hijacked.

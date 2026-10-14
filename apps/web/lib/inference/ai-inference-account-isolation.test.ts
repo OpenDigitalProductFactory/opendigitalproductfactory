@@ -14,11 +14,11 @@ vi.mock("./host-gpu-admission", () => ({ assertLocalGpuFree: vi.fn() }));
 vi.mock("@/lib/routing/local-provider-capacity", () => ({ assertProviderDispatchCapacity: vi.fn() }));
 vi.mock("../routing/execution-adapter-registry", () => ({ getExecutionAdapter: () => ({ execute: mock.execute }), registerExecutionAdapter: vi.fn() }));
 vi.mock("../routing/adapter-telemetry-writer", () => ({ writeAdapterTelemetry: vi.fn(async () => {}) }));
-vi.mock("../routing/provider-capacity/store", () => ({ clearProviderCapacityStatus: vi.fn(async () => {}), recordProviderCapacityStatus: vi.fn(async () => {}) }));
+vi.mock("../routing/provider-capacity/store", async importOriginal => ({ ...await importOriginal<typeof import("../routing/provider-capacity/store")>(), clearProviderCapacityStatus: vi.fn(async () => {}), recordProviderCapacityStatus: vi.fn(async () => {}) }));
 import { callProvider } from "./ai-inference";
 
 function account(connectionId: string) {
-  return { connectionId, providerId: "openai", status: "active", authMethod: "api-key", executionChannel: "direct-api", credentialEntryId: `credential-${connectionId}`, credentialEntry: { status: "ok" }, accessibleModelIds: ["model"], modelsVerifiedAt: new Date("2026-10-14T00:00:00Z"), evidenceStatus: "unreviewed" };
+  return { id: `immutable-${connectionId}`, connectionId, providerId: "openai", status: "active", authMethod: "api-key", executionChannel: "direct-api", credentialEntryId: `credential-${connectionId}`, credentialEntry: { id: `credential-${connectionId}`, status: "ok", updatedAt: new Date("2026-10-14T00:00:00Z"), secretRef: "encrypted-fixture", cachedToken: null, refreshToken: null }, accessibleModelIds: ["model"], modelsVerifiedAt: new Date("2026-10-14T00:00:00Z"), evidenceStatus: "unreviewed" };
 }
 function plan(connectionId: string): RoutedExecutionPlan {
   return { providerId: "openai", modelId: "model", providerConnectionId: connectionId, providerConnectionVersion: accountExecutionVersion(account(connectionId)), accountAuthMethod: "api_key", executionChannel: "direct-api", executionAdapter: "chat", recipeId: null, contractFamily: "summarization", maxTokens: 100, providerSettings: {}, toolPolicy: {}, responsePolicy: {} };

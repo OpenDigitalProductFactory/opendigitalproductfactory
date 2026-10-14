@@ -16,6 +16,9 @@ export type ProviderAccountCandidateFacts = {
   accessibleModelIds: string[];
   modelsVerifiedAt: Date | null;
   evidenceStatus: string;
+  accountClass?: string;
+  supplierContractId?: string | null;
+  lastReviewedAt?: Date | null;
 };
 
 export class ProviderAccountSelectionChangedError extends Error {
@@ -31,7 +34,8 @@ export function accountExecutionVersion(account: ProviderAccountCandidateFacts):
     status: account.status, authMethod: account.authMethod, executionChannel: account.executionChannel,
     credentialEntryId: account.credentialEntryId, credential: account.credentialEntry ? { status: account.credentialEntry.status, updatedAt: account.credentialEntry.updatedAt } : null,
     accessibleModelIds: [...account.accessibleModelIds].sort(),
-    modelsVerifiedAt: account.modelsVerifiedAt, evidenceStatus: account.evidenceStatus })).digest("hex");
+    modelsVerifiedAt: account.modelsVerifiedAt, evidenceStatus: account.evidenceStatus,
+    accountClass: account.accountClass, supplierContractId: account.supplierContractId, lastReviewedAt: account.lastReviewedAt })).digest("hex");
 }
 
 /** Dispatch reuses the same account boundary as routing, after a fresh read. */

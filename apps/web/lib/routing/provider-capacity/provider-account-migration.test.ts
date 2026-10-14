@@ -30,14 +30,15 @@ describe.runIf(enabled)("provider account capacity migration on PostgreSQL", () 
       INSERT INTO "TokenUsage" VALUES ('old-usage', NOW(), 'codex');
       INSERT INTO "RouteOutcome" VALUES ('old-outcome', NOW(), 'codex');
     `);
-    await db.query(readFileSync(resolve(__dirname, "../prisma/migrations/20261014010000_provider_account_capacity_scopes/migration.sql"), "utf8"));
+    await db.query(readFileSync(resolve(__dirname, "../../../../../packages/db/prisma/migrations/20261014010000_provider_account_capacity_scopes/migration.sql"), "utf8"));
+    await db.query(readFileSync(resolve(__dirname, "../../../../../packages/db/prisma/migrations/20261014053000_provider_account_health_ownership/migration.sql"), "utf8"));
   });
   afterAll(async () => { await db?.query("ROLLBACK"); await db?.end(); });
 
   it("preserves legacy aliases and health ownership while admitting distinct scoped rows", async () => {
     expect((await db.query('SELECT "providerId", "scopeKey" FROM "ProviderCapacityStatus" WHERE id=$1', ["legacy-capacity"])).rows).toEqual([{ providerId: "codex", scopeKey: "provider:codex" }]);
     expect((await db.query('SELECT "adapterType", "adapterKind", "scopeKey" FROM "CliPoolStatus"')).rows).toEqual([{ adapterType: "codex-cli", adapterKind: "codex", scopeKey: "legacy-cli:codex-cli" }]);
-    await db.query(`INSERT INTO "ProviderCapacityStatus" (id, "scopeKey") VALUES ('health-a', 'account:opaque-a'), ('health-b', 'account:opaque-b')`);
+    await db.query(`INSERT INTO "ProviderCapacityStatus" (id, "scopeKey", "ownedAccountId", "observedCredentialRevision") VALUES ('health-a', 'account:opaque-a', 'account-a', 'revision-a'), ('health-b', 'account:opaque-b', 'account-b', 'revision-b')`);
     await db.query(`INSERT INTO "CliPoolStatus" (id, "adapterKind", "scopeKey") VALUES ('scoped-pool', 'codex', 'cli:codex-cli:provider:codex')`);
     expect((await db.query('SELECT "capacityStatusId" FROM "AiProviderConnection" WHERE id=$1', ["account-a"])).rows[0].capacityStatusId).toBe("legacy-capacity");
   });
@@ -48,6 +49,9 @@ describe.runIf(enabled)("provider account capacity migration on PostgreSQL", () 
     await db.query("SAVEPOINT duplicate_health");
     await expect(db.query(`UPDATE "AiProviderConnection" SET "capacityStatusId"='legacy-capacity' WHERE id='account-b'`)).rejects.toMatchObject({ code: "23505" });
     await db.query("ROLLBACK TO SAVEPOINT duplicate_health");
+    await db.query("SAVEPOINT duplicate_current_health");
+    await expect(db.query(`INSERT INTO "ProviderCapacityStatus" (id,"scopeKey","ownedAccountId") VALUES ('duplicate-current','account:other','account-a')`)).rejects.toMatchObject({ code: "23505" });
+    await db.query("ROLLBACK TO SAVEPOINT duplicate_current_health");
   });
 
   it("retains unattributed history and immutable account attribution after account deletion", async () => {
@@ -56,6 +60,8 @@ describe.runIf(enabled)("provider account capacity migration on PostgreSQL", () 
       await db.query(`INSERT INTO "${table}" (id, "createdAt", "providerId", "providerConnectionId", "quotaScopeKey") VALUES ($1, NOW(), 'codex', 'account-a', 'provider:codex')`, [`new-${table}`]);
     }
     await db.query(`DELETE FROM "AiProviderConnection" WHERE id='account-a'`);
+    expect((await db.query(`SELECT COUNT(*)::int AS n FROM "ProviderCapacityStatus" WHERE "ownedAccountId"='account-a'`)).rows[0].n).toBe(0);
+    expect((await db.query(`SELECT COUNT(*)::int AS n FROM "ProviderCapacityStatus" WHERE id='legacy-capacity'`)).rows[0].n).toBe(1);
     for (const table of ["TokenUsage", "RouteOutcome"]) expect((await db.query(`SELECT "providerConnectionId" FROM "${table}" WHERE id=$1`, [`new-${table}`])).rows[0].providerConnectionId).toBe("account-a");
   });
 });

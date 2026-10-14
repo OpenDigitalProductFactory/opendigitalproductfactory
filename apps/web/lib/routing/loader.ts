@@ -208,7 +208,7 @@ async function queryEndpointManifests(readLocalContext: LocalContextReader): Pro
     where: { providerId: { in: [...providers.keys()] } },
     select: { connectionId: true, providerId: true, status: true, authMethod: true, executionChannel: true,
       credentialEntryId: true, updatedAt: true, credentialEntry: { select: { status: true, updatedAt: true } },
-      accessibleModelIds: true, modelsVerifiedAt: true, evidenceStatus: true },
+      accessibleModelIds: true, modelsVerifiedAt: true, evidenceStatus: true, accountClass: true, supplierContractId: true, lastReviewedAt: true },
   });
   const candidates = await Promise.all(profiles.map(async profile => expandProviderAccountCandidates(
     await profileToManifest(profile, readLocalContext, undefined, riskAcceptedByProvider),

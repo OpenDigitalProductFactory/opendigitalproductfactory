@@ -1,12 +1,17 @@
 import { prisma, type Prisma } from "@dpf/db";
 
 import type { ProviderCapacityClassification } from "./types";
-import { accountCapacityScope, isAccountCapacityState } from "./scopes";
+import { accountCapacityScope, capacityCredentialRevision, isAccountCapacityState } from "./scopes";
 import { accountRuntimeKey } from "../provider-account-candidates";
 import { capacityRoutingExclusionReason, type CapacitySnapshot } from "../capacity-routing-exclude";
 
 export type ProviderCapacitySource = "api" | "cli" | "opencode" | "oauth" | "manual";
-export type CapacityAccountIdentity = { connectionId: string; credentialEntryId: string | null; credentialUpdatedAt?: Date };
+export type CapacityAccountIdentity = { accountId: string; connectionId: string; credentialEntryId: string | null; credentialUpdatedAt: Date; credentialRevision: string };
+
+export function capacityAccountIdentity(account: { id: string; connectionId: string; credentialEntryId: string | null; credentialEntry: { id: string; updatedAt: Date; secretRef: string | null; clientSecret: string | null; cachedToken: string | null; refreshToken: string | null } | null }): CapacityAccountIdentity | undefined {
+  return account.credentialEntry ? { accountId: account.id, connectionId: account.connectionId, credentialEntryId: account.credentialEntryId,
+    credentialUpdatedAt: account.credentialEntry.updatedAt, credentialRevision: capacityCredentialRevision(account.credentialEntry) } : undefined;
+}
 
 /** Conservative quota grouping proves no shared authentication or grant lineage. */
 export function indexProviderCapacityByProvider<T extends { providerId: string | null; state: string; retryAt: Date | null; lastObservedAt?: Date | null }>(rows: readonly T[], nowMs = Date.now()): Map<string, T> {
@@ -31,8 +36,8 @@ export function capacityProviderIds(providerIds: readonly string[]): string[] {
 /** One projection feeds routing; account-local observations never become global. */
 export async function loadProviderCapacitySnapshots(): Promise<Map<string, CapacitySnapshot>> {
   const rows = await prisma.providerCapacityStatus.findMany({
-    select: { providerId: true, scopeKey: true, state: true, retryAt: true, lastObservedAt: true,
-      providerConnection: { select: { connectionId: true, providerId: true, credentialEntryId: true, credentialEntry: { select: { updatedAt: true } } } } },
+    select: { providerId: true, scopeKey: true, observedCredentialRevision: true, state: true, retryAt: true, lastObservedAt: true,
+      ownedAccount: { select: { id: true, connectionId: true, providerId: true, status: true, credentialEntryId: true, credentialEntry: { select: { id: true, status: true, updatedAt: true, secretRef: true, clientSecret: true, cachedToken: true, refreshToken: true } } } } },
   });
   const map = new Map<string, CapacitySnapshot>();
   for (const [providerId, row] of indexProviderCapacityByProvider(rows)) {
@@ -40,8 +45,10 @@ export async function loadProviderCapacitySnapshots(): Promise<Map<string, Capac
   }
   for (const row of rows) {
     const snapshot = { state: row.state, retryAtMs: row.retryAt?.getTime() ?? null, observedAtMs: row.lastObservedAt?.getTime() ?? null };
-    const account = row.providerConnection;
-    if (account && row.scopeKey === accountCapacityScope(account.providerId, account.connectionId, account.credentialEntryId, account.credentialEntry?.updatedAt)) {
+    const account = row.ownedAccount;
+    if (account && ["active", "degraded"].includes(account.status) && account.credentialEntry?.status === "ok"
+      && row.scopeKey === accountCapacityScope(account.providerId, account.id)
+      && row.observedCredentialRevision === capacityCredentialRevision(account.credentialEntry)) {
       map.set(accountRuntimeKey(account.providerId, account.connectionId), snapshot);
     }
   }
@@ -55,20 +62,35 @@ async function persistScopedCapacity(input: {
     await prisma.providerCapacityStatus.upsert({ where: { providerId: input.providerId }, create: { providerId: input.providerId, ...data }, update: data });
     return;
   }
-  const accountLocal = isAccountCapacityState(String(data.state)) || data.state === "available";
-  const scopeKey = accountCapacityScope(input.providerId, input.account.connectionId, input.account.credentialEntryId, input.account.credentialUpdatedAt);
-  const row = await prisma.providerCapacityStatus.upsert({
+  const identity = input.account;
+  await prisma.$transaction(async tx => {
+    // Lock account then credential together before ANY health or quota write.
+    // Replacement/deletion waits until this short transaction commits; no network.
+    const current = await tx.$queryRaw<Array<{ id: string; credentialId: string; updatedAt: Date; secretRef: string | null; clientSecret: string | null; cachedToken: string | null; refreshToken: string | null }>>`
+      SELECT a.id, c.id AS "credentialId", c."updatedAt", c."secretRef", c."clientSecret", c."cachedToken", c."refreshToken"
+      FROM "AiProviderConnection" a JOIN "CredentialEntry" c ON c.id=a."credentialEntryId"
+      WHERE a.id=${identity.accountId} AND a."connectionId"=${identity.connectionId}
+        AND a."providerId"=${input.providerId} AND a."credentialEntryId"=${identity.credentialEntryId}
+        AND a.status IN ('active','degraded') AND c.status='ok' AND c."updatedAt"=${identity.credentialUpdatedAt}
+      FOR UPDATE OF a, c`;
+    const credential = current[0];
+    if (!credential || capacityCredentialRevision({ ...credential, id: credential.credentialId }) !== identity.credentialRevision) return;
+    const accountLocal = isAccountCapacityState(String(data.state)) || data.state === "available";
+    const scopeKey = accountCapacityScope(input.providerId, identity.accountId);
+    const revision = accountLocal ? { observedCredentialRevision: identity.credentialRevision } : {};
+    const row = await tx.providerCapacityStatus.upsert({
     where: accountLocal ? { scopeKey } : { providerId: input.providerId },
-    create: { providerId: accountLocal ? null : input.providerId, ...(accountLocal ? { scopeKey } : {}), ...data },
-    update: data,
+    create: { providerId: accountLocal ? null : input.providerId, ...(accountLocal ? { scopeKey, ownedAccountId: identity.accountId } : {}), ...data, ...revision },
+    update: { ...data, ...revision },
   });
-  // A stale attempt cannot attach observations to replacement credentials.
-  await prisma.aiProviderConnection.updateMany({
-    where: { connectionId: input.account.connectionId, providerId: input.providerId,
-      credentialEntryId: input.account.credentialEntryId,
-      ...(input.account.credentialUpdatedAt ? { credentialEntry: { is: { updatedAt: input.account.credentialUpdatedAt } } } : {}),
+    const attached = await tx.aiProviderConnection.updateMany({
+    where: { id: identity.accountId, connectionId: identity.connectionId, providerId: input.providerId,
+      credentialEntryId: identity.credentialEntryId,
+      credentialEntry: { is: { updatedAt: identity.credentialUpdatedAt } },
       status: { in: ["active", "degraded"] } },
     data: accountLocal ? { capacityStatusId: row.id } : { quotaStatusId: row.id },
+  });
+    if (attached.count !== 1) throw new Error("Account capacity ownership changed inside transaction");
   });
 }
 

@@ -20,7 +20,8 @@ import { seedKnownModels } from "@/lib/inference/known-model-seeding";
 import { recordDiscoveredAuthEligibility } from "@/lib/routing/model-auth-eligibility";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { persistDiscoveredInventory } from "./discovered-model-inventory";
-import { findProviderCredential, getDecryptedCredential, resolveCredentialProviderId } from "./provider-account-credentials";
+import { decryptProviderCredential, findProviderCredential, getDecryptedCredential, resolveCredentialProviderId } from "./provider-account-credentials";
+import { ProviderAccountSelectionChangedError } from "../routing/provider-account-candidates";
 export { getDecryptedCredential, resolveCredentialProviderId } from "./provider-account-credentials";
 import { supportsTextGeneration } from "@/lib/routing/model-classifier";
 import { providerWorkspaceHeaders } from "./provider-workspace";
@@ -223,7 +224,8 @@ export async function getProviderBearerToken(providerId: string, connectionId?: 
   }
 
   // Existing client_credentials flow
-  const credential = await getDecryptedCredential(providerId, connectionId, expectedExecutionVersion);
+  const storedCredential = connectionId ? await findProviderCredential(providerId, connectionId, expectedExecutionVersion) : null;
+  const credential = connectionId ? storedCredential && decryptProviderCredential(storedCredential, providerId) : await getDecryptedCredential(providerId);
   if (!credential) return { error: "No credential configured" };
   if (!credential.clientId || !credential.clientSecret || !credential.tokenEndpoint) {
     return { error: "OAuth credentials incomplete — need client ID, secret, and token endpoint" };
@@ -257,17 +259,23 @@ export async function getProviderBearerToken(providerId: string, connectionId?: 
     const body = await res.json() as { access_token: string; expires_in: number };
     const expiresAt = new Date(Date.now() + body.expires_in * 1000);
 
-    await prisma.credentialEntry.update({
-      where: { id: credential.id },
-      data: {
-        cachedToken: encryptSecret(body.access_token),
-        tokenExpiresAt: expiresAt,
-        status: "ok",
-      },
-    });
+    const data = { cachedToken: encryptSecret(body.access_token), tokenExpiresAt: expiresAt, status: "ok" };
+    if (connectionId) {
+      const written = await prisma.credentialEntry.updateMany({ where: {
+        id: credential.id, updatedAt: credential.updatedAt,
+        ...(storedCredential ? { secretRef: storedCredential.secretRef, clientSecret: storedCredential.clientSecret, cachedToken: storedCredential.cachedToken, refreshToken: storedCredential.refreshToken } : {}),
+        providerConnection: { is: { connectionId, providerId, credentialEntryId: credential.id, status: { in: ["active", "degraded"] } } },
+      }, data });
+      if (written.count !== 1) {
+        const error = "Selected provider account changed during token exchange";
+        if (expectedExecutionVersion) throw new ProviderAccountSelectionChangedError(providerId, error);
+        return { error };
+      }
+    } else await prisma.credentialEntry.update({ where: { id: credential.id }, data });
 
     return { token: body.access_token };
   } catch (err) {
+    if (err instanceof ProviderAccountSelectionChangedError) throw err;
     return { error: err instanceof Error ? err.message : "Token exchange error" };
   }
 }

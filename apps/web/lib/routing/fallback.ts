@@ -320,7 +320,7 @@ export async function callWithFallbackChain(
       where: { connectionId: entry.providerConnectionId, providerId: entry.providerId },
       select: { connectionId: true, providerId: true, status: true, authMethod: true, executionChannel: true,
         credentialEntryId: true, credentialEntry: { select: { status: true, updatedAt: true } },
-        accessibleModelIds: true, modelsVerifiedAt: true, evidenceStatus: true, updatedAt: true },
+        accessibleModelIds: true, modelsVerifiedAt: true, evidenceStatus: true, updatedAt: true, accountClass: true, supplierContractId: true, lastReviewedAt: true },
     }) : null;
     const accountBlock = providerAccountExecutionBlock(account, entry);
     if (accountBlock) {

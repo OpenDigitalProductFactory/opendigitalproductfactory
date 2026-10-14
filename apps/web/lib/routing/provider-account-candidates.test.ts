@@ -24,6 +24,11 @@ function account(overrides: Partial<ProviderAccountCandidateFacts> = {}): Provid
   return { connectionId: "business", providerId: "anthropic", status: "active", authMethod: "api-key", executionChannel: "direct-api", credentialEntryId: "owned-credential", credentialEntry: { status: "ok" }, accessibleModelIds: ["model"], modelsVerifiedAt: new Date(), evidenceStatus: "unreviewed", ...overrides };
 }
 describe("account manifest expansion", () => {
+  it("invalidates a selected account when its data-use review changes without changing authentication", () => {
+    const a = Object.assign(account(), { accountClass: "business", supplierContractId: "contract-a", lastReviewedAt: new Date("2026-10-14T00:00:00Z") });
+    const b = Object.assign({ ...a }, { lastReviewedAt: new Date("2026-10-14T01:00:00Z") });
+    expect(accountExecutionVersion(a)).not.toBe(accountExecutionVersion(b));
+  });
   it("preserves the selected response protocol and recipe when binding an HTTP account", () => {
     const plan = { providerId: "chatgpt", executionAdapter: "responses", recipeId: "reviewed-recipe" } as RoutedExecutionPlan;
     const bound = bindProviderAccountExecution(plan, { ...endpoint, providerId: "chatgpt", providerConnectionId: "business", accountAuthMethod: "oauth2_authorization_code", executionChannel: "direct-api" });

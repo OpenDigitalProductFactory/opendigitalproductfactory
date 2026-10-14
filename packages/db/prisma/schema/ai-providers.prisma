@@ -100,6 +100,7 @@ model AiProviderConnection {
   supplierContract SupplierContract?         @relation(fields: [supplierContractId], references: [id], onDelete: SetNull)
   capacityStatus   ProviderCapacityStatus?   @relation(fields: [capacityStatusId], references: [id], onDelete: SetNull)
   quotaStatus      ProviderCapacityStatus?   @relation("AccountQuota", fields: [quotaStatusId], references: [id], onDelete: SetNull)
+  ownedHealth      ProviderCapacityStatus?   @relation("OwnedAccountHealth")
   trustEvidence    ComplianceEvidence[]
   oauthFlows       OAuthPendingFlow[]
 
@@ -603,6 +604,7 @@ enum CliPoolAdapterKind {
   codex
 }
 
+/// @dpf lifecycle=operational retention=domain sensitivity=confidential categories=operational owner=platform-owner steward=data-steward
 model CliPoolStatus {
   id                String    @id @default(cuid())
   /// "claude-cli" | "codex-cli"
@@ -640,10 +642,13 @@ model CliPoolStatus {
 // Current live capacity state for a provider. This separates runtime capacity
 // (quota, throttles, credits, plan limits) from ModelProvider.status, which is
 // the configured/admin lifecycle state.
+/// @dpf lifecycle=operational retention=domain sensitivity=confidential categories=operational owner=platform-owner steward=data-steward
 model ProviderCapacityStatus {
   id                    String                @id @default(cuid())
   providerId            String?               @unique
   scopeKey              String?               @unique
+  ownedAccountId        String?               @unique
+  observedCredentialRevision String?
   state                 String
   action                String
   retryAt               DateTime?
@@ -661,6 +666,7 @@ model ProviderCapacityStatus {
   provider              ModelProvider?        @relation(fields: [providerId], references: [providerId], onDelete: Cascade)
   providerConnection    AiProviderConnection?
   quotaConnections      AiProviderConnection[] @relation("AccountQuota")
+  ownedAccount          AiProviderConnection? @relation("OwnedAccountHealth", fields: [ownedAccountId], references: [id], onDelete: Cascade)
 
   @@index([state, retryAt])
   @@index([isHumanActionRequired, updatedAt])
