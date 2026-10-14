@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, realpath, symlink, writeFile, readdir } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, symlink, writeFile, readdir, rename, mkdir } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { join, dirname, basename } from "node:path";
 import { acquireInstallStateLock, restoreInstallState, sha256, updateInstallState } from "./install-state-transaction.mjs";
@@ -210,4 +210,66 @@ test("governed rollback restores exact recovery bytes under the shared lock", as
   await restoreInstallState(statePath, recoveryPath);
   assert.deepEqual(await readFile(statePath), original);
   assert.deepEqual((await readdir(dir)).filter(name => name.includes(".tmp-") || name.endsWith(".lock")), []);
+});
+
+test("a verified held state lock spans update and rollback without reacquisition or release", async () => {
+  const { dir, statePath } = await fixture(); const before = await readFile(statePath);
+  const held = await acquireInstallStateLock(statePath);
+  const recoveryPath = join(dir, "prior.json");
+  try {
+    await updateInstallState(statePath, state => ({ ...state, installerVersion: "held" }), { heldLock: held, recoveryPath, timeoutMs: 20 });
+    assert.equal(JSON.parse(await readFile(`${statePath}.lock`)).ownerId, held.owner.ownerId);
+    await restoreInstallState(statePath, recoveryPath, { heldLock: held, timeoutMs: 20 });
+    assert.deepEqual(await readFile(statePath), before);
+    await assert.rejects(acquireInstallStateLock(statePath, { timeoutMs: 20 }), /lock_timeout/);
+  } finally { await held.release(); }
+});
+test("a copied or wrong-target held lock cannot authorize a state write", async () => {
+  const first = await fixture(); const other = await fixture();
+  const held = await acquireInstallStateLock(first.statePath);
+  try {
+    for (const [target, heldLock] of [[first.statePath, { ...held }], [other.statePath, held]]) {
+      const before = await readFile(target);
+      await assert.rejects(updateInstallState(target, state => ({ ...state, installerVersion: "unauthorized" }), { heldLock, timeoutMs: 20 }), /install_state_held_lock_invalid/);
+      assert.deepEqual(await readFile(target), before);
+    }
+  } finally { await held.release(); }
+});
+test("held ownership lost during transform stops before replacement and preserves successor", async () => {
+  const { statePath } = await fixture(); const before = await readFile(statePath);
+  const held = await acquireInstallStateLock(statePath);
+  const successor = { ...held.owner, ownerId: "successor" };
+  await assert.rejects(updateInstallState(statePath, async state => {
+    await writeFile(`${statePath}.lock`, JSON.stringify(successor));
+    return { ...state, installerVersion: "lost" };
+  }, { heldLock: held, timeoutMs: 20 }), /install_state_held_lock_invalid/);
+  assert.deepEqual(await readFile(statePath), before);
+  assert.deepEqual(JSON.parse(await readFile(`${statePath}.lock`)), successor);
+});
+
+test("lost parent generation never cleans a replacement directory temp file", async () => {
+  const { dir, statePath } = await fixture(); const held = await acquireInstallStateLock(statePath);
+  const old = `${dir}-old`; let replacementTemp;
+  await assert.rejects(updateInstallState(statePath, state => ({ ...state, installerVersion: "replaced" }), {
+    heldLock: held,
+    onStage: async (name, context) => {
+      if (name !== "temp-flushed") return;
+      await rename(dir, old); await mkdir(dir, { mode: 0o700 });
+      replacementTemp = context.tempPath;
+      await writeFile(replacementTemp, "replacement-owned-file");
+    },
+  }), /install_state_held_lock_invalid/);
+  assert.equal(await readFile(replacementTemp, "utf8"), "replacement-owned-file");
+});
+
+test("one held capability cannot run overlapping transactions or release mid-write", async () => {
+  const { statePath } = await fixture(); const held = await acquireInstallStateLock(statePath);
+  let entered; const started = new Promise(resolve => { entered = resolve; });
+  let resume; const waiting = new Promise(resolve => { resume = resolve; });
+  const first = updateInstallState(statePath, async state => { entered(); await waiting; return { ...state, installerVersion: "first" }; }, { heldLock: held });
+  await started;
+  try {
+    await assert.rejects(updateInstallState(statePath, state => state, { heldLock: held }), /install_state_held_lock_busy/);
+    await assert.rejects(held.release(), /install_state_held_lock_busy/);
+  } finally { resume(); await first; await held.release(); }
 });
