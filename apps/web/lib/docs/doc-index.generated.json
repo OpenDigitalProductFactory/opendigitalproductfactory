@@ -2374,7 +2374,8 @@
         "governed-controls",
         "provider-ui-preservation-contract",
         "account-presentation-boundaries",
-        "migration-and-verification"
+        "migration-and-verification",
+        "measured-route-integration"
       ]
     },
     "docs/architecture/review-reliability-recovery.md": {

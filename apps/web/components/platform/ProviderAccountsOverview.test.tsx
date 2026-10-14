@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({ add: vi.fn(), push: vi.fn(), refresh: vi.fn() 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push, refresh: mocks.refresh }) }));
 vi.mock("@/lib/actions/provider-accounts", () => ({ addProviderAccount: mocks.add }));
 import { ProviderAccountsOverview, type ProviderAccountOverviewRow } from "./ProviderAccountsOverview";
+import { measureUxBudget } from "@/lib/ux-budget/measure";
 
 const copy = { connection: "Accounts", accountName: "Account name", provider: "Provider", allowedWork: "Allowed work", models: "Models", capacity: "Capacity", manage: "Manage", addAccount: "Add account", addProvider: "Add provider", noAccounts: "No accounts", catalog: "Available providers", searchAccounts: "Search accounts", searchProviders: "Search providers", authMethod: "Authentication method", apiKeyMethod: "API key", oauthMethod: "Sign-in", workloadMethod: "Client credentials", cancel: "Cancel", failed: "Failed" };
 const catalog = [{ providerId: "codex", name: "Codex", summary: "Coding and reasoning", supportedAuthMethods: ["oauth2_authorization_code"] }, { providerId: "anthropic", name: "Anthropic", summary: "Writing and coding", supportedAuthMethods: ["api_key"] }];
@@ -13,6 +14,14 @@ beforeEach(() => { vi.resetAllMocks(); mocks.add.mockResolvedValue({ ok: true, d
 afterEach(cleanup);
 
 describe("compact provider account overview", () => {
+  it.each([true, false])("keeps an account next action visible when advisory help is disclosed (write=%s)", canWrite => {
+    const { container } = render(<><details><summary>Allowed work</summary>
+      <button data-owner-first-next-action>Ask for advice</button></details>
+      <ProviderAccountsOverview rows={[row]} catalog={catalog} firstRun={false} canWrite={canWrite} copy={copy} /></>);
+    const metrics = measureUxBudget(container.innerHTML);
+    expect(metrics.hasNextActionMarker).toBe(true);
+    expect(metrics.buriedPrimaryAction).toBe(0);
+  });
   it("shows the catalog only on first arrival or explicit Add provider", () => {
     const { rerender } = render(<ProviderAccountsOverview rows={[row]} catalog={catalog} firstRun={false} canWrite copy={copy} />);
     expect(screen.queryByRole("heading", { name: "Available providers" })).toBeNull();

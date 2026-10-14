@@ -66,7 +66,7 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
       {row.resetSummary && <div className="text-xs text-[var(--dpf-muted)]">{row.resetSummary}</div>}
     </div> },
     { key: "manage", header: copy.manage, cell: row => <div className="flex flex-wrap gap-2">
-      <Link href={providerAccountHref(row)} className="py-2 text-[var(--dpf-accent)]">{copy.manage}</Link>
+      <Link href={providerAccountHref(row)} data-owner-first-next-action={!canWrite && row.connectionId === visibleRows[0]?.connectionId ? "" : undefined} className="py-2 text-[var(--dpf-accent)]">{copy.manage}</Link>
       {canWrite && firstAccountByProvider.get(row.providerId) === row.connectionId
         && supportsAccount(catalogById.get(row.providerId)) &&
         <button type="button" className={buttonClass} disabled={pending} onClick={() => beginAccount(catalogById.get(row.providerId)!)}>{copy.addAccount}</button>}
@@ -84,7 +84,7 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
   return <section className="space-y-3" aria-label={copy.connection} aria-busy={pending}>
     <div className="flex flex-wrap items-center justify-between gap-2">
       <FilterBar facets={[{ kind: "search", key: "query", placeholder: copy.searchAccounts }]} value={{ query: search }} onChange={next => setSearch(next.query ?? "")} resultCount={visibleRows.length} />
-      {canWrite && <button type="button" className={buttonClass} disabled={pending} aria-expanded={showCatalog} aria-controls={`${id}-catalog`} onClick={() => setShowCatalog(!showCatalog)}>{copy.addProvider}</button>}
+      {canWrite && <button type="button" data-owner-first-next-action className={buttonClass} disabled={pending} aria-expanded={showCatalog} aria-controls={`${id}-catalog`} onClick={() => setShowCatalog(!showCatalog)}>{copy.addProvider}</button>}
     </div>
     <DataTable columns={columns} rows={visibleRows} getRowKey={row => row.connectionId} empty={copy.noAccounts} dense ariaLabel={copy.connection} />
     {showCatalog && <Surface padding="sm"><div ref={catalogRef} id={`${id}-catalog`}>
