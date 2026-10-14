@@ -348,6 +348,48 @@ export function parseStringArrayMap(body) {
   return out;
 }
 
+/** Resolve declared named spreads without executing the authorization module. */
+export function resolveStringArrayMap(source, identifier, { modulePath, readModule }, ancestors = new Set()) {
+  const identity = `${modulePath}:${identifier}`;
+  if (ancestors.has(identity)) throw new Error(`cyclic_grant_map:${identity}`);
+  const seen = new Set([...ancestors, identity]);
+  const clean = stripLineComments(source);
+  const declaration = new RegExp(`\\bconst\\s+${identifier}\\b`).exec(clean);
+  if (!declaration) throw new Error(`unresolved_grant_map:${identity}`);
+  const body = objectLiteralBody(clean.slice(declaration.index), identifier);
+  if (body === null) throw new Error(`unresolved_grant_map:${identity}`);
+  const result = new Map();
+  // Preserve JavaScript member order: later literals/spreads replace earlier keys.
+  const members = /\.\.\.([A-Za-z_$][\w$]*)|["']?([A-Za-z_][A-Za-z0-9_-]*)["']?\s*:\s*\[([^\]]*)\]/g;
+  for (const member of body.matchAll(members)) {
+    if (!member[1]) {
+      for (const [name, grants] of parseStringArrayMap(member[0])) result.set(name, grants);
+      continue;
+    }
+    const localName = member[1];
+    let imported;
+    for (const statement of clean.matchAll(/import\s*\{([^}]+)\}\s*from\s*["']([^"']+)["']/g)) {
+      const binding = statement[1].split(",").map(value => value.trim().match(/^([\w$]+)(?:\s+as\s+([\w$]+))?$/))
+        .find(value => value && (value[2] ?? value[1]) === localName);
+      if (binding) { imported = { name: binding[1], ...readModule(statement[2], modulePath) }; break; }
+    }
+    const child = imported ?? { name: localName, source: clean, modulePath };
+    for (const [name, grants] of resolveStringArrayMap(child.source, child.name, { modulePath: child.modulePath, readModule }, seen)) {
+      result.set(name, grants);
+    }
+  }
+  return result;
+}
+
+function readGrantSourceModule(specifier, from) {
+  if (!specifier.startsWith("@/") && !specifier.startsWith(".")) throw new Error(`unsupported_grant_import:${specifier}`);
+  const candidate = specifier.startsWith("@/") ? P("apps/web", specifier.slice(2)) : path.resolve(P(path.dirname(from)), specifier);
+  const relative = normalizeGeneratedPath(path.relative(REPO_ROOT, candidate));
+  if (relative.startsWith("../") || path.isAbsolute(relative)) throw new Error("grant_import_outside_repository");
+  const modulePath = fs.existsSync(candidate) ? relative : `${relative}.ts`;
+  return { modulePath, source: read(modulePath) };
+}
+
 /** Parse `"key": "value"` string pairs from an object body. */
 export function parseStringMap(body) {
   const out = new Map();
@@ -505,7 +547,9 @@ export function loadSubstrate() {
   const onboardingAgents = new Set(onboardingGrants.keys());
 
   const grantImplications = parseStringArrayMap(objectLiteralBody(grantsSrc, "GRANT_IMPLICATIONS"));
-  const toolToGrants = parseStringArrayMap(objectLiteralBody(grantsSrc, "TOOL_TO_GRANTS"));
+  const toolToGrants = resolveStringArrayMap(grantsSrc, "TOOL_TO_GRANTS", {
+    modulePath: "apps/web/lib/tak/agent-grants.ts", readModule: readGrantSourceModule,
+  });
 
   // ── Namespace 3: profession families and their corpora.
   const professions = JSON.parse(read("docs/professions/registry.json"));
@@ -798,7 +842,7 @@ export function scoreIdentity(ident, s) {
   // ladder measures whether the agent can consult, this measures whether the
   // platform makes it. Folding them would blame the agent for a platform gap.
   const reachableSideEffecting = [...(s.toolDefs ?? new Map()).entries()]
-    .filter(([name, def]) => def.sideEffect && grantsSatisfy(s.toolToGrants.get(name) ?? [], expanded))
+    .filter(([name, def]) => def.sideEffect && canCall(name, expanded, s.toolToGrants).reachable)
     .map(([name]) => name);
   const reachableGated = reachableSideEffecting.filter((n) => (s.consequentialTools ?? new Set()).has(n));
 

@@ -207,6 +207,7 @@ export type ToolDefinition = {
 };
 
 export type EndpointTestRunRequest = {
+  concurrencyOnly?: boolean;
   endpointId?: string;
   modelId?: string;
   taskType?: string;

@@ -16,6 +16,9 @@ param(
     # production install from a disposable one. Recorded in installer state as the
     # canonical local host fact; an undeclared install is treated as production.
     [ValidateSet("production", "development", "test")][string]$EnvironmentClass,
+    # Answers the installer monitoring question (Prometheus + Grafana). Without it an
+    # interactive install asks; -Headless leaves monitoring off and undecided.
+    [ValidateSet("On", "Off")][string]$Monitoring,
     [ValidateNotNullOrEmpty()][string]$OrganizationJoinPackage,
     [switch]$Help
 )
@@ -51,6 +54,12 @@ Flags:
                 agents may do -- teardown, credential handling, and writes to a
                 paired installation. An undeclared install is treated as
                 production.
+  -Monitoring <On|Off>
+                Answer the monitoring question without a prompt. Monitoring
+                (Prometheus + Grafana) watches this platform and its host;
+                change it later in Settings > Monitoring. -Headless without
+                this flag leaves monitoring off and undecided. A choice already
+                recorded on this install is kept and never re-asked.
   -OrganizationJoinPackage <file.dpfjoin>
                 Join an existing organization trust domain during install. The
                 private package is validated, consumed, and deleted on success;
@@ -1953,6 +1962,34 @@ if (-not (Test-StepDone "started")) {
         Write-OK "Installation environment class: $EnvironmentClass"
     } else {
         Write-Host "  No environment class declared; this install is treated as production until one is set." -ForegroundColor Yellow
+    }
+    # Monitoring question (BI-31F11C37). Recorded BEFORE the capability profiles
+    # resolve, so the first compose up starts monitoring when it was chosen. A
+    # recorded enabled/disabled decision is never re-asked.
+    if (Test-DpfMonitoringPromptNeeded -InstallDir $DPF_DIR) {
+        if ($Monitoring) {
+            $monitoringChoice = $Monitoring.ToLowerInvariant()
+            $monitoringSource = "installer-flag"
+        } elseif ($Headless) {
+            $monitoringChoice = "none"
+            $monitoringSource = "headless-default"
+        } else {
+            $monitoringCost = Get-DpfMonitoringCost -InstallDir $DPF_DIR
+            Write-Host ""
+            Write-Host "  Monitoring (Prometheus + Grafana) watches this platform and its host." -ForegroundColor Cyan
+            Write-Host "  It uses $monitoringCost when on. You can change this later in Settings > Monitoring." -ForegroundColor White
+            $monitoringAnswer = Read-DPFInstallerInput "  Turn monitoring on? [y/N]"
+            $monitoringChoice = if ("$monitoringAnswer".Trim() -match '^(?i)y(es)?$') { "on" } else { "off" }
+            $monitoringSource = "installer-prompt"
+        }
+        Set-DpfMonitoringChoice -InstallDir $DPF_DIR -Choice $monitoringChoice -Source $monitoringSource
+        switch ($monitoringChoice) {
+            "on" { Write-OK "Monitoring: on" }
+            "off" { Write-OK "Monitoring: off (turn it on later in Settings > Monitoring)" }
+            default { Write-Host "  Monitoring: off and undecided; the portal will offer the choice." -ForegroundColor Yellow }
+        }
+    } elseif ($Monitoring) {
+        Write-Host "  Monitoring was already chosen on this install; -Monitoring $Monitoring is ignored. Change it in Settings > Monitoring." -ForegroundColor Yellow
     }
     $capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir $DPF_DIR
     $env:COMPOSE_PROFILES = (@($capabilityProjection.composeProfiles) -join ',')
