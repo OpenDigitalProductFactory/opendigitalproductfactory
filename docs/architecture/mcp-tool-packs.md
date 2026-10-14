@@ -64,6 +64,27 @@ edge into the runner, the readiness composer or `lib/self-upgrade/quiescence.ts`
 
 A definition also declares its reach. `sideEffect` plus `consequence` (`outward` | `irreversible` | `authority`) is what puts a tool behind the consult-before-consequential-act gate, and an `outward` tool additionally names whose stance governs it with `consequenceScope`: `business` (default, WWWD-alignment-gated) or `platform` (platform development or operations that leave the install, such as `create_portal_pr` or `contribute_to_hive`; receipted and outward-reviewed, never scored against the customer business stance). Declare both on the tool; never infer them from the pack name (BI-63B14D4B).
 
+### Per-call effects under existing policy
+
+`consequenceForCall` may narrow a declared consequence when the exact call proves
+an ordinary effect. It does not grant permission: the governed executor still
+intersects user capabilities, assistant grants, current delegation and scope.
+Unavailable evidence retains the declared consequence.
+
+For `release_workroom_scope` and its alias, the declaration stays `authority`.
+The existing resolver narrows only an exact active Workroom with the caller's
+live lease and scope recorded by that principal. Mixed or foreign claims,
+unknown ownership, archived rooms and expired leases retain authority routing.
+The handler reads the current monitor-bound authorization decision, checks the
+human, assistant and action, then rechecks eligibility inside the existing write
+transaction before the scope snapshot CAS. Transaction admission cannot extend
+a lease. Genuine approved authority operations retain their established path.
+
+No new approval store or trust exception is involved. Permission to perform an
+action remains separate from independent review or attestation of test results.
+The design and acceptance bounds are in
+[owned Workroom scope release](../superpowers/specs/2026-10-14-owned-workroom-scope-release-design.md).
+
 ## Read packs for standing stages
 
 Some packs exist so a standing Workroom stage can read the record it reports on.
