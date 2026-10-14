@@ -1,8 +1,7 @@
 // apps/web/lib/ai-provider-internals.ts
 // Internal discovery/profiling logic and shared private helpers.
 // NOT a server action file — must never have "use server" directive.
-// Called by checkBundledProviders() (page-load health check) and
-// by the server actions in ai-providers.ts (which add auth guards).
+// Used by page-load health checks and guarded provider server actions.
 
 import { prisma, type Prisma } from "@dpf/db";
 import { decryptSecret, encryptSecret } from "@/lib/credential-crypto";
@@ -24,6 +23,7 @@ import { persistDiscoveredInventory } from "./discovered-model-inventory";
 import { findProviderCredential, resolveCredentialProviderId } from "./provider-account-credentials";
 export { resolveCredentialProviderId } from "./provider-account-credentials";
 import { supportsTextGeneration } from "@/lib/routing/model-classifier";
+import { providerWorkspaceHeaders } from "./provider-workspace";
 import { modelOutputCapacityFields, refreshModelOutputCapacity } from "./model-output-capacity";
 
 /**
@@ -510,7 +510,6 @@ export async function discoverModelsInternal(
   const testUrl = getTestUrl(providerRow);
   if (!testUrl) return { discovered: 0, newCount: 0, error: "No base URL configured" };
 
-  // Build auth headers (same logic as testProviderAuth)
   const headers: Record<string, string> = {
     ...getProviderExtraHeaders(providerId),
   };
@@ -519,6 +518,7 @@ export async function discoverModelsInternal(
     if (cred?.secretRef && provider.authHeader) {
       headers[provider.authHeader] = provider.authHeader === "Authorization"
         ? `Bearer ${cred.secretRef}` : cred.secretRef;
+      Object.assign(headers, providerWorkspaceHeaders(providerId, cred.providerWorkspaceId));
     }
   } else if (provider.authMethod === "oauth2_client_credentials") {
     const tokenResult = await getProviderBearerToken(providerId);

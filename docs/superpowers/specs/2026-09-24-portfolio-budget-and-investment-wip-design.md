@@ -200,7 +200,8 @@ When an approval would exceed the allocation:
 
 ### 5.5 Capacity
 
-Capacity is **measured throughput**: points reaching done per week. It is
+Capacity is **measured throughput**: points delivered per week, dated by
+delivery (the move into awaiting-acceptance, else completion; BI-77313ADD). It is
 measured per portfolio and per delivery surface (Build Studio, external Claude
 Code / Codex / Grok, other), over a rolling six-week window.
 
@@ -221,7 +222,12 @@ admit(item) ⇔ inFlightPoints(portfolio) + points(item) ≤ allowance(portfolio
 ```
 
 - **In flight** means items in progress, plus active builds and Workrooms bound
-  to an item. Each item is counted once.
+  to an item that have something running (the drive dispatched an agent, or a
+  principal holds an unexpired lease). Each item is counted once. Amended
+  2026-10-13 (BI-77313ADD, WWMD DI-A54504784480): a room parked on attention
+  counts its item as ready, and delivered work awaiting acceptance is
+  delivered, dated by its move into awaiting-acceptance, never in flight. A
+  period is charged for work delivered in it plus work actively in progress.
 - **The default allowance** follows Little's Law: measured weekly throughput ×
   a target lead time of 2 weeks. Its floor is one large item (8 points), so a
   new portfolio can always start one large piece of work.

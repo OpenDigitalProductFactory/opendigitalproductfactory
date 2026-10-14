@@ -24,6 +24,10 @@ function processMock() {
   return proc;
 }
 
+function proof(proc: ReturnType<typeof processMock>, responseId: number) {
+  proc.stdout.emit("data", Buffer.from(JSON.stringify({ method: "dpf/catalog-provenance", params: { responseId, verified: true, clientVersion: "0.157.0", fetchedAt: "2026-10-13T04:35:00Z" } }) + "\n"));
+}
+
 afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
@@ -82,13 +86,48 @@ describe("parseCodexModelListPage", () => {
 });
 
 describe("discoverCodexCliModels", () => {
+  it("rejects a successful RPC catalog without remote provenance", async () => {
+    const proc = processMock();
+    const result = discoverCodexCliModels(login);
+    const rejection = expect(result).rejects.toThrow("could not be verified");
+    proc.stdout.emit("data", Buffer.from('{"id":1,"result":{}}\n{"id":2,"result":{"type":"chatgptAuthTokens"}}\n{"id":3,"result":{"data":[{"model":"bundled-model"}],"nextCursor":null}}\n'));
+    await rejection;
+    expect(proc.kill).toHaveBeenCalledWith("SIGTERM");
+  });
+
+  it("does not admit bundled fallback when the private runner reports absent remote evidence", async () => {
+    const proc = processMock();
+    const result = discoverCodexCliModels(login);
+    const rejection = expect(result).rejects.toThrow("could not be verified");
+    proc.stdout.emit("data", Buffer.from('{"id":1,"result":{}}\n{"id":2,"result":{"type":"chatgptAuthTokens"}}\n{"method":"dpf/catalog-provenance","params":{"responseId":3,"verified":false,"error":"selected-token"}}\n{"id":3,"result":{"data":[{"model":"bundled-model"}],"nextCursor":null}}\n'));
+    await rejection;
+  });
+
+  it("rejects provenance for another response instead of accepting the current page", async () => {
+    const proc = processMock();
+    const result = discoverCodexCliModels(login);
+    const rejection = expect(result).rejects.toThrow("could not be verified");
+    proc.stdout.emit("data", Buffer.from('{"id":1,"result":{}}\n{"id":2,"result":{"type":"chatgptAuthTokens"}}\n{"method":"dpf/catalog-provenance","params":{"responseId":4,"verified":true,"clientVersion":"0.157.0","fetchedAt":"2026-10-13T04:35:00Z"}}\n{"id":3,"result":{"data":[{"model":"fresh-model"}],"nextCursor":null}}\n'));
+    await rejection;
+  });
+
+  it("rejects a complete empty catalog even when remote provenance is present", async () => {
+    const proc = processMock();
+    const result = discoverCodexCliModels(login);
+    const rejection = expect(result).rejects.toThrow("no visible models");
+    proc.stdout.emit("data", Buffer.from('{"id":1,"result":{}}\n{"id":2,"result":{"type":"chatgptAuthTokens"}}\n{"method":"dpf/catalog-provenance","params":{"responseId":3,"verified":true,"clientVersion":"0.157.0","fetchedAt":"2026-10-13T04:35:00Z"}}\n{"id":3,"result":{"data":[],"nextCursor":null}}\n'));
+    await rejection;
+  });
+
   it("initializes app-server and follows pagination", async () => {
     const proc = processMock();
     const result = discoverCodexCliModels(login);
     await Promise.resolve();
     proc.stdout.emit("data", Buffer.from('{"id":1,"result":{}}\n'));
     proc.stdout.emit("data", Buffer.from('{"id":2,"result":{"type":"chatgptAuthTokens"}}\n'));
+    proof(proc, 3);
     proc.stdout.emit("data", Buffer.from('{"id":3,"result":{"data":[{"model":"gpt-6-astra","hidden":false}],"nextCursor":"c2"}}\n'));
+    proof(proc, 4);
     proc.stdout.emit("data", Buffer.from('{"id":4,"result":{"data":[{"model":"gpt-5.6-sol","hidden":false}],"nextCursor":null}}\n'));
 
     await expect(result).resolves.toEqual([
@@ -102,6 +141,40 @@ describe("discoverCodexCliModels", () => {
       { method: "model/list", id: 3, params: { cursor: null, limit: 100 } },
       { method: "model/list", id: 4, params: { cursor: "c2", limit: 100 } },
     ]);
+  });
+
+  it("preserves fragmented Unicode metadata without adding proof timestamps to model hashes", async () => {
+    const proc = processMock();
+    const result = discoverCodexCliModels(login);
+    proc.stdout.emit("data", Buffer.from('{"id":1,"result":{}}\n{"id":2,"result":{"type":"chatgptAuthTokens"}}\n'));
+    proof(proc, 3);
+    const wire = Buffer.from(JSON.stringify({ id: 3, result: { data: [{ model: "future-model", description: "モデル 🦊" }], nextCursor: null } }) + "\n");
+    for (const byte of wire) proc.stdout.emit("data", Buffer.from([byte]));
+    const models = await result;
+    expect(models[0]!.rawMetadata.description).toBe("モデル 🦊");
+    expect(models[0]!.rawMetadata).not.toHaveProperty("fetchedAt");
+    expect(models[0]!.rawMetadata).not.toHaveProperty("clientVersion");
+  });
+
+  it("refuses proof replay across pages", async () => {
+    const proc = processMock();
+    const result = discoverCodexCliModels(login);
+    const rejection = expect(result).rejects.toThrow("could not be verified");
+    proc.stdout.emit("data", Buffer.from('{"id":1,"result":{}}\n{"id":2,"result":{"type":"chatgptAuthTokens"}}\n'));
+    proof(proc, 3);
+    proc.stdout.emit("data", Buffer.from('{"id":3,"result":{"data":[{"model":"fresh-model"}],"nextCursor":"p2"}}\n'));
+    proc.stdout.emit("data", Buffer.from('{"id":4,"result":{"data":[{"model":"unverified-model"}],"nextCursor":null}}\n'));
+    await rejection;
+  });
+
+  it("preserves empty-catalog semantics for hidden-only remote inventory", async () => {
+    const proc = processMock();
+    const result = discoverCodexCliModels(login);
+    const rejection = expect(result).rejects.toThrow("no visible models");
+    proc.stdout.emit("data", Buffer.from('{"id":1,"result":{}}\n{"id":2,"result":{"type":"chatgptAuthTokens"}}\n'));
+    proof(proc, 3);
+    proc.stdout.emit("data", Buffer.from('{"id":3,"result":{"data":[{"model":"hidden-model","hidden":true}],"nextCursor":null}}\n'));
+    await rejection;
   });
 
   it("fails closed on timeout", async () => {
@@ -121,8 +194,10 @@ describe("discoverCodexCliModels", () => {
     const proc = processMock();
     const result = discoverCodexCliModels(login);
     await Promise.resolve();
-    proc.stdout.emit("data", Buffer.from('{"id":1,"result":{}}\n{"id":2,"result":{"type":"chatgptAuthTokens"}}\n{"id":3,"result":{"data":[],"nextCursor":null}}\n'));
-    await expect(result).resolves.toEqual([]);
+    proc.stdout.emit("data", Buffer.from('{"id":1,"result":{}}\n{"id":2,"result":{"type":"chatgptAuthTokens"}}\n'));
+    proof(proc, 3);
+    proc.stdout.emit("data", Buffer.from('{"id":3,"result":{"data":[{"model":"fresh-model"}],"nextCursor":null}}\n'));
+    await expect(result).resolves.toHaveLength(1);
     const args = spawnMock.mock.calls[0]![1];
     expect(args).toEqual(expect.arrayContaining(["OPENAI_API_KEY=", "CODEX_API_KEY=", "node"]));
     expect(args.at(-1)).toContain("mkdtempSync('/tmp/dpf-codex-catalog-')");
@@ -165,7 +240,11 @@ describe("discoverCodexCliModels", () => {
     const result = discoverCodexCliModels(login);
     const rejection = expect(result).rejects.toThrow("repeated a cursor");
     await Promise.resolve();
-    proc.stdout.emit("data", Buffer.from('{"id":1,"result":{}}\n{"id":2,"result":{"type":"chatgptAuthTokens"}}\n{"id":3,"result":{"data":[],"nextCursor":"c2"}}\n{"id":4,"result":{"data":[],"nextCursor":"c2"}}\n'));
+    proc.stdout.emit("data", Buffer.from('{"id":1,"result":{}}\n{"id":2,"result":{"type":"chatgptAuthTokens"}}\n'));
+    proof(proc, 3);
+    proc.stdout.emit("data", Buffer.from('{"id":3,"result":{"data":[],"nextCursor":"c2"}}\n'));
+    proof(proc, 4);
+    proc.stdout.emit("data", Buffer.from('{"id":4,"result":{"data":[],"nextCursor":"c2"}}\n'));
     await rejection;
   });
 

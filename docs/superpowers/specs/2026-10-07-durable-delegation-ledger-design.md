@@ -208,7 +208,9 @@ receipt, activity rows, state rows, outbox rows.
   `recovery: 'replay-safe' | 'process-bound'`. After process loss, replay-safe
   effects requeue; process-bound ones are cancelled with
   `cancelled_after_process_loss` recorded on the room. Undeclared counts as
-  process-bound (fail closed).
+  process-bound (fail closed), except that a job function declaring
+  `retries >= 1` has already accepted re-running an unfinished step and counts
+  replay-safe (`recoveryFor`, `BI-4FA0EFEB`).
 - Boot order is fixed and logged: job engine lease recovery → delegated-child
   recovery → outbox workers.
 - After a provider failure other than validation, the room's queued runs are

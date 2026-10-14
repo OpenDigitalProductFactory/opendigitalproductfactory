@@ -3,6 +3,7 @@
 // Server actions in actions/*.ts can import from here freely.
 
 import { prisma } from "@dpf/db";
+import { providerWorkspaceHeaders } from "./provider-workspace";
 import { computeTokenCost, computeComputeCost } from "@/lib/ai-provider-types";
 import {
   aiInferenceDuration,
@@ -47,11 +48,13 @@ import "../routing/codex-cli-adapter"; // codex: registers "codex-cli" adapter
 import {
   acquireInferenceSlot,
   currentInferenceOrigin,
+  currentInferenceSignal,
   engineKeyForProvider,
 } from "./inference-admission";
 import { assertProviderDispatchCapacity } from "@/lib/routing/local-provider-capacity";
 import { isLocalProviderId } from "@/lib/routing/provider-locality";
-import { providerInferenceFetch } from "./provider-inference-transport";
+import { providerInferenceFetch, withInferenceCancellationFetch } from "./provider-inference-transport";
+import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
 import { InferenceError } from "../routing/inference-error";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -100,6 +103,7 @@ async function buildAuthHeaders(
   if (authMethod === "api_key") {
     const cred = await getDecryptedCredential(providerId);
     if (!cred?.secretRef || !authHeader) throw new InferenceError("No credential configured", "auth", providerId);
+    Object.assign(headers, providerWorkspaceHeaders(providerId, cred.providerWorkspaceId));
     headers[authHeader] = authHeader === "Authorization" ? `Bearer ${cred.secretRef}` : cred.secretRef;
   } else if (authMethod === "oauth2_client_credentials") {
     const tokenResult = await getProviderBearerToken(providerId);
@@ -199,6 +203,9 @@ export async function callProvider(
     buildId?: string | null;
   },
 ): Promise<InferenceResult> {
+  currentInferenceSignal()?.throwIfAborted();
+  await assertGovernedInferenceAuthority(currentInferenceSignal());
+  currentInferenceSignal()?.throwIfAborted();
   // Resolve adapter enforceability before capacity or budget accounting. A
   // plan/adapter capability miss is not a provider request and must not consume
   // budget, wait on host capacity, or mutate provider health through fallback.
@@ -243,11 +250,6 @@ export async function callProvider(
   // Transcription uses its registry adapter and has no model-routing connection.
   const needsModelConnection = executionAdapterRaw !== "transcription";
   const localProvider = needsModelConnection ? await readEnabledRoutingProvider(providerId) : null;
-  await assertProviderDispatchCapacity(providerId);
-  // Lease ownership is routing policy. Whether the card is free is an inference
-  // fact, so it stays in this layer (routing may not import inference).
-  const { assertLocalGpuFree } = await import("@/lib/inference/host-gpu-admission");
-  await assertLocalGpuFree({ providerId, modelId });
 
   // 0. EP-COST-001 Phase 2 — pre-call budget gate.
   // Check the agent's daily token budget before dispatching. If the agent has
@@ -300,6 +302,10 @@ export async function callProvider(
       console.warn("[budget-gate] Budget check failed (non-fatal):", { agentId: attribution.agentId }, err);
     }
   }
+
+  // An exclusive host reservation refuses promptly; ordinary local runner
+  // contention waits for admission below. Recheck the reservation at dispatch.
+  await assertProviderDispatchCapacity(providerId);
 
   // 1. Resolve provider (DB lookup + auth headers)
   const provider = localProvider ?? await prisma.modelProvider.findUnique({ where: { providerId } });
@@ -357,18 +363,32 @@ export async function callProvider(
   const releaseInferenceSlot = await acquireInferenceSlot(engineKey, currentInferenceOrigin(), {
     providerId,
     modelId,
+    signal: currentGovernedInferenceDeadline()?.signal,
   });
   let result;
   try {
+    // Queue before observing host ownership: an earlier portal request is
+    // ordinary contention, not a reason to fail the next caller. Recheck both
+    // safety facts at dispatch because they may change while admission waits.
+    await assertProviderDispatchCapacity(providerId);
+    // Local chat owns the shared build/chat lane and checks the GPU there.
+    // Inspecting it here would reject a build that this caller should wait for.
+    if (adapter.type !== "chat" || !isLocalProviderId(providerId)) {
+      const { assertLocalGpuFree } = await import("@/lib/inference/host-gpu-admission");
+      await assertLocalGpuFree({ providerId, modelId });
+    }
     // Queued work has not started inference yet. A disable during admission
     // invalidates its earlier selection; finally still releases the slot.
     if (needsModelConnection) await readEnabledRoutingProvider(providerId);
+    await assertGovernedInferenceAuthority(currentInferenceSignal());
+    currentInferenceSignal()?.throwIfAborted();
+    const parentFetch = providerId === "local" ? currentGovernedInferenceDeadline()?.localFetch : undefined;
     result = await adapter.execute({
       providerId,
       modelId,
       plan: effectivePlan,
       provider: { baseUrl, headers },
-      fetchImpl: providerInferenceFetch,
+      fetchImpl: parentFetch ? withInferenceCancellationFetch(parentFetch) : providerInferenceFetch,
       messages,
       systemPrompt,
       tools,
@@ -378,7 +398,8 @@ export async function callProvider(
     endTimer();
   } catch (err) {
     endTimer();
-    const errorType = err instanceof InferenceError ? err.code : "unknown";
+    const cancelled = currentInferenceSignal()?.aborted && err === currentInferenceSignal()?.reason;
+    const errorType = cancelled ? "cancelled" : err instanceof InferenceError ? err.code : "unknown";
     aiInferenceErrors.inc({ provider: providerId, error_type: errorType });
     // Phase A7: telemetry write before re-throw. Fire-and-forget — the writer
     // swallows its own errors so we never mask the original throw.
@@ -394,7 +415,7 @@ export async function callProvider(
       finishedAt,
       durationMs: finishedAt.getTime() - telemetryStartedAt.getTime(),
       status: "error",
-      errorClass: err instanceof InferenceError ? err.code : "unknown",
+      errorClass: errorType,
       httpStatus: err instanceof InferenceError ? err.statusCode : undefined,
       refusalReason: err instanceof InferenceError
         ? (err.rawBody ?? err.message)

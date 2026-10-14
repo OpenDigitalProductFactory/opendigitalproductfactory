@@ -63,6 +63,39 @@ function page(input: {
 }
 
 describe("terminal writer context hydration", () => {
+  it("recovers the successful historical 63040/400 request through a current bounded reread", async () => {
+    const historical = reader("historical-architecture-read", { maxChars: 63_040, maxLines: 400 });
+    const saved = structuredClone(historical);
+    const readPage = vi.fn().mockResolvedValue({ success: true, message: "fresh exact source",
+      data: page({ content: "verified source", startLine: 1, endLine: 1, totalLines: 1, hasMore: false, cursor: null }) });
+    const result = await hydrateTerminalWriterContext({ policy, executions: [historical], readPage });
+    expect(result).toMatchObject({ ok: true, data: { hydratedPageCount: 1,
+      context: expect.stringContaining("verified source") } });
+    expect(readPage).toHaveBeenCalledWith(expect.objectContaining({ startLine: 1, maxChars: SOURCE_READ_MAX_CHARS }));
+    expect(historical).toEqual(saved);
+  });
+  it("never reuses cached content from an oversized historical request", async () => {
+    const cached = page({ content: "old cached source", startLine: 1, endLine: 1, totalLines: 1, hasMore: false, cursor: null });
+    const readPage = vi.fn().mockResolvedValue({ success: false, message: "source unavailable", error: "reader-unavailable" });
+    const result = await hydrateTerminalWriterContext({ policy,
+      executions: [reader("legacy", { maxChars: 63_040 }, { result: { data: cached } })], readPage });
+    expect(result).toMatchObject({ ok: false, code: "reader-unavailable" });
+    expect(readPage).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    { controls: { maxChars: 63_040, expectedBlobId: "different" }, success: true },
+    { controls: { maxChars: 63_040 }, success: false },
+    { controls: { maxChars: "63040" }, success: true },
+    { controls: { maxChars: Number.MAX_SAFE_INTEGER + 1 }, success: true },
+    { controls: { maxChars: 63_040, maxLines: 0 }, success: true },
+    { controls: { maxChars: 63_040, cursor: "" }, success: true },
+  ])("refuses invalid historical metadata without rereading: %j", async ({ controls, success }) => {
+    const readPage = vi.fn();
+    const result = await hydrateTerminalWriterContext({ policy,
+      executions: [reader("invalid-history", controls, { success })], readPage });
+    expect(result.ok).toBe(false);
+    expect(readPage).not.toHaveBeenCalled();
+  });
   it.each([false, true])("verifies a paginated citation and refuses conflicting continuation identity (%s)", async (wrongBlob) => {
     const first = page({ content: "First line\n", startLine: 50, endLine: 50, totalLines: 1000, hasMore: true, cursor: "continue-51" });
     const second = page({ content: "Second line\n", startLine: 51, endLine: 51, totalLines: 1000, hasMore: true, cursor: "continue-52" });

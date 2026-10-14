@@ -67,6 +67,8 @@ Branch `feat/approval-convergence-substrate`. Acceptance: AC-CHAR, AC-INVENTORY,
 
   It does this under the context that convert-and-run will use: `{ agentId, threadId }`, with the approver as the thread owner. It reports one refusal code per row, plus owner `isActive` and `lastSeenAt`. Record the output as workroom evidence. It feeds W2 and W6.
 
+  > **Note (BI-129EFFD1):** run it through the read-only MCP tool `probe_pending_approval_conversion` (platform admin; returns `{ probedAt, summary, rows }`). The script stays for local use and calls the same runner, `lib/coworker/approval-convergence-probe-run.ts`.
+
 ### A3. Inert substrate (second commit onward)
 
 | Change | File(s) | Why inert |

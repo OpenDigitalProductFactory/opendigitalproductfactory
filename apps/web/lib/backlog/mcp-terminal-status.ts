@@ -54,6 +54,7 @@ export async function completeBacklogItemTransitionTool(args: {
   if (!terminal.ok) {
     const codes = [...terminal.decision.blockers, ...terminal.decision.unmet].map((entry) => entry.code);
     const recovery = await resolveTerminalInitiativeRecovery({
+      currentUserId: args.userId,
       decision: terminal.decision,
       currentAgentId: args.agentId ?? null,
       refusedWorkroomId: null,

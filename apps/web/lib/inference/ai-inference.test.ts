@@ -28,7 +28,7 @@ vi.mock("../routing/provider-capacity/store", () => ({
 import { callProvider, classifyHttpError, InferenceError } from "./ai-inference";
 import { assertProviderDispatchCapacity } from "@/lib/routing/local-provider-capacity";
 import { prisma } from "@dpf/db";
-import { acquireInferenceSlot } from "./inference-admission";
+import { acquireInferenceSlot, withInferenceCancellation } from "./inference-admission";
 
 beforeEach(() => {
   vi.mocked(assertProviderDispatchCapacity).mockReset();
@@ -37,6 +37,21 @@ beforeEach(() => {
   vi.mocked(prisma.aiProviderConnection.findUnique).mockResolvedValue({ status: "active" } as any);
   vi.mocked(acquireInferenceSlot).mockReset().mockResolvedValue(vi.fn());
   executeAdapter.mockReset().mockResolvedValue({ text: "done", toolCalls: [], inferenceMs: 1, usage: { inputTokens: 1, outputTokens: 1 } });
+});
+
+it("does not dispatch after a caller deadline races admission handoff", async () => {
+  vi.mocked(prisma.modelProvider.findUnique).mockResolvedValue({ status: "active", baseUrl: "http://provider.test/v1", authMethod: "none" } as any);
+  const controller = new AbortController();
+  const release = vi.fn();
+  vi.mocked(acquireInferenceSlot).mockImplementation(async () => {
+    controller.abort(new DOMException("utility deadline reached", "AbortError"));
+    return release;
+  });
+  await expect(withInferenceCancellation(controller.signal, () =>
+    callProvider("openai", "test-model", [{ role: "user", content: "synthetic input" }], "")))
+    .rejects.toMatchObject({ name: "AbortError" });
+  expect(executeAdapter).not.toHaveBeenCalled();
+  expect(release).toHaveBeenCalledOnce();
 });
 
 it("rechecks setup removal after a cloud selection waits for admission", async () => {

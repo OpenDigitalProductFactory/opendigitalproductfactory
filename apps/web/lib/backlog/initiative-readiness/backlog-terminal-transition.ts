@@ -99,7 +99,7 @@ export async function completeBacklogItemTransition(args: {
       if (lockedItem.status !== args.expectedStatus) {
         throw new Error(`Backlog item ${lockedItem.itemId} expected status=${args.expectedStatus}, got ${lockedItem.status}.`);
       }
-      const evaluated = await evaluateBacklogItemCompletion({
+      let evaluated = await evaluateBacklogItemCompletion({
         db: tx,
         item: lockedItem,
         rawManifest: args.completionEvidence,
@@ -107,6 +107,20 @@ export async function completeBacklogItemTransition(args: {
         evaluatedAt,
         ...(args.dependencies ? { dependencies: args.dependencies } : {}),
       });
+      // Body criteria are scoped facts, not a spec-approval or acceptance receipt.
+      // Mint only on the existing authorized mutation; read projections stay pure.
+      if (evaluated.decision.shapeDecision?.effective === "medium" && evaluated.delivery === "pass"
+        && [...evaluated.decision.blockers, ...evaluated.decision.unmet]
+          .some((entry) => entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED")) {
+        const { ensureItemBodyBaseline } = await import("./body-baseline-persistence");
+        await ensureItemBodyBaseline(tx as never, { item: lockedItem, profile: evaluated.decision.profile,
+          effectiveShape: evaluated.decision.shapeDecision.effective,
+          actor: args.actor, authority: args.authority });
+        evaluated = await evaluateBacklogItemCompletion({ db: tx, item: lockedItem,
+          rawManifest: args.completionEvidence,
+          transitionObject: { kind: "backlog-item", id: lockedItem.id, expectedVersion: args.expectedStatus, targetState: "done" },
+          evaluatedAt, ...(args.dependencies ? { dependencies: args.dependencies } : {}) });
+      }
       deployment = evaluated.deployment;
       acceptanceState = evaluated.acceptanceState;
       return {

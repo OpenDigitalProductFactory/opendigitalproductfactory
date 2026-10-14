@@ -109,10 +109,20 @@ export type JobTriggers<TName extends string> =
   | readonly JobEventTrigger<TName>[]
   | readonly JobCronTrigger[];
 
+/**
+ * What happens to a run whose worker died mid-step (BI-4FA0EFEB). A
+ * `replay-safe` run re-runs its unfinished step; a `process-bound` one is
+ * failed through onFailure as `cancelled_after_process_loss`. Undeclared, a
+ * function with `retries >= 1` has already accepted re-running a step and is
+ * replay-safe; anything else is process-bound. Enforced by the Postgres engine.
+ */
+export type JobRecovery = "replay-safe" | "process-bound";
+
 export interface JobFunctionOptions<TName extends string> {
   id: string;
   triggers: JobTriggers<TName>;
   retries?: JobRetries;
+  recovery?: JobRecovery;
   concurrency?: JobConcurrencyOption;
   cancelOn?: readonly JobCancelOn[];
   onFailure?: (ctx: JobFailureContext) => unknown;

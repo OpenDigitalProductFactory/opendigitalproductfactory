@@ -71,6 +71,35 @@ data-handling checks.
 
 ## Prerequisites
 
+### Docker memory during installation
+
+The installer sizes local Docker Desktop memory before dependency and image
+work: one quarter of physical RAM rounded down to a GiB, with an 8 GiB floor
+and 32 GiB cap. For example, a 64 GiB Mac gets a 16 GiB upper allocation and
+a 128 GiB Mac gets 32 GiB. A saved allocation already between 8 GiB and that
+upper allocation is preserved. Hosts below 16 GiB are refused. Native AI
+models share the Mac's memory and need their own capacity allowance.
+
+Changing the allocation requires a Docker Desktop restart, which interrupts
+all Docker containers and host model runner work. The installer asks permission
+when containers are running or Docker AI is enabled. Unattended installation
+requires `--allow-docker-restart` for that interruption; `--headless` alone
+uses the default answer of no. Empty setup with Docker AI disabled converges
+automatically. Previously running containers are restored, including containers
+whose restart policy is `no`.
+
+The installer checks both the saved limit and the running VM, so a saved change
+that has not taken effect also requires restart. It backs up Docker's settings
+before replacing the allocation and reports the backup path. Malformed,
+symlinked, missing or administrator-managed settings stop setup before shutdown.
+Remote engines and non-Desktop runtimes are untouched; dry-run only describes
+the plan. The [Docker settings documentation](https://docs.docker.com/desktop/settings-and-maintenance/settings/)
+describes the settings file and VM memory limit.
+
+This applies to new installations and explicit installer re-runs using the
+updated source. It does not silently resize existing installations during normal
+portal upgrades. Restarting Docker normally keeps its saved allocation.
+
 The installer auto-installs Docker Desktop. You bring:
 
 - **Xcode Command Line Tools** — `xcode-select --install` (for `git`,

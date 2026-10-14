@@ -1,11 +1,17 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render as testingRender, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { configureProvider, testProviderAuth, discoverModels, profileModels } from "@/lib/actions/ai-providers";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import type { ProviderWithCredential } from "@/lib/ai-provider-types";
 import { ProviderDetailForm } from "./ProviderDetailForm";
+const render = (ui: ReactNode) => testingRender(
+  <MessagesProvider locale="en-US" messages={{ setup: namespaceMessages("en-US", "setup") }}>{ui}</MessagesProvider>,
+);
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
@@ -77,6 +83,28 @@ const providerFixture: ProviderWithCredential = {
 
 describe("ProviderDetailForm", () => {
   afterEach(() => { cleanup(); vi.clearAllMocks(); });
+
+  it("keeps workspace editing open when clearing an ID to replace it", () => {
+    const fixture = { ...providerFixture,
+      provider: { ...providerFixture.provider, providerId: "anthropic", name: "Anthropic" },
+      credential: { ...providerFixture.credential!, providerWorkspaceId: "wrkspc_accountA" },
+    };
+    render(<ProviderDetailForm pw={fixture} canWrite models={[]} profiles={[]} hasActiveProvider />);
+    fireEvent.change(screen.getByLabelText("Anthropic workspace ID"), { target: { value: "" } });
+    expect(screen.getByText("Organization-scoped key").closest("details")?.hasAttribute("open")).toBe(true);
+  });
+
+  it("saves the Anthropic workspace without requiring the key to be re-entered", async () => {
+    vi.mocked(configureProvider).mockResolvedValue({});
+    vi.mocked(testProviderAuth).mockResolvedValue({ ok: true, message: "Connected" });
+    const fixture = { ...providerFixture, provider: { ...providerFixture.provider, providerId: "anthropic", name: "Anthropic" } };
+    render(<ProviderDetailForm pw={fixture} canWrite models={[]} profiles={[]} hasActiveProvider />);
+    fireEvent.click(screen.getByText("Organization-scoped key"));
+    fireEvent.change(screen.getByLabelText("Anthropic workspace ID"), { target: { value: "wrkspc_accountA" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save & verify connection" }));
+    await waitFor(() => expect(configureProvider).toHaveBeenCalledWith(expect.objectContaining({ providerId: "anthropic", providerWorkspaceId: "wrkspc_accountA" })));
+    expect(vi.mocked(configureProvider).mock.calls[0][0]).not.toHaveProperty("secretRef");
+  });
   it("keeps ChatGPT shared authentication changes in the Codex management page", () => {
     const fixture: ProviderWithCredential = { ...providerFixture, provider: { ...providerFixture.provider, providerId: "chatgpt", authMethod: "oauth2_authorization_code", supportedAuthMethods: ["oauth2_authorization_code"], authorizeUrl: "https://auth.openai.com/oauth/authorize" } };
     render(<ProviderDetailForm pw={fixture} canWrite models={[]} profiles={[]} hasActiveProvider />);

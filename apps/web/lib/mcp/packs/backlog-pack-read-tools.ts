@@ -383,7 +383,7 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
   };
 }
 
-export async function getBacklogItem(params: Record<string, unknown>, currentAgentId: string | null = null): Promise<ToolResult> {
+export async function getBacklogItem(params: Record<string, unknown>, currentAgentId: string | null = null, currentUserId?: string): Promise<ToolResult> {
   const { prisma } = await import("@dpf/db");
   const itemIdRaw = String(params["itemId"] ?? "").trim();
   if (!itemIdRaw)
@@ -483,6 +483,7 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
       .some((entry) => entry.code === "POST_IMPLEMENTATION_REVIEW_REQUIRED");
   const recovery = needsPirRecovery
     ? await (await import("@/lib/backlog/initiative-readiness/terminal-recovery")).resolveTerminalInitiativeRecovery({
+      currentUserId,
         decision: completion, currentAgentId, refusedWorkroomId: null,
       })
     : undefined;

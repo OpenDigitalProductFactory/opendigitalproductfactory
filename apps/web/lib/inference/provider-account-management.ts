@@ -3,6 +3,7 @@ import { prisma, setProviderStatusWithDefaultConnection, type Prisma } from "@dp
 import { encryptSecret } from "@/lib/credential-crypto";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { isLocalProviderId } from "@/lib/routing/provider-locality";
+import { normalizeProviderWorkspaceId } from "./provider-workspace";
 
 export const ACCOUNT_ACCESS_RESET = {
   accessibleModelIds: [] as string[], modelsVerifiedAt: null,
@@ -15,6 +16,27 @@ export async function invalidateProviderAccountProofs(tx: Pick<Prisma.Transactio
   await tx.complianceEvidence.updateMany({
     where: { providerConnectionId: connectionDbId, claimKey: { not: null }, status: "active" },
     data: { status: "superseded" },
+  });
+}
+
+/** A workspace change can select a different upstream account without replacing the key row. */
+export async function configureDefaultProviderWorkspace(providerId: string, workspaceId: string | null) {
+  await prisma.$transaction(async (tx) => {
+    const current = await tx.credentialEntry.findUnique({
+      where: { providerId }, select: { providerWorkspaceId: true, providerConnection: { select: { id: true } } },
+    });
+    if (current && current.providerWorkspaceId !== workspaceId && current.providerConnection) {
+      const id = current.providerConnection.id;
+      await invalidateProviderAccountProofs(tx, id);
+      await tx.aiProviderConnection.update({ where: { id }, data: ACCOUNT_ACCESS_RESET });
+      await tx.aiProviderConnection.updateMany({ where: { id, status: { not: "disabled" } }, data: { status: "unconfigured" } });
+      await tx.modelProvider.update({ where: { providerId }, data: { sensitivityClearance: ["public"] } });
+    }
+    await tx.credentialEntry.upsert({
+      where: { providerId },
+      create: { providerId, providerWorkspaceId: workspaceId, status: "pending" },
+      update: { providerWorkspaceId: workspaceId, status: "pending" },
+    });
   });
 }
 
@@ -49,6 +71,7 @@ export async function addProviderAccount(input: {
 }
 
 export async function configureProviderAccount(input: {
+  providerWorkspaceId?: string;
   connectionId: string;
   label?: string;
   secretRef?: string;
@@ -59,12 +82,16 @@ export async function configureProviderAccount(input: {
 }): Promise<ActionResult> {
   const connection = await prisma.aiProviderConnection.findUnique({ where: { connectionId: input.connectionId } });
   if (!connection?.credentialEntryId) return err("Account credential not found");
+  let providerWorkspaceId: string | null | undefined;
+  try { providerWorkspaceId = normalizeProviderWorkspaceId(connection.providerId, input.providerWorkspaceId); }
+  catch (error) { return err(error instanceof Error ? error.message : "Invalid workspace ID"); }
+  if (providerWorkspaceId && connection.authMethod !== "api-key") return err("Workspace selection requires an Anthropic API key");
   if (input.label !== undefined && (!input.label.trim() || input.label.trim().length > 120)) return err("Enter an account name of 1–120 characters");
   if (input.tokenEndpoint !== undefined) {
     try { if (new URL(input.tokenEndpoint).protocol !== "https:") return err("Token endpoint must use HTTPS"); }
     catch { return err("Enter a valid token endpoint"); }
   }
-  const hasCredentials = [input.secretRef, input.clientId, input.clientSecret, input.tokenEndpoint, input.scope].some((value) => value !== undefined);
+  const hasCredentials = [input.secretRef, input.clientId, input.clientSecret, input.tokenEndpoint, input.scope, providerWorkspaceId].some((value) => value !== undefined);
   await prisma.$transaction(async (tx) => {
     if (hasCredentials) await invalidateProviderAccountProofs(tx, connection.id);
     if (hasCredentials) await tx.credentialEntry.update({ where: { id: connection.credentialEntryId! }, data: {
@@ -73,6 +100,7 @@ export async function configureProviderAccount(input: {
       ...(input.clientId === undefined ? {} : { clientId: input.clientId }),
       ...(input.tokenEndpoint === undefined ? {} : { tokenEndpoint: input.tokenEndpoint }),
       ...(input.scope === undefined ? {} : { scope: input.scope }),
+      ...(providerWorkspaceId === undefined ? {} : { providerWorkspaceId }),
       cachedToken: null, refreshToken: null, tokenExpiresAt: null, status: "pending",
     } });
     await tx.aiProviderConnection.update({ where: { connectionId: input.connectionId }, data: {
