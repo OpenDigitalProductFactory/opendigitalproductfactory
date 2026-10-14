@@ -9,7 +9,7 @@ status: active
 - Profile: fix; delivery shape: server-derived `delivery-small@1.0.0`.
 - Source inspected: `e74ab9d0b5da4233dd2f9a5759f75ef152453e8c`.
 - Direction: WWMD DI-CDF5289BF7C4. Task completeness and thoroughness remain the criterion; latency is a measurement, not an acceptance substitute.
-- Status: design and research; implementation and live calibration unrun. Canonical plan coverage must be recorded before implementation.
+- Status: implementation complete at source checkpoint `9b3ef9380ced29fa7105a7770a77450e47f4cc5a`, integrated against merged main `6d8048987692580a37ef0be184f5b97d40df336f`. The affected run passed 880 tests across 62 files; both TypeScript programs passed. Final independent source assessment found no blocking findings. Exact-head canonical CI, publication, deployment and live calibration remain unrun while canonical maintenance refuses new admissions.
 
 ## Problem and observed evidence
 
@@ -74,7 +74,7 @@ The Workroom's resolved change-impact contract requires graph-linked and colocat
 
 Implementation parent: BI-3CF78C8E. Canonical ordered fix: this document. Reference lists for atomic coverage are `AC-WIRE`, `AC-SUPPORT`, `AC-ENVELOPE`, `AC-JSON`, `AC-RECOVERY`, `AC-QUALITY`, `AC-DELIVERY`; `ActivityContract.tokenEnvelope`, `EffortDecision`, `RoutedExecutionPlan`, `SemanticReviewRequest`; `selected-model-observation`, `route-to-wire`, `native-review-completion`, `governed-delivery`; and `source-red-green`, `affected-suites`, `canonical-exact-head`, `live-task-completion`.
 
-Initial coverage receipt `cmv7fvvc44ems01o9211h9hbf` binds immutable design commit `227b90338368532e70b9ff4b94cb4c9790cc1494`, blob `c73407f6b0ef2eb4e2175232f995b85a9dae5242`; its currentness was checked before this advisory-review correction. This revision adds the template prerequisite and clean paired control, so record fresh coverage against its new immutable identity before implementation. Design/research admission is not implementation admission. Keep the prior tiering/tool-selection evidence with its original date and limited scope.
+Initial coverage receipt `cmv7fvvc44ems01o9211h9hbf` binds design `227b90338368532e70b9ff4b94cb4c9790cc1494`. Fresh coverage `cmv7g7jd94pqm01o9my66w5v0` binds the corrected pre-implementation design `d30ea58e9e58f845284c0eb4c443bfba4b12c24b`, blob `e9bc73fc436cff6739b96393114bdb0ee1214657`; currentness was checked before source implementation. Research receipt `initiative-722f8914-dc3e-457f-a0a0-2a1a166dd766` then made implementation readiness allowed, with passing-after and live verification explicitly owed. The four atomic deliverables are unchanged. Reconcile coverage to the final published document identity after the required gate and push; maintenance currently refuses coordination writes. Keep the prior tiering/tool-selection evidence with its original date and limited scope.
 
 ## Risks and rollback
 

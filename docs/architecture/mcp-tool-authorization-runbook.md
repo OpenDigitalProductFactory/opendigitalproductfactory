@@ -546,7 +546,9 @@ Numeric local thinking limits require fresh selected-model runtime evidence,
 not an optimistic model-family prior. The verified llama.cpp b9879 dialect uses
 `thinking_budget_tokens` and requires a compatible thinking end delimiter.
 Read-only configuration, engine status and model metadata bind that dialect to
-the selected model digest, template and configuration; unknown or overridden
+the selected model digest, template and configuration; only an audited exact
+template digest can establish compatibility in this dialect. Delimiter text in
+comments or unreachable Jinja branches is insufficient. Unknown or overridden
 templates leave effort unexpressed. Recheck the evidence after admission before
 inference, preserving authority and the original deadline. No global configure
 write or model reload is needed. The initial final-output reserve is a candidate
