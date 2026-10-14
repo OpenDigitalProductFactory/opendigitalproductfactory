@@ -151,8 +151,12 @@ test("macOS: both variables land in ~/.dpf/agent-toolchain.env and launchd; a re
     for (const profile of [".zshenv", ".profile"]) {
       assert.match(readFileSync(join(home, profile), "utf8"), /agent-toolchain\.env.*# dpf-mcp-token/);
     }
+    // Claude's connector reads its own variable (BI-D6A6462A), written beside
+    // the shared one under the same https-only rule.
+    assert.match(file, /^export DPF_CLAUDE_MCP_URL='https:\/\/desk\.lan\/api\/mcp\/v1\?tier=full'$/m);
     const log = readFileSync(join(home, "launchctl.log"), "utf8");
     assert.match(log, /^setenv DPF_MCP_URL https:\/\/desk\.lan\/api\/mcp\/v1\?tier=full$/m);
+    assert.match(log, /^setenv DPF_CLAUDE_MCP_URL https:\/\/desk\.lan\/api\/mcp\/v1\?tier=full$/m);
     assert.match(log, /^setenv NODE_EXTRA_CA_CERTS /m);
 
     const second = bash(persistScript, { home, env });
@@ -337,8 +341,8 @@ test("Windows: DPF_MCP_URL and NODE_EXTRA_CA_CERTS go to the User env once; a re
       $first = Set-DpfMcpClientEnv -ClientEnv $clientEnv -GetUserEnv $get -SetUserEnv $set
       $firstWrites = $script:writes
       $second = Set-DpfMcpClientEnv -ClientEnv $clientEnv -GetUserEnv $get -SetUserEnv $set
-      "$first|$firstWrites|$second|$($script:writes)|$($store['DPF_MCP_URL'])|$($store['NODE_EXTRA_CA_CERTS'])"`);
-    assert.equal(out, `persisted|2|unchanged|2|https://desk.lan/api/mcp/v1?tier=full|${cert}`);
+      "$first|$firstWrites|$second|$($script:writes)|$($store['DPF_MCP_URL'])|$($store['DPF_CLAUDE_MCP_URL'])|$($store['NODE_EXTRA_CA_CERTS'])"`);
+    assert.equal(out, `persisted|3|unchanged|3|https://desk.lan/api/mcp/v1?tier=full|https://desk.lan/api/mcp/v1?tier=full|${cert}`);
   });
 });
 
@@ -492,6 +496,7 @@ test("plain-http and IPv6-literal endpoints never reach the shared env file or l
       const out = bash(`. "$ENV_LIB"; DPF_MCP_CLIENT_URL='${endpoint}'; DPF_MCP_CLIENT_CA_BUNDLE='unused'; dpf_persist_mcp_client_env; printf '%s' "$?"`,
         { home, env: { DPF_CLIENT_ENV_PLATFORM: "Darwin" } });
       assert.equal(out.stdout, "1", endpoint);
+      assert.doesNotMatch(readFileSync(join(home, ".dpf", "agent-toolchain.env"), "utf8"), /DPF_CLAUDE_MCP_URL/, endpoint);
       assert.equal(readFileSync(join(home, ".dpf", "agent-toolchain.env"), "utf8"), saved, endpoint);
       assert.equal(existsSync(join(home, "launchctl.log")), false, `launchd untouched for ${endpoint}`);
     });

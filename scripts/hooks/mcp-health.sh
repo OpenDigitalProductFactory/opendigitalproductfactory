@@ -39,18 +39,24 @@ if [ -z "$root" ]; then
 fi
 
 # Probe URL (BI-8A562681, design 12.4.5): the client's connector is the plugin
-# descriptor, `${DPF_MCP_URL:-<plugin default>}`, so resolve the endpoint the
-# same way: DPF_MCP_URL first, then the default written in the shipped plugin
-# descriptor, then the known local bind. No JSON parser dependency -- take the
-# first "url" string in the descriptor (it holds only the dpf server).
-url="${DPF_MCP_URL:-}"
+# descriptor, `${DPF_CLAUDE_MCP_URL:-<plugin default>}`, so resolve the endpoint
+# the same way: DPF_CLAUDE_MCP_URL first, then the default written in the
+# shipped plugin descriptor, then the known local bind. The shared DPF_MCP_URL
+# is deliberately not read: Claude's connector does not read it, and any client,
+# gate or stale checkout may have set it (BI-D6A6462A). A descriptor still on
+# the legacy `${DPF_MCP_URL:-...}` form yields its default the same way. No JSON
+# parser dependency -- take the first "url" string in the descriptor (it holds
+# only the dpf server).
+url="${DPF_CLAUDE_MCP_URL:-}"
 if [ -z "$url" ]; then
   plugin_cfg="${root:-.}/packages/dpf-skill-pack/claude.mcp.json"
   if [ -f "$plugin_cfg" ]; then
     u="$(sed -n 's/.*"url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$plugin_cfg" 2>/dev/null | head -n 1)"
-    pfx='${DPF_MCP_URL:-'
+    pfx='${DPF_CLAUDE_MCP_URL:-'
+    legacy_pfx='${DPF_MCP_URL:-'
     case "$u" in
       "$pfx"*'}') u=${u#"$pfx"}; url=${u%\}} ;;
+      "$legacy_pfx"*'}') u=${u#"$legacy_pfx"}; url=${u%\}} ;;
       '$'*) ;;  # some other variable reference: not resolvable here
       *) url="$u" ;;
     esac

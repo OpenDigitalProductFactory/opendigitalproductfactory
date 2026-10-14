@@ -2159,6 +2159,7 @@
         "task-specific-operating-rules",
         "disclosure-measurement-and-recovery",
         "administrator-classification-recovery",
+        "approval-convergence-probe",
         "recovering-an-interrupted-independent-review",
         "parent-bounded-local-review-execution-bi-03ac2fd9"
       ]
@@ -2765,6 +2766,7 @@
         "the-brief-and-what-advances-a-stage",
         "failing-closed-is-not-the-same-as-locking",
         "every-reason-the-drive-emits-is-in-its-vocabulary-by-type",
+        "an-undispatched-stage-is-a-pause-and-its-task-owner-is-the-accountable-person",
         "every-stage-is-a-queue",
         "a-named-governed-writer-must-be-attached-not-discovered",
         "a-stage-names-the-tools-it-needs",
@@ -13194,6 +13196,7 @@
         "a-shape-is-a-model-the-platform-checks",
         "incomplete-or-unavailable-rooms",
         "who-is-accountable-and-who-is-working",
+        "who-an-ai-coworkers-stage-runs-for",
         "when-an-account-stops-being-used",
         "opening-a-workroom-that-has-no-work-item"
       ]

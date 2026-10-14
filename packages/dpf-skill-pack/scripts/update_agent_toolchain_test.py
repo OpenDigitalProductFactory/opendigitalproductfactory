@@ -1694,7 +1694,7 @@ class OnePluginOwnedConnectorTest(unittest.TestCase):
 
     def test_claude_descriptor_is_url_only_https_with_the_scope_pin(self) -> None:
         server = self._read("claude.mcp.json")["mcpServers"]["dpf"]
-        self.assertEqual(server["url"], "${DPF_MCP_URL:-https://localhost/api/mcp/v1?tier=full}")
+        self.assertEqual(server["url"], "${DPF_CLAUDE_MCP_URL:-https://localhost/api/mcp/v1?tier=full}")
         self.assertNotIn("headers", server)
         self.assertEqual(server["oauth"], {"scopes": updater.MCP_CLIENT_OAUTH_SCOPE_PIN})
 

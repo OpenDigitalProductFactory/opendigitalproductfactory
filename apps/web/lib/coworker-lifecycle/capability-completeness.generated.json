@@ -7536,7 +7536,7 @@
           "level": 3,
           "directSkills": 1,
           "wildcardSkills": 10,
-          "reachableTools": 231,
+          "reachableTools": 232,
           "heldGrants": [
             "work_room_read",
             "work_room_write",
@@ -7555,12 +7555,13 @@
             "backlog_triage",
             "document_write",
             "ea_graph_read",
+            "approval_probe_read",
             "coworker_catalog_read",
             "coworker_engagement_write"
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "1 skill(s), 231 tool(s), all service backings resolve",
+          "detail": "1 skill(s), 232 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -7655,7 +7656,7 @@
           "level": 3,
           "directSkills": 1,
           "wildcardSkills": 10,
-          "reachableTools": 231,
+          "reachableTools": 232,
           "heldGrants": [
             "work_room_read",
             "work_room_write",
@@ -7674,12 +7675,13 @@
             "backlog_triage",
             "document_write",
             "ea_graph_read",
+            "approval_probe_read",
             "coworker_catalog_read",
             "coworker_engagement_write"
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "1 skill(s), 231 tool(s), all service backings resolve",
+          "detail": "1 skill(s), 232 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -7774,7 +7776,7 @@
           "level": 3,
           "directSkills": 1,
           "wildcardSkills": 10,
-          "reachableTools": 231,
+          "reachableTools": 232,
           "heldGrants": [
             "work_room_read",
             "work_room_write",
@@ -7793,12 +7795,13 @@
             "backlog_triage",
             "document_write",
             "ea_graph_read",
+            "approval_probe_read",
             "coworker_catalog_read",
             "coworker_engagement_write"
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "1 skill(s), 231 tool(s), all service backings resolve",
+          "detail": "1 skill(s), 232 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -9169,18 +9172,19 @@
           "level": 3,
           "directSkills": 5,
           "wildcardSkills": 10,
-          "reachableTools": 94,
+          "reachableTools": 95,
           "heldGrants": [
             "admin_read",
             "admin_write",
             "agent_control_read",
             "registry_read",
             "web_search",
-            "file_read"
+            "file_read",
+            "approval_probe_read"
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "5 skill(s), 94 tool(s), all service backings resolve",
+          "detail": "5 skill(s), 95 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true

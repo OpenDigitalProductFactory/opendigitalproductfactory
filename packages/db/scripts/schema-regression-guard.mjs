@@ -298,6 +298,21 @@ export const INTENTIONAL_FIELD_REMOVALS = new Set([
   // no column of their own. Prune with the model entries.
   "VoiceProfile.trainingJobs",
   "CourseRegistration.examVoucher",
+  // 2026-10-14 BI-5F1CF306: QueueMetricSnapshot's eight duration percentiles
+  // WIDEN Int -> Float (DOUBLE PRECISION; the fields are KEPT, only storage
+  // grows; same shape as the FederatedRecordMirror widening above). INTEGER ms
+  // caps at ~24.8 days and Workroom stage items sit for weeks, so the hourly
+  // rollup failed on 2,430,001,060 ms. Migration:
+  // 20261014000000_queue_snapshot_duration_columns_double. Prune once shipped
+  // fleet-wide.
+  "QueueMetricSnapshot.waitP50Ms",
+  "QueueMetricSnapshot.waitP95Ms",
+  "QueueMetricSnapshot.processP50Ms",
+  "QueueMetricSnapshot.processP95Ms",
+  "QueueMetricSnapshot.cycleP50Ms",
+  "QueueMetricSnapshot.cycleP95Ms",
+  "QueueMetricSnapshot.heldP50Ms",
+  "QueueMetricSnapshot.heldP95Ms",
 ]);
 
 // Model attributes intentionally removed through a steward-reviewed migration.
