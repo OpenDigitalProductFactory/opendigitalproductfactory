@@ -91,7 +91,7 @@ export function PlatformHealthIndicator() {
             )}
 
             {monitoringOff && alerts.length > 0 && (
-              <div className="px-3 py-2 text-[10px] text-[var(--dpf-muted)] border-b border-[var(--dpf-border)]">
+              <div className="px-3 py-2 text-xs text-[var(--dpf-muted)] border-b border-[var(--dpf-border)]">
                 {t("monitoring.offAlertsNote")}
               </div>
             )}
