@@ -22,7 +22,7 @@ Use a conditional update matching the original capacity row identity, version, s
 
 No new inference route, timer override, account activation, grant, credential store or database migration is introduced. Existing approval idempotency, bounded HTTP request, one token-renewal limit and completed-response validation remain in force. Reconciliation never retries paid inference.
 
-The active-account `verificationOnly` path introduced in PR #6354 remains read-only for authentication and capacity. It validates the existing account snapshot without capturing or clearing quota evidence. Restoring routing uses the normal authorized account-verification path; a successful read-only probe alone does not claim that routing was restored.
+The active-account `verificationOnly` path introduced in PR #6354 does not activate accounts or mutate quota; existing snapshot-bound credential renewal remains permitted. It validates the existing account snapshot without capturing or clearing quota evidence. Restoring routing uses the normal authorized account-verification path; a successful verification-only probe alone does not claim that routing was restored.
 
 ## Ordered repair and acceptance
 
