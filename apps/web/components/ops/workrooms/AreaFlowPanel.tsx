@@ -6,6 +6,7 @@ import { KpiCard } from "@/components/ui/report-kit/KpiCard";
 import { WorkroomFlowMap } from "@/components/workspace/workroom/WorkroomFlowMap";
 
 import { PortfolioComparisonTable, ShapeFlowTable } from "./AreaFlowTables";
+import { ShapeStepMeasures } from "./ShapeStepMeasures";
 import type { PortfolioFlowWithCost, ShapeFlowView } from "@/lib/work-management/area-flow.server";
 import { FLOW_ITEM_TYPES, FLOW_WINDOW_DAYS, type FlowItemType } from "@/lib/work-management/portfolio-flow";
 import { getWorkShape } from "@/lib/work-management/work-shapes";
@@ -164,6 +165,7 @@ export function ShapeFlowDrillIn({ view, backHref, baseHref, stageKey, t }: { vi
       </div>
       <p className="text-xs text-[var(--dpf-muted)]">{t("flow.roomsInFlowOn", { count: model.aggregate?.roomsInFlow ?? 0, version: version ?? "" })}</p>
       <WorkroomFlowMap model={model} selectParam="stage" />
+      <ShapeStepMeasures measures={view.stepMeasures} t={t} />
       {view.roomsAtStep ? (
         <div className="space-y-2">
           <h3 className="text-sm font-medium text-[var(--dpf-text)]">{t("flow.roomsAt", { stage: stageKey ?? "" })}</h3>
