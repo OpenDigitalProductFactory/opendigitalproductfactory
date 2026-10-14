@@ -50,7 +50,8 @@ async function callDiagnostic(
 
 function isUnobservedDiagnostic(err: unknown): boolean {
   return isCapacityDeferral(err) || err instanceof DiagnosticIncompleteError
-    || err instanceof InferenceError || err instanceof GovernedInferenceDeadlineError;
+    || err instanceof InferenceError || err instanceof GovernedInferenceDeadlineError
+    || currentInferenceSignal()?.aborted === true;
 }
 
 /** A capacity deferral is the host declining to schedule, not the model failing. */
@@ -337,7 +338,7 @@ export async function runEndpointTests(opts: {
       },
     });
 
-    // Run probes against this model's provider via V2 routing with preferred provider bias.
+    // Probes stay on the selected model; dispatch still enforces shared admission.
     const probeResults: ProbeRunResult[] = [];
     for (const probe of CAPABILITY_PROBES) {
       const result = await runProbe(probe, providerId, modelId, runId);

@@ -28,7 +28,7 @@ vi.mock("@/lib/orchestrator-evaluator", () => ({
 
 import { checkScenarioAssertions } from "./endpoint-test-registry";
 import { InferenceError } from "@/lib/routing/inference-error";
-import { currentInferenceSignal } from "@/lib/routing/governed-inference-deadline";
+import { currentInferenceSignal, withInferenceCancellation } from "@/lib/routing/governed-inference-deadline";
 import {
   isCapacityDeferral,
   mapProbeResultsToInstructionFollowing,
@@ -300,5 +300,19 @@ describe("selected endpoint diagnostics (BI-0C5858D1)", () => {
       expect(mockCallProvider).toHaveBeenCalledTimes(1);
       expect(mockPrisma.modelProfile.update).not.toHaveBeenCalled();
     } finally { vi.useRealTimers(); }
+  });
+
+  it("honors inherited caller cancellation without scoring the model", async () => {
+    const parent = new AbortController();
+    let markStarted!: () => void;
+    const started = new Promise<void>(resolve => { markStarted = resolve; });
+    mockCallProvider.mockImplementation(() => { markStarted(); return new Promise(() => {}); });
+    const pending = withInferenceCancellation(parent.signal, () => runEndpointTests({ endpointId: "chatgpt", modelId: "gpt-6-luna", probesOnly: true, triggeredBy: "test" }));
+    await started;
+    parent.abort(new Error("owning request ended"));
+    const results = await pending;
+    expect(results[0]?.probes[0]).toMatchObject({ outcome: "deferred", passed: null });
+    expect(mockCallProvider).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.modelProfile.update).not.toHaveBeenCalled();
   });
 });
