@@ -115,6 +115,12 @@ Priority is explicit at the producer:
 The bounded queue-depth setting remains aggregate across both queues. Cancellation
 or failure removes exactly one waiter; release remains idempotent.
 
+Caller cancellation stays separate from governed parent authority. The provider
+composes both signals for local admission, and post-admission authority checks
+stop waiting when the caller expires. Cancelling a queued caller removes its
+entry without dispatching HTTP or revoking its parent. Active provider execution
+retains the lane until its transport settles.
+
 Each queued callback captures its submitting async context. Dispatch restores
 that context so the preceding holder cannot supply another caller's authority,
 deadline, transport or origin. Regression coverage includes an unscoped waiter

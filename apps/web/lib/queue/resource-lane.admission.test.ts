@@ -5,8 +5,51 @@ vi.mock("@/lib/routing/local-provider-capacity", () => ({ assertLocalProviderCap
 vi.mock("@/lib/inference/host-gpu-admission", () => ({ assertLocalGpuFree: checks.gpu }));
 import { withLocalInferenceLock } from "./resource-lane";
 import { chatAdapter } from "@/lib/routing/chat-adapter";
+import { currentGovernedInferenceDeadline, withGovernedInferenceDeadline,
+  withInferenceCancellation } from "@/lib/routing/governed-inference-deadline";
 
 afterEach(() => { vi.unstubAllEnvs(); vi.resetAllMocks(); });
+
+it("ends a caller's post-admission authority wait without revoking its parent", async () => {
+  const caller = new AbortController();
+  const reason = new Error("caller expired while checking authority");
+  let entered!: () => void;
+  let finishAuthority!: (value: boolean) => void;
+  const enteredAuthority = new Promise<void>(resolve => { entered = resolve; });
+  const authority = new Promise<boolean>(resolve => { finishAuthority = resolve; });
+  let checks = 0;
+  let observed: unknown;
+  let parentWasAborted: boolean | undefined;
+  const dispatch = vi.fn(async () => "answer");
+  const running = withGovernedInferenceDeadline({
+    deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+    verifyAuthority: async () => {
+      if (++checks === 1) return true;
+      entered();
+      return authority;
+    },
+  }, () => withInferenceCancellation(caller.signal, async () => {
+    const parent = currentGovernedInferenceDeadline()!;
+    try {
+      return await withLocalInferenceLock(dispatch, { signal: caller.signal });
+    } catch (error) {
+      observed = error;
+      parentWasAborted = parent.signal.aborted;
+      throw error;
+    }
+  }));
+  const settled = running.catch(() => undefined);
+  await enteredAuthority;
+  caller.abort(reason);
+  try {
+    await vi.waitFor(() => expect(observed).toBe(reason), { timeout: 1_000 });
+    expect(parentWasAborted).toBe(false);
+    expect(dispatch).not.toHaveBeenCalled();
+  } finally {
+    finishAuthority(true);
+    await settled;
+  }
+});
 
 it.each(["local", "ollama"])("%s provider dispatch waits behind a local build before checking the GPU", async (providerId) => {
   vi.stubEnv("VITEST", "false");

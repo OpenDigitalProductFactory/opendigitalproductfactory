@@ -356,12 +356,12 @@ export function withLocalInferenceLock<T>(
 async function probeLocalGpuThenRun<T>(fn: () => Promise<T>, modelId: string | null, signal?: AbortSignal): Promise<T> {
   signal?.throwIfAborted();
   const { assertGovernedInferenceAuthority } = await import("@/lib/routing/governed-inference-deadline");
-  await assertGovernedInferenceAuthority();
+  await assertGovernedInferenceAuthority(signal);
   const { assertLocalGpuFree } = await import("@/lib/inference/host-gpu-admission");
   const { assertLocalProviderCapacityAvailable } = await import("@/lib/routing/local-provider-capacity");
   await assertLocalProviderCapacityAvailable();
   await assertLocalGpuFree({ modelId });
   signal?.throwIfAborted();
-  await assertGovernedInferenceAuthority();
+  await assertGovernedInferenceAuthority(signal);
   return fn();
 }

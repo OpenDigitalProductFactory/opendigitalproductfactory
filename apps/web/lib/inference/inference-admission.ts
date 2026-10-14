@@ -27,31 +27,15 @@
 // in-process semaphore is a correct bound for a single-portal install. A
 // distributed lane (for multi-replica portals) is a documented follow-up.
 
-import { AsyncLocalStorage } from "node:async_hooks";
 import { isLocalProviderId } from "@/lib/routing/provider-locality";
-
-export type InferenceOrigin = "interactive" | "autonomous";
+import { currentInferenceSignal, type InferenceOrigin } from "@/lib/routing/governed-inference-deadline";
+export { currentInferenceOrigin, currentInferenceSignal, withInferenceOrigin,
+  withInferenceCancellation, type InferenceOrigin } from "@/lib/routing/governed-inference-deadline";
 
 /** Coarse engine bucket. Local models are the scarce, easily-overloaded backend
  *  and get their own tight budget; every remote provider shares an aggregate
  *  outbound budget (a conservative cap on concurrent cost/rate-limit exposure). */
 export type EngineKey = "local" | "remote";
-
-const originStore = new AsyncLocalStorage<InferenceOrigin>();
-
-/** Run `fn` with the given inference origin bound for its whole async subtree.
- *  Every `callProvider` beneath it reads this origin without any signature
- *  threading. */
-export function withInferenceOrigin<T>(origin: InferenceOrigin, fn: () => T): T {
-  return originStore.run(origin, fn);
-}
-
-/** The origin of the currently-executing inference call. Defaults to
- *  "interactive" when unset — background callers must opt in via
- *  withInferenceOrigin("autonomous", …). */
-export function currentInferenceOrigin(): InferenceOrigin {
-  return originStore.getStore() ?? "interactive";
-}
 
 export function engineKeyForProvider(providerId: string): EngineKey {
   return isLocalProviderId(providerId) ? "local" : "remote";
@@ -132,7 +116,7 @@ interface Waiter {
   reject: (err: Error) => void;
   timer: ReturnType<typeof setTimeout> | null;
   enqueuedAt: number;
-  cleanup?: () => void;
+  cancelCleanup?: () => void;
 }
 
 interface EngineState {
@@ -163,6 +147,11 @@ function removeWaiter(s: EngineState, w: Waiter): void {
   if (i >= 0) q.splice(i, 1);
 }
 
+function clearWaiter(w: Waiter): void {
+  if (w.timer) clearTimeout(w.timer);
+  w.cancelCleanup?.();
+}
+
 /**
  * Acquire a slot on `engineKey`. Resolves immediately when the engine is below
  * its ceiling; otherwise queues (by priority) until a slot frees or the timeout
@@ -174,7 +163,8 @@ export async function acquireInferenceSlot(
   origin: InferenceOrigin,
   opts?: { providerId?: string; modelId?: string; signal?: AbortSignal },
 ): Promise<() => void> {
-  opts?.signal?.throwIfAborted();
+  const signal = currentInferenceSignal(opts?.signal);
+  signal?.throwIfAborted();
   const limit = resolveEngineLimit(engineKey);
   const s = engineState(engineKey);
 
@@ -189,27 +179,34 @@ export async function acquireInferenceSlot(
   await new Promise<void>((resolve, reject) => {
     const waiter: Waiter = {
       origin,
-      resolve: () => { waiter.cleanup?.(); resolve(); },
+      resolve,
       reject,
       timer: null,
       enqueuedAt: startedWaiting,
     };
-    const cancel = () => {
-      removeWaiter(s, waiter);
-      if (waiter.timer) clearTimeout(waiter.timer);
-      waiter.cleanup?.();
-      reject(opts?.signal?.reason ?? new Error("inference-parent-canceled"));
-    };
-    waiter.cleanup = () => opts?.signal?.removeEventListener("abort", cancel);
-    opts?.signal?.addEventListener("abort", cancel, { once: true });
     const timeoutMs = resolveAcquireTimeoutMs(origin);
     waiter.timer = setTimeout(() => {
       removeWaiter(s, waiter);
-      waiter.cleanup?.();
+      clearWaiter(waiter);
       reject(createInferenceAdmissionTimeoutError(engineKey, origin, timeoutMs, opts));
     }, timeoutMs);
     (origin === "interactive" ? s.interactiveQ : s.autonomousQ).push(waiter);
+    if (signal) {
+      const cancel = () => {
+        removeWaiter(s, waiter);
+        clearWaiter(waiter);
+        reject(signal.reason);
+      };
+      waiter.cancelCleanup = () => signal.removeEventListener("abort", cancel);
+      signal.addEventListener("abort", cancel, { once: true });
+    }
   });
+
+  // Cancellation can race the handoff before this continuation gets CPU time.
+  if (signal?.aborted) {
+    makeRelease(engineKey)();
+    signal.throwIfAborted();
+  }
 
   const waitedMs = Date.now() - startedWaiting;
   if (waitedMs >= 2_000) {
@@ -231,7 +228,7 @@ function makeRelease(engineKey: EngineKey): () => void {
     const next = nextWaiter(s);
     if (next) {
       // Hand our slot directly to the next waiter (active count stays put).
-      if (next.timer) clearTimeout(next.timer);
+      clearWaiter(next);
       next.resolve();
     } else {
       s.active = Math.max(0, s.active - 1);
@@ -260,7 +257,7 @@ export function getInferenceAdmissionSnapshot(): Record<
 export function __resetInferenceAdmissionForTest(): void {
   for (const s of engines.values()) {
     for (const w of [...s.interactiveQ, ...s.autonomousQ]) {
-      if (w.timer) clearTimeout(w.timer);
+      clearWaiter(w);
     }
   }
   engines.clear();

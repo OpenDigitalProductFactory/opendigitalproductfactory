@@ -38,7 +38,8 @@ import {
   resolveInferenceRuntimePolicy,
 } from "./local-inference-runtime-policy";
 import { isRecord } from "@/lib/shared/coerce";
-import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
+import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline,
+  currentInferenceSignal } from "./governed-inference-deadline";
 
 // Compatibility export for existing callers; callProvider now owns local
 // admission, so this adapter never acquires the lane itself.
@@ -457,7 +458,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
     let res: Response;
     try {
       // callProvider owns admission; governed queue wait consumes the parent budget.
-      await assertGovernedInferenceAuthority();
+      await assertGovernedInferenceAuthority(currentInferenceSignal());
       const execution = currentGovernedInferenceDeadline();
       const timeout = createInferenceTimeoutSignal(resolveInferenceRuntimePolicy(providerId, modelId, {
         defaultTimeoutMs: process.env.DPF_INFERENCE_TIMEOUT_MS,
@@ -470,6 +471,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
         signal: execution ? AbortSignal.any([timeout, execution.signal]) : timeout,
       });
     } catch (e) {
+      currentInferenceSignal()?.throwIfAborted();
       // A busy GPU is a capacity deferral. Wrapping it as "network" makes the
       // fallback chain treat the local model as broken instead of waiting.
       if (e instanceof Error && ["LocalProviderCapacityDeferredError", "GovernedInferenceDeadlineError"].includes(e.name)) throw e;

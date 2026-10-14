@@ -43,6 +43,34 @@ The risk is narrowing on caller-asserted rather than server-recorded ownership. 
 
 There is no UI control or public API shape change. Update `docs/operations/local-ci-sandbox-slots.md` with owned cleanup eligibility, retained approval boundaries and truthful terminal behavior. Live acceptance and native semantic review remain UNRUN until independently recorded.
 
+## Expiry continuation, October 13
+
+Continuation Workroom: WC-E2A3B2EB on `fix/dev-lease-expiry-wait`, the same
+BI-25CB699C and source worktree. WC-796A89FA/PR6263 retains the delivered consent
+correction and all prior evidence; its completed scopes were released normally
+after exact employee approval cmv7cik2s142v01ll6fjg3tpp executed.
+
+The served 08bb build expires leases in `reconcileEnvironmentInTransaction`
+without settling their linked durable Task wait. The janitor subsequently scans
+only active/queued leases, so that wait can remain submitted until its owner
+explicitly releases the expired lease. This is the remaining AC-4 cleanup defect.
+
+Reuse `settleNonprodLeaseWait` in the existing environment transaction after an
+actual expiry transition. Cover both janitor and claim reconciliation, exact
+lease binding, replay, payload preservation and never-admitted null slot/history.
+No command execution or passing test evidence follows from settling the wait.
+Keep expiry and Task settlement atomic; preserve FIFO and the existing lock.
+Run graph-linked/colocated lease and durable-wait tests and both web typechecks,
+then independent review and protected GitHub integration. Earlier 6263 evidence
+remains scoped to that delivered correction; this continuation is not yet tested
+or deployed. Independent source review identified two notification/expiry
+interleavings. Capacity writes now require a submitted Task and exact payload
+CAS; expiry revalidates complete lease ownership on at most three fresh reads,
+then rolls back on persistent contention. Genuine failing regressions reproduced
+both races before the corrections. All 141 affected tests across ten files and
+both official web TypeScript 7 programs pass. Source review found no remaining
+blocking finding; live PostgreSQL rollback and served acceptance remain unrun.
+
 ## Backlog coverage
 
 Initial native planning receipt: cmv67i1ua1a4001o78yav9uoh, atomic, covering immutable plan commit de5743aef92bdeac08b9a122f4fc08594bd72067/blob 6d01322b2e670e45c80df1d540df47116512d79d. Parent BI-25CB699C, Workroom WC-796A89FA; atomic deliverable mapped to the existing BI, with no dependencies. Final source publication will reconcile current coverage in the Workroom without treating this initial receipt as a code-review or runtime verdict.

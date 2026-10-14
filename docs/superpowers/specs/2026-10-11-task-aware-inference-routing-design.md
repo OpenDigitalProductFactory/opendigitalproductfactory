@@ -489,3 +489,107 @@ unverified because native coordination is unavailable. The next agent action
 after reconnection is to read the install contract and live trace/backlog/kernel
 context, reconcile this proposal with existing work, then deliver slices 0-2.
 This document neither advances a build gate nor authorizes an install change.
+
+### October 12 follow-through
+
+This update supersedes the earlier unavailable-coordination and undeployed
+status statements above. PR #6190 merged through protected checks as
+`520fb9eeeb8b2f4204828c3f431cc3961774f7a5`. The canonical development portal
+subsequently served `8156f50dc5b1670f2e5405aeee6a5eb309ac25fa`, whose source
+ancestry includes that repair. The missing Workroom base binding was reconciled
+and the merged and served identities recorded. Deployment identity proves that
+the code arrived; it does not prove the broader behavioral outcomes.
+
+Both existing OpenAI subscription-account catalog refreshes succeeded through
+the supported account operation. The live phase resolver nevertheless excluded
+all 26 candidates for Plan, Design review and Plan review, with missing activity
+completion capacity as its reported dominant reason. Ideate and Build resolved
+to Codex. This remains failed live verification, not an eligible-cloud canary.
+Capacity/catalog acceptance belongs to BI-59E37E39, account routing to
+BI-385C0357, and truthful runtime-health projection to BI-449F5F0F; their existing
+Workrooms were retained rather than duplicated.
+
+BI-277606F2 owns the independently shippable utility execution repair in slice 4.
+BI-0C5858D1 captures the separate diagnostic gap: the existing endpoint test
+runner selects only `llm` providers and silently skips the active Responses
+subscription providers, returning success with no tests. This is not capability
+or cloud execution evidence; its acceptance remains open.
+Its ordered implementation reuses existing primitives:
+
+1. Reproduce ignored output allowance, interactive-origin default and leaked
+   timeout using the utility caller; test queue-handoff and transport cancellation.
+2. Bind utility work to ActivityContract with low effort and its explicit output allowance, or
+   512 tokens by default. Invalid allowances return the existing truthful fallback
+   before dispatch. Existing payload screening and endpoint capacity checks still
+   decide eligibility; this repair supplies no model-capacity evidence. The
+   shared caller-plan override also clamps the final dispatch allowance without
+   increasing a stricter existing plan. Regression coverage checks the dispatched
+   plan, not only the caller options.
+3. Extend the existing inference async context to carry caller cancellation along
+   with origin. The priority semaphore removes cancelled waiters and releases a
+   cancelled handoff without disturbing an already running request. The shared
+   HTTP transport combines the utility signal with each adapter's own deadline.
+4. Recheck cancellation before provider dispatch and classify actual cancellation
+   separately in telemetry. Clear deadline timers on every exit. A ten-second
+   caller deadline returns the existing fallback; unsupported transport
+   cancellation never falsely releases a slot held by a running request.
+   A token-truncated answer is fallback output, never accepted as a completed
+   utility result merely because its prefix satisfies a length check.
+5. Run graph-linked and colocated regression tests, both typechecks, source guards,
+   exact-tree shared CI and protected publication. Verify the published repair
+   against the served identity with synthetic input before recording acceptance.
+
+No schema, parallel queue, provider pin or clearance change is introduced. The
+shared inference context and waiter cleanup replace duplicated lifecycle work.
+Rollback is a source revert through the canonical release and self-upgrade.
+Residual risk: CLI execution may continue after the caller deadline when its
+adapter has no cancellation hook; its existing admission slot remains occupied
+until actual completion. Full prompt, cloud-canary and autonomous recovery
+outcomes remain open. The new utility repair is not deployed by this document.
+
+October 13 reconciliation: PR #6262 merged the immutable reviewer parent deadline
+as 0954bfb23a1fe7daf2a93f1f5fb3fd5dd205b2b0. Utility cancellation combines its
+caller signal with the parent's explicit admission signal at one semaphore and
+one waiter cleanup path. The selected governed local transport keeps its parent
+authority, generation and deadline checks while a shared fetch wrapper adds the
+shorter caller signal. Utility work never creates a synthetic parent authority.
+Joint tests cover either signal cancelling queued work, ownership after handoff,
+and both signals on real loopback HTTP. A dispatch regression fails when the
+parent transport is selected without the caller wrapper. The reconciled source
+passes 256 tests in 13 suites; it requires a new exact-tree gate. The existing
+cancellation waiter also ends a shorter caller's wait on a hung authority
+recheck, including the selected local transport, without granting or revoking
+parent authority. The shorter caller regression failed before this extension.
+The earlier
+e40223ec8d5 gate (6391 tests, evidence cmv69z7yn0k7001qpgib0s7kt) attests only
+that earlier snapshot and cannot be reused as integration proof for this tree.
+The latest read-only phase preview resolves all five phases to cloud providers;
+this supersedes the earlier unresolved phase preview, not the separate missing
+OpenAI model-capacity evidence or the pending executed cloud/recovery acceptance.
+
+The local chat adapter's shared GPU lane also receives the combined parent and
+caller signal. A utility cancelled while waiting for that lane must issue no HTTP
+request and preserve its cancellation reason instead of reporting a network
+failure. Its regression failed before the caller signal was forwarded. The
+existing signal getter now owns the combination used by both admission lanes.
+The b1f8ee0b035 snapshot passed canonical integration with evidence
+cmv6c8wo10j6l01n1x41ed4f0 and received an independent read-only client assessment
+with no blocking source finding in the requested boundaries. Neither attests
+this subsequent GPU-lane change; this final tree requires fresh verification.
+
+The subsequent 28d0c7c preflight caught a reverse dependency from routing to
+inference. The existing caller context now lives in the routing deadline module,
+below both admission and adapters; inference admission re-exports its public
+origin and cancellation functions for existing callers. The application boundary
+guard passes without changing its exception baseline. This refactor needs fresh
+commit-bound verification and assessment; the earlier gate and assessments do
+not attest the changed tree.
+
+The 694a476c integration attempt stopped at merge conflicts with refreshed main
+ad9c4d14da5. Its controller also rejected the completion checkpoint because of a
+gate-key mismatch; no integration tests ran and its inconclusive receipt is not
+a pass. The branch was reconciled onto that main ref, preserving canonical local
+provider classification and the peer's GPU admission regressions. Those tests
+now observe real admission while retaining call-order assertions. The expanded
+affected run passed 342 tests in 23 suites; the reconciled tree needs its own
+commit-bound gate and source assessment.
