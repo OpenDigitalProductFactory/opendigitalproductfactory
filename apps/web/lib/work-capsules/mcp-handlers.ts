@@ -30,6 +30,7 @@ import {
   isWorkCapsulePortfolioRole,
   isWorkCapsuleSource,
   isWorkCapsuleStatus,
+  SCOPE_KIND_SET,
   WORK_CAPSULE_WORKROOM_SHAPES,
   type ScopeClaim,
   type WorkCapsuleEvidenceKind,
@@ -117,7 +118,6 @@ async function runAutoRenewedCapsuleWrite(args: {
   return renewLeaseAfterCapsuleWrite(args.capsuleId, currentActor);
 }
 
-const SCOPE_KINDS = new Set<ScopeClaim["kind"]>(["path", "module", "package", "route", "skill", "prompt"]);
 const SCOPE_INTENTS = new Set<ScopeClaim["intent"]>(["edit", "read"]);
 
 function parseClaimInputs(params: Record<string, unknown>): Array<Pick<ScopeClaim, "kind" | "value" | "intent">> | null {
@@ -131,7 +131,7 @@ function parseClaimInputs(params: Record<string, unknown>): Array<Pick<ScopeClai
     const kind = typeof candidate.kind === "string" ? candidate.kind : "";
     const value = typeof candidate.value === "string" ? candidate.value.trim() : "";
     const intent = typeof candidate.intent === "string" ? candidate.intent : "";
-    if (!SCOPE_KINDS.has(kind as ScopeClaim["kind"]) || !SCOPE_INTENTS.has(intent as ScopeClaim["intent"]) || !value) {
+    if (!SCOPE_KIND_SET.has(kind as ScopeClaim["kind"]) || !SCOPE_INTENTS.has(intent as ScopeClaim["intent"]) || !value) {
       return null;
     }
     parsed.push({ kind: kind as ScopeClaim["kind"], value, intent: intent as ScopeClaim["intent"] });

@@ -1,5 +1,5 @@
 import { prisma } from "@dpf/db";
-import { isWorkCapsuleStatus, parseScopeClaims, type ScopeClaim } from "@/lib/work-capsules";
+import { isWorkCapsuleStatus, parseScopeClaims, SCOPE_KIND_SET, type ScopeClaim } from "@/lib/work-capsules";
 import type { ToolExecutionContext } from "@/lib/mcp-tool-types";
 import { isTerminalCapsuleStatus } from "./work-capsule-branch-identity";
 import type { ScopeClaimRoom } from "./scope-claim-lease";
@@ -7,7 +7,6 @@ import type { ScopeClaimRoom } from "./scope-claim-lease";
 export const OWN_SCOPE_RELEASE_REASON = "owned-workroom-scope-release";
 export type ScopeReleaseInput = Pick<ScopeClaim, "kind" | "value">;
 export type ScopeReleaseRoom = ScopeClaimRoom & { capsuleId: string; scopeClaims: unknown };
-const kinds = new Set(["path", "module", "package", "route", "skill", "prompt"]);
 const record = (value: unknown): Record<string, unknown> | null =>
   value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 
@@ -17,7 +16,7 @@ export function parseScopeReleaseClaims(value: unknown): ScopeReleaseInput[] | n
   const result: ScopeReleaseInput[] = [];
   for (const entry of value) {
     const row = record(entry);
-    if (!row || typeof row.kind !== "string" || !kinds.has(row.kind)
+    if (!row || typeof row.kind !== "string" || !SCOPE_KIND_SET.has(row.kind as ScopeClaim["kind"])
       || typeof row.value !== "string" || !row.value.trim()) return null;
     result.push({ kind: row.kind as ScopeClaim["kind"], value: row.value.trim() });
   }
