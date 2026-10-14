@@ -514,8 +514,7 @@ async function runEndpointTestsHandler(
   });
 
   const summary = results.map((r) => {
-    // BI-91F0E312: deferred probes/scenarios never reached the model — report
-    // them as deferred, not failed, and flag the run as incomplete.
+    // Incomplete observations do not establish a model-quality failure.
     const probesPassed = r.probes.filter((p) => p.outcome === "passed").length;
     const probesFailed = r.probes.filter((p) => p.outcome === "failed").length;
     const probesDeferred = r.probes.filter((p) => p.outcome === "deferred").length;
@@ -524,7 +523,7 @@ async function runEndpointTestsHandler(
     const scenariosDeferred = r.scenarios.filter((s) => s.outcome === "deferred").length;
     const lines = [
       `**${r.endpointId}**: Probes ${probesPassed}/${probesPassed + probesFailed} passed` +
-        (probesDeferred > 0 ? ` (${probesDeferred} deferred — capacity held, run incomplete)` : ""),
+        (probesDeferred > 0 ? ` (${probesDeferred} unverified — run incomplete)` : ""),
     ];
     if (r.scenarios.length > 0) {
       lines.push(

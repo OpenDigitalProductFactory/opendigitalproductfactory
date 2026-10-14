@@ -824,6 +824,15 @@ the wrapper reads that exact path. This prevents the two linked worktrees'
 different gitdirs from turning a green preflight into `freshness: unknown`, and
 prevents a stale prior report from classifying a new run.
 
+The integration plan's first step merges the candidate onto the accepted base.
+If that merge stops on conflicts, the runner reads the unmerged paths from git's
+index, aborts the merge, writes them to `execution.mergeConflict` in the run
+metadata, and exits 10 (`EXIT_CANDIDATE_MERGE_CONFLICT`). The wrapper records
+the existing `conflict` status. A run that stopped at its merge graded nothing,
+so the wrapper owes no completion checkpoint and does not rewrite the result as
+infrastructure. `pregate:status` reports FAIL and names the remedy: merge
+`origin/main` into the branch and resolve the listed paths (BI-FCC1DCB2).
+
 The sandbox-freshness step checks the load-bearing runtime and gate packages,
 including the Vitest runner used by the next step. Vitest is checked for both
 locked version and runnable entrypoint imports, so an incomplete package cannot
@@ -1086,6 +1095,20 @@ program takes seconds instead of minutes. TypeScript 6 remains the workspace's
 `typescript` library. `DPF_TSC=6` runs it as the checker instead, for comparing
 verdicts. The non-blocking CI job "Typecheck (TS6 reference, advisory)" does
 the same on every pull request.
+
+Updating TypeScript 7 is one PR that bumps the root `typescript7` alias
+(`pnpm add -w -D typescript7@npm:typescript@<version>`). Every surface follows
+the lockfile from there:
+- worktrees reinstall;
+- the local-CI sandbox's freshness step refuses to grade until its installed
+  `typescript7` matches the lock;
+- GitHub CI installs fresh;
+- Build Studio type-checks through `run-tsc.mjs` (BI-D2FE6931).
+
+Dependabot is not relied on to notice new releases of an `npm:`-aliased
+dependency. The weekly "TypeScript Checker Currency" workflow
+(`scripts/audit-typescript-checker-currency.mjs`) compares the pin with npm's
+latest release and keeps one tracking issue open while the pin is behind.
 
 The local feedback loop is therefore:
 

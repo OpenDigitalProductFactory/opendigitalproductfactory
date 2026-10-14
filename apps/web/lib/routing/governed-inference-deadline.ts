@@ -1,6 +1,32 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createOffThreadpoolFetchTransport, type OffThreadpoolFetchTransport } from "@/lib/network/off-threadpool-fetch";
 
+export type InferenceOrigin = "interactive" | "autonomous";
+const originStore = new AsyncLocalStorage<{ origin?: InferenceOrigin; signal?: AbortSignal }>();
+
+/** Shared caller context lives below admission and provider adapters. */
+export function withInferenceOrigin<T>(origin: InferenceOrigin, fn: () => T): T {
+  return originStore.run({ ...originStore.getStore(), origin }, fn);
+}
+
+export function currentInferenceOrigin(): InferenceOrigin {
+  return originStore.getStore()?.origin ?? "interactive";
+}
+
+/** Caller cancellation never grants or replaces governed parent authority. */
+export function withInferenceCancellation<T>(signal: AbortSignal, fn: () => T): T {
+  const inherited = currentInferenceSignal();
+  return originStore.run({ ...originStore.getStore(),
+    signal: inherited && inherited !== signal ? AbortSignal.any([inherited, signal]) : signal,
+  }, fn);
+}
+
+export function currentInferenceSignal(parentSignal?: AbortSignal): AbortSignal | undefined {
+  const callerSignal = originStore.getStore()?.signal;
+  return callerSignal && parentSignal && callerSignal !== parentSignal
+    ? AbortSignal.any([callerSignal, parentSignal]) : callerSignal ?? parentSignal;
+}
+
 type DeadlineScope = Readonly<{
   deadlineAt: number;
   signal: AbortSignal;
@@ -18,14 +44,15 @@ export class GovernedInferenceDeadlineError extends Error {
   }
 }
 
-function awaitAuthority(checking: Promise<void>, signal: AbortSignal): Promise<void> {
-  signal.throwIfAborted();
+/** Cancellation ends this wait; it never supplies or revokes parent authority. */
+export function awaitInferenceCancellation<T>(checking: Promise<T>, signal: AbortSignal): Promise<T> {
   return new Promise((resolve, reject) => {
-    const canceled = () => reject(signal.reason);
+    const canceled = () => { signal.removeEventListener("abort", canceled); reject(signal.reason); };
     signal.addEventListener("abort", canceled, { once: true });
-    checking.then(() => { signal.removeEventListener("abort", canceled); resolve(); }, error => {
+    checking.then(value => { signal.removeEventListener("abort", canceled); resolve(value); }, error => {
       signal.removeEventListener("abort", canceled); reject(error);
     });
+    if (signal.aborted) canceled();
   });
 }
 
@@ -61,7 +88,7 @@ export async function withGovernedInferenceDeadline<T>(
         if (!disposed) controller.abort(new GovernedInferenceDeadlineError("authority-unavailable"));
       }
     })().finally(() => { checking = undefined; });
-    await awaitAuthority(checking, controller.signal);
+    await awaitInferenceCancellation(checking, controller.signal);
     controller.signal.throwIfAborted();
     if (Date.now() >= deadlineAt) {
       controller.abort(new GovernedInferenceDeadlineError("deadline-exhausted"));
@@ -97,6 +124,8 @@ export function currentGovernedInferenceDeadline(): DeadlineScope | undefined {
 }
 
 /** Called at the common provider choke point, including every fallback. */
-export async function assertGovernedInferenceAuthority(): Promise<void> {
-  await deadlines.getStore()?.assertAuthority();
+export async function assertGovernedInferenceAuthority(callerSignal?: AbortSignal): Promise<void> {
+  callerSignal?.throwIfAborted();
+  const checking = deadlines.getStore()?.assertAuthority();
+  if (checking) await (callerSignal ? awaitInferenceCancellation(checking, callerSignal) : checking);
 }

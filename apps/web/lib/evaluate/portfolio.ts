@@ -27,11 +27,12 @@ export type OwnerRoleInfo = {
 };
 
 /** Portfolio root accent colours (keyed by nodeId). */
+/** Portfolio identity colours as theme tokens (globals.css), so light, dark and branding all apply. */
 export const PORTFOLIO_COLOURS: Record<string, string> = {
-  foundational: "#7c8cf8",
-  manufacturing_and_delivery: "#fb923c",
-  for_employees: "#a78bfa",
-  products_and_services_sold: "#f472b6",
+  foundational: "var(--dpf-portfolio-foundational)",
+  manufacturing_and_delivery: "var(--dpf-portfolio-manufacturing-and-delivery)",
+  for_employees: "var(--dpf-portfolio-for-employees)",
+  products_and_services_sold: "var(--dpf-portfolio-products-and-services-sold)",
 };
 
 /** Portfolio owner HR role codes (keyed by nodeId). */

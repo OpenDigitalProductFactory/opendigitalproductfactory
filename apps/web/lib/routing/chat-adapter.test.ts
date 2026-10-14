@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+vi.mock("@/lib/routing/local-provider-capacity", () => ({ assertLocalProviderCapacityAvailable: vi.fn() }));
 // ── Mocks (must be declared before imports) ──────────────────────────────────
 // Fake both inference leaves (error, message format) with copies of their pure functions.
 const aiInferenceFake = vi.hoisted(() => {

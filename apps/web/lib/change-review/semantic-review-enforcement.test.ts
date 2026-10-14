@@ -16,6 +16,7 @@ import {
 
 const now = new Date("2026-08-01T16:00:00.000Z");
 const identity: SemanticReviewIdentity = {
+  artifactType: "code-change",
   capsuleId: "WC-CALIBRATION",
   baseTreeHash: "a".repeat(40),
   headTreeHash: "b".repeat(40),
@@ -38,6 +39,15 @@ function receipt(overrides: Partial<SemanticReviewReceipt> = {}): SemanticReview
 }
 
 describe("deterministic semantic-review publication control", () => {
+  it("uses the publication request role rather than a matching receipt and copied identity", () => {
+    const specIdentity = { ...identity, artifactType: "spec" as const };
+    const specReceipt = createSemanticReviewReceipt({ identity: specIdentity, disposition: "reviewed", risk: "high",
+      result: { decision: "pass", issues: [], summary: "Spec reviewed." } });
+    expect(evaluateSemanticReviewPublicationControl({ mode: "enforce", identity: specIdentity,
+      expectedArtifactType: "code-change", receipt: specReceipt, now })).toMatchObject({ mayPublish: false, reason: "stale-receipt" });
+    expect(evaluateSemanticReviewPublicationControl({ mode: "enforce", identity: specIdentity,
+      expectedArtifactType: "spec", receipt: specReceipt, now })).toMatchObject({ mayPublish: true, reason: "fresh-receipt" });
+  });
   it("observes a missing receipt in shadow mode and blocks it in enforce mode", () => {
     expect(evaluateSemanticReviewPublicationControl({ mode: "shadow", identity, receipt: null, now }))
       .toMatchObject({ disposition: "shadow-observe", reason: "missing-receipt", mayPublish: true });

@@ -300,12 +300,12 @@
       "byConsequenceClass": {
         "outward": 17,
         "irreversible": 21,
-        "authority": 23
+        "authority": 25
       },
-      "sideEffectingTools": 187,
-      "gateClassified": 62,
+      "sideEffectingTools": 189,
+      "gateClassified": 64,
       "ungated": 125,
-      "coveragePct": 33,
+      "coveragePct": 34,
       "classifiedTools": [
         "abandon_stalled_build",
         "activity_harness_confidence_override",
@@ -329,6 +329,7 @@
         "discovery_sweep",
         "dismiss_entity",
         "drive_browser_task",
+        "drive_workroom_runtime",
         "enrich_customer_account",
         "enrich_digital_product",
         "escalate_feedback_upstream",
@@ -353,6 +354,7 @@
         "repair_promoter_image",
         "request_re_enrichment",
         "request_self_upgrade",
+        "resume_workroom_queue",
         "retire_backlog_item",
         "run_capacity_drain",
         "run_hive_scout_ingest",
@@ -1926,8 +1928,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "HR-200",
-          "reachableSideEffectingTools": 65,
-          "reachableGatedTools": 20,
+          "reachableSideEffectingTools": 67,
+          "reachableGatedTools": 22,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to HR-200",
           "levelKey": "proven",
@@ -1952,7 +1954,7 @@
           "level": 1,
           "directSkills": 0,
           "wildcardSkills": 10,
-          "reachableTools": 149,
+          "reachableTools": 152,
           "heldGrants": [
             "registry_read",
             "backlog_read",
@@ -1970,7 +1972,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "no skill authored for it (10 wildcard only), 149 reachable tool(s)",
+          "detail": "no skill authored for it (10 wildcard only), 152 reachable tool(s)",
           "levelKey": "declared",
           "ceiling": 3,
           "atCeiling": false
@@ -2006,7 +2008,7 @@
           "plane": "toolsAndSkills",
           "level": 1,
           "ceiling": 3,
-          "detail": "no skill authored for it (10 wildcard only), 149 reachable tool(s)"
+          "detail": "no skill authored for it (10 wildcard only), 152 reachable tool(s)"
         },
         {
           "plane": "evidence",
@@ -4680,8 +4682,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-300",
-          "reachableSideEffectingTools": 65,
-          "reachableGatedTools": 20,
+          "reachableSideEffectingTools": 67,
+          "reachableGatedTools": 22,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-300",
           "levelKey": "proven",
@@ -4706,7 +4708,7 @@
           "level": 1,
           "directSkills": 0,
           "wildcardSkills": 10,
-          "reachableTools": 132,
+          "reachableTools": 135,
           "heldGrants": [
             "registry_read",
             "sandbox_execute",
@@ -4717,7 +4719,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "no skill authored for it (10 wildcard only), 132 reachable tool(s)",
+          "detail": "no skill authored for it (10 wildcard only), 135 reachable tool(s)",
           "levelKey": "declared",
           "ceiling": 3,
           "atCeiling": false
@@ -4753,7 +4755,7 @@
           "plane": "toolsAndSkills",
           "level": 1,
           "ceiling": 3,
-          "detail": "no skill authored for it (10 wildcard only), 132 reachable tool(s)"
+          "detail": "no skill authored for it (10 wildcard only), 135 reachable tool(s)"
         },
         {
           "plane": "evidence",
@@ -4817,8 +4819,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-300",
-          "reachableSideEffectingTools": 65,
-          "reachableGatedTools": 20,
+          "reachableSideEffectingTools": 67,
+          "reachableGatedTools": 22,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-300",
           "levelKey": "proven",
@@ -4843,7 +4845,7 @@
           "level": 1,
           "directSkills": 0,
           "wildcardSkills": 10,
-          "reachableTools": 132,
+          "reachableTools": 135,
           "heldGrants": [
             "registry_read",
             "sandbox_execute",
@@ -4854,7 +4856,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "no skill authored for it (10 wildcard only), 132 reachable tool(s)",
+          "detail": "no skill authored for it (10 wildcard only), 135 reachable tool(s)",
           "levelKey": "declared",
           "ceiling": 3,
           "atCeiling": false
@@ -4890,7 +4892,7 @@
           "plane": "toolsAndSkills",
           "level": 1,
           "ceiling": 3,
-          "detail": "no skill authored for it (10 wildcard only), 132 reachable tool(s)"
+          "detail": "no skill authored for it (10 wildcard only), 135 reachable tool(s)"
         },
         {
           "plane": "evidence",
@@ -4954,8 +4956,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-300",
-          "reachableSideEffectingTools": 63,
-          "reachableGatedTools": 18,
+          "reachableSideEffectingTools": 65,
+          "reachableGatedTools": 20,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-300",
           "levelKey": "proven",
@@ -4980,7 +4982,7 @@
           "level": 1,
           "directSkills": 0,
           "wildcardSkills": 10,
-          "reachableTools": 126,
+          "reachableTools": 129,
           "heldGrants": [
             "registry_read",
             "sandbox_execute",
@@ -4990,7 +4992,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "no skill authored for it (10 wildcard only), 126 reachable tool(s)",
+          "detail": "no skill authored for it (10 wildcard only), 129 reachable tool(s)",
           "levelKey": "declared",
           "ceiling": 3,
           "atCeiling": false
@@ -5026,7 +5028,7 @@
           "plane": "toolsAndSkills",
           "level": 1,
           "ceiling": 3,
-          "detail": "no skill authored for it (10 wildcard only), 126 reachable tool(s)"
+          "detail": "no skill authored for it (10 wildcard only), 129 reachable tool(s)"
         },
         {
           "plane": "evidence",
@@ -5090,8 +5092,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-300",
-          "reachableSideEffectingTools": 65,
-          "reachableGatedTools": 20,
+          "reachableSideEffectingTools": 67,
+          "reachableGatedTools": 22,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-300",
           "levelKey": "proven",
@@ -5116,7 +5118,7 @@
           "level": 1,
           "directSkills": 0,
           "wildcardSkills": 10,
-          "reachableTools": 132,
+          "reachableTools": 135,
           "heldGrants": [
             "registry_read",
             "sandbox_execute",
@@ -5127,7 +5129,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "no skill authored for it (10 wildcard only), 132 reachable tool(s)",
+          "detail": "no skill authored for it (10 wildcard only), 135 reachable tool(s)",
           "levelKey": "declared",
           "ceiling": 3,
           "atCeiling": false
@@ -5163,7 +5165,7 @@
           "plane": "toolsAndSkills",
           "level": 1,
           "ceiling": 3,
-          "detail": "no skill authored for it (10 wildcard only), 132 reachable tool(s)"
+          "detail": "no skill authored for it (10 wildcard only), 135 reachable tool(s)"
         },
         {
           "plane": "evidence",
@@ -7289,8 +7291,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "HR-300",
-          "reachableSideEffectingTools": 99,
-          "reachableGatedTools": 28,
+          "reachableSideEffectingTools": 101,
+          "reachableGatedTools": 30,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to HR-300",
           "levelKey": "proven",
@@ -7315,7 +7317,7 @@
           "level": 3,
           "directSkills": 1,
           "wildcardSkills": 10,
-          "reachableTools": 194,
+          "reachableTools": 197,
           "heldGrants": [
             "file_read",
             "sandbox_execute",
@@ -7330,7 +7332,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "1 skill(s), 194 tool(s), all service backings resolve",
+          "detail": "1 skill(s), 197 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -7510,8 +7512,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-200",
-          "reachableSideEffectingTools": 105,
-          "reachableGatedTools": 29,
+          "reachableSideEffectingTools": 107,
+          "reachableGatedTools": 31,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-200",
           "levelKey": "proven",
@@ -7536,7 +7538,7 @@
           "level": 3,
           "directSkills": 1,
           "wildcardSkills": 10,
-          "reachableTools": 232,
+          "reachableTools": 235,
           "heldGrants": [
             "work_room_read",
             "work_room_write",
@@ -7561,7 +7563,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "1 skill(s), 232 tool(s), all service backings resolve",
+          "detail": "1 skill(s), 235 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -7630,8 +7632,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-200",
-          "reachableSideEffectingTools": 105,
-          "reachableGatedTools": 29,
+          "reachableSideEffectingTools": 107,
+          "reachableGatedTools": 31,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-200",
           "levelKey": "proven",
@@ -7656,7 +7658,7 @@
           "level": 3,
           "directSkills": 1,
           "wildcardSkills": 10,
-          "reachableTools": 232,
+          "reachableTools": 235,
           "heldGrants": [
             "work_room_read",
             "work_room_write",
@@ -7681,7 +7683,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "1 skill(s), 232 tool(s), all service backings resolve",
+          "detail": "1 skill(s), 235 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -7750,8 +7752,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-200",
-          "reachableSideEffectingTools": 105,
-          "reachableGatedTools": 29,
+          "reachableSideEffectingTools": 107,
+          "reachableGatedTools": 31,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-200",
           "levelKey": "proven",
@@ -7776,7 +7778,7 @@
           "level": 3,
           "directSkills": 1,
           "wildcardSkills": 10,
-          "reachableTools": 232,
+          "reachableTools": 235,
           "heldGrants": [
             "work_room_read",
             "work_room_write",
@@ -7801,7 +7803,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "1 skill(s), 232 tool(s), all service backings resolve",
+          "detail": "1 skill(s), 235 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true

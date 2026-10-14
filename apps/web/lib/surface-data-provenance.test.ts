@@ -52,6 +52,15 @@ describe("surface data provenance", () => {
     expect(isTrustedOperationalSource("not-connected")).toBe(false);
   });
 
+  // BI-986B9DEB: provenance says where data comes from, not whether something is
+  // healthy. An absent optional source must not borrow the error tone.
+  it("renders a missing data source in a neutral tone, not the error tone", () => {
+    const tone = getDataSourceTone("not-connected");
+
+    expect(`${tone.className} ${tone.dotClassName}`).not.toContain("--dpf-error");
+    expect(tone.dotClassName).toContain("var(--dpf-muted)");
+  });
+
   it("maps tone to theme-token classes instead of hardcoded colors", () => {
     const tone = getDataSourceTone("demo-placeholder");
 

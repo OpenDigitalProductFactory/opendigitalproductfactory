@@ -27,12 +27,12 @@ type Props = {
 };
 
 export function PortalHealthSummary({ capabilityHealth, openBacklogItems, backlogHref, releaseHealth }: Props) {
-  const { checked, online } = useMonitoringStatus();
+  const { checked, online, off } = useMonitoringStatus();
   const { data: upTargets, loading: upTargetsLoading } = useMetricQuery("up");
   const { alerts } = useAlertQuery();
 
   const platform = capabilityHealth
-    ? derivePlatformSummary({ checked, online, capabilityHealth, loading: upTargetsLoading, alerts })
+    ? derivePlatformSummary({ checked, online, off, capabilityHealth, loading: upTargetsLoading, alerts })
     : {
         value: "Unavailable",
         tone: "critical" as const,
@@ -42,6 +42,7 @@ export function PortalHealthSummary({ capabilityHealth, openBacklogItems, backlo
   const monitoring = deriveMonitoringSummary({
     checked,
     online,
+    off,
     upTargets,
     upTargetsLoading,
     alerts,
