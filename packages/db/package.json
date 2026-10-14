@@ -97,7 +97,8 @@
     "./portfolio-sources/absorption-posture": "./src/portfolio-sources/absorption-posture.ts",
     "./portfolio-sources/incumbent-coverage": "./src/portfolio-sources/incumbent-coverage.ts",
     "./patch": "./src/patch/index.ts",
-    "./coworker-job-definition": "./src/coworker-job-definition.ts"
+    "./coworker-job-definition": "./src/coworker-job-definition.ts",
+    "./install-work-owner": "./src/install-work-owner.ts"
   },
   "scripts": {
     "postinstall": "prisma generate",

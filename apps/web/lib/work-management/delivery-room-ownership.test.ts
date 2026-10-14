@@ -65,6 +65,21 @@ describe("roomOwnerUserId", () => {
   it("falls back to the creator for rooms with no requester", () => {
     expect(roomOwnerUserId({ requestedByPrincipal: null, createdByPrincipal: alias("creator") })).toBe("creator");
   });
+  // BI-858FDE5A: requester and creator are history; a handed-over account is
+  // not who the work runs for now, so the drive falls through to the room's
+  // accountable person instead of birthing a task under the absent account.
+  it("skips a handed-over requester and creator, leaving the accountability walk to name the owner", () => {
+    const handedOver = new Set(["admin-user"]);
+    expect(roomOwnerUserId({ requestedByPrincipal: alias("admin-user"), createdByPrincipal: alias("admin-user") }, handedOver))
+      .toBeNull();
+    expect(roomOwnerUserId({ requestedByPrincipal: alias("admin-user"), createdByPrincipal: null }, handedOver)).toBeNull();
+  });
+  it("still names an account that was not handed over", () => {
+    const handedOver = new Set(["admin-user"]);
+    expect(roomOwnerUserId({ requestedByPrincipal: alias("admin-user"), createdByPrincipal: alias("creator") }, handedOver))
+      .toBe("creator");
+    expect(roomOwnerUserId({ requestedByPrincipal: alias("human-user"), createdByPrincipal: null }, handedOver)).toBe("human-user");
+  });
 });
 
 describe("repairUnownedDeliveryRooms", () => {
