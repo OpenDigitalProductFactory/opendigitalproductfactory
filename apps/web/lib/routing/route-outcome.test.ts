@@ -56,7 +56,7 @@ describe("recordRouteOutcome", () => {
 
   it("attributes an executed attempt to its exact account and conservative quota scope", async () => {
     await recordRouteOutcome({ ...BASE_OUTCOME, providerConnectionId: "account-a", quotaScopeKey: "provider:openai" });
-    expect(vi.mocked(prisma.routeOutcome.create).mock.calls[0]![0].data).toMatchObject({ providerConnectionId: "account-a", quotaScopeKey: "provider:openai" });
+    expect(vi.mocked(prisma.routeOutcome.create).mock.calls[0]![0].data).toMatchObject({ recordedProviderConnectionRef: "account-a", quotaScopeKey: "provider:openai" });
   });
 
   it("records outcome with all fields", async () => {

@@ -32,6 +32,7 @@ describe.runIf(enabled)("provider account capacity migration on PostgreSQL", () 
     `);
     await db.query(readFileSync(resolve(__dirname, "../../../../../packages/db/prisma/migrations/20261014010000_provider_account_capacity_scopes/migration.sql"), "utf8"));
     await db.query(readFileSync(resolve(__dirname, "../../../../../packages/db/prisma/migrations/20261014053000_provider_account_health_ownership/migration.sql"), "utf8"));
+    await db.query(readFileSync(resolve(__dirname, "../../../../../packages/db/prisma/migrations/20261014060000_provider_account_usage_refs/migration.sql"), "utf8"));
   });
   afterAll(async () => { await db?.query("ROLLBACK"); await db?.end(); });
 
@@ -56,12 +57,12 @@ describe.runIf(enabled)("provider account capacity migration on PostgreSQL", () 
 
   it("retains unattributed history and immutable account attribution after account deletion", async () => {
     for (const table of ["TokenUsage", "RouteOutcome"]) {
-      expect((await db.query(`SELECT "providerConnectionId", "quotaScopeKey" FROM "${table}"`)).rows).toEqual([{ providerConnectionId: null, quotaScopeKey: null }]);
-      await db.query(`INSERT INTO "${table}" (id, "createdAt", "providerId", "providerConnectionId", "quotaScopeKey") VALUES ($1, NOW(), 'codex', 'account-a', 'provider:codex')`, [`new-${table}`]);
+      expect((await db.query(`SELECT "recordedProviderConnectionRef", "quotaScopeKey" FROM "${table}"`)).rows).toEqual([{ recordedProviderConnectionRef: null, quotaScopeKey: null }]);
+      await db.query(`INSERT INTO "${table}" (id, "createdAt", "providerId", "recordedProviderConnectionRef", "quotaScopeKey") VALUES ($1, NOW(), 'codex', 'account-a', 'provider:codex')`, [`new-${table}`]);
     }
     await db.query(`DELETE FROM "AiProviderConnection" WHERE id='account-a'`);
     expect((await db.query(`SELECT COUNT(*)::int AS n FROM "ProviderCapacityStatus" WHERE "ownedAccountId"='account-a'`)).rows[0].n).toBe(0);
     expect((await db.query(`SELECT COUNT(*)::int AS n FROM "ProviderCapacityStatus" WHERE id='legacy-capacity'`)).rows[0].n).toBe(1);
-    for (const table of ["TokenUsage", "RouteOutcome"]) expect((await db.query(`SELECT "providerConnectionId" FROM "${table}" WHERE id=$1`, [`new-${table}`])).rows[0].providerConnectionId).toBe("account-a");
+    for (const table of ["TokenUsage", "RouteOutcome"]) expect((await db.query(`SELECT "recordedProviderConnectionRef" FROM "${table}" WHERE id=$1`, [`new-${table}`])).rows[0].recordedProviderConnectionRef).toBe("account-a");
   });
 });

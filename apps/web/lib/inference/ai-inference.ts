@@ -569,7 +569,7 @@ export async function logTokenUsage(input: {
       traceId:      input.traceId ?? null,
       agentId:      input.agentId,
       providerId:   input.providerId,
-      ...(input.providerConnectionId ? { providerConnectionId: input.providerConnectionId, quotaScopeKey: input.quotaScopeKey ?? null } : {}),
+      ...(input.providerConnectionId ? { recordedProviderConnectionRef: input.providerConnectionId, quotaScopeKey: input.quotaScopeKey ?? null } : {}),
       contextKey:   input.contextKey,
       inputTokens:  input.inputTokens,
       outputTokens: input.outputTokens,

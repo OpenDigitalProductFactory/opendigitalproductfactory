@@ -217,7 +217,8 @@ model TokenUsage {
   traceId      String?
   agentId      String
   providerId   String
-  providerConnectionId String?
+  /// Immutable attribution snapshot, not a live foreign key.
+  recordedProviderConnectionRef String?
   quotaScopeKey String?
   contextKey   String
   inputTokens  Int      @default(0)
@@ -228,7 +229,7 @@ model TokenUsage {
 
   @@index([createdAt])
   @@index([traceId])
-  @@index([providerConnectionId, createdAt])
+  @@index([recordedProviderConnectionRef, createdAt])
 }
 
 model EndpointTaskPerformance {
@@ -311,7 +312,8 @@ model RouteOutcome {
   requestId         String   @unique
   traceId           String?
   providerId        String
-  providerConnectionId String?
+  /// Immutable attribution snapshot, not a live foreign key.
+  recordedProviderConnectionRef String?
   quotaScopeKey     String?
   modelId           String
   recipeId          String?
@@ -332,7 +334,7 @@ model RouteOutcome {
 
   @@index([recipeId, contractFamily])
   @@index([providerId, modelId])
-  @@index([providerConnectionId, createdAt])
+  @@index([recordedProviderConnectionRef, createdAt])
   @@index([agentId, createdAt])
   @@index([traceId])
 }
