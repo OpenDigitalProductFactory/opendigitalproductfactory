@@ -14,8 +14,8 @@ import { PR_TRAILER_NAMES } from "./lib/pr-trailer-contract.mjs";
 import { runGate, readPublicationGateRecords } from "./pr-readiness.mjs";
 import { buildPublishedReadinessCommand } from "../apps/web/lib/build/build-studio-pr-readiness.ts";
 
-test("PR readiness supplies a working shell to nested fixtures", () => {
-  const result = runGate({ name: "nested shell", env: {}, command: [process.execPath,
+test("PR readiness supplies a working shell to nested fixtures", async () => {
+  const result = await runGate({ name: "nested shell", env: {}, command: [process.execPath,
     ["-e", "const {spawnSync}=require('node:child_process'); const r=spawnSync('sh',['-c','exit 0']); process.exit(r.status ?? 1);"]],
   });
   assert.equal(result.ok, true, result.output);

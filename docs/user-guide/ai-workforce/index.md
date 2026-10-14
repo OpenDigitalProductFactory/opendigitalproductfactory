@@ -130,11 +130,16 @@ The drift detail, along with route-level skills, observability, and the curator 
 - `/platform/ai/providers/[providerId]` — provider setup and the Finance Bridge panel
 - `/platform/ai/agent/AGT-ORCH-000` — standing COO record, including its optional organization-visible conversational name
 - `/platform/ai/runtime-health` — capability-aware local service and external-provider health
+- `/admin/settings/monitoring` — whether monitoring (Prometheus and Grafana) runs on this install, what it costs, and the switch to turn it on or off
 - `/finance/spend/ai` — finance-owned view of AI supplier commitments and work items
 
 ## Reading Runtime Health
 
 Runtime Health explains infrastructure in terms of enabled capabilities. **Required — unavailable** needs attention because an enabled capability depends on that local service. **Optional — inactive** is expected when its capability is disabled and does not make the platform unhealthy. **Optional — degraded** means the capability is enabled but its local service is unavailable. **External — provider managed** reports reconciled provider evidence rather than pretending the provider is a local container. Each state includes text and an action; color is supplementary. Services that only run on some host systems are judged against your install's own host: on a Mac, the `dpf-tts` voice container (Linux and Windows only, because macOS speaks through the host-native Chatterbox service) shows as optional and inactive, not degraded.
+
+### Turning monitoring on or off
+
+Monitoring is optional. Open **Settings → Monitoring** (`/admin/settings/monitoring`), or follow the action on a Prometheus, Grafana or postgres-exporter row in Runtime Health. The page shows whether monitoring is actually running, what it costs in memory and CPU, and the last change. Someone with platform management rights can turn it on or off; the change runs through the same governed capability change as any other runtime capability and reports its outcome. If the install's capability records disagree, the switch stays locked and says so until they are reconciled. With monitoring off, health pages say "Monitoring is off on this install" rather than showing an outage.
 
 ### Coworker routing
 

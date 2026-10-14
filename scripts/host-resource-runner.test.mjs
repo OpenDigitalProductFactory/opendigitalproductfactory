@@ -10,6 +10,7 @@ import {
   findUngovernedHeavyProcesses,
   parseHostResourceArgs,
   readMcpConnection,
+  readProcessRows,
 } from "./host-resource-runner.mjs";
 import { isAllowedMcpEndpoint } from "./lib/mcp-client.mjs";
 import { spawn, execFileSync } from "node:child_process";
@@ -18,6 +19,42 @@ import { fileURLToPath } from "node:url";
 import { resolveHostAttempt, hostResumePin } from "./lib/host-resource-attempt.mjs";
 
 const GiB = 1024 ** 3;
+
+for (const [reason, result] of Object.entries({
+  "producer-failed": { status: 1, stdout: "", stderr: "fixture-secret" },
+  "producer-timeout": { status: null, stdout: "", error: { code: "ETIMEDOUT" } },
+  "producer-output-limit": { status: null, stdout: "", error: { code: "ENOBUFS" } },
+  "empty-output": { status: 0, stdout: "" },
+  "malformed-output": { status: 0, stdout: '[{"CommandLine":"fixture-secret"' },
+  "invalid-rows": { status: 0, stdout: '[{"ProcessId":"wrong","ParentProcessId":0,"CommandLine":"fixture-secret"}]' },
+})) {
+  test(`process inventory ${reason} blocks admission with redacted diagnostics`, () => {
+    assert.throws(() => readProcessRows({ platform: "win32", spawnSyncImpl: () => result }), error => {
+      assert.equal(error.code, "host_inventory_unavailable");
+      assert.equal(error.reason, reason);
+      assert.ok(error.message.length < 300);
+      assert.doesNotMatch(error.message, /fixture-secret/);
+      return true;
+    });
+  });
+}
+
+test("process inventory preserves Unicode commands and enforces producer bounds", () => {
+  const rows = readProcessRows({ platform: "win32", spawnSyncImpl: (command, args, options) => {
+    assert.equal(command, "powershell.exe");
+    assert.match(args.at(-1), /OutputEncoding/);
+    assert.match(args.at(-1), /ErrorActionPreference/);
+    assert.ok(options.timeout > 0 && options.timeout <= 30000);
+    assert.ok(options.maxBuffer > 0 && options.maxBuffer <= 16 * 1024 * 1024);
+    return { status: 0, stdout: '\ufeff[{"ProcessId":42,"ParentProcessId":1,"CommandLine":"node café"}]' };
+  }});
+  assert.deepEqual(rows, [{ pid: 42, parentPid: 1, commandLine: "node café" }]);
+});
+
+test("POSIX process inventory rejects partial malformed output instead of dropping rows", () => {
+  assert.throws(() => readProcessRows({ platform: "linux", spawnSyncImpl: () => ({ status: 0, stdout: "42 1 node\ninvalid fixture-secret\n" }) }),
+    error => error.code === "host_inventory_unavailable" && error.reason === "invalid-rows" && !error.message.includes("fixture-secret"));
+});
 
 test("real runner resumes one mock lease across processes and never runs terminal or drifted work", { timeout: 60000 }, async t => {
   const cwd = mkdtempSync(join(tmpdir(), "host-resume-test-"));
