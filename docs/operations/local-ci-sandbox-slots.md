@@ -24,6 +24,13 @@ wait stays terminal; cleanup never implies admission, command success or complet
 verification. Reuse the exact supported request rather than creating repeated
 approval envelopes or new attempts for the same cleanup.
 
+Automatic expiry settles the lease's matching submitted durable wait in the
+same transaction. A capacity notification cannot reopen a completed wait.
+Concurrent notifications trigger a bounded re-read; sustained contention rolls
+back expiry for a later reconciliation pass. Settling a wait records only that
+waiting ended. It never proves a command ran or verification passed, and does
+not repair historical waits whose leases had already expired before this change.
+
 ## Host-wide heavyweight resource admission
 
 The local-CI slots are not the only processes capable of exhausting a

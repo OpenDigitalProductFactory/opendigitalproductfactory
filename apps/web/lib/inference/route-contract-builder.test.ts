@@ -11,6 +11,20 @@ import { buildEffectiveRequestContract, buildInitialRouteContext } from "./route
 // the explicit platform switch (`localOnlyInference`); sensitivity clearance
 // still independently protects sensitive data on every request.
 describe("buildInitialRouteContext — modelTier is a preference, not a residency boundary", () => {
+  it("requires JSON capability before selecting a route for a JSON activity", async () => {
+    const contract = await buildEffectiveRequestContract({
+      taskType: "build-review", messages: [{ role: "user", content: "Review and return JSON." }],
+      routeContext: { sensitivity: "internal" }, taskRequirement: null,
+      options: { activityContract: {
+        activityId: "review", parentRef: {}, activityClass: "critique", title: "Review",
+        distributionShape: "edge", riskClass: "high", successShape: "json",
+        contextPolicy: "work-case-packet", tokenEnvelope: { maxInputTokens: 64000, maxOutputTokens: 16384, compression: "none" },
+        evaluationPolicy: { evaluator: "review", minimumSignal: "review-passed" },
+        requestContractHints: { taskType: "build-review" },
+      } },
+    });
+    expect(contract.requiresStrictSchema).toBe(true);
+  });
   it("retains required tool choice in the contract used for endpoint selection", async () => {
     const contract = await buildEffectiveRequestContract({
       taskType: "tool-action", messages: [{ role: "user", content: "Record the review." }],

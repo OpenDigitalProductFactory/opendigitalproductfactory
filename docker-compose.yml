@@ -827,6 +827,11 @@ services:
     labels:
       dpf.recreate-class: stateless
     profiles: ["runtime-deep-observability", "observability-ui"]
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: "1.0"
     image: prom/prometheus:v3.12.0
     restart: unless-stopped
     logging: *default-logging
@@ -862,6 +867,11 @@ services:
     # capability; the legacy alias selects the same portable service closure:
     #   docker compose --profile observability-ui up -d
     profiles: ["runtime-deep-observability", "observability-ui"]
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.5"
     ports:
       - "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:3002:3000"
     volumes:
@@ -999,6 +1009,11 @@ services:
     labels:
       dpf.recreate-class: stateless
     profiles: ["runtime-deep-observability", "observability-ui"]
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+          cpus: "0.25"
     image: prometheuscommunity/postgres-exporter:v0.19.1
     restart: unless-stopped
     logging: *default-logging

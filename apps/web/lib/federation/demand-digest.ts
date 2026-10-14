@@ -193,6 +193,12 @@ export async function reconcileDemandDigests(
             // of re-sending on every digest cycle forever (BI-8A7E3E56).
             const wasDeadLettered = row.syncStatus === "dead-letter";
             if (wasDeadLettered && (row.rehealCount ?? 0) >= MAX_DEMAND_REHEALS) continue;
+            // BI-1A8887C7: a pending record already has a delivery job that owns
+            // it, on its own retry clock (a missing job is created by the dispatch
+            // bridge). The peer still needing it is not news; re-scheduling it on
+            // every five-minute digest reset its backoff and wrote ~700K
+            // `enqueued` telemetry rows a day while the queue could not drain.
+            if (row.syncStatus === "pending") continue;
             requeued++;
             await db.federatedRecordMirror.update!({ where: { mirrorId: row.mirrorId }, data: {
               syncStatus: "pending", deadLetteredAt: null,

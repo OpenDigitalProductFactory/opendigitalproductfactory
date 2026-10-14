@@ -20,6 +20,8 @@ const PACKAGES = [
   { name: "react", importer: "apps/web", version: "19.2.7" },
   { name: "react-dom", importer: "apps/web", version: "19.2.7" },
   { name: "typescript", importer: ".", version: "5.9.3" },
+  // npm alias, recorded in the lockfile as "typescript@<version>" (BI-D2FE6931).
+  { name: "typescript7", importer: ".", version: "7.0.2", aliasOf: "typescript" },
   { name: "prisma", importer: "packages/db", version: "6.19.1" },
   { name: "vitest", importer: "apps/web", version: "4.1.10" },
 ];
@@ -29,7 +31,9 @@ function lockfileText(versions) {
   for (const pkg of PACKAGES) {
     const version = versions[pkg.name] ?? pkg.version;
     const block = importerBlocks.get(pkg.importer) ?? [];
-    block.push(`      ${pkg.name}:\n        specifier: ^${version}\n        version: ${version}`);
+    block.push(pkg.aliasOf
+      ? `      ${pkg.name}:\n        specifier: npm:${pkg.aliasOf}@${version}\n        version: ${pkg.aliasOf}@${version}`
+      : `      ${pkg.name}:\n        specifier: ^${version}\n        version: ${version}`);
     importerBlocks.set(pkg.importer, block);
   }
   let text = "lockfileVersion: '9.0'\n\nimporters:\n\n";
@@ -57,7 +61,7 @@ function scaffold({ installedVersions = {}, lockedVersions = {}, installedLockVe
     const version = installedVersions[pkg.name] ?? pkg.version;
     const storeDir = join(root, "node_modules", ".pnpm", `${pkg.name}@${version}_fakehash`, "node_modules", pkg.name);
     mkdirSync(storeDir, { recursive: true });
-    writeFileSync(join(storeDir, "package.json"), JSON.stringify({ name: pkg.name, version }));
+    writeFileSync(join(storeDir, "package.json"), JSON.stringify({ name: pkg.aliasOf ?? pkg.name, version }));
     if (pkg.name === "vitest") {
       mkdirSync(join(storeDir, "dist", "chunks"), { recursive: true });
       writeFileSync(join(storeDir, "dist", "cli.js"), "import './chunks/cac.ok.js';\n");
@@ -127,6 +131,7 @@ const packages = [
   ["react", "apps/web", "19.2.7"],
   ["react-dom", "apps/web", "19.2.7"],
   ["typescript", ".", "5.9.3"],
+  ["typescript7", ".", "7.0.2"],
   ["prisma", "packages/db", "6.19.1"],
   ["vitest", "apps/web", "4.1.10"],
 ];
@@ -176,6 +181,7 @@ const packages = [
   ["react", "apps/web", "19.2.7"],
   ["react-dom", "apps/web", "19.2.7"],
   ["typescript", ".", "5.9.3"],
+  ["typescript7", ".", "7.0.2"],
   ["prisma", "packages/db", "6.19.1"],
   ["vitest", "apps/web", "4.1.10"],
 ];

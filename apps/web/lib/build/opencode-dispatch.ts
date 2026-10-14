@@ -603,7 +603,7 @@ export async function dispatchOpencodeTask(params: {
           }
         },
       }),
-      { modelId: model },
+      { modelId: model, origin: "autonomous" },
     );
 
     const content = extractOpencodeResult(stdout);

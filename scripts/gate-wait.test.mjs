@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { classifyGateExit, GATE_EXIT } from "./lib/gate-exit-classification.mjs";
-import { EXIT_SOURCE_DRIFT, EXIT_WAIT_CANCELLED } from "./lib/sandbox-freshness.mjs";
+import { EXIT_CANDIDATE_MERGE_CONFLICT, EXIT_SOURCE_DRIFT, EXIT_WAIT_CANCELLED } from "./lib/sandbox-freshness.mjs";
 import { delayForAttempt, parseGateStatus, waitForGate } from "./gate-wait.mjs";
 
 const noSleep = async () => {};
@@ -27,6 +27,17 @@ test("a plain exit 1 is a real failure and stops immediately", () => {
   const v = classifyGateExit({ code: 1, output: "FAIL lib/foo.test.ts" });
   assert.equal(v.verdict, "fail");
   assert.equal(v.retry, false);
+});
+
+// BI-FCC1DCB2: a candidate that conflicts with origin/main fails the same way on
+// every retry. It is the author's to fix, so it stops and names the merge.
+test("a merge conflict with the base is a failing verdict that does not retry", () => {
+  assert.equal(GATE_EXIT.MERGE_CONFLICT_WITH_BASE, EXIT_CANDIDATE_MERGE_CONFLICT);
+  const v = classifyGateExit({ code: EXIT_CANDIDATE_MERGE_CONFLICT });
+  assert.equal(v.kind, "merge-conflict-with-base");
+  assert.equal(v.retry, false);
+  assert.equal(v.verdict, "fail");
+  assert.match(v.next, /merge origin\/main into your branch and resolve/);
 });
 
 test("sandbox drift does not spin — retrying cannot converge a sandbox", () => {

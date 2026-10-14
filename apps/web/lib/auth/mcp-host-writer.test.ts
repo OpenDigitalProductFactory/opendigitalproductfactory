@@ -95,6 +95,43 @@ describe("writeMcpJsonToHost", () => {
     expect(firstCall[1]).toContain("Bearer ${DPF_MCP_BEARER_TOKEN}");
   });
 
+  // BI-DE1E6485 (design 2026-10-07 §5.3 step 5): when the install folder
+  // enables the dpf-platform plugin, its connector covers the folder, so a
+  // project `dpf` entry would be the duplicate the updater retires.
+  it("writes no .mcp.json dpf entry when the folder enables the dpf-platform plugin", () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
+      if (path === "/host-dpf/.claude/settings.json") {
+        return JSON.stringify({ enabledPlugins: { "dpf-platform@dpf-platform-local": true } });
+      }
+      throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    }) as never);
+    vi.mocked(fs.writeFileSync).mockImplementation(() => undefined);
+    vi.mocked(fs.mkdirSync).mockImplementation(() => undefined);
+
+    writeMcpJsonToHost(TOKEN, BASE);
+
+    const written = vi.mocked(fs.writeFileSync).mock.calls.map((call) => call[0]);
+    expect(written).not.toContain("/host-dpf/.mcp.json");
+    expect(written).toContain("/host-dpf/.vscode/mcp.json");
+  });
+
+  it("still writes .mcp.json when the plugin is installed but disabled for the folder", () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
+      if (path === "/host-dpf/.claude/settings.local.json") {
+        return JSON.stringify({ enabledPlugins: { "dpf-platform@dpf-platform-local": false } });
+      }
+      throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    }) as never);
+    vi.mocked(fs.writeFileSync).mockImplementation(() => undefined);
+    vi.mocked(fs.mkdirSync).mockImplementation(() => undefined);
+
+    writeMcpJsonToHost(TOKEN, BASE);
+
+    expect(vi.mocked(fs.writeFileSync).mock.calls[0]?.[0]).toBe("/host-dpf/.mcp.json");
+  });
+
   it("swallows write errors without propagating", () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.writeFileSync).mockImplementation(() => {

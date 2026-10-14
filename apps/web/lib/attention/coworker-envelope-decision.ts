@@ -59,8 +59,10 @@ export type EnvelopeDecisionSummary = {
   action: string;
   /** Where it lands: the record or surface the change is written to. */
   target: string;
-  /** The exact proposed content, bounded for display. Empty when unresolved. */
+  /** A bounded preview of the proposed content. Empty when unresolved. */
   proposed: EnvelopeProposedField[];
+  /** Complete original input for review; absent on older projections, null when unresolved. */
+  completeProposedContent?: string | null;
   /** The declared consequence of the action, or a plain statement that none is declared. */
   consequence: string;
   /** Why a person is asked: the governing reason recorded on the envelope. */
@@ -179,16 +181,16 @@ function humanizeKey(key: string): string {
 }
 
 function displayValue(value: unknown): string {
-  const text = typeof value === "string" ? value : JSON.stringify(value) ?? String(value);
+  const text = typeof value === "string" && value !== "" ? value : JSON.stringify(value) ?? String(value);
   return text.length > MAX_VALUE_CHARS
     ? `${text.slice(0, MAX_VALUE_CHARS)}… (${text.length - MAX_VALUE_CHARS} more characters)`
     : text;
 }
 
-/** The exact proposed arguments as label/value pairs, in the order sent. */
+/** A bounded preview; completeProposedContent retains the full input. */
 export function proposedFields(params: Record<string, unknown>): EnvelopeProposedField[] {
   const entries = Object.entries(params).filter(
-    ([, value]) => value !== undefined && value !== null && value !== "",
+    ([, value]) => value !== undefined,
   );
   const shown = entries.slice(0, MAX_FIELDS).map(([key, value]) => ({
     label: humanizeKey(key),
@@ -225,7 +227,7 @@ function actionLabel(toolName: string): string {
 function consequenceText(consequence: string | null | undefined): string {
   return consequence && CONSEQUENCE_WORDS[consequence]
     ? CONSEQUENCE_WORDS[consequence]
-    : "None declared. It adds or changes a platform record that can be corrected afterwards.";
+    : "None declared. The consequences and reversibility of this action are not established.";
 }
 
 const SCOPE_TEXT =
@@ -246,6 +248,7 @@ function sharedFacts(input: SummaryContext) {
       ? envelopeTarget(input.toolName, input.params)
       : "Unknown: the proposal could not be loaded",
     proposed: input.params ? proposedFields(input.params) : [],
+    completeProposedContent: input.params ? JSON.stringify(input.params, null, 2) : null,
     consequence: consequenceText(input.consequence),
     whyAPerson: input.rationale?.trim() || "No reason was recorded for asking a person.",
     scope: SCOPE_TEXT,

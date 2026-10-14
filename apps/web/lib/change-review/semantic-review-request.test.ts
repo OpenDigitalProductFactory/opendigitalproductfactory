@@ -16,11 +16,20 @@ const input: SemanticChangeReviewOperationInput = {
 const actor = { userId: "user-1", agentId: null, apiTokenId: "token-1", authSource: "pat" };
 
 describe("durable semantic review request", () => {
-  it("keeps production writers legacy during the compatibility deployment", () => {
+  it("writes an explicit role-bound contract by default", () => {
     const packet = createSemanticReviewRequest(input, actor, now);
+    expect(packet.schemaVersion).toBe(2);
+    expect(packet.input.identity.artifactType).toBe("code-change");
+    expect(packet.input.identity.reviewerVersion).toBe("change-reviewer.v2");
+  });
+
+  it("retains the original identity and deadline of legacy packets", () => {
+    const packet = createSemanticReviewRequest(input, actor, now, 1);
     expect(packet.schemaVersion).toBe(1);
     expect(packet.input.identity.artifactType).toBeUndefined();
     expect(packet.input.identity.reviewerVersion).toBe("change-reviewer.v1");
+    expect(parseSemanticReviewRequest(packet)).toEqual(packet);
+    expect(packet.deadlineAt).toBe("2026-09-07T04:30:00.000Z");
   });
 
   it("reads role-bound packets and separates same-content roles without changing deadlines", () => {
@@ -65,7 +74,7 @@ describe("durable semantic review request", () => {
   it("refuses modified payloads and unsupported versions without dispatch", () => {
     const packet = createSemanticReviewRequest(input, actor, now);
     expect(parseSemanticReviewRequest({ ...packet, input: { ...packet.input, artifact: "changed" } })).toBeNull();
-    expect(parseSemanticReviewRequest({ ...packet, schemaVersion: 2 })).toBeNull();
+    expect(parseSemanticReviewRequest({ ...packet, schemaVersion: 99 })).toBeNull();
     expect(parseSemanticReviewRequest({ ...packet, actor: { ...actor, userId: "other-user" } })).toBeNull();
   });
 
