@@ -12,12 +12,21 @@ import type { DeliberationArtifactType } from "../deliberation/external-review-a
 
 export const LEGACY_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION = "semantic-change-review-receipt.v2";
 export const ROLE_BOUND_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION = "semantic-change-review-receipt.v3";
-export const CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION = LEGACY_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION;
+export const CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION = ROLE_BOUND_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION;
 export const CHANGE_REVIEW_POLICY_VERSION = "semantic-change-review-policy.v3";
 export const LEGACY_CHANGE_REVIEWER_VERSION = "change-reviewer.v1";
 export const CHANGE_REVIEWER_VERSION = "change-reviewer.v2";
-/** Expand readers first. Activate v2 writers only after the compatible runtime is deployed. */
-export const SEMANTIC_REVIEW_ARTIFACT_CONTRACT_VERSION: 1 | 2 = 1;
+/** Compatible readers deployed before activation; legacy packets retain their original version. */
+export const SEMANTIC_REVIEW_ARTIFACT_CONTRACT_VERSION: 1 | 2 = 2;
+
+/** Historical receipts remain readable; freshness determines whether they authorize new work. */
+export function isSemanticReviewReceipt(value: unknown): value is SemanticReviewReceipt {
+  if (!value || typeof value !== "object") return false;
+  const receipt = value as Partial<SemanticReviewReceipt>;
+  return receipt.schemaVersion === LEGACY_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION
+    || (receipt.schemaVersion === ROLE_BOUND_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION
+      && typeof receipt.artifactType === "string");
+}
 
 export type SemanticReviewSeverity = "critical" | "important" | "minor";
 export type SemanticReviewDecision = "pass" | "fail" | "inconclusive";

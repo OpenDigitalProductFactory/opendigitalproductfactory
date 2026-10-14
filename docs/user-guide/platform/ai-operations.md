@@ -67,6 +67,15 @@ safe source, authority, state, and timing detail. Activity routing and
 deliberation detail remain under **Technical diagnostics**. There are no
 separate provider or A2A diagrams to reconcile with this map.
 
+### Confirm a routing override
+
+When the activity routing workbench recommends a different confidence for an
+activity's harness, **Confirm override** applies it. It is your own decision,
+so there is no separate approval step: the platform checks your access, records
+the change in the audit log, and keeps the override until someone confirms a
+different one for the same activity and recipe. Routing uses it from the next
+request. Overrides approved before this change keep applying.
+
 ## Architecture and evidence
 
 - [Model Routing & Lifecycle](../ai-workforce/model-routing-lifecycle.md) — current
@@ -91,6 +100,20 @@ Simple prompts about colors, JSON or greetings can be model calibration probes.
 They measure the model named in the request, so routing them to another provider
 would measure the wrong model. Chat probes run only on text-generating models and
 use bounded output limits; embedding models are excluded.
+
+Selected endpoint diagnostics also support Responses providers such as ChatGPT.
+They use the selected discovered model and report unavailable targets without
+substituting a default. Each probe allows 512 output tokens and waits at most
+30 seconds; scenarios allow 1,024 output tokens with the same waiting limit.
+That allowance includes prompt assembly and any required scenario grading.
+A failed sign-in, capacity hold, timeout or truncated response leaves the run
+incomplete and does not lower the model's capability rating. The runner stops
+that model's remaining tests after an incomplete call. A provider may continue
+computing after client cancellation if its transport cannot stop the operation.
+Probe and scenario traces link adapter telemetry to the recorded test run;
+older runs without those traces remain unattributed at the individual-call level.
+Scenario quality updates are recorded after the selected run finishes completely;
+a missing required grader score leaves it unverified.
 
 Background evaluations and endpoint probes use the background admission lane,
 so queued interactive requests take priority. A concurrent first-time evaluation

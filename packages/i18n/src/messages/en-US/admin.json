@@ -134,5 +134,61 @@
     "unresolvedTitle": "{$unresolved} of {$total} phases unresolved",
     "attentionTitle": "Phase routing needs attention",
     "resolvedSummary": "{$resolved} resolved: {$local} local, {$cloud} cloud."
+  },
+  "monitoringSettings": {
+    "title": "Monitoring",
+    "intro": "Monitoring (Prometheus and Grafana) watches this platform and its host. You can turn it on or off at any time.",
+    "status": {
+      "on": "On",
+      "off": "Off",
+      "turningOn": "Turning on",
+      "turningOff": "Turning off",
+      "needsAttention": "Needs attention",
+      "unreconciled": "Needs reconciling"
+    },
+    "explain": {
+      "on": "Monitoring is running. Prometheus, Grafana and the database exporter are all up.",
+      "off": "Monitoring is off. Nothing is collecting metrics, and no memory or CPU is spent on it.",
+      "turningOn": "Monitoring is starting. This page updates when it finishes.",
+      "turningOff": "Monitoring is stopping. This page updates when it finishes.",
+      "needsAttention": "What is running does not match the setting.",
+      "unreconciled": "This install's capability record and its saved install state disagree, so monitoring cannot be changed safely yet."
+    },
+    "reason": {
+      "inFlight": "A change is already in progress.",
+      "installUnknown": "The install state could not be read, so the switch is unavailable.",
+      "unreconciled": "Capability state needs reconciling first",
+      "enabledMissing": "Monitoring is on, but these services are not running: {$services}",
+      "disabledRunning": "Monitoring is off, but these services are still running: {$services}"
+    },
+    "cost": "Uses about {$memory} GB memory and {$cpus} CPU when on.",
+    "undecided": "Nobody has chosen yet whether this install runs monitoring.",
+    "runtimeHealthLink": "Open runtime health",
+    "readOnly": "You can see this setting, but changing it needs platform management access.",
+    "turnOn": "Turn monitoring on",
+    "turnOff": "Turn monitoring off",
+    "working": "Working…",
+    "lastChange": {
+      "heading": "Last change",
+      "none": "No monitoring change has been requested on this install.",
+      "id": "Change",
+      "status": "Result",
+      "completed": "Finished",
+      "notFinished": "not finished",
+      "services": "Services seen"
+    },
+    "outcome": {
+      "succeeded": "Done. Monitoring has been changed.",
+      "pendingVerification": "The host applied the change, but it is not verified yet. Check again shortly.",
+      "inProgress": "Another change is already in progress. Try again when it finishes.",
+      "drainRequired": "Work that depends on monitoring is still running. Let it finish, then try again.",
+      "alreadyTerminal": "This change was already handled. Refresh the page to see the result.",
+      "failed": "The change failed: {$failure} (change {$transitionId}).",
+      "rolledBack": "The change did not take, so the platform put things back as they were: {$failure} (change {$transitionId}).",
+      "rollbackFailed": "The change failed and putting things back also failed: {$failure} (change {$transitionId}). Open runtime health.",
+      "recoveryRequired": "An earlier change needs recovery before monitoring can be changed. Open runtime health.",
+      "unreconciled": "Capability state needs reconciling first",
+      "unknown": "The platform returned an answer this page does not recognise."
+    }
   }
 }

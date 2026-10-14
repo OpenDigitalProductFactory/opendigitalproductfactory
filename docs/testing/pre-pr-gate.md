@@ -14,6 +14,24 @@ wins and this doc is the bug — fix it.
 
 ## The contract (read this first)
 
+Host policy commands use the existing observed-process runner with a 30-minute
+command budget, bounded diagnostic tails and graceful/forced tree termination.
+The parent preflight has a 60-minute outer budget. Full source guard loops have
+exceeded ten minutes on developer hosts, so that shorter budget is unsuitable.
+Cancellation and deadline
+expiry are unrun outcomes (exit 88), including a late zero child exit. Guard
+violations, environment limitations and interrupted execution remain distinct.
+Environment-limited host checks may continue to canonical CI, but are reported
+inconclusive and cannot produce reusable passing host receipts.
+
+Progress and results live in the existing per-worktree Git directory's
+`dpf-host-guard-receipts` slot. Interrupted exceptions settle inconclusive; an
+externally killed process retains its running receipt and PID for reconciliation.
+Only complete successful results with unchanged source, policy, dependency and
+environment identity are reused. Inspect the receipt before retrying an
+interrupted command. A queued sibling cannot hide admitted progress for the
+same branch and SHA; neither queued nor admitted is a verification pass.
+
 Begin [failure analysis](../architecture/failure-analysis-and-recovery.md) in design, refine it during implementation, and give the independent reviewer executed evidence for the final change. Local integration reports now bind their output to the owning Workroom, source tree and diff. An empty checklist, stale report or skipped run cannot satisfy that requirement. Technical review outages follow internal recovery; they are not business-owner approval requests.
 
 Cross-session drift happens when each session reconstructs the workflow from
@@ -824,6 +842,15 @@ the wrapper reads that exact path. This prevents the two linked worktrees'
 different gitdirs from turning a green preflight into `freshness: unknown`, and
 prevents a stale prior report from classifying a new run.
 
+The integration plan's first step merges the candidate onto the accepted base.
+If that merge stops on conflicts, the runner reads the unmerged paths from git's
+index, aborts the merge, writes them to `execution.mergeConflict` in the run
+metadata, and exits 10 (`EXIT_CANDIDATE_MERGE_CONFLICT`). The wrapper records
+the existing `conflict` status. A run that stopped at its merge graded nothing,
+so the wrapper owes no completion checkpoint and does not rewrite the result as
+infrastructure. `pregate:status` reports FAIL and names the remedy: merge
+`origin/main` into the branch and resolve the listed paths (BI-FCC1DCB2).
+
 The sandbox-freshness step checks the load-bearing runtime and gate packages,
 including the Vitest runner used by the next step. Vitest is checked for both
 locked version and runnable entrypoint imports, so an incomplete package cannot
@@ -1086,6 +1113,20 @@ program takes seconds instead of minutes. TypeScript 6 remains the workspace's
 `typescript` library. `DPF_TSC=6` runs it as the checker instead, for comparing
 verdicts. The non-blocking CI job "Typecheck (TS6 reference, advisory)" does
 the same on every pull request.
+
+Updating TypeScript 7 is one PR that bumps the root `typescript7` alias
+(`pnpm add -w -D typescript7@npm:typescript@<version>`). Every surface follows
+the lockfile from there:
+- worktrees reinstall;
+- the local-CI sandbox's freshness step refuses to grade until its installed
+  `typescript7` matches the lock;
+- GitHub CI installs fresh;
+- Build Studio type-checks through `run-tsc.mjs` (BI-D2FE6931).
+
+Dependabot is not relied on to notice new releases of an `npm:`-aliased
+dependency. The weekly "TypeScript Checker Currency" workflow
+(`scripts/audit-typescript-checker-currency.mjs`) compares the pin with npm's
+latest release and keeps one tracking issue open while the pin is behind.
 
 The local feedback loop is therefore:
 

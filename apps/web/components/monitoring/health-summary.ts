@@ -104,6 +104,8 @@ type SummaryInput = {
   upTargets: PrometheusInstantResult[] | null | undefined;
   alerts: MonitoringAlert[];
   upTargetsLoading?: boolean;
+  /** Monitoring switched off on this install (BI-2CE9CBF4). */
+  off?: boolean;
 };
 
 type CapabilityPlatformSummaryInput = Omit<
@@ -149,9 +151,14 @@ export function derivePlatformSummary({
   capabilityHealth,
   alerts,
   loading = false,
+  off = false,
 }: CapabilityPlatformSummaryInput): HealthSummary {
   if (!checked || loading) {
     return { value: "Checking", tone: "neutral", detail: "Collecting current health signals" };
+  }
+
+  if (off) {
+    return { value: "Monitoring off", tone: "neutral", detail: "Monitoring is off on this install" };
   }
 
   if (!online) {
@@ -234,9 +241,14 @@ export function deriveMonitoringSummary({
   online,
   upTargets,
   upTargetsLoading = false,
+  off = false,
 }: SummaryInput): HealthSummary {
   if (!checked || upTargetsLoading) {
     return { value: "Checking", tone: "neutral", detail: "Checking monitoring targets" };
+  }
+
+  if (off) {
+    return { value: "Off", tone: "neutral", detail: "Monitoring is off on this install" };
   }
 
   if (!online) {

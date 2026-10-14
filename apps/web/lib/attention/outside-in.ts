@@ -92,6 +92,7 @@ const SOURCE_PORTFOLIO: Record<AttentionSource, AttentionPortfolio> = {
   // Foundational back-office / platform infra (deepest inside).
   "approval-bill": "foundational", // AP bill approval
   "approval-expense": "foundational", // expense claim
+  "approval-leave": "for-employees", // a person's time off (BI-7BCC87BB)
   "compliance-submission": "foundational", // regulatory filing
   "ai-readiness-blocker": "foundational", // platform readiness gap
   "platform-health": "foundational", // platform health alert — infra posture

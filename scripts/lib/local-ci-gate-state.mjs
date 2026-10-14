@@ -124,6 +124,7 @@ export function writeLocalCiGateState(stateFile, {
   admission = null,
   failureReason = "",
   failureSummary = null,
+  mergeConflict = null,
   childExitCode = null,
   testStub = false,
   executionLane = null,
@@ -195,6 +196,9 @@ export function writeLocalCiGateState(stateFile, {
   // structured summary so `pregate:status` can quote THIS run.
   if (failureReason) payload.failureReason = failureReason;
   if (failureSummary) payload.failureSummary = failureSummary;
+  // BI-FCC1DCB2: the paths a candidate merge left unmerged, so pregate:status
+  // can name the merge the author has to do.
+  if (mergeConflict) payload.mergeConflict = mergeConflict;
   if (childExitCode !== null && childExitCode !== undefined) payload.childExitCode = childExitCode;
   if (testStub) payload.testStub = true;
   if (executionLane !== null) payload.executionLane = executionLane;

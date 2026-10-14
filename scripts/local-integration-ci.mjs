@@ -167,6 +167,9 @@ if (metadataOut) {
       completedCommandCount: execution.completedCommandCount,
       failedCommand: execution.failedCommand?.join(" ") ?? null,
       failureDiagnostics: execution.diagnostics,
+      // BI-FCC1DCB2: the paths a candidate merge left unmerged, so the gate
+      // and pregate:status can name them. Null when the merge succeeded.
+      mergeConflict: execution.mergeConflict ?? null,
       typecheck: typecheckDiagnostics,
       vitest: vitestDiagnostics,
       productionBuild: buildDiagnostics,

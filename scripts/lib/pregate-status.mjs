@@ -37,6 +37,10 @@
 
 import { hasBoundDocumentationEvidence, isTestStubGateRecord } from "./local-ci-gate-state.mjs";
 import { SLOT_SUBSTRATE_UNAVAILABLE_STATUS } from "./local-ci-slot-substrate.mjs";
+import { mergeConflictRemedy } from "./sandbox-freshness.mjs";
+
+/** The recorded status of a candidate that does not merge onto the base (BI-FCC1DCB2). */
+const MERGE_CONFLICT_GATE_STATUS = "conflict";
 
 /** Terminal verdicts, ordered worst-to-best for slot reconciliation. */
 export const PREGATE_VERDICTS = Object.freeze([
@@ -331,6 +335,21 @@ function classifyUnpassedRecord({ state, metadata, base, headSha, candidateSha, 
       remedy,
     };
   }
+  // BI-FCC1DCB2: the candidate does not merge onto the base. A verdict about
+  // the branch with a remedy the author owns, never infrastructure, and never
+  // fixed by gating again — so the next step is the merge, not a re-run.
+  if (status === MERGE_CONFLICT_GATE_STATUS) {
+    const mergeConflict = state?.mergeConflict
+      ?? (metadataDescribesAnotherRun(state, metadata) ? null : metadata?.execution?.mergeConflict ?? null);
+    const remedy = mergeConflictRemedy(mergeConflict);
+    return {
+      ...base,
+      verdict: "FAIL",
+      reason: `gate record status conflict — merge conflict with ${mergeConflict?.baseRef || "origin/main"}: the candidate does not merge cleanly, so nothing was graded. The branch needs a merge; gating again fails the same way until you ${remedy}.`,
+      rerun: false,
+      remedy,
+    };
+  }
   if (BLOCKED_GATE_STATUSES.has(status) || status.startsWith("blocked_")) {
     const stated = state?.failureReason || state?.error || "";
     return {
@@ -481,6 +500,9 @@ export function reconcileSlots(slots) {
   let best = considered[0];
   for (const slot of considered.slice(1)) {
     if (rank(slot.verdict) > rank(best.verdict)) best = slot;
+    else if (slot.verdict === "INCONCLUSIVE" && best.verdict === "INCONCLUSIVE"
+      && slot.boundSha && slot.boundSha === best.boundSha && slot.boundBranch === best.boundBranch
+      && ["admitted", "running"].includes(slot.gateStatus) && best.gateStatus === "queued") best = slot;
   }
   return { ...best, slot: best.slotKey ?? null };
 }

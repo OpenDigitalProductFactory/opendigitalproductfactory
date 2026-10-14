@@ -24,7 +24,13 @@ function fakeDb() {
         return data;
       }),
     },
-    $queryRaw: vi.fn(async (..._args: unknown[]) => [{ id: "row-1" }]),
+    $queryRaw: vi.fn(async (...args: unknown[]) => {
+      if ((args[0] as TemplateStringsArray).join("?").includes("pg_advisory_xact_lock")) {
+        throw new Error("Failed to deserialize column of type 'void'");
+      }
+      return [{ id: "row-1" }];
+    }),
+    $executeRaw: vi.fn(async (..._args: unknown[]) => 1),
     $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn({ ...db, $transaction: undefined })),
   };
   return db;
@@ -63,9 +69,21 @@ describe("runReceiptedCommand", () => {
     await runReceiptedCommand({
       db: db as unknown as ReceiptDb, authorityScopeKey: scope, commandId: "cmd-1", commandType: "heartbeat", target, run: async () => 1,
     });
-    const sql = db.$queryRaw.mock.calls.map((call) => (call[0] as unknown as TemplateStringsArray).join("?"));
-    expect(sql[0]).toContain("pg_advisory_xact_lock");
-    expect(sql[1]).toContain("FOR UPDATE");
+    expect((db.$executeRaw.mock.calls[0]![0] as TemplateStringsArray).join("?")).toContain("pg_advisory_xact_lock");
+    expect(db.$executeRaw.mock.calls[0]!.slice(1)).toEqual([`command:${scope}:cmd-1`]);
+    expect((db.$queryRaw.mock.calls[0]![0] as TemplateStringsArray).join("?")).toContain("FOR UPDATE");
+    expect(db.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(db.$queryRaw.mock.invocationCallOrder[0]!);
+    expect(db.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(db.workroomActivity.findFirst.mock.invocationCallOrder[0]!);
+  });
+
+  it("fails before the effect when a raw adapter cannot execute the command lock", async () => {
+    const run = vi.fn(async () => "effect");
+    await expect(runReceiptedCommand({
+      db: { ...db, $transaction: undefined, $executeRaw: undefined } as unknown as ReceiptDb,
+      authorityScopeKey: scope, commandId: "missing-execute", commandType: "heartbeat", target, run,
+    })).rejects.toThrow("$executeRaw");
+    expect(run).not.toHaveBeenCalled();
+    expect(db.workroomActivity.create).not.toHaveBeenCalled();
   });
 
   it("writes the receipt as a command-accepted row in the room's own log", async () => {

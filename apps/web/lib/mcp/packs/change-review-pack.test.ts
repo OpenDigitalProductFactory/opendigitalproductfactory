@@ -249,11 +249,14 @@ describe("change-review MCP pack", () => {
     expect(mocks.recordWorkCapsuleEvidence).toHaveBeenCalledTimes(1);
   });
 
-  it("reuses an existing correlation for the same receipt", async () => {
+  it.each([
+    { schemaVersion: "semantic-change-review-receipt.v2" },
+    { schemaVersion: "semantic-change-review-receipt.v3", artifactType: "code-change" },
+  ])("reuses an existing correlation for $schemaVersion", async (contract) => {
     mocks.prisma.externalEvidenceRecord.findFirst
       .mockResolvedValueOnce({
         details: {
-          schemaVersion: "semantic-change-review-receipt.v2",
+          ...contract,
           result: { decision: "pass", issues: [], summary: "Passed." },
         },
       })

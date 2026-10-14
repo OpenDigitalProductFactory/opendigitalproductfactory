@@ -5,6 +5,7 @@ import {
 import { verifyMcpSessionToken } from "@/lib/mcp/session-token";
 import { buildUnauthorizedChallenge, resolveResourceOrigin } from "@/lib/auth/oauth-metadata";
 import { resolveOAuthAccessToken } from "@/lib/auth/oauth-tokens";
+import { resolveWorkroomSessionToken } from "@/lib/auth/workroom-session-token";
 import { isPatResolutionDisabled } from "@/lib/auth/oauth-policy";
 import type { PublicScope } from "@/lib/auth/oauth-scope-map";
 import type { McpAuthSource } from "@/lib/mcp/tool-tier";
@@ -15,6 +16,8 @@ export type ResolvedMcpTransportAuth = ResolvedMcpToken & {
   routeContext?: string | null;
   /** BI-B949993E: present only on session-JWT tokens minted for a governed TaskRun. */
   taskRunId?: string | null;
+  /** BI-05715F4C: the Workroom a room session token is bound to; set only on such a token. */
+  workroomRef?: string | null;
   source: McpAuthSource;
   oauthIdentitySetupRequired?: boolean;
 };
@@ -133,6 +136,12 @@ export async function authenticateMcpRequest(request: Request): Promise<McpAuthe
       token: { ...oauth.resolved, source: "oauth", oauthIdentitySetupRequired: oauth.identitySetupRequired },
       oauthGrantedScopes: oauth.publicScopes,
     };
+  }
+  // A Workroom session credential is the room's, not a PAT: it resolves even where PATs are retired.
+  const roomSession = await resolveWorkroomSessionToken(plaintext);
+  if (roomSession) {
+    const { runRef, ...resolved } = roomSession;
+    return { ...ok(), token: { ...resolved, taskRunId: runRef, source: "pat" }, oauthGrantedScopes: [] };
   }
   if (isPatResolutionDisabled()) {
     return {

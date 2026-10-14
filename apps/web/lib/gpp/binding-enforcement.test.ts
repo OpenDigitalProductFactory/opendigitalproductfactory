@@ -196,6 +196,14 @@ describe("promotion ratchet on fixtures", () => {
     expect(promotionRefusals("fixture-admit", entry, ctx({ directSites: sites })).join("\n")).toMatch(/dynamic/);
   });
 
+  // Approval convergence PR-C (BI-04E5A511, spec D6): with both
+  // proposal-approval paths behind the monitor, the live tree has no dynamic
+  // site, so promotion is never refused on that ground.
+  it("the live tree gives no dynamic-site refusal", () => {
+    expect(liveSites.filter((site) => site.toolName === "dynamic")).toEqual([]);
+    expect(promotionRefusals("fixture-admit", entry, ctx({ directSites: liveSites })).join("\n")).not.toMatch(/dynamic/);
+  });
+
   it("ignores direct sites for tools the binding does not name", () => {
     const sites: CallSite[] = [{ path: "lib/a.ts", line: 1, toolName: "other_outward_tool" }];
     expect(promotionRefusals("fixture-admit", entry, ctx({ directSites: sites }))).toEqual([]);

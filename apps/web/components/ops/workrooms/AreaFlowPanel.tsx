@@ -6,6 +6,7 @@ import { KpiCard } from "@/components/ui/report-kit/KpiCard";
 import { WorkroomFlowMap } from "@/components/workspace/workroom/WorkroomFlowMap";
 
 import { PortfolioComparisonTable, ShapeFlowTable } from "./AreaFlowTables";
+import { ShapeStepMeasures } from "./ShapeStepMeasures";
 import type { PortfolioFlowWithCost, ShapeFlowView } from "@/lib/work-management/area-flow.server";
 import { FLOW_ITEM_TYPES, FLOW_WINDOW_DAYS, type FlowItemType } from "@/lib/work-management/portfolio-flow";
 import { getWorkShape } from "@/lib/work-management/work-shapes";
@@ -24,7 +25,7 @@ const ITEM_COLOR: Record<FlowItemType, string> = {
 };
 
 
-/** Median flow time per week; gaps where a week finished nothing. */
+/** A measure's weekly trend, oldest first; gaps where a week has no value. */
 function Trend({ values, label }: { values: (number | null)[]; label: string }) {
   const known = values.filter((v): v is number => v != null);
   if (known.length < 2) return null;
@@ -79,7 +80,14 @@ export function PortfolioFlowTiles({ flow, areaHref, t }: { flow: PortfolioFlowW
         <p className="text-xs text-[var(--dpf-muted)]">{t("flow.windowRooms", { days: FLOW_WINDOW_DAYS, rooms: flow.rooms })}</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <KpiCard size="sm" value={flow.flowLoad} label={t("flow.inFlow")} hint={t("flow.inFlowHint")} />
+        <KpiCard
+          size="sm"
+          value={flow.flowLoad}
+          label={t("flow.inFlow")}
+          // No trend or change for load yet: rooms that end without a recorded stop
+          // never close their run, so its history overstates load (BI-B0E285FB).
+          hint={t("flow.inFlowHint")}
+        />
         <KpiCard
           size="sm"
           value={flow.flowTime.p50Ms == null ? "—" : formatDuration(flow.flowTime.p50Ms)}
@@ -96,13 +104,24 @@ export function PortfolioFlowTiles({ flow, areaHref, t }: { flow: PortfolioFlowW
           size="sm"
           value={flow.flowEfficiency.value == null ? "—" : pct(flow.flowEfficiency.value)}
           label={t("flow.efficiency")}
-          hint={<span className="flex flex-col gap-1">{t("flow.efficiencyHint")}{delta(t, flow.flowEfficiency.value, flow.flowEfficiency.prior, (n) => `${Math.round(n * 100)} pts`, false)}</span>}
+          hint={
+            <span className="flex flex-col gap-1">
+              {t("flow.efficiencyHint")}
+              {delta(t, flow.flowEfficiency.value, flow.flowEfficiency.prior, (n) => `${Math.round(n * 100)} pts`, false)}
+              <Trend values={flow.weeklyFlowEfficiency} label={t("flow.efficiencyTrendLabel")} />
+            </span>
+          }
         />
         <KpiCard
           size="sm"
           value={flow.throughput.perWeek.toFixed(1)}
           label={t("flow.perWeek")}
-          hint={delta(t, flow.throughput.perWeek, flow.throughput.priorPerWeek, (n) => n.toFixed(1), false) ?? t("flow.perWeekHint")}
+          hint={
+            <span className="flex flex-col gap-1">
+              {delta(t, flow.throughput.perWeek, flow.throughput.priorPerWeek, (n) => n.toFixed(1), false) ?? t("flow.perWeekHint")}
+              <Trend values={flow.weeklyThroughput} label={t("flow.throughputTrendLabel")} />
+            </span>
+          }
         />
         <KpiCard size="sm" value={flow.points ? t("flow.points", { points: flow.points.inFlight }) : "—"} label={t("flow.cost")} hint={costHint} />
       </div>
@@ -164,6 +183,7 @@ export function ShapeFlowDrillIn({ view, backHref, baseHref, stageKey, t }: { vi
       </div>
       <p className="text-xs text-[var(--dpf-muted)]">{t("flow.roomsInFlowOn", { count: model.aggregate?.roomsInFlow ?? 0, version: version ?? "" })}</p>
       <WorkroomFlowMap model={model} selectParam="stage" />
+      <ShapeStepMeasures measures={view.stepMeasures} t={t} />
       {view.roomsAtStep ? (
         <div className="space-y-2">
           <h3 className="text-sm font-medium text-[var(--dpf-text)]">{t("flow.roomsAt", { stage: stageKey ?? "" })}</h3>
