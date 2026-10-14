@@ -44,6 +44,14 @@ The persisted snapshot uses the canonical fields `enabledRuntimeCapabilities`,
 `capabilityCatalogHash`, and `capabilityStateVersion`; an unknown capability or
 a mismatched catalog/state hash fails closed before Compose changes the stack.
 
+The snapshot also records, in the optional `runtimeCapabilityDecisions` map,
+whether a person chose each operator-controlled capability: `decision`
+(`enabled`, `disabled` or `undecided`), `source` and `decidedAt`. Monitoring
+(`runtime:deep-observability`) is the first such capability. A state without a
+recorded decision is written as `undecided` / `upgrade-carried`, and its enabled
+capabilities are left exactly as they were, so the portal can offer the choice
+instead of silently changing the install (BI-83260BB3).
+
 When upgrading a previous-release state that predates these fields, the adapter
 preserves the capabilities that were active in that release: core, build,
 browser automation, durable automation, local speech, deep observability, and
