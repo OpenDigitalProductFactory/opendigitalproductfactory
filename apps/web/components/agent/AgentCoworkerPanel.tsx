@@ -14,6 +14,7 @@ import { AgentPanelHeader } from "./AgentPanelHeader";
 import { ThreadSensitivityNotice } from "./ThreadSensitivityNotice";
 import { AgentSkillAttributionChip } from "./AgentSkillAttributionChip";
 import { AgentMessageBubble } from "./AgentMessageBubble";
+import { proposalAfterApproval } from "./ProposalNoLongerRunnable";
 import { AgentMessageInput } from "./AgentMessageInput";
 import { CoworkerProfilePanel } from "./CoworkerProfilePanel";
 import { CollaborationActivityPanel } from "./CollaborationActivityPanel";
@@ -766,15 +767,8 @@ export function AgentCoworkerPanel({
       setMessages((prev) =>
         prev.map((m) =>
           m.proposal?.proposalId === proposalId
-            ? {
-                ...m,
-                proposal: {
-                  ...m.proposal,
-                  status: result.success ? "executed" : "failed",
-                  ...(result.resultEntityId !== undefined ? { resultEntityId: result.resultEntityId } : {}),
-                  ...(result.error !== undefined ? { resultError: result.error } : {}),
-                },
-              }
+            // A monitor refusal ran nothing: the card stays pending, with why (spec D5).
+            ? { ...m, proposal: proposalAfterApproval(m.proposal, result) }
             : m,
         ),
       );

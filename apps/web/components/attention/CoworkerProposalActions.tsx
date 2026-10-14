@@ -4,11 +4,16 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { approveProposal, rejectProposal } from "@/lib/actions/proposals";
+import { ProposalNoLongerRunnable } from "@/components/agent/ProposalNoLongerRunnable";
 
 export function CoworkerProposalActions({ proposalId }: { proposalId: string }) {
   const router = useRouter();
   const [result, setResult] = useState<"approved" | "declined" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Approval convergence PR-C (BI-04E5A511, spec D5): the reference monitor
+  // refused the proposed call. Nothing ran and the proposal is still pending,
+  // so only Decline is offered.
+  const [noLongerRunnable, setNoLongerRunnable] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   if (result) {
@@ -35,13 +40,19 @@ export function CoworkerProposalActions({ proposalId }: { proposalId: string }) 
         router.refresh();
         return;
       }
+      if ("noLongerRunnable" in response && response.noLongerRunnable) {
+        setNoLongerRunnable(response.error ?? "It was refused.");
+        return;
+      }
       setError(response.error ?? "That decision could not be saved. Please try again.");
     });
   };
 
   return (
     <div className="space-y-2">
+      {noLongerRunnable ? <ProposalNoLongerRunnable reason={noLongerRunnable} /> : null}
       <div className="flex flex-wrap gap-2">
+        {noLongerRunnable ? null : (
         <button
           type="button"
           disabled={pending}
@@ -50,6 +61,7 @@ export function CoworkerProposalActions({ proposalId }: { proposalId: string }) 
         >
           Approve action
         </button>
+        )}
         <button
           type="button"
           disabled={pending}

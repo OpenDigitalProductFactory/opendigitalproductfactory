@@ -44,6 +44,13 @@ export type AgentMessageRow = {
     status: string;
     resultEntityId?: string;
     resultError?: string;
+    /**
+     * Approval convergence PR-C (BI-04E5A511): the reference monitor refused
+     * the proposed call when it was approved. Nothing ran and the proposal is
+     * still pending; the card shows why and offers only its decline action.
+     * Client state, never persisted.
+     */
+    noLongerRunnable?: string;
   };
   /**
    * BI-C8EC05C9: the approval requests (CoworkerActionEnvelope) this turn
