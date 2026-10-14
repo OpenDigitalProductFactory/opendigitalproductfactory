@@ -4,8 +4,7 @@
   "decisionInteractionId": "DI-1324C595409A",
   "scope": {
     "files": [
-      "apps/web/components/monitoring/CapabilityServiceHealth.tsx",
-      "apps/web/components/monitoring/CapabilityServiceHealth.test.tsx"
+      "apps/web/components/monitoring/CapabilityServiceHealth.tsx"
     ]
   },
   "evidence": {
