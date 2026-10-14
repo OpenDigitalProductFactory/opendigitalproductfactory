@@ -31,12 +31,77 @@ vi.mock("@/lib/orchestrator-evaluator", () => ({
 import { CAPABILITY_PROBES, checkScenarioAssertions } from "./endpoint-test-registry";
 import { InferenceError } from "@/lib/routing/inference-error";
 import { currentInferenceSignal, withInferenceCancellation } from "@/lib/routing/governed-inference-deadline";
+import { acquireInferenceSlot, __resetInferenceAdmissionForTest } from "@/lib/inference/inference-admission";
 import {
   isCapacityDeferral,
   mapProbeResultsToInstructionFollowing,
   mapScoresToCodingCapability,
   runEndpointTests,
 } from "./endpoint-test-runner";
+
+describe("selected local concurrency diagnostic", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    __resetInferenceAdmissionForTest();
+    vi.stubEnv("DPF_INFERENCE_MAX_CONCURRENCY_LOCAL", "1");
+    mockPrisma.modelProvider.findMany.mockResolvedValue([{ providerId: "local" }]);
+    mockPrisma.modelProfile.findMany.mockResolvedValue([
+      { id: "mp1", providerId: "local", modelId: "selected", friendlyName: "Selected model" },
+    ]);
+    mockPrisma.endpointTestRun.create.mockResolvedValue({ id: "etr1" });
+    mockPrisma.endpointTestRun.update.mockResolvedValue({});
+  });
+  afterEach(() => { __resetInferenceAdmissionForTest(); vi.unstubAllEnvs(); });
+
+  it("runs exactly two ordinary calls and persists their answers and actual queued handoff without quality writes", async () => {
+    mockCallProvider.mockImplementation(async () => {
+      const release = await acquireInferenceSlot("local", "interactive");
+      try {
+        await new Promise(resolve => setTimeout(resolve, 5));
+        return { content: "READY", inputTokens: 2, outputTokens: 1, inferenceMs: 1,
+          truncated: false, raw: { choices: [{ finish_reason: "stop" }] } };
+      } finally { release(); }
+    });
+    const results = await runEndpointTests({ endpointId: "local", modelId: "selected",
+      concurrencyOnly: true, triggeredBy: "test" });
+    expect(mockCallProvider).toHaveBeenCalledTimes(2);
+    expect(results[0]?.concurrency?.outcome).toBe("passed");
+    expect(results[0]?.probes).toEqual([]);
+    const data = mockPrisma.endpointTestRun.update.mock.calls[0]![0].data;
+    expect(data.status).toBe("completed");
+    expect(data.results.concurrency.callers.map((c: { content: string }) => c.content)).toEqual(["READY", "READY"]);
+    expect(data.results.concurrency.contentionObserved).toBe(true);
+    expect(data.results.concurrency.events.some((e: { phase: string }) => e.phase === "queued")).toBe(true);
+    expect(mockPrisma.modelProfile.update).not.toHaveBeenCalled();
+    expect(mockPrisma.taskEvaluation.create).not.toHaveBeenCalled();
+    expect(mockPerformanceUpdate).not.toHaveBeenCalled();
+  });
+
+  it("persists incomplete output as unverified while preserving content and finish reason", async () => {
+    mockCallProvider.mockResolvedValue({ content: "partial", inputTokens: 2, outputTokens: 512,
+      inferenceMs: 1, truncated: true, raw: { choices: [{ finish_reason: "length" }] } });
+    const results = await runEndpointTests({ endpointId: "local", modelId: "selected",
+      concurrencyOnly: true, triggeredBy: "test" });
+    expect(mockCallProvider).toHaveBeenCalledTimes(2);
+    expect(results[0]?.concurrency?.outcome).toBe("deferred");
+    const data = mockPrisma.endpointTestRun.update.mock.calls[0]![0].data;
+    expect(data.status).toBe("incomplete");
+    expect(data.results.concurrency.callers[0]).toMatchObject({ content: "partial", finishReason: "length", outputTokens: 512 });
+    expect(mockPrisma.modelProfile.update).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { endpointId: "local" }, { modelId: "selected" },
+    { endpointId: "openai", modelId: "selected" },
+    { endpointId: "local", modelId: "default" },
+    { endpointId: "local", modelId: "selected", taskType: "code-gen" },
+    { endpointId: "local", modelId: "selected", probesOnly: true },
+  ])("rejects an incompatible selection before writes or inference: %j", async selection => {
+    await expect(runEndpointTests({ ...selection, concurrencyOnly: true, triggeredBy: "test" })).rejects.toThrow(/Concurrency diagnostics/);
+    expect(mockPrisma.endpointTestRun.create).not.toHaveBeenCalled();
+    expect(mockCallProvider).not.toHaveBeenCalled();
+  });
+});
 
 describe("checkScenarioAssertions", () => {
   it("passes contains assertion", () => {

@@ -22,6 +22,18 @@ type AdmissionEvidence = InferenceAdmissionEvent & { callerIndex: number; order:
 type DiagnosticCall = (input: { providerId: string; modelId: string; traceId: string }) => Promise<InferenceResult>;
 class ObservationTimeout extends Error {}
 
+/** Explicit selection only; ordinary probe defaults must not widen this run. */
+export function assertEndpointConcurrencySelection(selection: {
+  endpointId?: string; modelId?: string; taskType?: string; probesOnly?: boolean;
+  allModels?: boolean; allEndpoints?: boolean;
+}): void {
+  if (!selection.endpointId || !isLocalProviderId(selection.endpointId)
+    || !selection.modelId?.trim() || selection.modelId === "default"
+    || selection.taskType || selection.probesOnly || selection.allModels || selection.allEndpoints) {
+    throw new Error("Concurrency diagnostics require one explicit local provider and model, without probes, scenarios or exhaustive options");
+  }
+}
+
 function finishReason(raw: unknown): string | null {
   if (!isRecord(raw) || !Array.isArray(raw.choices)) return null;
   const choice = raw.choices[0];
@@ -41,9 +53,7 @@ async function callDiagnostic(input: Parameters<DiagnosticCall>[0]): Promise<Inf
 export async function runEndpointConcurrencyDiagnostic(
   providerId: string, modelId: string, call: DiagnosticCall = callDiagnostic,
 ): Promise<{ outcome: Outcome; reason: string; contentionObserved: boolean; callers: Caller[]; events: AdmissionEvidence[] }> {
-  if (!isLocalProviderId(providerId) || !modelId.trim() || modelId === "default") {
-    throw new Error("Concurrency diagnostics require one explicit local provider and model");
-  }
+  assertEndpointConcurrencySelection({ endpointId: providerId, modelId });
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(new ObservationTimeout("Diagnostic timed out after 30 seconds")), 30_000);
   timer.unref?.();
