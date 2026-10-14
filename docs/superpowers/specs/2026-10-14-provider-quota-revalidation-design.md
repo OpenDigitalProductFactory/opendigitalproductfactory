@@ -51,6 +51,19 @@ The following criteria are quoted from the existing BI-3CF78C8E acceptance basel
 - AC-Q4: Fence quota mutation by captured row identity/version/state/ownership; newer failure, handoff, deletion and duplicate completion preserve current evidence and report truthful status.
 - AC-Q5: Deliver the quota repair through canonical tests, independent review, DCO PR/queue/canonical deployment and a fresh authorized live account check; verificationOnly cannot activate accounts or mutate quota and existing snapshot-bound token renewal remains allowed.
 
+## Independent review follow-through
+
+Native review `TR-GATE-259744AB2300F0399E800C65` genuinely completed with PASS for source `05b2f008efec7d14ca89e14ed79d1319224804ad`, receipt `cmv7po4170wjh01mn1zvto4r2`. Both reviewers used Claude CLI; this is platform review evidence, not local-model performance evidence. Important nonblocking findings are being resolved before publication:
+
+1. Move the conditional availability write beside the existing canonical capacity writer and share its availability data construction. Import the canonical state/action/confidence/source contracts instead of defining free strings in the action layer.
+2. Isolate a failed quota write using a PostgreSQL savepoint after the connection CAS and credential update. A recoverable quota error must retain authenticated state, preserve the restriction, report a local routing-update failure and send no further provider request. Failure to restore the transaction or commit remains a local persistence failure; a completed provider response must not be described as a provider rejection.
+3. Add real PostgreSQL checks for nullable and named connection predicates, ownership handoff/version fencing, and recovery from a genuine SQL error. Mock predicate tests and the transaction-abort failure injection do not establish these database properties.
+4. State the scope accurately: this recovery is for the OAuth/Responses path, not API-key or workload-identity verification. Canonical default credential plus name is a bounded inference for an unlinked legacy record; it does not reconstruct historical attribution.
+
+[PostgreSQL savepoints](https://www.postgresql.org/docs/current/sql-savepoint.html) and [rollback to a savepoint](https://www.postgresql.org/docs/current/sql-rollback-to.html) preserve transaction work preceding the isolated operation. A plain JavaScript catch does not restore an aborted database transaction.
+
+After canonical coordination returned, ordinary scope claims granted the store, type registry, existing store tests and PostgreSQL fixture. The conditional writer now lives beside the existing clear operation and shares its availability data factory. The paid-write failure test observed 17 passing tests and one failure before repair; the recovered behavior and existing boundaries pass 55 tests in four files. Both typecheck programs pass. Six real PostgreSQL cases are prepared but intentionally skipped outside a canonical leased database; their execution remains unrun until the shared gate. No review or gate receipt for this follow-through is inferred from the earlier PASS.
+
 ## Rollback and operational limits
 
 Revert the scoped source PR through protected delivery if routing acceptance fails. Retain provider observations and audit evidence; never clear runtime rows by hand. A verified account may still be restricted by grants, data-use terms, billing or other provider failures. Old exhausted review lineages remain exhausted and are never renamed or restarted to manufacture assurance.

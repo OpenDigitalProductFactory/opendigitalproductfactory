@@ -7,6 +7,7 @@ const { mockPrisma, mockRefreshOAuthToken, mockGetProviderBearerToken, mockActiv
     credentialEntry: { findUnique: vi.fn(), update: vi.fn() },
     aiProviderConnection: { findUnique: vi.fn(), updateMany: vi.fn() },
     providerCapacityStatus: { findUnique: vi.fn(), updateMany: vi.fn() },
+    $executeRaw: vi.fn(),
   },
   mockRefreshOAuthToken: vi.fn(),
   mockGetProviderBearerToken: vi.fn(),
@@ -16,7 +17,7 @@ const { mockPrisma, mockRefreshOAuthToken, mockGetProviderBearerToken, mockActiv
 vi.mock("@dpf/db", () => ({ prisma: mockPrisma }));
 vi.mock("@/lib/provider-oauth", () => ({ refreshOAuthToken: mockRefreshOAuthToken }));
 vi.mock("@/lib/govern/activate-provider", () => ({ activateProvider: mockActivateProvider }));
-vi.mock("@/lib/routing/provider-capacity/store", () => ({ clearProviderCapacityStatus: mockClearCapacity }));
+vi.mock("@/lib/routing/provider-capacity/store", async (importOriginal) => ({ ...await importOriginal<typeof import("@/lib/routing/provider-capacity/store")>(), clearProviderCapacityStatus: mockClearCapacity }));
 vi.mock("@/lib/ai-provider-internals", () => ({
   getProviderBearerToken: mockGetProviderBearerToken,
   getDecryptedCredential: vi.fn(),
@@ -29,6 +30,7 @@ import { testProviderAuthInternal as testProviderAuth } from "./provider-auth-te
 describe("expired OAuth verification recovery", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPrisma.$executeRaw.mockReset().mockResolvedValue(0);
     mockPrisma.providerCapacityStatus.findUnique.mockReset().mockResolvedValue(null);
     mockPrisma.providerCapacityStatus.updateMany.mockReset().mockResolvedValue({ count: 1 });
     mockPrisma.modelProfile.findFirst.mockResolvedValue({ modelId: "discovered-current-model" });
@@ -172,6 +174,52 @@ describe("expired OAuth verification recovery", () => {
       ok: true, message: expect.stringContaining("Routing status changed during verification"),
     });
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves authentication when a quota write aborts its database subtransaction", async () => {
+    restoredDefaultAccount();
+    const version = new Date("2026-10-14T04:00:00Z");
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({
+      providerId: "chatgpt", connectionId: "provider-default-chatgpt", credentialEntryId: "credential-default",
+      authMethod: "oauth", status: "inactive", updatedAt: version,
+      credentialEntry: { id: "credential-default", status: "ok", cachedToken: "encrypted" },
+    });
+    let authenticated = false;
+    let credentialOk = false;
+    let aborted = false;
+    mockPrisma.aiProviderConnection.updateMany.mockImplementation(async () => {
+      authenticated = true;
+      return { count: 1 };
+    });
+    mockPrisma.credentialEntry.update.mockImplementation(async () => { credentialOk = true; });
+    mockPrisma.providerCapacityStatus.updateMany.mockImplementation(async () => {
+      aborted = true;
+      throw new Error("quota write failed");
+    });
+    Object.assign(mockPrisma, {
+      $executeRaw: vi.fn(async (statement: TemplateStringsArray) => {
+        if (statement.join("").startsWith("ROLLBACK TO SAVEPOINT")) aborted = false;
+        return 0;
+      }),
+      $transaction: async (fn: (tx: typeof mockPrisma) => Promise<unknown>) => {
+        try {
+          const result = await fn(mockPrisma);
+          if (aborted) throw new Error("transaction is aborted");
+          return result;
+        } catch (error) {
+          authenticated = false;
+          credentialOk = false;
+          throw error;
+        }
+      },
+    });
+    expect(await testProviderAuth("chatgpt", false, "provider-default-chatgpt")).toMatchObject({
+      ok: true, message: expect.stringContaining("could not update routing"),
+    });
+    expect(authenticated).toBe(true);
+    expect(credentialOk).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(mockRefreshOAuthToken).not.toHaveBeenCalled();
   });
 
 });

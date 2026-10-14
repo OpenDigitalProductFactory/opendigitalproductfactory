@@ -6,10 +6,11 @@ import { findProviderCredential } from "@/lib/inference/provider-account-credent
 import { providerWorkspaceHeaders } from "@/lib/inference/provider-workspace";
 import { buildResponsesUrl, isChatGptBackend } from "@/lib/routing/responses-contract";
 import { assertResponsesCompleted } from "@/lib/routing/responses-readiness";
-import { clearProviderCapacityStatus } from "@/lib/routing/provider-capacity/store";
+import { clearProviderCapacityStatus, reconcileProviderQuotaObservation } from "@/lib/routing/provider-capacity/store";
 import { resolveResponsesProbeBaseUrl } from "@/lib/routing/responses-provider";
 import { refreshOAuthToken } from "@/lib/provider-oauth";
-import { captureProviderQuotaObservation, reconcileProviderQuotaObservation, type ProviderQuotaObservation } from "./provider-quota-revalidation";
+import { captureProviderQuotaObservation } from "./provider-quota-revalidation";
+import type { ProviderQuotaObservation, ProviderQuotaReconciliation } from "@/lib/routing/provider-capacity/types";
 import { ACCOUNT_CHANGED, assertActiveAccountSnapshot, getActiveAccountBearerToken, isActiveDefaultSubscription, type ActiveAccountSnapshot } from "@/lib/inference/active-provider-account-verification";
 
 const OPENAI_OAUTH_LINKED_PROVIDERS = new Set(["codex", "chatgpt"]);
@@ -63,7 +64,7 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
   }
   const accountAuth = connection?.authMethod;
   const provider = { ...catalog, authMethod: accountAuth === "oauth" ? "oauth2_authorization_code" : accountAuth === "api-key" ? "api_key" : accountAuth === "workload-identity" ? "oauth2_client_credentials" : catalog.authMethod };
-  const markAuthenticated = async (quotaObservation?: ProviderQuotaObservation | null): Promise<boolean | undefined> => {
+  const markAuthenticated = async (quotaObservation?: ProviderQuotaObservation | null): Promise<ProviderQuotaReconciliation | undefined> => {
     if (activeSnapshot) {
       await assertActiveAccountSnapshot(activeSnapshot);
       return undefined;
@@ -200,13 +201,23 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
       }
       if (res.ok) {
         assertResponsesCompleted(body, streaming);
-        const quotaReconciled = await markAuthenticated(quotaObservation);
+        let quotaReconciled: ProviderQuotaReconciliation | undefined;
+        try {
+          quotaReconciled = await markAuthenticated(quotaObservation);
+        } catch (error) {
+          const detail = error instanceof Error && error.message.startsWith("Account changed")
+            ? error.message
+            : "DPF could not persist this verification. Routing status was not confirmed.";
+          return { ok: false, message: `Responses API verified. ${detail}` };
+        }
         if (connectionId === undefined) await clearProviderCapacityStatus({ providerId, source: "oauth" });
         return {
           ok: true,
-          message: quotaReconciled === false
-            ? "Connected via OAuth — Responses API verified. Routing status changed during verification; check its current status."
-            : "Connected via OAuth — Responses API verified",
+          message: quotaReconciled === "write-failed"
+            ? "Connected via OAuth — Responses API verified. DPF could not update routing; the account is authenticated and its routing restriction remains."
+            : quotaReconciled === "changed"
+              ? "Connected via OAuth — Responses API verified. Routing status changed during verification; check its current status."
+              : "Connected via OAuth — Responses API verified",
         };
       }
 
