@@ -25,9 +25,11 @@ type Props = {
   authMethod: string;
   authorizeUrl: string | null;
   providerId: string;
+  connectionId?: string;
+  canWrite?: boolean;
 };
 
-export function OAuthConnectionStatus({ credential, authMethod, authorizeUrl, providerId }: Props) {
+export function OAuthConnectionStatus({ credential, authMethod, authorizeUrl, providerId, connectionId, canWrite = true }: Props) {
   const [isPending, startTransition] = useTransition();
   const [signInError, setSignInError] = useState<string | null>(null);
 
@@ -49,7 +51,7 @@ export function OAuthConnectionStatus({ credential, authMethod, authorizeUrl, pr
   function handleSignIn() {
     setSignInError(null);
     startTransition(async () => {
-      const result = await startProviderOAuth(providerId);
+      const result = await startProviderOAuth(providerId, connectionId);
       if ("authorizeUrl" in result) {
         window.open(result.authorizeUrl, "_self");
       } else {
@@ -113,12 +115,12 @@ export function OAuthConnectionStatus({ credential, authMethod, authorizeUrl, pr
 
       {/* Actions */}
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
-        {(!isConnected || isExpired) && authorizeUrl && (
+        {authorizeUrl && (
           <div>
             <button
               type="button"
               onClick={handleSignIn}
-              disabled={isPending}
+              disabled={isPending || !canWrite}
               style={{
                 fontSize: 11,
                 color: "var(--dpf-accent)",

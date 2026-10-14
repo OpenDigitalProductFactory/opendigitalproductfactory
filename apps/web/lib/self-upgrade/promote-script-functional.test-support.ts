@@ -18,7 +18,10 @@ const gitBash = join(process.env.ProgramFiles ?? "C:\\Program Files", "Git", "bi
 export const BASH_COMMAND = process.platform === "win32" && existsSync(gitBash) ? gitBash : "bash";
 export const BASH_OK = spawnSync(BASH_COMMAND, ["--version"], { encoding: "utf8" }).status === 0;
 export const GIT_OK = spawnSync("git", ["--version"], { encoding: "utf8" }).status === 0;
-export const PROMOTE_TEST_TIMEOUT_MS = 30_000;
+// Measures a hang, not host speed (BI-F25D7E88): one case spawns Git Bash, a
+// real repo and a fake docker, which costs 11-25 s on Windows and over 30 s
+// when vitest runs two of these files side by side. A hung promote still fails.
+export const PROMOTE_TEST_TIMEOUT_MS = 120_000;
 
 let bashDrivePrefix: string | undefined;
 

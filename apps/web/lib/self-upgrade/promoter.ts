@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { SelfUpgradeHostIdentity } from "./config";
 import type { InstallStateMigrationHandoff } from "./preflight";
@@ -14,6 +15,7 @@ export {
   type ResolvedPromoterArtifact,
 } from "./promoter-artifact";
 import { resolvePromoterTimeoutMs } from "./promoter-timeout";
+import { validateRuntimeCapabilityProtocolInfo, type RuntimeCapabilityProtocolIdentity, type RuntimeCapabilityProtocolInfo } from "@/lib/platform-runtime/transition-protocol";
 
 /**
  * The promoter runs as a SIBLING container, never inside the portal.
@@ -88,6 +90,40 @@ export async function runPromoterReadiness(
     timeoutMs: Math.min(resolvePromoterTimeoutMs(params), 5 * 60_000),
     containerName: params.containerName,
   });
+}
+
+/** Probe the verified packaged actuator without any host authority or mounts. */
+export function buildRuntimeCapabilityProtocolProbeCommand(
+  artifact: ResolvedPromoterArtifact,
+  containerName: string,
+  snapshotBase64?: string,
+): { command: string; args: string[] } {
+  if (!/^sha256:[a-f0-9]{64}$/.test(artifact.digest) || !/^[a-f0-9]{40}$/.test(artifact.sourceSha) || !/^dpf-runtime-protocol-[a-z0-9-]{1,64}$/.test(containerName)) {
+    throw new Error("runtime_protocol_probe_identity_invalid");
+  }
+  if (snapshotBase64 !== undefined && (!/^[A-Za-z0-9_-]+$/.test(snapshotBase64) || snapshotBase64.length > 64 * 1024)) throw new Error("runtime_protocol_snapshot_invalid");
+  return { command: "docker", args: ["run", "--rm", "--name", containerName, "--read-only", "--network", "none", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--memory", "128m", "--cpus", "1", "--pids-limit", "64", "--pull", "never",
+    ...(snapshotBase64 !== undefined ? ["-e", `DPF_RUNTIME_VALIDATE_SNAPSHOT=${snapshotBase64}`] : []), artifact.digest, "--runtime-capability-protocol-info"] };
+}
+
+/** Expected byte identities must come from the trusted server closure.
+ * This read-only operation neither reserves transition authority nor applies it. */
+export async function runRuntimeCapabilityProtocolProbe(
+  params: { artifact: ResolvedPromoterArtifact; expected: RuntimeCapabilityProtocolIdentity; containerName: string; observedHostSnapshot?: unknown },
+  execute: typeof runProcessWithBudget = runProcessWithBudget,
+): Promise<RuntimeCapabilityProtocolInfo> {
+  const expected = { ...params.expected };
+  const snapshotBytes = params.observedHostSnapshot === undefined ? undefined : Buffer.from(JSON.stringify(params.observedHostSnapshot));
+  const snapshotHash = snapshotBytes ? createHash("sha256").update(snapshotBytes).digest("hex") : undefined;
+  if (expected.sourceSha !== params.artifact.sourceSha) throw new Error("runtime_protocol_probe_identity_mismatch");
+  const { command, args } = buildRuntimeCapabilityProtocolProbeCommand(params.artifact, params.containerName, snapshotBytes?.toString("base64url"));
+  const result = await execute(command, args, { timeoutMs: 60_000, containerName: params.containerName, maxStdoutBytes: 4096 });
+  if (result.exitCode !== 0 || result.outputLimitExceeded) throw new Error("runtime_protocol_probe_execution_failed");
+  let value: unknown;
+  try { value = JSON.parse(result.stdout); } catch { throw new Error("runtime_protocol_probe_invalid_json"); }
+  const info = validateRuntimeCapabilityProtocolInfo(value, expected);
+  if (snapshotHash && info.validatedSnapshotSha256 !== snapshotHash) throw new Error("runtime_protocol_snapshot_mismatch");
+  return info;
 }
 
 export type VerifiedReleaseIdentity = {

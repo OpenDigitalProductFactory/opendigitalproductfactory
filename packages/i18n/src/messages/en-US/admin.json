@@ -128,6 +128,22 @@
     "saving": "Saving…"
   },
   "runtimeHealth": {
+    "capabilityServices": {
+      "heading": "Service requirements",
+      "explanation": "Optional inactivity: no health penalty.",
+      "empty": "No capability-owned service requirements are configured.",
+      "authorityUnavailable": "Capability authority is unavailable, so service requirements cannot be classified safely.",
+      "inactiveSummary": "Inactive services ({$count :integer})",
+      "aggregateLabel": "Platform capability health: {$value}",
+      "requiredAdvice": "Recovery: {$action}",
+      "availabilityLabel": "Availability: {$value}",
+      "availability": {
+        "available": "Available",
+        "unavailable": "Unavailable",
+        "inactive": "Inactive",
+        "unknown": "Unknown"
+      }
+    },
     "intro": "Live model selection and unresolved build phases, using the build's own routing logic.",
     "unavailableTitle": "Phase routing unavailable",
     "unavailableDetail": "No phase evidence returned. Retry diagnostics.",

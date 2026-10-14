@@ -5,6 +5,7 @@ const { mockPrisma, mockAutoDiscoverAndProfile, mockRefreshDefaultOwners } = vi.
     aiProviderConnection: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     complianceEvidence: { updateMany: vi.fn() },
     $transaction: vi.fn(),
+    $queryRaw: vi.fn(),
     oAuthPendingFlow: {
       findUnique: vi.fn(),
       delete: vi.fn(),
@@ -465,24 +466,28 @@ describe("refreshOAuthToken", () => {
 });
 
 describe("guarded active-account renewal", () => {
-  const credential = { id: "owned", status: "ok", cachedToken: "enc:old", refreshToken: "enc:refresh", updatedAt: new Date("2026-10-01") };
+  const upstreamToken = `header.${Buffer.from(JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "selected-account" } })).toString("base64url")}.signature`;
+  const credential = { id: "owned", status: "ok", cachedToken: `enc:${upstreamToken}`, refreshToken: "enc:refresh", updatedAt: new Date("2026-10-01") };
   let snapshot = { connectionId: "provider-default-codex", providerId: "codex", credentialEntryId: "owned", updatedAt: new Date("2026-10-01"),
     credentialRevision: { updatedAt: credential.updatedAt, cachedToken: credential.cachedToken, refreshToken: credential.refreshToken } };
   beforeEach(() => {
     vi.clearAllMocks();
     snapshot = { ...snapshot, credentialRevision: { updatedAt: credential.updatedAt, cachedToken: credential.cachedToken, refreshToken: credential.refreshToken } };
     mockPrisma.modelProvider.findUnique.mockResolvedValue({ tokenUrl: "https://auth.openai.com/oauth/token", oauthClientId: "client-codex" });
-    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ ...snapshot, organizationId: null, status: "active", authMethod: "oauth", credentialEntry: credential });
+    mockPrisma.aiProviderConnection.findUnique.mockImplementation(async ({ where }) => where.connectionId === snapshot.connectionId
+      ? { id: "selected-owner", ...snapshot, organizationId: null, status: "active", authMethod: "oauth", credentialEntry: credential } : null);
     mockPrisma.credentialEntry.findUnique.mockResolvedValue(credential);
     mockPrisma.credentialEntry.updateMany.mockResolvedValue({ count: 1 });
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ access_token: "renewed", refresh_token: "next", expires_in: 3600 }))));
+    mockPrisma.$queryRaw.mockResolvedValue([{ id: "selected-owner" }]);
+    mockPrisma.$transaction.mockImplementation(async run => run(mockPrisma));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ access_token: upstreamToken, refresh_token: "next", expires_in: 3600 }))));
   });
   it("pins refresh writes to the active account revision and original refresh token", async () => {
-    expect(await refreshOAuthToken("codex", snapshot.connectionId, snapshot)).toEqual({ token: "renewed" });
+    expect(await refreshOAuthToken("codex", snapshot.connectionId, snapshot)).toEqual({ token: upstreamToken });
     expect(mockPrisma.credentialEntry.update).not.toHaveBeenCalled();
     expect(mockPrisma.credentialEntry.updateMany).toHaveBeenCalledWith({
-      where: expect.objectContaining({ id: "owned", refreshToken: "enc:refresh", providerConnection: { is: expect.objectContaining({ connectionId: snapshot.connectionId, credentialEntryId: "owned", updatedAt: snapshot.updatedAt, status: "active", organizationId: null }) } }),
-      data: expect.objectContaining({ cachedToken: "enc:renewed", status: "ok" }),
+      where: { AND: expect.arrayContaining([expect.objectContaining({ id: "owned", refreshToken: "enc:refresh", providerConnection: { is: expect.objectContaining({ connectionId: snapshot.connectionId, credentialEntryId: "owned", updatedAt: snapshot.updatedAt, status: "active", organizationId: null }) } })]) },
+      data: expect.objectContaining({ cachedToken: `enc:${upstreamToken}`, status: "ok" }),
     });
   });
   it("rejects a credential replacement before exchanging any grant", async () => {

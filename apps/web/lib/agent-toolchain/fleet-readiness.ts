@@ -1,5 +1,7 @@
 import "server-only";
 
+import { resolveToolchainVerdict, type PublishedToolchain, type ToolchainVerdict } from "./toolchain-verdict";
+
 // BI-D6DFC0E7 (EP-COMPETENCE-FLYWHEEL, host-agent scope). Make agent-surface
 // readiness OBSERVABLE across the fleet, not just self-attested locally.
 //
@@ -163,6 +165,20 @@ type SurfaceReadinessClient = {
   };
 };
 
+type ToolchainObservationClient = {
+  agentToolchainObservation: { findMany: (args?: unknown) => Promise<ToolchainObservationRow[]> };
+};
+
+/** One page of the newest connection observations, rolled up per credential. */
+export async function getToolchainCopies(
+  db: ToolchainObservationClient,
+  opts: { published: PublishedToolchain; mcpEndpoint: string; now: Date; staleAfterMs: number; limit?: number },
+): Promise<{ credentials: ToolchainCopyRollup[]; truncated: boolean }> {
+  const limit = opts.limit ?? FLEET_PAGE_SIZE;
+  const rows = (await db.agentToolchainObservation.findMany({ orderBy: { lastObservedAt: "desc" }, take: limit + 1 })) ?? [];
+  return { credentials: rollUpToolchainCopies(rows.slice(0, limit), opts), truncated: rows.length > limit };
+}
+
 /** Upsert a surface's latest heartbeat, keyed by surfaceKey (one row per surface). */
 export async function recordSurfaceReadiness(
   db: SurfaceReadinessClient,
@@ -185,13 +201,92 @@ export async function recordSurfaceReadiness(
   });
 }
 
-/** Read all surface heartbeats and roll them up for the fleet view / digest. */
+/** Default page size for the fleet roll-ups (BI-54469E18: no unbounded reads). */
+export const FLEET_PAGE_SIZE = 50;
+
+/** Read the newest surface heartbeats (one page) and roll them up for the fleet view / digest. */
 export async function getFleetReadiness(
   db: SurfaceReadinessClient,
-  opts: EvaluateFleetReadinessOptions,
-): Promise<FleetReadinessSummary> {
-  const rows = await db.agentSurfaceReadiness.findMany({ orderBy: { reportedAt: "desc" } });
-  return evaluateFleetReadiness(rows ?? [], opts);
+  opts: EvaluateFleetReadinessOptions & { limit?: number },
+): Promise<FleetReadinessSummary & { truncated: boolean }> {
+  const limit = opts.limit ?? FLEET_PAGE_SIZE;
+  const rows = (await db.agentSurfaceReadiness.findMany({ orderBy: { reportedAt: "desc" }, take: limit + 1 })) ?? [];
+  return { ...evaluateFleetReadiness(rows.slice(0, limit), opts), truncated: rows.length > limit };
+}
+
+// ── Connection-observed toolchain copies (BI-54469E18, design §5.2b) ─────────
+
+export type ToolchainObservationRow = {
+  credentialRef: string;
+  loadedDigest: string;
+  clientKind: string;
+  probableClient: string | null;
+  loadedPackVersion: string | null;
+  authMode: "oauth" | "bearer" | "session";
+  clientInfoName: string | null;
+  clientInfoVersion: string | null;
+  lastObservedAt: Date;
+};
+
+export type ToolchainCopyRollup = {
+  credentialRef: string;
+  clientKind: string;
+  probableClient: string | null;
+  /** Worst verdict among copies seen inside the staleness window. */
+  verdict: ToolchainVerdict | "silent";
+  copies: Array<{
+    loadedPackVersion: string | null;
+    loadedDigest: string;
+    authMode: ToolchainObservationRow["authMode"];
+    verdict: ToolchainVerdict;
+    silent: boolean;
+    lastObservedAt: Date;
+  }>;
+};
+
+const VERDICT_RANK: Record<ToolchainVerdict, number> = { "below-floor": 3, stale: 2, undeclared: 1, current: 0 };
+
+/** Pure: verdict per observed copy, rolled up per credential. */
+export function rollUpToolchainCopies(
+  rows: ToolchainObservationRow[],
+  opts: { published: PublishedToolchain; mcpEndpoint: string; now: Date; staleAfterMs: number },
+): ToolchainCopyRollup[] {
+  const cutoff = opts.now.getTime() - opts.staleAfterMs;
+  const byCredential = new Map<string, ToolchainCopyRollup>();
+  for (const row of rows) {
+    const declaration =
+      row.loadedDigest !== "undeclared" && row.loadedPackVersion
+        ? { pack: row.loadedPackVersion, digest: row.loadedDigest, client: row.clientKind }
+        : null;
+    const { verdict } = resolveToolchainVerdict({
+      declaration,
+      credential: { authSource: row.authMode === "oauth" ? "oauth" : row.authMode === "bearer" ? "pat" : "session-jwt" },
+      mcpEndpoint: opts.mcpEndpoint,
+      published: opts.published,
+    });
+    const rollup = byCredential.get(row.credentialRef) ?? {
+      credentialRef: row.credentialRef,
+      clientKind: row.clientKind,
+      probableClient: row.probableClient,
+      verdict: "silent" as const,
+      copies: [],
+    };
+    const silent = row.lastObservedAt.getTime() < cutoff;
+    rollup.copies.push({
+      loadedPackVersion: row.loadedPackVersion,
+      loadedDigest: row.loadedDigest,
+      authMode: row.authMode,
+      verdict,
+      silent,
+      lastObservedAt: row.lastObservedAt,
+    });
+    if (!silent && (rollup.verdict === "silent" || VERDICT_RANK[verdict] > VERDICT_RANK[rollup.verdict])) {
+      rollup.verdict = verdict;
+    }
+    if (rollup.clientKind === "undeclared" && row.clientKind !== "undeclared") rollup.clientKind = row.clientKind;
+    byCredential.set(row.credentialRef, rollup);
+  }
+  return [...byCredential.values()];
 }
 
 /** Default staleness window: a surface silent for >7 days is treated as unknown. */
