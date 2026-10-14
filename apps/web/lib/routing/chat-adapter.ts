@@ -43,7 +43,8 @@ import {
   resolveInferenceRuntimePolicy,
 } from "./local-inference-runtime-policy";
 import { isRecord } from "@/lib/shared/coerce";
-import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
+import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline,
+  currentInferenceSignal } from "./governed-inference-deadline";
 
 // ─── Inference HTTP timeouts ──────────────────────────────────────────────────
 // The runtime-policy module separates the governed, deliberately slower 27B
@@ -505,7 +506,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
       // Generic calls start their per-call clock after admission. Governed
       // calls use the absolute parent deadline, so queue wait consumes it.
       const doFetch = async () => {
-        await assertGovernedInferenceAuthority();
+        await assertGovernedInferenceAuthority(currentInferenceSignal());
         if (plan.providerSettings.thinking_budget_tokens !== undefined) {
           const expected = plan.localThinkingBudgetEvidence;
           if (!isLocalProviderId(providerId) || !expected) throw new Error("Local thinking runtime evidence unavailable");
@@ -514,7 +515,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
           if (!actual || ["dialect", "modelDigest", "engineIdentity", "templateDigest", "configDigest"].some(
             key => actual[key as keyof typeof actual] !== expected[key as keyof typeof expected],
           )) throw new Error("Local thinking runtime evidence changed or unavailable");
-          await assertGovernedInferenceAuthority();
+          await assertGovernedInferenceAuthority(currentInferenceSignal());
         }
         const execution = currentGovernedInferenceDeadline();
         const timeout = createInferenceTimeoutSignal(resolveInferenceRuntimePolicy(providerId, modelId, {
@@ -529,9 +530,11 @@ export const chatAdapter: ExecutionAdapterHandler = {
         });
       };
       res = isLocalProviderId(providerId)
-        ? await withLocalInferenceLock(doFetch, { modelId, signal: currentGovernedInferenceDeadline()?.signal })
+        ? await withLocalInferenceLock(doFetch, { modelId,
+          signal: currentInferenceSignal(currentGovernedInferenceDeadline()?.signal) })
         : await doFetch();
     } catch (e) {
+      currentInferenceSignal()?.throwIfAborted();
       // A busy GPU is a capacity deferral. Wrapping it as "network" makes the
       // fallback chain treat the local model as broken instead of waiting.
       if (e instanceof Error && ["LocalProviderCapacityDeferredError", "GovernedInferenceDeadlineError"].includes(e.name)) throw e;

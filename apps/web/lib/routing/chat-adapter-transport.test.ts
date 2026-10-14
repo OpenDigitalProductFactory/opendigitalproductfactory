@@ -1,4 +1,8 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { withInferenceCancellation } from "@/lib/inference/inference-admission";
+
+const localLane = vi.hoisted(() => ({ withLocalInferenceLock: vi.fn() }));
+vi.mock("@/lib/queue/resource-lane", () => localLane);
 
 const aiInferenceFake = vi.hoisted(() => ({
   InferenceError: class InferenceError extends Error {
@@ -25,7 +29,36 @@ import type { AdapterRequest } from "./adapter-types";
 import { chatAdapter } from "./chat-adapter";
 
 describe("chat adapter provider transport", () => {
+  beforeEach(() => { localLane.withLocalInferenceLock.mockReset().mockImplementation(work => work()); });
   afterEach(() => vi.restoreAllMocks());
+
+  it("cancels a utility caller waiting for the GPU without issuing HTTP or wrapping cancellation as network failure", async () => {
+    localLane.withLocalInferenceLock.mockImplementation((_work, options) => new Promise((_resolve, reject) => {
+      options?.signal?.addEventListener("abort", () => reject(options.signal.reason), { once: true });
+    }));
+    const caller = new AbortController();
+    const providerFetch = vi.fn();
+    const request: AdapterRequest = {
+      providerId: "local", modelId: "test-model",
+      plan: { providerId: "local", modelId: "test-model", recipeId: null,
+        contractFamily: "sync.chat", executionAdapter: "chat", maxTokens: 128,
+        providerSettings: {}, toolPolicy: {}, responsePolicy: {} },
+      provider: { baseUrl: "http://127.0.0.1:1", headers: {} },
+      fetchImpl: providerFetch as typeof fetch,
+      messages: [{ role: "user", content: "Classify this synthetic input." }], systemPrompt: "Bounded utility",
+    };
+    let result: unknown;
+    const pending = withInferenceCancellation(caller.signal, () => chatAdapter.execute(request))
+      .catch(error => { result = error; });
+    await vi.waitFor(() => expect(localLane.withLocalInferenceLock).toHaveBeenCalledOnce());
+    const reason = new Error("utility expired in GPU queue");
+    caller.abort(reason);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(result).toBe(reason);
+    expect(providerFetch).not.toHaveBeenCalled();
+    await pending;
+  });
 
   it("uses the server-injected transport and preserves Gemini tool calls", async () => {
     const globalFetch = vi.fn().mockRejectedValue(new Error("poisoned process-global fetch"));
