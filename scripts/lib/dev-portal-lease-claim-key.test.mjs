@@ -45,7 +45,7 @@ test("terminal keys are stopped instead of scanned or replaced", () => {
   assert.match(script, /terminal lease claim; stop/);
 });
 
-import { protectedServiceIdentity, REQUIRED_PREVIEW_DELIVERY_TOOLS, assertToolReadiness, assertPreviewConfig, assertPreviewContainer, previewOverride, runPreviewLifecycle, stopOwnedPreviewContainers } from './dev-preview-runtime.mjs';
+import { protectedServiceIdentity, REQUIRED_PREVIEW_DELIVERY_TOOLS, assertToolReadiness, assertPreviewConfig, assertPreviewContainer, assertAdmittedWorktreePath, previewOverride, runPreviewLifecycle, stopOwnedPreviewContainers } from './dev-preview-runtime.mjs';
 const identity = { worktree: resolve('/feature/worktree'), sha: 'a'.repeat(40), leaseId: 'NPEL-MINE' };
 const config = () => {
   const result = previewOverride(identity);
@@ -54,6 +54,17 @@ const config = () => {
   result.services["dev-portal"].environment.DATABASE_URL = result.services["dev-init"].environment.DATABASE_URL;
   return result;
 };
+
+test('admission compares filesystem identity and rejects ambiguous or foreign paths', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'dpf-preview-path-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const other = join(directory, 'other');
+  mkdirSync(other);
+  await assertAdmittedWorktreePath(directory.replace(/\\/g, '/'), directory);
+  for (const invalid of [undefined, null, '', 'relative/worktree', other, join(directory, 'missing')]) {
+    await assert.rejects(assertAdmittedWorktreePath(invalid, directory), /admission_binding_mismatch/);
+  }
+});
 test('configuration rejects the original root checkout mount and missing prerequisites before mutations', () => {
   assertPreviewConfig(config(), identity);
   const wrong = config(); wrong.services['dev-init'].volumes[0].source = '/root';

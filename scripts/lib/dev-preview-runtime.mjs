@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { readFile, writeFile, mkdir, rm, realpath } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { homedir } from 'node:os';
-import { dirname, resolve } from 'node:path';
+import { dirname, resolve, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveDpfStatePath } from './resolve-compose-install-context.mjs';
 import { validateComposeSafety } from './compose-safety.mjs';
@@ -18,6 +18,16 @@ export function assertToolReadiness(response) {
   const report = deliveryReadinessFromDiscovery(response);
   const denied = [...new Set([...report.missingTokenTools, ...report.missingCoworkerTools, ...report.unavailableTools])];
   if (!report.ready) throw new Error(`preview_delivery_permissions_incomplete:${denied.join(',')}; platform administrator must reconcile approved permissions; client cannot self-grant`);
+}
+
+export async function assertAdmittedWorktreePath(admittedPath, worktree) {
+  if (typeof admittedPath !== 'string' || !admittedPath.trim() || !isAbsolute(admittedPath)) {
+    throw new Error('preview_admission_binding_mismatch');
+  }
+  let canonicalPath;
+  try { canonicalPath = await realpath(admittedPath); }
+  catch { throw new Error('preview_admission_binding_mismatch'); }
+  if (canonicalPath !== worktree) throw new Error('preview_admission_binding_mismatch');
 }
 
 export function previewOverride({ worktree, sha, leaseId, cloneImage }) {
@@ -209,9 +219,10 @@ async function runAdmittedPreview(env, cleanupState) {
     const leases = await call('list_nonprod_environment_leases', {});
     const admitted = leases.data?.leases?.find(lease => lease.leaseId === leaseId);
     if (!admitted || admitted.status !== 'active' || admitted.ownerSessionId !== ownerSessionId
-        || admitted.worktreePath !== worktree || admitted.branchName !== branch
+        || admitted.branchName !== branch
         || !(Date.parse(admitted.expiresAt) > Date.now())
         || admitted.url !== 'http://localhost:3001' || !admitted.purpose?.includes(`(${sha})`)) throw new Error('preview_admission_binding_mismatch');
+    await assertAdmittedWorktreePath(admitted.worktreePath, worktree);
     const config = JSON.parse(await compose(['config', '--format', 'json']));
     assertPreviewConfig(config, identity);
     protectedBefore = await protectedSnapshot();
