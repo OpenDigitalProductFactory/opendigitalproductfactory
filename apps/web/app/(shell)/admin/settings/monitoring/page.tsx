@@ -53,7 +53,8 @@ export default async function MonitoringSettingsPage() {
 
   return (
     <div>
-      <div className="mb-6">
+      {/* data-dpf-lead marks where the owner starts reading (ux-budget lead-band check). */}
+      <div className="mb-6" data-dpf-lead>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">{t("monitoringSettings.title")}</h1>
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">{t("monitoringSettings.intro")}</p>
       </div>
