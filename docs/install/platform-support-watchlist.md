@@ -1,5 +1,28 @@
 # Platform Support Watch-List (living document)
 
+## Host process inventory before admission (BI-6DE5A3B6)
+
+Windows process inventory uses explicit UTF-8, terminating PowerShell errors,
+and a bounded producer. Both Windows and POSIX responses must be complete and
+have valid process identities. Producer failure, timeout, output exhaustion and
+malformed responses stop before resource admission as `host_inventory_unavailable`
+(exit 88, command unrun). Diagnostics contain reason and byte count, never raw
+command lines or parser excerpts. Retry the original governed command after
+collection recovers. The intermittent live parsing cause remains unproven;
+these safeguards address independently reproduced failure handling.
+
+## Host claim transport and Windows command launch (BI-091A2DCF)
+
+Host admission uses the existing lease-call allowance rather than the generic
+10-second probe budget. Whole-response deadlines include trickling replies.
+Timeout recovery reconciles the exact immutable claim key before one bounded
+same-key replacement; a lost response is not proof no lease exists. A changed
+source or foreign/active process identity cannot inherit authority. Uncertain
+admission and missing executable return redacted unrun88; an actual nonzero
+child exit retains its code result. Windows pnpm shims use the shared command
+resolver. Reports of the original live claim latency remain reproduction leads;
+mock response-loss and native Windows launch fixtures prove these boundaries.
+
 ## Windows host guard interpreters (BI-BA5F777A)
 
 Windows may resolve `bash` to the WSL launcher while `sh` is absent. Native

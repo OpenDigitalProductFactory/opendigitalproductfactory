@@ -319,7 +319,7 @@ const EXECUTOR_SET = new Set<string>(WORK_CAPSULE_EXECUTOR_KINDS);
 const ACTIVITY_SET = new Set<string>(WORK_CAPSULE_ACTIVITY_KINDS);
 const TAXONOMY_SET = new Set<string>(WORK_CAPSULE_BRANCH_TAXONOMIES);
 const EVIDENCE_KIND_SET = new Set<string>(WORK_CAPSULE_EVIDENCE_KINDS);
-const SCOPE_KIND_SET = new Set<ScopeClaim["kind"]>([
+export const SCOPE_KIND_SET: ReadonlySet<ScopeClaim["kind"]> = new Set<ScopeClaim["kind"]>([
   "path",
   "module",
   "package",

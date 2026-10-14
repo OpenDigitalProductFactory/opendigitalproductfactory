@@ -4,6 +4,7 @@
 // pass (BI-907C4327) and callable ad hoc for a single user/coworker.
 
 import { prisma } from "@dpf/db";
+import { ACTIVITY_ROUTING_OVERRIDE_FACT_CATEGORY } from "@/lib/routing/activity-harness-approval-source";
 import {
   selectExpirableEntries,
   selectPrunableMessages,
@@ -12,8 +13,12 @@ import {
   type ExpirableEntry,
 } from "./memory-expiry";
 
-/** UserFact categories whose facts must never expire (durable constraints). */
-const PROTECTED_FACT_CATEGORIES = new Set(["constraint"]);
+/**
+ * UserFact categories whose facts must never expire: durable constraints, and
+ * the operator's confirmed activity-routing overrides, which are configuration
+ * read by routing rather than recalled memory (BI-7BCC87BB, spec D2 S3).
+ */
+const PROTECTED_FACT_CATEGORIES = new Set(["constraint", ACTIVITY_ROUTING_OVERRIDE_FACT_CATEGORY]);
 
 export type ExpiryResult = {
   factsExpired: number;

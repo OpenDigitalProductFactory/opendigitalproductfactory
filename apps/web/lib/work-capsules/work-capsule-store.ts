@@ -58,6 +58,7 @@ export {
 export { recordWorkCapsuleEvidence } from "./work-capsule-activity-store";
 export { declareWorkCapsuleIntent } from "./work-capsule-intent-store";
 export { heartbeatWorkCapsule, reassignWorkCapsuleExecutor } from "./workroom-lease";
+export { releaseWorkCapsuleScope } from "./scope-release-store";
 
 type CapsuleCreateInput = {
   title: string;
@@ -79,7 +80,6 @@ type CapsuleCreateInput = {
   requestedByPrincipalId?: string | null;
 };
 type ScopeClaimInput = Pick<ScopeClaim, "kind" | "value" | "intent">;
-type ScopeReleaseInput = Pick<ScopeClaim, "kind" | "value">;
 
 type CapsuleWorkspacePlanInput = {
   capsuleId: string;
@@ -794,38 +794,6 @@ export async function claimWorkCapsuleScope(args: {
       });
     }
     return { ...updated, changeImpactContract: impact.contract };
-  });
-}
-
-export async function releaseWorkCapsuleScope(args: {
-  db: CapsuleDb;
-  capsuleId: string;
-  claims: ScopeReleaseInput[];
-  actor: WorkCapsuleActor;
-}) {
-  const capsule = await args.db.workroom.findUnique({
-    where: { capsuleId: args.capsuleId },
-  });
-  if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
-
-  const releaseKeys = new Set(args.claims.map((claim) => `${claim.kind}:${claim.value}`));
-  const existing = parseScopeClaims(capsule.scopeClaims);
-  const scopeClaims = replaceOwnershipClaims(capsule.scopeClaims, existing.filter((claim) => !releaseKeys.has(`${claim.kind}:${claim.value}`)));
-  const released = existing.filter((claim) => releaseKeys.has(`${claim.kind}:${claim.value}`));
-
-  return inTransaction(args.db, async (tx) => {
-    const updated = await tx.workroom.update({
-      where: scopeWriteWhere(capsule),
-      data: { scopeClaims },
-    });
-    await recordActivity(tx, {
-      workCapsuleId: capsule.id,
-      kind: "scope-released",
-      summary: `Released ${released.length} scope item(s).`,
-      payload: { released },
-      actor: args.actor,
-    });
-    return updated;
   });
 }
 

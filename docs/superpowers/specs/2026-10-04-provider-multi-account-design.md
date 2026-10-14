@@ -4,6 +4,14 @@ status: active
 
 # Multiple provider accounts and compact provider management
 
+## Anthropic workspace binding addendum (BI-FFC4C94D)
+
+Anthropic organization-scoped identity-linked API keys need an explicit `anthropic-workspace-id` on inference and model catalog requests. Single-workspace keys remain supported without that header. Store the optional upstream workspace as non-secret configuration on the account-owned CredentialEntry, not on ModelProvider, OAuth scope or contract evidence. Default and explicit-account paths share workspace validation and header construction; explicit accounts never borrow default account configuration. Surface the workspace option only for Anthropic API-key setup, with guidance distinguishing organization scope from a key already bound to one workspace. An additive nullable migration preserves existing installs. Implementation and verification are ordered in [the bounded repair plan](../plans/2026-10-12-anthropic-workspace-key.md).
+
+Authority remains on the existing governed provider configuration actions and MCP tool. Workspace selection does not alter account clearance, billing eligibility or provider trust. Acceptance requires persisted account isolation, header coverage across verification/discovery/execution, accessible theme-aware setup and served verification. WIF and usage/cost reporting are outside this repair.
+
+Source: [Anthropic workspace selection](https://platform.claude.com/docs/en/manage-claude/authentication#select-a-workspace).
+
 Status: operator-approved direction; independent source review pending. Backlog: BI-71ABBD95. Epic: EP-D38F463C.
 
 ## Objectives

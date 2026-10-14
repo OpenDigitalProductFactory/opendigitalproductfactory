@@ -9,6 +9,7 @@ import {
 } from "./local-integration-status.mjs";
 import {
   CRITICAL_PACKAGES,
+  EXIT_CANDIDATE_MERGE_CONFLICT,
   EXIT_CHILD_SIGNAL_DEATH,
   EXIT_VITEST_RUNNER_TERMINATION,
   EXIT_CONTROL_PLANE_STARVATION,
@@ -93,6 +94,34 @@ test("parseLockedVersion reads importer-scoped resolved versions", () => {
   assert.equal(parseLockedVersion(LOCKFILE, "apps/web", "left-pad"), "");
   // Must not leak into the top-level packages: section.
   assert.equal(parseLockedVersion(LOCKFILE, "packages", "next"), "");
+});
+
+// BI-D2FE6931: TypeScript 7 is installed under an npm alias. pnpm records an
+// aliased dependency's version as "<target>@<version>"; the installed
+// package.json says just "<version>". Reading the alias form verbatim would
+// report drift on every run.
+test("parseLockedVersion reads an npm-aliased dependency as its target version", () => {
+  const aliased = `lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    devDependencies:
+      typescript7:
+        specifier: npm:typescript@7.0.2
+        version: typescript@7.0.2
+      scoped-alias:
+        specifier: npm:@scope/pkg@1.2.3
+        version: '@scope/pkg@1.2.3(react@19.2.7)'
+`;
+  assert.equal(parseLockedVersion(aliased, ".", "typescript7"), "7.0.2");
+  assert.equal(parseLockedVersion(aliased, ".", "scoped-alias"), "1.2.3");
+});
+
+test("critical package sentinels include the TypeScript 7 checker pinned at the root", () => {
+  const ts7 = CRITICAL_PACKAGES.find((pkg) => pkg.name === "typescript7");
+  assert.ok(ts7, "a TypeScript 7 bump must reach the local-CI sandbox before it grades a diff");
+  assert.deepEqual(ts7.importers, ["."]);
 });
 
 test("critical package sentinels include the unit-test runner used by local-CI", () => {
@@ -633,6 +662,7 @@ test("every status classifyGateOutcome can emit is one the recorder accepts", ()
     EXIT_CONTROL_PLANE_STARVATION,
     EXIT_VITEST_RUNNER_TERMINATION,
     EXIT_CHILD_SIGNAL_DEATH,
+    EXIT_CANDIDATE_MERGE_CONFLICT,
     75,
     130,
     143,
@@ -654,6 +684,30 @@ test("every status classifyGateOutcome can emit is one the recorder accepts", ()
       + "Add it to LOCAL_INTEGRATION_STATUSES in scripts/lib/local-integration-status.mjs.",
     );
   }
+});
+
+// BI-FCC1DCB2. A candidate that does not merge onto origin/main was recorded as
+// blocked_control_plane_starvation, and authors retried for hours. It is an
+// author-actionable verdict: the recorder's existing `conflict` status, naming
+// the paths, never infrastructure, and never a product-evidence run that owes
+// a completion checkpoint (that demand is what turned it into starvation).
+test("a candidate merge conflict is a `conflict` verdict naming the paths, not starvation", () => {
+  const mergeConflict = { mergedRef: "abc123", baseRef: "origin/main", paths: ["agent_registry.json", "coworker-grants.ts"] };
+  for (const freshnessVerdict of [null, "", "green", "drifted"]) {
+    const outcome = classifyGateOutcome({ freshnessVerdict, gateExitCode: EXIT_CANDIDATE_MERGE_CONFLICT, mergeConflict });
+    assert.equal(outcome.status, "conflict", String(freshnessVerdict));
+    assert.equal(outcome.gatePassed, false);
+    assert.equal(outcome.productEvidence, false, "a run that stopped at the merge owes no completion checkpoint");
+    assert.match(outcome.summary, /merge origin\/main into your branch and resolve: agent_registry\.json, coworker-grants\.ts/);
+    assert.doesNotMatch(outcome.summary, /infrastructure/i);
+    assert.deepEqual(outcome.mergeConflict, mergeConflict);
+  }
+});
+
+test("a merge conflict whose paths were not recorded still names the remedy", () => {
+  const outcome = classifyGateOutcome({ gateExitCode: EXIT_CANDIDATE_MERGE_CONFLICT });
+  assert.equal(outcome.status, "conflict");
+  assert.match(outcome.summary, /merge origin\/main into your branch and resolve/);
 });
 
 test("a status the recorder does not know still records rather than dropping the write", () => {

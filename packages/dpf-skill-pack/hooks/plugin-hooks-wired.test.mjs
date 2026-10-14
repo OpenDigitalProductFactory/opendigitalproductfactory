@@ -172,6 +172,21 @@ test("hooks.json wires the SessionStart toolchain freshness advisory via CLAUDE_
   assert.ok(existsSync(join(here, "toolchain-freshness.mjs")));
 });
 
+test("hooks.json re-caches the Workroom claim after each dpf claim/heartbeat call (BI-AB4EA033)", () => {
+  // Without this the claim guard's marker expires with the ~30 min lease and
+  // stays expired after heartbeat_workroom renews it over MCP.
+  const post = loadHooksJson()?.hooks?.PostToolUse ?? [];
+  const mine = post.filter((entry) => (entry?.hooks ?? []).some((h) => String(h?.command).includes("workroom-claim-refresh.mjs")));
+  assert.equal(mine.length, 1, "PostToolUse must run workroom-claim-refresh.mjs once");
+  const matcher = new RegExp(mine[0].matcher);
+  for (const tool of ["adopt_worktree", "heartbeat_workroom", "claim_workroom_scope", "claim_backlog_item_for_work", "create_workroom"]) {
+    assert.ok(matcher.test(`mcp__plugin_dpf-platform_dpf__${tool}`), `matcher must cover ${tool}`);
+  }
+  assert.ok(!matcher.test("Edit") && !matcher.test("mcp__plugin_dpf-platform_dpf__get_workroom"), "matcher must not fire on unrelated tools");
+  assert.ok(mine[0].hooks[0].command.includes("CLAUDE_PLUGIN_ROOT"), "the refresh must load from ${CLAUDE_PLUGIN_ROOT}");
+  assert.ok(existsSync(join(here, "workroom-claim-refresh.mjs")));
+});
+
 test("repo .claude/settings.json does NOT also define WorktreeCreate (anti double-create)", () => {
   const settingsPath = join(here, "..", "..", "..", ".claude", "settings.json");
   if (!existsSync(settingsPath)) return; // standalone plugin install

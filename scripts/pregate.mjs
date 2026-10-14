@@ -17,6 +17,7 @@
 import { parseArgs as utilParseArgs } from "node:util";
 import { scriptArgv } from "./lib/script-argv.mjs";
 import { spawnSync } from "node:child_process";
+import { createObservedProcessRunner } from "./lib/local-ci-process-observer.mjs";
 import { gitTextOrNull } from "./lib/git.mjs";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve as resolvePath } from "node:path";
@@ -862,7 +863,8 @@ async function main() {
 }
 
 export async function runHostPreflight({
-  args = [], env = process.env, spawnSyncImpl = spawnSync,
+  args = [], env = process.env, spawnSyncImpl = null,
+  runObservedImpl = null,
   readStatusImpl = readEarlyQuiescenceStatus,
   stdout = (text) => process.stdout.write(text),
   stderr = (text) => process.stderr.write(text),
@@ -880,11 +882,34 @@ export async function runHostPreflight({
     // text a log-tail reader mistakes for a failure. Capture it and replay it
     // only when it actually fails.
     const verbose = isVerboseGateConsole();
-    const preflight = spawnSyncImpl(
-      process.execPath,
-      [join(SCRIPT_DIR, "pregate-preflight.mjs")],
-      verbose ? { stdio: "inherit" } : { encoding: "utf8" },
-    );
+    const preflightArgs = [join(SCRIPT_DIR, "pregate-preflight.mjs")];
+    let preflight;
+    if (spawnSyncImpl) {
+      // Compatibility for injected test executors; normal execution is observed.
+      preflight = await spawnSyncImpl(process.execPath, preflightArgs,
+        { env, encoding: "utf8", timeout: 60 * 60_000, maxBuffer: 64 * 1024 });
+    } else {
+      const controller = new AbortController();
+      const cancel = () => controller.abort();
+      process.once("SIGINT", cancel);
+      process.once("SIGTERM", cancel);
+      const run = runObservedImpl ?? createObservedProcessRunner({ maxDurationMs: 60 * 60_000,
+        sampleHost: () => null, stdout: { write(chunk) {
+          for (const line of String(chunk).split(/\r?\n/)) {
+            if (verbose || line.startsWith("[pregate-preflight]")) stdout(line + "\n");
+          }
+        } }, stderr: { write(chunk) { if (verbose) stderr(String(chunk)); } } });
+      try {
+        const observed = await run({ command: process.execPath, args: preflightArgs,
+          env, cwd: process.cwd(), shell: false, signal: controller.signal });
+        preflight = { ...observed, stdout: observed.outputTail, stderr: "" };
+      } finally {
+        process.removeListener("SIGINT", cancel);
+        process.removeListener("SIGTERM", cancel);
+      }
+    }
+    const unavailable = preflight.error || preflight.deadlineExceeded || preflight.cancelled || preflight.closeTimedOut;
+    if (unavailable) preflight = { ...preflight, status: 88 };
     if (preflight.error || (preflight.status ?? 1) !== 0) {
       if (!verbose) {
         stderr(String(preflight.stdout || ""));
@@ -894,7 +919,7 @@ export async function runHostPreflight({
       // spawn (taskkill /T during an eviction leaves status === null) is a
       // runner failure, not a deterministic guard violation — say so, or the
       // reader audits an innocent guard the loop never even reported on.
-      const preflightKilled = Boolean(preflight.error) || preflight.status === null;
+      const preflightKilled = Boolean(preflight.error) || preflight.status === null || preflight.status === 88;
       stderr(
         preflightKilled
           ? "pregate: guard parity preflight could not RUN on this host (killed or failed to spawn — host under pressure, not a guard violation) — retry on a quieter host (no lease was claimed).\n"
@@ -903,7 +928,11 @@ export async function runHostPreflight({
       return preflight.status ?? 1;
     }
     if (!verbose) {
-      stdout("pregate: guard parity preflight passed.\n");
+      let status;
+      const line = String(preflight.stdout ?? "").split(/\r?\n/).findLast(line => line.startsWith("DPF_HOST_PREFLIGHT_RESULT="));
+      try { status = JSON.parse(line?.slice("DPF_HOST_PREFLIGHT_RESULT=".length)).status; } catch { /* Missing summary is unproven, never passed. */ }
+      stdout(status === "passed" ? "pregate: guard parity preflight passed.\n"
+        : "pregate: host preflight inconclusive or partially verified; canonical CI still enforces all applicable checks.\n");
     }
   } else if (env.DPF_SKIP_PREGATE_PREFLIGHT_REASON) {
     stderr(

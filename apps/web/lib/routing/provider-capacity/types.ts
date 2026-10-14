@@ -42,3 +42,11 @@ export type ProviderCapacityClassification = {
   confidence: ProviderCapacityConfidence;
   isHumanActionRequired: boolean;
 };
+
+export const PROVIDER_QUOTA_STATES = ["quota_resets_at", "rate_limited", "cooling_down"] as const satisfies readonly ProviderCapacityState[];
+export type ProviderQuotaState = (typeof PROVIDER_QUOTA_STATES)[number];
+export const isProviderQuotaState = (state: string): state is ProviderQuotaState => PROVIDER_QUOTA_STATES.some(value => value === state);
+export type ProviderQuotaReconciliation = "cleared" | "changed" | "write-failed";
+export type ProviderQuotaObservation = {
+  id: string; providerId: string; state: ProviderQuotaState; updatedAt: Date; ownerConnectionId: string | null;
+};

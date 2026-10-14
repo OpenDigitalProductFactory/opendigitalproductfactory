@@ -381,6 +381,18 @@ test("reconcile of nothing is NO-RECORD, never a pass", () => {
   assert.equal(reconcileSlots([]).verdict, "NO-RECORD");
 });
 
+test("same-source admitted progress wins over a queued sibling without inventing PASS", () => {
+  const queued = {slotKey:"slot-0",verdict:"INCONCLUSIVE",gateStatus:"queued",boundSha:HEAD,boundBranch:"fix/topic",recordedAt:"2026-10-13T00:00:00Z"};
+  const admitted = {...queued,slotKey:"slot-1",gateStatus:"admitted",recordedAt:"2026-10-13T01:00:00Z"};
+  for (const slots of [[queued, admitted], [admitted, queued]]) {
+    const result = reconcileSlots(slots);
+    assert.equal(result.slot,"slot-1");
+    assert.equal(result.verdict,"INCONCLUSIVE");
+    assert.equal(result.gateStatus,"admitted");
+  }
+  assert.equal(reconcileSlots([queued,{...admitted,boundSha:OLD}]).slot,"slot-0", "foreign source progress cannot replace this claim");
+});
+
 test("the report is short enough that nobody pipes it, and names the next step", () => {
   const lines = formatStatusReport(
     { verdict: "STALE", reason: "head moved", boundSha: OLD, boundBranch: "claude/topic", recordedAt: "2026-08-04T11:00:00.000Z", slot: "slot-0", logFile: "D:/x.log" },
@@ -996,6 +1008,40 @@ test('unfinished current claims consistently recommend durable observation or re
       assert.match(result.reason, /observe|resume|reconcile|waiter runs/i);
     }
   }
+});
+
+// BI-FCC1DCB2. A candidate that does not merge onto origin/main is the author's
+// to fix, and the fix is not a re-run: name the paths and the merge to do.
+test("a merge conflict with the base is a FAIL that names the paths and the merge remedy", () => {
+  const mergeConflict = { mergedRef: HEAD, baseRef: "origin/main", paths: ["agent_registry.json", "apps/web/lib/tak/coworker-grants.ts"] };
+  const state = passingState({
+    status: "conflict",
+    gatePassed: false,
+    evidenceRecordId: "",
+    mergeConflict,
+    failureReason: "local-CI gate stopped before grading: the candidate does not merge cleanly onto origin/main.",
+  });
+  const result = classifySlotRecord({ state, metadata: { candidateSha: HEAD }, headSha: HEAD, headBranch: "claude/topic", now: NOW });
+
+  assert.equal(result.verdict, "FAIL");
+  assert.doesNotMatch(result.reason, /infrastructure|starvation/i);
+  assert.match(result.reason, /merge conflict with origin\/main/);
+  assert.match(result.reason, /agent_registry\.json, apps\/web\/lib\/tak\/coworker-grants\.ts/);
+
+  const lines = formatStatusReport(result, { headSha: HEAD, headBranch: "claude/topic", now: NOW });
+  assert.ok(
+    lines.includes("  next        merge origin/main into your branch and resolve: agent_registry.json, apps/web/lib/tak/coworker-grants.ts"),
+    lines.join("\n"),
+  );
+  assert.ok(!lines.some((line) => line.includes("pnpm run pregate ")), "re-running the gate cannot fix a conflict");
+});
+
+test("a merge-conflict record falls back to this run's metadata for the paths", () => {
+  const state = passingState({ status: "conflict", gatePassed: false, evidenceRecordId: "", leaseId: "NPEL-1" });
+  const metadata = { candidateSha: HEAD, runLeaseId: "NPEL-1", execution: { mergeConflict: { paths: ["f.txt"] } } };
+  const result = classifySlotRecord({ state, metadata, headSha: HEAD, headBranch: "claude/topic", now: NOW });
+  assert.equal(result.verdict, "FAIL");
+  assert.equal(result.remedy, "merge origin/main into your branch and resolve: f.txt");
 });
 
 test('terminal or uncertain current claims never recommend unqualified replacement', () => {

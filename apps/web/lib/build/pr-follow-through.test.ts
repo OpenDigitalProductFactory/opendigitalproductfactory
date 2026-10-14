@@ -78,6 +78,22 @@ describe("resolvePrRepairAuthority", () => {
 });
 
 describe("decidePrFollowThrough", () => {
+  it("gives a published defect repair targeted verification and protected integration without a repeated whole local gate", () => {
+    const result = decide({ checks: [failing("typecheck", "FAILURE")] });
+    if (result.kind !== "repair") throw new Error("expected a published repair packet");
+    const instructions = result.packet.constraints.join(" ");
+    expect(instructions).not.toMatch(/after the local gate passes/i);
+    expect(instructions).toMatch(/preserve valid evidence/i);
+    expect(instructions).toMatch(/affected.*tests/i);
+    expect(instructions).toMatch(/reproduce.*named failure/i);
+    expect(instructions).toMatch(/independent.*review/i);
+    expect(instructions).toMatch(/required GitHub checks.*protected merge queue/i);
+    expect(instructions).toMatch(/DCO-signed.*same branch/i);
+    expect(instructions).toMatch(/never merge, force-push, dismiss a check/i);
+    expect(result.packet.attempt).toBe(1);
+    expect(result.packet.bound).toBe(2);
+  });
+
   it("re-runs an infrastructure failure once per head, then raises the platform operator", () => {
     const first = decide({ checks: [failing("build", "CANCELLED", 11), failing("e2e", "TIMED_OUT", 12)] });
     expect(first).toEqual(expect.objectContaining({ kind: "rerun-infrastructure", headSha: "sha1", workflowRunIds: [11, 12] }));
