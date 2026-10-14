@@ -7,6 +7,7 @@ vi.mock("server-only", () => ({}));
 import {
   OBSERVATION_COALESCE_MS,
   _resetObservationMemo,
+  capabilityDriftSubject,
   readClientInfo,
   recordToolchainObservation,
   resolveCredentialRef,
@@ -155,5 +156,52 @@ describe("rollUpToolchainCopies", () => {
     const verdictOf = (ref: string) => credentials.find((c) => c.credentialRef === ref)!.verdict;
     expect(verdictOf("oauth:oc-grok")).toBe("current");
     expect(verdictOf("token:t-pat")).toBe("below-floor");
+  });
+});
+
+// BI-64795FD0 (AC-CAPABILITY-DRIFT): the fleet view names a client version the
+// capability profile has not verified.
+describe("getToolchainCopies capability drift", () => {
+  const published = { packVersion: "0.3.0", packDigest: "ab".repeat(32), floor: { minPackVersion: null, graceStartsAt: null } };
+  const now = new Date("2026-10-13T00:00:00Z");
+  const observed = (clientKind: string, clientInfoVersion: string | null): ToolchainObservationRow => ({
+    credentialRef: `oauth:${clientKind}`,
+    loadedDigest: "abababababababab",
+    clientKind,
+    probableClient: null,
+    loadedPackVersion: "0.3.0",
+    authMode: "oauth",
+    clientInfoName: clientKind,
+    clientInfoVersion,
+    lastObservedAt: now,
+  });
+
+  it("marks a client capabilities-unverified for a version newer than the profile", async () => {
+    const db = {
+      agentToolchainObservation: { findMany: async () => [observed("claude-code", "2.1.300"), observed("codex", "0.142.5")] },
+      oAuthClient: { findMany: async () => [] },
+      mcpApiToken: { findMany: async () => [] },
+    };
+    const result = await getToolchainCopies(db, { published, mcpEndpoint: "https://dpf.example/api/mcp/v1", now, staleAfterMs: 7 * 86_400_000 });
+    expect(result.capabilityDrift.map((drift) => `${drift.clientKind}: ${drift.label}`)).toEqual([
+      "claude-code: capabilities unverified for 2.1.300",
+    ]);
+  });
+});
+
+describe("observeConnection files capability drift on initialize", () => {
+  it("passes the declared client and its clientInfo.version to the drift note", () => {
+    expect(capabilityDriftSubject({
+      method: "initialize",
+      declaration: { pack: "0.3.0", digest: "abababababababab", client: "grok" },
+      clientInfo: { name: "grok", version: "0.3.1" },
+    })).toEqual({ clientKind: "grok", clientVersion: "0.3.1" });
+  });
+
+  it("has no subject without a declaration, a version or an initialize", () => {
+    const declared = { pack: "0.3.0", digest: "abababababababab", client: "grok" };
+    expect(capabilityDriftSubject({ method: "initialize", declaration: null, clientInfo: { name: "grok", version: "0.3.1" } })).toBeNull();
+    expect(capabilityDriftSubject({ method: "initialize", declaration: declared, clientInfo: { name: "grok", version: null } })).toBeNull();
+    expect(capabilityDriftSubject({ method: "tools/list", declaration: declared, clientInfo: null })).toBeNull();
   });
 });

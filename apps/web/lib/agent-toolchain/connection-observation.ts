@@ -135,6 +135,20 @@ export function readClientInfo(params: unknown): { name: string | null; version:
 }
 
 /**
+ * The client and version a capability-drift check needs, or null: only an
+ * initialize from a declared DPF client that reports clientInfo.version
+ * (BI-64795FD0).
+ */
+export function capabilityDriftSubject(input: {
+  method: string;
+  declaration: ToolchainDeclaration | null;
+  clientInfo: { name: string | null; version: string | null } | null;
+}): { clientKind: string; clientVersion: string } | null {
+  if (input.method !== "initialize" || !input.declaration || !input.clientInfo?.version) return null;
+  return { clientKind: input.declaration.client, clientVersion: input.clientInfo.version };
+}
+
+/**
  * Record this request's connection, fail-open. Called once per MCP POST after
  * authentication; returns immediately and never throws to the caller.
  */
@@ -148,14 +162,22 @@ export function observeConnection(input: {
     const { prisma } = await import("@dpf/db");
     const credential = await resolveCredentialRef(prisma as never, input.token);
     if (!credential) return;
+    const declaration = parseToolchainDeclaration(input.request.url, input.request.headers);
+    const clientInfo = input.method === "initialize" ? readClientInfo(input.params) : null;
     await recordToolchainObservation(prisma as never, {
       credentialRef: credential.credentialRef,
-      declaration: parseToolchainDeclaration(input.request.url, input.request.headers),
+      declaration,
       authSource: input.token.source,
       probableClient: deriveCallerClient(input.request.headers.get("user-agent")) ?? null,
-      clientInfo: input.method === "initialize" ? readClientInfo(input.params) : null,
+      clientInfo,
       now: new Date(),
     });
+    // BI-64795FD0: a client release the capability profile has not verified.
+    const drift = capabilityDriftSubject({ method: input.method, declaration, clientInfo });
+    if (drift) {
+      const { noteObservedClientVersion } = await import("./client-capability-drift");
+      await noteObservedClientVersion(drift.clientKind, drift.clientVersion);
+    }
   })().catch((error: unknown) => {
     console.warn("[agent-toolchain] connection observation skipped:", error);
   });

@@ -1905,6 +1905,9 @@
     "packages/db/src/workforce-staffing-posture.test.ts": [
       "docs/architecture/2026-08-20-assurance-operating-loop-and-capability-completeness.md"
     ],
+    "packages/dpf-skill-pack/client-capabilities.json": [
+      "docs/architecture/agent-client-capability-parity.md"
+    ],
     "packages/dpf-skill-pack/hooks/decision-routing-guard.mjs": [
       "docs/founder-kernel/wiki/principles/consult-scopes-before-asking.md"
     ],
@@ -2946,6 +2949,7 @@
       "apps/web/lib/deliberation/external-review-activation.ts",
       "apps/web/lib/routing/anthropic-cache.ts",
       "e2e/fixtures/evidence.ts",
+      "packages/dpf-skill-pack/client-capabilities.json",
       "packages/dpf-skill-pack/hooks/plugin-hooks-wired.test.mjs"
     ],
     "docs/architecture/agent-client-governance.md": [

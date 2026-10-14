@@ -11,6 +11,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+import { clientCapabilityRow } from "@dpf/integration-shared/client-capability-profile";
 
 import { generateInstanceSigningKeypair, deriveDeviceId } from "@/lib/federation/instance-identity";
 
@@ -127,6 +128,18 @@ describe("toolchain manifest", () => {
     const loopback = clientShapes("http://127.0.0.1:3000/api/mcp/v1");
     expect(loopback.codex!.authMode).toBe("oauth");
     expect(loopback["claude-code"]!.authMode).toBe("bearer");
+  });
+
+  // BI-64795FD0: the profile ships inside the clients map, and the carrier
+  // fields come from it rather than from a constant.
+  it("carries each client's capability profile row", () => {
+    const shapes = clientShapes("https://dpf.example/api/mcp/v1");
+    for (const kind of ["claude-code", "codex", "grok", "antigravity"]) {
+      expect(shapes[kind]!.capabilities).toEqual(clientCapabilityRow(kind));
+      expect(shapes[kind]!.declarationCarrier).toBe(clientCapabilityRow(kind)!.capabilities.declarationCarrier.value);
+      expect(shapes[kind]!.carrierVerified).toBe(clientCapabilityRow(kind)!.capabilities.declarationCarrier.status === "verified");
+    }
+    expect(shapes.grok!.capabilities!.capabilities.hookPlane.cli.denyEnvelope).toBe("dual");
   });
 });
 

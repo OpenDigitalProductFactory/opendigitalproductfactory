@@ -11,6 +11,49 @@ DPF runs across, and is driven by, external coding agents (Claude Code, Codex, G
 
 Adoption status legend: ✅ adopted · ◐ partial/planned · ⬜ not adopted · ➖ n/a · ⚠️ regression to track.
 
+## Client capability profile (generated, BI-64795FD0)
+
+Since 2026-10-13 the per-client capabilities that DPF rules depend on live in one machine-readable profile, [`packages/dpf-skill-pack/client-capabilities.json`](../../packages/dpf-skill-pack/client-capabilities.json). The MCP credential policy, the toolchain floor, the release manifest's `clients` map and the matrix below all read it. A value changes only through a reviewed PR that cites a source passage and a live probe.
+
+- A connection that reports a client version newer than the profile's verified version marks that client "capabilities unverified for <version>" in `get_fleet_readiness` and files one backlog item, deduplicated on `client-capability:<client>@<version>`.
+- A weekly scheduled task (`client-capability-reverify-weekly`) reads only each row's `sources[]` and the CLI versions the updater reports. It files at most one proposal item per client and never edits the profile. A source that fails marks the row `verificationStale`; two failed runs in a row raise one platform notification.
+
+The sections after the matrix are the dated prose history. They stay as the record of how each finding was reached.
+
+<!-- BEGIN GENERATED: client-capability-matrix (node packages/dpf-skill-pack/scripts/gen-client-capabilities.mjs) -->
+
+Rendered from [`packages/dpf-skill-pack/client-capabilities.json`](../../packages/dpf-skill-pack/client-capabilities.json). Edit the profile, never this block. "unproven" means no live probe is recorded, so every rule treats the capability as absent. Server-side controls stay the guarantee; a missing hook is a missing accelerator, shown here so it is not silent.
+
+| Client | Verified version | OAuth https | OAuth loopback http | Static headers | Declaration carrier | Plugin scopes | Reload required | Skills load | Hook plane |
+|---|---|---|---|---|---|---|---|---|---|
+| Claude Code (`claude-code`) | 2.1.295 | yes (encoded, not live-proven) | no (verified 2026-09-17) | yes (encoded, not live-proven) | header (encoded, not live-proven) | user, project, local (encoded, not live-proven) | yes (encoded, not live-proven) | yes (verified 2026-07-26) | cli: hooks unproven; desktop: verified; ide: hooks unproven |
+| Codex CLI (`codex`) | 0.155.0-alpha.16 | yes (encoded, not live-proven) | yes (verified 2026-09-20) | unproven | header (encoded, not live-proven) | user (encoded, not live-proven) | yes (encoded, not live-proven) | yes (verified 2026-07-26) | cli: verified; desktop: hooks unproven; ide: hooks unproven |
+| Grok Build (`grok`) | 0.2.87 | unproven | unproven | unproven | query (encoded, not live-proven) | user (encoded, not live-proven) | yes (encoded, not live-proven) | yes (verified 2026-07-26) | cli: verified; desktop: hooks unproven; ide: hooks unproven |
+| Antigravity (`antigravity`) | none | yes (encoded, not live-proven) | unproven | yes (encoded, not live-proven) | header (encoded, not live-proven) | unproven | yes (encoded, not live-proven) | unproven | cli: hooks unproven; desktop: hooks unproven; ide: hooks unproven |
+| VS Code (`vscode`) | none | yes (encoded, not live-proven) | unproven | yes (encoded, not live-proven) | unproven | unproven | unproven | unproven | cli: hooks unproven; desktop: hooks unproven; ide: hooks unproven |
+
+**Hook plane by host.**
+
+| Client | Host | Events | Deny envelope | Permission modes | Verified | Evidence |
+|---|---|---|---|---|---|---|
+| `claude-code` | cli | hooks unproven | hookSpecificOutput | none | no | No live probe of the terminal host is recorded. The desktop proof (BI-E5C45F61) ran the same Claude Code version in another host. |
+| `claude-code` | desktop | fires: PreToolUse shell, PreToolUse ask; unproven: SessionStart, PreToolUse write, UserPromptSubmit, Stop, SessionEnd | hookSpecificOutput | bypassPermissions | 2026-10-13, v2.1.295 | docs/superpowers/specs/2026-07-03-harness-enforced-decision-routing-and-lease-punt-gates-design.md §15.1 (BI-E5C45F61, #6287): desktop app 2.31226.1 ran every PreToolUse hook but discarded a top-level decision "deny"; with the fix, compose-guard and decision-routing-guard probes were denied live. The 2026-10-07 reading that the AskUserQuestion matcher was skipped (BI-271B8EEC) was disproven there. |
+| `claude-code` | ide | hooks unproven | hookSpecificOutput | none | no | No probe recorded for the IDE extension host. |
+| `codex` | cli | fires: PreToolUse shell; does not fire: PreToolUse ask; unproven: SessionStart, PreToolUse write, UserPromptSubmit, Stop, SessionEnd | hookSpecificOutput | codex exec with hook trust granted | 2026-07-07, v0.142.5 | docs/superpowers/specs/2026-07-03-harness-enforced-decision-routing-and-lease-punt-gates-design.md §11 (BI-883FC2FC): a lease-punt probe ran without hook trust and was denied with it. The ask tool is not named AskUserQuestion, so that matcher never fires (BI-B22DE548). Single plugin plane since #5636 (BI-2B634E68, codex-cli 0.155.0-alpha.16). |
+| `codex` | desktop | hooks unproven | hookSpecificOutput | none | no | No probe recorded for the Codex desktop host. |
+| `codex` | ide | hooks unproven | hookSpecificOutput | none | no | No probe recorded for the Codex IDE extension host. |
+| `grok` | cli | fires: SessionStart, PreToolUse shell, Stop; unproven: PreToolUse ask, PreToolUse write, UserPromptSubmit, SessionEnd | dual | headless grok -p | 2026-07-07, v0.2.87 | docs/superpowers/specs/2026-07-03-harness-enforced-decision-routing-and-lease-punt-gates-design.md §11.1 (BI-883FC2FC): a prisma migrate probe was denied in a DPF worktree and ran in a bare folder. Grok ignores plugin-bundled hooks. The SessionStart and Stop session plane is wired globally (BI-BCA23DBB) and was sampled live on 2026-07-26. |
+| `grok` | desktop | hooks unproven | dual | none | no | No probe recorded for the Grok desktop app. |
+| `grok` | ide | hooks unproven | unknown | none | no | No Grok IDE host is known to DPF. |
+| `antigravity` | cli | hooks unproven | unknown | none | no | docs/architecture/agent-client-capability-parity.md governance table G3: hooks unproven, an honest gap |
+| `antigravity` | desktop | hooks unproven | unknown | none | no | No probe recorded. |
+| `antigravity` | ide | hooks unproven | unknown | none | no | No probe recorded. |
+| `vscode` | cli | hooks unproven | unknown | none | no | VS Code has no DPF hook plane. |
+| `vscode` | desktop | hooks unproven | unknown | none | no | VS Code has no DPF hook plane. |
+| `vscode` | ide | hooks unproven | unknown | none | no | VS Code has no DPF hook plane. |
+
+<!-- END GENERATED: client-capability-matrix -->
+
 ## Capability matrix (verified 2026-06-20)
 
 | Capability | Claude Code | Codex CLI | Gemini CLI | Grok Build | OpenCode | DPF dependency / adoption |
@@ -115,6 +158,8 @@ Source checklist also lives in `packages/dpf-skill-pack/README.md` (adapter chec
 - **⚠️ prompt-cache TTL**: re-confirm each refresh; the 5-minute default changes the break-even math for long sessions.
 
 ## Refresh ritual (monthly — how this stays fresh)
+
+**Update 2026-10-13 (BI-64795FD0):** step 1 is now wired. The weekly `client-capability-reverify-weekly` task reads each profile row's declared sources and files proposals; see "Client capability profile" above. Steps 2 and 3 are how a person acts on a proposal: verify with a live probe, then change the profile by PR.
 
 Reuse existing substrate; **no new cron, no new system**:
 

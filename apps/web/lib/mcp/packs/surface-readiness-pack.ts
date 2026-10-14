@@ -52,6 +52,15 @@ const definitions: ToolDefinition[] = [
         },
         mcpOk: { type: "boolean", description: "Whether the DPF MCP reachability probe passed." },
         mcpReason: { type: "string", description: "The probe failure reason when mcpOk is false (e.g. no_token, endpoint_unreachable)." },
+        cliVersion: {
+          type: "string",
+          description: "This client's own CLI --version line, as the toolchain updater reports it.",
+        },
+        clientVersions: {
+          type: "object",
+          description: "The updater report's clientVersions: each client kind's CLI --version line, or null when that CLI is absent. Lets the platform notice a client release its capability record has not verified.",
+          additionalProperties: { type: ["string", "null"] },
+        },
       },
       required: ["surfaceKey", "clientKind", "readinessState", "mcpOk"],
     },
@@ -61,7 +70,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "get_fleet_readiness",
     description:
-      "Read the rolled-up readiness of every build surface known to this instance: which are ready, not-ready, or stale (heartbeat gone silent). Feeds the daily digest and answers 'is every AI surface wired to durable memory right now?'.",
+      "Read the rolled-up readiness of every build surface known to this instance: which are ready, not-ready, or stale (heartbeat gone silent). Feeds the daily digest and answers 'is every AI surface wired to durable memory right now?'. Also names clients whose capabilities are unverified for the version they report.",
     inputSchema: {
       type: "object",
       properties: {
@@ -112,6 +121,31 @@ async function boundSurfaceKey(
   return credential ? `${clientKind}@${credential.credentialRef}` : supplied;
 }
 
+const VERSION_LINE_LIMIT = 120;
+const versionLine = (value: unknown): string | null =>
+  typeof value === "string" && value.trim() ? value.trim().slice(0, VERSION_LINE_LIMIT) : null;
+
+/**
+ * BI-64795FD0: the CLI versions the updater reports, bounded. Only known client
+ * kinds are kept, each a `--version` line or null. Undefined when none were sent,
+ * so a plain heartbeat keeps the versions the last updater run stored.
+ */
+function versionDetail(params: Record<string, unknown>): { cliVersion?: string; clientVersions?: Record<string, string | null> } | undefined {
+  const detail: { cliVersion?: string; clientVersions?: Record<string, string | null> } = {};
+  const own = versionLine(params.cliVersion);
+  if (own) detail.cliVersion = own;
+  const map = params.clientVersions;
+  if (map && typeof map === "object" && !Array.isArray(map)) {
+    const versions: Record<string, string | null> = {};
+    for (const [kind, raw] of Object.entries(map as Record<string, unknown>)) {
+      if (!isSurfaceClientKind(kind) || (raw !== null && typeof raw !== "string")) continue;
+      versions[kind] = versionLine(raw);
+    }
+    if (Object.keys(versions).length) detail.clientVersions = versions;
+  }
+  return Object.keys(detail).length ? detail : undefined;
+}
+
 async function recordSurfaceReadinessHandler(
   params: Record<string, unknown>,
   context?: ToolExecutionContext,
@@ -134,6 +168,7 @@ async function recordSurfaceReadinessHandler(
     return { success: false, error: "invalid_mcp_ok", message: "mcpOk (boolean) is required." };
   }
 
+  const detail = versionDetail(params);
   const surfaceKey = await boundSurfaceKey(suppliedKey, clientKind, context);
   const { prisma } = await import("@dpf/db");
   const { recordSurfaceReadiness } = await import("@/lib/agent-toolchain/fleet-readiness");
@@ -144,6 +179,7 @@ async function recordSurfaceReadinessHandler(
     dpfPlatformVersion: typeof params.dpfPlatformVersion === "string" ? params.dpfPlatformVersion : null,
     mcpOk,
     mcpReason: typeof params.mcpReason === "string" ? params.mcpReason : null,
+    ...(detail ? { detail } : {}),
   });
 
   return {
@@ -179,13 +215,30 @@ async function getFleetReadinessHandler(
     ? { release: { packVersion: published.packVersion, packDigest: published.packDigest }, ...(await getToolchainCopies(prisma as never, { published, mcpEndpoint: `${origin}/api/mcp/v1`, now, staleAfterMs })) }
     : null;
 
+  // BI-64795FD0: clients whose capabilities are unverified, either because a
+  // connection reported a newer version or because the weekly re-verification
+  // could not read a declared source.
+  const { CLIENT_CAPABILITY_REVERIFY_TASK_ID, staleClientsFromTaskConfig } = await import("@/lib/agent-toolchain/client-capability-reverify");
+  const verificationTask = await prisma.scheduledAgentTask
+    .findUnique({ where: { taskId: CLIENT_CAPABILITY_REVERIFY_TASK_ID }, select: { taskConfig: true } })
+    .catch(() => null);
+  const capabilities = {
+    unverifiedVersions: [
+      ...(toolchain?.capabilityDrift ?? []),
+      ...summary.reportedCapabilityDrift.filter(
+        (drift) => !(toolchain?.capabilityDrift ?? []).some((seen) => seen.intakeKey === drift.intakeKey),
+      ),
+    ],
+    verificationStale: staleClientsFromTaskConfig(verificationTask?.taskConfig),
+  };
+
   const msg = summary.counts.total === 0
     ? "No build surfaces have reported readiness yet."
     : summary.allReady
       ? `All ${summary.counts.total} surface(s) are ready.`
       : `${summary.counts.notReady} not-ready, ${summary.counts.stale} stale of ${summary.counts.total} surface(s).`;
 
-  return { success: true, message: msg, data: { ...summary, toolchain } as unknown as Record<string, unknown> };
+  return { success: true, message: msg, data: { ...summary, toolchain, capabilities } as unknown as Record<string, unknown> };
 }
 
 async function issueGrokCredentialsClientHandler(userId: string, context?: ToolExecutionContext): Promise<ToolResult> {
