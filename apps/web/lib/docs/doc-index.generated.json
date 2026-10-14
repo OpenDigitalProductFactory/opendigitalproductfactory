@@ -11621,6 +11621,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "accounts-and-provider-setup",
         "routing-status-and-temporary-pauses",
         "authentication-methods",
         "api-key",

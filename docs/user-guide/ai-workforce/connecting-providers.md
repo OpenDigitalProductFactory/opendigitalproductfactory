@@ -13,6 +13,40 @@ relatedCode:
 
 The platform connects to external AI providers to run inference for your AI workforce. Depending on the provider, you can authenticate using one of three methods: API Key, OAuth Sign-in, or None (for local providers). Open **Platform > AI Operations > Providers & Routing**, then choose **Manage** beside a provider.
 
+### Accounts and provider setup
+
+The compact account table keeps **Allowed work**, models and capabilities,
+connection problems, and capacity/reset information together. Allowed work is a
+data-sensitivity boundary. Authentication, model access, or remaining quota does
+not grant permission to send company or customer data. Capacity that a provider
+has not reported stays **Capacity not reported**.
+
+On initial setup, the available-provider catalog is open. **Continue with Local**
+completes provider selection without requiring a hosted account. After setup,
+the overview shows configured and unfinished accounts, including disabled or
+disconnected accounts. **Add provider** opens the searchable catalog again;
+**Add account** starts another named account for the chosen provider. Removing
+the last hosted account does not restart setup.
+
+**Manage account** opens that account's connection and Allowed work controls.
+Connection checks, model refresh, sign-in, disconnect, and enable/disable actions
+apply to the selected account. Secret fields are write-only: leave them empty to
+keep the saved credential. Saving a replacement credential requires a fresh
+data-terms review. The page announces pending actions and their results.
+
+The legacy provider link opens the default account. **Shared provider settings**
+contains catalog and endpoint configuration; provider-wide emergency clearance,
+usage/billing, recipes, diagnostics, and routing operations remain reachable
+through disclosures. Local hardware and installed-model management remain on
+the Local detail page. Shared usage and diagnostics are identified as applying
+across accounts.
+
+An authenticated additional account is not automatically executable. Its own
+model-access proof, work permissions, capacity, and supported execution channel
+must qualify for the request. An unavailable policy read does not confirm that
+hosted AI is permitted. The global Local-only policy remains visible above the
+account table.
+
 ### Routing status and temporary pauses
 
 Z.ai GLM Coding is also listed separately so you can manage its coding endpoint and traffic. It inherits the main Z.ai key unless you configure an override.
@@ -139,8 +173,8 @@ provider toggle. A provider whose default connection is disabled is shown with
 a connection-specific reason ("routing skips it until you reconnect") instead
 of a green active badge, on both the list and the provider detail page.
 Activating a provider brings its default connection along, and the platform
-heals a disabled-connection-behind-active-provider split automatically at
-startup — so a provider that reads active can actually route.
+preserves an intentionally disabled account during registry reconciliation.
+Enable the account explicitly when you want routing to use it again.
 
 If you choose **Skip safely** or **Review later**, DPF does not treat the provider as approved. Company and customer data stay restricted until the missing account, contract, region, or other evidence is reviewed. You can return to Providers & Routing and ask the COO again; a denied or unavailable consultation does not change provider posture.
 
