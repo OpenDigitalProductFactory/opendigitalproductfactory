@@ -1,4 +1,10 @@
 {
+  "providerConnection": {
+    "reconnect": "Sign in again",
+    "accountActions": "Account actions",
+    "upgradePaused": "The platform is upgrading. Connection setup is paused. Try again after the upgrade finishes.",
+    "setupUnavailable": "Connection setup could not complete. Reload this page and try again. Your saved sign-in has not been verified."
+  },
   "anthropicWorkspace": {
     "disclosure": "Organization-scoped key",
     "label": "Anthropic workspace ID",
