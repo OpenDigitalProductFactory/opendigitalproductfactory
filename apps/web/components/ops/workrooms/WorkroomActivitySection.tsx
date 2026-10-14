@@ -11,7 +11,7 @@ import { WorkroomInventory, type WorkroomInventoryRow } from "@/components/ops/w
 import { Surface } from "@/components/ui/Surface";
 import type { WorkPortfolioRoleKey } from "@/lib/navigation/area-portfolio";
 import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inventory";
-import { projectWorkroomOperatorSummary } from "@/lib/work-capsules/workroom-operator-summary";
+import { countOperatorAttention, projectWorkroomOperatorSummary } from "@/lib/work-capsules/workroom-operator-summary";
 import { loadRoomAccountabilityBatch } from "@/lib/work-management/room-workforce.server";
 import { portfolioRoleLabel } from "@/lib/work-capsules/work-capsule-presenter";
 import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
@@ -104,7 +104,9 @@ export async function WorkroomActivitySection({ portfolioRole, scopeLabel, child
         : portfolioRoleLabel(row.branchId as Parameters<typeof portfolioRoleLabel>[0]),
   }));
   const working = workrooms.filter(room => room.operator.group === "working").length;
-  const attention = workrooms.filter(room => room.operator.group === "attention").length;
+  const sharedRecoveryIds = children ? heldCapsuleIds : [];
+  const attention = countOperatorAttention(workrooms.filter(room => room.operator.group === "attention")
+    .map(room => room.capsuleId), sharedRecoveryIds);
   const where = scopeLabel ? ` in ${scopeLabel}` : "";
 
   return (
@@ -114,7 +116,7 @@ export async function WorkroomActivitySection({ portfolioRole, scopeLabel, child
           {working} working now{where} · {attention} need attention.
         </p>
         <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-          {roomReadBounded ? "Showing the 200 most recently updated rooms. Counts cover this view." : "Counts cover the rooms in this view."} Routine expiry follows the existing cleanup policy.
+          {roomReadBounded ? "200 recent rooms, plus shared recovery issues." : "Counts cover the rooms in this view."} Routine expiry follows the existing cleanup policy.
         </p>
         <Link data-owner-first-next-action href="#live-workrooms-heading" className="mt-3 inline-block text-xs font-medium text-[var(--dpf-accent)] hover:underline">
           {t("area.reviewLive")}
@@ -122,7 +124,7 @@ export async function WorkroomActivitySection({ portfolioRole, scopeLabel, child
       </Surface>
       <div className="mt-6">
         <WorkroomInventory workrooms={workrooms} summary={inventory.livenessSummary}
-          heldCapsuleIds={heldCapsuleIds} attentionContent={children} />
+          heldCapsuleIds={sharedRecoveryIds} attentionContent={children} />
       </div>
       {!portfolioRole && (
         <details className="mt-6 rounded-dpf-xl border border-dpf-border p-4">

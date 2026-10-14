@@ -1,9 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { projectWorkroomOperatorSummary } from "./workroom-operator-summary";
+import { countOperatorAttention, projectWorkroomOperatorSummary } from "./workroom-operator-summary";
 import type { EffectiveHumanAccountability } from "@/lib/work-management/human-accountability";
 
 const owner: EffectiveHumanAccountability = { state: "resolved", principalId: "P-1", source: "organization-owner", inheritedFrom: [] };
 const base = { capsuleId: "WC-1", status: "working", liveness: "live", isLive: true, accountability: owner };
+describe("operator attention count", () => {
+  it("includes shared recovery outside the bounded recent-room inventory", () => {
+    expect(countOperatorAttention(["WC-RECENT"], ["WC-OLDER-HELD"])).toBe(2);
+  });
+  it("counts a room once when both inventory and recovery identify it", () => {
+    expect(countOperatorAttention(["WC-1", "WC-2"], ["WC-2", "WC-2", "WC-3"])).toBe(3);
+  });
+  it("retains the attention count when only older shared recovery is present", () => {
+    expect(countOperatorAttention([], ["WC-OLDER-HELD"])).toBe(1);
+  });
+});
 describe("operator work groups", () => {
   it("does not mistake a held lease or capacity wait for current progress", () => {
     for (const liveness of ["leased-idle", "paused", "durable-wait"]) {

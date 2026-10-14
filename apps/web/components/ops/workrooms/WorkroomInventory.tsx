@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { DataTable, StatCard, StatusBadge, type Column } from "@/components/ui/report-kit";
 import type { CapsuleLivenessSummary } from "@/lib/work-capsules/liveness-inventory";
 import type { InvocationAttribution } from "@/lib/work-capsules/invocation-attribution";
-import { projectWorkroomOperatorSummary, type OperatorWorkGroup, type WorkroomOperatorSummary } from "@/lib/work-capsules/workroom-operator-summary";
+import { countOperatorAttention, projectWorkroomOperatorSummary, type OperatorWorkGroup, type WorkroomOperatorSummary } from "@/lib/work-capsules/workroom-operator-summary";
 import { portfolioRoleLabel } from "@/lib/work-capsules/work-capsule-presenter";
 import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
 import { useT } from "@/lib/i18n/use-t";
@@ -62,8 +62,9 @@ export function WorkroomInventory({ workrooms, summary, heldCapsuleIds = [], att
   const groups = { attention: [] as WorkroomInventoryRow[], working: [] as WorkroomInventoryRow[],
     waiting: [] as WorkroomInventoryRow[], history: [] as WorkroomInventoryRow[] };
   for (const room of workrooms) groups[viewOf(room).group].push(room);
-  const held = new Set(heldCapsuleIds);
-  const attentionCount = new Set([...groups.attention.map(room => room.capsuleId), ...heldCapsuleIds]).size;
+  const sharedRecoveryIds = attentionContent ? heldCapsuleIds : [];
+  const held = new Set(sharedRecoveryIds);
+  const attentionCount = countOperatorAttention(groups.attention.map(room => room.capsuleId), sharedRecoveryIds);
   const [selected, setSelected] = useState<OperatorWorkGroup>(attentionCount ? "attention"
     : groups.working.length ? "working" : "waiting");
   const [showHistory, setShowHistory] = useState(false);

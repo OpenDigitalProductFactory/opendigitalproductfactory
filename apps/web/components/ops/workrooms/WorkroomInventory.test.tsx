@@ -57,4 +57,15 @@ describe("operator Workrooms inventory", () => {
     expect(screen.getByText("One shared recovery issue")).toBeVisible();
     expect(screen.queryByRole("link", { name: "Repeated review" })).toBeNull();
   });
+  it("starts with attention when shared recovery is outside the recent inventory", () => {
+    renderInventory(<WorkroomInventory workrooms={[]} summary={summary} heldCapsuleIds={["WC-OLDER-HELD"]}
+      attentionContent={<p>One older recovery issue</p>} />);
+    expect(screen.getByRole("button", { name: "Needs attention · 1" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("One older recovery issue")).toBeVisible();
+  });
+  it("retains an individual held room when no shared-recovery replacement is supplied", () => {
+    const blocked = { ...row("WC-BLOCK", "live", "Retained review"), status: "blocked" };
+    renderInventory(<WorkroomInventory workrooms={[blocked]} summary={summary} heldCapsuleIds={["WC-BLOCK"]} />);
+    expect(screen.getByRole("link", { name: "Retained review" })).toBeVisible();
+  });
 });

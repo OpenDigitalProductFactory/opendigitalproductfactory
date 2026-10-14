@@ -11,6 +11,11 @@ export type WorkroomOperatorSummary = {
   recoveryCondition: string | null;
 };
 
+/** Shared recovery can include rooms older than the recent inventory window. */
+export function countOperatorAttention(attentionIds: readonly string[], heldIds: readonly string[] = []): number {
+  return new Set([...attentionIds, ...heldIds]).size;
+}
+
 /** Presentation only: safety-held liveness and the recorded drive remain authoritative. */
 export function projectWorkroomOperatorSummary(room: {
   capsuleId: string; status: string; liveness: string; isLive: boolean;

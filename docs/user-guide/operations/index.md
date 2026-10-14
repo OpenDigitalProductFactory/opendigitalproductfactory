@@ -20,7 +20,7 @@ Rooms waiting on the same recovery condition are grouped under **Shared recovery
 
 **Technical evidence** reveals session information, branches, lease reasons and recovery conditions. **History** loads the retained rows only when opened. **System details** explains the system's protected leases and cleanup candidates. Routine expiry follows the existing policy: a valid held lease is not reaped, paused sessions retain their resume grace, and unmerged work is preserved. The Waiting view does not promise that an unavailable worker will automatically return.
 
-Counts cover the rooms read for this view, with an explicit note when the 200-room limit is reached. Open a portfolio's Work view to narrow the same inventory. Open **Architecture > Workrooms** for reusable definitions rather than instance history.
+The page reads up to 200 recent rooms. Shared recovery can include older rooms. The attention total combines both and counts each room once. Open a portfolio's Work view to narrow the same inventory. Open **Architecture > Workrooms** for reusable definitions rather than instance history.
 
 **Activity by portfolio** groups the same Workrooms under the four portfolios and summarises each one with a few concrete activities rather than a bare count. Every line names its Workroom and says what is happening to it, so two Workrooms blocked for the same reason stay distinguishable. Select any line to open that Workroom's activity case in one step.
 

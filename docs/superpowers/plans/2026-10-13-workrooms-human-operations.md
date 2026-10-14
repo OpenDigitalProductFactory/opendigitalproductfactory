@@ -4,6 +4,12 @@ status: active
 
 # Workrooms for human operators
 
+## Verification and review follow-up
+
+The first frozen source, `3a369ee81304a7314249bf69cfaa69be5a212227`, passed canonical integrated validation (`cmv7ebwt9034001qse5jsdy50`): 5,388 tests, repository guards, migrations and typecheck. Native semantic review stopped with uncertain provider execution and no verdict. Independent client source review found a mismatch between the bounded inventory's attention count and the shared recovery count; one shared presentation helper now computes their unique-room union. The optional replacement-content safeguard also preserves individual held-room links when no shared list is supplied.
+
+The rendered route sweep measured 176 default-visible words against the frozen 252, with no numerical or usability-budget failures. The intended disclosure structure required a measured snapshot refresh. [Workflow 38495720583](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/actions/runs/38495720583) succeeded on the immutable first source. Only `/ops/workrooms` was spliced into the existing baseline; every other watched route remains unchanged. New source validation and actual live desktop/narrow acceptance remain required before completion.
+
 Backlog: BI-65D75876. Workroom: WC-24AD64E1. Delivery shape: medium.
 This is a refactor of the existing inventory, extending the portal UX spine,
 2026-08-24-workroom-portfolio-convergence and 2026-08-05-workcapsule-liveness-and-reaper-ws9.
