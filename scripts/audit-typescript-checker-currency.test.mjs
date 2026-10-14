@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { assessCurrency, parsePinnedTs7, renderMarkdown } from "./audit-typescript-checker-currency.mjs";
+import { assessCurrency, normalizeRegistryVersion, parsePinnedTs7, renderMarkdown } from "./audit-typescript-checker-currency.mjs";
 
 test("reads the pin from the root typescript7 alias", () => {
   assert.equal(parsePinnedTs7({ devDependencies: { typescript7: "npm:typescript@7.0.2" } }), "7.0.2");
@@ -30,4 +30,13 @@ test("a behind report names the exact bump command", () => {
   const md = renderMarkdown(assessCurrency({ pinned: "7.0.2", latest: "7.0.3" }));
   assert.match(md, /\*\*behind\*\*/);
   assert.match(md, /pnpm add -w -D typescript7@npm:typescript@7\.0\.3/);
+});
+
+test("only a plain release version from the registry reaches the report", () => {
+  assert.equal(normalizeRegistryVersion("7.0.3"), "7.0.3");
+  assert.equal(normalizeRegistryVersion("7.0.3-beta.1"), null);
+  assert.equal(normalizeRegistryVersion("7.0.3\n# injected"), null);
+  assert.equal(normalizeRegistryVersion("<img src=x>"), null);
+  assert.equal(normalizeRegistryVersion(7), null);
+  assert.equal(normalizeRegistryVersion(undefined), null);
 });

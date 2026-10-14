@@ -30,6 +30,16 @@ export function parsePinnedTs7(rootPackageJson) {
   return match ? match[1] : null;
 }
 
+/**
+ * npm's latest dist-tag as a plain `X.Y.Z`, rebuilt from its numbers, or null.
+ * The registry response is untrusted and ends up in a report and an issue body,
+ * so anything other than a release version (a pre-release, markup) is refused.
+ */
+export function normalizeRegistryVersion(raw) {
+  const match = /^(\d{1,6})\.(\d{1,6})\.(\d{1,6})$/.exec(typeof raw === "string" ? raw : "");
+  return match ? match.slice(1, 4).map(Number).join(".") : null;
+}
+
 function parts(version) {
   const match = /^(\d+)\.(\d+)\.(\d+)/.exec(String(version ?? ""));
   return match ? match.slice(1, 4).map(Number) : null;
@@ -65,7 +75,7 @@ async function main() {
   let latest = null;
   try {
     const response = await fetch(REGISTRY_URL, { headers: { accept: "application/vnd.npm.install-v1+json" } });
-    if (response.ok) latest = (await response.json())?.["dist-tags"]?.latest ?? null;
+    if (response.ok) latest = normalizeRegistryVersion((await response.json())?.["dist-tags"]?.latest);
   } catch {
     latest = null;
   }
