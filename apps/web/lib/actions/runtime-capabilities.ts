@@ -2,9 +2,9 @@
 
 import { requireCapability } from "@/lib/actions/shared/guards";
 import { rotateProductionRuntimeTransitionSecret } from "@/lib/platform-runtime/runtime-capability-executor";
-import { previewRuntimeCapabilityReconciliationForActor, requestRuntimeCapabilityTransitionForActor, type RuntimeCapabilityMutationInput } from "@/lib/platform-runtime/runtime-capability-commands";
+import { previewRuntimeCapabilityReconciliationForActor, requestRuntimeCapabilityTransitionForActor, type RuntimeCapabilityMutationInput as RuntimeCommandInput } from "@/lib/platform-runtime/runtime-capability-commands";
 import { assertRuntimeCapabilityTransitionAdmission } from "@/lib/platform-runtime/transition-recovery";
-export type { RuntimeCapabilityMutationInput } from "@/lib/platform-runtime/runtime-capability-commands";
+export type RuntimeCapabilityMutationInput = RuntimeCommandInput;
 
 export async function previewRuntimeCapabilityReconciliation() {
   const { userId } = await requireCapability("manage_platform");

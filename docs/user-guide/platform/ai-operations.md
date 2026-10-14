@@ -115,6 +115,16 @@ older runs without those traces remain unattributed at the individual-call level
 Scenario quality updates are recorded after the selected run finishes completely;
 a missing required grader score leaves it unverified.
 
+For a local concurrency check, an authorized coworker can select
+`concurrencyOnly=true` in `run_endpoint_tests` with an explicit local `endpointId`
+and discovered `modelId`. This runs exactly two ordinary calls in one 30-second
+observation, instead of capability probes or scenarios. It cannot be combined
+with exhaustive options, a task type, or `probesOnly=true`. The recorded run
+preserves each answer, completion reason, token counts, trace and admission
+events. A pass requires an observed queued handoff, release and two nonempty,
+complete answers. Missing contention, cancellation, capacity holds and truncated
+answers leave the check unverified. This check never changes capability ratings.
+
 Background evaluations and endpoint probes use the background admission lane,
 so queued interactive requests take priority. A concurrent first-time evaluation
 must acquire its model's reservation before it performs inference. Docker Model
