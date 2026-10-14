@@ -21,5 +21,11 @@
   },
   "nav": {
     "moreTools": "More tools"
+  },
+  "monitoring": {
+    "offLabel": "Monitoring is off on this install",
+    "offBody": "Prometheus and Grafana are not running, so metrics and metric alerts are not collected. Logs are still captured.",
+    "offLink": "See runtime services",
+    "offAlertsNote": "Log alerts only — metric monitoring is off."
   }
 }

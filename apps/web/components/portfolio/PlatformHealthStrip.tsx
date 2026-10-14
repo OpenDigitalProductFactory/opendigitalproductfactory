@@ -7,6 +7,8 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 
+import { MonitoringOffNotice } from "@/components/monitoring/MonitoringOffNotice";
+
 type Alert = {
   labels: Record<string, string>;
   state: string;
@@ -17,6 +19,8 @@ type ServiceStatus = { name: string; up: boolean };
 type HealthState = {
   checked: boolean;
   online: boolean;
+  /** Monitoring switched off on this install (BI-2CE9CBF4). */
+  off?: boolean;
   services: ServiceStatus[];
   firingAlerts: number;
   criticalAlerts: number;
@@ -56,6 +60,10 @@ export function PlatformHealthStrip() {
 
       // Parse service status
       const upJson = await upRes.json();
+      if (upJson.status === "monitoring-off") {
+        setState({ ...INITIAL, checked: true, off: true });
+        return;
+      }
       const results: Array<{ metric: { job?: string }; value: [number, string] }> =
         upJson.data?.result ?? [];
       const statusMap = new Map<string, number>();
@@ -92,6 +100,14 @@ export function PlatformHealthStrip() {
   }, [probe]);
 
   if (!state.checked) return null;
+
+  if (state.off) {
+    return (
+      <div className="mb-6 px-3 py-2 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)]">
+        <MonitoringOffNotice compact />
+      </div>
+    );
+  }
 
   if (!state.online) {
     return (
