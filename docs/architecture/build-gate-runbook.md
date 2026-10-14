@@ -86,6 +86,13 @@ Its mode is the source of truth for receipt enforcement; a skill must not presen
 a shadow observation as an enforced refusal. This procedure applies to external
 Claude, Codex and Grok delivery. Build Studio keeps its own transition contract.
 
+New requests use the role-bound v2 request contract and produce v3 receipts.
+Historical v1 requests and v2 receipts remain readable, but cannot satisfy a new
+role-bound review. Publication expects `code-change` by default. Document callers
+must supply their expected role with `--artifact-type spec` or `--artifact-type plan`
+when recording and validating a receipt; the expected role comes from the caller,
+not from the receipt. A receipt for one role cannot authorize another role.
+
 1. Freeze a clean DCO-signed commit and produce its required gate evidence.
    Call `review_semantic_change` with the governing Workroom, immutable base/head
    trees, committed diff digest and failure analysis bound to that evidence.
