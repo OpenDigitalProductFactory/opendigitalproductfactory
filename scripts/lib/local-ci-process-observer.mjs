@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { freemem, loadavg, totalmem } from "node:os";
+import { performance } from "node:perf_hooks";
 
 import { BoundedTextTail } from "./bounded-text-tail.mjs";
 
@@ -151,6 +152,7 @@ export function createObservedProcessRunner({
       const output = new BoundedTextTail(outputTailBytes);
       const hostSamples = [];
       const startedAt = now();
+      const startedMonotonic = performance.now();
       const boundedDurationMs = Number.isInteger(maxDurationMs) && maxDurationMs > 0
         ? maxDurationMs
         : null;
@@ -201,6 +203,9 @@ export function createObservedProcessRunner({
 
       const finish = (status, signal, { closeTimedOut = false } = {}) => {
         if (settled) return;
+        const completedAt = now();
+        if (boundedDurationMs !== null && (performance.now() - startedMonotonic >= boundedDurationMs
+          || Date.parse(completedAt) >= Date.parse(deadlineAt))) deadlineExceeded = true;
         settled = true;
         clearIntervalImpl(sampler);
         clearTimeoutImpl(deadlineTimer);
@@ -217,7 +222,7 @@ export function createObservedProcessRunner({
           childPid: child.pid ?? null,
           hostSamples,
           startedAt,
-          completedAt: now(),
+          completedAt,
           maxDurationMs: boundedDurationMs,
           deadlineAt,
           deadlineExceeded,

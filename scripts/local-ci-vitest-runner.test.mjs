@@ -107,6 +107,19 @@ test("progress continues after the retained host sample window fills", async () 
   assert.equal(observations,127,"start, all heartbeats and completion remain observable");
 });
 
+test("a delayed deadline callback cannot make an over-budget zero exit successful", async () => {
+  const child=fakeChild(),timers=manualTimeouts();
+  let clock=0;
+  const run=createObservedProcessRunner({spawnImpl:()=>child,sampleHost:()=>({}),
+    stdout:{write(){}},stderr:{write(){}},maxDurationMs:100,
+    now:()=>new Date(clock).toISOString(),setTimeoutImpl:timers.setTimeoutImpl,clearTimeoutImpl:timers.clearTimeoutImpl});
+  const pending=run({command:"fixture",args:[]});
+  clock=101;
+  child.emit("close",0,null);
+  const result=await pending;
+  assert.equal(result.deadlineExceeded,true,"elapsed budget is authoritative even before timer delivery");
+});
+
 test("Vitest stage duration defaults to 30 minutes and accepts only a positive override", () => {
   assert.equal(resolveVitestMaxDurationMs({}), 1_800_000);
   assert.equal(resolveVitestMaxDurationMs({ DPF_LOCAL_CI_VITEST_MAX_DURATION_MS: "45000" }), 45_000);
