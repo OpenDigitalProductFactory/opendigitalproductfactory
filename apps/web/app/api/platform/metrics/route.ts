@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { getMonitoringAuthority } from "@/lib/platform-runtime/monitoring-authority";
+
 export const dynamic = "force-dynamic";
 
 const PROMETHEUS_URL = process.env.PROMETHEUS_URL || "http://prometheus:9090";
@@ -11,6 +13,11 @@ const NO_CACHE_HEADERS = {
 export async function GET(req: NextRequest) {
   const query = req.nextUrl.searchParams.get("query");
   if (!query) return NextResponse.json({ error: "query required" }, { status: 400, headers: NO_CACHE_HEADERS });
+
+  // Monitoring switched off is a choice, not an outage (BI-2CE9CBF4).
+  if ((await getMonitoringAuthority()) === "off") {
+    return NextResponse.json({ status: "monitoring-off" }, { headers: NO_CACHE_HEADERS });
+  }
 
   const type = req.nextUrl.searchParams.get("type") || "instant";
   const endpoint = type === "range" ? "/api/v1/query_range" : "/api/v1/query";
