@@ -199,8 +199,8 @@ export async function convergeUxSweepFixture(db, now = new Date(), { dbNull } = 
 export function uxSweepEstateFacts() {
   const items = [
     ["host", "Fixture machine", "hostname:ux-sweep-machine", { hostname: "ux-sweep-machine", platform: "linux" }],
-    ["host", "LAN Host 10.1.0.10", "arp:02AABBCCDD10", { address: "10.1.0.10", mac: "02:AA:BB:CC:DD:10" }],
-    ["host", "LAN Host 172.18.0.2", "arp:02AABBCCDD20", { address: "172.18.0.2", mac: "02:AA:BB:CC:DD:20" }],
+    ["host", "LAN Host 10.1.0.10", "arp:02AABBCCDD10", { address: "10.1.0.10", mac: "02:AA:BB:CC:DD:10", osiLayer: 3, osiLayerName: "network", networkAddress: "10.1.0.10", protocolFamily: "ipv4" }],
+    ["host", "LAN Host 172.18.0.2", "arp:02AABBCCDD20", { address: "172.18.0.2", mac: "02:AA:BB:CC:DD:20", osiLayer: 3, osiLayerName: "network", networkAddress: "172.18.0.2", protocolFamily: "ipv4" }],
     ["gateway", "Gateway 10.1.0.1", "gateway:10.1.0.1", { address: "10.1.0.1" }],
     ["subnet", "10.1.0.0/24", "subnet:10.1.0.0/24", { networkAddress: "10.1.0.0/24" }],
     ["network_interface", "Interface 10.1.0.10", "nic:000D3A000010", { address: "10.1.0.10", mac: "00:0D:3A:00:00:10" }],

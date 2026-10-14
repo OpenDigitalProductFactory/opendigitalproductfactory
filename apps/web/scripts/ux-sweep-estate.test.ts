@@ -11,6 +11,13 @@ import { deriveInventoryEnrichment } from "../../../packages/db/src/inventory-en
 import { buildQualityEvaluationEntities } from "../../../packages/db/src/discovery-quality-input";
 import { evaluateInventoryQuality } from "../../../packages/db/src/discovery-attribution";
 
+const taxonomyNodes = [
+  { nodeId: "products_and_services_sold/financial_services/commercial_banking/treasury_cash_management_bank_platforms", name: "Bank platforms", portfolioSlug: "products_and_services_sold" },
+  { nodeId: "foundational/compute/servers", name: "Servers", portfolioSlug: "foundational" },
+  { nodeId: "foundational/platform_services/container_platform", name: "Containers", portfolioSlug: "foundational" },
+  { nodeId: "foundational/network_management", name: "Network Management", portfolioSlug: "foundational" },
+];
+
 const state = vi.hoisted(() => ({ entities: [] as unknown[], relations: [] as unknown[], graph: vi.fn() }));
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -34,14 +41,17 @@ import { getInventoryEntitiesGroupedBySubnet } from "@/lib/discovery-data";
 import { syncInventoryEntityAsInfraCI } from "../../../packages/db/src/graph-sync";
 
 describe("declared estate uses the actual discovery read-model contract", () => {
+  it("retains collector network signals so ARP hosts do not suggest a financial taxonomy", () => {
+    const normalized = normalizeDiscoveredFacts(uxSweepEstateFacts(), { taxonomyNodes });
+    const neighbors = normalized.inventoryEntities.filter(e => e.entityKey.startsWith("host:arp:"));
+    expect(neighbors).toHaveLength(2);
+    for (const neighbor of neighbors) {
+      expect(neighbor.candidateTaxonomy[0]?.nodeId).toBe("foundational/network_management");
+      expect(neighbor.attributionStatus).toBe("needs_review");
+    }
+  });
   it("derives the known NIC lifecycle from OUI evidence while retaining unknown estate cases", () => {
-    const normalized = normalizeDiscoveredFacts(uxSweepEstateFacts(), {
-      taxonomyNodes: [
-        { nodeId: "foundational/compute/servers", name: "Servers", portfolioSlug: "foundational" },
-        { nodeId: "foundational/platform_services/container_platform", name: "Containers", portfolioSlug: "foundational" },
-        { nodeId: "foundational/network_management/network_connectivity", name: "Network", portfolioSlug: "foundational" },
-      ],
-    });
+    const normalized = normalizeDiscoveredFacts(uxSweepEstateFacts(), { taxonomyNodes });
     // Verified against the committed OUI TSV and the seeded MacVendorOui row.
     const vendors = new Map([["000D3A", "Microsoft Corp."]]);
     const enrichments = new Map(normalized.inventoryEntities.map(e => {
@@ -92,13 +102,7 @@ describe("declared estate uses the actual discovery read-model contract", () => 
     expect(html.match(/>Configure<\/button>/g)).toHaveLength(3);
   });
   it("has physical subnet members, review candidates and graph-mirror nodes", async () => {
-    const normalized = normalizeDiscoveredFacts(uxSweepEstateFacts(), {
-      taxonomyNodes: [
-        { nodeId: "foundational/compute/servers", name: "Servers", portfolioSlug: "foundational" },
-        { nodeId: "foundational/platform_services/container_platform", name: "Containers", portfolioSlug: "foundational" },
-        { nodeId: "foundational/network_management/network_connectivity", name: "Network", portfolioSlug: "foundational" },
-      ],
-    });
+    const normalized = normalizeDiscoveredFacts(uxSweepEstateFacts(), { taxonomyNodes });
     state.graph.mockClear();
     state.entities = normalized.inventoryEntities.map(e => ({
       id: e.entityKey, ...e, status: "active",
