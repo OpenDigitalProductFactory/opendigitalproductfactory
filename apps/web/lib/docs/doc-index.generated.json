@@ -2373,7 +2373,9 @@
         "provider-account-identity",
         "governed-controls",
         "provider-ui-preservation-contract",
-        "migration-and-verification"
+        "account-presentation-boundaries",
+        "migration-and-verification",
+        "measured-route-integration"
       ]
     },
     "docs/architecture/review-reliability-recovery.md": {
@@ -11622,6 +11624,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "accounts-and-provider-setup",
         "routing-status-and-temporary-pauses",
         "authentication-methods",
         "api-key",
@@ -11745,6 +11748,7 @@
         "reading-the-skills-catalog",
         "related-routes",
         "reading-runtime-health",
+        "turning-monitoring-on-or-off",
         "coworker-routing",
         "context-budget-what-recent-turns-were-given",
         "capability-completeness",
@@ -12782,6 +12786,7 @@
         "use-this-doc-for",
         "workflow",
         "read-the-routing-picture",
+        "confirm-a-routing-override",
         "architecture-and-evidence",
         "understanding-background-inference",
         "when-a-coworker-says-it-used-the-backup-model",

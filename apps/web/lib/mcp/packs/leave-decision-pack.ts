@@ -1,6 +1,7 @@
 // Propose-only time-off decision surface — BI-4D030159 (Paycom absorption).
 // The handler consults the organization's WWWD profile and hard leave guards,
-// then writes an AgentActionProposal. It never approves or rejects leave.
+// then records the recommendation for the manager (BI-7BCC87BB: no proposal).
+// It never approves or rejects leave.
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import { proposeLeaveDecision } from "@/lib/workforce/leave/decide-proposal";
@@ -12,7 +13,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "propose_leave_decision",
     description:
-      "Recommend approve, deny, or human review for one pending leave request. Uses staffing coverage, leave balance, hard policy rails, and the organization's own recorded business-decision stance. Writes a proposed leave.decide action for a human; never changes leave status.",
+      "Recommend approve, deny, or human review for one pending leave request. Uses staffing coverage, leave balance, hard policy rails, and the organization's own recorded business-decision stance. Records the recommendation for the manager to decide on the time-off page; never changes leave status.",
     inputSchema: {
       type: "object",
       properties: {
@@ -64,7 +65,7 @@ async function proposeLeaveDecisionHandler(
     organizationId,
     minCoverageCushion,
   });
-  const proposal = await proposeLeaveDecision({
+  const recommendation = await proposeLeaveDecision({
     decision,
     userId,
     agentId: context?.agentId,
@@ -74,11 +75,11 @@ async function proposeLeaveDecisionHandler(
 
   return {
     success: true,
-    entityId: proposal.proposalId,
+    entityId: recommendation.recommendationId,
     message: `Time-off recommendation ${decision.action}; queued for human review.`,
     data: {
-      proposalId: proposal.proposalId,
-      status: proposal.status,
+      recommendationId: recommendation.recommendationId,
+      status: recommendation.status,
       recommendation: decision.action,
       interactionId: decision.interactionId,
       rationale: decision.operatorMessage,

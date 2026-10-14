@@ -3,6 +3,7 @@
 // the pure planner; supersession preserves the provenance chain (loser points at
 // the canonical winner). Reused by the nightly sleep-time pass.
 
+import { ACTIVITY_ROUTING_OVERRIDE_FACT_CATEGORY } from "@/lib/routing/activity-harness-approval-source";
 import { prisma } from "@dpf/db";
 import { planBatchDedupe, type SweepEntry } from "./memory-consolidation-sweep";
 
@@ -36,7 +37,9 @@ export async function dedupeCoworkerNotes(agentCuid: string): Promise<number> {
 /** Collapse a user's near-duplicate active facts (per category) to one canonical each. */
 export async function dedupeUserFacts(userId: string): Promise<number> {
   const facts = await prisma.userFact.findMany({
-    where: { userId, supersededAt: null },
+    // Routing overrides are keyed configuration, one per activity and recipe;
+    // similar-looking values are distinct overrides, never duplicates (BI-7BCC87BB).
+    where: { userId, supersededAt: null, category: { not: ACTIVITY_ROUTING_OVERRIDE_FACT_CATEGORY } },
     select: { id: true, key: true, value: true, createdAt: true, category: true },
   });
   const byCategory = new Map<string, SweepEntry[]>();

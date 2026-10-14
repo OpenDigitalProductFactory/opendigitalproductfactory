@@ -25,6 +25,12 @@ User-facing copy lives in the message catalog, not in JSX. Two rules:
 - **Catalogs.** They sit at `packages/i18n/src/messages/<locale>/<namespace>.json`, and **en-US is the source of truth**. Register a new namespace in `SOURCE_CATALOG` (`packages/i18n/src/catalog.ts`).
 - **Keys.** They are typed from the en-US JSON, so an unknown key fails typecheck.
 
+Provider account setup uses the registered `providerAccounts` namespace. Server
+provider routes resolve its messages for the viewer and pass the translated
+copy to the compact account table and selected-account forms. Pending and result
+feedback use that same catalog with the shared form controls. Provider and
+account labels remain stored user data rather than translation keys.
+
 Use the translator that matches where the code runs:
 
 | Where | How |
