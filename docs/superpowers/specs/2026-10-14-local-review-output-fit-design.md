@@ -29,7 +29,7 @@ The exact installed vendor contracts are verified in primary source:
 - [DMR v1.2.8 HTTP handler](https://github.com/docker/model-runner/blob/v1.2.8/pkg/inference/scheduling/http_handler.go) exposes read-only `/engines/status` and model-filtered `/engines/_configure`, and forwards the complete inference body.
 - [DMR v1.2.8 model configuration](https://github.com/docker/model-runner/blob/v1.2.8/pkg/inference/scheduling/api.go) identifies backend, model digest and operation mode. Completion mode is distinct from embedding mode.
 
-A provider name or model family is insufficient evidence of the engine dialect. Extend the existing selected-model runtime observation to carry supported reasoning-budget evidence beside served context. Unknown, older, ambiguous or unreachable backend evidence remains unknown/unexpressed. It must not be silently presented as an enforced budget. No global `_configure` write or model reload is part of this repair.
+A provider name or model family is insufficient evidence of the engine dialect. Extend the existing selected-model runtime observation to carry supported reasoning-budget evidence beside served context. The b9879 parser enables the sampling limit only when `chat_params.thinking_end_tag` is nonempty: engine version alone does not prove the selected template can enforce it. Bind compatible template/delimiter evidence or an equivalent observed enforcement result to the selected model digest and served configuration. An overridden, unknown or delimiter-free template remains unexpressed, even on a compatible engine. Unknown, older, ambiguous or unreachable backend evidence remains unknown/unexpressed. It must not be silently presented as an enforced budget. No global `_configure` write or model reload is part of this repair.
 
 The existing proportional effort decision remains the input. For a backend that supports a numeric limit, compile that decision inside the actual total completion allowance, leaving final-answer room. A tentative reserve is one quarter of the completion allowance, with the existing 2,048-token final-output floor where it fits. The reserve is a candidate to verify against task completion; it is not a claim of measured quality. Do not disable thinking, increase the activity's total tokens or reset its parent deadline. Reject malformed or impossible budgets rather than silently widening them.
 
@@ -48,11 +48,11 @@ Bind JSON success requirements before provider capability fencing and sampling. 
 | Acceptance ID | Objective IDs | Statement |
 | --- | --- | --- |
 | AC-WIRE | OBJ-BUDGET | A failing-before/passing-after regression inspects the real adapter HTTP body and shows the supported numeric allowance plus unchanged total max_tokens. |
-| AC-SUPPORT | OBJ-BUDGET, OBJ-GOVERNANCE | Unsupported, ambiguous, stale or unreadable backend evidence never claims numeric effort was expressed; model/provider labels alone cannot enable the dialect. |
+| AC-SUPPORT | OBJ-BUDGET, OBJ-GOVERNANCE | Unsupported, ambiguous, stale or unreadable backend/template evidence never claims numeric effort was expressed; version/model/provider labels alone cannot enable the dialect. Include a no-thinking-end-tag regression. |
 | AC-ENVELOPE | OBJ-BUDGET, OBJ-GOVERNANCE | Smaller activity allowances, invalid numbers, fixed provider thinking and fallback dispatch cannot exceed the authorized total; unrelated unbound calls retain their contract. |
 | AC-JSON | OBJ-CONTRACT | Native review requests JSON through the actual route and wire policy; malformed, empty, reasoning-only and truncated output remains inconclusive. |
 | AC-RECOVERY | OBJ-GOVERNANCE | Existing replay, expiry, cancellation, executor-loss and late-writer tests remain green; no request, receipt, deadline, authority or retry budget is fabricated or reset. |
-| AC-QUALITY | OBJ-QUALITY | Record an actual complete native review and meaningful normal/adversarial task-completion checks with exact model/runtime/prompt/schema/tool-surface/budget identities. A known defective fixture must receive a relevant finding; a legitimate FAIL is a genuine verdict. |
+| AC-QUALITY | OBJ-QUALITY | Record an actual complete native review and meaningful paired task-completion checks with exact model/runtime/template/prompt/schema/tool-surface/budget identities. The known-clean control must complete without an invented blocking finding; the known-defective control must receive a relevant finding. A legitimate FAIL is a genuine verdict. One pair is not broad calibration. |
 | AC-DELIVERY | OBJ-GOVERNANCE | DCO source, independent exact-commit assessment, exact-head canonical gate, protected merge queue, canonical deployment and post-deployment verification are recorded. Unavailable gates remain unrun until reconciled. |
 
 ## Ordered fix and verification
@@ -70,7 +70,7 @@ The Workroom's resolved change-impact contract requires graph-linked and colocat
 
 Implementation parent: BI-3CF78C8E. Canonical ordered fix: this document. Reference lists for atomic coverage are `AC-WIRE`, `AC-SUPPORT`, `AC-ENVELOPE`, `AC-JSON`, `AC-RECOVERY`, `AC-QUALITY`, `AC-DELIVERY`; `ActivityContract.tokenEnvelope`, `EffortDecision`, `RoutedExecutionPlan`, `SemanticReviewRequest`; `selected-model-observation`, `route-to-wire`, `native-review-completion`, `governed-delivery`; and `source-red-green`, `affected-suites`, `canonical-exact-head`, `live-task-completion`.
 
-Coverage receipt: pending. Design/research admission is not implementation admission. Record the immutable committed artifact and live coverage, then read readiness before editing implementation. Keep the prior tiering/tool-selection evidence with its original date and limited scope.
+Initial coverage receipt `cmv7fvvc44ems01o9211h9hbf` binds immutable design commit `227b90338368532e70b9ff4b94cb4c9790cc1494`, blob `c73407f6b0ef2eb4e2175232f995b85a9dae5242`; its currentness was checked before this advisory-review correction. This revision adds the template prerequisite and clean paired control, so record fresh coverage against its new immutable identity before implementation. Design/research admission is not implementation admission. Keep the prior tiering/tool-selection evidence with its original date and limited scope.
 
 ## Risks and rollback
 
