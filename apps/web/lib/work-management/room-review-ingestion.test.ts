@@ -210,7 +210,10 @@ describe("review ingestion continuation", () => {
     expect(seen.size).toBe(100000);
     expect(cycles).toBe(100);
     expect(checkpoint.rooms.every(room => room.consumed === "10")).toBe(true);
-  }, 60000);
+    // 21 s on a dev host, over 60 s in a loaded CI shard: the budget measures a
+    // hang, not runner speed (BI-F3C8D1EA). Each batch read walks every room, so
+    // the case is quadratic in rooms; that is recorded on the item, not hidden here.
+  }, 180_000);
   it("carries consumed positions and rotation into a later cycle with newer highwater", () => {
     const checkpoint = createReviewCheckpoint([{roomId: "a", highWater: "20"}, {roomId: "b", highWater: "10"}]);
     checkpoint.rooms[0].consumed = "5";
