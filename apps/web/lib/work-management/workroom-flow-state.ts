@@ -65,6 +65,8 @@ const FLOW_STATE_BY_ACTION_AND_REASON: FlowStateTable = {
     // The graph drive's fail-closed pauses (GPP Phase 3c, BI-8875C9DF).
     construct_not_executable: "blocked",
     marking_unreadable: "blocked",
+    // No accountable person can be named to run the agent stage (BI-D13FA12A).
+    missing_task_owner: "blocked",
   },
   attention: {
     governed_decision: "awaiting-person",
@@ -84,7 +86,6 @@ const FLOW_STATE_BY_ACTION_AND_REASON: FlowStateTable = {
     agent_stage: "working",
     // Another worker holds the stage; the stage is being worked.
     lease_held: "working",
-    missing_task_owner: "blocked",
     // A review stage owes its non-author reviewer, but the request could not be
     // sent (BI-2C8750FC): stuck with a cause until the reviewer can be reached.
     reviewer_dispatch_unavailable: "blocked",

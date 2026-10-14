@@ -102,6 +102,8 @@ services/adp/pnpm-lock.yaml
 /sbom/internalization-candidates.md
 /sbom/stale-override-audit.json
 /sbom/stale-override-audit.md
+/sbom/typescript-checker-currency.json
+/sbom/typescript-checker-currency.md
 /sbom/security-sweep.json
 /sbom/security-sweep.md
 

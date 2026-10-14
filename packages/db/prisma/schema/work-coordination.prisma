@@ -962,17 +962,19 @@ model QueueMetricSnapshot {
   wip             Int      @default(0) // queued + in-progress at computedAt
   arrivals        Int      @default(0) // enqueued in window
   throughput      Int      @default(0) // finished in window
-  waitP50Ms       Int?
-  waitP95Ms       Int?
-  processP50Ms    Int?
-  processP95Ms    Int?
-  cycleP50Ms      Int?
-  cycleP95Ms      Int?
+  // Durations in milliseconds. Float, not Int: a 32-bit Int caps at ~24.8 days and
+  // Workroom stage items sit for weeks (BI-4ADFFEDB). Exact for whole ms up to 2^53.
+  waitP50Ms       Float?
+  waitP95Ms       Float?
+  processP50Ms    Float?
+  processP95Ms    Float?
+  cycleP50Ms      Float?
+  cycleP95Ms      Float?
   firstPassYield  Float? // 0..1 — % correct without rework
   slaAttainment   Float? // 0..1 — null when no finished item carried an SLA
   abandonmentRate Float? // 0..1
-  heldP50Ms       Int? // held time (waiting on a person or blocked) of items finished in the window — EP-B70E718D
-  heldP95Ms       Int?
+  heldP50Ms       Float? // held time (waiting on a person or blocked) of items finished in the window — EP-B70E718D
+  heldP95Ms       Float?
   processShare    Float? // 0..1 — Σ process ÷ Σ cycle: the queue's flow efficiency
   computedAt      DateTime @default(now())
   createdAt       DateTime @default(now())

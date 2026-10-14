@@ -56,7 +56,7 @@ The coworker operates within a two-layer authorization model:
 
 - **Your role determines what's possible** — your platform role (e.g., Portfolio Manager, Enterprise Architect) controls which capabilities are available
 - **The agent's grants determine what's offered** — each agent persona has declared tool grants that scope what it can do. The coworker on the Ops page (Scrum Master) has different grants than the one on the Portfolio page (Portfolio Analyst)
-- **Side-effect actions require approval** — when the coworker wants to create, update, or delete something, it proposes the action and waits for your approval before executing
+- **Approval follows the action's authority** — routine work can run when current policy and your delegation authorize it. Damaging actions, missing authority, and decisions that require your judgment come to you for approval. Your role, the coworker's grants, connection permissions, and work context still limit every action.
 - **Every action is recorded** — all tool calls (not just proposals) are logged with your identity and the agent's identity for audit purposes. View the log at `/platform/ai/authority`
 
 On a business Product's **Direction** page, informational cards and links do
@@ -137,6 +137,6 @@ When you need to add an external tool (MCP server, npm package, API), the cowork
 
 - Be specific. "Show me overdue compliance actions" works better than "what's wrong?"
 - The coworker can create backlog items, register products, assign roles, and more — it's not just a chatbot
-- If the coworker proposes an action (like creating a record), you'll see an approval prompt before anything changes
+- If an action needs your authorization, review its approval card before deciding. Routine work already covered by policy and delegation can run without a new prompt.
 - Each conversation is tied to the page context. If you switch pages, the coworker knows the new context
 - Ask in the words of your business. "Which trucks need restock?" or "Which appointments are missing forms?" is better than guessing the platform's internal module name.

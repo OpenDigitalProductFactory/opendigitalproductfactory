@@ -503,6 +503,20 @@ Accountability is answerability for the work. It is deliberately separate from w
 the room and from what any AI coworker is permitted to do — a coworker doing the work does not
 become accountable for it.
 
+### Who an AI coworker's stage runs for
+
+When a room reaches a stage an AI coworker carries out, the platform schedules that work under a
+person's account. It uses the person the room was requested by or created by. Some rooms record
+neither, for example rooms started from Build Studio. For those, the work runs for the room's
+accountable person, found the same way as above: recorded on the room, inherited from a room
+further up, or the organization's recorded owner. The room's activity says which of those it used.
+
+If no accountable person with an active account can be named, nothing is scheduled. The room
+shows as paused at that stage, with the reason that no accountable person can be named. It does
+not show as dispatched. After an hour it is reported as stuck like any other paused room. Record an
+accountable person on the room, or set the organization's owner, and the next drive cycle schedules
+the work.
+
 ### When an account stops being used
 
 Rooms, Build Studio builds and scheduled coworker tasks belong to an account. If that account stops
