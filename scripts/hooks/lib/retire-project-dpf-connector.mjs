@@ -111,8 +111,11 @@ export function isPlatformWrittenEntry(server, env = process.env) {
   if (parsed.username || parsed.password) return false;
   if (parsed.pathname.replace(/\/+$/, "") !== "/api/mcp/v1") return false;
   if (LOOPBACK_HOSTS.has(parsed.hostname)) return true;
-  const configured = env.DPF_MCP_URL ? originOf(env.DPF_MCP_URL) : null;
-  return configured !== null && parsed.origin === configured;
+  // Either variable names a platform-written origin: Claude's own (BI-D6A6462A)
+  // or the shared one older writers used.
+  return [env.DPF_CLAUDE_MCP_URL, env.DPF_MCP_URL]
+    .map((value) => (value ? originOf(value) : null))
+    .some((configured) => configured !== null && parsed.origin === configured);
 }
 
 export function retireProjectDpfConnector({ root, url, env = process.env }) {

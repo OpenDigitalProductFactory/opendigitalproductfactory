@@ -100,6 +100,8 @@ model CredentialEntry {
   /// Legacy default lookup. Additional accounts are owned by their connection.
   providerId         String?               @unique
   secretRef          String?
+  /// Non-secret upstream workspace binding, currently used by Anthropic API keys.
+  providerWorkspaceId String?
   status             String                @default("unconfigured")
   updatedAt          DateTime              @updatedAt
   clientId           String?

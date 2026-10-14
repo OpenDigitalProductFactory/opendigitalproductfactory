@@ -1,4 +1,9 @@
 {
+  "anthropicWorkspace": {
+    "disclosure": "Organization-scoped key",
+    "label": "Anthropic workspace ID",
+    "help": "Organization keys need a workspace ID. Find it in Claude Console → Settings → Workspaces. Leave blank for a key scoped to one workspace."
+  },
   "progress": {
     "label": "Setup progress",
     "stepAria": "Step {$index} of {$total}: {$label}, {$state}",

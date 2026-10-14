@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { fetchAlertSources, isMonitoringConfigured } from "@/lib/observability/alert-sources";
 import { screenAlertsForSelfDistrust } from "@/lib/observability/alert-self-distrust";
+import { getMonitoringAuthority } from "@/lib/platform-runtime/monitoring-authority";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,14 @@ export async function GET() {
     // unreachable" (a real outage worth a 503 + offline banner). BI-63FF58D2:
     // a persistent "Monitoring offline" chrome on an install that simply never
     // wired up Prometheus/Loki is a false-alarm default for a product we sell.
+    // Loki is always on, so reaching neither source with monitoring switched
+    // off still means no metric alerts by choice (BI-2CE9CBF4).
+    if ((await getMonitoringAuthority()) === "off") {
+      return NextResponse.json(
+        { status: "monitoring-off", data: { alerts: [] } },
+        { headers: NO_CACHE_HEADERS },
+      );
+    }
     if (!isMonitoringConfigured()) {
       return NextResponse.json(
         { status: "not-configured", data: { alerts: [] } },
@@ -42,8 +51,9 @@ export async function GET() {
     );
   }
 
+  const monitoring = (await getMonitoringAuthority()) === "off" ? "off" : "on";
   return NextResponse.json(
-    { status: "success", data: { alerts } },
+    { status: "success", monitoring, data: { alerts } },
     { headers: NO_CACHE_HEADERS },
   );
 }

@@ -47,6 +47,10 @@ export interface AdapterRequest {
    * use this field.
    */
   fetchImpl: typeof fetch;
+  /** Outer runtime layer supplies read-only evidence without reversing the routing dependency. */
+  readLocalThinkingBudgetEvidence?: (
+    apiRoot: string, modelId: string, fetchImpl: typeof fetch,
+  ) => Promise<import("./types").LocalThinkingBudgetEvidence | undefined>;
   messages: ChatMessage[];
   systemPrompt: string;
   tools?: Array<Record<string, unknown>>;

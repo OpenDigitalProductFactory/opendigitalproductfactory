@@ -37,7 +37,8 @@ vi.mock("@/lib/jobs", () => ({ jobs: { createFunction: () => ({}) } }));
 vi.mock("@/lib/jobs/triggers", () => ({ cron: () => ({}) }));
 vi.mock("../quiescence-gates", () => ({ gateAtEntry: vi.fn() }));
 
-import { runBuildPrDeliveryReconcile } from "./build-pr-delivery-reconcile";
+import { observesRoomHead, runBuildPrDeliveryReconcile } from "./build-pr-delivery-reconcile";
+import { createBuildPrDeliveryState, writeBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
 
 function room(overrides: Record<string, unknown>) {
   return {
@@ -130,6 +131,21 @@ describe("runBuildPrDeliveryReconcile — every room with a PR, whichever client
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
+  // BI-ECA50241: the reconciler's own update-branch moves the PR head to
+  // GitHub's merge commit; the room follows it instead of freezing in updating.
+  it("follows a PR head moved by its own update-branch and records the new head", async () => {
+    const roomHead = "a".repeat(40);
+    const mergedHead = "c".repeat(40);
+    const updating = { ...createBuildPrDeliveryState({ repository: "o/r", prNumber: 9, prUrl: "https://github.com/o/r/pull/9" }), status: "updating" as const, lastObservedHeadSha: roomHead };
+    mocks.findMany.mockResolvedValue([room({ id: "updated", headSha: roomHead, workspaceState: writeBuildPrDeliveryState({}, updating) })]);
+    mocks.observe.mockResolvedValue({ ...observation([], "BLOCKED"), headSha: mergedHead });
+
+    const result = await runBuildPrDeliveryReconcile();
+
+    expect(result).toMatchObject({ observed: 1 });
+    expect(mocks.updateMany.mock.calls[0]?.[0]?.data).toMatchObject({ headSha: mergedHead });
+  });
+
   it("arms auto-merge for a green PR in a non-Build-Studio room, and withholds it in a quiet room", async () => {
     mocks.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: { enablePullRequestAutoMerge: { pullRequest: { number: 9 } } } }) });
     mocks.findMany.mockResolvedValue([
@@ -145,5 +161,19 @@ describe("runBuildPrDeliveryReconcile — every room with a PR, whichever client
     expect(String(mocks.fetch.mock.calls[0]?.[1]?.body)).toContain("enablePullRequestAutoMerge");
     const quietWrite = mocks.updateMany.mock.calls.find((call) => call[0].where.id === "quiet")?.[0];
     expect(quietWrite.data.workspaceState.prDelivery.lastError).toBe("withheld:queue");
+  });
+});
+
+describe("observesRoomHead", () => {
+  const head = "a".repeat(40);
+  const other = "b".repeat(40);
+  it("observes the room's own head, and any head when the room has none", () => {
+    expect(observesRoomHead(head, head.toUpperCase(), null)).toBe(true);
+    expect(observesRoomHead(null, other, null)).toBe(true);
+  });
+  it("skips a different head unless the room's head is the one it updated from (#6148)", () => {
+    expect(observesRoomHead(head, other, { status: "checking", lastObservedHeadSha: head })).toBe(false);
+    expect(observesRoomHead(head, other, { status: "updating", lastObservedHeadSha: other })).toBe(false);
+    expect(observesRoomHead(head, other, { status: "updating", lastObservedHeadSha: head })).toBe(true);
   });
 });

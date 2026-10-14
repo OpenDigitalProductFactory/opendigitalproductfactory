@@ -96,6 +96,15 @@ Build Studio reports these states in plain language:
 - **Deployed** — governed release evidence proves the change is live
 - **Needs your decision** — a true conflict, closed PR, or bounded recovery limit requires a person
 
+### When the platform moved on before the pull request opened
+
+A build can reach Ship and then wait while other changes land on the platform. Its change was checked against an older version, so publishing it as-is could undo those newer changes in the files it touched. Build Studio does not publish it. Instead it:
+
+1. Updates its copy of the platform and replays the build's changes on top.
+2. Sends the build back to **Review**, which checks the updated change from scratch: tests, typecheck, change review, guards and acceptance. It then returns to Ship and opens its pull request.
+
+If the build's changes clash with the newer platform changes, nothing is replayed. The build stays in Ship, its activity names the files that clash, and Build Studio tries again later.
+
 A merged pull request does not make the build complete. Completion waits for the
 governed release and live-version evidence. Build Studio does not directly
 merge, force-push, or silently edit a true conflict.

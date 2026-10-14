@@ -1,6 +1,6 @@
 name: Daily Checkpoint Tag
 
-# Cuts a dated checkpoint tag (v<YYYY.MM.DD>) once per day WHEN main has new
+# Cuts a dated checkpoint tag (v<YYYY.MM.DD>) once per day by default WHEN main has new
 # commits since the previous checkpoint, then publishes that checkpoint as a
 # GitHub Release and a set of multi-arch GHCR images.
 #
@@ -42,6 +42,12 @@ on:
   schedule:
     - cron: "40 6 * * *" # daily at 06:40 UTC
   workflow_dispatch:
+    inputs:
+      additional_batch:
+        description: "Publish an additional immutable batch after today's checkpoint when main advanced."
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write # push the checkpoint tag
@@ -60,15 +66,16 @@ jobs:
         with:
           fetch-depth: 0 # full history + tags for describe / rev-list
 
+      - name: Verify checkpoint selection and publication wiring
+        run: node --test scripts/daily-checkpoint-tag.test.mjs
+
       - name: Cut checkpoint tag if main advanced
         id: checkpoint
         env:
           GH_TOKEN: ${{ github.token }}
+          ADDITIONAL_BATCH: ${{ github.event_name == 'workflow_dispatch' && inputs.additional_batch || false }}
         run: |
           set -euo pipefail
-          git fetch --tags --force origin
-
-          today="v$(date -u +%Y.%m.%d)"
 
           # The publish step keys off this output, so it must be written EXACTLY
           # once on every path — a duplicate `tag=` line would leave which value
@@ -79,15 +86,43 @@ jobs:
           publish_tag=""
           trap 'echo "tag=${publish_tag}" >> "$GITHUB_OUTPUT"' EXIT
 
-          # Idempotent: never cut the same day twice (re-runs / dispatch).
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "::error::Canonical checkpoints require the protected main ref."
+            exit 1
+          fi
+          git fetch --tags --force origin
+          daily="v$(date -u +%Y.%m.%d)"
+          today="${daily}"
+          if [ "${ADDITIONAL_BATCH:-false}" = "true" ]; then
+            if [ "${GITHUB_EVENT_NAME}" != "workflow_dispatch" ] || ! [[ "${GITHUB_RUN_NUMBER}" =~ ^[1-9][0-9]*$ ]]; then
+              echo "::error::Additional batches require an explicit dispatch and a valid workflow run number."
+              exit 1
+            fi
+            if ! git rev-parse -q --verify "refs/tags/${daily}" >/dev/null || ! git merge-base --is-ancestor "refs/tags/${daily}" HEAD; then
+              echo "::error::An additional batch requires today's checkpoint in the source lineage."
+              exit 1
+            fi
+            today="${daily}-dev-recovery.${GITHUB_RUN_NUMBER}"
+          fi
+
+          # Default remains once per day; an additional run owns one immutable tag.
           if git rev-parse -q --verify "refs/tags/${today}" >/dev/null; then
+            if [ "${ADDITIONAL_BATCH:-false}" = "true" ] && [ "$(git rev-list -n 1 "${today}")" != "$(git rev-parse HEAD)" ]; then
+              echo "::error::Existing batch tag belongs to different source; refusing to move it."
+              exit 1
+            fi
             echo "Checkpoint ${today} already exists - nothing to do."
+            exit 0
+          fi
+          if [ "${ADDITIONAL_BATCH:-false}" = "true" ] && [ -n "$(git tag --points-at HEAD --list "${daily}-dev-recovery.*")" ]; then
+            echo "This source already has an additional checkpoint - nothing to do."
             exit 0
           fi
 
           # Most recent existing dated checkpoint (v20YY.MM.DD), if any. Zero-
           # padded dates sort chronologically under -refname.
           prev="$(git tag --list 'v20[0-9][0-9].[0-1][0-9].[0-3][0-9]' --sort=-refname | head -n1 || true)"
+          if [ "${ADDITIONAL_BATCH:-false}" = "true" ]; then prev="${daily}"; fi
 
           if [ -n "${prev}" ]; then
             new_commits="$(git rev-list --count "${prev}..HEAD")"

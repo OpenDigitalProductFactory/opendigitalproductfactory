@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 vi.mock("@dpf/db", () => ({ prisma: {} }));
-import { loadApprovalOutcomes, readApprovalOutcome, recordApprovalOutcome } from "./approval-outcome-store";
+import { listPendingApprovalOutcomes, loadApprovalOutcomes, readApprovalOutcome, recordApprovalOutcome } from "./approval-outcome-store";
 
 const now = new Date("2026-09-27T12:00:00Z");
 const row = { id: "e1", delegatingUserId: "u1", coworkerAgentId: "a1", threadId: "thread1", taskRunId: null, status: "approved", createdAt: now, expiresAt: now, toolExecutions: [] as unknown[] };
 function fixture() {
   const findFirst = vi.fn(async ({ where }: { where: Record<string, unknown> }) => where.delegatingUserId === "u1" && (!where.coworkerAgentId || where.coworkerAgentId === "a1") ? row : null);
   const create = vi.fn(async ({ data }: { data: unknown }) => { row.toolExecutions = [data]; return data; });
-  const findMany = vi.fn(async (_args: unknown) => [row]);
+  const findMany = vi.fn(async (_args: unknown): Promise<Array<Record<string, unknown>>> => [row]);
   return { coworkerActionEnvelope: { findFirst, findMany }, toolExecution: { create } };
 }
 describe("approval receipt owner and assistant isolation", () => {
@@ -40,5 +40,60 @@ describe("approval receipt owner and assistant isolation", () => {
     const db = fixture();
     await expect(recordApprovalOutcome("e1", "u2", { status: "executed", message: "Done" }, db as never)).rejects.toThrow();
     expect(db.toolExecution.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("caller-scoped pending approval discovery", () => {
+  const binding = {
+    writerToolName: "record_initiative_evidence", itemId: "BI-EXAMPLE", gate: "research",
+    artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo",
+      commitSha: "a".repeat(40), path: "docs/design.md", providerBlobId: "b".repeat(40) },
+  };
+  const pending = {
+    ...row, status: "proposed", expiresAt: new Date(now.getTime() + 60_000),
+    taskRunId: "TR-1", manifestActionId: binding.writerToolName, toolExecutions: [],
+    taskRun: { userId: "u1", a2aMetadata: { initiativeReviewBinding: { ...binding, secret: "private-binding-data" }, apiTokenId: "private-token" } },
+    argsJson: { secret: "private-arguments" }, rationale: "private-rationale",
+  };
+  it("queries only this user and assistant's live requests and returns safe immutable locators", async () => {
+    const db = fixture();
+    db.coworkerActionEnvelope.findMany.mockResolvedValue([pending]);
+    const result = await listPendingApprovalOutcomes("u1", "a1", db as never, now);
+    expect(db.coworkerActionEnvelope.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { delegatingUserId: "u1", coworkerAgentId: "a1", status: "proposed",
+        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 21,
+    }));
+    expect(result).toMatchObject({ hasMore: false, approvals: [{
+      envelopeId: "e1", state: "waiting", delegatingUserId: "u1", coworkerAgentId: "a1",
+      expiresAtIso: pending.expiresAt.toISOString(), taskRunId: "TR-1", reviewBinding: binding,
+      inboxHref: "/workspace/inbox?approval=e1#approval-result",
+    }] });
+    expect(JSON.stringify(result)).not.toContain("private-");
+  });
+  it.each([["", "a1"], ["u1", undefined]])("never queries without authenticated %s/%s", async (user, agent) => {
+    const db = fixture();
+    expect(await listPendingApprovalOutcomes(user, agent, db as never, now))
+      .toMatchObject({ approvals: [], hasMore: false });
+    expect(db.coworkerActionEnvelope.findMany).not.toHaveBeenCalled();
+  });
+  it("reports a bounded page without pretending extra requests do not exist", async () => {
+    const db = fixture();
+    db.coworkerActionEnvelope.findMany.mockResolvedValue(Array.from({ length: 21 }, (_, i) => ({ ...pending, id: `e${i}` })));
+    const result = await listPendingApprovalOutcomes("u1", "a1", db as never, now);
+    expect(result.approvals).toHaveLength(20);
+    expect(result.hasMore).toBe(true);
+    expect(result.inboxHref).toBe("/workspace/inbox");
+  });
+  it.each([
+    { userId: "u2", a2aMetadata: { initiativeReviewBinding: binding } },
+    { userId: "u1", a2aMetadata: { initiativeReviewBinding: { ...binding, writerToolName: "record_initiative_architecture_review" } } },
+    { userId: "u1", a2aMetadata: { initiativeReviewBinding: { secret: "private-malformed" } } },
+  ])("does not expose a foreign, conflicting or malformed task binding", async (taskRun) => {
+    const db = fixture();
+    db.coworkerActionEnvelope.findMany.mockResolvedValue([{ ...pending, taskRun }]);
+    const result = await listPendingApprovalOutcomes("u1", "a1", db as never, now);
+    expect(result.approvals[0].reviewBinding).toBeNull();
+    expect(JSON.stringify(result)).not.toContain("private-");
   });
 });

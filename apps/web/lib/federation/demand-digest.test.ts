@@ -4,6 +4,8 @@ vi.mock("@/lib/queue/queue-telemetry", () => ({ recordQueueTransition: vi.fn().m
 
 import type { DemandDigestV1 } from "@dpf/db/federated-demand-contract";
 
+import { recordQueueTransition } from "@/lib/queue/queue-telemetry";
+
 import {
   compareIncomingDemandDigest,
   reconcileDemandDigests,
@@ -174,5 +176,46 @@ describe("reconcileDemandDigests", () => {
     for (const id of ["out_a", "out_b", "out_c"]) {
       expect(update).toHaveBeenCalledWith({ where: { mirrorId: id }, data: expect.objectContaining({ syncStatus: "synced" }) });
     }
+  });
+
+  it("a repeated digest pass over unchanged, already-pending records writes no new enqueued events (BI-1A8887C7)", async () => {
+    // Live evidence 2026-10-14: ~1,978 pending records on one trusted link were
+    // re-scheduled on EVERY five-minute digest cycle because the peer still
+    // needed them (their jobs could not drain), writing ~700K `enqueued`
+    // QueueTelemetryEvent rows a day and resetting each job's retry clock.
+    // A pending record already has a queued delivery job; the peer needing it
+    // again is not a new state transition.
+    const update = vi.fn().mockResolvedValue({});
+    const queue = queueDelegates();
+    const db = {
+      ...queue,
+      federationLink: { findMany: vi.fn().mockResolvedValue([
+        { linkId: "link_1", peerAuthorityUrl: "https://peer.example", peerTokenEnc: "encrypted", role: "same-org-peer" },
+      ]) },
+      federatedRecordMirror: {
+        findMany: vi.fn().mockImplementation((args: { cursor?: unknown }) => Promise.resolve(args.cursor ? [] : [
+          { mirrorId: "out_pending", federationLinkId: "link_1", version: 1, syncStatus: "pending", payload: {
+            activity: "dpf.demand.proposed", eventId: "evt_p", queuedAt: digest.generatedAt,
+            envelope: { ...digest.records[0], specVersion: "dpf.demand/1", originInstallationId: "inst_origin" },
+          } },
+        ])),
+        update,
+      },
+    } as unknown as DemandDigestDb;
+    const send = vi.fn().mockResolvedValue({
+      ok: true, status: 200, body: { ok: true, checked: 1, needs: [{ originRecordRef: "ref_missing", reason: "missing" }] },
+    });
+    vi.mocked(recordQueueTransition).mockClear();
+
+    for (const minute of ["06:10", "06:15", "06:20"]) {
+      await reconcileDemandDigests(db, {
+        installationId: "inst_origin", projectionSecret: "a".repeat(64),
+      }, { now: new Date(`2026-07-20T${minute}:00Z`), decryptToken: () => "dpflink_token", send });
+    }
+
+    expect(send).toHaveBeenCalledTimes(3);
+    expect(queue.workItem.upsert).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+    expect(recordQueueTransition).not.toHaveBeenCalledWith(expect.objectContaining({ transition: "enqueued" }));
   });
 });

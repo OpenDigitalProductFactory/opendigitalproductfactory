@@ -6,6 +6,15 @@
 
 DPF tracks platform work, common company capabilities, and archetype-specific functionality in the same backlog. That is correct for execution, but it makes investment planning blurry unless every epic and backlog item can say what kind of scope it serves.
 
+Scope classification and product association also remain intact during acceptance.
+A medium product-linked item can use valid acceptance criteria in its body:
+after delivery passes, its authorized completion attempt retains an immutable
+criteria baseline and recovery issues an independent review request. The backlog
+MCP read carries the requesting person's context so reviewer room admission is
+checked. A product association must not be removed to obtain the platform merge
+shortcut. See [the readiness runbook](initiative-readiness-runbook.md) for current
+baseline, evidence and reviewer prerequisites.
+
 Backlog archetype scope is the planning facet that separates:
 
 | Scope kind | Meaning | Typical examples |

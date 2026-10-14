@@ -44,16 +44,16 @@ databaseSuite("admission by points in flight on PostgreSQL (BI-3430B3A4)", () =>
 
   it("counts in-flight points from real rows and applies the one-large-item floor", async () => {
     await item("BI-ADM-FLIGHT-1", "in-progress", "medium");   // 3 in flight
-    await item("BI-ADM-FLIGHT-2", "awaiting-acceptance", "small"); // 1 in flight
-    await item("BI-ADM-SMALL", "open", "small");   // 4 + 1 = 5 <= 8: admit
-    await item("BI-ADM-LARGE", "open", "large");   // 4 + 8 = 12 > 8: refuse autonomously
+    await item("BI-ADM-FLIGHT-2", "awaiting-acceptance", "small"); // delivered, not in flight (BI-77313ADD)
+    await item("BI-ADM-SMALL", "open", "small");   // 3 + 1 = 4 <= 8: admit
+    await item("BI-ADM-LARGE", "open", "large");   // 3 + 8 = 11 > 8: refuse autonomously
 
     const small = await evaluateItemAdmission(db, { itemId: "BI-ADM-SMALL", startKind: "autonomous" });
-    expect(small).toMatchObject({ verdict: "admit", portfolioId: "p-admission-test", inFlightPoints: 4, itemPoints: 1, allowance: 8, allowanceSource: "floor" });
+    expect(small).toMatchObject({ verdict: "admit", portfolioId: "p-admission-test", inFlightPoints: 3, itemPoints: 1, allowance: 8, allowanceSource: "floor" });
 
     const large = await evaluateItemAdmission(db, { itemId: "BI-ADM-LARGE", startKind: "autonomous" });
-    expect(large).toMatchObject({ verdict: "refuse", inFlightPoints: 4, itemPoints: 8 });
-    expect(large.reason).toContain("12 of 8 points");
+    expect(large).toMatchObject({ verdict: "refuse", inFlightPoints: 3, itemPoints: 8 });
+    expect(large.reason).toContain("11 of 8 points");
 
     const person = await evaluateItemAdmission(db, { itemId: "BI-ADM-LARGE", startKind: "human" });
     expect(person.verdict).toBe("warn");

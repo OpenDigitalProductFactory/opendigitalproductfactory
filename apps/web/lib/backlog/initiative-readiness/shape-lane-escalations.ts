@@ -67,9 +67,9 @@ export function researchLaneEscalation(): TerminalInitiativeRecovery {
  *   item "cannot close"; adding a heading closed it minutes later.
  * - The criteria are there but acceptance is still unmet. Platform work is
  *   accepted when its merge through branch protection is recognized. Other
- *   medium work needs an independent objective-mapping receipt, and no lane
- *   persists a baseline from body criteria yet, which is the gap left open on
- *   BI-0F8E39D5.
+ *   medium work needs an independent objective-mapping receipt. The authorized
+ *   completion mutation now retains body criteria when source and author
+ *   prerequisites are available; recovery names those prerequisites otherwise.
  */
 export function bodyBaselineEscalation(decision: InitiativeReadinessDecision): TerminalInitiativeRecovery {
   const criteriaMissing = [...decision.blockers, ...decision.unmet]
@@ -84,10 +84,10 @@ export function bodyBaselineEscalation(decision: InitiativeReadinessDecision): T
     }
     : {
       accountableRole: "acceptance-reviewer" as const,
-      toolName: "record_execution_evidence" as const,
+      toolName: "update_backlog_item_status" as const,
       grant: "backlog_write" as const,
       reason: "body-baseline-unpersisted" as const,
-      nextAction: "Platform work at this shape is accepted once its merge through branch protection is recognized: bind the Workroom head to the merged commit, cite manual_check (and ux_verified when a UI changed) with record_execution_evidence, and read any merge-signal reason on the refusal. Other work at this shape needs an independent objective-mapping receipt, and no lane persists a baseline from body criteria yet (BI-0F8E39D5), so it cannot close through a reviewer yet. Do not seek spec approval; this shape does not owe one.",
+      nextAction: "The body has readable criteria but no retained criteria version. Retry completion with update_backlog_item_status and a valid completionEvidence manifest to capture it through the authorized transition. Capture requires one current Workroom with a full repository/head identity, author provenance and retained document storage. Then record fresh passing evidence after that version and request the exact independent acceptance reviewer route. Product-linked work still requires independent acceptance; no spec approval is needed.",
     };
   return { reviewerRoutes: [], unroutable: [], escalations: [escalation] };
 }

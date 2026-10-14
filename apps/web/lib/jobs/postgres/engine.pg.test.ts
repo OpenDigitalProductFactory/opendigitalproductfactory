@@ -271,7 +271,7 @@ describe.skipIf(!DATABASE_URL)("Postgres durable-job engine (real database)", ()
     let releaseDeadWorker!: () => void;
     const deadWorkerGate = new Promise<void>((r) => (releaseDeadWorker = r));
     let gateFirstAttempt = true;
-    const fn = define({ id: "crashy", triggers: [{ event: "t/crash" }] }, async ({ step }: never) => {
+    const fn = define({ id: "crashy", recovery: "replay-safe", triggers: [{ event: "t/crash" }] }, async ({ step }: never) => {
       const s = step as never as import("../types").JobStepTools;
       await s.run("first", async () => ++calls.first);
       return s.run("second", async () => {
@@ -327,6 +327,41 @@ describe.skipIf(!DATABASE_URL)("Postgres durable-job engine (real database)", ()
     expect(run.error).toMatch(/^lease_expired_exhausted/);
     expect(failures).toHaveLength(1);
     expect(failures[0]).toMatch(/^lease_expired_exhausted/);
+  });
+
+  // BI-4FA0EFEB (AC-DDL-RECOVER-CLASS): a process-bound run is never replayed after its worker died.
+  it.each([
+    ["declared process-bound, with retries left", { recovery: "process-bound", retries: 2 }],
+    ["undeclared, with no retries", { retries: 0 }],
+    ["with neither recovery nor retries declared", {}],
+  ])("cancels a run (%s) after process loss, through onFailure, without re-running it", async (_label, declared) => {
+    const failures: string[] = [];
+    let calls = 0;
+    const fn = define(
+      {
+        id: "bound",
+        ...declared,
+        triggers: [{ event: "t/bound" }],
+        onFailure: async ({ error }: { error: Error }) => { failures.push(error.message); },
+      } as never,
+      async ({ step }: never) => (step as never as import("../types").JobStepTools).run("turn", async () => {
+        calls++;
+        return new Promise(() => {}); // the worker "dies" mid-turn
+      }),
+    );
+    await send({ name: "t/bound" });
+    await store.fanOutEvents(pool, [{ functionKey: fn.id, maxAttempts: maxAttemptsFor(fn), eventNames: fn.eventNames, cancelOn: [] }]);
+    const [claimed] = await store.claimRuns(pool, { owner: "dead", leaseMs: 60_000, limit: 1, lanes: () => [], functionIds: [fn.id] });
+    void executeRun(pool, fn, claimed!, { owner: "dead", leaseMs: 60_000 });
+    await new Promise((r) => setTimeout(r, 20));
+    await pool.query(`UPDATE "JobRun" SET "leaseExpiresAt" = now() - interval '1 second' WHERE status = 'running'`);
+    const survivor = worker([fn]);
+    await survivor.maintain();
+    await survivor.drain();
+    const [run] = await runRow("bound");
+    expect(run).toMatchObject({ status: "failed", error: store.PROCESS_LOSS_ERROR });
+    expect(failures).toEqual([store.PROCESS_LOSS_ERROR]);
+    expect(calls).toBe(1);
   });
 
   it("resumes a run parked mid-sleep or mid-wait under a new worker after a restart (AC-M3-LEASE)", async () => {

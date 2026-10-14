@@ -8,6 +8,7 @@ import { cleanup, render as rtlRender, screen, within } from "@testing-library/r
 import type { PortfolioFlowWithCost, ShapeFlowView } from "@/lib/work-management/area-flow.server";
 import { getWorkShape } from "@/lib/work-management/work-shapes";
 import { buildShapeFlowMap } from "@/lib/work-management/workroom-flow-map";
+import { computeShapeStepMeasures } from "@/lib/work-management/shape-step-measures";
 
 import { translate } from "@dpf/i18n";
 
@@ -37,7 +38,7 @@ const flow = (key: PortfolioFlowWithCost["key"], overrides: Partial<PortfolioFlo
   distribution: { feature: 4, defect: 2, risk: 1, debt: 0 },
   shapes: [{ shapeKey: "delivery-small", shapeRef: "delivery-small@1.0.0", roomsInFlow: 5, flowTimeP50Ms: 20 * H, runs: 6, bottleneck: { stageKey: "merge", roomsHeld: 3, cause: "awaiting-person" } }],
   points: { inFlight: 34, delivered: 21 },
-  aiUsd: 1.5,
+  ai: { runs: 4, tokens: 12_000, recordedUsd: 1.5, subscriptionTokens: 0, durationMs: 0 },
   ...overrides,
 });
 
@@ -50,8 +51,15 @@ describe("PortfolioFlowTiles", () => {
     expect(screen.getByText("12%")).toBeInTheDocument();
     expect(screen.getByText("2.3")).toBeInTheDocument();
     expect(screen.getByText("34 pts")).toBeInTheDocument();
-    expect(screen.getByText(/AI \$1\.50 on these rooms, last 28 days/)).toBeInTheDocument();
+    expect(screen.getByText(/AI on these rooms, last 28 days: \$1\.50 recorded/)).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /Median flow time per week/ })).toBeInTheDocument();
+  });
+
+  it("names subscription AI use as tokens, never as $0", () => {
+    const ai = { runs: 988, tokens: 832_337, recordedUsd: null, subscriptionTokens: 832_337, durationMs: 0 };
+    render(<PortfolioFlowTiles flow={flow("manufactureAndDeliver", { ai })} areaHref="/area/delivery?view=work" t={t} />);
+    expect(screen.getByText(/AI on these rooms, last 28 days: subscription: \$0 recorded, 832\.3k tokens/)).toBeInTheDocument();
+    expect(screen.queryByText(/\$0\.00/)).toBeNull();
   });
 
   it("links each shape to its drill-in and names where it waits", () => {
@@ -76,10 +84,23 @@ describe("ShapeFlowDrillIn", () => {
     liveCounts: new Map([[`wr:${definition.key}@${definition.version}:merge`, { wip: 3, depth: 3 }]]),
     now: new Date(),
   });
+  const shapeRef = `${definition.key}@${definition.version}`;
+  const H = 3_600_000;
+  const today = new Date().toISOString().slice(0, 10);
+  const firstKey = definition.stages[0]!.key;
+  const stepMeasures = computeShapeStepMeasures({
+    shapeRef,
+    stages: model.stages.map((stage) => ({ key: stage.key, title: stage.title })),
+    // The first step has history; the rest do not.
+    snapshots: [{ queueKey: `wr:${shapeRef}:${firstKey}`, period: today, throughput: 6, cycleP50Ms: 10 * H, processP50Ms: 2 * H, firstPassYield: 0.5 }],
+    liveCounts: new Map([[`wr:${shapeRef}:merge`, { wip: 3, depth: 3 }]]),
+    now: new Date(),
+  });
   const view: ShapeFlowView = {
     model,
     versions: [definition.version, "0.9.0"],
     roomsAtStep: [{ capsuleId: "WC-1", title: "Fix login", href: "/workspace/cases/x", state: "blocked", cause: "conformance_pause" }],
+    stepMeasures,
   };
 
   it("draws the shape across its rooms with queue counts, a version picker and the rooms at a step", () => {
@@ -89,6 +110,22 @@ describe("ShapeFlowDrillIn", () => {
     expect(within(versions).getByRole("link", { name: `v${definition.version}` })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Fix login" })).toBeInTheDocument();
     expect(screen.getByText("Blocked: conformance pause")).toBeInTheDocument(); // no deviation recorded on this room
+  });
+
+  it("shows a data box per step and the timeline ladder: process above, wait below, flow efficiency", () => {
+    render(<ShapeFlowDrillIn view={view} backHref="/area/delivery?view=work" baseHref="/area/delivery?view=work" stageKey={null} t={t} />);
+    const steps = screen.getByRole("region", { name: "Where the time goes, step by step" });
+    // Measured step: dwell, process and first-pass yield.
+    expect(within(steps).getByText("10h")).toBeInTheDocument();
+    expect(within(steps).getAllByText("2h").length).toBeGreaterThan(0);
+    expect(within(steps).getByText("50%")).toBeInTheDocument();
+    // Merge: its queue, and too few exits to measure.
+    expect(within(steps).getByText("3 waiting · 3 in step")).toBeInTheDocument();
+    expect(within(steps).getAllByText(/Too few to measure \(0 of 5 exits\)/).length).toBeGreaterThan(0);
+    // Ladder: 2h process, 8h wait, 20% efficiency; the unmeasured steps are named as left out.
+    expect(within(steps).getByRole("list", { name: /Timeline: process time above/ })).toBeInTheDocument();
+    expect(within(steps).getByText(/Process 2h · wait 8h · flow efficiency 20%\./)).toBeInTheDocument();
+    expect(within(steps).getByText(/step\(s\) left out: too few exits to measure/)).toBeInTheDocument();
   });
 });
 

@@ -9,6 +9,9 @@ const {
   mockAiInferenceTokensInc,
   mockAiInferenceErrorsInc,
   mockProviderFetch,
+  mockGpuFree,
+  mockAcquireSlot,
+  mockReleaseSlot,
 } = vi.hoisted(() => ({
   mockPrisma: {
     aiProviderConnection: { findUnique: vi.fn() },
@@ -23,7 +26,24 @@ const {
   mockAiInferenceTokensInc: vi.fn(),
   mockAiInferenceErrorsInc: vi.fn(),
   mockProviderFetch: vi.fn(),
+  mockGpuFree: vi.fn(),
+  mockAcquireSlot: vi.fn(),
+  mockReleaseSlot: vi.fn(),
 }));
+
+vi.mock("./host-gpu-admission", () => ({ assertLocalGpuFree: mockGpuFree }));
+vi.mock("@/lib/routing/local-provider-capacity", () => ({
+  assertProviderDispatchCapacity: vi.fn(),
+  assertLocalProviderCapacityAvailable: vi.fn(),
+}));
+vi.mock("./inference-admission", async importOriginal => {
+  const actual = await importOriginal<typeof import("./inference-admission")>();
+  return { ...actual, acquireInferenceSlot: async (...args: Parameters<typeof actual.acquireInferenceSlot>) => {
+    const release = await actual.acquireInferenceSlot(...args);
+    mockAcquireSlot(...args);
+    return () => { release(); mockReleaseSlot(); };
+  } };
+});
 
 vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
@@ -45,7 +65,7 @@ vi.mock("@/lib/metrics", () => ({
 }));
 
 vi.mock("../routing/execution-adapter-registry", () => ({
-  getExecutionAdapter: vi.fn(() => ({ execute: mockAdapterExecute })),
+  getExecutionAdapter: vi.fn(() => ({ type: "chat", execute: mockAdapterExecute })),
   registerExecutionAdapter: vi.fn(),
 }));
 
@@ -55,8 +75,8 @@ vi.mock("../routing/image-gen-adapter", () => ({}));
 vi.mock("../routing/embedding-adapter", () => ({}));
 vi.mock("../routing/transcription-adapter", () => ({}));
 vi.mock("../routing/async-adapter", () => ({}));
-
-vi.mock("./provider-inference-transport", () => ({
+vi.mock("./provider-inference-transport", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./provider-inference-transport")>(),
   providerInferenceFetch: mockProviderFetch,
 }));
 
@@ -64,8 +84,64 @@ import { callProvider } from "./ai-inference";
 import { _setAdapterTelemetryWriteOverrideForTests } from "../routing/adapter-telemetry-writer";
 
 describe("callProvider", () => {
+  it("removes a cancelled caller queued behind the shared local holder", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "local", status: "active", authMethod: "none",
+      baseUrl: "http://localhost:12434/v1", endpoint: null,
+    });
+    const { withInferenceCancellation } = await import("./inference-admission");
+    const { getResourceLane, LOCAL_INFERENCE_LANE_KEY, withLocalInferenceLock } =
+      await import("../queue/resource-lane");
+    let release!: () => void;
+    let entered!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const holder = withLocalInferenceLock(async () => { entered(); await held; });
+    await started;
+    const caller = new AbortController();
+    const reason = new Error("utility expired in local queue");
+    let observed: unknown;
+    const waiting = withInferenceCancellation(caller.signal,
+      () => callProvider("local", "test-model", [], "bounded utility"));
+    const settled = waiting.catch(error => { observed = error; });
+    try {
+      await vi.waitFor(() => expect(getResourceLane(LOCAL_INFERENCE_LANE_KEY).depth()).toBe(1));
+      caller.abort(reason);
+      await vi.waitFor(() => expect(observed).toBe(reason));
+      expect(getResourceLane(LOCAL_INFERENCE_LANE_KEY).depth()).toBe(0);
+      expect(mockAdapterExecute).not.toHaveBeenCalled();
+      expect(mockAcquireSlot).not.toHaveBeenCalled();
+    } finally {
+      release();
+      await holder;
+      await settled;
+    }
+  });
+
+  it("retains caller cancellation when dispatch selects the parent's local transport", async () => {
+    const { withInferenceCancellation } = await import("./inference-admission");
+    const caller = new AbortController();
+    const reason = new Error("utility expired during governed dispatch");
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "local", status: "active", authMethod: "none",
+      baseUrl: "http://127.0.0.1:1", endpoint: null,
+    });
+    mockAdapterExecute.mockImplementationOnce(context => {
+      caller.abort(reason);
+      return context.fetchImpl("http://127.0.0.1:1/");
+    });
+    await expect(withGovernedInferenceDeadline({ deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+      verifyAuthority: async () => true }, () => withInferenceCancellation(caller.signal,
+      () => callProvider("local", "test-model", [], "bounded utility"))))
+      .rejects.toBe(reason);
+    expect(mockAdapterExecute).toHaveBeenCalledOnce();
+    expect(mockProviderFetch).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGpuFree.mockReset().mockResolvedValue(undefined);
+    mockAdapterExecute.mockReset();
     mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ status: "active" });
     mockStartTimer.mockReturnValue(vi.fn());
     mockAdapterExecute.mockResolvedValue({
@@ -75,6 +151,34 @@ describe("callProvider", () => {
       inferenceMs: 12,
       raw: {},
     });
+  });
+
+  it("waits for admission before inspecting the GPU and releases on deferral", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "openai", status: "active", authMethod: "api_key", authHeader: "Authorization",
+      baseUrl: "https://api.openai.com/v1", endpoint: null,
+    });
+    mockGetDecryptedCredential.mockResolvedValue({ secretRef: "test-key" });
+    const busy = new Error("GPU busy");
+    mockGpuFree.mockRejectedValueOnce(busy);
+    await expect(callProvider("openai", "model", [{ role: "user", content: "Hi" }], "Help"))
+      .rejects.toBe(busy);
+    expect(mockAcquireSlot.mock.invocationCallOrder[0]).toBeLessThan(mockGpuFree.mock.invocationCallOrder[0]);
+    expect(mockReleaseSlot).toHaveBeenCalledOnce();
+    expect(mockAdapterExecute).not.toHaveBeenCalled();
+  });
+
+  it("delegates local chat host checks to the shared lane instead of rejecting an active build", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "local", status: "active", authMethod: "none", authHeader: null,
+      baseUrl: "http://localhost:12434/v1", endpoint: null,
+    });
+    await expect(callProvider("local", "local-model", [{ role: "user", content: "Hi" }], "Help"))
+      .resolves.toMatchObject({ content: "ok" });
+    expect(mockGpuFree).toHaveBeenCalledOnce();
+    expect(mockGpuFree.mock.invocationCallOrder[0]).toBeLessThan(mockAdapterExecute.mock.invocationCallOrder[0]);
+    expect(mockAcquireSlot).not.toHaveBeenCalled();
+    expect(mockReleaseSlot).not.toHaveBeenCalled();
   });
 
   it.each(["active", "degraded"])("preserves %s legacy activation while its default account is unconfigured", async status => {
@@ -118,6 +222,13 @@ describe("callProvider", () => {
     expect(mockAdapterExecute).toHaveBeenCalledWith(expect.objectContaining({
       fetchImpl: mockProviderFetch,
     }));
+  });
+
+  it("passes the configured Anthropic workspace to the execution adapter", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({ providerId: "anthropic", status: "active", authMethod: "api_key", authHeader: "x-api-key", baseUrl: "https://api.anthropic.com/v1", endpoint: null });
+    mockGetDecryptedCredential.mockResolvedValueOnce({ secretRef: "test-key", providerWorkspaceId: "wrkspc_accountA" });
+    await callProvider("anthropic", "claude-model", [{ role: "user", content: "hi" }], "system");
+    expect(mockAdapterExecute).toHaveBeenCalledWith(expect.objectContaining({ provider: expect.objectContaining({ headers: expect.objectContaining({ "anthropic-workspace-id": "wrkspc_accountA", "x-api-key": "test-key" }) }) }));
   });
 
   it("routes Codex OAuth execution through the ChatGPT backend", async () => {
@@ -494,4 +605,21 @@ describe("callProvider", () => {
     )).rejects.toThrow(/cannot enforce required tool choice/i);
     expect(mockAdapterExecute).not.toHaveBeenCalled();
   });
+});
+
+import { withGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
+
+it("blocks every paid fallback before adapter dispatch when parent authority is lost", async () => {
+  vi.clearAllMocks();
+  let valid = true;
+  await withGovernedInferenceDeadline({ deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+    verifyAuthority: async () => valid }, async () => {
+    valid = false;
+    for (const provider of ["openai", "anthropic-sub", "codex"]) {
+      await expect(callProvider(provider, "review-model", [], "Review the diff"))
+        .rejects.toThrow("authority-lost");
+    }
+  });
+  expect(mockAdapterExecute).not.toHaveBeenCalled();
+  expect(mockPrisma.modelProvider.findUnique).not.toHaveBeenCalled();
 });

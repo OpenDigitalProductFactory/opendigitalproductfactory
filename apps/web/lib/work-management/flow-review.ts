@@ -12,7 +12,9 @@
  *
  * The signal's source id is the stage queue and the cause, so the same pile
  * keeps one identity across reviews; a different cause at the same step is a
- * different problem.
+ * different problem. A step's rooms can sit in several portfolios, so the
+ * review merges them into one finding per step and cause: one touch per pile
+ * per review, counting every room held there.
  */
 import type { CreateOrTouchImprovementSignalInput } from "@/lib/improvement-flywheel/signals";
 
@@ -29,25 +31,35 @@ export type FlowBottleneckFinding = {
   stageKey: string;
   cause: string;
   roomsHeld: number;
-  portfolio: PortfolioFlow["key"];
+  /** Every portfolio with rooms held at this step for this cause. */
+  portfolios: PortfolioFlow["key"][];
 };
 
 export function findFlowBottlenecks(flows: readonly Pick<PortfolioFlow, "key" | "shapes">[]): FlowBottleneckFinding[] {
-  const findings: FlowBottleneckFinding[] = [];
+  const byPile = new Map<string, FlowBottleneckFinding>();
   for (const flow of flows) {
     for (const shape of flow.shapes) {
-      if (!shape.bottleneck || shape.bottleneck.roomsHeld < MIN_ROOMS_HELD) continue;
-      findings.push({
-        queueKey: workroomStageQueueKey(shape.shapeRef, shape.bottleneck.stageKey),
+      if (!shape.bottleneck) continue;
+      const queueKey = workroomStageQueueKey(shape.shapeRef, shape.bottleneck.stageKey);
+      const key = `${queueKey}|${shape.bottleneck.cause}`;
+      const pile = byPile.get(key);
+      if (pile) {
+        pile.roomsHeld += shape.bottleneck.roomsHeld;
+        if (!pile.portfolios.includes(flow.key)) pile.portfolios.push(flow.key);
+        continue;
+      }
+      byPile.set(key, {
+        queueKey,
         shapeRef: shape.shapeRef,
         stageKey: shape.bottleneck.stageKey,
         cause: shape.bottleneck.cause,
         roomsHeld: shape.bottleneck.roomsHeld,
-        portfolio: flow.key,
+        portfolios: [flow.key],
       });
     }
   }
-  return findings.sort((a, b) => b.roomsHeld - a.roomsHeld);
+  // The threshold applies to the whole pile, not to one portfolio's share of it.
+  return [...byPile.values()].filter((pile) => pile.roomsHeld >= MIN_ROOMS_HELD).sort((a, b) => b.roomsHeld - a.roomsHeld);
 }
 
 export function bottleneckSignal(finding: FlowBottleneckFinding, shapeTitle: string): CreateOrTouchImprovementSignalInput {
@@ -58,7 +70,7 @@ export function bottleneckSignal(finding: FlowBottleneckFinding, shapeTitle: str
     title: `Work piles up at "${finding.stageKey}" in ${shapeTitle} (${why})`,
     description: [
       `The daily flow review found ${finding.roomsHeld} rooms held at step "${finding.stageKey}" of ${finding.shapeRef} at once (${why}).`,
-      `Portfolio: ${finding.portfolio}. Stage queue: ${finding.queueKey}.`,
+      `${finding.portfolios.length > 1 ? "Portfolios" : "Portfolio"}: ${finding.portfolios.join(", ")}. Stage queue: ${finding.queueKey}.`,
       "Where to look: the shape's flow map on the area Work view shows the step's queue and typical time; each room's page shows why it is held.",
       "This item is filed once the same pile recurs across daily reviews; one that clears on its own never reaches the backlog.",
     ].join("\n\n"),

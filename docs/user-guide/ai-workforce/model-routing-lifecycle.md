@@ -194,6 +194,12 @@ The rollout is cumulative and ordered: compiler shadow → admin preview → onb
 | Provider posture drifts from its attestation | The owner receives an attention item; restricted routing stays blocked until the posture or evidence is reviewed. |
 | A workload cohort is small | Provider/model totals remain available, but workload-class detail stays hidden until the privacy threshold is met. |
 
+## Local requests while background work is running
+
+Local coworker requests and background builds share one inference queue. A running request finishes before the next starts. Interactive requests normally run ahead of waiting background work; older background requests eventually advance so they are not left waiting indefinitely.
+
+Waiting has its own deadline, separate from the model's generation deadline. If that wait expires, the request is removed from the queue and will not run later. Work already queued inside DPF waits its turn; a busy signal after admission means the host or model runner is occupied outside that queue. A completed response on an idle model does not prove the queue works correctly under background load.
+
 ## Provider-Specific Notes
 
 ### Anthropic (OAuth Subscription)

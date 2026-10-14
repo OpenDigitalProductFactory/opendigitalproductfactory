@@ -9,8 +9,9 @@
 // It feeds waivers W2 and W6.
 //
 // It never executes a tool and never writes: every dependency is injected,
-// and scripts/approval-convergence-probe.ts runs it on a session the database
-// itself holds read-only. Anything that throws is reported, never retried.
+// and approval-convergence-probe-run.ts (the MCP tool and the local script)
+// wires them onto transactions the database itself holds read-only. Anything
+// that throws is reported, never retried.
 import type { CoworkerAuthorityDecision, CoworkerAuthorityInput } from "@/lib/govern/authority/coworker-authority-decision";
 import type { GovernedExecuteArgs, GovernedExecuteResult } from "@/lib/mcp-governed-execute-types";
 import type { ToolDefinition } from "@/lib/mcp-tool-types";

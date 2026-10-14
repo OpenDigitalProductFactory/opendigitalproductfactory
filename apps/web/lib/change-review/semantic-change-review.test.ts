@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CHANGE_REVIEW_POLICY_VERSION,
-  CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION,
+  LEGACY_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION,
   assessSemanticReviewReceiptFreshness,
   buildSemanticChangeReviewPrompt,
   createLowRiskAutoPassReceipt,
@@ -110,7 +110,7 @@ describe("semantic review receipt freshness", () => {
     }));
 
     expect(result).toEqual({ fresh: true, reasons: [] });
-    expect(receipt.schemaVersion).toBe(CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION);
+    expect(receipt.schemaVersion).toBe(LEGACY_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION);
   });
 
   it.each([
