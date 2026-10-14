@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Local inference concurrency verification — BI-B550D9E5
 
 ## Objective and evidence

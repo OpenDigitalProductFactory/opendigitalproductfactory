@@ -8,7 +8,7 @@ import { InferenceError } from "@/lib/routing/inference-error";
 import { isRecord } from "@/lib/shared/coerce";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { withInferenceAdmissionObserver, isAdmissionTimeout, type InferenceAdmissionEvent } from "@/lib/inference/inference-admission";
-import { awaitInferenceCancellation, currentInferenceSignal, withInferenceCancellation, withInferenceOrigin,
+import { awaitInferenceCancellation, currentInferenceSignal, currentInferenceOrigin, withInferenceCancellation, withInferenceOrigin,
   GovernedInferenceDeadlineError } from "@/lib/routing/governed-inference-deadline";
 
 type Outcome = "passed" | "failed" | "deferred";
@@ -48,9 +48,10 @@ export async function runEndpointConcurrencyDiagnostic(
   const timer = setTimeout(() => controller.abort(new ObservationTimeout("Diagnostic timed out after 30 seconds")), 30_000);
   timer.unref?.();
   const events: AdmissionEvidence[] = [];
+  const origin = currentInferenceOrigin();
   let closed = false;
   try {
-    return await withInferenceCancellation(controller.signal, () => withInferenceOrigin("interactive", async () => {
+    return await withInferenceCancellation(controller.signal, () => withInferenceOrigin(origin, async () => {
       const signal = currentInferenceSignal()!;
       const callers = await Promise.all([0, 1].map(async callerIndex => {
         const traceId = createRoutingTraceId();
@@ -85,7 +86,7 @@ export async function runEndpointConcurrencyDiagnostic(
       }
       // Sequence, not elapsed time, proves the handoff even within one millisecond.
       const position = (caller: number, phase: InferenceAdmissionEvent["phase"]) =>
-        events.find(e => e.callerIndex === caller && e.engineKey === "local" && e.origin === "interactive" && e.phase === phase)?.order ?? -1;
+        events.find(e => e.callerIndex === caller && e.engineKey === "local" && e.origin === origin && e.phase === phase)?.order ?? -1;
       const contentionObserved = [0, 1].some(waiting => {
         const holder = 1 - waiting;
         const acquired = position(holder, "acquired"), queued = position(waiting, "queued");

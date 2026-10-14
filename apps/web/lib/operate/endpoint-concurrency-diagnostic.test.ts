@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/ai-inference", () => ({ callProvider: vi.fn() }));
 import { runEndpointConcurrencyDiagnostic } from "./endpoint-concurrency-diagnostic";
-import { acquireInferenceSlot, __resetInferenceAdmissionForTest, currentInferenceSignal, withInferenceCancellation } from "@/lib/inference/inference-admission";
+import { acquireInferenceSlot, __resetInferenceAdmissionForTest, currentInferenceSignal, withInferenceCancellation,
+  currentInferenceOrigin, withInferenceOrigin } from "@/lib/inference/inference-admission";
 import { LocalProviderCapacityDeferredError } from "@/lib/routing/local-provider-capacity";
 
 const answer = { content: "READY", inputTokens: 2, outputTokens: 1, inferenceMs: 1,
@@ -89,5 +90,19 @@ describe("two ordinary caller evidence", () => {
       runEndpointConcurrencyDiagnostic("local", "test-model", call));
     expect(result.outcome).toBe("deferred");
     expect(call).not.toHaveBeenCalled();
+  });
+
+  it("preserves background priority while observing both callers", async () => {
+    const origins: string[] = [];
+    const result = await withInferenceOrigin("autonomous", () =>
+      runEndpointConcurrencyDiagnostic("local", "test-model", async () => {
+        const origin = currentInferenceOrigin();
+        origins.push(origin);
+        const release = await acquireInferenceSlot("local", origin);
+        try { await new Promise(resolve => setTimeout(resolve, 5)); return answer; }
+        finally { release(); }
+      }));
+    expect(origins).toEqual(["autonomous", "autonomous"]);
+    expect(result.outcome).toBe("passed");
   });
 });
