@@ -2172,6 +2172,7 @@
       "anchors": [
         "scoped-mcp-tool-packs",
         "the-shape",
+        "per-call-effects-under-existing-policy",
         "read-packs-for-standing-stages",
         "migration-discipline-parity-first",
         "first-pack",
