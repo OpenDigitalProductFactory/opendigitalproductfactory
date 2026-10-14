@@ -2,7 +2,7 @@
   "mcpServers": {
     "dpf": {
       "type": "http",
-      "url": "${DPF_MCP_URL:-https://localhost/api/mcp/v1?tier=full}",
+      "url": "${DPF_CLAUDE_MCP_URL:-https://localhost/api/mcp/v1?tier=full}",
       "oauth": {
         "scopes": "dpf.read dpf.work dpf.build"
       }

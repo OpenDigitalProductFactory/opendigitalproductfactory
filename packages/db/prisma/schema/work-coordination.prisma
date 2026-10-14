@@ -421,6 +421,9 @@ model Workroom {
   contributionMode        String                   @default("private")
   branchTaxonomy          String?
   idempotencyKey          String?                  @unique
+  /// BI-62514632: highest WorkroomActivity.sequence handed out for this room.
+  /// Advanced only by the WorkCapsuleActivity insert trigger.
+  activitySequence        Int                      @default(0)
   leaseHolderPrincipalId  String?
   leaseExpiresAt          DateTime?
   createdByPrincipalId    String?
@@ -487,12 +490,22 @@ model WorkroomActivity {
   recordedById      String?
   recordedByAgentId String?
   toolExecutionId   String?
+  /// BI-763D6E01: set on a command receipt row (kind command-accepted |
+  /// command-rejected). A retry with the same (scope, command key) replays it. Named
+  /// commandKey, not commandId: it is the client's idempotency key, not a reference.
+  commandScopeKey   String?
+  commandKey        String?
+  /// BI-62514632: the row's position in its room's log, assigned on insert by a
+  /// trigger under the room's row lock. NULL only on rows written before it.
+  sequence          Int?
   capsule           Workroom @relation(fields: [workCapsuleId], references: [id], onDelete: Cascade)
 
   @@index([workCapsuleId, recordedAt(sort: Desc)])
   @@index([workCapsuleId, kind, recordedAt(sort: Desc), id(sort: Desc)])
   @@index([kind, recordedAt(sort: Desc)])
   @@index([recordedAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
+  @@unique([commandScopeKey, commandKey]) // BI-763D6E01 command receipts; NULLs never collide
+  @@unique([workCapsuleId, sequence]) // BI-62514632 the room's log order; NULLs never collide
   @@map("WorkCapsuleActivity")
 }
 
@@ -949,17 +962,19 @@ model QueueMetricSnapshot {
   wip             Int      @default(0) // queued + in-progress at computedAt
   arrivals        Int      @default(0) // enqueued in window
   throughput      Int      @default(0) // finished in window
-  waitP50Ms       Int?
-  waitP95Ms       Int?
-  processP50Ms    Int?
-  processP95Ms    Int?
-  cycleP50Ms      Int?
-  cycleP95Ms      Int?
+  // Durations in milliseconds. Float, not Int: a 32-bit Int caps at ~24.8 days and
+  // Workroom stage items sit for weeks (BI-4ADFFEDB). Exact for whole ms up to 2^53.
+  waitP50Ms       Float?
+  waitP95Ms       Float?
+  processP50Ms    Float?
+  processP95Ms    Float?
+  cycleP50Ms      Float?
+  cycleP95Ms      Float?
   firstPassYield  Float? // 0..1 — % correct without rework
   slaAttainment   Float? // 0..1 — null when no finished item carried an SLA
   abandonmentRate Float? // 0..1
-  heldP50Ms       Int? // held time (waiting on a person or blocked) of items finished in the window — EP-B70E718D
-  heldP95Ms       Int?
+  heldP50Ms       Float? // held time (waiting on a person or blocked) of items finished in the window — EP-B70E718D
+  heldP95Ms       Float?
   processShare    Float? // 0..1 — Σ process ÷ Σ cycle: the queue's flow efficiency
   computedAt      DateTime @default(now())
   createdAt       DateTime @default(now())

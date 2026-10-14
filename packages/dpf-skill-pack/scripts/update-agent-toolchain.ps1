@@ -3,6 +3,7 @@ param(
     # Empty means "not named here": update_agent_toolchain.py owns the default
     # (DPF_MCP_URL, else its canonical https origin) and the OAuth auth mode.
     [string]$McpUrl = "",
+    [string]$ProjectRoot = "",
     [switch]$CodexOnly,
     [switch]$CodexPluginOnly,
     [switch]$PrintExistingCodexMcpUrl,
@@ -25,6 +26,7 @@ $argsList = @(
     (Join-Path $PSScriptRoot "update_agent_toolchain.py"),
     "--skill-pack-path", $SkillPackPath
 )
+if ($ProjectRoot) { $argsList += @("--project-root", $ProjectRoot) }
 if ($McpUrl) { $argsList += @("--mcp-url", $McpUrl) }
 if ($CodexOnly) { $argsList += "--codex-only" }
 if ($CodexPluginOnly) { $argsList += "--codex-plugin-only" }

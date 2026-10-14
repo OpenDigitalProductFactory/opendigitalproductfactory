@@ -1467,10 +1467,8 @@ if ($InstallMode -eq "customizer" -and -not (Test-StepDone "dev_setup")) {
         Write-Warn "Node.js v20+ required. Current: $(node -v)"
         exit 1
     }
-    if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
-        Write-Action "Installing pnpm..."
-        npm install -g pnpm
-    }
+    . (Join-Path $DPF_DIR "scripts/installer/lib/pnpm.ps1")
+    Initialize-DpfPnpm -InstallDir $DPF_DIR
 
     # Hoisted layout avoids symlink permission issues on Windows (no Developer Mode needed)
     if (-not (Test-Path "$DPF_DIR\.npmrc")) {
@@ -1858,6 +1856,14 @@ if ($env:Path -notlike "*$safetyBin*") {
 Write-Action "Open a new terminal for the PATH change to take effect in other windows."
 
 # --- Step 6: Start Platform ---------------------------------------------------
+
+. (Resolve-DPFComposeChainModule -InstallDir $DPF_DIR)
+$runtimeComposeArgs = Get-DPFComposeArgs -InstallDir $DPF_DIR -IncludeEdge:$false -IncludeRelease:($InstallMode -eq "consumer")
+Push-Location $DPF_DIR
+try {
+    & node (Join-Path $DPF_DIR "scripts/installer/prepare-runtime-state.mjs") @runtimeComposeArgs
+    if ($LASTEXITCODE -ne 0) { throw "runtime_state_preparation_failed" }
+} finally { Pop-Location }
 
 # Every install is https at one canonical origin (BI-6DC1CD5B, design section
 # 12): Claude refuses OAuth over plain http, and one origin keeps OAuth token

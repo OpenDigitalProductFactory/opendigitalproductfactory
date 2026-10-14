@@ -64,4 +64,25 @@ describe("requestCoworker delegation link", () => {
     const collaboration = mockPrisma.taskRun.update.mock.calls[0]?.[0].data.a2aMetadata.collaboration;
     expect(collaboration).not.toHaveProperty("delegationLinkId");
   });
+
+  // BI-FAD98137: an Advise-mode delegation is recorded so the child runs in Advise.
+  it("records an Advise-mode delegation on the child's provenance, and nothing for Act", async () => {
+    await requestCoworker(
+      { parentThreadId: "parent-1", targetAgent: "agent-mkt", objective: "Draft", callerAgentId: "coo", runtimeMode: "advise" },
+      "user-1",
+    );
+    expect(mockPrisma.taskRun.update.mock.calls[0]?.[0].data.a2aMetadata.collaboration).toMatchObject({ runtimeMode: "advise" });
+
+    vi.clearAllMocks();
+    mockPrisma.agent.findFirst.mockResolvedValue({ agentId: "coo", delegatesTo: ["agent-mkt"], escalatesTo: null, sensitivity: null });
+    mockPrisma.principalAlias.findFirst.mockResolvedValue(null);
+    mockPrisma.delegationChain.create.mockResolvedValue({ id: "link-2" });
+    mockPrisma.taskRun.update.mockResolvedValue({});
+    mockSpawn.mockResolvedValue({ child: { id: "child-2" }, taskRunId: "TR-2" });
+    await requestCoworker(
+      { parentThreadId: "parent-1", targetAgent: "agent-mkt", objective: "Draft", callerAgentId: "coo", runtimeMode: "act" },
+      "user-1",
+    );
+    expect(mockPrisma.taskRun.update.mock.calls[0]?.[0].data.a2aMetadata.collaboration).not.toHaveProperty("runtimeMode");
+  });
 });

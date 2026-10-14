@@ -27,6 +27,7 @@ import { callProvider } from "@/lib/ai-inference";
 import { prisma } from "@dpf/db";
 import { callWithFallbackChain } from "./fallback";
 import { LocalProviderCapacityDeferredError } from "./local-provider-capacity";
+import { markEndpointUnavailable } from "./rate-tracker";
 import type { RouteDecision, SensitivityLevel } from "./types";
 
 const mockCallProvider = vi.mocked(callProvider);
@@ -69,6 +70,26 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("fallback local-CI capacity arbitration", () => {
+  it("stops a cancelled request before trying another provider or changing health", async () => {
+    const controller = new AbortController();
+    mockCallProvider.mockReset().mockResolvedValue({ content: "late fallback", inputTokens: 1, outputTokens: 1, inferenceMs: 1 });
+    mockCallProvider.mockImplementationOnce(async () => {
+      controller.abort(new DOMException("utility deadline reached", "AbortError"));
+      throw controller.signal.reason;
+    });
+    try {
+      const outcome = callWithFallbackChain(decisionWithCloudFallback(), [], "", undefined, undefined,
+        undefined, undefined, undefined, undefined, controller.signal)
+        .then(() => ({ error: undefined }), error => ({ error }));
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect((await outcome).error).toMatchObject({ name: "AbortError" });
+      expect(mockCallProvider).toHaveBeenCalledOnce();
+      expect(markEndpointUnavailable).not.toHaveBeenCalled();
+      expect(prisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(prisma.modelProfile.updateMany).not.toHaveBeenCalled();
+    } finally { mockCallProvider.mockReset(); }
+  });
+
   it.each([
     "local-ci-active-capacity-reservation",
     "local-ci-queued-capacity-reservation",

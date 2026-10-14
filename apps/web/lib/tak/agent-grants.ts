@@ -424,13 +424,13 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   search_tool_marketplace: ["registry_read"],
   get_my_coworker_profile: ["registry_read"],
   get_my_approval_status: ["registry_read"],
+  probe_pending_approval_conversion: ["approval_probe_read"], // BI-129EFFD1: read-only AC-PROBE, manage_platform
   assess_my_capabilities: ["registry_read"],
   submit_coworker_capability_need: ["registry_read"],
   list_my_capability_needs: ["registry_read"],
   // BI-F9E7B780: governance-surface variant — same grant tier (registry_read)
   // because both surfaces are read-only over the same CoworkerCapabilityNeed
-  // model; the scope difference is "your needs" vs "everyone's needs", not
-  // a privilege difference.
+  // model; the scope difference is "your needs" vs "everyone's needs", not a privilege difference.
   list_all_capability_needs: ["registry_read"],
   list_coworker_services: ["coworker_catalog_read"],
   list_coworker_offers: ["coworker_catalog_read"],

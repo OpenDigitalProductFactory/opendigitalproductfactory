@@ -102,7 +102,7 @@ function main() {
   const verdict = decide(command, process.env);
   if (verdict.action === "allow") process.exit(0);
 
-  // Dual-envelope emit: deny hard-blocks on every surface; warn is Claude-only
+  // emitDeny answers in the sending surface's envelope: deny hard-blocks on every surface; warn is Claude-only
   // additionalContext (Grok has no non-blocking channel and ignores it).
   if (verdict.action === "deny") emitDeny(verdict.reason);
   emitContext(verdict.reason);

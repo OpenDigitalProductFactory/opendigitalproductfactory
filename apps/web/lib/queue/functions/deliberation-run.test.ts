@@ -31,7 +31,12 @@ const mocks = vi.hoisted(() => ({
   loadEndpointManifests: vi.fn(),
   loadPolicyRules: vi.fn(),
   loadOverrides: vi.fn(),
+  routeAndCall: vi.fn(),
 }));
+
+vi.mock("@/lib/inference/routed-inference", () => ({ routeAndCall: mocks.routeAndCall }));
+vi.mock("@/lib/jobs", () => ({ jobs: { createFunction: (_config: unknown, handler: unknown) => handler } }));
+vi.mock("../quiescence-gates", () => ({ gateBetweenSteps: async () => ({ reason: null }) }));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -77,10 +82,15 @@ vi.mock("@/lib/routing/loader", () => ({
   loadOverrides: mocks.loadOverrides,
 }));
 
-import { runDeliberation } from "./deliberation-run";
+import { runDeliberation, deliberationRun } from "./deliberation-run";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.routeAndCall.mockReset().mockResolvedValue({
+    content: "RECOMMENDATION: accept\nRATIONALE: Evidence supports it.",
+    providerId: "openai", modelId: "gpt-4o", inputTokens: 10, outputTokens: 20,
+    truncated: false,
+  });
   mocks.transaction.mockImplementation(async (callback: (client: unknown) => unknown) =>
     callback({
       taskRun: {
@@ -105,6 +115,7 @@ beforeEach(() => {
     }),
   );
   mocks.taskRunUpdate.mockResolvedValue({});
+  mocks.taskRunUpdateMany.mockResolvedValue({ count: 1 });
   mocks.taskRunFindUnique.mockResolvedValue({ routeContext: "deliberation" });
   mocks.deliberationRunUpdate.mockResolvedValue({});
   mocks.taskNodeUpdate.mockResolvedValue({});
@@ -156,6 +167,7 @@ function runWithBranches(
     id: string;
     workerRole: string;
     status: string;
+    outputSnapshot?: Record<string, unknown>;
   }>,
   strategyProfile = "balanced",
   diversityMode = "single-model-multi-persona",
@@ -173,6 +185,7 @@ function runWithBranches(
       workerRole: b.workerRole,
       status: b.status,
       routeDecision: null,
+      outputSnapshot: b.outputSnapshot ?? null,
     })),
   });
   // Synthesizer's downstream read — return completed non-summarizer branches.
@@ -188,6 +201,69 @@ function runWithBranches(
 }
 
 describe("runDeliberation", () => {
+  it("retains incomplete call cost on resume without rerunning that branch", async () => {
+    runWithBranches([
+      { id: "failed", workerRole: "reviewer", status: "failed", outputSnapshot: {
+        error: "incomplete-answer", raw: "partial", inputTokens: 10000, outputTokens: 10000,
+      } },
+      { id: "waiting", workerRole: "reviewer", status: "queued" },
+    ], "balanced", "single-model-multi-persona", 0.001);
+    await runDeliberation({ userId: "u1", deliberationRunId: "delib-1", taskRunId: "tr-1", threadId: null, resume: true });
+    expect(mocks.routeAndCall).not.toHaveBeenCalled();
+    expect(mocks.taskNodeUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "waiting" }, data: expect.objectContaining({ status: "cancelled" }),
+    }));
+    expect(mocks.deliberationRunUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      data: { metadata: expect.objectContaining({ budgetHalted: true, capacityWaitExhausted: false }) },
+    }));
+  });
+  it("rehydrates completed positions and preserves the brief on resume", async () => {
+    runWithBranches([{ id: "n1", workerRole: "reviewer", status: "completed", outputSnapshot: {
+      raw: "RECOMMENDATION: accept\nRATIONALE: Prior evidence.", providerId: "openai", modelId: "gpt-4o", inputTokens: 5, outputTokens: 5,
+    } }]);
+    const run = await mocks.deliberationRunFindUnique();
+    run.metadata = { brief: "Keep this brief", subject: "Test", capacityDeferred: true };
+    await runDeliberation({ userId: "u1", deliberationRunId: "delib-1", taskRunId: "tr-1", threadId: null, resume: true });
+    expect(mocks.routeAndCall).not.toHaveBeenCalled();
+    expect(mocks.outcomeUpsert).toHaveBeenCalledWith(expect.objectContaining({ create: expect.objectContaining({ mergedRecommendation: expect.stringContaining("accept") }) }));
+    expect(mocks.deliberationRunUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: { metadata: expect.objectContaining({ brief: "Keep this brief", subject: "Test", capacityDeferred: false }) } }));
+  });
+
+  it("bounds durable capacity waits and parks without inventing an outcome", async () => {
+    runWithBranches([{ id: "n1", workerRole: "reviewer", status: "queued" }]);
+    const run = await mocks.deliberationRunFindUnique();
+    run.metadata = { brief: "Original brief" };
+    mocks.routeAndCall.mockRejectedValue(Object.assign(new Error("busy"), { name: "LocalProviderCapacityDeferredError", reason: "local-runner-busy" }));
+    const step = { run: vi.fn(async (_id: string, fn: () => Promise<unknown>) => fn()), sleep: vi.fn().mockResolvedValue(undefined) };
+    const handler = deliberationRun as unknown as (input: { event: { name: string; data: Record<string, unknown> }; step: typeof step }) => Promise<unknown>;
+    await expect(handler({ event: { name: "deliberation/run.start", data: { userId: "u1", deliberationRunId: "delib-1", taskRunId: "tr-1", threadId: null } }, step })).resolves.toEqual({ ok: false, deferredCapacity: true });
+    expect(step.sleep).toHaveBeenCalledTimes(10);
+    expect(mocks.outcomeUpsert).not.toHaveBeenCalled();
+    expect(mocks.taskRunUpdateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "input-required" }) }));
+    expect(mocks.deliberationRunUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: { metadata: expect.objectContaining({ brief: "Original brief", capacityWaitExhausted: true }) } }));
+  });
+
+  it("keeps capacity-deferred branches queued and does not seal a verdict", async () => {
+    runWithBranches([{ id: "n1", workerRole: "reviewer", status: "queued" }]);
+    const busy = Object.assign(new Error("Local provider dispatch deferred: local-runner-busy"), {
+      name: "LocalProviderCapacityDeferredError", reason: "local-runner-busy",
+    });
+    mocks.routeAndCall.mockRejectedValueOnce(busy);
+    const result = await runDeliberation({ userId: "u1", deliberationRunId: "delib-1", taskRunId: "tr-1", threadId: "th-1" });
+    expect(result).toMatchObject({ deferredCapacity: true });
+    expect(mocks.taskNodeUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "queued", completedAt: null }) }));
+    expect(mocks.outcomeUpsert).not.toHaveBeenCalled();
+    expect(mocks.pushThreadProgress.mock.calls.map(c => c[2].type)).not.toContain("deliberation:completed");
+  });
+
+  it.each([true, false])("does not accept an incomplete answer (truncated=%s)", async truncated => {
+    runWithBranches([{ id: "n1", workerRole: "reviewer", status: "queued" }]);
+    mocks.routeAndCall.mockResolvedValueOnce({ content: truncated ? "RECOMMENDATION: acc" : "", truncated, providerId: "local", modelId: "qwen", inputTokens: 10, outputTokens: 4096 });
+    await runDeliberation({ userId: "u1", deliberationRunId: "delib-1", taskRunId: "tr-1", threadId: "th-1" });
+    expect(mocks.taskNodeUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "failed", outputSnapshot: expect.objectContaining({ error: "incomplete-answer" }) }) }));
+    expect(mocks.taskNodeUpdate.mock.calls.some(c => c[0].where.id === "n1" && c[0].data.status === "completed")).toBe(false);
+  });
+
   it("emits queued → branch_dispatched → branch_completed → completed", async () => {
     runWithBranches([
       { id: "n1", workerRole: "reviewer", status: "queued" },

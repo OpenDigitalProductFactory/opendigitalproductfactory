@@ -132,7 +132,7 @@ describe("computeReadinessState", () => {
       computeReadinessState({
         claudeCodeWired: true,
         codexWired: true,
-        mcpReadiness: { ok: true, toolCount: 5, observedAt: "2026-05-27T00:00:00.000Z" },
+        mcpReadiness: { ok: true, toolCount: 5, observedAt: "2026-05-27T00:00:00.000Z", delivery: { ready: true, missingTokenTools: [], missingCoworkerTools: [], unavailableTools: [] } },
         smokeTest: { result: "failed", transcript: "...", reason: "no signature" },
       }),
     ).toBe("failed_smoke");
@@ -143,7 +143,7 @@ describe("computeReadinessState", () => {
       computeReadinessState({
         claudeCodeWired: true,
         codexWired: false,
-        mcpReadiness: { ok: true, toolCount: 5, observedAt: "2026-05-27T00:00:00.000Z" },
+        mcpReadiness: { ok: true, toolCount: 5, observedAt: "2026-05-27T00:00:00.000Z", delivery: { ready: true, missingTokenTools: [], missingCoworkerTools: [], unavailableTools: [] } },
         smokeTest: { result: "passed", kernelPrincipleObserved: "destructive-actions-require-explicit-go", transcript: "..." },
       }),
     ).toBe("partial");
@@ -157,7 +157,7 @@ describe("computeReadinessState", () => {
         claudeCodeWired: false,
         codexWired: false,
         antigravityWired: true,
-        mcpReadiness: { ok: true, toolCount: 5, observedAt: "2026-07-17T00:00:00.000Z" },
+        mcpReadiness: { ok: true, toolCount: 5, observedAt: "2026-07-17T00:00:00.000Z", delivery: { ready: true, missingTokenTools: [], missingCoworkerTools: [], unavailableTools: [] } },
         smokeTest: { result: "skipped", reason: "no_token" },
       }),
     ).toBe("partial");
@@ -169,7 +169,7 @@ describe("computeReadinessState", () => {
         claudeCodeWired: true,
         codexWired: true,
         antigravityWired: false,
-        mcpReadiness: { ok: true, toolCount: 5, observedAt: "2026-07-17T00:00:00.000Z" },
+        mcpReadiness: { ok: true, toolCount: 5, observedAt: "2026-07-17T00:00:00.000Z", delivery: { ready: true, missingTokenTools: [], missingCoworkerTools: [], unavailableTools: [] } },
         smokeTest: { result: "passed", kernelPrincipleObserved: "destructive-actions-require-explicit-go", transcript: "..." },
       }),
     ).toBe("ready");
@@ -180,7 +180,7 @@ describe("computeReadinessState", () => {
       computeReadinessState({
         claudeCodeWired: true,
         codexWired: true,
-        mcpReadiness: { ok: true, toolCount: 5, observedAt: "2026-05-27T00:00:00.000Z" },
+        mcpReadiness: { ok: true, toolCount: 5, observedAt: "2026-05-27T00:00:00.000Z", delivery: { ready: true, missingTokenTools: [], missingCoworkerTools: [], unavailableTools: [] } },
         smokeTest: { result: "passed", kernelPrincipleObserved: "destructive-actions-require-explicit-go", transcript: "..." },
       }),
     ).toBe("ready");
@@ -191,9 +191,14 @@ describe("computeReadinessState", () => {
       computeReadinessState({
         claudeCodeWired: true,
         codexWired: true,
-        mcpReadiness: { ok: true, toolCount: 5, observedAt: "2026-05-27T00:00:00.000Z" },
+        mcpReadiness: { ok: true, toolCount: 5, observedAt: "2026-05-27T00:00:00.000Z", delivery: { ready: true, missingTokenTools: [], missingCoworkerTools: [], unavailableTools: [] } },
         smokeTest: { result: "skipped", reason: "claude_not_on_path" },
       }),
     ).toBe("ready");
   });
+});
+
+it("requires current complete authority evidence rather than historical tools/list success", () => {
+  expect(computeReadinessState({ codexWired: true, claudeCodeWired: true, grokWired: true,
+    mcpReadiness: { ok: true, toolCount: 1000, observedAt: "historical" } })).toBe("needs_refresh");
 });

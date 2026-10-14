@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
+  credentialEntry: { update: vi.fn() },
+  complianceEvidence: { updateMany: vi.fn() },
   modelProvider: { update: vi.fn() },
   aiProviderConnection: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   $transaction: vi.fn(),
@@ -9,10 +11,31 @@ vi.mock("@dpf/db", async (importOriginal) => ({
   ...await importOriginal<typeof import("@dpf/db")>(), prisma: db,
   setProviderStatusWithDefaultConnection: (await import("../../../../packages/db/src/provider-connection")).setProviderStatusWithDefaultConnection,
 }));
-import { setProviderAccountEnabled } from "./provider-account-management";
+import { configureProviderAccount, setProviderAccountEnabled } from "./provider-account-management";
 import { reconcileProviderConnectionState } from "./provider-connection-reconcile";
 const pause = vi.hoisted(() => ({ resumeLocalProvider: vi.fn() }));
 vi.mock("./provider-operator-pause", () => pause);
+
+describe("explicit Anthropic workspace configuration", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    db.$transaction.mockImplementation(async (run) => run(db));
+    db.aiProviderConnection.findUnique.mockResolvedValue({ id: "account-b", providerId: "anthropic", authMethod: "api-key", credentialEntryId: "credential-b" });
+  });
+
+  it.each([" wrkspc_accountB ", ""])("writes only the selected credential and resets its proofs (%s)", async (workspace) => {
+    expect(await configureProviderAccount({ connectionId: "account-b", providerWorkspaceId: workspace })).toEqual({ ok: true });
+    expect(db.credentialEntry.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "credential-b" }, data: expect.objectContaining({ providerWorkspaceId: workspace.trim() || null }) }));
+    expect(db.complianceEvidence.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ providerConnectionId: "account-b" }) }));
+    expect(db.aiProviderConnection.update).toHaveBeenCalledWith(expect.objectContaining({ where: { connectionId: "account-b" }, data: expect.objectContaining({ accessibleModelIds: [], modelsVerifiedAt: null, evidenceStatus: "unreviewed" }) }));
+  });
+
+  it("preserves credentials and proofs when workspace is omitted", async () => {
+    await configureProviderAccount({ connectionId: "account-b", label: "Renamed" });
+    expect(db.credentialEntry.update).not.toHaveBeenCalled();
+    expect(db.complianceEvidence.updateMany).not.toHaveBeenCalled();
+  });
+});
 
 describe("local account operator intent", () => {
   let providerId: string;

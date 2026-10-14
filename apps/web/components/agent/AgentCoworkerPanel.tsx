@@ -701,7 +701,7 @@ export function AgentCoworkerPanel({
         setIsBusy(false);
       } else {
         // Stored and accepted (BI-DEFA25EE): show "sent", not "Sending..." for the whole turn.
-        completeJourney("message-ack", { serverUrl: "/api/agent/send" }); // BI-BD0B0DCC
+        completeJourney("message-ack", { serverTiming: res.headers.get("server-timing") }); // BI-BD0B0DCC
         setMessages((prev) =>
           prev.map((message) =>
             message.id === optimisticMessage.id ? { ...message, deliveryState: "sent" as const } : message,

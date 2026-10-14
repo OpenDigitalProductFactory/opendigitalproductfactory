@@ -23,6 +23,33 @@ describe("loadCapsuleLivenessInventory", () => {
     expect(result.capsulesAll[0]).not.toHaveProperty("activities");
     expect(JSON.stringify(result)).not.toContain("secret");
   });
+  it("selects successful history behind a paused snapshot and excludes private activity payloads", async () => {
+    const now = new Date("2026-10-02T00:00:00Z");
+    const db = {
+      workroom: { findMany: vi.fn().mockResolvedValue([{
+        capsuleId: "WC-PAUSED", status: "draft", updatedAt: now, featureBuildId: null,
+        workspaceState: { workroomDrive: { action: "pause" } },
+        activities: [{ kind: "workroom-drive", payload: { action: "dispatch_agent", reason: "agent_stage", agentId: "original-agent", taskId: "task", stageKey: "read", privateNote: "private-history" } }],
+      }]) },
+      featureBuild: { findMany: vi.fn().mockResolvedValue([]) },
+      scheduledAgentTask: { findMany: vi.fn().mockResolvedValue([{ taskId: "task", agentId: "reassigned-agent" }]) },
+    };
+    const result = await loadCapsuleLivenessInventory(db, { where: {}, take: 10 }, now);
+    expect(result.capsulesAll[0]!.attribution).toEqual({ executor: "original-agent", invocation: "Scheduled · original-agent · task · stage read" });
+    expect(JSON.stringify(result)).not.toContain("private-history");
+    expect(result.capsulesAll[0]).not.toHaveProperty("activities");
+    expect(db.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({ select: expect.objectContaining({ activities: {
+      orderBy: { recordedAt: "desc" }, take: 1,
+      where: { OR: [
+        { kind: { in: ["concierge-sweep", "embedding-coverage"] } },
+        { kind: "workroom-drive", AND: [
+          { payload: { path: ["action"], equals: "dispatch_agent" } },
+          { payload: { path: ["reason"], equals: "agent_stage" } },
+        ] },
+      ] },
+      select: { kind: true, payload: true },
+    } }) }));
+  });
   it("loads the linked TaskRun independently and projects a terminal turn over a stale session", async () => {
     const now = new Date("2026-08-24T18:00:00.000Z");
     const db = {

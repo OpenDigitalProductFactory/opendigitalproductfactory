@@ -62,7 +62,7 @@ describe("admission and the budget proposal attribute an item alike (BI-291F7451
   const base = {
     status: "open", effortSize: "small", jobSize: null, estimateAgreed: null, storedPortfolioId: null, storedPortfolioDangling: false,
     productPortfolioId: null, taxonomyPortfolioId: null, coworkerNeedPortfolioId: null, epicPortfolioId: null, activeBuildId: null,
-    hasLiveWorkroom: false, deliverySurface: "other", traced: false, completedAt: null, platformDefaultPortfolioId: "pf",
+    hasActiveWorkroom: false, deliveredAt: null, deliverySurface: "other", traced: false, completedAt: null, platformDefaultPortfolioId: "pf",
   };
   const items = [
     { ...base, itemId: "BI-NEW", scopeKind: "platform" },

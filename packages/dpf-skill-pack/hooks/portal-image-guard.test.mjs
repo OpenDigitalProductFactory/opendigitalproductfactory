@@ -88,7 +88,9 @@ test("an empty or junk command is allowed, never wedged", () => {
 test("the deny carries the governed alternative, not just a refusal", () => {
   const { reason } = decide({ command: "docker build -t dpf-portal:latest ." });
   assert.match(reason, /self-upgrade/, "must name the sanctioned path");
-  assert.match(reason, /dev-portal-lease\.sh claim/, "must offer the preview route");
+  assert.match(reason, /dev-portal-lease\.sh up/, "must offer the preview route");
+  assert.match(reason, /foreground supervisor/);
+  assert.match(reason, /durable taskRunId; terminal claims stop/);
   assert.match(reason, /non-canonical tag|NON-canonical/i, "must offer the local-inspect route");
 });
 

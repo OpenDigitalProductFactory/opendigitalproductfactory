@@ -145,6 +145,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse-guard-selftest.mjs\"",
+            "statusMessage": "Check the safety guards can block in this session"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/governance-freshness-check.mjs\"",
             "statusMessage": "Check this checkout has current process guards"
           }
@@ -183,6 +192,15 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-readiness-banner.mjs\"",
             "statusMessage": "Report which checks this worktree is ready to run"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/toolchain-freshness.mjs\"",
+            "statusMessage": "Check the installed DPF tools match the portal's release"
           }
         ]
       }

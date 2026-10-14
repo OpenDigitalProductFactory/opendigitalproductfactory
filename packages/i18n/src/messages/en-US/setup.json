@@ -1,13 +1,8 @@
 {
-  "localInferencePolicy": {
-    "heading": "Where AI may run",
-    "cloud": "Local and allowed cloud providers",
-    "local": "Local only",
-    "help": "Applies to DPF coding and coworker tasks. Local only is not required for coding. It blocks cloud providers and stops work when no local model fits. Other routing rules still apply.",
-    "saving": "Saving…",
-    "savedLocal": "Saved: Local only",
-    "savedCloud": "Saved: Cloud allowed",
-    "saveUnconfirmed": "Could not confirm the save. The last confirmed setting is shown. Try again."
+  "anthropicWorkspace": {
+    "disclosure": "Organization-scoped key",
+    "label": "Anthropic workspace ID",
+    "help": "Organization keys need a workspace ID. Find it in Claude Console → Settings → Workspaces. Leave blank for a key scoped to one workspace."
   },
   "progress": {
     "label": "Setup progress",
@@ -113,5 +108,15 @@
     "saved": "Saved.",
     "loadFailed": "Couldn't load your current answers.",
     "saveFailed": "Couldn't save. Try again."
+  },
+  "localInferencePolicy": {
+    "heading": "Where AI may run",
+    "cloud": "Local and allowed cloud providers",
+    "local": "Local only",
+    "help": "Applies to DPF coding and coworker tasks. Local only is not required for coding. It blocks cloud providers and stops work when no local model fits. Other routing rules still apply.",
+    "saving": "Saving…",
+    "savedLocal": "Saved: Local only",
+    "savedCloud": "Saved: Cloud allowed",
+    "saveUnconfirmed": "Could not confirm the save. The last confirmed setting is shown. Try again."
   }
 }

@@ -44,3 +44,44 @@
 - **Tooling upgrade = operator-triggered quiesce → reap → upgrade → resume.** Orphaned sidecars must never pin a tool against update. → [kernel principle](../founder-kernel/wiki/principles/reap-sidecars-to-upgrade-tools.md)
 - **`:3001` and every shared singleton are lease-gated** ⟦runtime: install-local port — the lease rule is doctrine, the number is not⟧ via `claim_nonprod_environment_lease`. No per-branch CI images, no silent re-bind, no ad-hoc `docker run`/`compose up` from a surface. Hook-refused, so §1's refusal rule governs what to do when one fires.
 - **A built image carries the identity of its bytes** — stamp == built HEAD == target, asserted pre-swap.
+
+### Contributor preview binding and cleanup
+
+Preview startup resolves the canonical install settings and overlays, then binds
+`/workspace` to the clean admitted worktree. The controller generates development
+password/signing material in memory, validates Compose config before runtime
+mutation, and uses explicit preview services with `--no-deps`. Initialization must
+succeed before `dev-portal` starts. Docker mount/commit labels and the served health
+identity must agree. No hand-built live image is an acceptable substitute.
+
+A queued claim stops its shell caller: the returned durable TaskRun resumes the
+wait. A terminal claim stops too; never scan historical `:rerun-N` keys. A new
+explicitly wanted attempt may supply a new `DPF_DEV_PORTAL_CLAIM_KEY`. Durable
+resume supplies its original lease and task through `DPF_DEV_PORTAL_RESUME_LEASE_ID`
+and `DPF_DEV_PORTAL_TASK_RUN_ID`.
+
+WWMD DI-E1203C00715D supports ordinary cleanup only for a verified principal and
+its exact owning session. Current leases lack principal provenance, so their
+release remains an authority action requiring approval. Report the exact lease
+and owning session and the returned approval link; never suppress the request.
+The existing Concierge envelope-expiry sweep settles lapsed proposed/approved
+requests using the envelope state machine. It does not silently approve or replay
+them. Restricted connections never receive grants from the client.
+
+Preview browser authentication uses `issue_ux_verification_sign_in` with the
+admitted preview lease and active verification Workroom session. The source
+Workroom may remain paused under its original session: WWMD DI-FBEC4720D1DA
+requires the same authenticated principal and repository for both rooms, an
+active verifier lease, and the source room’s exact recorded SHA. The platform
+checks those identities again before returning the session and issues in the
+preview database with its
+own signing key. The sweep consumes that one-time link and saves its own browser
+storage state. Production cookies and operator passwords are not preview inputs.
+
+For shared-header changes, record the complete touched-route inventory first.
+Use desktop (1280×900), mobile (390×844), normal and Simple (`worker`) navigation,
+light/dark themes and representative persona/account states. The local 40-route
+feedback cap is not coverage: `--exhaustive --fixture-map <file>` selects all
+touched static and dynamic routes. A fixture map must name the admitted source
+SHA, lease, base URL and every dynamic concrete route. Missing fixture paths,
+redirects, failed routes or incomplete accounting block the sweep.

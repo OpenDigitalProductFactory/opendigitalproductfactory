@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { summarizePortfolioInvestment, type InvestmentItemRow } from "./investment-read-model";
+import { quarterBounds } from "./investment-points";
+import { isActivelyInProgress, resolveInvestmentItem, summarizePortfolioInvestment, type InvestmentItemRow } from "./investment-read-model";
 
 const now = new Date("2026-09-25T12:00:00Z");
 
@@ -8,7 +9,7 @@ function row(overrides: Partial<InvestmentItemRow>): InvestmentItemRow {
   return {
     itemId: "BI-1", status: "open", effortSize: "medium", jobSize: null, estimateAgreed: null,
     storedPortfolioId: null, storedPortfolioDangling: false, productPortfolioId: null, taxonomyPortfolioId: null,
-    coworkerNeedPortfolioId: null, epicPortfolioId: null, activeBuildId: null, hasLiveWorkroom: false, deliverySurface: "other", traced: false, completedAt: null,
+    coworkerNeedPortfolioId: null, epicPortfolioId: null, activeBuildId: null, hasActiveWorkroom: false, deliveredAt: null, deliverySurface: "other", traced: false, completedAt: null,
     ...overrides,
   };
 }
@@ -64,9 +65,64 @@ describe("summarizePortfolioInvestment (BI-298A7202)", () => {
     expect(summary.rows.find((r) => r.portfolioId === null)).toMatchObject({ items: 1, danglingStoredItems: 1 });
   });
 
-  it("counts an item with a live Workroom as in flight, whatever its status (design §5.6)", () => {
-    const summary = summarizePortfolioInvestment([row({ epicPortfolioId: "p1", status: "open", hasLiveWorkroom: true })], now);
+  it("counts an item with an active Workroom as in flight, whatever its status (design §5.6)", () => {
+    const summary = summarizePortfolioInvestment([row({ epicPortfolioId: "p1", status: "open", hasActiveWorkroom: true })], now);
     expect(summary.rows[0]).toMatchObject({ inFlightPoints: 3, readyPoints: 0 });
+  });
+});
+
+describe("the spend rule: a quarter is charged for what was delivered in it and what is actively in progress (BI-77313ADD)", () => {
+  // Q4 2026: delivered means delivered between 1 Oct and 1 Jan.
+  const q4 = new Date("2026-10-13T12:00:00Z");
+  const inQ4 = new Date("2026-10-05T00:00:00Z");
+  const inQ3 = new Date("2026-09-20T00:00:00Z");
+  const classOf = (overrides: Partial<InvestmentItemRow>) =>
+    resolveInvestmentItem(row({ epicPortfolioId: "p1", ...overrides }), quarterBounds(q4)).itemClass;
+
+  it("charges a done item by its delivery date, not its acceptance date", () => {
+    expect(classOf({ status: "done", deliveredAt: inQ4, completedAt: inQ4 })).toBe("delivered");
+    // Merged in Q3, accepted in Q4: Q3 delivered it, so Q4 is not charged again.
+    expect(classOf({ status: "done", deliveredAt: inQ3, completedAt: inQ4 })).toBeNull();
+    // Never went through awaiting-acceptance: completedAt is its delivery date.
+    expect(classOf({ status: "done", deliveredAt: null, completedAt: inQ4 })).toBe("delivered");
+    expect(classOf({ status: "done", deliveredAt: null, completedAt: inQ3 })).toBeNull();
+  });
+
+  it("charges awaiting-acceptance work to the quarter it was delivered in, and an earlier quarter's to nothing now", () => {
+    expect(classOf({ status: "awaiting-acceptance", deliveredAt: inQ4 })).toBe("delivered");
+    expect(classOf({ status: "awaiting-acceptance", deliveredAt: inQ3 })).toBeNull();
+    // Even with a room still open on it, delivered work is not in flight.
+    expect(classOf({ status: "awaiting-acceptance", deliveredAt: inQ3, hasActiveWorkroom: true })).toBeNull();
+  });
+
+  it("counts in flight only work actively in progress: in-progress, an active build, or an active room", () => {
+    expect(classOf({ status: "in-progress" })).toBe("inFlight");
+    expect(classOf({ status: "open", activeBuildId: "FB-1" })).toBe("inFlight");
+    expect(classOf({ status: "open", hasActiveWorkroom: true })).toBe("inFlight");
+  });
+
+  it("counts an open item whose room is parked with nothing running as ready", () => {
+    expect(classOf({ status: "open", hasActiveWorkroom: false })).toBe("ready");
+  });
+
+  it("reads one active-work predicate the admission path shares", () => {
+    expect(isActivelyInProgress(row({ status: "in-progress" }))).toBe(true);
+    expect(isActivelyInProgress(row({ status: "open", activeBuildId: "FB-1" }))).toBe(true);
+    expect(isActivelyInProgress(row({ status: "open", hasActiveWorkroom: true }))).toBe(true);
+    expect(isActivelyInProgress(row({ status: "open" }))).toBe(false);
+    expect(isActivelyInProgress(row({ status: "awaiting-acceptance", deliveredAt: inQ4 }))).toBe(false);
+  });
+
+  it("totals the live Foundational shape within its budget once prior deliveries and parked rooms are excluded", () => {
+    const summary = summarizePortfolioInvestment([
+      row({ itemId: "delivered-q4", status: "done", deliveredAt: inQ4, completedAt: inQ4, effortSize: "large" }),
+      row({ itemId: "accepted-q4-merged-q3", status: "done", deliveredAt: inQ3, completedAt: inQ4, effortSize: "large" }),
+      row({ itemId: "awaiting-q4", status: "awaiting-acceptance", deliveredAt: inQ4, effortSize: "medium" }),
+      row({ itemId: "awaiting-q3", status: "awaiting-acceptance", deliveredAt: inQ3, effortSize: "large" }),
+      row({ itemId: "parked", status: "open", hasActiveWorkroom: false, effortSize: "large" }),
+      row({ itemId: "running", status: "in-progress", effortSize: "small" }),
+    ].map((r) => ({ ...r, epicPortfolioId: "p1" })), q4);
+    expect(summary.rows[0]).toMatchObject({ deliveredPoints: 11, inFlightPoints: 1, readyPoints: 8, items: 4 });
   });
 });
 

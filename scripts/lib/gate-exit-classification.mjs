@@ -23,6 +23,7 @@ export const GATE_EXIT = Object.freeze({
   EVIDENCE_PENDING: 4,
   CONTROL_PLANE_STARVATION: 5,
   SLOT_SUBSTRATE_UNAVAILABLE: 9,
+  MERGE_CONFLICT_WITH_BASE: 10,
   ABANDONED_OR_UNRECORDED: 7,
   DURABLE_WAIT: 75,
   WAIT_CANCELLED: 81,
@@ -94,6 +95,14 @@ export function classifyGateExit({ code, output = "" }) {
         kind: "substrate-unavailable", retry: false, verdict: "none",
         summary: "BLOCKED — slot substrate unavailable: no local-CI slot PostgreSQL container can run, so nothing was claimed",
         next: "read pnpm pregate:status for the container and Docker's refusal; gating again changes nothing until it runs",
+      };
+    // BI-FCC1DCB2: the candidate does not merge onto origin/main. A verdict
+    // about the branch; every retry fails identically until the author merges.
+    case GATE_EXIT.MERGE_CONFLICT_WITH_BASE:
+      return {
+        kind: "merge-conflict-with-base", retry: false, verdict: "fail",
+        summary: "the candidate does not merge cleanly onto origin/main — nothing was graded",
+        next: "merge origin/main into your branch and resolve the paths pnpm pregate:status names, then gate the new commit",
       };
     case GATE_EXIT.SOURCE_DRIFT:
       return {

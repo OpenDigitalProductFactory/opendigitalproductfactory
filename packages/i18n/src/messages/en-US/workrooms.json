@@ -80,7 +80,7 @@
   },
   "flow": {
     "heading": "How the work flows",
-    "windowRooms": "Last {$days} days · {$rooms} live rooms",
+    "windowRooms": "Last {$days} days · {$rooms} rooms in this area",
     "inFlow": "In flow now",
     "inFlowHint": "Rooms being worked, waiting on a person, or blocked",
     "flowTime": "Flow time (median)",
@@ -95,7 +95,7 @@
     "points": "{$points} pts",
     "deliveredPoints": "{$points} pts delivered this quarter",
     "noBudget": "Unplaced rooms carry no portfolio budget",
-    "aiSpend": "AI {$amount} on these rooms, last {$days} days",
+    "aiSpend": "AI on these rooms, last {$days} days: {$spend}",
     "aiUnavailable": "AI spend unavailable",
     "noChange": "no change vs prior {$days} days",
     "changeVsPrior": "{$delta} vs prior {$days} days",

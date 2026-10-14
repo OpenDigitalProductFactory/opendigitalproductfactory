@@ -1,6 +1,8 @@
 import {
   CHANGE_REVIEW_POLICY_VERSION,
   CHANGE_REVIEWER_VERSION,
+  LEGACY_CHANGE_REVIEWER_VERSION,
+  SEMANTIC_REVIEW_ARTIFACT_CONTRACT_VERSION,
   assessSemanticReviewReceiptFreshness,
   buildSemanticChangeReviewPrompt,
   createSemanticReviewReceipt,
@@ -50,6 +52,8 @@ export interface SemanticChangeReviewDispatchContext {
 }
 
 export interface SemanticChangeReviewOperationDeps {
+  /** Persisted packet executor pins its original contract; never an MCP caller option. */
+  legacyContract?: boolean;
   dispatch(
     prompt: string,
     context: SemanticChangeReviewDispatchContext,
@@ -87,7 +91,8 @@ export function resolveSemanticReviewRisk(
   return "medium";
 }
 
-export function resolveSemanticReviewCoordination(input: SemanticChangeReviewOperationInput): {
+export function resolveSemanticReviewCoordination(input: SemanticChangeReviewOperationInput,
+  legacyContract = SEMANTIC_REVIEW_ARTIFACT_CONTRACT_VERSION === 1): {
   identity: SemanticReviewIdentity;
   risk: SemanticReviewRisk;
 } {
@@ -95,10 +100,14 @@ export function resolveSemanticReviewCoordination(input: SemanticChangeReviewOpe
     ...input.identity.specialistIds,
     ...selectSemanticReviewSpecialists(input.changedFiles),
   ])].sort();
+  if (input.identity.artifactType && input.identity.artifactType !== input.artifactType) {
+    throw new Error("Semantic review artifact type does not match its identity.");
+  }
   const identity: SemanticReviewIdentity = {
     ...input.identity,
+    artifactType: legacyContract ? undefined : input.artifactType,
     policyVersion: CHANGE_REVIEW_POLICY_VERSION,
-    reviewerVersion: input.identity.reviewerVersion ?? CHANGE_REVIEWER_VERSION,
+    reviewerVersion: legacyContract ? (input.identity.reviewerVersion ?? LEGACY_CHANGE_REVIEWER_VERSION) : CHANGE_REVIEWER_VERSION,
     specialistIds,
     failureAnalysisDigest: validateFailureAnalysis(input.failureAnalysis, input.identity, input.resolvedFailureEvidence ?? []).digest ?? undefined,
   };
@@ -182,7 +191,7 @@ export async function runSemanticChangeReview(
   input: SemanticChangeReviewOperationInput,
   deps: SemanticChangeReviewOperationDeps,
 ): Promise<SemanticChangeReviewOperationResult> {
-  const { identity, risk } = resolveSemanticReviewCoordination(input);
+  const { identity, risk } = resolveSemanticReviewCoordination(input, deps.legacyContract);
   const activation = decideExternalReviewActivation({
     artifactType: input.artifactType,
     authorSurface: input.authorSurface,
@@ -234,6 +243,7 @@ async function performReview(args: {
   deps: SemanticChangeReviewOperationDeps;
 }): Promise<SemanticReviewReceipt> {
   const prompt = buildSemanticChangeReviewPrompt({
+    artifactType: args.identity.artifactType,
     requireFailureAnalysis: true,
     title: args.input.title,
     artifact: args.input.artifact,

@@ -45,17 +45,18 @@ try {
     }
 
     # Probe URL (BI-8A562681, design 12.4.5): the client's connector is the
-    # plugin descriptor, `${DPF_MCP_URL:-<plugin default>}`, so resolve the
-    # endpoint the same way: DPF_MCP_URL first, then the default written in the
-    # shipped plugin descriptor, then the known local bind.
-    $url = $env:DPF_MCP_URL
+    # plugin descriptor, `${DPF_CLAUDE_MCP_URL:-<plugin default>}`, so resolve
+    # the endpoint the same way: DPF_CLAUDE_MCP_URL first, then the default
+    # written in the shipped plugin descriptor, then the known local bind. The
+    # shared DPF_MCP_URL is deliberately not read (BI-D6A6462A).
+    $url = $env:DPF_CLAUDE_MCP_URL
     if ([string]::IsNullOrWhiteSpace($url)) {
         $url = $null
         $pluginCfg = Join-Path $root 'packages\dpf-skill-pack\claude.mcp.json'
         if (Test-Path -LiteralPath $pluginCfg) {
             try {
                 $u = [string](Get-Content -Raw -LiteralPath $pluginCfg | ConvertFrom-Json).mcpServers.dpf.url
-                if ($u -match '^\$\{DPF_MCP_URL:-(.+)\}$') { $url = $Matches[1] }
+                if ($u -match '^\$\{DPF_(?:CLAUDE_)?MCP_URL:-(.+)\}$') { $url = $Matches[1] }
                 elseif (-not [string]::IsNullOrWhiteSpace($u) -and -not $u.StartsWith('$')) { $url = $u }
             }
             catch { }  # malformed descriptor -> fall back to the default bind

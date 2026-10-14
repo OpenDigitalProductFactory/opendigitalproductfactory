@@ -14,6 +14,43 @@ const RESEARCH = {
 };
 
 describe("summarizeCoworkerEnvelopeDecision", () => {
+  it("preserves the complete proposal beyond summary limits, including clearing values", () => {
+    const params = {
+      itemId: "BI-12E5DD91", body: "x".repeat(700), reference: null,
+      emptyText: "", enabled: false,
+      ...Object.fromEntries(Array.from({ length: 15 }, (_, i) => [`field${i}`, { value: i }])),
+    };
+    const summary = summarizeCoworkerEnvelopeDecision({
+      ...RESEARCH, toolName: "update_backlog_item", proposedParameters: { ...params, _surface: "mcp" },
+    });
+    expect(JSON.parse(summary.completeProposedContent!)).toEqual(params);
+    expect(summary.proposed.find((field) => field.label === "Body")?.value).toMatch(/100 more characters/);
+    expect(summary.proposed.find((field) => field.label === "Reference")?.value).toBe("null");
+    expect(summary.proposed.find((field) => field.label === "Empty Text")?.value).toBe('""');
+  });
+
+  it("never invents reversibility for an unclassified action", () => {
+    const summary = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "browser.click", proposedParameters: { selector: "#pay" } });
+    expect(summary.consequence).not.toMatch(/can be corrected afterwards/);
+    expect(summary.consequence).toMatch(/not established/i);
+  });
+
+  it("provides complete content for known receipts and leaves missing content unresolved", () => {
+    const params = { decision: "pass", reason: "x".repeat(700) };
+    const known = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, proposedParameters: params });
+    expect(known.kind).toBe("known");
+    expect(JSON.parse(known.completeProposedContent!)).toEqual(params);
+    const missing = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, proposedParameters: undefined });
+    expect(missing.completeProposedContent).toBeNull();
+  });
+
+  it("preserves the full handover manifest in the shared proposal projection", () => {
+    const params = { capsuleId: "WC-1", toExecutorKind: "codex-desktop", handoffManifest: { nextAction: "Continue", evidence: "x".repeat(900) } };
+    const summary = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "reassign_workroom_executor", recommenderAgentId: "AGT-EXT-CODEX", proposedParameters: params });
+    expect(summary.kind).toBe("handover");
+    expect(JSON.parse(summary.completeProposedContent!)).toEqual(params);
+  });
+
   it("states a research pass with no findings as recommendation versus authorization", () => {
     const summary = summarizeCoworkerEnvelopeDecision({
       ...RESEARCH,

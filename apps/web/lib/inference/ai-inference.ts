@@ -3,6 +3,7 @@
 // Server actions in actions/*.ts can import from here freely.
 
 import { prisma } from "@dpf/db";
+import { providerWorkspaceHeaders } from "./provider-workspace";
 import { computeTokenCost, computeComputeCost } from "@/lib/ai-provider-types";
 import {
   aiInferenceDuration,
@@ -47,11 +48,14 @@ import "../routing/codex-cli-adapter"; // codex: registers "codex-cli" adapter
 import {
   acquireInferenceSlot,
   currentInferenceOrigin,
+  currentInferenceSignal,
   engineKeyForProvider,
 } from "./inference-admission";
 import { assertProviderDispatchCapacity } from "@/lib/routing/local-provider-capacity";
 import { isLocalProviderId } from "@/lib/routing/provider-locality";
-import { providerInferenceFetch } from "./provider-inference-transport";
+import { withLocalInferenceLock } from "@/lib/queue/resource-lane";
+import { providerInferenceFetch, withInferenceCancellationFetch } from "./provider-inference-transport";
+import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
 import { InferenceError } from "../routing/inference-error";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -100,6 +104,7 @@ async function buildAuthHeaders(
   if (authMethod === "api_key") {
     const cred = await getDecryptedCredential(providerId);
     if (!cred?.secretRef || !authHeader) throw new InferenceError("No credential configured", "auth", providerId);
+    Object.assign(headers, providerWorkspaceHeaders(providerId, cred.providerWorkspaceId));
     headers[authHeader] = authHeader === "Authorization" ? `Bearer ${cred.secretRef}` : cred.secretRef;
   } else if (authMethod === "oauth2_client_credentials") {
     const tokenResult = await getProviderBearerToken(providerId);
@@ -199,6 +204,9 @@ export async function callProvider(
     buildId?: string | null;
   },
 ): Promise<InferenceResult> {
+  currentInferenceSignal()?.throwIfAborted();
+  await assertGovernedInferenceAuthority(currentInferenceSignal());
+  currentInferenceSignal()?.throwIfAborted();
   // Resolve adapter enforceability before capacity or budget accounting. A
   // plan/adapter capability miss is not a provider request and must not consume
   // budget, wait on host capacity, or mutate provider health through fallback.
@@ -243,12 +251,6 @@ export async function callProvider(
   // Transcription uses its registry adapter and has no model-routing connection.
   const needsModelConnection = executionAdapterRaw !== "transcription";
   const localProvider = needsModelConnection ? await readEnabledRoutingProvider(providerId) : null;
-  await assertProviderDispatchCapacity(providerId);
-  // Lease ownership is routing policy. Whether the card is free is an inference
-  // fact, so it stays in this layer (routing may not import inference).
-  const { assertLocalGpuFree } = await import("@/lib/inference/host-gpu-admission");
-  await assertLocalGpuFree({ providerId, modelId });
-
   // 0. EP-COST-001 Phase 2 — pre-call budget gate.
   // Check the agent's daily token budget before dispatching. If the agent has
   // consumed ≥100% of its registry limit today, throw a billing error so the
@@ -301,6 +303,10 @@ export async function callProvider(
     }
   }
 
+  // An exclusive host reservation refuses promptly; ordinary local runner
+  // contention waits for admission below. Recheck the reservation at dispatch.
+  await assertProviderDispatchCapacity(providerId);
+
   // 1. Resolve provider (DB lookup + auth headers)
   const provider = localProvider ?? await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) throw new InferenceError("Provider not found", "provider_error", providerId);
@@ -347,38 +353,55 @@ export async function callProvider(
     selector !== null
       ? selector.kind
       : `legacy:${typeof executionAdapterRaw === "string" ? executionAdapterRaw : "unknown"}`;
-  // Admission gate: bound concurrent inference per engine so a fleet of
-  // autonomous coworkers can't overload a scarce backend (local model ≈ 1-2
-  // concurrent before latency collapses; remote = provider rate limit / cost).
-  // Interactive turns take priority over autonomous/background work, so a human
-  // waiting on a reply never queues behind a scheduled brief. Held only across
-  // the actual inference call, released in `finally`. See inference-admission.ts.
-  const engineKey = engineKeyForProvider(providerId);
-  const releaseInferenceSlot = await acquireInferenceSlot(engineKey, currentInferenceOrigin(), {
-    providerId,
-    modelId,
-  });
+  // Local HTTP and sandbox inference share the one compute:local-inference
+  // ResourceLane. Remote providers retain the multi-slot provider semaphore.
+  // Keeping these paths disjoint prevents local HTTP from holding one admission
+  // slot while it waits on another queue.
+  const origin = currentInferenceOrigin();
+  let releaseInferenceSlot: (() => void) | null = null;
   let result;
   try {
-    // Queued work has not started inference yet. A disable during admission
-    // invalidates its earlier selection; finally still releases the slot.
-    if (needsModelConnection) await readEnabledRoutingProvider(providerId);
-    result = await adapter.execute({
-      providerId,
-      modelId,
-      plan: effectivePlan,
-      provider: { baseUrl, headers },
-      fetchImpl: providerInferenceFetch,
-      messages,
-      systemPrompt,
-      tools,
-      previousResponseId,
-      mcpSession,
-    });
+    const execute = async () => {
+      await assertProviderDispatchCapacity(providerId);
+      if (!isLocalProviderId(providerId)) {
+        const { assertLocalGpuFree } = await import("@/lib/inference/host-gpu-admission");
+        await assertLocalGpuFree({ providerId, modelId });
+      }
+      // Queued work has not started inference yet. A disable during admission
+      // invalidates its earlier selection before any provider bytes are sent.
+      if (needsModelConnection) await readEnabledRoutingProvider(providerId);
+      await assertGovernedInferenceAuthority(currentInferenceSignal());
+      currentInferenceSignal()?.throwIfAborted();
+      const parentFetch = providerId === "local" ? currentGovernedInferenceDeadline()?.localFetch : undefined;
+      return adapter.execute({
+        providerId,
+        modelId,
+        plan: effectivePlan,
+        provider: { baseUrl, headers },
+        fetchImpl: parentFetch ? withInferenceCancellationFetch(parentFetch) : providerInferenceFetch,
+        messages,
+        systemPrompt,
+        tools,
+        previousResponseId,
+        mcpSession,
+      });
+    };
+    if (isLocalProviderId(providerId)) {
+      result = await withLocalInferenceLock(execute, { modelId, origin,
+        signal: currentInferenceSignal(currentGovernedInferenceDeadline()?.signal) });
+    } else {
+      releaseInferenceSlot = await acquireInferenceSlot(engineKeyForProvider(providerId), origin, {
+        providerId,
+        modelId,
+        signal: currentInferenceSignal(currentGovernedInferenceDeadline()?.signal),
+      });
+      result = await execute();
+    }
     endTimer();
   } catch (err) {
     endTimer();
-    const errorType = err instanceof InferenceError ? err.code : "unknown";
+    const cancelled = currentInferenceSignal()?.aborted && err === currentInferenceSignal()?.reason;
+    const errorType = cancelled ? "cancelled" : err instanceof InferenceError ? err.code : "unknown";
     aiInferenceErrors.inc({ provider: providerId, error_type: errorType });
     // Phase A7: telemetry write before re-throw. Fire-and-forget — the writer
     // swallows its own errors so we never mask the original throw.
@@ -394,7 +417,7 @@ export async function callProvider(
       finishedAt,
       durationMs: finishedAt.getTime() - telemetryStartedAt.getTime(),
       status: "error",
-      errorClass: err instanceof InferenceError ? err.code : "unknown",
+      errorClass: errorType,
       httpStatus: err instanceof InferenceError ? err.statusCode : undefined,
       refusalReason: err instanceof InferenceError
         ? (err.rawBody ?? err.message)
@@ -417,7 +440,7 @@ export async function callProvider(
     }
     throw err;
   } finally {
-    releaseInferenceSlot();
+    releaseInferenceSlot?.();
   }
 
   void clearProviderCapacityStatus({ providerId, source: "api" }).catch((capacityErr) => {

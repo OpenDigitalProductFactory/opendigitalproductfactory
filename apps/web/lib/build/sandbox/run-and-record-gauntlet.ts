@@ -169,7 +169,7 @@ export async function recordScopedTestsEvidence(input: {
     candidateBranch: input.build.buildBranch ?? `build/${input.build.buildId}`,
     mode: "single-branch",
     status: passed ? "passed" : "failed",
-    summary: `Scoped tests ${passed ? "passed" : "failed"} (${input.result.scope ?? "full"}) for tree ${input.binding.headTreeHash.slice(0, 12)}`,
+    summary: `Scoped tests ${passed ? "passed" : "failed"} (${input.result.scope ?? "none"}) for tree ${input.binding.headTreeHash.slice(0, 12)}`,
     evidence: {
       tier: "in-platform-scoped-tests",
       coverage: ran.coverage,
@@ -207,9 +207,9 @@ export function scopedTestsRunDescription(
         : "tsc --noEmit (apps/web) — none of the changed files are in apps/web, so it does not cover this change",
       unitTests
         ? `vitest run (${result.scopedTestsRun} test file(s) covering the changed files)`
-        : result.scope === "none"
-          ? "no tests ran: no test file covers the changed files"
-          : "full test suite (informational; not gated)",
+        : changedFiles.length === 0
+          ? "no tests ran: the build's changed files are unknown"
+          : "no tests ran: no test file covers the changed files",
     ],
   };
 }
