@@ -4,7 +4,7 @@ status: active
 
 # Customer-first repository intake delivery
 Status: implementation plan; commissioning and acceptance remain outstanding.
-Backlog: BI-FD40397B. Workroom: WC-FDE1240A.
+**Backlog item:** BI-FD40397B. Workroom: WC-FDE1240A (controller fencing increment: WC-A2D58814).
 
 For agentic workers: execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use dpf-tdd for red-green implementation, dpf-local-merge-ci-before-push plus the completion gate, and dpf-pr-with-dco for handoff.
 
@@ -63,7 +63,10 @@ Use shared existing error and scheduling plumbing for the refactoring portion (o
 A failed sweep can have partially ingested work. Existing retries already exist; do not increase retry count or polling cadence until identity reconciliation is accepted. Page-cap exhaustion reports incomplete coverage conservatively even if the last full page happens to be the final page. Revert this branch through a normal PR to restore the prior source behavior; no database migration or peer mutation is included. Keep original receipts and source data.
 
 ## Backlog coverage
-Receipt cmv674efp0vuw01o77l9sg4hd validated six live mappings and was read back valid. It binds the immutable plan at f2129dc6e2d7adc87087bebb331b9f6fe665608d (blob 5802f0b0c613e2160936f51b588706311d777e02). Graph: controller depends on reconciliation, disposition, terminal and human-resumption; reconciliation depends on source-identity; disposition and terminal depend on reconciliation. All dependency work remains on its existing BI. This branch may deliver a verified controller repair increment, but BI-FD40397B remains open until all acceptance criteria are evidenced.
+- Decision: decomposed
+- Receipt: cmv7loxoi0u0u01mx0m3dh2e5
+
+Receipt cmv7loxoi0u0u01mx0m3dh2e5 maps six live items (BI-FD40397B, BI-952F08BA, BI-CCD8D841, BI-4C8A83AB, BI-AE9FCB4C, BI-8239CD30) and binds the immutable plan blob 3b406d4af2340a677469ad3ab5f53382a3ba88d3 at pushed commit c32d8250514d628d43c0609e1252912fabc63512. It replaces the earlier receipt cmv674efp0vuw01o77l9sg4hd, which was recorded on the development install and does not exist on the controller install. Graph: controller depends on reconciliation, disposition, terminal and human-resumption; reconciliation depends on source-identity; disposition and terminal depend on reconciliation. All dependency work remains on its existing BI. This branch may deliver a verified controller repair increment, but BI-FD40397B remains open until all acceptance criteria are evidenced.
 
 Scope update: the subsequent claim resolved the impact contract to concrete paths. Related-test lookup returned the colocated reader/runner tests plus migration-proof, standing-operations-shapes, standing-room-declaration and standing-stage-evidence-grants tests. The queue wrapper has no linked tests; add its behavior test. The required style-drift guard, Design Grounding explanation and doc-index regeneration remain in the completion gate.
 
