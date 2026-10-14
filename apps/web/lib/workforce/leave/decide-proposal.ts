@@ -65,8 +65,10 @@ type RecommendationResult = { recommendationId: string; status: "proposed" };
  */
 export type LeaveDecisionRecommendationPersistence = {
   ensureThread(input: { userId: string; threadId?: string | null }): Promise<{ id: string }>;
-  /** The same recommendation already written to the thread, for idempotency. */
+  /** This request's same recommendation already written to the thread, for idempotency. */
   findExistingMessage(input: { threadId: string; content: string }): Promise<{ id: string } | null>;
+  /** Link the request to its DecisionInteraction when it is not linked to it yet. */
+  linkDecisionInteraction(input: { requestId: string; decisionInteractionId: string }): Promise<void>;
   writeRecommendation(input: {
     threadId: string;
     taskRunId?: string | null;
@@ -91,11 +93,19 @@ export async function proposeLeaveDecision(input: {
   const auditKey = input.decision.interactionId ?? `guard-${input.decision.action}`;
   const recommendationId = `leave-decision:${input.decision.request.requestId}:${auditKey}`;
   const persistence = input.persistence ?? prismaLeaveDecisionRecommendationPersistence();
-  const messageContent = `Time-off recommendation: ${draft.parameters.recommendation}. ${draft.parameters.rationale}`;
+  // The message names its request, so idempotency is per request: two requests
+  // with the same recommendation prose each get their own message and link.
+  const messageContent = `Time-off recommendation for ${draft.parameters.requestId}: ${draft.parameters.recommendation}. ${draft.parameters.rationale}`;
 
   const thread = await persistence.ensureThread({ userId: input.userId, threadId: input.threadId });
   const existing = await persistence.findExistingMessage({ threadId: thread.id, content: messageContent });
-  if (existing) return { recommendationId, status: "proposed", existing: true };
+  if (existing) {
+    const decisionInteractionId = input.decision.interactionId;
+    if (decisionInteractionId) {
+      await persistence.linkDecisionInteraction({ requestId: input.decision.request.requestId, decisionInteractionId });
+    }
+    return { recommendationId, status: "proposed", existing: true };
+  }
 
   await persistence.writeRecommendation({
     threadId: thread.id,
@@ -128,6 +138,12 @@ export function prismaLeaveDecisionRecommendationPersistence(): LeaveDecisionRec
         where: { threadId, role: "assistant", taskType: LEAVE_RECOMMENDATION_TASK_TYPE, content },
         select: { id: true },
       }),
+    linkDecisionInteraction: async ({ requestId, decisionInteractionId }) => {
+      await prisma.leaveRequest.updateMany({
+        where: { requestId, OR: [{ decisionInteractionId: null }, { decisionInteractionId: { not: decisionInteractionId } }] },
+        data: { decisionInteractionId },
+      });
+    },
     writeRecommendation: (input) =>
       prisma.$transaction(async (tx) => {
         const message = await tx.agentMessage.create({

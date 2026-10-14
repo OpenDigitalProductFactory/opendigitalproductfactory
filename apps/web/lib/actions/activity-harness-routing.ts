@@ -63,21 +63,27 @@ export async function confirmActivityHarnessOverrideAction(
     confidence: input.confidence,
     approvedAt: now.toISOString(),
   });
-  // One live override per activity and recipe: a newer confirm by anyone supersedes the rest.
-  await prisma.userFact.updateMany({
-    where: { category: ACTIVITY_ROUTING_OVERRIDE_FACT_CATEGORY, key, supersededAt: null, NOT: { userId: user.id } },
-    data: { supersededAt: now },
+  // One live override per activity and recipe: each confirm writes one new fact
+  // and supersedes every other live one (the caller's own included) in the same
+  // transaction, serialised per activity and recipe so two confirms cannot both
+  // stay live.
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(
+      "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+      `${ACTIVITY_ROUTING_OVERRIDE_FACT_CATEGORY}:${key}`,
+    );
+    const fact = await tx.userFact.create({
+      data: {
+        userId: user.id, category: ACTIVITY_ROUTING_OVERRIDE_FACT_CATEGORY, key, value,
+        confidence: 1, sourceRoute: ACTIVITY_ROUTING_ROUTE_CONTEXT, sourceAgentId: ACTIVITY_ROUTING_AGENT_ID,
+      },
+      select: { id: true },
+    });
+    await tx.userFact.updateMany({
+      where: { category: ACTIVITY_ROUTING_OVERRIDE_FACT_CATEGORY, key, supersededAt: null, NOT: { id: fact.id } },
+      data: { supersededAt: now, supersededById: fact.id },
+    });
   });
-  const existing = await prisma.userFact.findFirst({
-    where: { userId: user.id, category: ACTIVITY_ROUTING_OVERRIDE_FACT_CATEGORY, key, supersededAt: null },
-    select: { id: true },
-  });
-  const data = { value, confidence: 1, sourceRoute: ACTIVITY_ROUTING_ROUTE_CONTEXT, sourceAgentId: ACTIVITY_ROUTING_AGENT_ID };
-  if (existing) {
-    await prisma.userFact.update({ where: { id: existing.id }, data });
-  } else {
-    await prisma.userFact.create({ data: { userId: user.id, category: ACTIVITY_ROUTING_OVERRIDE_FACT_CATEGORY, key, ...data } });
-  }
 
   revalidatePath(ACTIVITY_ROUTING_ROUTE_CONTEXT);
   return { success: true, overrideId: input.proposalId };

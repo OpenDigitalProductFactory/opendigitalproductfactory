@@ -4,19 +4,24 @@ vi.mock("@/lib/auth", () => ({
   auth: vi.fn(),
 }));
 
-vi.mock("@dpf/db", () => ({
-  prisma: {
-    agentActionProposal: {
-      create: vi.fn(),
+vi.mock("@dpf/db", () => {
+  const userFact = {
+    findFirst: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn(),
+  };
+  const $executeRawUnsafe = vi.fn();
+  return {
+    prisma: {
+      agentActionProposal: { create: vi.fn() },
+      userFact,
+      $executeRawUnsafe,
+      // The supersede and the new fact land together or not at all.
+      $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn({ userFact, $executeRawUnsafe })),
     },
-    userFact: {
-      findFirst: vi.fn(),
-      create: vi.fn(),
-      update: vi.fn(),
-      updateMany: vi.fn(),
-    },
-  },
-}));
+  };
+});
 
 vi.mock("@/lib/mcp-governed-execute", () => ({
   governedExecuteTool: vi.fn(),
@@ -57,7 +62,7 @@ describe("confirmActivityHarnessOverrideAction", () => {
     vi.mocked(auth).mockResolvedValue({ user: { id: "user-1", platformRole: "HR-000", isSuperuser: false } } as never);
     vi.mocked(governedExecuteTool).mockResolvedValue({ success: true, message: "Activity routing confidence override approved." });
     vi.mocked(prisma.userFact.findFirst).mockResolvedValue(null);
-    vi.mocked(prisma.userFact.create).mockResolvedValue({} as never);
+    vi.mocked(prisma.userFact.create).mockResolvedValue({ id: "fact-new" } as never);
     vi.mocked(prisma.userFact.updateMany).mockResolvedValue({ count: 0 } as never);
   });
 
@@ -81,17 +86,24 @@ describe("confirmActivityHarnessOverrideAction", () => {
     });
   });
 
-  it("keeps the confirmed override as a current fact, superseding anyone else's for the same activity and recipe", async () => {
+  it("keeps the confirmed override as one new current fact, superseding every live one for the activity and recipe in the same transaction", async () => {
     const result = await confirmActivityHarnessOverrideAction(INPUT);
     expect(result).toEqual({ success: true, overrideId: INPUT.proposalId });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    // Concurrent confirms for the same activity and recipe are serialised.
+    expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+      "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+      `${ACTIVITY_ROUTING_OVERRIDE_FACT_CATEGORY}:plan|edge.plan.balanced`,
+    );
+    // Every live fact, the caller's own included, is superseded by the new one.
     expect(prisma.userFact.updateMany).toHaveBeenCalledWith({
       where: {
         category: ACTIVITY_ROUTING_OVERRIDE_FACT_CATEGORY,
         key: "plan|edge.plan.balanced",
         supersededAt: null,
-        NOT: { userId: "user-1" },
+        NOT: { id: "fact-new" },
       },
-      data: { supersededAt: expect.any(Date) },
+      data: { supersededAt: expect.any(Date), supersededById: "fact-new" },
     });
     const write = vi.mocked(prisma.userFact.create).mock.calls[0]![0] as { data: Record<string, unknown> };
     expect(write.data).toMatchObject({
@@ -109,11 +121,12 @@ describe("confirmActivityHarnessOverrideAction", () => {
     expect(revalidatePath).toHaveBeenCalledWith("/platform/ai/operations-map");
   });
 
-  it("updates the person's own current fact instead of adding a second", async () => {
-    vi.mocked(prisma.userFact.findFirst).mockResolvedValue({ id: "fact-1" } as never);
+  it("a repeat confirm by the same person adds one new fact and supersedes their earlier one, never a second live fact", async () => {
     await confirmActivityHarnessOverrideAction(INPUT);
-    expect(prisma.userFact.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "fact-1" } }));
-    expect(prisma.userFact.create).not.toHaveBeenCalled();
+    expect(prisma.userFact.create).toHaveBeenCalledTimes(1);
+    expect(prisma.userFact.update).not.toHaveBeenCalled();
+    const where = vi.mocked(prisma.userFact.updateMany).mock.calls[0]![0]!.where as Record<string, unknown>;
+    expect(where).not.toHaveProperty("userId");
   });
 
   it("stores nothing when the monitor refuses, and says why", async () => {

@@ -418,14 +418,19 @@ async function addPendingEnvelopes(
   db: AgentCardDb,
 ): Promise<void> {
   const now = new Date();
-  const envelopes = await db.coworkerActionEnvelope.findMany({
-    where: {
-      coworkerAgentId: { in: agentIds },
-      status: "proposed",
-      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
-    },
+  const waiting = { status: "proposed", OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] };
+  // Counted per agent, and the newest read per agent, so a busy agent neither
+  // caps its own count nor pushes another agent's request out of the read.
+  const counts = await db.coworkerActionEnvelope.groupBy({
+    by: ["coworkerAgentId"],
+    where: { coworkerAgentId: { in: agentIds }, ...waiting },
+    _count: { _all: true },
+  });
+  const countByAgent = new Map(counts.map((row) => [row.coworkerAgentId, row._count._all]));
+  const envelopes = countByAgent.size === 0 ? [] : await db.coworkerActionEnvelope.findMany({
+    where: { coworkerAgentId: { in: [...countByAgent.keys()] }, ...waiting },
     orderBy: { createdAt: "desc" },
-    take: Math.max(50, agentIds.length * 5),
+    distinct: ["coworkerAgentId"],
     select: { id: true, coworkerAgentId: true, delegatingUserId: true, manifestActionId: true, rationale: true, createdAt: true, expiresAt: true },
   });
   const ownerIds = [...new Set(envelopes.map((envelope) => envelope.delegatingUserId))];
@@ -437,7 +442,7 @@ async function addPendingEnvelopes(
     const current = stateByAgentId.get(envelope.coworkerAgentId) ?? createEmptySupervisorDecisionState();
     stateByAgentId.set(envelope.coworkerAgentId, {
       ...current,
-      pendingEnvelopeCount: (current.pendingEnvelopeCount ?? 0) + 1,
+      pendingEnvelopeCount: countByAgent.get(envelope.coworkerAgentId) ?? 1,
       latestPendingEnvelope: current.latestPendingEnvelope ?? {
         envelopeId: envelope.id,
         delegatingUserId: envelope.delegatingUserId,

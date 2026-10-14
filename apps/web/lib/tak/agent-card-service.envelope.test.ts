@@ -9,7 +9,7 @@ vi.mock("@dpf/db", () => ({
   prisma: {
     agent: { findUnique: vi.fn(), findMany: vi.fn() },
     agentActionProposal: { findMany: vi.fn() },
-    coworkerActionEnvelope: { findMany: vi.fn() },
+    coworkerActionEnvelope: { findMany: vi.fn(), groupBy: vi.fn() },
     user: { findMany: vi.fn() },
     toolExecution: { findMany: vi.fn() },
   },
@@ -39,6 +39,7 @@ beforeEach(() => {
   vi.mocked(prisma.agent.findMany).mockResolvedValue([AGENT] as never);
   vi.mocked(prisma.toolExecution.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.user.findMany).mockResolvedValue([{ id: "owner-1", email: "owner@x.test" }] as never);
+  vi.mocked(prisma.coworkerActionEnvelope.groupBy).mockResolvedValue([{ coworkerAgentId: "AGT-OPS", _count: { _all: 1 } }] as never);
 });
 
 describe("agent card — latest pending proposal or envelope", () => {
@@ -52,6 +53,7 @@ describe("agent card — latest pending proposal or envelope", () => {
     expect(prisma.coworkerActionEnvelope.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ coworkerAgentId: { in: ["AGT-OPS"] }, status: "proposed" }),
       orderBy: { createdAt: "desc" },
+      distinct: ["coworkerAgentId"],
     }));
     expect(state.pendingProposalCount).toBe(1);
     expect(state.pendingEnvelopeCount).toBe(1);
@@ -79,8 +81,34 @@ describe("agent card — latest pending proposal or envelope", () => {
     expect(card!.extensions.tak.authority.supervisorDecisionState.latestPendingKind).toBe("proposal");
   });
 
+  it("counts each agent's waiting requests in full: a busy agent neither caps its own count nor starves another's", async () => {
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([AGENT, { ...AGENT, agentId: "AGT-QUIET", name: "Quiet" }] as never);
+    vi.mocked(prisma.agentActionProposal.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.coworkerActionEnvelope.groupBy).mockResolvedValue([
+      { coworkerAgentId: "AGT-OPS", _count: { _all: 120 } },
+      { coworkerAgentId: "AGT-QUIET", _count: { _all: 1 } },
+    ] as never);
+    vi.mocked(prisma.coworkerActionEnvelope.findMany).mockResolvedValue([
+      ENVELOPE,
+      { ...ENVELOPE, id: "env-quiet", coworkerAgentId: "AGT-QUIET", createdAt: new Date("2026-09-01T09:00:00.000Z") },
+    ] as never);
+
+    const cards = await listInternalAgentCards();
+    const stateOf = (agentId: string) => cards.find((card) => card.agentId === agentId)!.extensions.tak.authority.supervisorDecisionState;
+
+    expect(prisma.coworkerActionEnvelope.groupBy).toHaveBeenCalledWith(expect.objectContaining({
+      by: ["coworkerAgentId"],
+      where: expect.objectContaining({ coworkerAgentId: { in: ["AGT-OPS", "AGT-QUIET"] }, status: "proposed" }),
+    }));
+    expect(stateOf("AGT-OPS").pendingEnvelopeCount).toBe(120);
+    expect(stateOf("AGT-OPS").latestPendingEnvelope?.envelopeId).toBe("env-1");
+    expect(stateOf("AGT-QUIET").pendingEnvelopeCount).toBe(1);
+    expect(stateOf("AGT-QUIET").latestPendingEnvelope?.envelopeId).toBe("env-quiet");
+  });
+
   it("has nothing pending when neither exists", async () => {
     vi.mocked(prisma.agentActionProposal.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.coworkerActionEnvelope.groupBy).mockResolvedValue([] as never);
     vi.mocked(prisma.coworkerActionEnvelope.findMany).mockResolvedValue([] as never);
     const [card] = await listInternalAgentCards();
     const state = card!.extensions.tak.authority.supervisorDecisionState;

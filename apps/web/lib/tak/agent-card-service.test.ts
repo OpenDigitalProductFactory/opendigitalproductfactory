@@ -11,6 +11,7 @@ vi.mock("@dpf/db", () => ({
     },
     coworkerActionEnvelope: {
       findMany: vi.fn(),
+      groupBy: vi.fn(),
     },
     user: {
       findMany: vi.fn(),
@@ -35,6 +36,7 @@ describe("resolveInternalAgentCard", () => {
     vi.clearAllMocks();
     vi.mocked(prisma.agentActionProposal.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.coworkerActionEnvelope.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.coworkerActionEnvelope.groupBy).mockResolvedValue([] as never);
     vi.mocked(prisma.user.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.toolExecution.findMany).mockResolvedValue([] as never);
   });

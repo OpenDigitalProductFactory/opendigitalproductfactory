@@ -226,8 +226,9 @@ async function recommendationsFromInteractions(
     where: { interactionId: { in: ids } },
     select: { interactionId: true, outcomeType: true, recommendedOptionId: true, rationale: true },
   });
+  const interactionById = new Map(interactions.map((i) => [i.interactionId, i]));
   for (const row of rows) {
-    const interaction = interactions.find((i) => i.interactionId === row.decisionInteractionId);
+    const interaction = row.decisionInteractionId ? interactionById.get(row.decisionInteractionId) : undefined;
     if (!interaction) continue;
     const outcome = mapOrgDecisionToLeaveOutcome({
       outcomeType: interaction.outcomeType,

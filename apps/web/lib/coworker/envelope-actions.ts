@@ -145,19 +145,30 @@ function authorizeDecider(
   return { refusal: null, reason };
 }
 
+/**
+ * The audit row follows a decision that has already committed, and the
+ * decision itself carries who, for whom and why on the envelope. A failed audit
+ * write is logged, never thrown: throwing here would fail the approve route
+ * before the approved call runs and strand an approved request.
+ */
 async function auditOnBehalf(envelope: EnvelopeRow, by: string, reason: string, verb: "approve" | "decline"): Promise<void> {
-  await createAuthorizationDecisionLog({
-    actorType: "user",
-    actorRef: by,
-    humanContextRef: envelope.delegatingUserId,
-    actionKey: `coworker_envelope.${verb}_on_behalf`,
-    objectRef: envelope.id,
-    decision: "allow",
-    rationale: {
-      by, onBehalfOf: envelope.delegatingUserId, reason,
-      toolName: envelope.manifestActionId, coworkerAgentId: envelope.coworkerAgentId,
-    },
-  });
+  try {
+    await createAuthorizationDecisionLog({
+      actorType: "user",
+      actorRef: by,
+      humanContextRef: envelope.delegatingUserId,
+      actionKey: `coworker_envelope.${verb}_on_behalf`,
+      objectRef: envelope.id,
+      decision: "allow",
+      rationale: {
+        by, onBehalfOf: envelope.delegatingUserId, reason,
+        toolName: envelope.manifestActionId, coworkerAgentId: envelope.coworkerAgentId,
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[envelope-actions] on-behalf audit not written: envelope=${JSON.stringify(envelope.id)} verb=${JSON.stringify(verb)} error=${JSON.stringify(message)}`);
+  }
 }
 
 /**

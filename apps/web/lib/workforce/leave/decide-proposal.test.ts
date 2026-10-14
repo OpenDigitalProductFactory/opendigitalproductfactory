@@ -54,6 +54,7 @@ function persistence(over: Partial<LeaveDecisionRecommendationPersistence> = {})
   return {
     ensureThread: vi.fn().mockResolvedValue({ id: "thread-1" }),
     findExistingMessage: vi.fn().mockResolvedValue(null),
+    linkDecisionInteraction: vi.fn().mockResolvedValue(undefined),
     writeRecommendation: vi.fn().mockResolvedValue({ messageId: "msg-1" }),
     ...over,
   };
@@ -80,21 +81,52 @@ describe("leave decision recommendation", () => {
       threadId: "thread-1",
       taskRunId: "TR-1",
       agentId: "time-off-advisor",
-      messageContent: "Time-off recommendation: approve. Approve under the recorded staffing stance.",
+      messageContent: "Time-off recommendation for LR-1: approve. Approve under the recorded staffing stance.",
       leaveRequestUpdate: { requestId: "LR-1", decisionInteractionId: "DI-1" },
     });
     expect(result).toEqual({ recommendationId: "leave-decision:LR-1:DI-1", status: "proposed" });
   });
 
-  it("is idempotent: the same recommendation already in the thread is not written twice", async () => {
+  it("is idempotent per request: the same request's recommendation is not written twice, and its link is still made", async () => {
     const store = persistence({ findExistingMessage: vi.fn().mockResolvedValue({ id: "msg-0" }) });
     const result = await proposeLeaveDecision({ decision, userId: "user-1", persistence: store });
     expect(store.findExistingMessage).toHaveBeenCalledWith({
       threadId: "thread-1",
-      content: "Time-off recommendation: approve. Approve under the recorded staffing stance.",
+      content: "Time-off recommendation for LR-1: approve. Approve under the recorded staffing stance.",
     });
     expect(result).toEqual({ recommendationId: "leave-decision:LR-1:DI-1", status: "proposed", existing: true });
     expect(store.writeRecommendation).not.toHaveBeenCalled();
+    // A message written before the link landed must not leave the request unlinked.
+    expect(store.linkDecisionInteraction).toHaveBeenCalledWith({ requestId: "LR-1", decisionInteractionId: "DI-1" });
+  });
+
+  it("a second request with the same recommendation prose gets its own message and its own link", async () => {
+    const written = new Set<string>();
+    const store = persistence({
+      findExistingMessage: vi.fn(async ({ content }: { content: string }) => (written.has(content) ? { id: "msg-x" } : null)),
+      writeRecommendation: vi.fn(async (input: { messageContent: string }) => {
+        written.add(input.messageContent);
+        return { messageId: `msg-${written.size}` };
+      }),
+    });
+    await proposeLeaveDecision({ decision, userId: "user-1", persistence: store });
+    const second = {
+      ...decision, interactionId: "DI-2",
+      request: { ...decision.request, requestId: "LR-2" }, inputs: { ...decision.inputs, requestId: "LR-2" },
+    };
+    const result = await proposeLeaveDecision({ decision: second, userId: "user-1", persistence: store });
+    expect(result).toEqual({ recommendationId: "leave-decision:LR-2:DI-2", status: "proposed" });
+    expect(store.writeRecommendation).toHaveBeenCalledTimes(2);
+    expect(store.writeRecommendation).toHaveBeenLastCalledWith(expect.objectContaining({
+      leaveRequestUpdate: { requestId: "LR-2", decisionInteractionId: "DI-2" },
+    }));
+  });
+
+  it("an existing guard-only recommendation links nothing", async () => {
+    const store = persistence({ findExistingMessage: vi.fn().mockResolvedValue({ id: "msg-0" }) });
+    const guarded = { ...decision, action: "escalate" as const, interactionId: null };
+    await proposeLeaveDecision({ decision: guarded, userId: "user-1", persistence: store });
+    expect(store.linkDecisionInteraction).not.toHaveBeenCalled();
   });
 
   it("a guard-only recommendation has no interaction: keyed by the guard, links nothing", async () => {

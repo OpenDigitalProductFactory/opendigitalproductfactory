@@ -219,14 +219,17 @@ describe("S1 — a proposal-mode tool in chat raises an approval request", () =>
     expect(routeAndCall).toHaveBeenCalledTimes(1);
   });
 
-  it("collects every request one step raised", async () => {
+  it("ends the step on the first request raised: later calls from the same model batch are not run", async () => {
     vi.mocked(routeAndCall).mockResolvedValueOnce(inference("", [CALL, { ...CALL, id: "c2", arguments: { title: "Second", body: "More" } }]) as never);
     vi.mocked(governedExecuteTool)
       .mockResolvedValueOnce(pending("env-1") as never)
       .mockResolvedValueOnce(pending("env-2") as never);
     const result = await runAgenticLoop({ ...params("chat"), agentMessageId: "msg-turn-1" });
-    expect(result.pendingApproval).toEqual({ envelopeIds: ["env-1", "env-2"] });
+    expect(governedExecuteTool).toHaveBeenCalledTimes(1);
+    expect(result.pendingApproval).toEqual({ envelopeIds: ["env-1"] });
+    expect(result.executedTools.map((tool) => tool.args)).toEqual([{ title: "Finding", body: "Details" }]);
     expect(result.content).toBe("I'd like to contribute to hive with the following details.");
+    expect(routeAndCall).toHaveBeenCalledTimes(1);
   });
 
   it("a settled call (it already ran on an approval) renders its recorded outcome and raises no card", async () => {

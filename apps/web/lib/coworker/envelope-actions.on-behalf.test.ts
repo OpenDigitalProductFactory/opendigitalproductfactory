@@ -108,6 +108,15 @@ describe("approve on someone's behalf (AC-OVERRIDE)", () => {
     expect(updateMany).not.toHaveBeenCalled();
   });
 
+  it("a failed audit write does not undo or block the approval that already committed", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    createAuthorizationDecisionLog.mockRejectedValueOnce(new Error("audit table unavailable"));
+    const result = await approveEnvelope("env-1", "admin-1", { reason: "Owner is away.", callerIsAdmin: true });
+    expect(result).toMatchObject({ ok: true, envelope: { status: "approved" } });
+    expect(consoleError).toHaveBeenCalledWith(expect.stringContaining("audit table unavailable"));
+    consoleError.mockRestore();
+  });
+
   it("a lapsed request still expires instead of being decided on someone's behalf", async () => {
     findUnique.mockResolvedValue(row({ expiresAt: new Date(Date.now() - 1) }));
     const result = await approveEnvelope("env-1", "admin-1", { reason: "Owner is away.", callerIsAdmin: true });
@@ -135,6 +144,15 @@ describe("decline on someone's behalf (AC-OVERRIDE)", () => {
       actorRef: "admin-1", humanContextRef: "owner-1", actionKey: "coworker_envelope.decline_on_behalf",
       rationale: expect.objectContaining({ reason: "Not wanted any more." }),
     }));
+  });
+
+  it("a failed audit write does not undo or block the decline that already committed", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    createAuthorizationDecisionLog.mockRejectedValueOnce(new Error("audit table unavailable"));
+    const result = await denyEnvelope("env-1", "admin-1", { reason: "Not wanted any more.", callerIsAdmin: true });
+    expect(result).toMatchObject({ ok: true, envelope: { status: "declined" } });
+    expect(consoleError).toHaveBeenCalledWith(expect.stringContaining("audit table unavailable"));
+    consoleError.mockRestore();
   });
 
   it("refuses a non-admin non-delegate and an admin with no reason", async () => {

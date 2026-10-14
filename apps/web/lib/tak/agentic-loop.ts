@@ -2469,7 +2469,8 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       iterationResults.push({ tc, toolResult });
       onProgress?.({ type: "tool:complete", tool: tc.name, success: toolResult.success });
       const raisedId = declaredProposalInChat ? pendingApprovalEnvelopeId(toolResult) : null;
-      if (raisedId) chatApprovalIds.push(raisedId);
+      // The turn ends on the raised request; later calls in this batch are not run.
+      if (raisedId) { chatApprovalIds.push(raisedId); break; }
       // Also bound a batch from one inference; varying arguments evade the
       // exact-call repetition detector. Keep all completed calls in the result.
       if (refusalStreak >= 3) return stopRefusedTurn();
