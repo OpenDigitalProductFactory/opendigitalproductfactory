@@ -24,6 +24,7 @@ import {
   resolveEvidenceRecovery,
 } from "@/lib/tak/evidence-requirement";
 import { resolveRouteContext } from "@/lib/route-context-map";
+import { isSuppliedSourceAnalysis } from "./intent-taxonomy";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { isGovernedToolRefusal } from "@/lib/govern/authority/governed-rejection-disposition";
 import { sanitizeForLog } from "@/lib/security/safe-log";
@@ -1266,10 +1267,8 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   // finish (up to this many times) before falling through to the best partial.
   const MAX_TRUNCATION_CONTINUES = 2;
   let truncationContinues = 0;
-  // Evidence-integrity gate (INV-1). Decide once whether this turn's answer
-  // depends on live operational state (a route with authoritative domain tools +
-  // a live-state question); the terminal guard in the zero-tool branch enforces
-  // that such a turn never returns factual prose without a successful tool call.
+  // Source-only analysis needs no live lookup; mixed requests still owe INV-1 evidence.
+  const sourceOnlyAnalysis = isSuppliedSourceAnalysis(latestUserText(messages));
   const evidenceRequirement = classifyEvidenceRequirement({
     routeContext,
     domainTools: resolveRouteContext(routeContext).domainTools,
@@ -2055,7 +2054,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         ),
         isSetupTourTurn: isSetupTourTurn(messages),
         isConversationalRoute: !BUILD_ROUTE_PATTERN.test(routeContext ?? ""),
-        allowFirstTurnTextOnlyReply: shouldAllowProviderStatusTextReply({
+        allowFirstTurnTextOnlyReply: (sourceOnlyAnalysis && !BUILD_ROUTE_PATTERN.test(routeContext ?? "")) || shouldAllowProviderStatusTextReply({
           routeContext,
           taskType,
           providerId: result.providerId,

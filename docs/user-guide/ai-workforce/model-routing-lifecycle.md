@@ -239,6 +239,10 @@ Local models are automatically discovered and profiled. They are assigned the `b
 
 ## Troubleshooting
 
+**Reviewing supplied code on the local model:**
+- A complete answer about code included in your message can be short, including a JSON verdict. The coworker preserves that answer without asking for a live lookup or adding a tool-unavailable warning.
+- Include code in a closed code fence or a complete standalone function. Questions about the current provider, deployment, queue or test results still require live evidence, even when code is included. A request to save or record an assessment still requires its declared tool.
+
 **Independent review reports unknown or insufficient model capacity:**
 - Unknown completion/context capacity means routing lacks usable capacity evidence; it is an infrastructure admission problem, not a failed code review or an active inference.
 - For the default local Docker Model Runner provider, routing reads the exact selected model's configured context. Input and completion share that window, and any lower explicit output limit still applies. Another installed model's capacity or advertised catalog maximum cannot substitute for an unavailable runtime read. Routing inputs refresh within 30 seconds and on explicit cache invalidation.

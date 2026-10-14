@@ -16,7 +16,7 @@ Restore complete legitimate local supplied-code answers through the coworker por
 
 ## Backlog coverage
 
-Decision: decomposed. One independently shippable deliverable `source-answer-completion` maps to BI-C145F650, dependsOn []. Immutable plan coverage receipt is pending provider publication and validation; implementation waits for the normal receipt. Primary admission work remains BI-285EF102, original branch identity unchanged.
+Decision: decomposed. Receipt: cmv7sachk093501o97vd1wxcg. One independently shippable deliverable `source-answer-completion` maps to BI-C145F650, dependsOn []. Provider-verified immutable plan is b13bf59fda520dcbc19e0d412a34095c029eaa74, blob 3558d2c305137dcc26e8caa2f104330fbb610252. Primary admission work remains BI-285EF102, original branch identity unchanged.
 
 Requirement ref: BI-C145F650/source-answer-preservation.
 Contract ref: supplied-source-analysis/no-live-evidence-exemption.
