@@ -19,14 +19,14 @@ function fakeDb() {
 const scope = { principalId: "p1", organizationId: "org1", purpose: "shared-platform" as const };
 
 describe("canonical funding authority reads", () => {
-  it("keeps attribution-gap counts inside the organization for a non-founder owner", async () => {
+  it.each(["founder", "organization"] as const)("keeps attribution-gap counts inside the organization for a %s owner without broader observation authority", async (ownerKind) => {
     const base = fakeDb();
     base.organization.findUnique.mockResolvedValue({ id: "org1", topAccountablePrincipalId: "p1" });
-    base.decisionPerspectiveProfile.findUnique.mockResolvedValue({ status: "active", ownerPrincipalId: "platform-owner", ownerOrganizationId: "platform-org" });
+    if (ownerKind === "organization") base.decisionPerspectiveProfile.findUnique.mockResolvedValue({ status: "active", ownerPrincipalId: "platform-owner", ownerOrganizationId: "platform-org" });
     base.platformConfig.findUnique.mockImplementation(async (args?: unknown) => (args as { where: { key: string } }).where.key === "federation.identity" ? { value: { deviceId: `did_${"a".repeat(64)}` } } as never : null);
     const query = vi.fn(async () => []);
     const result = await loadScopedBalanceReport({ ...base, $queryRaw: query } as never, scope);
-    expect(result).toMatchObject({ ok: true, data: { ownerKind: "organization", attributionGap: { level: "organization", unassignedAttempts: 0 } } });
+    expect(result).toMatchObject({ ok: true, data: { ownerKind, attributionGap: { level: "organization", unassignedAttempts: 0 } } });
     expect(query.mock.calls.at(-1)?.slice(-2)).toEqual(["org1", "org1"]);
   });
   it("bounds owner listings and advances a stable organization cursor without crossing ownership", async () => {

@@ -250,8 +250,8 @@ export async function loadScopedBalanceReport(db: InvestmentIdentityDb & Pick<Pr
   const now = new Date();
   const policyActive = stored.data === null || policyRevisionIsActive(stored.data, now);
   const observed = await loadInvestmentObservation(db, { scope, installationRef, windowDays: policy.windowDays, now });
-  const attributionGap = { level: ownerKind === "founder" ? "installation" as const : "organization" as const,
-    unassignedAttempts: await loadUnassignedInvestmentAttempts(db, policy.windowDays, now, ownerKind === "founder" ? null : scope.organizationId) };
+  const attributionGap = { level: "organization" as const,
+    unassignedAttempts: await loadUnassignedInvestmentAttempts(db, policy.windowDays, now, scope.organizationId) };
   const row = await db.platformConfig.findUnique({ where: { key: bindingKey({ kind: "installation", purpose: scope.purpose }, installationRef, scope.organizationId) } });
   const binding = row ? parseBinding(row.value, installationRef) : null;
   const canSucceedBinding = binding !== null && binding.scope.organizationId === scope.organizationId

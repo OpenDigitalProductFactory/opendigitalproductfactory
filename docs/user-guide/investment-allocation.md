@@ -12,7 +12,7 @@ Use **Adjust allocation** to choose a priority, review window and reason. Automa
 Use **Installation funding** to explicitly apply your scope to matching unbound work on this install. Room funding takes precedence, followed by the nearest applicable parent room, then portfolio and installation funding. Different items in a common room can retain different owners. Another installation needs its own governed binding, including a paired production installation; copying settings does not grant funding authority.
 
 The observed balance counts platform-recorded inference attempts, including retries. Unclassified work and missing usage stay visible. External agent inference outside the platform is unobserved. A fresh install says **Not measured yet**, rather than showing invented spending. Changing a policy or owner does not rewrite historical attribution.
-Unassigned attempts appear as a separate attribution gap and never enter the owner's percentage. Organization owners see only gaps tied to their organization; the platform founder can review the installation-wide gap.
+Unassigned attempts appear as a separate attribution gap and never enter the owner's percentage. All owner reports show only gaps tied to their funding organization. Funding ownership does not grant visibility into other organizations.
 
 Build Studio receives the resolved direction before inference. External agents receive it when claiming or reading a Workroom. The tools `get_investment_balance`, `set_investment_balance` and `bind_investment_funding` use the same owner checks as the portal. Read the current revision before changing it; a stale revision is refused.
 

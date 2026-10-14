@@ -16,7 +16,7 @@ describe("investment allocation presentation", () => {
     const scope = { principalId: "p1", organizationId: "org1", purpose: "shared-platform" as const };
     const view: OwnerInvestmentView = { scope, organizationName: "Operator organization", report: { ok: true, data: {
       scope, ownerKind: "founder", source: "default", revision: null, policy, guidance: "", installationBinding: null,
-      policyActive: true, canSucceedBinding: false, attributionGap: { level: "installation", unassignedAttempts: 7 }, externalInferenceCoverage: "unobserved", observation: evaluateInvestmentBalance(policy, { knownAttempts: 0, unknownAttempts: 3, refactorTokens: 0, newTokens: 0, unclassifiedTokens: 0, latestAt: null }),
+      policyActive: true, canSucceedBinding: false, attributionGap: { level: "organization", unassignedAttempts: 7 }, externalInferenceCoverage: "unobserved", observation: evaluateInvestmentBalance(policy, { knownAttempts: 0, unknownAttempts: 3, refactorTokens: 0, newTokens: 0, unclassifiedTokens: 0, latestAt: null }),
     } } };
     const html = renderBalance(<InvestmentBalance views={[view]} canManage />);
     expect(html).toContain("80% repair / 20% new");
