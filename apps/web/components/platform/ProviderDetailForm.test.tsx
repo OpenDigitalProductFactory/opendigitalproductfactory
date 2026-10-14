@@ -5,6 +5,7 @@ import { configureProvider, testProviderAuth, discoverModels, profileModels } fr
 import { renderToStaticMarkup } from "react-dom/server";
 
 import type { ProviderWithCredential } from "@/lib/ai-provider-types";
+import { SOURCE_CATALOG } from "@dpf/i18n";
 import { ProviderDetailForm } from "./ProviderDetailForm";
 
 vi.mock("next/navigation", () => ({
@@ -85,8 +86,9 @@ describe("ProviderDetailForm", () => {
   });
   it("keeps ChatGPT shared authentication changes in the Codex management page", () => {
     const fixture: ProviderWithCredential = { ...providerFixture, provider: { ...providerFixture.provider, providerId: "chatgpt", authMethod: "oauth2_authorization_code", supportedAuthMethods: ["oauth2_authorization_code"], authorizeUrl: "https://auth.openai.com/oauth/authorize" } };
-    render(<ProviderDetailForm pw={fixture} canWrite models={[]} profiles={[]} hasActiveProvider />);
+    render(<ProviderDetailForm pw={fixture} canWrite models={[]} profiles={[]} hasActiveProvider sharedAuthRecovery={{ help: SOURCE_CATALOG.providerAccounts.sharedSignInHelp, label: SOURCE_CATALOG.providerAccounts.manageSharedSignIn }} />);
     expect(screen.queryByRole("button", { name: /sign in|disconnect/i })).toBeNull();
+    expect(screen.getByRole("link", { name: "Manage shared sign-in" }).getAttribute("href")).toBe("/platform/ai/providers/codex");
   });
   it("recovers the ready button after a rejected save", async () => {
     vi.mocked(configureProvider).mockRejectedValue(new Error("network failure"));

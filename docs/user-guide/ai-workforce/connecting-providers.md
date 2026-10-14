@@ -259,6 +259,6 @@ After provider setup, the finance-linked surfaces are:
 
 ## Troubleshooting
 
-- **"Token expired"** — click Sign In again to re-authenticate. This is the only action required.
+- **"Token expired"** — a stored expiry date does not prove the upstream token still works. ChatGPT and Codex default connections share the sign-in managed from the Codex provider page. Use **Manage shared sign-in** beside ChatGPT verification to reconnect there, then verify again; disconnecting the ChatGPT connection is not required. Additional named accounts retain their own sign-in and recovery controls. The bounded expired-token verification repair retries once after refreshing the owning grant; if renewal fails or the second request is still expired, a new sign-in is required.
 - **"Provider not configured"** — verify that an API key or OAuth connection has been set up for this provider.
 - **"No eligible endpoints"** — the provider needs at least one profiled model. Click "Sync Models & Profiles" on the provider detail page.

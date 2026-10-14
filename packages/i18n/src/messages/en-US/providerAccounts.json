@@ -76,5 +76,7 @@
   "loadingDiagnostics": "Loading diagnostics…",
   "usageUnavailable": "Usage and billing could not be loaded. Connection controls remain available.",
   "diagnosticsUnavailable": "Diagnostics could not be loaded. Connection controls remain available.",
-  "diagnostics": "Diagnostics and history"
+  "diagnostics": "Diagnostics and history",
+  "sharedSignInHelp": "ChatGPT uses the sign-in managed by Codex. If verification needs a new sign-in, reconnect there without disconnecting this account.",
+  "manageSharedSignIn": "Manage shared sign-in"
 }

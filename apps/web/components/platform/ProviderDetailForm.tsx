@@ -3,6 +3,7 @@
 import { useState, useTransition, useEffect, useId } from "react";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { configureProvider, testProviderAuth, discoverModels } from "@/lib/actions/ai-providers";
 import { startProviderOAuth, disconnectProviderOAuth } from "@/lib/actions/provider-oauth";
 import { ConnectGrokCard } from "./ConnectGrokCard";
@@ -31,6 +32,7 @@ type RoutingProfile = {
 };
 
 type Props = {
+  sharedAuthRecovery?: { help: string; label: string };
   pw: ProviderWithCredential;
   canWrite: boolean;
   models: DiscoveredModelRow[];
@@ -40,7 +42,7 @@ type Props = {
   routingProfiles?: RoutingProfile[];
 };
 
-export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActiveProvider, routingProfiles }: Props) {
+export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActiveProvider, routingProfiles, sharedAuthRecovery }: Props) {
   const { provider, credential } = pw;
   const router = useRouter();
   const fieldId = useId();
@@ -451,6 +453,11 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
         </>
       )}
 
+      {selectedAuthMethod === "oauth2_authorization_code" && isSharedOpenAiConsumer && sharedAuthRecovery && (
+        <p className="mb-3 text-sm text-[var(--dpf-muted)]">
+          {sharedAuthRecovery.help}{" "}<Link className="text-[var(--dpf-accent)] underline underline-offset-2" href="/platform/ai/providers/codex">{sharedAuthRecovery.label}</Link>
+        </p>
+      )}
       {selectedAuthMethod === "oauth2_authorization_code" && !isSharedOpenAiConsumer && (
         <div style={{ marginBottom: 16 }}>
           {/* BI-2DD7042A: judge connected/expired by the tokenExpiresAt TIMESTAMP,
