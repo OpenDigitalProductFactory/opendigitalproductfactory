@@ -53,12 +53,21 @@ describe("legacy proposal card after a monitor refusal", () => {
     expect(html).not.toContain("can no longer run as proposed");
   });
 
-  it("panel card: a refused proposal says why and offers only its decline action", () => {
+  it("panel card: a refused proposal says why and offers Decline only (spec C3)", () => {
     const html = bubble(REASON);
     expect(html).toContain("This request can no longer run as proposed: ");
     expect(html).toContain("not admitted to that room");
-    expect(html).toContain(">Reject<");
+    expect(html).toContain(">Decline<");
+    expect(html).not.toContain(">Reject<");
     expect(html).not.toContain(">Approve<");
+  });
+
+  it("Needs-you card: a refusal persisted on the row (after a reload) starts with Decline only", () => {
+    render(<CoworkerProposalActions proposalId="AP-1" noLongerRunnable={REASON} />);
+
+    expect(screen.getByRole("status").textContent).toContain("This request can no longer run as proposed: ");
+    expect(screen.queryByRole("button", { name: "Approve action" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Decline" })).toBeTruthy();
   });
 
   it("Needs-you card: a refused approval keeps the card, says why, and leaves Decline only", async () => {
@@ -96,6 +105,11 @@ describe("proposalAfterApproval (the coworker panel's card state)", () => {
   it("a refusal keeps the card pending and carries the reason", () => {
     expect(proposalAfterApproval(pending, { success: false, error: REASON, noLongerRunnable: true }))
       .toEqual({ ...pending, noLongerRunnable: REASON });
+  });
+
+  it("a retryable hold keeps the card pending with Approve (PR-C review finding 3)", () => {
+    expect(proposalAfterApproval(pending, { success: false, error: "Pass the review gate first.", retryable: true }))
+      .toEqual(pending);
   });
 
   it("a run ends the card executed or failed, as before", () => {

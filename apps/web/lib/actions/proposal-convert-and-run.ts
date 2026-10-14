@@ -20,13 +20,23 @@
 //                            once (it writes the thread message itself);
 //        settled           → an identical approved call already ran: its
 //                            recorded outcome;
-//        any refusal       → nothing ran: the row goes back to `proposed` and
-//                            the refusal is returned, so the card can say the
-//                            request can no longer run as proposed.
+//        a settled no      → nothing ran: the row goes back to `proposed` with
+//                            the reason in resultError (so a reload still
+//                            says it can no longer run as proposed), and with a
+//                            thread record the approval and refusal are logged
+//                            and the coworker is told;
+//        any other no      → a hold (permit_required), an inconclusive check,
+//                            or an escalation: nothing ran, the row goes back
+//                            to `proposed` and Approve can be tried again.
+//      When the approver approved an envelope here and the runner then could
+//      not run it, that envelope is cancelled, so a later approve can never
+//      spend it past the reason it was not run (waiver W5).
 //   4. The row ends as characterised (executed/failed, executedAt,
 //      resultEntityId/resultError), with the decision log and thread message
 //      when the caller writes a thread record, and approval_outcome recorded
 //      once when an envelope was approved here.
+//   5. A throw after the claim never strands the row `approved`: it is
+//      compare-and-set to `failed` and reported as `threw`.
 import * as crypto from "crypto";
 
 import { prisma } from "@dpf/db";
@@ -34,6 +44,7 @@ import { prisma } from "@dpf/db";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import type { GovernedExecuteResult } from "@/lib/mcp-governed-execute-types";
 import type { ToolResult } from "@/lib/mcp-tool-types";
+import { isGovernedToolRefusal } from "@/lib/govern/authority/governed-rejection-disposition";
 import type { UserContext } from "@/lib/permissions";
 import type { ApprovedRequestRun, PlatformRequestRun } from "@/lib/coworker/approved-request-run-types";
 
@@ -50,10 +61,14 @@ export type ProposalApprover = { userId: string; userContext: UserContext };
 export type ConvertAndRunOutcome =
   /** The compare-and-set lost: someone already decided this proposal. */
   | { kind: "already-decided" }
-  /** Nothing ran and the row is `proposed` again; `message` says why. */
+  /** A settled no: nothing ran, the row is `proposed` again with `message` as its resultError. */
   | { kind: "refused"; message: string; result: ToolResult }
+  /** Not a settled no (a hold, an inconclusive check): nothing ran, the row is `proposed`, retryable. */
+  | { kind: "held"; message: string; result: ToolResult }
   /** The call ran (now or earlier, for a settled replay); the row is executed or failed. */
-  | { kind: "ran"; result: ToolResult };
+  | { kind: "ran"; result: ToolResult }
+  /** Something threw after the claim; the row was compare-and-set from `approved` to `failed`. */
+  | { kind: "threw"; error: string };
 
 type ProposalDb = {
   agentActionProposal: {
@@ -67,6 +82,7 @@ type ProposalDb = {
 type ApproveEnvelope = (envelopeId: string, userId: string) => Promise<{ ok: true } | { ok: false; reason: string }>;
 type RunApproved = (envelopeId: string) => Promise<PlatformRequestRun | null>;
 type RecordOutcome = (envelopeId: string, userId: string, outcome: ApprovedRequestRun) => Promise<void>;
+type CancelEnvelope = (envelopeId: string, userId: string) => Promise<{ ok: true } | { ok: false; reason: string }>;
 
 export type ConvertAndRunDeps = {
   db?: ProposalDb;
@@ -74,6 +90,7 @@ export type ConvertAndRunDeps = {
   approveEnvelope?: ApproveEnvelope;
   runApproved?: RunApproved;
   recordOutcome?: RecordOutcome;
+  cancelEnvelope?: CancelEnvelope;
   now?: () => Date;
 };
 
@@ -85,6 +102,12 @@ const runApprovedLive: RunApproved = async (envelopeId) =>
   (await import("@/lib/coworker/approved-request-run")).runApprovedPlatformRequest(envelopeId);
 const recordOutcomeLive: RecordOutcome = async (envelopeId, userId, outcome) =>
   (await import("@/lib/coworker/approval-outcome-store")).recordApprovalOutcome(envelopeId, userId, outcome);
+const cancelEnvelopeLive: CancelEnvelope = async (envelopeId, userId) =>
+  (await import("@/lib/coworker/envelope-actions")).cancelEnvelope(envelopeId, userId);
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 /** A settled run is recorded as its outcome, as the envelope approve route does. */
 function recordable(run: PlatformRequestRun): ApprovedRequestRun {
@@ -94,19 +117,25 @@ function recordable(run: PlatformRequestRun): ApprovedRequestRun {
     : { status: "failed", message: run.message };
 }
 
-/** The platform runner's result as the tool result the proposal records. */
+/** The platform runner's result as the tool result the proposal records: a short code in `error`, its prose in `message`. */
 function runResult(run: Exclude<PlatformRequestRun, { status: "not-run" }>): ToolResult {
   const executed = run.status === "executed" || (run.status === "settled" && run.outcome === "executed");
   const entityId = "entityId" in run && run.entityId ? run.entityId : undefined;
   return executed
     ? { success: true, message: run.message, ...(entityId ? { entityId } : {}) }
-    : { success: false, error: run.message, message: run.message };
+    : { success: false, error: "approval_run_failed", message: run.message };
 }
 
-/** A gate answer that ran nothing. `unknown_tool` is a run that cannot happen (characterised S4: failed). */
-function isRefusal(result: GovernedExecuteResult): boolean {
+/**
+ * A gate answer that ran nothing, other than approval_required (handled here)
+ * and `unknown_tool`, a run that cannot happen (characterised S4: failed).
+ * "refused" is a settled no; anything else (permit_required, an inconclusive
+ * check, an escalation) is a hold the approver can try again after.
+ */
+function gateAnswer(result: GovernedExecuteResult): "refused" | "held" | null {
   const rejected = result.governance?.rejected;
-  return rejected !== undefined && rejected !== "unknown_tool" && rejected !== "approval_required";
+  if (rejected === undefined || rejected === "unknown_tool" || rejected === "approval_required") return null;
+  return isGovernedToolRefusal(result) ? "refused" : "held";
 }
 
 export async function convertAndRunProposal(
@@ -125,12 +154,76 @@ export async function convertAndRunProposal(
   });
   if (claimed.count === 0) return { kind: "already-decided" };
 
-  const refuse = async (result: ToolResult): Promise<ConvertAndRunOutcome> => {
+  // Once the row is finalised, a later throw (the decision log, say) must not
+  // turn a run that happened into a reported failure.
+  let finalised: ConvertAndRunOutcome | null = null;
+  try {
+    finalised = await runClaimed(proposal, approver, options, deps, db, now, (outcome) => { finalised = outcome; });
+    return finalised;
+  } catch (error) {
+    if (finalised) {
+      console.error(
+        "[proposal-convert-and-run] record after the run failed proposal=%s: %s",
+        JSON.stringify(proposalId), JSON.stringify(errorText(error)),
+      );
+      return finalised;
+    }
+    // Never strand the row `approved`: only the claimed row moves, so a row
+    // another path already settled is left alone.
+    const message = errorText(error) || "Execution failed";
     await db.agentActionProposal.updateMany({
       where: { proposalId, status: "approved" },
-      data: { status: "proposed", decidedAt: null, decidedById: null },
+      data: { status: "failed", resultError: message },
+    }).catch((writeError: unknown) => {
+      console.error(
+        "[proposal-convert-and-run] could not mark proposal=%s failed: %s",
+        JSON.stringify(proposalId), JSON.stringify(errorText(writeError)),
+      );
     });
-    return { kind: "refused", message: result.message ?? result.error ?? "It was refused.", result };
+    return { kind: "threw", error: message };
+  }
+}
+
+async function runClaimed(
+  proposal: LegacyProposal,
+  approver: ProposalApprover,
+  options: { threadRecord: boolean },
+  deps: ConvertAndRunDeps,
+  db: ProposalDb,
+  now: () => Date,
+  markFinalised: (outcome: ConvertAndRunOutcome) => void,
+): Promise<ConvertAndRunOutcome> {
+  const { proposalId } = proposal;
+
+  /** Nothing ran: the row goes back to `proposed`. A settled no keeps its reason on the row. */
+  const revert = async (kind: "refused" | "held", result: ToolResult): Promise<ConvertAndRunOutcome> => {
+    const message = result.message ?? result.error ?? "It was refused.";
+    await db.agentActionProposal.updateMany({
+      where: { proposalId, status: "approved" },
+      data: { status: "proposed", decidedAt: null, decidedById: null, resultError: kind === "refused" ? message : null },
+    });
+    const outcome: ConvertAndRunOutcome = { kind, message, result };
+    markFinalised(outcome);
+    if (kind === "refused" && options.threadRecord) {
+      await db.authorizationDecisionLog.create({
+        data: {
+          decisionId: `DEC-${crypto.randomUUID()}`,
+          actionKey: proposal.actionType,
+          objectRef: proposalId,
+          actorType: "user",
+          actorRef: approver.userId,
+          decision: "allow",
+          rationale: { proposalId, refusedByMonitor: true, reason: message },
+        },
+      });
+      await db.agentMessage.create({
+        data: {
+          threadId: proposal.threadId, role: "system", agentId: proposal.agentId,
+          content: `${proposal.actionType} was approved but could not run as proposed: ${message}`,
+        },
+      }).catch(() => {});
+    }
+    return outcome;
   };
 
   const governed = await (deps.execute ?? governedExecuteTool)({
@@ -143,13 +236,15 @@ export async function convertAndRunProposal(
   });
 
   let result: ToolResult = governed;
-  // The platform runner already told the thread on the approval path.
+  // A fresh platform-runner run already told the thread; a recorded settled
+  // outcome did not. On a failure, the runner's prose (not its code) is the detail.
   let threadMessageWritten = false;
+  let failureDetail: string | undefined = governed.error ?? governed.message;
   if (governed.governance?.rejected === "approval_required") {
     const envelopeId = typeof governed.data?.envelopeId === "string" ? governed.data.envelopeId : null;
-    if (!envelopeId) return refuse(governed);
+    if (!envelopeId) return revert("refused", governed);
     const approved = await (deps.approveEnvelope ?? approveEnvelopeLive)(envelopeId, approver.userId);
-    if (!approved.ok) return refuse({ success: false, error: "approval_unavailable", message: approved.reason });
+    if (!approved.ok) return revert("refused", { success: false, error: "approval_unavailable", message: approved.reason });
     const run: PlatformRequestRun = await (deps.runApproved ?? runApprovedLive)(envelopeId)
       .then((platform) => platform ?? {
         status: "not-run" as const, reason: "no-pending-call" as const,
@@ -166,11 +261,24 @@ export async function convertAndRunProposal(
         error instanceof Error ? JSON.stringify(error.message) : JSON.stringify(String(error)),
       );
     });
-    if (run.status === "not-run") return refuse({ success: false, error: run.reason, message: run.message });
+    if (run.status === "not-run") {
+      // The approver's envelope is approved but did not run. Cancel it so a
+      // later approve cannot spend it past the reason it was not run (W5).
+      // The runner may already have settled it; a refused cancel changes nothing.
+      await (deps.cancelEnvelope ?? cancelEnvelopeLive)(envelopeId, approver.userId).catch((error: unknown) => {
+        console.error(
+          "[proposal-convert-and-run] approved envelope not cancelled after not-run envelope=%s: %s",
+          JSON.stringify(envelopeId), JSON.stringify(errorText(error)),
+        );
+      });
+      return revert("refused", { success: false, error: run.reason, message: run.message });
+    }
     result = runResult(run);
-    threadMessageWritten = true;
-  } else if (isRefusal(governed)) {
-    return refuse(governed);
+    failureDetail = run.message;
+    threadMessageWritten = run.status === "executed" || run.status === "failed";
+  } else {
+    const answer = gateAnswer(governed);
+    if (answer) return revert(answer, governed);
   }
 
   await db.agentActionProposal.update({
@@ -179,6 +287,8 @@ export async function convertAndRunProposal(
       ? { status: "executed", executedAt: now(), ...(result.entityId !== undefined ? { resultEntityId: result.entityId } : {}) }
       : { status: "failed", ...(result.error !== undefined ? { resultError: result.error } : {}) },
   });
+  const outcome: ConvertAndRunOutcome = { kind: "ran", result };
+  markFinalised(outcome);
 
   if (options.threadRecord) {
     await db.authorizationDecisionLog.create({
@@ -196,12 +306,12 @@ export async function convertAndRunProposal(
     if (!threadMessageWritten) {
       const summary = result.success
         ? `${proposal.actionType} completed successfully.${result.message ? ` ${result.message.slice(0, 500)}` : ""}`
-        : `${proposal.actionType} failed: ${result.error ?? result.message ?? "unknown error"}`;
+        : `${proposal.actionType} failed: ${failureDetail ?? "unknown error"}`;
       await db.agentMessage.create({
         data: { threadId: proposal.threadId, role: "system", content: summary, agentId: proposal.agentId },
       }).catch(() => {});
     }
   }
 
-  return { kind: "ran", result };
+  return outcome;
 }

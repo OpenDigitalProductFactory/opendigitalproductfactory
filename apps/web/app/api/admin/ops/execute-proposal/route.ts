@@ -7,8 +7,9 @@
 // the reference monitor, never a direct executeTool, so the proposal's own
 // coworker grants, room, hooks and audit apply exactly as for any coworker
 // call; a refusal leaves the proposal `proposed`. The route keeps its own
-// { ok, result } response and status codes and writes no system message or
-// decision log of its own. The shared-secret X-Ops-Token path, which acted as
+// { ok, result } response and status codes, adds `refused: true` for a settled
+// no and answers 500 when the run threw (the row is then `failed`, never left
+// `approved`), and writes no system message or decision log of its own. The shared-secret X-Ops-Token path, which acted as
 // a resolved user with a synthetic role, is removed (waiver W3, WWMD
 // DI-587137D2BB72): a superuser session is the only way in.
 
@@ -57,6 +58,14 @@ export async function POST(req: Request): Promise<NextResponse> {
   if (outcome.kind === "already-decided") {
     // Another decision won the compare-and-set between the read above and now.
     return NextResponse.json({ error: "Proposal already decided" }, { status: 409 });
+  }
+  if (outcome.kind === "threw") {
+    // The core already moved the claimed row from approved to failed.
+    return NextResponse.json({ ok: false, error: outcome.error }, { status: 500 });
+  }
+  if (outcome.kind === "refused") {
+    // A settled no, told apart from a run that failed so recovery scripts can branch.
+    return NextResponse.json({ ok: false, refused: true, result: outcome.result });
   }
   return NextResponse.json({ ok: outcome.kind === "ran" && outcome.result.success, result: outcome.result });
 }

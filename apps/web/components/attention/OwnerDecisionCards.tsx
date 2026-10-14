@@ -155,6 +155,7 @@ function DecisionActions({ entry }: { entry: OwnerAttentionEntry }) {
     return (
       <CoworkerProposalActions
         proposalId={entry.item.id.replace(/^agent-proposal:/, "")}
+        {...(entry.item.noLongerRunnable ? { noLongerRunnable: entry.item.noLongerRunnable } : {})}
       />
     );
   }

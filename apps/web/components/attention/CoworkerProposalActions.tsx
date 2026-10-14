@@ -6,14 +6,21 @@ import { useRouter } from "next/navigation";
 import { approveProposal, rejectProposal } from "@/lib/actions/proposals";
 import { ProposalNoLongerRunnable } from "@/components/agent/ProposalNoLongerRunnable";
 
-export function CoworkerProposalActions({ proposalId }: { proposalId: string }) {
+export function CoworkerProposalActions({
+  proposalId,
+  noLongerRunnable: persistedRefusal,
+}: {
+  proposalId: string;
+  /** A refusal already persisted on the row (after a reload). */
+  noLongerRunnable?: string;
+}) {
   const router = useRouter();
   const [result, setResult] = useState<"approved" | "declined" | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Approval convergence PR-C (BI-04E5A511, spec D5): the reference monitor
   // refused the proposed call. Nothing ran and the proposal is still pending,
   // so only Decline is offered.
-  const [noLongerRunnable, setNoLongerRunnable] = useState<string | null>(null);
+  const [noLongerRunnable, setNoLongerRunnable] = useState<string | null>(persistedRefusal ?? null);
   const [pending, startTransition] = useTransition();
 
   if (result) {

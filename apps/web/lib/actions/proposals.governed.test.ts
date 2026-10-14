@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   executeTool: vi.fn(),
   approveEnvelope: vi.fn(),
+  cancelEnvelope: vi.fn(),
   prisma: {
     agentActionProposal: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     authorizationDecisionLog: { create: vi.fn() },
@@ -51,7 +52,7 @@ vi.mock("@/lib/govern/current-user-context", () => ({
 // approveEnvelope's own state machine is covered by the envelope-actions
 // tests; here it records the person's decision on the envelope the monitor
 // minted, and refuses anyone but its delegate, as the real one does.
-vi.mock("@/lib/coworker/envelope-actions", () => ({ approveEnvelope: mocks.approveEnvelope }));
+vi.mock("@/lib/coworker/envelope-actions", () => ({ approveEnvelope: mocks.approveEnvelope, cancelEnvelope: mocks.cancelEnvelope }));
 
 import { _setGovernanceForTests, registerToolLifecycleHook } from "@/lib/mcp-governed-execute";
 import { buildCoworkerApprovalBinding } from "@/lib/govern/authority/coworker-authority-decision";
@@ -89,6 +90,7 @@ function authorityInput(approvalPolicy: "none" | "all", over: Partial<CoworkerAu
 }
 
 let input: CoworkerAuthorityInput;
+let decisionEvidenceFails = false;
 let settledOutcome: { envelopeId: string; status: "executed" | "failed"; result: unknown } | null;
 const finalize = vi.fn();
 
@@ -110,7 +112,10 @@ function governance() {
         binding: buildCoworkerApprovalBinding(input),
       } }
       : input,
-    authorizationDecisionCreate: async () => ({}),
+    authorizationDecisionCreate: async () => {
+      if (decisionEvidenceFails) throw new Error("evidence store down");
+      return {};
+    },
     authorityApprovalEnvelopeCreate: (async (minted: { binding: unknown; threadId: string | null }) => {
       state.envelope = {
         id: "ENV-1", status: "proposed", expiresAt: new Date(Date.now() + 86_400_000), threadId: minted.threadId ?? "",
@@ -150,6 +155,7 @@ beforeEach(() => {
   state.envelope = null;
   state.audit = [];
   settledOutcome = null;
+  decisionEvidenceFails = false;
   input = authorityInput("none");
   governance();
   mocks.auth.mockResolvedValue({ user: { id: "user-admin", platformRole: "HR-000", isSuperuser: true } });
@@ -294,13 +300,70 @@ describe("approveProposal through the reference monitor (AC-LEGACY)", () => {
     expect(result).toMatchObject({ success: false, noLongerRunnable: true, error: expect.stringContaining(TOOL) });
     expect(mocks.executeTool).not.toHaveBeenCalled();
     expect(rowWrites()).toEqual(["cas:proposed->approved", "cas:approved->proposed"]);
+    // The reason stays on the still-proposed row, so a reload keeps Decline only.
     expect(mocks.prisma.agentActionProposal.updateMany.mock.calls[1]![0]).toEqual({
       where: { proposalId: "AP-1", status: "approved" },
-      data: { status: "proposed", decidedAt: null, decidedById: null },
+      data: { status: "proposed", decidedAt: null, decidedById: null, resultError: result.error },
     });
     expect(state.proposalStatus).toBe("proposed");
-    expect(mocks.prisma.agentMessage.create).not.toHaveBeenCalled();
+    // The person's approval and the monitor's refusal are on the record, and
+    // the coworker is told in its thread (review finding 8).
+    expect(mocks.prisma.authorizationDecisionLog.create).toHaveBeenCalledTimes(1);
+    expect(mocks.prisma.authorizationDecisionLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ objectRef: "AP-1", actorType: "user", actorRef: "user-admin", decision: "allow",
+        rationale: { proposalId: "AP-1", refusedByMonitor: true, reason: result.error } }),
+    });
+    expect(mocks.prisma.agentMessage.create).toHaveBeenCalledTimes(1);
+    expect(mocks.prisma.agentMessage.create).toHaveBeenCalledWith({
+      data: { threadId: "thread-9", role: "system", agentId: "AGT-COWORKER",
+        content: `${TOOL} was approved but could not run as proposed: ${result.error}` },
+    });
+  });
+
+  it("inconclusive (the authority evidence could not be written): the row goes back to proposed and Approve stays", async () => {
+    decisionEvidenceFails = true;
+
+    const result = await approveProposal("AP-1");
+
+    expect(result).toMatchObject({ success: false, retryable: true });
+    expect(result).not.toHaveProperty("noLongerRunnable");
+    // No refusal reason is persisted, so a reload keeps Approve too.
+    expect(mocks.prisma.agentActionProposal.updateMany.mock.calls[1]![0]).toEqual({
+      where: { proposalId: "AP-1", status: "approved" },
+      data: { status: "proposed", decidedAt: null, decidedById: null, resultError: null },
+    });
+    expect(result.error).toContain("This is not a refusal");
+    expect(mocks.executeTool).not.toHaveBeenCalled();
+    expect(state.proposalStatus).toBe("proposed");
     expect(mocks.prisma.authorizationDecisionLog.create).not.toHaveBeenCalled();
+  });
+
+  it("a write that throws after the row is executed leaves it executed (review finding 4)", async () => {
+    mocks.prisma.authorizationDecisionLog.create.mockRejectedValue(new Error("log down"));
+
+    const result = await approveProposal("AP-1");
+
+    expect(result).toEqual({ success: true, resultEntityId: "BI-1" });
+    expect(state.proposalStatus).toBe("executed");
+    expect(mocks.executeTool).toHaveBeenCalledTimes(1);
+  });
+
+  it("approval_required then a runner not-run cancels the approver's envelope so it cannot be spent later (W5)", async () => {
+    input = authorityInput("all");
+    // The park row is gone, so the runner cannot run the approved call.
+    mocks.prisma.toolExecution.findFirst.mockResolvedValue(null);
+    mocks.cancelEnvelope.mockImplementation(async (envelopeId: string) => {
+      if (state.envelope?.id === envelopeId) state.envelope.status = "cancelled";
+      return { ok: true, envelope: state.envelope };
+    });
+
+    const result = await approveProposal("AP-1");
+
+    expect(result).toMatchObject({ success: false, noLongerRunnable: true });
+    expect(mocks.cancelEnvelope).toHaveBeenCalledWith("ENV-1", "user-admin");
+    expect(state.envelope?.status).toBe("cancelled");
+    expect(state.proposalStatus).toBe("proposed");
+    expect(mocks.executeTool).not.toHaveBeenCalled();
   });
 
   it("refusal (pre-tool hook): the hook's reason reaches the card and the row stays decidable", async () => {

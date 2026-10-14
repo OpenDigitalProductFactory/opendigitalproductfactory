@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   executeTool: vi.fn(),
   approveEnvelope: vi.fn(),
+  cancelEnvelope: vi.fn(),
   prisma: {
     agentActionProposal: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     authorizationDecisionLog: { create: vi.fn() },
@@ -45,7 +46,7 @@ vi.mock("@/lib/mcp-tools", async (importOriginal) => ({
 vi.mock("@/lib/govern/current-user-context", () => ({
   currentUserContext: async (userId: string) => ({ userId, platformRole: "HR-000", isSuperuser: true }),
 }));
-vi.mock("@/lib/coworker/envelope-actions", () => ({ approveEnvelope: mocks.approveEnvelope }));
+vi.mock("@/lib/coworker/envelope-actions", () => ({ approveEnvelope: mocks.approveEnvelope, cancelEnvelope: mocks.cancelEnvelope }));
 
 import { _setGovernanceForTests } from "@/lib/mcp-governed-execute";
 import { buildCoworkerApprovalBinding } from "@/lib/govern/authority/coworker-authority-decision";
@@ -229,9 +230,38 @@ describe("POST /api/admin/ops/execute-proposal through the reference monitor (AC
     const res = await POST(request({ proposalId: "AP-1" }));
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ ok: false, result: { success: false, error: "authority_denied" } });
+    // `refused` tells a recovery script a settled no from a run that failed (review finding 9).
+    expect(await res.json()).toMatchObject({ ok: false, refused: true, result: { success: false, error: "authority_denied" } });
     expect(mocks.executeTool).not.toHaveBeenCalled();
     expect(state.proposalStatus).toBe("proposed");
+    // The route writes no thread record of its own.
+    expect(mocks.prisma.agentMessage.create).not.toHaveBeenCalled();
+    expect(mocks.prisma.authorizationDecisionLog.create).not.toHaveBeenCalled();
+  });
+
+  it("a tool failure carries no refused flag", async () => {
+    mocks.executeTool.mockResolvedValue({ success: false, error: "duplicate_title", message: "Exists" });
+
+    const res = await POST(request({ proposalId: "AP-1" }));
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({ ok: false, result: { success: false, error: "duplicate_title" } });
+    expect(body).not.toHaveProperty("refused");
+  });
+
+  it("a throw after the claim does not strand the row approved: it ends failed and the route answers 500 (finding 1)", async () => {
+    mocks.prisma.agentActionProposal.update.mockRejectedValue(new Error("db connection reset"));
+
+    const res = await POST(request({ proposalId: "AP-1" }));
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ ok: false, error: "db connection reset" });
+    expect(mocks.prisma.agentActionProposal.updateMany).toHaveBeenLastCalledWith({
+      where: { proposalId: "AP-1", status: "approved" },
+      data: { status: "failed", resultError: "db connection reset" },
+    });
+    expect(state.proposalStatus).toBe("failed");
   });
 
   it("a double execute is refused by the compare-and-set with 409: the tool runs once", async () => {

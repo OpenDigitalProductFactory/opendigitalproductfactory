@@ -15,11 +15,13 @@ type ApprovalResult = {
   resultEntityId?: string;
   error?: string;
   noLongerRunnable?: true;
+  retryable?: true;
 };
 
-/** The card's state after Approve: a monitor refusal keeps it pending, with the reason. */
+/** The card's state after Approve: a monitor refusal keeps it pending, with the reason; a hold keeps it pending as it was. */
 export function proposalAfterApproval<T extends ProposalCardState>(proposal: T, result: ApprovalResult): T {
   if (result.noLongerRunnable) return { ...proposal, noLongerRunnable: result.error ?? "It was refused." };
+  if (result.retryable) return proposal;
   return {
     ...proposal,
     status: result.success ? "executed" : "failed",

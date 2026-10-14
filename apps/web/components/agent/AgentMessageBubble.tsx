@@ -476,7 +476,7 @@ export function AgentMessageBubble({
                 </button>
                 )}
                 <button type="button" onClick={() => onReject?.(p.proposalId)} style={{ flex: 1, background: "color-mix(in srgb, var(--dpf-error) 15%, transparent)", border: "1px solid color-mix(in srgb, var(--dpf-error) 30%, transparent)", borderRadius: 6, padding: "5px 10px", fontSize: 11, color: "var(--dpf-error)", cursor: "pointer" }}>
-                  Reject
+                  {p.noLongerRunnable ? "Decline" : "Reject"}
                 </button>
               </div>
             )}
@@ -586,7 +586,7 @@ export function AgentMessageBubble({
                     cursor: "pointer",
                   }}
                 >
-                  Reject
+                  {p.noLongerRunnable ? "Decline" : "Reject"}
                 </button>
               </div>
             )}

@@ -48,7 +48,7 @@ export type AgentMessageRow = {
      * Approval convergence PR-C (BI-04E5A511): the reference monitor refused
      * the proposed call when it was approved. Nothing ran and the proposal is
      * still pending; the card shows why and offers only its decline action.
-     * Client state, never persisted.
+     * Persisted as the still-proposed row's resultError, so it survives a reload.
      */
     noLongerRunnable?: string;
   };

@@ -25,13 +25,16 @@ import { convertAndRunProposal } from "@/lib/actions/proposal-convert-and-run";
  * What an approval returns to the card. `noLongerRunnable` is set when the
  * reference monitor refused the proposed call (spec D5): nothing ran, the
  * proposal is still `proposed`, and `error` says why, so the card offers
- * Decline only.
+ * Decline only. `retryable` is set when nothing ran for a reason that is not a
+ * settled no (a permit the call still needs, a check that could not complete):
+ * the proposal is still `proposed` and Approve stays.
  */
 export type ProposalApprovalResult = {
   success: boolean;
   resultEntityId?: string;
   error?: string;
   noLongerRunnable?: true;
+  retryable?: true;
 };
 
 
@@ -70,6 +73,8 @@ export async function approveProposal(
     const outcome = await convertAndRunProposal(proposal, { userId: user.id, userContext }, { threadRecord: true });
     if (outcome.kind === "already-decided") return { success: false, error: "Proposal already decided" };
     if (outcome.kind === "refused") return { success: false, error: outcome.message, noLongerRunnable: true };
+    if (outcome.kind === "held") return { success: false, error: outcome.message, retryable: true };
+    if (outcome.kind === "threw") return { success: false, error: outcome.error };
 
     const { result } = outcome;
     const returnVal: ProposalApprovalResult = { success: result.success };
@@ -77,12 +82,15 @@ export async function approveProposal(
     if (result.error !== undefined) returnVal.error = result.error;
     return returnVal;
   } catch (e) {
-    // The run threw after the row was claimed: record the failure.
-    await prisma.agentActionProposal.update({
-      where: { proposalId },
-      data: { status: "failed", resultError: e instanceof Error ? e.message : "Execution failed" },
+    // convert-and-run settles a throw after its claim itself; this guards
+    // anything else. Only a row still `approved` (claimed, never settled) may
+    // be marked failed: an executed or reverted row keeps its status.
+    const message = e instanceof Error ? e.message : "Execution failed";
+    await prisma.agentActionProposal.updateMany({
+      where: { proposalId, status: "approved" },
+      data: { status: "failed", resultError: message },
     });
-    return { success: false, error: e instanceof Error ? e.message : "Execution failed" };
+    return { success: false, error: message };
   }
 }
 
