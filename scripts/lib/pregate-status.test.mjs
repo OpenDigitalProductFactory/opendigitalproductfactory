@@ -1010,6 +1010,40 @@ test('unfinished current claims consistently recommend durable observation or re
   }
 });
 
+// BI-FCC1DCB2. A candidate that does not merge onto origin/main is the author's
+// to fix, and the fix is not a re-run: name the paths and the merge to do.
+test("a merge conflict with the base is a FAIL that names the paths and the merge remedy", () => {
+  const mergeConflict = { mergedRef: HEAD, baseRef: "origin/main", paths: ["agent_registry.json", "apps/web/lib/tak/coworker-grants.ts"] };
+  const state = passingState({
+    status: "conflict",
+    gatePassed: false,
+    evidenceRecordId: "",
+    mergeConflict,
+    failureReason: "local-CI gate stopped before grading: the candidate does not merge cleanly onto origin/main.",
+  });
+  const result = classifySlotRecord({ state, metadata: { candidateSha: HEAD }, headSha: HEAD, headBranch: "claude/topic", now: NOW });
+
+  assert.equal(result.verdict, "FAIL");
+  assert.doesNotMatch(result.reason, /infrastructure|starvation/i);
+  assert.match(result.reason, /merge conflict with origin\/main/);
+  assert.match(result.reason, /agent_registry\.json, apps\/web\/lib\/tak\/coworker-grants\.ts/);
+
+  const lines = formatStatusReport(result, { headSha: HEAD, headBranch: "claude/topic", now: NOW });
+  assert.ok(
+    lines.includes("  next        merge origin/main into your branch and resolve: agent_registry.json, apps/web/lib/tak/coworker-grants.ts"),
+    lines.join("\n"),
+  );
+  assert.ok(!lines.some((line) => line.includes("pnpm run pregate ")), "re-running the gate cannot fix a conflict");
+});
+
+test("a merge-conflict record falls back to this run's metadata for the paths", () => {
+  const state = passingState({ status: "conflict", gatePassed: false, evidenceRecordId: "", leaseId: "NPEL-1" });
+  const metadata = { candidateSha: HEAD, runLeaseId: "NPEL-1", execution: { mergeConflict: { paths: ["f.txt"] } } };
+  const result = classifySlotRecord({ state, metadata, headSha: HEAD, headBranch: "claude/topic", now: NOW });
+  assert.equal(result.verdict, "FAIL");
+  assert.equal(result.remedy, "merge origin/main into your branch and resolve: f.txt");
+});
+
 test('terminal or uncertain current claims never recommend unqualified replacement', () => {
   for (const status of ['failed', 'blocked_source_drift', 'blocked_control_plane_starvation', 'cancelled', 'released']) {
     for (const metadata of [null, { candidateSha: OLD, execution: { status: 'passed' } }]) {

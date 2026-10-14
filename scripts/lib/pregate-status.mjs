@@ -37,6 +37,10 @@
 
 import { hasBoundDocumentationEvidence, isTestStubGateRecord } from "./local-ci-gate-state.mjs";
 import { SLOT_SUBSTRATE_UNAVAILABLE_STATUS } from "./local-ci-slot-substrate.mjs";
+import { mergeConflictRemedy } from "./sandbox-freshness.mjs";
+
+/** The recorded status of a candidate that does not merge onto the base (BI-FCC1DCB2). */
+const MERGE_CONFLICT_GATE_STATUS = "conflict";
 
 /** Terminal verdicts, ordered worst-to-best for slot reconciliation. */
 export const PREGATE_VERDICTS = Object.freeze([
@@ -327,6 +331,21 @@ function classifyUnpassedRecord({ state, metadata, base, headSha, candidateSha, 
       ...base,
       verdict: "INCONCLUSIVE",
       reason: `BLOCKED — slot substrate unavailable: ${container} is ${observed}. The gate claimed nothing; this is infrastructure, not a verdict on the diff, and running the gate again changes nothing until the substrate is back.`,
+      rerun: false,
+      remedy,
+    };
+  }
+  // BI-FCC1DCB2: the candidate does not merge onto the base. A verdict about
+  // the branch with a remedy the author owns, never infrastructure, and never
+  // fixed by gating again — so the next step is the merge, not a re-run.
+  if (status === MERGE_CONFLICT_GATE_STATUS) {
+    const mergeConflict = state?.mergeConflict
+      ?? (metadataDescribesAnotherRun(state, metadata) ? null : metadata?.execution?.mergeConflict ?? null);
+    const remedy = mergeConflictRemedy(mergeConflict);
+    return {
+      ...base,
+      verdict: "FAIL",
+      reason: `gate record status conflict — merge conflict with ${mergeConflict?.baseRef || "origin/main"}: the candidate does not merge cleanly, so nothing was graded. The branch needs a merge; gating again fails the same way until you ${remedy}.`,
       rerun: false,
       remedy,
     };

@@ -8,6 +8,26 @@ const scope = (verifyAuthority = async () => true) => ({
 });
 
 describe("governed inference deadline", () => {
+  it("stops a shorter caller waiting on hung authority without revoking the parent", async () => {
+    let checks = 0;
+    await withGovernedInferenceDeadline(scope(async () => {
+      if (++checks === 1) return true;
+      return new Promise<boolean>(() => {});
+    }), async () => {
+      const caller = new AbortController();
+      const reason = new Error("utility expired during authority check");
+      let result: unknown;
+      const waiting = assertGovernedInferenceAuthority(caller.signal).catch(error => { result = error; });
+      caller.abort(reason);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(result).toBe(reason);
+      expect(currentGovernedInferenceDeadline()!.signal.aborted).toBe(false);
+      await waiting;
+    });
+  });
+
   it("does not infer authority from autonomous origin alone", () => {
     withInferenceOrigin("autonomous", () => expect(currentGovernedInferenceDeadline()).toBeUndefined());
   });
