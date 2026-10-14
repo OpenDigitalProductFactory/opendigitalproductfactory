@@ -153,7 +153,7 @@ export function denyGuidance(verdict) {
     `${head} AGENTS.md §12 requires claiming a Workroom before you work, on every surface including the external CLIs — the unit of WIP is the Workroom, and MCP is the coordination plane. ` +
     `This was prose until BI-0B292D84; when it was measured, 30 of 79 live branches had no claim at all. ` +
     `To comply: call adopt_worktree with this repository, headBranch and worktreePath (it binds or reuses idempotently), then claim_workroom_scope for the paths you are about to edit. ` +
-    `Already claimed over MCP (claim_backlog_item_for_work), or the lease just renewed with heartbeat_workroom? The claim exists but this worktree has no cached copy: run node scripts/bind-worktree-cli.mjs <worktree-path> from the checkout to re-cache your own claim (another session's claim stays refused). ` +
+    `Already claimed over MCP (claim_backlog_item_for_work), or the lease just renewed with heartbeat_workroom? The claim exists but this worktree has no cached copy. Where the dpf-platform plugin's PostToolUse hook runs (Claude), a successful adopt_worktree, heartbeat_workroom or claim call re-caches it for the next edit; otherwise run node scripts/bind-worktree-cli.mjs <worktree-path> from the checkout to re-cache your own claim (another session's claim stays refused). ` +
     `If claim_backlog_item_for_work refuses with work_shape_required, it carries a pickList of the five delivery shapes: ` +
     `put that list to the user and re-claim with workShape set to their answer — never guess a shape. ` +
     `If adopt_worktree refuses with branch_occupied against a terminal capsule, the capsule is closed but the BRANCH may not be: check ` +

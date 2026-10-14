@@ -236,6 +236,16 @@ describe("build-ops pack — handler behavior (delegation preserved)", () => {
     );
   });
 
+  it("reports an unverified sign-in probe without inventing a capacity hold", async () => {
+    endpointRunner.runEndpointTests.mockResolvedValue([
+      { endpointId: "chatgpt", probes: [{ name: "p", outcome: "deferred", reason: "Deferred: Auth failed" }], scenarios: [], instructionFollowing: null },
+    ]);
+    const res = await buildOpsPack.handlers.run_endpoint_tests({ endpointId: "chatgpt", modelId: "selected" }, "u1", {});
+    expect(res.message).toContain("unverified");
+    expect(res.message).toContain("Auth failed");
+    expect(res.message).not.toContain("capacity held");
+  });
+
   it("promote_to_build_studio promotes a triaged item through the transaction", async () => {
     db.platformDevConfigFindUnique.mockResolvedValue({ governedBacklogEnabled: false });
     db.backlogItemFindFirst.mockResolvedValue({

@@ -32,12 +32,14 @@ describe("chat adapter provider transport", () => {
   beforeEach(() => { localLane.withLocalInferenceLock.mockReset().mockImplementation(work => work()); });
   afterEach(() => vi.restoreAllMocks());
 
-  it("cancels a utility caller waiting for the GPU without issuing HTTP or wrapping cancellation as network failure", async () => {
-    localLane.withLocalInferenceLock.mockImplementation((_work, options) => new Promise((_resolve, reject) => {
-      options?.signal?.addEventListener("abort", () => reject(options.signal.reason), { once: true });
-    }));
+  it("cancels the injected transport without reacquiring admission or wrapping cancellation as network failure", async () => {
     const caller = new AbortController();
-    const providerFetch = vi.fn();
+    let finish!: (response: Response) => void;
+    const providerFetch = vi.fn((_input: Parameters<typeof fetch>[0], init?: RequestInit) =>
+      new Promise<Response>((resolve, reject) => {
+        finish = resolve;
+        init?.signal?.addEventListener("abort", () => reject(init.signal!.reason), { once: true });
+      }));
     const request: AdapterRequest = {
       providerId: "local", modelId: "test-model",
       plan: { providerId: "local", modelId: "test-model", recipeId: null,
@@ -50,14 +52,19 @@ describe("chat adapter provider transport", () => {
     let result: unknown;
     const pending = withInferenceCancellation(caller.signal, () => chatAdapter.execute(request))
       .catch(error => { result = error; });
-    await vi.waitFor(() => expect(localLane.withLocalInferenceLock).toHaveBeenCalledOnce());
-    const reason = new Error("utility expired in GPU queue");
+    await vi.waitFor(() => expect(providerFetch).toHaveBeenCalledOnce());
+    const reason = new Error("utility expired during transport");
     caller.abort(reason);
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(result).toBe(reason);
-    expect(providerFetch).not.toHaveBeenCalled();
-    await pending;
+    try {
+      await vi.waitFor(() => expect(result).toBe(reason), { timeout: 1_000 });
+      expect(providerFetch.mock.calls[0][1]?.signal?.aborted).toBe(true);
+      expect(localLane.withLocalInferenceLock).not.toHaveBeenCalled();
+    } finally {
+      finish(new Response(JSON.stringify({
+        choices: [{ message: { content: "finished" }, finish_reason: "stop" }],
+      }), { status: 200 }));
+      await pending;
+    }
   });
 
   it("uses the server-injected transport and preserves Gemini tool calls", async () => {

@@ -3,6 +3,7 @@
 // Server actions in actions/*.ts can import from here freely.
 
 import { prisma } from "@dpf/db";
+import { getLocalThinkingBudgetEvidence } from "./dmr-runtime-config";
 import { providerWorkspaceHeaders } from "./provider-workspace";
 import { computeTokenCost, computeComputeCost } from "@/lib/ai-provider-types";
 import {
@@ -53,6 +54,7 @@ import {
 } from "./inference-admission";
 import { assertProviderDispatchCapacity } from "@/lib/routing/local-provider-capacity";
 import { isLocalProviderId } from "@/lib/routing/provider-locality";
+import { withLocalInferenceLock } from "@/lib/queue/resource-lane";
 import { providerInferenceFetch, withInferenceCancellationFetch } from "./provider-inference-transport";
 import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
 import { InferenceError } from "../routing/inference-error";
@@ -250,7 +252,6 @@ export async function callProvider(
   // Transcription uses its registry adapter and has no model-routing connection.
   const needsModelConnection = executionAdapterRaw !== "transcription";
   const localProvider = needsModelConnection ? await readEnabledRoutingProvider(providerId) : null;
-
   // 0. EP-COST-001 Phase 2 — pre-call budget gate.
   // Check the agent's daily token budget before dispatching. If the agent has
   // consumed ≥100% of its registry limit today, throw a billing error so the
@@ -353,56 +354,59 @@ export async function callProvider(
     selector !== null
       ? selector.kind
       : `legacy:${typeof executionAdapterRaw === "string" ? executionAdapterRaw : "unknown"}`;
-  // Admission gate: bound concurrent inference per engine so a fleet of
-  // autonomous coworkers can't overload a scarce backend (local model ≈ 1-2
-  // concurrent before latency collapses; remote = provider rate limit / cost).
-  // Interactive turns take priority over autonomous/background work, so a human
-  // waiting on a reply never queues behind a scheduled brief. Held only across
-  // the actual inference call, released in `finally`. See inference-admission.ts.
-  const engineKey = engineKeyForProvider(providerId);
-  const releaseInferenceSlot = await acquireInferenceSlot(engineKey, currentInferenceOrigin(), {
-    providerId,
-    modelId,
-    signal: currentGovernedInferenceDeadline()?.signal,
-  });
+  // Local HTTP and sandbox inference share the one compute:local-inference
+  // ResourceLane. Remote providers retain the multi-slot provider semaphore.
+  // Keeping these paths disjoint prevents local HTTP from holding one admission
+  // slot while it waits on another queue.
+  const origin = currentInferenceOrigin();
+  let releaseInferenceSlot: (() => void) | null = null;
   let result;
   let investment: import("../routing/adapter-telemetry-writer").InvestmentAttemptSnapshot | null = null;
   let investmentGuidance = "";
   try {
-    // Queue before observing host ownership: an earlier portal request is
-    // ordinary contention, not a reason to fail the next caller. Recheck both
-    // safety facts at dispatch because they may change while admission waits.
-    await assertProviderDispatchCapacity(providerId);
-    // Local chat owns the shared build/chat lane and checks the GPU there.
-    // Inspecting it here would reject a build that this caller should wait for.
-    if (adapter.type !== "chat" || !isLocalProviderId(providerId)) {
-      const { assertLocalGpuFree } = await import("@/lib/inference/host-gpu-admission");
-      await assertLocalGpuFree({ providerId, modelId });
+    const execute = async () => {
+      await assertProviderDispatchCapacity(providerId);
+      if (!isLocalProviderId(providerId)) {
+        const { assertLocalGpuFree } = await import("@/lib/inference/host-gpu-admission");
+        await assertLocalGpuFree({ providerId, modelId });
+      }
+      // Queued work has not started inference yet. A disable during admission
+      // invalidates its earlier selection before any provider bytes are sent.
+      if (needsModelConnection) await readEnabledRoutingProvider(providerId);
+      if (attribution?.buildId) {
+        const { loadBuildInvestmentContext, UNRESOLVED_INVESTMENT_GUIDANCE } = await import("../portfolio/investment-balance-server");
+        const context = await loadBuildInvestmentContext(prisma, attribution.buildId).catch(() => ({ snapshot: null, guidance: UNRESOLVED_INVESTMENT_GUIDANCE }));
+        investment = context.snapshot;
+        investmentGuidance = context.guidance;
+      }
+      await assertGovernedInferenceAuthority(currentInferenceSignal());
+      currentInferenceSignal()?.throwIfAborted();
+      const parentFetch = providerId === "local" ? currentGovernedInferenceDeadline()?.localFetch : undefined;
+      return adapter.execute({
+        providerId,
+        modelId,
+        plan: effectivePlan,
+        provider: { baseUrl, headers },
+        readLocalThinkingBudgetEvidence: getLocalThinkingBudgetEvidence,
+        fetchImpl: parentFetch ? withInferenceCancellationFetch(parentFetch) : providerInferenceFetch,
+        messages,
+        systemPrompt: investmentGuidance ? `${systemPrompt}\n\n${investmentGuidance}` : systemPrompt,
+        tools,
+        previousResponseId,
+        mcpSession,
+      });
+    };
+    if (isLocalProviderId(providerId)) {
+      result = await withLocalInferenceLock(execute, { modelId, origin,
+        signal: currentInferenceSignal(currentGovernedInferenceDeadline()?.signal) });
+    } else {
+      releaseInferenceSlot = await acquireInferenceSlot(engineKeyForProvider(providerId), origin, {
+        providerId,
+        modelId,
+        signal: currentInferenceSignal(currentGovernedInferenceDeadline()?.signal),
+      });
+      result = await execute();
     }
-    // Queued work has not started inference yet. A disable during admission
-    // invalidates its earlier selection; finally still releases the slot.
-    if (needsModelConnection) await readEnabledRoutingProvider(providerId);
-    if (attribution?.buildId) {
-      const { loadBuildInvestmentContext, UNRESOLVED_INVESTMENT_GUIDANCE } = await import("../portfolio/investment-balance-server");
-      const context = await loadBuildInvestmentContext(prisma, attribution.buildId).catch(() => ({ snapshot: null, guidance: UNRESOLVED_INVESTMENT_GUIDANCE }));
-      investment = context.snapshot;
-      investmentGuidance = context.guidance;
-    }
-    await assertGovernedInferenceAuthority(currentInferenceSignal());
-    currentInferenceSignal()?.throwIfAborted();
-    const parentFetch = providerId === "local" ? currentGovernedInferenceDeadline()?.localFetch : undefined;
-    result = await adapter.execute({
-      providerId,
-      modelId,
-      plan: effectivePlan,
-      provider: { baseUrl, headers },
-      fetchImpl: parentFetch ? withInferenceCancellationFetch(parentFetch) : providerInferenceFetch,
-      messages,
-      systemPrompt: investmentGuidance ? `${systemPrompt}\n\n${investmentGuidance}` : systemPrompt,
-      tools,
-      previousResponseId,
-      mcpSession,
-    });
     endTimer();
   } catch (err) {
     endTimer();
@@ -447,7 +451,7 @@ export async function callProvider(
     }
     throw err;
   } finally {
-    releaseInferenceSlot();
+    releaseInferenceSlot?.();
   }
 
   void clearProviderCapacityStatus({ providerId, source: "api" }).catch((capacityErr) => {
