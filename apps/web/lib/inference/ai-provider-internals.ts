@@ -4,7 +4,6 @@
 // Used by page-load health checks and guarded provider server actions.
 
 import { prisma, type Prisma } from "@dpf/db";
-import { encryptSecret } from "@/lib/credential-crypto";
 import {
   getTestUrl,
   parseModelsResponse,
@@ -21,7 +20,6 @@ import { recordDiscoveredAuthEligibility } from "@/lib/routing/model-auth-eligib
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { persistDiscoveredInventory } from "./discovered-model-inventory";
 import { findDefaultProviderCredential, getDecryptedCredential, getProviderBearerToken } from "./provider-account-credentials";
-import { accountExecutionVersion, ProviderAccountSelectionChangedError } from "../routing/provider-account-candidates";
 export { getDecryptedCredential, getProviderBearerToken, resolveCredentialProviderId } from "./provider-account-credentials";
 import { supportsTextGeneration } from "@/lib/routing/model-classifier";
 import { providerWorkspaceHeaders } from "./provider-workspace";

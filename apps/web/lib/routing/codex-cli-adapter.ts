@@ -314,7 +314,7 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
 
     try {
       await execAsync(`docker exec ${SANDBOX_CONTAINER} sh -c 'mkdir -p ${authHome} && chmod 700 ${authHome}'`, { timeout: 5_000 });
-      const auth = await prepareCodexCliAuth(providerId, authHome, request.plan.providerConnectionId, request.plan.providerConnectionVersion);
+      await prepareCodexCliAuth(providerId, authHome, request.plan.providerConnectionId, request.plan.providerConnectionVersion);
       // Write prompt via stdin to avoid the POSIX ARG_MAX limit (BI-2685C1E5).
       // See writeContainerFileViaStdin for full rationale.
       const promptB64 = Buffer.from(prompt).toString("base64");
