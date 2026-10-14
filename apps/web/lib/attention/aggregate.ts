@@ -12,6 +12,7 @@ import { loadPausedAiItems } from "./sources/paused-ai";
 import { loadWorkroomStallItems } from "./sources/workroom-stall";
 import { loadWorkroomRebindItems } from "./sources/workroom-rebind";
 import { loadScheduledTaskItems } from "./sources/scheduled-task";
+import { loadScheduledJobAttentionItems, type ScheduledJobAttentionDb } from "./sources/scheduled-job";
 import { loadAgentProposalItems } from "./sources/agent-proposal";
 import { loadSkillProposalItems } from "./sources/skill-proposal";
 import { loadCoworkerEnvelopeItems } from "./sources/coworker-envelope";
@@ -118,6 +119,8 @@ export function attentionSourceLoaders(
     { source: "workroom-stall", load: () => loadWorkroomStallItems(db) },
     { source: "workroom-rebind", load: () => loadWorkroomRebindItems(db) },
     { source: "scheduled-task", load: () => loadScheduledTaskItems(db) },
+    // Cron-backed ScheduledJob failures and an uncommissioned issue intake (BI-FD40397B).
+    { source: "scheduled-task", load: () => loadScheduledJobAttentionItems(db as unknown as ScheduledJobAttentionDb) },
     { source: "agent-proposal", load: () => loadAgentProposalItems(db) },
     { source: "skill-proposal", load: () => loadSkillProposalItems(db) },
     { source: "approval-outbound", load: () => loadOutboundItems(db) },
