@@ -225,7 +225,7 @@ describe("change-review MCP pack", () => {
       if (kind === "wrong-room") row.workCapsuleId = "other-room";
       if (kind === "wrong-tree") row.details.evidence.headTreeHash = "d".repeat(40);
       if (kind === "wrong-diff") row.details.evidence.diffDigest = "d".repeat(64);
-      if (kind === "expired") row.details.evidenceValidity.expiresAt = "2000-01-01T00:00:00Z";
+      if (kind === "expired") row.details.evidenceValidity.expiresAt = new Date(Date.now() - 60_000).toISOString();
       if (kind === "wrong-head") row.details.evidence.sha = "d".repeat(40);
       const out = await changeReviewPack.handlers.review_semantic_change!(submitted, "user-1", { agentId: "codex" });
       expect(out).toMatchObject({ success: false, error: "invalid_failure_analysis", data: { reasons: expect.any(Array) } });
