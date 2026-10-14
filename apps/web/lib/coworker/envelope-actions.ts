@@ -19,6 +19,7 @@
 import { prisma, type Prisma } from "@dpf/db";
 import { createAuthorizationDecisionLog } from "@/lib/governance-data";
 import { isRecord } from "@/lib/shared/coerce";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { humanApprovalMarker } from "./human-approved-execution";
 import { labelOnBehalfDecision, readOnBehalfDecision, type OnBehalfDecision } from "./on-behalf-decision";
 
@@ -166,7 +167,7 @@ async function auditOnBehalf(envelope: EnvelopeRow, by: string, reason: string, 
       },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = getErrorMessage(err);
     console.error(`[envelope-actions] on-behalf audit not written: envelope=${JSON.stringify(envelope.id)} verb=${JSON.stringify(verb)} error=${JSON.stringify(message)}`);
   }
 }
