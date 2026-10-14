@@ -70,7 +70,7 @@ describe("Work activity page", () => {
     const html = renderToStaticMarkup(await WorkroomsPage());
     expect(html).toContain("/workspace/cases/work-capsule%3AWC-BLOCK");
     expect(html).toContain("/workspace/cases/work-capsule%3AWC-RUN");
-    expect(html).toContain("Session payables-session");
+    expect(html).not.toContain("Session payables-session");
     expect(html).toContain("Session release-session");
   });
 
@@ -82,7 +82,7 @@ describe("Work activity page", () => {
 
   it("lists held Workrooms with why and for how long (BI-E8C78E80)", async () => {
     const html = renderToStaticMarkup(await WorkroomsPage());
-    expect(html).toContain("Held Workrooms");
+    expect(html).toContain("Shared recovery issues");
     expect(html).toContain("Onboard new foster");
     expect(html).toContain("missing explicit coordinator");
     expect(html).toContain("3 h");

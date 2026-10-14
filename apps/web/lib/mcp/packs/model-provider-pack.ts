@@ -320,7 +320,7 @@ async function manage(params: Record<string, unknown>): Promise<ToolResult> {
     }
     case "configure": {
       const input: Parameters<typeof accounts.configureProviderAccount>[0] = { connectionId };
-      for (const key of ["label", "secretRef", "clientId", "clientSecret", "tokenEndpoint", "scope"] as const) {
+      for (const key of ["label", "secretRef", "clientId", "clientSecret", "tokenEndpoint", "scope", "providerWorkspaceId"] as const) {
         if (typeof params[key] === "string") input[key] = params[key];
       }
       return result(await accounts.configureProviderAccount(input));

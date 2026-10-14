@@ -14,6 +14,10 @@ export interface FederationDeliveryQueueDb {
     upsert(args: unknown): Promise<{ itemId: string }>;
     update(args: unknown): Promise<unknown>;
     updateMany(args: unknown): Promise<{ count: number }>;
+    /** Reads the job's current status so scheduling records `enqueued` only on
+     *  a real transition (BI-1A8887C7). Prisma always provides it; a store
+     *  without it keeps the old always-record behaviour. */
+    findUnique?(args: unknown): Promise<{ itemId: string; status: string } | null>;
     findMany?(args: unknown): Promise<Array<{
       itemId: string;
       sourceId: string | null;
@@ -108,11 +112,20 @@ export async function scheduleFederationDeliveryJob(
   now = new Date(),
   telemetry: TelemetryWriter = recordQueueTransition,
 ): Promise<{ itemId: string }> {
+  const sourceKey = `federation-demand:${mirrorId}`;
+  // BI-1A8887C7: telemetry records state transitions, not repeated schedules.
+  // A job that is already queued stays queued, so re-scheduling it (a content
+  // change the queued job will pick up anyway) is not an `enqueued` event.
+  // Recording it anyway wrote ~700K rows/day while one link's backlog could
+  // not drain.
+  const prior = db.workItem.findUnique
+    ? await db.workItem.findUnique({ where: { sourceKey }, select: { itemId: true, status: true } })
+    : null;
   const queue = await ensureFederationDeliveryQueue(db);
   const item = await db.workItem.upsert({
-    where: { sourceKey: `federation-demand:${mirrorId}` },
+    where: { sourceKey },
     create: {
-      sourceKey: `federation-demand:${mirrorId}`,
+      sourceKey,
       sourceType: "federation-demand-delivery",
       sourceId: mirrorId,
       title: `Deliver federated demand ${mirrorId}`,
@@ -132,6 +145,7 @@ export async function scheduleFederationDeliveryJob(
     },
     select: { itemId: true },
   });
+  if (prior?.status === "queued") return item;
   await telemetry({
     queueKey: FEDERATION_DELIVERY_QUEUE_KEY,
     itemKind: "federation-demand",

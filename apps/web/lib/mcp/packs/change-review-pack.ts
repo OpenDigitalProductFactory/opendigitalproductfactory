@@ -11,6 +11,7 @@ import {
 } from "@/lib/change-review/semantic-change-review-operation";
 import {
   assessSemanticReviewReceiptFreshness,
+  isSemanticReviewReceipt,
   type SemanticReviewReceipt,
   type SemanticReviewRisk,
 } from "@/lib/change-review/semantic-change-review";
@@ -131,14 +132,6 @@ function reviewMode(): SemanticChangeReviewMode {
   return process.env.DPF_SEMANTIC_CHANGE_REVIEW_MODE === "enforce" ? "enforce" : "shadow";
 }
 
-function isReceipt(value: unknown): value is SemanticReviewReceipt {
-  return Boolean(
-    value &&
-    typeof value === "object" &&
-    (value as { schemaVersion?: unknown }).schemaVersion === "semantic-change-review-receipt.v2",
-  );
-}
-
 const reviewSemanticChange: ToolPackHandler = async (params, userId, context): Promise<ToolResult> => {
   const capsuleId = stringParam(params, "capsuleId");
   const authorSurface = stringParam(params, "authorSurface");
@@ -176,7 +169,7 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
     orderBy: { createdAt: "desc" },
     select: { id: true, details: true },
   });
-  const priorReceipt = isReceipt(previousEvidence?.details) ? previousEvidence.details : null;
+  const priorReceipt = isSemanticReviewReceipt(previousEvidence?.details) ? previousEvidence.details : null;
   const risk = RISKS.includes(params.risk as SemanticReviewRisk) ? params.risk as SemanticReviewRisk : undefined;
   const sensitivityFloor = PROFILES.includes(params.sensitivityFloor as StrategyProfile)
     ? params.sensitivityFloor as StrategyProfile
@@ -226,7 +219,7 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
         where: { id: evidenceRecordId },
         select: { workCapsuleId: true, details: true },
       });
-      if (row?.workCapsuleId !== capsule.id || !isReceipt(row.details)) return false;
+      if (row?.workCapsuleId !== capsule.id || !isSemanticReviewReceipt(row.details)) return false;
       return row.details.result.decision !== "inconclusive"
         && assessSemanticReviewReceiptFreshness(row.details, coordination.identity).fresh;
     });
@@ -263,7 +256,7 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
     const existing = await prisma.externalEvidenceRecord.findUnique({
       where: { id: singleFlight.evidenceRecordId }, select: { details: true },
     });
-    if (!isReceipt(existing?.details)) throw new Error("Canonical semantic-review evidence is missing or invalid");
+    if (!isSemanticReviewReceipt(existing?.details)) throw new Error("Canonical semantic-review evidence is missing or invalid");
     const outcome = await runSemanticChangeReview({ ...operationInput, priorReceipt: existing.details }, {
       dispatch: async () => { throw new Error("Canonical semantic-review evidence is no longer fresh"); },
     });
@@ -307,7 +300,7 @@ const recordSemanticReviewOutcome: ToolPackHandler = async (params, userId, cont
     where: { id: receiptId, workCapsuleId: capsule.id, operationType: "semantic-change-review.receipt" },
     select: { details: true, createdAt: true },
   });
-  if (!isReceipt(receiptRow?.details)) {
+  if (!isSemanticReviewReceipt(receiptRow?.details)) {
     return { success: false, error: "receipt_not_found", message: `A current semantic-review receipt ${receiptId} was not found on ${capsuleId}.` };
   }
   const priorOutcome = await prisma.externalEvidenceRecord.findFirst({

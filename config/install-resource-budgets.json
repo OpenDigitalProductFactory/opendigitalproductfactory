@@ -51,6 +51,24 @@
       "profiles": ["runtime-local-speech", "tts"],
       "notes": "BI-A0A0568F: keep profile-gated; do not promote to always-on. Idle-process elimination is the preferred long-term path."
     },
+    "prometheus": {
+      "memory": "1g",
+      "cpus": "1.0",
+      "profiles": ["runtime-deep-observability", "observability-ui"],
+      "notes": "BI-D6769E2F: operator-chosen monitoring (BI-83260BB3). 15-day TSDB over the platform's own scrape targets. Initial bound; measured steady state is recorded once monitoring is turned on, and any bound above 70% steady state is raised."
+    },
+    "grafana": {
+      "memory": "512m",
+      "cpus": "0.5",
+      "profiles": ["runtime-deep-observability", "observability-ui"],
+      "notes": "BI-D6769E2F: power-user dashboards; idle most of the time. Initial bound, verified with prometheus."
+    },
+    "postgres-exporter": {
+      "memory": "128m",
+      "cpus": "0.25",
+      "profiles": ["runtime-deep-observability", "observability-ui"],
+      "notes": "BI-D6769E2F: single small Go exporter polled by prometheus. Initial bound, verified with prometheus."
+    },
     "sandbox": {
       "cpus": "4.0",
       "profiles": ["runtime-build"],
