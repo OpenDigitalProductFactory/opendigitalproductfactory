@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # ChatGPT/Codex verification recovery
 
 Backlog: BI-C4FCC089. Workroom: WC-4214F2E0.
@@ -21,7 +25,7 @@ The operator additionally requests plain grouping language. Replace "Subscriptio
 
 One atomic recovery deliverable, key `connection-recovery`, mapped to BI-C4FCC089; no internal phase is independently delivered as a complete repair. References: requirement `AC-1`, contract `oauth-owner-isolation`, flow `expired-token-single-retry`, verification `expired-token-regressions`.
 
-1. Add regression cases in `apps/web/lib/actions/ai-providers.test.ts`: successful renewal, refresh rejection, repeated 401, unrelated 401/429 and explicit account ownership. Run them against the old source and preserve the observed failure. Resolve graph-linked tests for both claimed source paths, expanding verification when advice is absent.
+1. Add regression cases in `apps/web/lib/actions/provider-auth-test.test.ts`: successful renewal, refresh rejection, repeated 401, unrelated 401/429 and explicit account ownership. Run them against the old source and preserve the observed failure. Resolve graph-linked tests for both claimed source paths, expanding verification when advice is absent.
 2. Extract a reusable local probe closure inside `provider-auth-test.ts` so both attempts share request construction and completion validation. Only a parsed 401 error.code exactly equal to token_expired starts refresh. Default ChatGPT renews Codex; explicit accounts keep their own identity. Return an actionable reconnect message on renewal failure or repeated token expiry. No refresh for quota or generic authentication errors. Keep capacity clearing and activation after proven completion only.
 3. Update grouping and grouping tests to "Subscriptions". Coordinate form recovery with BI-7AA4EB6B; record its delivered source and served evidence before claiming the full acceptance criteria.
 4. Run affected action/account/OAuth/grouping tests and web/test typechecks. Run style-drift guard, doc index generation/check, exact-tree pregate and semantic publication review. The Workroom impact contract requires related-test lookup, style-drift and exact-tree verification. Inspect immutable review findings and pr:health before queue merge.
