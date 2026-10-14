@@ -23,7 +23,7 @@ import { isImmutableGateClaimKey, type LocalCiEvidenceValidity } from "@/lib/gat
 import { settleTerminalGateLease } from "./environment-lease-terminal-evidence";
 import { resolveResumeClaim, validateHostResourceClaim } from "./environment-lease-resume";
 import { admittedLeaseTtlMs, DEFAULT_LEASE_TTL_MS, requestedTtlMs } from "./environment-lease-timing";
-import { afterNonprodLeaseRelease, publishNonprodCapacityForHead, settleNonprodLeaseWait } from "./durable-wait";
+import { afterNonprodLeaseRelease, publishNonprodCapacityForHead, settleExpiredNonprodLeaseWaits } from "./durable-wait";
 export { NONPROD_OWNER_PROVIDERS, type NonprodOwnerProvider } from "./nonprod-owner-provider";
 export {
   admittedLeaseTtlMs,
@@ -101,10 +101,6 @@ function isSelfAdmittingEnvironment(environmentKey: string): boolean {
     || environmentKey === "host-heavy-resource";
 }
 
-function queueKey(environmentKey: string): string {
-  return `compute:nonprod-${environmentKey}`;
-}
-
 type LeaseTransitionInput = {
   lease: LeaseRow;
   transition: "enqueued" | "started" | "finished" | "cancelled";
@@ -117,7 +113,7 @@ type LeaseTransitionInput = {
 
 function emitLeaseTransition(input: LeaseTransitionInput) {
   return recordQueueTransition({
-    queueKey: queueKey(input.lease.environmentKey),
+    queueKey: `compute:nonprod-${input.lease.environmentKey}`,
     itemKind: "nonprod-environment-lease",
     itemId: input.lease.leaseId,
     transition: input.transition,
@@ -203,20 +199,8 @@ async function reconcileEnvironmentInTransaction(input: {
     // the environment lock, so a committed expiry cannot strand a submitted
     // Task that no subsequent active/queued janitor scan can see.
     if (input.tx.taskRun) {
-      const expired = await input.tx.nonProductionEnvironmentLease.findMany({
-        where: { id: { in: plan.expiredLeaseIds }, status: "expired", releasedAt: input.now },
-      });
-      for (const lease of expired) {
-        if (!lease.taskRunId) continue;
-        await settleNonprodLeaseWait({
-          db: input.tx as never,
-          taskRunId: lease.taskRunId,
-          leaseId: lease.leaseId,
-          state: "terminal",
-          expiredLease: lease,
-          now: input.now,
-        });
-      }
+      await settleExpiredNonprodLeaseWaits({ db: input.tx as never,
+        leaseIds: plan.expiredLeaseIds, now: input.now });
     }
   }
 

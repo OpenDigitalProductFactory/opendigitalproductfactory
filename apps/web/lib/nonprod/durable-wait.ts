@@ -388,6 +388,24 @@ async function settleNonprodLeaseWaitOnce(input: SettleNonprodLeaseWaitInput): P
   return { settled: true };
 }
 
+/** Called only inside the transaction that expires these exact lease rows. */
+export async function settleExpiredNonprodLeaseWaits(input: {
+  db: DurableWaitDb;
+  leaseIds: string[];
+  now: Date;
+}): Promise<void> {
+  if (!input.db.taskRun || !input.db.nonProductionEnvironmentLease.findMany) return;
+  const expired = await input.db.nonProductionEnvironmentLease.findMany({
+    where: { id: { in: input.leaseIds }, status: "expired", releasedAt: input.now },
+  });
+  for (const lease of expired) {
+    if (!lease.taskRunId) continue;
+    await settleNonprodLeaseWait({ db: input.db as DurableWaitDb & { taskRun: NonNullable<DurableWaitDb["taskRun"]> },
+      taskRunId: lease.taskRunId, leaseId: lease.leaseId, state: "terminal",
+      expiredLease: lease, now: input.now });
+  }
+}
+
 export async function afterNonprodLeaseRelease(input: {
   db: DurableWaitDb;
   lease: WaitLease & { status: string };
