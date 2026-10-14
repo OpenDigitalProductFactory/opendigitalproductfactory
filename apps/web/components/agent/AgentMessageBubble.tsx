@@ -16,6 +16,7 @@ import {
 } from "@/lib/tak/decision-block";
 import { LEAVE_DECISION_ACTION } from "@/lib/workforce/leave/leave-decision-proposal-contract";
 import { LeaveDecisionProposalCard } from "./LeaveDecisionProposalCard";
+import { ProposalNoLongerRunnable } from "./ProposalNoLongerRunnable";
 import { InlineEnvelopeApprovals } from "./InlineEnvelopeApprovals";
 
 /**
@@ -466,13 +467,16 @@ export function AgentMessageBubble({
                 })}
               </pre>
             )}
+            {isPending && p.noLongerRunnable && <ProposalNoLongerRunnable reason={p.noLongerRunnable} />}
             {isPending && (
               <div style={{ display: "flex", gap: 6 }}>
+                {!p.noLongerRunnable && (
                 <button type="button" onClick={() => onApprove?.(p.proposalId)} style={{ flex: 1, background: "color-mix(in srgb, var(--dpf-success) 20%, transparent)", border: "1px solid color-mix(in srgb, var(--dpf-success) 40%, transparent)", borderRadius: 6, padding: "5px 10px", fontSize: 11, color: "var(--dpf-success)", cursor: "pointer" }}>
                   Approve &amp; Apply
                 </button>
+                )}
                 <button type="button" onClick={() => onReject?.(p.proposalId)} style={{ flex: 1, background: "color-mix(in srgb, var(--dpf-error) 15%, transparent)", border: "1px solid color-mix(in srgb, var(--dpf-error) 30%, transparent)", borderRadius: 6, padding: "5px 10px", fontSize: 11, color: "var(--dpf-error)", cursor: "pointer" }}>
-                  Reject
+                  {p.noLongerRunnable ? "Decline" : "Reject"}
                 </button>
               </div>
             )}
@@ -547,8 +551,10 @@ export function AgentMessageBubble({
             <div style={{ color: "var(--dpf-muted)", fontSize: 11, marginBottom: 8, lineHeight: 1.5 }}>
               {formatProposalParams(p.actionType, p.parameters)}
             </div>
+            {isPending && p.noLongerRunnable && <ProposalNoLongerRunnable reason={p.noLongerRunnable} />}
             {isPending && (
               <div style={{ display: "flex", gap: 6 }}>
+                {!p.noLongerRunnable && (
                 <button
                   type="button"
                   onClick={() => onApprove?.(p.proposalId)}
@@ -565,6 +571,7 @@ export function AgentMessageBubble({
                 >
                   Approve
                 </button>
+                )}
                 <button
                   type="button"
                   onClick={() => onReject?.(p.proposalId)}
@@ -579,7 +586,7 @@ export function AgentMessageBubble({
                     cursor: "pointer",
                   }}
                 >
-                  Reject
+                  {p.noLongerRunnable ? "Decline" : "Reject"}
                 </button>
               </div>
             )}

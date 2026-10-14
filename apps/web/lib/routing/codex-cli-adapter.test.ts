@@ -437,6 +437,37 @@ describe("cliFailureSignal — classify the CLI's own error, not the echoed prom
     expect(looksLikeCliAuthFailure(cliFailureSignal(expired))).toBe(true);
   });
 
+  // BI-07EC0FB4 (live, 2026-10-14 00:07–00:20Z): a revoked OpenAI sign-in. The 401s
+  // sit only on timestamped `... ERROR codex_models_manager` lines, which the
+  // signal drops; the CLI's own ERROR: line says "sign in again", which no
+  // pattern matched, so 39 Workroom turns failed as provider_error and the
+  // provider was never disabled or flagged for re-auth.
+  it("classifies a refresh-token failure that asks to sign in again as auth", () => {
+    const revoked = [
+      "Reading prompt from stdin...",
+      "2026-10-14T00:16:54.477268Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized: Your authentication token has expired. Please try refreshing it.",
+      "OpenAI Codex v0.162.1",
+      "--------",
+      "model: gpt-5.6-luna",
+      "--------",
+      "user",
+      "You are executing one stage of a standing Workroom activity.",
+      "ERROR: Your access token could not be refreshed because you have since logged out or signed in to another account. Please sign in again.",
+      "ERROR: Your access token could not be refreshed because you have since logged out or signed in to another account. Please sign in again.",
+    ].join("\n");
+    const signal = cliFailureSignal(revoked);
+    expect(looksLikeCliAuthFailure(signal)).toBe(true);
+    expect(looksLikeCliRateLimit(signal)).toBe(false);
+  });
+
+  it.each([
+    "ERROR: Please sign in again.",
+    "ERROR: please sign in to continue",
+    "ERROR: Your access token could not be refreshed.",
+  ])("classifies sign-in phrasing %j as auth", (text) => {
+    expect(looksLikeCliAuthFailure(cliFailureSignal(text))).toBe(true);
+  });
+
   it("falls back to the tail when the CLI printed no ERROR line", () => {
     const text = "x".repeat(10_000) + "\nnot logged in";
     expect(cliFailureSignal(text)).toContain("not logged in");

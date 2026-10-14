@@ -139,7 +139,7 @@ export function expressEffort(
   providerId: string,
   decision: EffortDecision,
   capabilities?: ModelCardCapabilities | null,
-  opts?: { modelClass?: string; isLocalNative?: boolean },
+  opts?: { modelClass?: string; isLocalNative?: boolean; localThinkingBudgetEvidence?: import("./types").LocalThinkingBudgetEvidence },
 ): EffortExpression {
   if (decision.level === "none") return NOTHING;
   if (!levelAccepted(decision.level, capabilities)) {
@@ -197,11 +197,17 @@ export function expressEffort(
 
   // ── Local native transport — Ollama's `think` toggle ───────────────────────
   if (opts?.isLocalNative) {
+    const evidence = opts.localThinkingBudgetEvidence;
+    const age = evidence ? Date.now() - evidence.observedAt : Infinity;
+    if (evidence?.dialect === "llama.cpp-b9879" && age >= 0 && age <= 30000 && decision.budgetTokens !== null) {
+      return { settings: { thinking_budget_tokens: decision.budgetTokens }, extraMaxTokens: 0,
+        thinking: true, effortUnexpressed: false };
+    }
     return {
       settings: { think: true },
       extraMaxTokens: 0,
       thinking: true,
-      effortUnexpressed: false,
+      effortUnexpressed: true,
     };
   }
 

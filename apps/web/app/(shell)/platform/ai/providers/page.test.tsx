@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
+const policy = vi.hoisted(() => ({ read: vi.fn().mockResolvedValue(false) }));
+vi.mock("@/lib/inference/local-only", () => ({ getLocalOnlyInference: policy.read }));
+
 vi.mock("@/lib/auth", () => ({
   auth: vi.fn().mockResolvedValue({
     user: { platformRole: "admin", isSuperuser: true },
@@ -25,10 +28,6 @@ vi.mock("@/lib/inference/provider-account-overview.server", async () => {
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
 }));
-vi.mock("@/lib/inference/local-only", () => ({
-  getLocalOnlyInference: vi.fn().mockResolvedValue(false),
-}));
-
 vi.mock("@dpf/db", () => ({
   prisma: {
     cliPoolStatus: { findMany: vi.fn().mockResolvedValue([]) },
@@ -176,6 +175,16 @@ vi.mock("next/link", () => ({
 }));
 
 describe("ProvidersPage", () => {
+  it("does not render a permissive setting when the policy cannot be read", async () => {
+    policy.read.mockRejectedValueOnce(new Error("policy unavailable"));
+    const { default: ProvidersPage } = await import("./page");
+    const { SOURCE_CATALOG } = await import("@dpf/i18n");
+    const html = renderToStaticMarkup(await ProvidersPage());
+    expect(html).toContain(SOURCE_CATALOG.providerAccounts.policyUnavailable);
+    expect(html).not.toContain('type="radio"');
+    expect(html).toContain("Providers &amp; Routing");
+  });
+
   it("renders provider and routing content without MCP service operations or tool inventory", async () => {
     const { default: ProvidersPage } = await import("./page");
     const html = renderToStaticMarkup(await ProvidersPage());

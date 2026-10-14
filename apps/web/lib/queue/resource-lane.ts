@@ -267,7 +267,14 @@ function defaultRecord(input: QueueTransitionInput): void {
   });
 }
 
-const LANES = new Map<string, ResourceLane>();
+// Next can evaluate this module independently for instrumentation, handlers
+// and SSR. A module-local Map gives each bundle its own "single" GPU lane.
+// Share the registry across those module caches in the same Node process.
+const LANES_REGISTRY_KEY = Symbol.for("dpf.resource-lanes.v1");
+const laneGlobal = globalThis as typeof globalThis & {
+  [LANES_REGISTRY_KEY]?: Map<string, ResourceLane>;
+};
+const LANES = laneGlobal[LANES_REGISTRY_KEY] ??= new Map<string, ResourceLane>();
 
 /** Get (or create) the shared lane for a resource key. One lane per key. */
 export function getResourceLane(laneKey: string, deps?: ResourceLaneDeps): ResourceLane {

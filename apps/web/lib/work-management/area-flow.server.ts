@@ -22,6 +22,7 @@ import { loadRoomAiUse } from "./room-ai-spend.server";
 import { TERMINAL_WORKROOM_STATUSES } from "./standing-room-nesting";
 import { getWorkShape, getWorkShapeVersion } from "./work-shapes";
 import { readWorkShapeClaimRef } from "./workroom-shape-claim";
+import { computeShapeStepMeasures, type ShapeStepMeasures } from "./shape-step-measures";
 import { buildShapeFlowMap, type WorkroomFlowMapModel } from "./workroom-flow-map";
 import { classifyDriveSegment, type WorkroomFlowState } from "./workroom-flow-state";
 import {
@@ -102,6 +103,8 @@ export type ShapeFlowView = {
   /** Versions of this shape with stage data, newest first, for before/after. */
   versions: string[];
   roomsAtStep: ShapeRoomAtStep[] | null;
+  /** Per-step data boxes, timeline ladder and heat (F4, spec §4 VSM). */
+  stepMeasures: ShapeStepMeasures;
 };
 
 export async function loadShapeFlowView(input: {
@@ -124,7 +127,7 @@ export async function loadShapeFlowView(input: {
         queueKey: { startsWith: `${WORKROOM_STAGE_QUEUE_PREFIX}${shapeRef}:` },
         period: { gte: new Date(now.getTime() - FLOW_WINDOW_DAYS * DAY_MS).toISOString().slice(0, 10) },
       },
-      select: { queueKey: true, cycleP50Ms: true, throughput: true },
+      select: { queueKey: true, period: true, cycleP50Ms: true, processP50Ms: true, firstPassYield: true, throughput: true },
     }),
     prisma.queueMetricSnapshot.findMany({
       where: { queueKey: { startsWith: `${WORKROOM_STAGE_QUEUE_PREFIX}${definition.key}@` } },
@@ -162,5 +165,13 @@ export async function loadShapeFlowView(input: {
       })
     : null;
 
-  return { model, versions, roomsAtStep };
+  const stepMeasures = computeShapeStepMeasures({
+    shapeRef,
+    stages: model.stages.map((stage) => ({ key: stage.key, title: stage.title })),
+    snapshots,
+    liveCounts,
+    now,
+  });
+
+  return { model, versions, roomsAtStep, stepMeasures };
 }

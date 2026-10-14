@@ -1612,9 +1612,11 @@
       "sensitivity": "internal",
       "honored_by_tools": [
         "claim_capsule_scope",
+        "approve_runtime_permission",
         "claim_workroom_scope",
         "create_work_capsule",
         "create_workroom",
+        "drive_workroom_runtime",
         "heartbeat_capsule",
         "heartbeat_runtime_target",
         "heartbeat_workroom",
@@ -1628,6 +1630,7 @@
         "release_capsule_scope",
         "release_runtime_target",
         "release_workroom_scope",
+        "resume_workroom_queue",
         "update_work_capsule_status",
         "update_workroom_status"
       ],
