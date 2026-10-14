@@ -344,11 +344,9 @@ describe("governedExecuteTool — happy path", () => {
   });
 
   it("forwards caller attribution and effective token scope into executeTool (BI-0EEBA669)", async () => {
-    // Regression: governedExecuteTool built the executeTool context from only
-    // {agentId, threadId, routeContext, taskRunId, featureBuildId} and dropped
-    // the three caller-attribution fields, so every principle_decide consult
-    // recorded an all-null caller and the decision ledger could not match a
-    // decision back to the client/thread that made it.
+    // Regression: the executeTool context dropped the caller-attribution fields, so
+    // every principle_decide consult recorded an all-null caller. BI-FAD98137: the
+    // turn's coworkerMode must also reach the handler, or a delegated child runs wider.
     await governedExecuteTool({
       toolName: "query_backlog",
       rawParams: { status: "open" },
@@ -361,6 +359,7 @@ describe("governedExecuteTool — happy path", () => {
         apiTokenId: "tok_xyz",
         authSource: "pat",
         tokenScope: "admin",
+        coworkerMode: "advise",
       },
       source: "external-jsonrpc",
     });
@@ -375,6 +374,7 @@ describe("governedExecuteTool — happy path", () => {
         authSource: "pat",
         tokenScope: "admin",
         threadId: "thread-9",
+        coworkerMode: "advise",
       }),
     );
   });

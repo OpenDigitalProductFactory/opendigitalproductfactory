@@ -246,7 +246,6 @@ export async function callProvider(
   // Transcription uses its registry adapter and has no model-routing connection.
   const needsModelConnection = executionAdapterRaw !== "transcription";
   const localProvider = needsModelConnection ? await readEnabledRoutingProvider(providerId) : null;
-  await assertProviderDispatchCapacity(providerId);
   // 0. EP-COST-001 Phase 2 — pre-call budget gate.
   // Check the agent's daily token budget before dispatching. If the agent has
   // consumed ≥100% of its registry limit today, throw a billing error so the
@@ -298,6 +297,10 @@ export async function callProvider(
       console.warn("[budget-gate] Budget check failed (non-fatal):", { agentId: attribution.agentId }, err);
     }
   }
+
+  // An exclusive host reservation refuses promptly; ordinary local runner
+  // contention waits for admission below. Recheck the reservation at dispatch.
+  await assertProviderDispatchCapacity(providerId);
 
   // 1. Resolve provider (DB lookup + auth headers)
   const provider = localProvider ?? await prisma.modelProvider.findUnique({ where: { providerId } });
@@ -354,6 +357,11 @@ export async function callProvider(
   let result;
   try {
     const execute = async () => {
+      await assertProviderDispatchCapacity(providerId);
+      if (!isLocalProviderId(providerId)) {
+        const { assertLocalGpuFree } = await import("@/lib/inference/host-gpu-admission");
+        await assertLocalGpuFree({ providerId, modelId });
+      }
       // Queued work has not started inference yet. A disable during admission
       // invalidates its earlier selection before any provider bytes are sent.
       if (needsModelConnection) await readEnabledRoutingProvider(providerId);

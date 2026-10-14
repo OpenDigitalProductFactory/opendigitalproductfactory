@@ -1694,7 +1694,7 @@ class OnePluginOwnedConnectorTest(unittest.TestCase):
 
     def test_claude_descriptor_is_url_only_https_with_the_scope_pin(self) -> None:
         server = self._read("claude.mcp.json")["mcpServers"]["dpf"]
-        self.assertEqual(server["url"], "${DPF_MCP_URL:-https://localhost/api/mcp/v1?tier=full}")
+        self.assertEqual(server["url"], "${DPF_CLAUDE_MCP_URL:-https://localhost/api/mcp/v1?tier=full}")
         self.assertNotIn("headers", server)
         self.assertEqual(server["oauth"], {"scopes": updater.MCP_CLIENT_OAUTH_SCOPE_PIN})
 
@@ -1931,9 +1931,11 @@ class WrapperEndpointParityTest(unittest.TestCase):
         self.assertIn('--mcp-url "$MCP_ENDPOINT_NAMED"', sh)
         self.assertNotRegex(ps1, r"-McpUrl \$McpEndpoint\b(?!Named)")
         self.assertIn("-McpUrl $McpEndpointNamed", ps1)
-        # Persisting a non-https endpoint keys on the operator naming one, not
-        # on a comparison with a hard-coded default.
-        self.assertIn('if [ -n "$MCP_ENDPOINT_NAMED" ]; then', sh)
+        # A named non-https endpoint reaches the clients only through
+        # --mcp-url; it is never written to the env file or launchd that
+        # Claude's OAuth connector reads (BI-8FD7C0C9).
+        self.assertNotIn('dpf_launchd_setenv DPF_MCP_URL "$MCP_ENDPOINT"', sh)
+        self.assertNotIn('dpf_set_client_env_export DPF_MCP_URL "$MCP_ENDPOINT"', sh)
 
     def test_python_default_is_canonical_https_oauth(self):
         self.assertEqual(updater.DEFAULT_MCP_URL, "https://localhost/api/mcp/v1")

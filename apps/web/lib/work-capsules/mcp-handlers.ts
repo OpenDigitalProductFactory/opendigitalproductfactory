@@ -60,6 +60,7 @@ import { invalidScopeResult, scopeClaimRefusal } from "./mcp-result-errors";
 import { claimBacklogItemForWork } from "./claim-backlog-item-handler";
 import { createWorkroomBoundToBacklogItem } from "./create-workroom-binding";
 import { workCapsuleActor as actor } from "./handler-actor";
+import { commandDb } from "./receipted-tool";
 type ToolContext = {
   routeContext?: string;
   agentId?: string;
@@ -89,8 +90,9 @@ function stringParam(params: Record<string, unknown>, key: string): string | nul
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
+// Inside a receipted command (BI-763D6E01) this is the command's transaction.
 function workCapsuleDb(): CapsuleDb {
-  return prisma as unknown as CapsuleDb;
+  return commandDb();
 }
 // An ordinary write renews the writer's own lease; it never takes another
 // principal's live lease (BI-A7601AED).
@@ -193,6 +195,11 @@ export async function getWorkCapsuleTool(params: Record<string, unknown>, userId
   if (!capsuleId) {
     return { success: false, error: "missing_capsuleId", message: "capsuleId is required." };
   }
+  const { parseAfterSequence, readActivityAfter } = await import("./activity-log-read");
+  const afterSequence = parseAfterSequence(params["afterSequence"]);
+  if (afterSequence === null) {
+    return { success: false, error: "invalid_input", message: "afterSequence must be a non-negative integer." };
+  }
   const capsule = await prisma.workroom.findUnique({
     where: { capsuleId },
     include: {
@@ -220,11 +227,14 @@ export async function getWorkCapsuleTool(params: Record<string, unknown>, userId
     }).catch(() => ({ delegations: [], escalation: {
       state: "setup-required" as const, reason: "coordination-read-unavailable", steps: [],
     } })) : null;
+  // BI-62514632: the room's log from a position the caller already holds.
+  const log = afterSequence === undefined ? null
+    : { afterSequence, ...(await readActivityAfter(prisma as never, { workCapsuleId: capsule.id, afterSequence })) };
   return {
     success: true,
     entityId: capsule.capsuleId,
     message: `Loaded ${capsule.capsuleId}.`,
-    data: { capsule: { ...capsule, recovery: projectWorkroomRecovery(capsule), nestedCoordination } },
+    data: { capsule: { ...capsule, recovery: projectWorkroomRecovery(capsule), nestedCoordination }, ...(log ? { log } : {}) },
   };
 }
 

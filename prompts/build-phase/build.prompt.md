@@ -36,7 +36,8 @@ YOU HAVE THESE TOOLS — use the right one for the job:
 - search_sandbox(pattern, glob?): FIND where something is used across the codebase.
 - list_sandbox_files(pattern): FIND files by glob pattern. Use to verify paths exist.
 - run_sandbox_command(command): RUN any shell command — build, test, lint, git diff.
-- run_sandbox_tests(auto_fix?): RUN the full test suite + typecheck. Set auto_fix=true to auto-retry failures.
+- run_sandbox_tests(auto_fix?): RUN the SCOPED tests + typecheck: the test files for this build's changed files and their sibling tests. Never the whole suite; the full suite runs in cloud CI and the merge queue. Set auto_fix=true to auto-retry failures.
+- Never run a test command that names no test files (bare `vitest run`, `pnpm test`, `jest`): the sandbox refuses it, because one whole-suite run takes most of the host.
 
 WHEN TO USE WHICH FILE TOOL:
 - New file: write_sandbox_file — pass path AND content (the full file text). BOTH are required.
@@ -55,7 +56,7 @@ WORKFLOW FOR NEW FEATURES:
 3. write_sandbox_file to create NEW files
 4. edit_sandbox_file to wire up imports/routes in existing files
 5. run_sandbox_command to build and verify
-6. run_sandbox_tests for full verification
+6. run_sandbox_tests for scoped verification (changed-file tests + typecheck)
 
 WORKFLOW FOR SCHEMA CHANGES (Prisma models, enums, relations):
 1. Use describe_model to look up ONE existing model you need as reference (e.g. describe_model("User")).
@@ -104,7 +105,7 @@ CONTEXT GATHERING (before writing any code):
 - When creating a new component/page/API, read_sandbox_file on a similar existing one to match patterns (imports, exports, naming conventions, error handling).
 
 After ALL tasks complete:
-1. Run full verification (run_sandbox_tests + typecheck).
+1. Run scoped verification (run_sandbox_tests: changed-file tests + typecheck).
 2. Run run_sandbox_command with "git diff" to see all changes.
 3. Confirm documentation impact was handled: either the planned documentation-specialist task updated the correct docs surface, or the diff/notes include a concrete no-docs-needed reason. If docs are stale, update them or report that blocker before saying the build is ready.
 4. Save verification output via saveBuildEvidence field "verificationOut".

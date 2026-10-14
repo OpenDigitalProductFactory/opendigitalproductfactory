@@ -18,6 +18,7 @@ import {
 } from "@/lib/proactivity/proactivity-override-preferences";
 import { roomOwnedLevelFor, enumerateRoomOwnedCoworkers } from "./room-owned-cadence";
 import {
+  COWORKER_SELF_TASKS,
   coworkerSelfTaskId,
   reconcileCoworkerSelfTask,
   selfTaskRegistryKey,
@@ -56,6 +57,11 @@ export function inferLevelFromSelfTaskSchedule(schedule: string): ProactivityLev
 export type ReconcileAllSelfTasksResult = {
   /** Missing self-tasks created for an active non-quiet fact (Direction A). */
   created: number;
+  /**
+   * Active self-tasks whose stored title, prompt or route had drifted from the
+   * registry and were brought current (BI-4B643D89). Schedule is never touched.
+   */
+  refreshed: number;
   /**
    * Coworkers driven by their ROOMS ALONE — a live room carries their standing
    * work and declared a pace, and no legacy agent-scoped fact exists for them.
@@ -113,7 +119,7 @@ async function applySelfTaskLevel(
   const taskId = coworkerSelfTaskId(agentId, userId);
   const existing = await prisma.scheduledAgentTask.findUnique({
     where: { taskId },
-    select: { isActive: true },
+    select: { isActive: true, title: true, prompt: true, routeContext: true },
   });
 
   if (level === "quiet") {
@@ -127,13 +133,32 @@ async function applySelfTaskLevel(
   if (!existing?.isActive) {
     await reconcileCoworkerSelfTask(userId, agentId, level);
     result.created++;
+    return taskId;
+  }
+
+  // An active task is not re-upserted (that would churn nextRunAt), but its
+  // words must follow the registry: otherwise a fixed prompt never reaches an
+  // install that already runs the task (BI-4B643D89 — #6109's marketing prompt
+  // stayed old on the reference install). Only the text fields are written.
+  const entry = COWORKER_SELF_TASKS[agentId];
+  if (
+    entry &&
+    (existing.title !== entry.title ||
+      existing.prompt !== entry.prompt ||
+      existing.routeContext !== entry.routeContext)
+  ) {
+    await prisma.scheduledAgentTask.updateMany({
+      where: { taskId },
+      data: { title: entry.title, prompt: entry.prompt, routeContext: entry.routeContext },
+    });
+    result.refreshed++;
   }
   return taskId;
 }
 
 export async function reconcileAllCoworkerSelfTasks(): Promise<ReconcileAllSelfTasksResult> {
   const result: ReconcileAllSelfTasksResult = {
-    created: 0, deactivated: 0, orphansObserved: 0, unroomedFallback: 0, roomOnly: 0, ownerless: 0,
+    created: 0, refreshed: 0, deactivated: 0, orphansObserved: 0, unroomedFallback: 0, roomOnly: 0, ownerless: 0,
   };
 
   // Direction A — every active Proactivity fact for a REGISTERED coworker should

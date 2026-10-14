@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+vi.mock("@/lib/routing/local-provider-capacity", () => ({ assertLocalProviderCapacityAvailable: vi.fn() }));
 // ── Mocks (must be declared before imports) ──────────────────────────────────
 // Fake both inference leaves (error, message format) with copies of their pure functions.
 const aiInferenceFake = vi.hoisted(() => {
@@ -334,8 +335,7 @@ describe("chatAdapter", () => {
     expect(result.text).not.toContain("Scratchpad");
   });
 
-  it("falls back to reasoning as text ONLY when there is no content at all", async () => {
-    // Last-resort path: a thinking-only reply would otherwise render blank.
+  it("keeps a reasoning-only response out of the answer channel", async () => {
     stubFetchOk({
       choices: [{ message: { reasoning_content: "Only thinking, no answer emitted." }, finish_reason: "stop" }],
       usage: { prompt_tokens: 1, completion_tokens: 1 },
@@ -343,7 +343,7 @@ describe("chatAdapter", () => {
 
     const result = await chatAdapter.execute(makeRequest({ providerId: "local", modelId: "qwen3.8-27b" }));
 
-    expect(result.text).toBe("Only thinking, no answer emitted.");
+    expect(result.text).toBe("");
     expect(result.reasoning).toBe("Only thinking, no answer emitted.");
   });
 

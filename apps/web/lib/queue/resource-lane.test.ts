@@ -2,6 +2,7 @@ import { beforeEach, describe, it, expect, vi } from "vitest";
 import { assertLocalGpuFree } from "@/lib/inference/host-gpu-admission";
 
 vi.mock("@/lib/inference/host-gpu-admission", () => ({ assertLocalGpuFree: vi.fn() }));
+vi.mock("@/lib/routing/local-provider-capacity", () => ({ assertLocalProviderCapacityAvailable: vi.fn() }));
 import {
   ResourceLane,
   LaneBusyError,

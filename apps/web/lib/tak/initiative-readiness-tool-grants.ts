@@ -55,6 +55,8 @@ export const INITIATIVE_READINESS_TOOL_GRANTS: Record<string, string[]> = {
 };
 
 export function readinessLaneForRole(role: string): { toolName: string; lane: InitiativeReadinessLane } | null {
+  if (role === "acceptance-reviewer") return { toolName: "record_initiative_evidence",
+    lane: { ...INITIATIVE_READINESS_LANES.record_initiative_evidence!, independent: true } };
   for (const [toolName, lane] of Object.entries(INITIATIVE_READINESS_LANES)) {
     if (lane.accountableRoles.includes(role)) return { toolName, lane };
   }
@@ -80,6 +82,7 @@ export type InitiativeReviewBindingPacket = {
     headSha: string;
   };
   artifactRef:
+    | { kind: "document-version"; repositoryFullName: string; versionId: string; valueDigest: string }
     | {
       kind: "repo-blob-at-commit";
       repositoryFullName: string;
@@ -181,6 +184,7 @@ export type InitiativeRecoveryDispatchContext = {
  * a pure routing decision over evidence it is handed.
  */
 export type InitiativeRecoveryCanonicalArtifact =
+  | { resolved: true; kind: "document-version"; versionId: string; valueDigest: string }
   // A retained baseline already owns its immutable commit. Newly discovered
   // branch artifacts omit it and inherit the Workroom head below.
   | { resolved: true; kind?: "repo-blob-at-commit"; path: string; providerBlobId: string; commitSha?: string }
@@ -291,6 +295,7 @@ export async function resolveInitiativeReviewerRecovery(input: {
   eligibleEvidenceActivityIds?: readonly string[];
   /** Server-owned history predicate; never a caller-supplied exclusion list. */
   isPlanReviewExhausted?: (packet: ReturnType<typeof requestCoworkerPacket>) => Promise<boolean>;
+  isReviewerEligible?: (agentId: string) => Promise<boolean>;
 }): Promise<InitiativeReviewerRecovery> {
   const requirements = [...input.decision.blockers, ...input.decision.unmet];
   const requested: Array<{
@@ -355,10 +360,14 @@ export async function resolveInitiativeReviewerRecovery(input: {
     const requiredGrants = bindable
       ? [entry.route.lane.grant, IMMUTABLE_READER_GRANT]
       : [entry.route.lane.grant];
-    const candidates = deterministicRows.filter((row) =>
+    let candidates = deterministicRows.filter((row) =>
       row.grantKey === entry.route.lane.grant
       && requiredGrants.every((grant) => grantsByAgent.get(row.agent.agentId)?.has(grant))
       && (!entry.route.lane.independent || row.agent.agentId !== input.currentAgentId));
+    if (input.isReviewerEligible) {
+      const eligibility = await Promise.all(candidates.map(async (row) => ({ row, allowed: await input.isReviewerEligible!(row.agent.agentId) })));
+      candidates = eligibility.filter((entry) => entry.allowed).map((entry) => entry.row);
+    }
     let candidate: GrantHolderRow | undefined = candidates[0];
     if (candidate) {
       if (!input.dispatchContext) {
@@ -622,7 +631,7 @@ function requestCoworkerPacket(args: {
   expectedCurrentBaselineId: string | null;
   eligibleEvidenceActivityIds: string[] | null;
 }) {
-  const repoArtifact = args.artifact && args.artifact.kind !== "feature-build-revision" ? args.artifact : null;
+  const repoArtifact = args.artifact && args.artifact.kind !== "feature-build-revision" && args.artifact.kind !== "document-version" ? args.artifact : null;
   const reviewSha = repoArtifact?.commitSha ?? args.dispatch.headSha;
   const readerTool = args.artifact?.kind === "feature-build-revision" ? BUILD_ARTIFACT_REVISION_READER_TOOL : IMMUTABLE_READER_TOOL;
   const objective = formatInitiativeReviewObjective({ ...args.dispatch,
@@ -658,7 +667,10 @@ function requestCoworkerPacket(args: {
         eligibleEvidenceActivityIds: args.eligibleEvidenceActivityIds,
       }
       : {}),
-    artifactRef: args.artifact.kind === "feature-build-revision"
+    artifactRef: args.artifact.kind === "document-version"
+      ? { kind: "document-version" as const, repositoryFullName: args.dispatch.repositoryFullName,
+        versionId: args.artifact.versionId, valueDigest: args.artifact.valueDigest }
+      : args.artifact.kind === "feature-build-revision"
       ? {
         kind: "feature-build-revision" as const,
         repositoryFullName: args.dispatch.repositoryFullName,

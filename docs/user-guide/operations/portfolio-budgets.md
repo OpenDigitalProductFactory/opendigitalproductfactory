@@ -24,8 +24,9 @@ no portfolio.
 - **Budget** shows the points set for this quarter, or "No budget set". A missing
   budget is never shown as zero.
 - **Reserved** counts points held for items approved for funding that have not
-  started. **In flight** counts work under way. **Delivered this quarter** counts
-  work that reached done. Each item is counted once.
+  started. **In flight** counts work actively under way. **Delivered this
+  quarter** counts work delivered in the quarter. Each item is counted once; see
+  [What a quarter is charged for](#what-a-quarter-is-charged-for).
 - **Capacity to quarter end** is a range: the portfolio's weekly delivered points
   (the 15th to the 85th percentile of the last six weeks), times the weeks left.
   It reads "estimated" until the install has four weeks of delivery history.
@@ -39,6 +40,29 @@ no portfolio.
   beside the points and never converted into them. Use under a subscription reads
   "subscription: $0 recorded, N tokens", because a subscription records no cost
   per call. It does not mean the use was free.
+
+## What a quarter is charged for
+
+A quarter's budget is charged for two things, and the panel, the budget
+proposal, admission and the agent's within-budget check all use the same rule:
+
+- **Work delivered in the quarter**, dated by when it was delivered, not when it
+  was accepted. Delivered means the item moved to awaiting acceptance (its change
+  merged or was submitted). Work that goes straight to done is dated by when it
+  was completed.
+- **Work actively in progress**: an item marked in progress, an item with a
+  Build Studio build running, or an item whose workroom has something running
+  (its drive has handed a stage to an agent, or someone holds the room's claim).
+
+Two things are not charged:
+
+- Work delivered in an earlier quarter and still awaiting acceptance. That
+  quarter already counted it; accepting it later does not charge the new quarter.
+- Work whose workroom is parked, waiting for someone with nothing running. It
+  counts as ready, not in flight.
+
+An item awaiting acceptance from before this delivery date was recorded is dated
+by its last update instead.
 
 ## Which portfolio an item counts against
 
@@ -98,6 +122,8 @@ one at a time.
   recorded reason; an autonomous approval is refused.
 - A portfolio starts new work while its points in flight fit its allowance: two
   weeks of its measured delivery, never less than one large item (8 points).
+  Points in flight are only work actively in progress, so picking up an item
+  whose room was parked is a new start and is checked against the allowance.
 - Admission starts in **shadow** mode. Every decision to admit, warn or refuse is
   recorded on the item and nothing is blocked. The operator switches to
   **enforce** with `set_backlog_delivery_budget` (`wipAdmissionMode`) once the

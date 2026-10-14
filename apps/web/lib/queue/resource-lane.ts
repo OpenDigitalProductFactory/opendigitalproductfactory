@@ -355,6 +355,8 @@ async function probeLocalGpuThenRun<T>(fn: () => Promise<T>, modelId: string | n
   const { assertGovernedInferenceAuthority } = await import("@/lib/routing/governed-inference-deadline");
   await assertGovernedInferenceAuthority();
   const { assertLocalGpuFree } = await import("@/lib/inference/host-gpu-admission");
+  const { assertLocalProviderCapacityAvailable } = await import("@/lib/routing/local-provider-capacity");
+  await assertLocalProviderCapacityAvailable();
   await assertLocalGpuFree({ modelId });
   signal?.throwIfAborted();
   await assertGovernedInferenceAuthority();

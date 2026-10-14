@@ -369,8 +369,8 @@ export function proposeBoundaryAuthority(
  * Resolve the server-owned inputs for the pure authority evaluator. Model
  * output and caller-provided policy claims never enter this function.
  */
-export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
-  async ({ execution, tool, agentGrantAllowed }, db: AuthorityDb = prisma as unknown as AuthorityDb) => {
+export const resolveCoworkerToolAuthorityInput =
+  (async ({ execution, tool, agentGrantAllowed }, db: AuthorityDb = prisma as unknown as AuthorityDb) => {
     const actingAgentId = execution.context?.agentId;
     if (!actingAgentId) {
       throw new Error("Coworker authority resolution requires an agent identity.");
@@ -588,4 +588,6 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
       ...input,
       approval,
     };
-  };
+  // `satisfies`, not an annotation: the optional `db` stays callable, so the
+  // AC-PROBE runner can evaluate on a read-only transaction (BI-129EFFD1).
+  }) satisfies CoworkerAuthorityInputResolver;

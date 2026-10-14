@@ -145,7 +145,7 @@ function main() {
   const verdict = decide(payload.toolName, payload.toolInput ?? {}, process.env);
   if (!verdict.block) process.exit(0);
 
-  emitDeny(verdict.reason); // dual-envelope deny — blocks on every surface
+  emitDeny(verdict.reason); // deny in the envelope the sending surface honours
 }
 
 const invokedPath = process.argv[1] ? process.argv[1].replace(/\\/g, "/") : "";

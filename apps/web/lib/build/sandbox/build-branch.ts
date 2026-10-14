@@ -36,9 +36,11 @@ const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const SANDBOX_PORT = Number(process.env.SANDBOX_PORT ?? "3035");
 import {
   buildSandboxBuildCloneCommand,
+  buildSandboxBuildCloneRebaseCommand,
   buildSandboxBuildCloneRemoveCommand,
   buildSandboxBuildCloneSyncCommand,
   buildWorkspaceMode,
+  parseBuildCloneRebaseOutput,
 } from "./build-clone";
 
 const WORKSPACE = "/workspace";
@@ -843,6 +845,64 @@ export async function ensureBuildWorktree(buildId: string): Promise<{ materializ
     clientBranch: identity.clientBranch,
   });
   return { materialized: true, workdir };
+}
+
+export type BuildBranchRefreshOutcome =
+  | { status: "refreshed"; headSha: string; clientSha: string | null }
+  | { status: "conflict"; files: string[] }
+  | { status: "unsupported" | "client-not-refreshable" | "unknown"; reason: string };
+
+/**
+ * Bring a build's branch back onto upstream main (BI-76BD65E6). A build that
+ * waited at ship while main moved on is classed diverged, and publication is
+ * rightly refused: the PR lays the clone's touched files over current main.
+ *
+ * Uses the same steps a build start does. It fetches upstream, fast-forwards
+ * the shared client branch when it is purely behind, re-ensures the clone (so
+ * its view of client/* and origin/* is the fresh one), then rebases the build
+ * branch onto the client branch and records it back in the shared repo. It
+ * never resolves a conflict: the rebase is aborted and the files are reported.
+ *
+ * Clone mode only: in the shared-worktree modes a rebase would move /workspace
+ * under every other build.
+ */
+export async function refreshBuildBranchOntoUpstream(buildId: string): Promise<BuildBranchRefreshOutcome> {
+  if (!isBuildWorktreeIsolationEnabled() || buildWorkspaceMode() !== "clone") {
+    return { status: "unsupported", reason: "Refresh needs isolated build clones (DPF_BUILD_WORKSPACE_MODE=clone)." };
+  }
+  const identity = await getClientIdentity();
+  const checkedOut = (await execSandboxGit(`git -C ${WORKSPACE} rev-parse --abbrev-ref HEAD`)).trim();
+  if (checkedOut !== identity.clientBranch) {
+    return { status: "client-not-refreshable", reason: `${WORKSPACE} is on ${checkedOut || "no branch"}, not ${identity.clientBranch}.` };
+  }
+  if (!(await configureAndFetchUpstream(identity))) {
+    return { status: "client-not-refreshable", reason: "No upstream remote is configured to refresh from." };
+  }
+  let client: SandboxSourceCurrencySnapshot;
+  try {
+    client = await refreshCurrentBranchFromTarget({
+      buildId,
+      branchName: identity.clientBranch,
+      targetRef: "origin/main",
+      blockUnknown: true,
+    });
+  } catch (err) {
+    return { status: "client-not-refreshable", reason: (err as Error).message.slice(0, 300) };
+  }
+  if (client.recommendedAction !== "allow") {
+    return { status: "client-not-refreshable", reason: formatSandboxSourceCurrencySummary(client) };
+  }
+
+  const { workdir } = await ensureBuildWorktree(buildId);
+  const branchName = `build/${buildId}`;
+  await execSandboxGit(buildSandboxCommitInFlightWorkCommand(workdir)).catch(() => {});
+  const rebase = parseBuildCloneRebaseOutput(
+    await execSandboxGit(buildSandboxBuildCloneRebaseCommand(workdir, identity.clientBranch)),
+  );
+  if (rebase.status === "conflict") return rebase;
+  if (rebase.status === "unknown") return { status: "unknown", reason: rebase.output };
+  await execSandboxGit(buildSandboxBuildCloneSyncCommand(workdir, branchName));
+  return { status: "refreshed", headSha: rebase.headSha, clientSha: client.headSha };
 }
 
 /**

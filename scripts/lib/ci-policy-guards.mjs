@@ -88,6 +88,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-no-manual-vm-cache-drop.test.mjs"),
       node("--test", "scripts/host-resource-runner.test.mjs"),
       node("--test", "scripts/lib/semantic-review-artifact.test.mjs", "scripts/semantic-review-gate.test.mjs"),
+      // BI-2B8D67A9: run-tsc selects TS7 by default and TS6 under DPF_TSC=6,
+      // and a signal-killed native compiler still exits 88 (BI-27D3DCCD).
+      node("--test", "scripts/lib/tsc-compiler.test.mjs"),
       node("scripts/check-guards.mjs"),
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
       node("scripts/check-capability-compose-profiles.mjs"),
@@ -267,6 +270,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "scripts/installer/lib/state-cleanup-temps.test.mjs",
         "scripts/installer/lib/docker.test.mjs",
+        "scripts/installer/lib/macos-memory.test.mjs",
+        "scripts/installer/macos-docker-memory.test.mjs",
+        "scripts/installer/lib/pnpm.test.mjs",
+        "scripts/installer/prepare-runtime-state.test.mjs",
+        "scripts/installer/stage-ca-password.test.mjs",
         "scripts/installer/lib/state-lock-timeout.test.mjs",
         "scripts/installer/lib/doctor-redaction.test.mjs",
         "scripts/installer/install-release-assets.test.mjs",
@@ -361,6 +369,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/ci-observation.test.mjs",
         "scripts/ci-shadow-selection.test.mjs",
         "scripts/ci-change-scope.test.mjs",
+        "scripts/pr-readiness-scope.test.mjs",
         "scripts/ci-evidence-plan.test.mjs",
         "scripts/ci-build-artifact-discovery.test.mjs",
         "scripts/lib/ci-build-artifact.test.mjs",
@@ -445,6 +454,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // the image — so it reaches main green and breaks the release chain.
       node("scripts/check-dockerfile-copied-script-imports.mjs"),
       node("--test", "scripts/check-dockerfile-copied-script-imports.test.mjs"),
+      // The package-resolution twin (BI-PIR-53d2c42d): scripts the image runs
+      // from /app/apps/web-src resolve bare imports from the `@dpf/db...`
+      // runtime set, not the web app's deps. A web-only package anywhere in
+      // their graph (prom-client via lib/operate/metrics) killed the boot-time
+      // wiki re-embed with "Cannot find module". Static graph walk, no install.
+      node("scripts/check-web-src-script-imports.mjs"),
+      node("--test", "scripts/check-web-src-script-imports.test.mjs"),
       // The test-fixture twin: a contract test that cpSync's modules into a temp
       // tree one at a time dies on ERR_MODULE_NOT_FOUND when a copied module
       // gains a static import the fixture never copies. Hit twice on 2026-09-25
@@ -1038,6 +1054,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "packages/dpf-skill-pack/hooks/plugin-hooks-wired.test.mjs",
+      ),
+      // BI-E5C45F61: the SessionStart self-test that reports an inert
+      // PreToolUse guard plane. Unlisted = unrun.
+      node(
+        "--test",
+        "packages/dpf-skill-pack/hooks/pretooluse-guard-selftest.test.mjs",
       ),
       // BI-0B292D84: AGENTS.md 12 requires a Workroom claim before work on
       // every surface. It was prose - 30 of 79 live worktree branches carried

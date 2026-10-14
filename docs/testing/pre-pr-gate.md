@@ -67,6 +67,12 @@ naming the substrate it ran on (AGENTS.md §15).
 
 ## Which gate runs where
 
+`pnpm pr:readiness` selects policy guards using the same changed-file
+classification as CI and host pregate. For documentation-only changes, it
+omits only guards explicitly declared code-only. Documentation guards and
+guards without input declarations still run. Mixed and unknown changes retain
+all guards; scope selection never substitutes for required publication proof.
+
 This is the single biggest source of drift, so it gets the decision table. A
 worktree is **source-control isolation, not a second DPF install**
 ([kernel principle](../founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md)).
@@ -1073,6 +1079,13 @@ It does **not** run vitest/jest — that's CI's job. The hook path is auto-wired
 `postinstall` (`scripts/set-hooks-path.mjs` sets `core.hooksPath`). Emergency
 bypasses exist for verified false positives only: `DPF_SKIP_SECRET_SCAN=1` and
 `DPF_SKIP_TYPECHECK=1`. CI still gates the PR regardless of local bypass.
+
+Every package `typecheck` script goes through `scripts/run-tsc.mjs`, which
+checks with TypeScript 7, the native compiler (BI-2B8D67A9). The web production
+program takes seconds instead of minutes. TypeScript 6 remains the workspace's
+`typescript` library. `DPF_TSC=6` runs it as the checker instead, for comparing
+verdicts. The non-blocking CI job "Typecheck (TS6 reference, advisory)" does
+the same on every pull request.
 
 The local feedback loop is therefore:
 

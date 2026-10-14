@@ -23,6 +23,7 @@ import { guardReceiptDirectory, identifyGuardExecution, runWithGuardReceipt } fr
 import { resolveWorktreeContext } from "./pregate-status.mjs";
 import { LOCAL_CI_SLOT_KEYS, createLocalCiSlotManifest } from "./lib/local-ci-slot-manifest.mjs";
 import { readLocalCiGateState } from "./lib/local-ci-gate-state.mjs";
+import { classifyChangedFiles } from "./ci-change-scope.mjs";
 
 export function readPublicationGateRecords(context = resolveWorktreeContext(), read = readLocalCiGateState) {
   if (!context) return [];
@@ -193,7 +194,7 @@ async function main() {
     process.exit(2);
   }
 
-  const gatePlan = buildGatePlan({ prBody: args.prBody, prLabelsJson: args.prLabelsJson });
+  const gatePlan = buildGatePlan({ prBody: args.prBody, prLabelsJson: args.prLabelsJson, changeScope: classifyChangedFiles(repo.changedFiles) });
   const execution = args.runGates ? await runWithGuardReceipt({
     directory: guardReceiptDirectory(),
     stage: "pr-readiness",

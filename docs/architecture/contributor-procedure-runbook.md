@@ -38,7 +38,7 @@ That runs, in order:
 
 **Base-drift trap:** regenerate **after** rebasing onto current `origin/main`. Checking/regenerating on a pre-rebase tree reports “fresh” and still fails CI on the merged tree.
 
-**Typecheck heap:** if pre-commit typecheck OOMs, use `NODE_OPTIONS=--max-old-space-size=8192` (or `DPF_SKIP_TYPECHECK=1` only when justified and attested).
+**Typecheck compiler:** `scripts/run-tsc.mjs` type-checks with TypeScript 7, the native compiler (BI-2B8D67A9); it has no V8 heap to exhaust. `DPF_TSC=6` runs the workspace's TypeScript 6 instead, with the 8 GB heap that version needs for `apps/web`. Use it to compare verdicts, not as a workaround. `DPF_SKIP_TYPECHECK=1` remains only for a justified, attested skip.
 
 ## 3. Strongly-Typed String Enums (mandatory)
 

@@ -194,10 +194,10 @@ Each area's **Work** view opens with the same five measures, so the four portfol
 | Measure | What it means |
 |---|---|
 | **In flow now** | Rooms being worked, waiting on a person, or blocked. |
-| **Flow time** | How long a run takes, from its first step to its stop. This is the median over the last four weeks, with the change from the four weeks before and a weekly trend line. |
+| **Flow time** | How long a run takes, from its first step to its stop. This is the median over the last four weeks, with the change from the four weeks before and a weekly trend line. A delivery room is one run however many days it takes. For a recurring room, each cycle is a run. A cycle that is still open when the next one starts did not finish, so it counts as abandoned and never as a finished run. |
 | **Flow efficiency** | The share of step time spent working rather than waiting. |
 | **Finished per week** | Runs that reached a success stop. |
-| **Cost** | Points in flight, points delivered this quarter, and the AI spend on this area's rooms over the last four weeks. AI spend is counted only from conversations and dispatched work that name a room, so it is never guessed. |
+| **Cost** | Points in flight, points delivered this quarter, and the AI used by this area's rooms over the last four weeks. AI use is counted only from conversations and dispatched work that name a room, so it is never guessed. Recorded dollars are shown when a provider records a cost. Work on a subscription records no per-call cost, so it shows as subscription tokens (for example *subscription: $0 recorded, 832.3k tokens*) and never as a bare $0. |
 
 Below the measures:
 

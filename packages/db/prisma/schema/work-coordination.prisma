@@ -421,6 +421,9 @@ model Workroom {
   contributionMode        String                   @default("private")
   branchTaxonomy          String?
   idempotencyKey          String?                  @unique
+  /// BI-62514632: highest WorkroomActivity.sequence handed out for this room.
+  /// Advanced only by the WorkCapsuleActivity insert trigger.
+  activitySequence        Int                      @default(0)
   leaseHolderPrincipalId  String?
   leaseExpiresAt          DateTime?
   createdByPrincipalId    String?
@@ -487,12 +490,22 @@ model WorkroomActivity {
   recordedById      String?
   recordedByAgentId String?
   toolExecutionId   String?
+  /// BI-763D6E01: set on a command receipt row (kind command-accepted |
+  /// command-rejected). A retry with the same (scope, command key) replays it. Named
+  /// commandKey, not commandId: it is the client's idempotency key, not a reference.
+  commandScopeKey   String?
+  commandKey        String?
+  /// BI-62514632: the row's position in its room's log, assigned on insert by a
+  /// trigger under the room's row lock. NULL only on rows written before it.
+  sequence          Int?
   capsule           Workroom @relation(fields: [workCapsuleId], references: [id], onDelete: Cascade)
 
   @@index([workCapsuleId, recordedAt(sort: Desc)])
   @@index([workCapsuleId, kind, recordedAt(sort: Desc), id(sort: Desc)])
   @@index([kind, recordedAt(sort: Desc)])
   @@index([recordedAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
+  @@unique([commandScopeKey, commandKey]) // BI-763D6E01 command receipts; NULLs never collide
+  @@unique([workCapsuleId, sequence]) // BI-62514632 the room's log order; NULLs never collide
   @@map("WorkCapsuleActivity")
 }
 
