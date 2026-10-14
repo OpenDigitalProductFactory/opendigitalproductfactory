@@ -87,7 +87,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-903FB5F9: no checked-in recipe may drop the Docker VM page cache by hand.
       node("--test", "scripts/check-no-manual-vm-cache-drop.test.mjs"),
       node("--test", "scripts/host-resource-runner.test.mjs"),
-      node("--test", "scripts/lib/semantic-review-artifact.test.mjs", "scripts/semantic-review-gate.test.mjs"),
+      node("--test", "scripts/lib/semantic-review-artifact.test.mjs", "scripts/semantic-review-gate.test.mjs", "scripts/semantic-review-cli-role.test.mjs"),
       // BI-2B8D67A9: run-tsc selects TS7 by default and TS6 under DPF_TSC=6,
       // and a signal-killed native compiler still exits 88 (BI-27D3DCCD).
       node("--test", "scripts/lib/tsc-compiler.test.mjs"),
