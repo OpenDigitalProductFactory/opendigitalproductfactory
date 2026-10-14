@@ -13,7 +13,8 @@ vi.mock("@dpf/db", () => ({
 }));
 
 import { prisma } from "@dpf/db";
-import { capacityCredentialRevision } from "./scopes";
+import { accountCapacityScope, capacityCredentialRevision } from "./scopes";
+import { accountRuntimeKey } from "../provider-account-candidates";
 import {
   clearProviderCapacityStatus,
   recordProviderCapacityStatus,
@@ -32,6 +33,23 @@ beforeEach(() => {
 });
 
 describe("provider capacity store", () => {
+  it("projects current account recovery facts without credential or raw provider material", async () => {
+    vi.mocked(prisma.providerCapacityStatus.findMany).mockResolvedValue([{
+      providerId: null, scopeKey: accountCapacityScope("openai", identity.accountId),
+      state: "reauth_required", retryAt: null, lastObservedAt: NOW,
+      safeSummary: "Reconnect this account.", action: "reconnect", isHumanActionRequired: true,
+      rawSnippet: "must-never-reach-the-overview",
+      observedCredentialRevision: identity.credentialRevision,
+      ownedAccount: { id: identity.accountId, providerId: "openai", connectionId: identity.connectionId,
+        status: "active", credentialEntryId: credential.id, credentialEntry: credential },
+    }] as never);
+    const snapshots = await loadProviderCapacitySnapshots();
+    expect(snapshots.get(accountRuntimeKey("openai", identity.connectionId))).toEqual({
+      state: "reauth_required", retryAtMs: null, observedAtMs: NOW.getTime(),
+      safeSummary: "Reconnect this account.", action: "reconnect", isHumanActionRequired: true,
+    });
+    expect(snapshots.has("openai")).toBe(false);
+  });
   it("does not write either health or shared quota for a replaced account", async () => {
     vi.mocked(prisma.$queryRaw).mockResolvedValueOnce([]);
     await recordProviderCapacityStatus({ providerId: "openai", source: "api",

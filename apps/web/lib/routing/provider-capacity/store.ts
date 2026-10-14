@@ -37,14 +37,15 @@ export function capacityProviderIds(providerIds: readonly string[]): string[] {
 export async function loadProviderCapacitySnapshots(): Promise<Map<string, CapacitySnapshot>> {
   const rows = await prisma.providerCapacityStatus.findMany({
     select: { providerId: true, scopeKey: true, observedCredentialRevision: true, state: true, retryAt: true, lastObservedAt: true,
+      safeSummary: true, action: true, isHumanActionRequired: true,
       ownedAccount: { select: { id: true, connectionId: true, providerId: true, status: true, credentialEntryId: true, credentialEntry: { select: { id: true, status: true, updatedAt: true, secretRef: true, clientSecret: true, cachedToken: true, refreshToken: true } } } } },
   });
   const map = new Map<string, CapacitySnapshot>();
   for (const [providerId, row] of indexProviderCapacityByProvider(rows)) {
-    map.set(providerId, { state: row.state, retryAtMs: row.retryAt?.getTime() ?? null, observedAtMs: row.lastObservedAt?.getTime() ?? null });
+    map.set(providerId, snapshotFor(row));
   }
   for (const row of rows) {
-    const snapshot = { state: row.state, retryAtMs: row.retryAt?.getTime() ?? null, observedAtMs: row.lastObservedAt?.getTime() ?? null };
+    const snapshot = snapshotFor(row);
     const account = row.ownedAccount;
     if (account && ["active", "degraded"].includes(account.status) && account.credentialEntry?.status === "ok"
       && row.scopeKey === accountCapacityScope(account.providerId, account.id)
@@ -53,6 +54,14 @@ export async function loadProviderCapacitySnapshots(): Promise<Map<string, Capac
     }
   }
   return map;
+}
+
+/** Explicit safe fields only: raw snippets and credential storage stay server-side. */
+function snapshotFor(row: { state: string; retryAt: Date | null; lastObservedAt: Date | null;
+  safeSummary: string | null; action: string; isHumanActionRequired: boolean }): CapacitySnapshot {
+  return { state: row.state, retryAtMs: row.retryAt?.getTime() ?? null,
+    observedAtMs: row.lastObservedAt?.getTime() ?? null, safeSummary: row.safeSummary,
+    action: row.action, isHumanActionRequired: row.isHumanActionRequired };
 }
 
 async function persistScopedCapacity(input: {

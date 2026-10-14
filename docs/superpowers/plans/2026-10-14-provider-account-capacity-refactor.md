@@ -106,3 +106,11 @@ and RouteOutcome. It records the selected connection at execution and intentiona
 has no live foreign key. The safe rename migration retains all values, historical
 NULLs and indexes; old migration checksums stay unchanged. The execution selection
 contract still calls its selected account `providerConnectionId`.
+
+The compact account overview must consume the same revision-valid capacity
+projection as routing. Retain its safe recovery summary, action and human-action
+flag while excluding raw upstream snippets and credential storage. Additional
+accounts show their own current sign-in, billing or model-access restriction;
+shared provider quotas and reset times remain explicitly shared. Unknown
+independent allowance stays unknown. Integrate the overview consumer after the
+qualified compact UI is merged, rather than maintaining a second health registry.
