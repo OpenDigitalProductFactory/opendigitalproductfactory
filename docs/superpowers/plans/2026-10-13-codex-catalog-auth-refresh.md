@@ -147,10 +147,10 @@ acceptance merely by merging.
   handoff and impact expansion, if required for the guarded write
 - existing catalog lifecycle specification and this final repository plan
 
-The shared OAuth pair also has successful normal scope claims. Production changes
-reuse its HTTP renewal path, share selected-connection comparison, validate the
-returned identity before saving, lock the selected owner during persistence and
-conditionally update the observed credential version and refresh token.
+The shared OAuth pair's earlier claims do not establish current exclusive custody.
+Its service composition is now assigned to the existing BI-CFFB7ED7 owner as
+described below. The catalog author does not edit or publish that pair while the
+service author owns it.
 
 ## Executed evidence and remaining work
 
@@ -200,4 +200,80 @@ VERIFY-LIVE: exact deployed identity and normal operation precede Root's single
 metadata-only selected discovery; successful fresh account inventory and preserved
 negative behavior are separately recorded. No paid inference, provider activation,
 pause alteration or live credential change is undertaken during preparation.
+
+## Scoped delivery decomposition and handoff (2026-10-14)
+
+This amendment supersedes the earlier atomic implementation assignment, while
+preserving CONTRACT-DEFAULT-LINEAGE, platform decision DI-5534D2F44975 and all five
+BI-59E37E39 acceptance criteria. It separates an independently useful shared
+renewal API from its catalog consumer. No new backlog item or shared service
+author is introduced. Native decomposed coverage for this immutable amendment
+must be recorded before treating planning as complete; earlier atomic receipts
+remain historical evidence.
+
+DELIVERY-SERVICE-RENEWAL maps to existing BI-CFFB7ED7, whose current service owner
+alone integrates and publishes apps/web/lib/govern/provider-oauth.ts, its tests,
+any needed real PostgreSQL fixture and its existing delegated-maintenance design.
+The service preserves legacy two-argument use and the third ActiveAccountSnapshot
+contract, and adds an independently qualified fourth ScopedOAuthRefreshGuard.
+It fences the exact captured owner and full credential revision before network
+and persistence, supports selected-only additional/unproven default accounts and
+atomically renews both exact captured default participants only on proven lineage.
+The active caller revision advances only after the complete save commits. A
+single-row early return must not bypass paired persistence.
+
+CONTRACT-SERVICE-COMPOSITION: the third active-account predicate and fourth
+selected-account guard both apply when supplied; neither replaces the other.
+Capture caller revisions privately before awaits. Conditional writes include
+credential id, timestamp, cached-token ciphertext and refresh-token ciphertext;
+locks validate persisted owner identity and state. Keep ciphertext metadata
+internal, with no token/identity values in browser output, logs or evidence.
+
+FLOW-SERVICE-RENEWAL: captured selected account and optional active snapshot ->
+validated lineage -> owned refresh -> validated response -> owner locks and
+conditional single/pair save -> committed caller revision. The service owner
+records affected tests, both package typechecks, real transaction qualification,
+normal exact-source gate, DCO PR and protected delivery independently. Existing
+provider-oauth.test.ts transaction mocks and private VM rollback probes do not
+prove PostgreSQL atomicity.
+
+VERIFY-SERVICE-COMPOSITION: exercise third-only, fourth-only and combined callers;
+replacement with unchanged timestamp but changed ciphertext; changed/disabled
+owner; captured sibling changes; second participant CAS loss; cancellation and
+malformed/foreign returned token. Preserve active-only exact-CAS expiry behavior.
+Source tests and real PostgreSQL rollback/owner-lock verification are distinct.
+
+DELIVERY-CATALOG-RENEWAL maps to existing BI-59E37E39 and depends on
+DELIVERY-SERVICE-RENEWAL. This catalog author retains the routing transport and
+test, inference catalog caller and test, lifecycle specification and this plan.
+The caller passes undefined third and the qualified fourth guard, with the exact
+captured selected credential revision. It adopts the API only after the service
+contract is qualified and normally published, then integrates published main and
+runs its own affected tests, typechecks, guards and exact-source gate before its
+own DCO PR. Its callback, transport lifetime and private provenance behavior
+remain one catalog delivery unit; they cannot claim service qualification.
+
+The coordinator relays source identities and the scoped handoff. The service
+author does not acquire the entire BI-59E37E39 catalog case. The catalog author
+does not overwrite service work or infer custody from an expired historical
+claim. Normal scope records and a single designated service author govern edits.
+
+Joint acceptance remains CONTRACT-DEFAULT-LINEAGE plus VERIFY-LIVE: after both
+qualified changes are in the exact canonical served identity, the coordinator
+records successful selected metadata discovery and preserved negative behavior.
+Shared default compatibility, UI recovery and original model parity remain open
+until their actual evidence exists. Neither independent merge completes this
+joint acceptance. Unknown context/output capacity remains unknown.
+
+The temporary service/caller candidates and fourteen-case regression plan are
+handoff preparation only, not qualified source or runtime evidence. The service
+owner receives the existing provider-oauth.test.ts regression paths and the
+recorded lineage contract; the catalog owner retains its caller/transport tests.
+
+## Backlog coverage amendment
+
+- Parent: BI-59E37E39; decision: decomposed.
+- DELIVERY-SERVICE-RENEWAL -> BI-CFFB7ED7, independently shippable shared API.
+- DELIVERY-CATALOG-RENEWAL -> BI-59E37E39, depends on DELIVERY-SERVICE-RENEWAL.
+- Native receipt: pending immutable amendment commit and coverage recording.
 
