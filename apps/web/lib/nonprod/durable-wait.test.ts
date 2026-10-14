@@ -40,6 +40,12 @@ function db() {
         task = { ...task, ...data };
         return task;
       }),
+      updateMany: vi.fn(async ({ where, data }: any) => {
+        if (!task || task.status !== where.status
+          || JSON.stringify(task.progressPayload) !== JSON.stringify(where.progressPayload.equals)) return { count: 0 };
+        task = { ...task, ...data };
+        return { count: 1 };
+      }),
       findMany: vi.fn(async () => task ? [task] : []),
     },
     nonProductionEnvironmentLease: {

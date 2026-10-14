@@ -46,6 +46,7 @@ A purpose in this file is not proof that an approval row displays it.
 - Hook 7: [worktree-session-heartbeat.mjs](worktree-session-heartbeat.mjs) — Refresh this session heartbeat to protect active work
 - Hook 8: [root-clone-freshness.mjs](root-clone-freshness.mjs) — Safely fast-forward the clean shared source checkout
 - Hook 9: [worktree-readiness-banner.mjs](worktree-readiness-banner.mjs) — Report which checks this worktree is ready to run
+- Hook 10: [toolchain-freshness.mjs](toolchain-freshness.mjs) — Check the installed DPF tools match the portal's release
 
 ## SessionEnd
 

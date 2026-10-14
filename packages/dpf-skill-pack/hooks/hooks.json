@@ -194,6 +194,15 @@
             "statusMessage": "Report which checks this worktree is ready to run"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/toolchain-freshness.mjs\"",
+            "statusMessage": "Check the installed DPF tools match the portal's release"
+          }
+        ]
       }
     ],
     "SessionEnd": [
