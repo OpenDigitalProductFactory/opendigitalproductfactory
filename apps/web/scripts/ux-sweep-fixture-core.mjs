@@ -192,54 +192,51 @@ export async function convergeUxSweepFixture(db, now = new Date(), { dbNull } = 
 
 /**
  * Populated CI estate, before the authenticated shell's first-run host scan.
- * Constant keys make both fixture passes idempotent. Never replace real runs,
- * delete observations or alter business products. Publish the completed run
- * only after every entity, link and review issue exists.
+ * Constant keys make both fixture passes idempotent. Never replace real runs
+ * or delete observations. Canonical persistence owns the atomic run/estate
+ * transaction and its graph projection; do not invent row-only substitutes.
  */
-export async function convergeUxSweepEstate(db, now) {
-  const existing = await db.discoveryRun.findFirst({
+export function uxSweepEstateFacts() {
+  const items = [
+    ["host", "Fixture machine", "hostname:ux-sweep-machine", { hostname: "ux-sweep-machine", platform: "linux" }],
+    ["host", "LAN Host 10.1.0.10", "arp:02AABBCCDD10", { address: "10.1.0.10", mac: "02:AA:BB:CC:DD:10" }],
+    ["host", "LAN Host 172.18.0.2", "arp:02AABBCCDD20", { address: "172.18.0.2", mac: "02:AA:BB:CC:DD:20" }],
+    ["gateway", "Gateway 10.1.0.1", "gateway:10.1.0.1", { address: "10.1.0.1" }],
+    ["subnet", "10.1.0.0/24", "subnet:10.1.0.0/24", { networkAddress: "10.1.0.0/24" }],
+    ["network_interface", "Interface 10.1.0.10", "nic:02AABBCCDD10", { address: "10.1.0.10", mac: "02:AA:BB:CC:DD:10" }],
+    ["docker_runtime", "Docker", "socket:/var/run/docker.sock", { socketPath: "/var/run/docker.sock", serverVersion: "26.0.0" }],
+    ["docker_container", "Fixture portal", "container:ux-sweep-portal", { containerName: "ux-sweep-portal" }],
+  ].map(([itemType, name, externalRef, attributes]) => ({
+    sourceKind: "dpf_bootstrap", itemType, name, externalRef, attributes,
+  }));
+  const relationships = [
+    [1, 4, "MEMBER_OF"], [3, 4, "MEMBER_OF"], [5, 4, "MEMBER_OF"],
+    [0, 5, "HAS_INTERFACE"], [6, 7, "HOSTS"],
+  ].map(([from, to, relationshipType]) => ({
+    sourceKind: "dpf_bootstrap", relationshipType,
+    fromExternalRef: items[from].externalRef, toExternalRef: items[to].externalRef,
+  }));
+  return { items, relationships };
+}
+
+export async function convergeUxSweepEstate(db, now, persist) {
+  const real = await db.discoveryRun.findFirst({
     where: { sourceSlug: { not: "ux-route-sweep" } }, select: { id: true },
   });
-  if (existing) return null;
-  const runId = "ux-sweep-discovery-run";
-  const nodes = [
-    ["host", "host:hostname:ux-sweep-host", "Fixture host", { hostname: "ux-sweep-host", address: "10.1.0.10", macAddress: "02:AA:BB:CC:DD:10" }],
-    ["gateway", "gateway:gateway:10.1.0.1", "Gateway 10.1.0.1", { address: "10.1.0.1" }],
-    ["subnet", "subnet:subnet:10.1.0.0/24", "10.1.0.0/24", { cidr: "10.1.0.0/24" }],
-    ["network_interface", "nic:mac:02AABBCCDD10", "Interface 10.1.0.10", { address: "10.1.0.10", macAddress: "02:AA:BB:CC:DD:10", subnetCidr: "10.1.0.0/24" }],
-    ["runtime", "runtime:socket:/var/run/docker.sock", "Docker", { socketPath: "/var/run/docker.sock" }],
-    ["container", "container:ux-sweep-portal", "Fixture portal", { containerName: "ux-sweep-portal" }],
-  ];
-  const entities = [];
-  for (const [entityType, entityKey, name, properties] of nodes) {
-    const data = { entityType, name, status: "active", confidence: 0.8,
-      attributionStatus: "needs_review", firstSeenAt: now, lastSeenAt: now,
-      properties: { ...properties, fixture: "ux-route-sweep" } };
-    entities.push(await db.inventoryEntity.upsert({ where: { entityKey },
-      create: { entityKey, ...data }, update: data }));
-  }
-  for (const [from, to, relationshipType] of [[0, 3, "HAS_INTERFACE"], [4, 5, "HOSTS"]]) {
-    const tuple = { fromEntityId: entities[from].id, toEntityId: entities[to].id, relationshipType };
-    const data = { relationshipKey: `ux-sweep:${relationshipType}`, status: "active", confidence: 1,
-      firstSeenAt: now, lastSeenAt: now, properties: { fixture: "ux-route-sweep" } };
-    await db.inventoryRelationship.upsert({ where: { fromEntityId_toEntityId_relationshipType: tuple },
-      create: { ...tuple, ...data }, update: data });
-  }
-  for (const [index, issueType, summary] of [
-    [0, "attribution_missing", "Fixture host requires taxonomy review"],
-    [1, "gateway_connection_needed", "Gateway requires a discovery connection"],
-  ]) {
-    const issueKey = `ux-sweep:${issueType}`;
-    const data = { issueType, status: "open", severity: "warn", summary,
-      inventoryEntityId: entities[index].id, firstDetectedAt: now, lastDetectedAt: now,
-      details: { fixture: "ux-route-sweep" } };
-    await db.portfolioQualityIssue.upsert({ where: { issueKey }, create: { issueKey, ...data }, update: data });
-  }
-  const run = { runKey: "DISC-UX-SWEEP", sourceSlug: "ux-route-sweep", trigger: "fixture",
-    status: "completed", startedAt: now, completedAt: now, itemCount: 6, relationshipCount: 2,
-    notes: { fixture: "ux-route-sweep", observedHostCollection: false } };
-  await db.discoveryRun.upsert({ where: { id: runId }, create: { id: runId, ...run }, update: run });
-  return { runId, entities: 6, relationships: 2, issues: 2 };
+  if (real) return null;
+  const existing = await db.discoveryRun.findFirst({
+    where: { sourceSlug: "ux-route-sweep", runKey: "DISC-UX-SWEEP" },
+    select: { id: true },
+  });
+  if (existing) return { runId: existing.id, reused: true };
+  if (typeof persist !== "function") throw new Error("Canonical estate persistence is required");
+  // The normal discovery transaction owns attribution, membership, quality
+  // issues and graph-mirror projection. A row-only sentinel cannot stand in
+  // for the read model the browser actually renders.
+  const result = await persist(uxSweepEstateFacts(), {
+    runKey: "DISC-UX-SWEEP", sourceSlug: "ux-route-sweep", trigger: "fixture",
+  });
+  return { runId: result.runId, reused: false };
 }
 
 /**

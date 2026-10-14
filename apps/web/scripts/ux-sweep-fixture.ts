@@ -21,7 +21,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { Prisma, prisma } from "@dpf/db";
+import { Prisma, prisma, loadDiscoveryAttributionInputs, normalizeDiscoveredFacts, persistBootstrapDiscoveryRun } from "@dpf/db";
 
 import { convergeUxSweepFixture, convergeUxSweepEstate } from "./ux-sweep-fixture-core.mjs";
 import { SWEEP_ROUTE_PARAMS_REL } from "@/lib/ux-budget/route-shells";
@@ -31,9 +31,12 @@ void (async () => {
     // The estate represents a declared test scenario, never the developer's
     // live observations. Both existing CI passes run before authentication.
     if (process.env.CI === "true" && process.env.UX_SWEEP_BASE_URL) {
-      const estate = await convergeUxSweepEstate(prisma, new Date());
+      const estate = await convergeUxSweepEstate(prisma, new Date(), async (facts, meta) => {
+        const inputs = await loadDiscoveryAttributionInputs(prisma);
+        return persistBootstrapDiscoveryRun(prisma, normalizeDiscoveredFacts(facts, inputs), meta);
+      });
       console.error(estate
-        ? `[ux-sweep-fixture] populated estate: ${estate.entities} entities, ${estate.relationships} relationships, ${estate.issues} issues`
+        ? `[ux-sweep-fixture] canonical estate ${estate.reused ? "reused" : "populated"}: ${estate.runId}`
         : "[ux-sweep-fixture] preserved existing discovery context");
     }
     const result = await convergeUxSweepFixture(prisma, new Date(), {

@@ -1,59 +1,50 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { convergeUxSweepFixture, convergeUxSweepEstate } from "./ux-sweep-fixture-core.mjs";
+import { convergeUxSweepFixture, convergeUxSweepEstate, uxSweepEstateFacts } from "./ux-sweep-fixture-core.mjs";
 
 const NOW = new Date("2026-07-28T19:30:00.000Z");
 
 function estateDb(existing = null) {
-  const rows = { run: existing, olderRuns: [], entities: new Map(), relationships: new Map(), issues: new Map() };
-  const upsert = map => async ({ where, create, update }) => {
-    const key = JSON.stringify(where);
-    const value = map.has(key) ? { ...map.get(key), ...update } : { id: key, ...create };
-    map.set(key, value); return value;
-  };
+  const rows = { run: existing, olderRuns: [] };
   return { rows, db: {
     discoveryRun: { findFirst: async ({ where } = {}) => {
       const runs = [rows.run, ...rows.olderRuns].filter(Boolean);
       return where?.sourceSlug?.not ? runs.find(r => r.sourceSlug !== where.sourceSlug.not) ?? null : runs[0] ?? null;
-    },
-      upsert: async ({ create, update }) => (rows.run = rows.run ? { ...rows.run, ...update } : create) },
-    inventoryEntity: { upsert: upsert(rows.entities) },
-    inventoryRelationship: { upsert: upsert(rows.relationships) },
-    portfolioQualityIssue: { upsert: upsert(rows.issues) },
+    } },
   } };
 }
 
 test("estate fixture populates a complete repeatable discovery before shell bootstrap and replays idempotently", async () => {
   const { db, rows } = estateDb();
-  await convergeUxSweepEstate(db, NOW);
+  let calls = 0;
+  const persist = async (facts, meta) => {
+    calls++;
+    assert.deepEqual(facts, uxSweepEstateFacts());
+    assert.equal(facts.items.length, 8);
+    assert.equal(facts.relationships.filter(r => r.relationshipType === "MEMBER_OF").length, 3);
+    rows.run = { id: "canonical-run", ...meta, status: "completed" };
+    return { runId: rows.run.id };
+  };
+  await convergeUxSweepEstate(db, NOW, persist);
   assert.equal(rows.run.status, "completed");
   assert.equal(rows.run.sourceSlug, "ux-route-sweep");
-  assert.equal(rows.entities.size, 6);
-  assert.equal(rows.relationships.size, 2);
-  assert.equal(rows.issues.size, 2);
   const first = JSON.stringify(rows.run);
-  await convergeUxSweepEstate(db, NOW);
+  await convergeUxSweepEstate(db, NOW, persist);
   assert.equal(JSON.stringify(rows.run), first);
-  assert.equal(rows.entities.size, 6);
-  assert.equal(rows.relationships.size, 2);
-  assert.equal(rows.issues.size, 2);
+  assert.equal(calls, 1);
 });
 
 test("estate fixture preserves existing real discovery instead of replacing its observations", async () => {
   const existing = { id: "real-run", sourceSlug: "dpf_bootstrap", status: "completed" };
   const { db, rows } = estateDb(existing);
-  assert.equal(await convergeUxSweepEstate(db, NOW), null);
+  assert.equal(await convergeUxSweepEstate(db, NOW, () => assert.fail("must preserve real observations")), null);
   assert.equal(rows.run, existing);
-  assert.equal(rows.entities.size, 0);
-  assert.equal(rows.relationships.size, 0);
-  assert.equal(rows.issues.size, 0);
 });
 
 test("a partial estate write cannot produce a completed-run sentinel", async () => {
   const { db, rows } = estateDb();
-  db.inventoryEntity.upsert = async () => { throw new Error("fixture write failed"); };
-  await assert.rejects(convergeUxSweepEstate(db, NOW), /fixture write failed/);
+  await assert.rejects(convergeUxSweepEstate(db, NOW, async () => { throw new Error("fixture write failed"); }), /fixture write failed/);
   assert.equal(rows.run, null);
 });
 
@@ -61,11 +52,8 @@ test("a newer fixture run cannot hide older real observations", async () => {
   const latest = { id: "fixture-run", sourceSlug: "ux-route-sweep", status: "completed" };
   const { db, rows } = estateDb(latest);
   rows.olderRuns.push({ id: "older-real", sourceSlug: "dpf_bootstrap", status: "completed" });
-  assert.equal(await convergeUxSweepEstate(db, NOW), null);
+  assert.equal(await convergeUxSweepEstate(db, NOW, () => assert.fail("must preserve older real observations")), null);
   assert.equal(rows.run, latest);
-  assert.equal(rows.entities.size, 0);
-  assert.equal(rows.relationships.size, 0);
-  assert.equal(rows.issues.size, 0);
 });
 
 function fixtureDb({ setupComplete, hasQueue = true, hasArchetype = true, hasStorefront = false }) {
