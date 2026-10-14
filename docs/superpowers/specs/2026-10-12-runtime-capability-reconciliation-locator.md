@@ -118,3 +118,18 @@ suite now also accepts the canonical slot's explicit test-database variable,
 without falling back to an installed database URL. Current grant and bootstrap
 package checks after the metadata correction, real PostgreSQL, independent final review, the governed gate and live acceptance
 remain owed. No partial source prerequisite is published as a completed fix.
+
+Independent assembled review of checkpoint `df16befe5ee` found a live-path
+compensation race when health failed after a later database writer. Two tests
+reproduced it before repair (41 existing passes). Live and restart compensation
+now share the complete persisted database-baseline fence; an unavailable fence
+refuses reverse host IO and retains the recorded packet for recovery. The focused
+coordinator/restart/tool-pack follow-up passed 59 tests in three files. A real
+PostgreSQL case covers a later writer and packet retention but remains unrun
+until admitted to the explicit test database. Final source qualification is owed.
+
+The two permanent tools earn separate selection-space entries: preview establishes
+read-only, validated complete baselines without activating anything; apply carries
+explicit operator intent through the existing signed transition ledger. Combining
+these into one implicit read/write operation would obscure authority. Both stay
+in the existing platform-update pack and existing administrator grant categories.

@@ -95,4 +95,17 @@ describe.skipIf(!url)("runtime reconciliation transactions on PostgreSQL", () =>
     await expect(receipts.createPending(changed)).rejects.toThrow("transition_id_conflict");
     expect(await db.runtimeCapabilityTransition.count()).toBe(1);
   });
+  it("fences a later database writer before live compensation without losing its packet", async () => {
+    const input = request(); await receipts.createPending(input); await receipts.markHostApplied(input.transitionId);
+    const reverse = createRuntimeCompensationEnvelope(input.envelope, Date.now());
+    const compensation = { envelope: reverse, envelopeSignature: signTransitionPayload(reverse, secret) };
+    await receipts.markCompensating!(input.transitionId, "required_health_failed", compensation);
+    await receipts.assertCompensationOwnership!(input.transitionId);
+    await db.platformCapability.update({ where: { capabilityId: "runtime:build" }, data: { state: "operator-paused" } });
+    await expect(receipts.assertCompensationOwnership!(input.transitionId)).rejects.toThrow("runtime_transition_database_stale");
+    await receipts.markRollbackFailed!(input.transitionId, "runtime_transition_database_stale");
+    const row = await db.runtimeCapabilityTransition.findUniqueOrThrow({ where: { transitionId: input.transitionId } });
+    expect(row.failure).toEqual({ code: "runtime_transition_database_stale", recoveryRequired: true, compensation });
+    expect(await states()).toEqual({ ...previousStates, "runtime:build": "operator-paused" });
+  });
 });

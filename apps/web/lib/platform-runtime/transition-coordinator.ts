@@ -32,6 +32,7 @@ export interface RuntimeCapabilityTransitionReceipts {
   markHostApplied(transitionId: string): Promise<void>;
   commitSuccess?(transitionId: string, receipt: RuntimeTransitionReceipt, desiredStates: Readonly<Record<string, string>>): Promise<void>;
   markCompensating?(transitionId: string, failure: string, compensation?: RuntimeCompensationPacket): Promise<void>;
+  assertCompensationOwnership?(transitionId: string): Promise<void>;
   markRolledBack?(transitionId: string, receipt: RuntimeTransitionReceipt): Promise<void>;
   markRollbackFailed?(transitionId: string, failure: string): Promise<void>;
 }
@@ -70,6 +71,11 @@ type TransitionPrisma = {
 function sameStateMap(left: Readonly<Record<string, string>>, right: Readonly<Record<string, string>>): boolean {
   const keys = Object.keys(left);
   return keys.length === Object.keys(right).length && keys.every((key) => Object.hasOwn(right, key) && left[key] === right[key]);
+}
+
+/** Shared live/startup fence: unknown, extra and missing settings are material. */
+export function assertRuntimeCompensationDatabaseBaseline(current: Readonly<Record<string, string>>, previous: Readonly<Record<string, string>>): void {
+  if (!sameStateMap(current, previous)) throw new Error("runtime_transition_database_stale");
 }
 
 export function createPrismaRuntimeTransitionReceipts(prisma: TransitionPrisma): RuntimeCapabilityTransitionReceipts {
@@ -154,6 +160,12 @@ export function createPrismaRuntimeTransitionReceipts(prisma: TransitionPrisma):
       const r = await tx.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: "host_applied" }, data: { status: "compensating", failure: { code: failure, ...(compensation ? { compensation } : {}) } } });
       if (r.count !== 1) throw new Error("runtime_transition_cas_failed");
       await tx.runtimeCapabilityTransitionEvent.create({ data: { transitionId, outcome: "compensating", detail: { failure, compensation: compensation ?? null } } });
+    }, { isolationLevel: "Serializable" }),
+    assertCompensationOwnership: (transitionId) => prisma.$transaction(async (tx) => {
+      const row = await tx.runtimeCapabilityTransition.findUnique({ where: { transitionId }, select: { status: true, previousStates: true } });
+      if (row?.status !== "compensating") throw new Error("runtime_transition_cas_failed");
+      const states = await tx.platformCapability.findMany({ where: { capabilityId: { startsWith: "runtime:" } }, select: { capabilityId: true, state: true } });
+      assertRuntimeCompensationDatabaseBaseline(Object.fromEntries(states.map(value => [value.capabilityId, value.state])), row.previousStates);
     }, { isolationLevel: "Serializable" }),
     markRolledBack: async (transitionId, receipt) => { const r = await prisma.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: "compensating" }, data: { status: "rolled_back", hostReceipt: receipt, completedAt: new Date() } }); if (r.count !== 1) throw new Error("runtime_transition_cas_failed"); },
     markRollbackFailed: (transitionId, failure) => prisma.$transaction(async (tx) => {
@@ -394,6 +406,10 @@ export async function coordinateRuntimeCapabilityTransition(
       return { status: "rollback_failed" as const, failure };
     }
     try {
+      if (request.reconciliation) {
+        if (!deps.receipts.assertCompensationOwnership) throw new Error("runtime_transition_compensation_ownership_unavailable");
+        await deps.receipts.assertCompensationOwnership(request.transitionId);
+      }
       const rollback = await deps.runPromoter({ ...deps.promoterParams, runtimeCapabilityTransitionId: rollbackTransitionId, containerName: `dpf-promoter-${rollbackTransitionId}`, timeoutMs: 600_000, runtimeCapabilityEnvelope: Buffer.from(JSON.stringify(rollbackEnvelope)).toString("base64url"), runtimeCapabilitySignature: compensation.envelopeSignature, runtimeCapabilitySecretFileHostPath: deps.protocolSecretFileHostPath });
       if (rollback.exitCode !== 0) throw new Error("rollback_host_apply_failed");
       const receipt = await deps.readHostReceipt(rollbackTransitionId);
@@ -401,8 +417,9 @@ export async function coordinateRuntimeCapabilityTransition(
       await deps.receipts.markRolledBack(request.transitionId, receipt);
       return { status: "rolled_back" as const, failure };
     } catch (rollbackError) {
-      await deps.receipts.markRollbackFailed(request.transitionId, rollbackError instanceof Error ? rollbackError.message : "rollback_failed");
-      return { status: "rollback_failed" as const, failure };
+      const rollbackFailure = rollbackError instanceof Error ? rollbackError.message : "rollback_failed";
+      await deps.receipts.markRollbackFailed(request.transitionId, rollbackFailure);
+      return { status: "rollback_failed" as const, failure: request.reconciliation ? rollbackFailure : failure };
     }
   }
 }

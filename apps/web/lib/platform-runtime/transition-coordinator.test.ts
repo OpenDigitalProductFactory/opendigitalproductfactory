@@ -68,6 +68,37 @@ function reconciliationDeps() {
 }
 
 describe("dual-baseline reconciliation coordinator", () => {
+  it.each(["failed", "threw"])("does not compensate over a later database writer when health %s", async outcome => {
+    const d = reconciliationDeps();
+    d.verifyRequiredHealth = vi.fn(async () => { if (outcome === "threw") throw new Error("health_unavailable"); return false; });
+    d.receipts.markCompensating = vi.fn(async () => undefined);
+    d.receipts.markRolledBack = vi.fn(async () => undefined);
+    d.receipts.markRollbackFailed = vi.fn(async () => undefined);
+    d.receipts.assertCompensationOwnership = vi.fn(async () => { throw new Error("runtime_transition_database_stale"); });
+    expect(await coordinateRuntimeCapabilityTransition(reconciliationRequest(), d)).toEqual({ status: "rollback_failed", failure: "runtime_transition_database_stale" });
+    expect(d.runPromoter).toHaveBeenCalledTimes(1);
+    expect(d.receipts.markCompensating).toHaveBeenCalledTimes(1);
+    expect(d.receipts.assertCompensationOwnership).toHaveBeenCalledWith("RCT-1");
+    expect(vi.mocked(d.receipts.markCompensating!).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(d.receipts.assertCompensationOwnership!).mock.invocationCallOrder[0]!);
+    expect(d.receipts.markRollbackFailed).toHaveBeenCalledWith("RCT-1", "runtime_transition_database_stale");
+  });
+  it("fails closed when compensation ownership cannot be checked", async () => {
+    const d = reconciliationDeps(); d.verifyRequiredHealth = vi.fn(async () => false);
+    d.receipts.markCompensating = vi.fn(async () => undefined);
+    d.receipts.markRolledBack = vi.fn(async () => undefined);
+    d.receipts.markRollbackFailed = vi.fn(async () => undefined);
+    expect(await coordinateRuntimeCapabilityTransition(reconciliationRequest(), d)).toEqual({ status: "rollback_failed", failure: "runtime_transition_compensation_ownership_unavailable" });
+    expect(d.runPromoter).toHaveBeenCalledTimes(1);
+  });
+  it.each([false, true])("checks the complete persisted database baseline before compensation (stale=%s)", async stale => {
+    const baseline = reconciliationRequest().previousStates;
+    const current = { ...baseline, ...(stale ? { "runtime:local-ai": "active" } : {}) };
+    const tx = { runtimeCapabilityTransition: { findUnique: vi.fn(async () => ({ status: "compensating", previousStates: baseline })) },
+      platformCapability: { findMany: vi.fn(async () => Object.entries(current).map(([capabilityId, state]) => ({ capabilityId, state }))) } };
+    const receipts = createPrismaRuntimeTransitionReceipts({ $transaction: async (fn: (value: typeof tx) => Promise<void>) => fn(tx) } as never);
+    if (stale) await expect(receipts.assertCompensationOwnership!("RCT-1")).rejects.toThrow("runtime_transition_database_stale");
+    else await expect(receipts.assertCompensationOwnership!("RCT-1")).resolves.toBeUndefined();
+  });
   it("refuses replay through a different immutable promoter", async () => {
     const d = reconciliationDeps(); await coordinateRuntimeCapabilityTransition(reconciliationRequest(), d);
     const input = vi.mocked(d.receipts.createPending).mock.calls[0][0];

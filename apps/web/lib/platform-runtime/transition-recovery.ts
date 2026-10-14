@@ -1,6 +1,6 @@
 import { prisma } from "@dpf/db";
 import { readFile } from "node:fs/promises";
-import { classifyRuntimeInstallState, createPrismaRuntimeTransitionReceipts, reconcileRuntimeCapabilityTransitions, type RuntimeTransitionReconcileRow } from "./transition-coordinator";
+import { assertRuntimeCompensationDatabaseBaseline, classifyRuntimeInstallState, createPrismaRuntimeTransitionReceipts, reconcileRuntimeCapabilityTransitions, type RuntimeTransitionReconcileRow } from "./transition-coordinator";
 import { canonicalTransitionPayload, createRuntimeCompensationEnvelope, signTransitionPayload, verifyHistoricalTransitionReceipt, type RuntimeTransitionEnvelope, type RuntimeTransitionReceipt } from "./transition-protocol";
 import { runPromoter } from "@/lib/self-upgrade/promoter";
 
@@ -72,8 +72,7 @@ export async function createProductionRuntimeTransitionHost() {
       if (row.envelope.version === 2 && row.envelope.mode === "reconciliation") {
         const states = await prisma.platformCapability.findMany({ where: { capabilityId: { startsWith: "runtime:" } }, select: { capabilityId: true, state: true } });
         const current = Object.fromEntries(states.map(capability => [capability.capabilityId, capability.state]));
-        if (Object.keys(current).length !== Object.keys(row.previousStates).length
-          || Object.keys(row.previousStates).some(key => !Object.hasOwn(current, key) || current[key] !== row.previousStates[key])) throw new Error("runtime_transition_database_stale");
+        assertRuntimeCompensationDatabaseBaseline(current, row.previousStates);
       }
       let receipt = await readReceipt(reverse.transitionId);
       if (!receipt) {
