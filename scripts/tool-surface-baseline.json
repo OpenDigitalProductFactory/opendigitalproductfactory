@@ -3,9 +3,7 @@
   "selectionCliff": null,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 442,
-      "reason": "EP-07B49BD8 (BI-9CD95438, BI-07F52DA6): resume_workroom_queue releases a Workroom held after a provider failure; no existing tool clears drive state, and update_workroom_status overrides status, not the hold. drive_workroom_runtime is the single entry point for a room's supervised agent-CLI session (start, turn, steer, interrupt, stop, decide, status as one action enum rather than seven tools). approve_runtime_permission is the fixed-name tool Claude Code's --permission-prompt-tool must call; it answers only a room session credential. Claim to check: a held room dispatches nothing until resumed; a room session credential is refused for any other room and revoked when the session stops; an outward CLI action is held for a room decision, never bypassed. BI-0ACB97B5 adds get_investment_balance, set_investment_balance and bind_investment_funding in the existing portfolio-budget pack. They expose one scoped read, one revisioned owner policy write and one explicit room/portfolio/install funding binding across portal and external agents; points-budget tools cannot express token allocation or funding provenance. Claim to check: matching portal/MCP authority, stale revision refusal, no administrator-derived ownership, cross-organization isolation and immutable attempt attribution. No new pack or core-tier names.",
-      "recordedAt": "2026-10-14"
+      "value": 444
     },
     "registry.packFiles": {
       "value": 106,

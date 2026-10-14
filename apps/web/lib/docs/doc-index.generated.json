@@ -1266,6 +1266,7 @@
         "backup-and-health-semantics",
         "observation-and-diagnostics-boundary",
         "diagnosing-capability-drift-bi-5acbac50",
+        "proposed-existing-install-reconciliation-bi-5acbac50",
         "safe-operating-rules",
         "how-self-upgrade-may-recreate-a-service"
       ]
@@ -12792,6 +12793,7 @@
         "understanding-background-inference",
         "when-a-coworker-says-it-used-the-backup-model",
         "what-to-watch",
+        "repair-disagreement-in-installed-runtime-capabilities",
         "defaults-for-work-rooms"
       ]
     },

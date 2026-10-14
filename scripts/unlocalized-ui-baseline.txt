@@ -960,7 +960,7 @@ apps/web/components/mailroom/MailroomItemActions.tsx	jsx-copy	4
 apps/web/components/monitoring/AiCoworkerHealthPanel.tsx	jsx-copy	1
 apps/web/components/monitoring/AlertBanner.tsx	jsx-copy	1
 apps/web/components/monitoring/AlertBanner.tsx	physical-direction	2
-apps/web/components/monitoring/CapabilityServiceHealth.tsx	jsx-copy	2
+apps/web/components/monitoring/CapabilityServiceHealth.tsx	jsx-copy	0
 apps/web/components/monitoring/CapabilityServiceHealth.tsx	physical-direction	1
 apps/web/components/monitoring/ContainerResourceTable.tsx	jsx-copy	5
 apps/web/components/monitoring/ContainerResourceTable.tsx	physical-direction	7
@@ -972,7 +972,7 @@ apps/web/components/monitoring/MetricTimeSeries.tsx	physical-direction	2
 apps/web/components/monitoring/PlatformHealthIndicator.tsx	jsx-copy	7
 apps/web/components/monitoring/PlatformHealthIndicator.tsx	physical-direction	2
 apps/web/components/monitoring/RecentAlertsPanel.tsx	jsx-copy	3
-apps/web/components/monitoring/ServiceHealthDashboard.tsx	jsx-copy	4
+apps/web/components/monitoring/ServiceHealthDashboard.tsx	jsx-copy	2
 apps/web/components/monitoring/ServiceStatusGrid.tsx	jsx-copy	1
 apps/web/components/monitoring/SystemHealthDashboard.tsx	jsx-copy	3
 apps/web/components/onboarding/HowYouDecideCards.tsx	jsx-copy	4
