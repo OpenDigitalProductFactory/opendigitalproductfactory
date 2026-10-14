@@ -121,13 +121,16 @@ describe("approveProposal / rejectProposal — convergence characterisation", ()
     });
   });
 
-  it("reads then updates: approved is written before the run, with no compare-and-set", async () => {
+  // Named PR-C delta (spec D5 step 1): base read-then-updated with no
+  // compare-and-set, leaving the double-approve race open. The claim is now a
+  // compare-and-set on status "proposed"; approved is still written before the run.
+  it("claims the row with a compare-and-set on proposed before the run (PR-C delta, spec D5)", async () => {
     await approveProposal("AP-1");
-    expect(mocks.prisma.agentActionProposal.update.mock.calls[0][0]).toEqual({
-      where: { proposalId: "AP-1" },
+    expect(mocks.prisma.agentActionProposal.updateMany.mock.calls[0][0]).toEqual({
+      where: { proposalId: "AP-1", status: "proposed" },
       data: { status: "approved", decidedAt: expect.any(Date), decidedById: "user-admin" },
     });
-    expect(mocks.prisma.agentActionProposal.update.mock.invocationCallOrder[0])
+    expect(mocks.prisma.agentActionProposal.updateMany.mock.invocationCallOrder[0])
       .toBeLessThan(mocks.executeTool.mock.invocationCallOrder[0]!);
   });
 
