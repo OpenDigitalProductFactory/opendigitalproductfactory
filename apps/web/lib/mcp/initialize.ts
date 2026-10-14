@@ -74,6 +74,8 @@ async function composeInstallationIdentity(): Promise<
 export async function buildMcpInitializeResult(args: {
   params?: Record<string, unknown>;
   authority: InitializeAuthority;
+  /** BI-54469E18: the TOOLCHAIN line for this connection, if any. */
+  toolchainNotice?: string | null;
 }): Promise<Record<string, unknown>> {
   const requested =
     typeof args.params?.["protocolVersion"] === "string"
@@ -91,6 +93,9 @@ export async function buildMcpInitializeResult(args: {
   } catch (error) {
     console.warn("[mcp/initialize] agent-host compose failed (fail-open):", error);
   }
+  if (args.toolchainNotice) instructions += `
+
+${args.toolchainNotice}`;
 
   try {
     const [{ buildOrgContextBundle, formatOrgContextInstructions }, { prisma }] =

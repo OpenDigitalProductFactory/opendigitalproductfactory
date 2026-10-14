@@ -16,7 +16,7 @@ import { generateInstanceSigningKeypair, deriveDeviceId } from "@/lib/federation
 
 import { buildPackArchive } from "./pack-archive";
 import { deliveredDigest, listDeliveredFiles, listPackFiles } from "./pack-digest";
-import { _resetServedToolchainCache, getServedToolchain } from "./served-toolchain";
+import { _resetServedToolchainCache, getInstallationDeviceId, getServedToolchain } from "./served-toolchain";
 import { buildToolchainRelease, clientShapes, signToolchainManifest } from "./toolchain-manifest";
 
 const FIXTURE = join(__dirname, "__fixtures__", "pack-digest");
@@ -153,5 +153,21 @@ describe("served toolchain", () => {
     await expect(
       getServedToolchain("https://b/api/mcp/v1", { packRoot: () => null, releaseId: async () => null, signer: async () => signer() }),
     ).rejects.toThrow(/not present/);
+  });
+});
+
+describe("getInstallationDeviceId", () => {
+  it("returns the signer's full device id once, and retries after a failure", async () => {
+    _resetServedToolchainCache();
+    const failing = vi.fn(async () => {
+      throw new Error("identity unavailable");
+    });
+    expect(await getInstallationDeviceId(failing as never)).toBeNull();
+    const did = `did_${"c3".repeat(32)}`;
+    const working = vi.fn(async () => ({ deviceId: did, signingPublicKey: "", signingPrivateKey: "" }));
+    expect(await getInstallationDeviceId(working)).toBe(did);
+    expect(await getInstallationDeviceId(working)).toBe(did);
+    expect(working).toHaveBeenCalledTimes(1);
+    _resetServedToolchainCache();
   });
 });
