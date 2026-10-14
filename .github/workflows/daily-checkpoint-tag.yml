@@ -114,6 +114,10 @@ jobs:
             echo "Checkpoint ${today} already exists - nothing to do."
             exit 0
           fi
+          if [ "${ADDITIONAL_BATCH:-false}" = "true" ] && [ -n "$(git tag --points-at HEAD --list "${daily}-dev-recovery.*")" ]; then
+            echo "This source already has an additional checkpoint - nothing to do."
+            exit 0
+          fi
 
           # Most recent existing dated checkpoint (v20YY.MM.DD), if any. Zero-
           # padded dates sort chronologically under -refname.

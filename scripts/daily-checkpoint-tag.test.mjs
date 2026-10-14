@@ -57,7 +57,14 @@ function fixture(t, { checkpoint = true, advance = true } = {}) {
     });
     return { ...result, output: readFileSync(output, "utf8").trim() };
   };
-  return { git, run, original, head: git("rev-parse", "HEAD").trim() };
+  const advanceAgain = () => {
+    writeFileSync(join(root, "source.txt"), "another protected source change\n");
+    git("add", "source.txt");
+    git("commit", "--quiet", "-m", "another source change");
+    git("push", "--quiet", "origin", "main");
+    return git("rev-parse", "HEAD").trim();
+  };
+  return { git, run, advanceAgain, original, head: git("rev-parse", "HEAD").trim() };
 }
 
 test("default daily dispatch remains a no-op after today's checkpoint", t => {
@@ -88,6 +95,15 @@ test("an additional batch publishes the advanced head once without moving the da
   assert.equal(retry.status, 0, retry.stderr);
   assert.equal(retry.output, "tag=");
   assert.equal(f.git("rev-list", "-n", "1", tag).trim(), f.head);
+  const duplicateDispatch = f.run({ GITHUB_RUN_NUMBER: "43" });
+  assert.equal(duplicateDispatch.status, 0, duplicateDispatch.stderr);
+  assert.equal(duplicateDispatch.output, "tag=");
+  assert.equal(f.git("tag", "--list", `${dayTag}-dev-recovery.43`).trim(), "");
+  const nextHead = f.advanceAgain();
+  const nextBatch = f.run({ GITHUB_RUN_NUMBER: "44" });
+  assert.equal(nextBatch.status, 0, nextBatch.stderr);
+  assert.equal(nextBatch.output, `tag=${dayTag}-dev-recovery.44`);
+  assert.equal(f.git("rev-list", "-n", "1", `${dayTag}-dev-recovery.44`).trim(), nextHead);
 });
 
 test("an additional batch with no new source emits no publication", t => {
