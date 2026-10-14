@@ -868,9 +868,6 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-1229E42C: the installed plugin descriptor carries a literal URL so
         // the desktop app can start sign-in.
         "scripts/hooks/pin-plugin-mcp-url.test.mjs",
-        // BI-16EAAB62: SessionStart names an installed plugin copy that drifted
-        // from the root clone's pack (version, content, loaded connector).
-        "scripts/hooks/plugin-copy-freshness.test.mjs",
         "scripts/lib/root-clone-refresh.test.mjs",
         "scripts/lib/compose-safety.test.mjs",
         "scripts/lib/promoter-compose-mounts.test.mjs",
@@ -1060,6 +1057,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "packages/dpf-skill-pack/hooks/pretooluse-guard-selftest.test.mjs",
+      ),
+      // BI-A67B65F4 (supersedes the BI-16EAAB62 settings.json hook): the
+      // plugin's SessionStart freshness advisory, with and without Python.
+      // Unlisted = unrun.
+      node(
+        "--test",
+        "packages/dpf-skill-pack/hooks/toolchain-freshness.test.mjs",
       ),
       // BI-0B292D84: AGENTS.md 12 requires a Workroom claim before work on
       // every surface. It was prose - 30 of 79 live worktree branches carried
