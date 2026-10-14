@@ -2208,6 +2208,18 @@
         "change-control"
       ]
     },
+    "docs/architecture/offline-recovery-preparation.md": {
+      "publicHref": "/architecture/offline-recovery-preparation/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "offline-recovery-preparation-and-compatible-rollout",
+        "available-source-primitives",
+        "release-sequence",
+        "remaining-acceptance"
+      ]
+    },
     "docs/architecture/operational-precedent-corpus.md": {
       "publicHref": "/architecture/operational-precedent-corpus/",
       "portalHref": null,
