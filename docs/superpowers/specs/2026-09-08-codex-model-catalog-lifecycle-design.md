@@ -324,3 +324,40 @@ This correction does not inject GPT-6.1 Sol, borrow API capacities for CLI model
 upgrade a shared worker, or prove that a previous response used bundled fallback.
 See the [atomic implementation plan](../plans/2026-10-13-codex-catalog-provenance.md)
 for the existing BI's acceptance, source and served verification boundaries.
+
+### Selected-account host renewal — 2026-10-13
+
+The upstream 0.157.0
+[account protocol](https://github.com/openai/codex/blob/rust-v0.157.0/codex-rs/app-server-protocol/src/protocol/v2/account.rs)
+defines a host request for replacement ChatGPT tokens. The inference boundary
+owns renewal for the already selected credential. The transport accepts one known
+request with the documented reason, a valid request ID and matching or null account
+hint after selected login is sent. Inventory still requires successful login and
+existing response-correlated remote proof.
+
+The original discovery deadline owns renewal and all pages. Cancellation, process
+closure, input errors or an invalid competing request end the attempt. Both the
+outer collector and private runner suppress late responses; inner input failure
+also suppresses forwarding proof or catalog output.
+
+Renewal reuses the existing OAuth service. The returned upstream account must
+match before token persistence. A short transaction locks the selected connection,
+rechecks its original ownership/state and conditionally saves against the observed
+credential ID, version and refresh token. It preserves account trust, catalog
+proof, sightings and pins. Additional-account renewal remains isolated from sibling
+credentials.
+
+Legacy default Codex/ChatGPT shared sign-in is a bounded compatibility case,
+governed by DI-5534D2F44975. Provider names and default IDs do not prove a shared
+grant. Paired renewal requires both persisted default owners, the same selected
+upstream identity and equal private refresh-token lineage before HTTP. Captured
+owner/credential versions are rechecked under deterministic locks and atomic CAS
+before either row is saved. Changed or disabled participants abort the whole
+paired write. Additional accounts and defaults with unproven lineage remain
+selected-only, and the recovery projection must disclose independence truthfully.
+
+The [selected-account renewal plan](../plans/2026-10-13-codex-catalog-auth-refresh.md)
+records source checks and remaining verification. The source implementation is in
+progress; final regular tests, both TypeScript programs, protected delivery and
+qualified live discovery remain required. The observed live authentication message
+alone does not identify the upstream request or establish its cause.

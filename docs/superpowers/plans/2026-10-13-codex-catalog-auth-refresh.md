@@ -1,10 +1,14 @@
 ---
-status: draft
+status: active
 ---
 
 # Selected-account catalog token renewal — BI-59E37E39
 
-Implementation has not started. Six catalog and documentation paths have normal scope claims; shared OAuth service custody and the expanded impact contract remain prerequisites.
+Implementation is in progress under WC-B81E3ED2. All eight source/documentation
+paths have normal nonforced custody and resolved impact. Implementation admission
+IRD-0E80E106434A is allowed. Immutable atomic plan coverage
+cmv7d8cny1wc601llmxowj2wb remains bound to the original published plan at
+c666a33b98a9ed447689683d185167c60e291131.
 
 ## Objective and existing work
 
@@ -67,6 +71,22 @@ handle at most one valid host renewal request, then admit only existing remotely
 verified nonempty inventory. Transport never decrypts credentials or selects a
 provider default. The caller owns renewal through the existing OAuth service.
 
+CONTRACT-DEFAULT-LINEAGE: preserve the existing compact shared default sign-in
+only after proving both persisted default connection/credential owners, the same
+already selected upstream identity and equal internally decrypted refresh-token
+lineage. Default IDs alone are insufficient. Capture both owner and credential
+versions before HTTP; validate the returned identity; acquire owner locks in
+deterministic order and save both credential versions atomically. A changed,
+disabled or reowned captured participant aborts the whole paired write. Preserve
+account status, trust, proof and pins. Additional accounts and defaults with
+unproven lineage stay selected-only, with truthful independent recovery.
+
+This compatibility amendment follows platform decision DI-5534D2F44975
+(high-confidence proceed; usable/autonomy-eligible; no commandment conflicts).
+It preserves the operator-approved multi-account design's default compatibility
+and current OAuth finish/shared-refresh semantics without treating provider names
+as lineage evidence. No live pair identity equality has been established.
+
 CONTRACT-SELECTED-RENEWAL: only the documented method/reason and the selected
 ChatGPT auth type qualify. A foreign hint, unknown method, malformed request,
 overlap or repeated request fails closed. A nullable upstream hint never grants
@@ -84,7 +104,8 @@ path if required. Validate a returned upstream identity before persistence and
 conditionally fence the credential update to its observed explicit connection,
 provider, credential owner and current credential version/refresh token. An owner
 change, disabled account or mismatch cannot mutate the foreign credential. An
-explicit renewal cannot fall back to or synchronize a sibling credential. Existing
+explicit additional-account renewal cannot fall back to or synchronize a sibling
+credential. Proven legacy defaults use CONTRACT-DEFAULT-LINEAGE. Existing
 legacy renewal behavior remains covered separately. No HTTP implementation is
 duplicated and no table, cache, model-ID list, SDK upgrade or UI control is added.
 
@@ -126,8 +147,32 @@ acceptance merely by merging.
   handoff and impact expansion, if required for the guarded write
 - existing catalog lifecycle specification and this final repository plan
 
-No implementation edits have started. The six catalog/documentation paths have
-successful normal scope claims; the shared OAuth service pair remains unclaimed.
+The shared OAuth pair also has successful normal scope claims. Production changes
+reuse its HTTP renewal path, share selected-connection comparison, validate the
+returned identity before saving, lock the selected owner during persistence and
+conditionally update the observed credential version and refresh token.
+
+## Executed evidence and remaining work
+
+The initial three-file regression run executed 11 new failures and 78 existing
+passes. The first repaired snapshot passed all 89 tests. That is predecessor
+evidence: later lifetime and login-stage coverage changed the candidate.
+
+Small source-only probes execute the exported runner/transport with simulated
+processes and files. They observed and corrected four boundaries: two forwarded
+frames after inner input failure became zero; renewal during login changed from
+zero calls to one while catalog admission still waited for login; malformed
+request IDs changed from one renewal to zero; a null RPC frame changed from a
+stream-handler exception to a controlled discovery failure. Colocated regressions cover these
+behaviors. These probes do not establish remote or served behavior.
+
+The expanded regular suite and official web production/test TypeScript attempts
+stopped before execution on repeated Windows host inventory JSON reader failures.
+Their original B77A8C22E9/B2DDC061CF attempts remain historical infrastructure-unrun;
+the existing verification-safeguards owner is repairing that execution path.
+The changed source needs normal fresh admission and executed final checks before
+independent assessment, publication and qualified live discovery. The case remains
+open.
 
 ## Verification matrix
 
@@ -140,8 +185,14 @@ VERIFY-LIFETIME: renewal resolving/rejecting after timeout, close, stdin error o
 another server request cannot write or publish; repeated requests cannot renew
 again; slow renewal remains inside the original deadline.
 VERIFY-PERSISTENCE: returned-token validation precedes persistence; conditional
-write loses cleanly to an ownership/credential change; selected renewal does not
+write loses cleanly to an ownership/credential change; additional-account renewal does not
 touch sibling rows, trust, model proof or pins. Existing legacy tests remain.
+VERIFY-DEFAULT-LINEAGE: both explicit default routes preserve proven legacy
+shared sign-in. Missing owners, different upstream identity, unequal refresh
+lineage, a disabled sibling or changed captured versions never copy credentials.
+Acquire locks in stable order; failure of either CAS rolls back both writes.
+Additional accounts remain selected-only. Masked expiry/status and default IDs
+are not lineage proof; unproven shared recovery is disclosed truthfully.
 VERIFY-CATALOG: current provenance/parser/pagination/privacy/empty/failure tests
 and affected account discovery/revalidation tests pass without fabricated limits,
 timestamps or models. Source fixtures are not remote/runtime evidence.
