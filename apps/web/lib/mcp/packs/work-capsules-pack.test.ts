@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockPrisma = {
   $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(mockPrisma)),
   $executeRawUnsafe: vi.fn(),
+  authorizationDecisionLog: { findUnique: vi.fn() },
   workroom: {
     create: vi.fn(),
     findFirst: vi.fn(),
@@ -710,6 +711,10 @@ describe("work capsule MCP tools", () => {
   });
 
   it("release_workroom_scope removes matching scope claims", async () => {
+    mockPrisma.authorizationDecisionLog.findUnique.mockResolvedValue({
+      actionKey: "release_workroom_scope", actorRef: "codex", humanContextRef: "user-1",
+      agentContextRef: "codex", decision: "allow", rationale: {},
+    });
     mockPrisma.workroom.findUnique.mockResolvedValue({
       id: "row-1",
       capsuleId: "WC-RELEASE",
@@ -737,7 +742,7 @@ describe("work capsule MCP tools", () => {
     const result = await executeTool("release_workroom_scope", {
       capsuleId: "WC-RELEASE",
       claims: [{ kind: "path", value: "apps/web/lib/work-capsules.ts" }],
-    }, "user-1", { agentId: "codex" });
+    }, "user-1", { agentId: "codex", authorityDecisionId: "AUTH-release" });
 
     expect(result.success).toBe(true);
     expect(mockPrisma.workroom.update).toHaveBeenCalledWith(expect.objectContaining({

@@ -97,7 +97,9 @@ dispositioned above; closure must not imply their live acceptance is proven.
    design; bind live coverage before behavior implementation.
 2. Implement shared parsing/eligibility, server-side narrow-only resolver and
    focused scope-release store. Wire the existing tool/handler after coordinating
-   the active claim on `mcp-handlers.ts`; do not force a conflicting scope.
+   the active claim on `mcp-handlers.ts`; co-edit only after the existing governed
+   claim has executed. Envelope cmv7mxfd807ie01obbyj63tgu executed on
+   2026-10-14; Workroom activity sequence 40 records the exact handler co-claim.
 3. Test own/foreign/unknown claims, mixed requests, null actor, malformed inputs,
    terminal/archive/expired/foreign leases, exact target, no-op, read failure,
    unknown raw claims, stale snapshots and lease changes. Test decision binding
@@ -130,5 +132,20 @@ credential repair or manual release tag is part of rollback.
 
 ## Backlog coverage
 
-Coverage is pending independent baseline and immutable artifact publication.
-No implementation readiness or acceptance is claimed by this document.
+Independent review: initiative-06d5545b-ca1a-4f74-bafc-dedb695a5797,
+passing review of commit 295df8913622a1369a050bda230628cc387c5385,
+blob ca6fa23a044c48a703ed68158bbe9fc2ff63a059. Baseline:
+baseline-e4e40c3d-c67e-4f50-8310-f5a8d1cf1957. Research:
+initiative-ab219014-7a05-400c-9f51-c300a95f416e.
+
+Atomic coverage receipt: cmv7jv3a24iof01qsegrgg83f; parent BI-8D8939E5,
+deliverable OSR, no dependent or independently shippable children. Requirement
+references OBJ-OSR-1 through OBJ-OSR-3; contracts resolveCallConsequence,
+AuthorizationDecisionLog and workCapsuleActor; flow references current governed
+dispatch context, write-time exact lookup and existing snapshot CAS;
+verification AC-OSR-1 through AC-OSR-7. Native coverage readback was current and
+implementation admission IRD-598C5907A1BC was allowed. Refresh immutable plan
+provenance to the published implementation head before publication; these
+historical review and coverage receipts remain immutable.
+
+No protected delivery or live acceptance is claimed by this document.
