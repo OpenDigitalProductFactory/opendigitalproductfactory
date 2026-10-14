@@ -73,7 +73,7 @@ describe("decideLeaveRequestFromData", () => {
       minCoverageCushion: 1,
     });
 
-    expect(mocks.getLeaveRequests).toHaveBeenCalledWith({ requestId: "LR-1" });
+    expect(mocks.getLeaveRequests).toHaveBeenCalledWith({ requestId: "LR-1", withCurrentGuards: false });
     expect(mocks.getLeaveBalances).toHaveBeenCalledWith("employee-profile-1", 2026);
     expect(mocks.getTeamLeaveCalendar).toHaveBeenCalledWith(
       "dept-1",

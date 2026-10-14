@@ -15,6 +15,9 @@ const evalState = vi.hoisted(() => ({
   modelClass: "chat",
   outputModalities: ["text"] as string[],
   executionPlans: [] as Array<unknown>,
+  dispatchAttributions: [] as Array<{ traceId?: string; threadId?: string } | undefined>,
+  createdRunIds: [] as string[],
+  savedRuns: [] as Array<{ where: { runId: string }; data: { results: { dimensions: Array<{ tests: Array<{ traceId?: string }> }> } } }>,
   // BI-32426CA0: last-endpoint-standing guard fixtures
   selfClearance: ["public", "internal", "confidential", "restricted"] as string[],
   peerClearances: [] as string[][],
@@ -33,6 +36,7 @@ vi.mock("@/lib/ai-inference", () => {
     callProvider: vi.fn(async (...args: unknown[]) => {
       evalState.callCount++;
       evalState.executionPlans.push(args[5]);
+      evalState.dispatchAttributions.push(args[8] as { traceId?: string; threadId?: string } | undefined);
       throw new InferenceError(evalState.errorMessage, "network");
     }),
   };
@@ -68,11 +72,15 @@ vi.mock("@dpf/db", () => ({
       // BI-C8164664: serve the recent-in-flight fixture; assert that runs older
       // than the guard window are reaped rather than re-counted as in-flight.
       findFirst: vi.fn(async () => evalState.inflightRun),
-      create: vi.fn(async () => {
+      create: vi.fn(async (args: { data: { runId: string } }) => {
         evalState.createCount++;
+        evalState.createdRunIds.push(args.data.runId);
         return {};
       }),
-      update: vi.fn(async () => ({})),
+      update: vi.fn(async (args: { where: { runId: string }; data: { results: { dimensions: Array<{ tests: Array<{ traceId?: string }> }> } } }) => {
+        evalState.savedRuns.push(args);
+        return {};
+      }),
       updateMany: vi.fn(async (args: { where: { startedAt?: { lte?: Date } } }) => {
         // Test reaper: pretend one stale row was reaped whenever the where clause
         // includes the `lte` cutoff filter the eval-runner uses.
@@ -341,6 +349,9 @@ describe("runDimensionEval — whole-endpoint short-circuit", () => {
     evalState.modelClass = "chat";
     evalState.outputModalities = ["text"];
     evalState.executionPlans.length = 0;
+    evalState.dispatchAttributions.length = 0;
+    evalState.createdRunIds.length = 0;
+    evalState.savedRuns.length = 0;
   });
 
   it("skips stale and forced embedding evaluations without writes or inference", async () => {
@@ -365,6 +376,16 @@ describe("runDimensionEval — whole-endpoint short-circuit", () => {
       contractFamily: "model-calibration.dimension",
       providerId: "local",
     });
+  });
+
+  it("joins a real calibration run's stored test result to its provider dispatch trace", async () => {
+    const result = await runDimensionEval("local", "qwen", "test");
+    const attribution = evalState.dispatchAttributions[0];
+    expect(attribution).toMatchObject({ traceId: expect.stringMatching(/^[a-f0-9]{32}$/) });
+    expect(attribution).not.toHaveProperty("threadId");
+    expect(evalState.createdRunIds[0]).toBe(result.testRunId);
+    expect(evalState.savedRuns[0]?.where.runId).toBe(result.testRunId);
+    expect(evalState.savedRuns[0]?.data.results.dimensions[0]?.tests[0]?.traceId).toBe(attribution?.traceId);
   });
 
   it("stops after the first timed-out probe instead of grinding every test", async () => {
