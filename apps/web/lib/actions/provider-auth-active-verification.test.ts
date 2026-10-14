@@ -15,7 +15,7 @@ vi.mock("@/lib/ai-provider-internals", () => ({ getProviderBearerToken: mocks.be
 import { testProviderAuthInternal } from "./provider-auth-test";
 
 describe("verification-only subscription effects", () => {
-  const credential = { id: "owned", status: "ok", cachedToken: "enc:token", tokenExpiresAt: new Date("2099-01-01") };
+  const credential = { id: "owned", status: "ok", cachedToken: "enc:token", refreshToken: "enc:refresh", updatedAt: new Date("2026-10-01"), tokenExpiresAt: new Date("2099-01-01") };
   const account = { connectionId: "provider-default-codex", providerId: "codex", organizationId: null, status: "active", authMethod: "oauth", credentialEntryId: "owned", updatedAt: new Date("2026-10-01"), credentialEntry: credential };
   const verify = () => testProviderAuthInternal("codex", false, account.connectionId, { verificationOnly: true });
   beforeEach(() => {
@@ -57,6 +57,7 @@ describe("verification-only subscription effects", () => {
     expect(await verify()).toMatchObject({ ok: true });
     expect(mocks.refresh).toHaveBeenCalledExactlyOnceWith("codex", account.connectionId, {
       connectionId: account.connectionId, providerId: "codex", credentialEntryId: "owned", updatedAt: account.updatedAt,
+      credentialRevision: { updatedAt: credential.updatedAt, cachedToken: credential.cachedToken, refreshToken: credential.refreshToken },
     });
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(mocks.prisma.aiProviderConnection.updateMany).not.toHaveBeenCalled();
@@ -67,5 +68,30 @@ describe("verification-only subscription effects", () => {
     expect(await verify()).toMatchObject({ ok: false, message: expect.stringContaining("Account changed") });
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(mocks.prisma.credentialEntry.update).not.toHaveBeenCalled();
+  });
+  it("cannot dispatch after Disable while resolving the model", async () => {
+    mocks.prisma.modelProfile.findFirst.mockImplementation(async () => {
+      mocks.prisma.aiProviderConnection.findUnique.mockResolvedValue({ ...account, status: "disabled" });
+      return { modelId: "current-model" };
+    });
+    expect(await verify()).toMatchObject({ ok: false });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("cannot dispatch after a same-row credential replacement during model selection", async () => {
+    mocks.prisma.modelProfile.findFirst.mockImplementation(async () => {
+      mocks.prisma.aiProviderConnection.findUnique.mockResolvedValue({ ...account, credentialEntry: { ...credential, cachedToken: "enc:replacement", updatedAt: new Date("2026-10-02") } });
+      return { modelId: "current-model" };
+    });
+    expect(await verify()).toMatchObject({ ok: false });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("cannot retry after Disable between renewal and the second probe", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: "token_expired" } }), { status: 401 }));
+    mocks.refresh.mockImplementation(async () => {
+      mocks.prisma.aiProviderConnection.findUnique.mockResolvedValue({ ...account, status: "disabled" });
+      return { token: "renewed" };
+    });
+    expect(await verify()).toMatchObject({ ok: false });
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 });

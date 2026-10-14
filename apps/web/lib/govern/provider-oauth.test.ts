@@ -465,10 +465,12 @@ describe("refreshOAuthToken", () => {
 });
 
 describe("guarded active-account renewal", () => {
-  const snapshot = { connectionId: "provider-default-codex", providerId: "codex", credentialEntryId: "owned", updatedAt: new Date("2026-10-01") };
-  const credential = { id: "owned", status: "ok", refreshToken: "enc:refresh" };
+  const credential = { id: "owned", status: "ok", cachedToken: "enc:old", refreshToken: "enc:refresh", updatedAt: new Date("2026-10-01") };
+  let snapshot = { connectionId: "provider-default-codex", providerId: "codex", credentialEntryId: "owned", updatedAt: new Date("2026-10-01"),
+    credentialRevision: { updatedAt: credential.updatedAt, cachedToken: credential.cachedToken, refreshToken: credential.refreshToken } };
   beforeEach(() => {
     vi.clearAllMocks();
+    snapshot = { ...snapshot, credentialRevision: { updatedAt: credential.updatedAt, cachedToken: credential.cachedToken, refreshToken: credential.refreshToken } };
     mockPrisma.modelProvider.findUnique.mockResolvedValue({ tokenUrl: "https://auth.openai.com/oauth/token", oauthClientId: "client-codex" });
     mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ ...snapshot, organizationId: null, status: "active", authMethod: "oauth", credentialEntry: credential });
     mockPrisma.credentialEntry.findUnique.mockResolvedValue(credential);
@@ -499,6 +501,12 @@ describe("guarded active-account renewal", () => {
     await refreshOAuthToken("codex", snapshot.connectionId, snapshot);
     expect(mockPrisma.credentialEntry.update).not.toHaveBeenCalled();
     expect(mockPrisma.credentialEntry.updateMany).toHaveBeenCalledWith({ where: expect.objectContaining({ id: "owned", refreshToken: "enc:refresh", providerConnection: { is: expect.objectContaining({ status: "active", updatedAt: snapshot.updatedAt }) } }), data: { status: "expired" } });
+  });
+  it("rejects a same-row credential revision changed before grant exchange", async () => {
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ ...snapshot, organizationId: null, status: "active", authMethod: "oauth", credentialEntry: { ...credential, updatedAt: new Date("2026-10-02") } });
+    expect(await refreshOAuthToken("codex", snapshot.connectionId, snapshot)).toEqual({ error: expect.stringContaining("changed") });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(mockPrisma.credentialEntry.updateMany).not.toHaveBeenCalled();
   });
 });
 

@@ -51,13 +51,14 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
 
   const catalog = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!catalog) return { ok: false, message: "Provider not found" };
-  const connection = connectionId === undefined ? null : await prisma.aiProviderConnection.findUnique({ where: { connectionId } });
+  const connection = connectionId === undefined ? null : await prisma.aiProviderConnection.findUnique({ where: { connectionId }, include: { credentialEntry: true } });
   if (connectionId !== undefined && (!connection || connection.providerId !== providerId)) return { ok: false, message: "Provider account not found" };
   if (connection?.status === "disabled") return { ok: false, message: "Enable this account before testing authentication" };
   let activeSnapshot: ActiveAccountSnapshot | undefined;
   if (options.verificationOnly) {
-    if (!isActiveDefaultSubscription(connection)) return { ok: false, message: "This verification requires an already active, install-owned subscription account" };
-    activeSnapshot = { connectionId: connection.connectionId, providerId: connection.providerId, credentialEntryId: connection.credentialEntryId, updatedAt: connection.updatedAt };
+    if (!isActiveDefaultSubscription(connection) || !connection.credentialEntry) return { ok: false, message: "This verification requires an already active, install-owned subscription account" };
+    activeSnapshot = { connectionId: connection.connectionId, providerId: connection.providerId, credentialEntryId: connection.credentialEntryId, updatedAt: connection.updatedAt,
+      credentialRevision: { updatedAt: connection.credentialEntry.updatedAt, cachedToken: connection.credentialEntry.cachedToken, refreshToken: connection.credentialEntry.refreshToken } };
   }
   const accountAuth = connection?.authMethod;
   const provider = { ...catalog, authMethod: accountAuth === "oauth" ? "oauth2_authorization_code" : accountAuth === "api-key" ? "api_key" : accountAuth === "workload-identity" ? "oauth2_client_credentials" : catalog.authMethod };
@@ -151,7 +152,9 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
       if (!model) return { ok: false, message: "No active model found — refresh the model catalog and retry" };
       const streaming = isChatGptBackend(providerId, baseUrl);
       headers["Content-Type"] = "application/json";
-      const probe = () => fetch(attemptedUrl, {
+      const probe = async () => {
+        if (activeSnapshot) await assertActiveAccountSnapshot(activeSnapshot);
+        return fetch(attemptedUrl, {
         method: "POST",
         headers: { ...headers },
         body: JSON.stringify({
@@ -162,7 +165,8 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
           ...(!streaming ? { max_output_tokens: 32 } : {}),
         }),
         signal: AbortSignal.timeout(30_000),
-      });
+        });
+      };
 
       res = await probe();
       let body = await res.text();

@@ -5,7 +5,7 @@
 import { randomBytes, createHash } from "crypto";
 import { prisma } from "@dpf/db";
 import { encryptSecret, decryptSecret } from "@/lib/credential-crypto";
-import { activeAccountCredentialWhere, assertActiveAccountSnapshot, ACCOUNT_CHANGED, type ActiveAccountSnapshot } from "@/lib/inference/active-provider-account-verification";
+import { activeAccountCredentialWhere, assertActiveAccountSnapshot, matchesCredentialRevision, ACCOUNT_CHANGED, type ActiveAccountSnapshot } from "@/lib/inference/active-provider-account-verification";
 import { activateProvider } from "@/lib/govern/activate-provider";
 import { getStablePortalUrl } from "@/lib/portal-url";
 import { findProviderCredential } from "@/lib/inference/provider-account-credentials";
@@ -357,10 +357,10 @@ export async function refreshOAuthToken(
   }
 
   const cred = await findProviderCredential(providerId, connectionId);
-  if (activeSnapshot && (connectionId !== activeSnapshot.connectionId || providerId !== activeSnapshot.providerId || cred?.id !== activeSnapshot.credentialEntryId)) {
+  if (activeSnapshot && (connectionId !== activeSnapshot.connectionId || providerId !== activeSnapshot.providerId || !matchesCredentialRevision(activeSnapshot, cred))) {
     return { error: ACCOUNT_CHANGED };
   }
-  const guardedWhere = activeSnapshot && cred ? { ...activeAccountCredentialWhere(activeSnapshot), refreshToken: cred.refreshToken } : null;
+  const guardedWhere = activeSnapshot && cred ? activeAccountCredentialWhere(activeSnapshot) : null;
   const credentialWhere = connectionId && cred ? { id: cred.id } : { providerId };
   if (!cred?.refreshToken) {
     // Nothing can renew this token. Once it is past expiry, say so on the row
@@ -406,11 +406,16 @@ export async function refreshOAuthToken(
     const expiresAt = new Date(Date.now() + body.expires_in * 1000);
 
     if (guardedWhere) {
+      const credentialRevision = { updatedAt: new Date(), cachedToken: encryptSecret(body.access_token),
+        refreshToken: body.refresh_token ? encryptSecret(body.refresh_token) : cred.refreshToken };
       const renewed = await prisma.credentialEntry.updateMany({ where: guardedWhere, data: {
-        cachedToken: encryptSecret(body.access_token), refreshToken: body.refresh_token ? encryptSecret(body.refresh_token) : cred.refreshToken,
-        tokenExpiresAt: expiresAt, status: "ok",
+        ...credentialRevision, tokenExpiresAt: expiresAt, status: "ok",
       } });
-      return renewed.count === 1 ? { token: body.access_token } : { error: ACCOUNT_CHANGED };
+      if (renewed.count !== 1) return { error: ACCOUNT_CHANGED };
+      // Advance only the revision this call itself atomically wrote. Every
+      // subsequent probe rechecks it; another writer still invalidates it.
+      activeSnapshot!.credentialRevision = credentialRevision;
+      return { token: body.access_token };
     }
 
     // Optimistic concurrency: only write if refreshToken hasn't changed
