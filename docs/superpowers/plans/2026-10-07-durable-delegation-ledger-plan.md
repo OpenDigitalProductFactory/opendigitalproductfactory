@@ -143,3 +143,49 @@ handoff matrix, and usage-limit auto-resume. Decomposed in its own plan.
 
 Recorded with `record_plan_backlog_coverage` against `BI-763D6E01`'s
 spec-approval baseline; the receipt id is added here when issued.
+
+## P3 acceptance repair — Prisma advisory lock (2026-10-14)
+
+BI-763D6E01 remains awaiting acceptance. Its existing coverage
+`cmuyynun9a5od01owy891syzo` and independent plan review
+`initiative-77b20214-aadf-419e-a2d7-2ea6460602d0` bind the P3 contract above.
+This repair continues P3; the other deliverables and baseline are unchanged.
+
+The installed implementation stores receipts in `WorkroomActivity`, using the
+existing nullable `commandScopeKey` and `commandKey` columns and unique index.
+Calls without a command id retain their previous behavior. This describes the
+shipped substrate; the table and automatic-key proposal above is historical.
+
+Approved release `cmv7cgoxm0y5k01llb8k9dus3` failed in ToolExecution
+`cmv7cv0cn1iy701lll2yy2u74`: Prisma `$queryRaw` cannot decode PostgreSQL's
+`void` result from `pg_advisory_xact_lock`. The direct `pg` test adapter accepts
+that result, leaving the production transport failure uncovered.
+
+One atomic repair, in dependency order:
+
+1. Reproduce the failure in the store and MCP wrapper tests using a transport
+   that rejects a void-valued query. Resolve the graph-linked unit and Postgres
+   tests before editing; keep replay, typed refusal, target conflict and actor
+   isolation coverage.
+2. Execute the parameterized command-id advisory lock through `$executeRaw`
+   inside the same transaction. Keep the room `SELECT id ... FOR UPDATE` query,
+   receipt key, transaction boundaries, authority checks and result unchanged.
+   A raw database adapter missing execution support must fail before the effect.
+3. Exercise the real Prisma adapter in the disposable Postgres fixture, including
+   concurrent commands and retries. Never run the destructive fixture on the
+   installation database. Run affected tests, both web TypeScript programs,
+   style guard and doc-index freshness, then the canonical exact-tree gate,
+   independent semantic review and protected PR queue.
+4. After canonical release, verify a receipted native write and identical replay.
+   Preserve the original failed approval, actor, command id, manifest and audit;
+   recover it only through an existing supported execution-recovery action.
+   Permission to perform a write does not attest that its evidence is correct.
+
+This is one P3 repair rather than a new initiative: a transport correction and
+its regression tests cannot independently deliver AC-DDL-RECEIPT-ONCE,
+AC-DDL-RECEIPT-REJECT or AC-DDL-LEASE-SERIAL. Consolidation stays in the existing
+store and adapters. No new ledger, schema, grants, approval bypass or UI is added.
+No operator documentation changes are needed because the documented command
+contract is restored. Risk is loss of serialization if the lock is omitted;
+tests must prove it remains transactional. Rollback is one code revert, leaving
+the existing receipts and immutable migration intact.
