@@ -470,6 +470,24 @@ records the escalation branch and the consent binding. Approval cards show the
 exact proposal, found by the envelope id on the pending execution, and state
 that authorizing is not review.
 
+**Amendment 2026-10-15 (BI-79D26E39, founder decision).** A client-credentials
+client that an operator bound to an approved assistant now steers like a
+consented connection. Grok's "DPF Grok connection" client is bound to
+AGT-EXT-GROK by setup (BI-8D152751). A credentials client has no consent
+screen. Its authority is granted once, when the operator creates it:
+`allowedScopes` is the grant, `ownerUserId` the cap, `agentId` the assistant.
+Without a binding, every routine write from a headless assistant parked on an
+approval card. At the client_credentials grant, the token endpoint now reuses
+the owner's active consent binding for (owner, client, resource, assistant)
+whose grants still verify, or creates one once through
+`createOAuthConsentBinding`, which applies the consent screen's eligibility
+rule (`apps/web/lib/auth/credentials-client-consent.ts`). The token carries the
+binding, and `resolveOAuthConsent` revalidates it on every call, so revoking
+the binding or the assistant's eligibility stops the steering. A client with no
+assistant, or one the rules reject, is issued an unbound token as before. Each
+new binding is logged as `oauth_client_credentials_consent`. Damaging,
+restricted and proposal-shaped actions still reach a person.
+
 ### Complete proposal disclosure correction (BI-12E5DD91, 2026-10-13)
 
 Current baseline `e4edd79cd6cfa83ac00df4dd64494090573b3e23` preserves the
