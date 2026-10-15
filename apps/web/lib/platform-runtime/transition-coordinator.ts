@@ -73,6 +73,10 @@ function sameStateMap(left: Readonly<Record<string, string>>, right: Readonly<Re
   return keys.length === Object.keys(right).length && keys.every((key) => Object.hasOwn(right, key) && left[key] === right[key]);
 }
 
+function isCompletionContention(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "code" in error && error.code === "P2034");
+}
+
 /** Shared live/startup fence: unknown, extra and missing settings are material. */
 export function assertRuntimeCompensationDatabaseBaseline(current: Readonly<Record<string, string>>, previous: Readonly<Record<string, string>>): void {
   if (!sameStateMap(current, previous)) throw new Error("runtime_transition_database_stale");
@@ -283,7 +287,7 @@ export async function reconcileRuntimeCapabilityTransitions(deps: {
     } catch (error) {
       // Serializable completion may race the still-live coordinator. The next
       // observation rechecks its durable result; contention is not corruption.
-      if (deps.receiptOnly && error && typeof error === "object" && "code" in error && error.code === "P2034") throw error;
+      if (deps.receiptOnly && isCompletionContention(error)) throw error;
       await deps.markRecoveryRequired(row, error instanceof Error ? error.message : "invalid_host_receipt");
     }
   }
@@ -406,8 +410,17 @@ export async function coordinateRuntimeCapabilityTransition(
     await deps.receipts.markHostApplied(request.transitionId);
     if (!(await deps.verifyRequiredHealth(desiredProjection.requiredServices, receipt.observedServices, receipt.observedHealth))) throw new Error("required_health_failed");
     if (!deps.receipts.commitSuccess) return { status: "host_applied_pending_verification" as const };
-    await deps.receipts.commitSuccess(request.transitionId, receipt, request.desiredStates);
-    return { status: "succeeded" as const };
+    // The observer can win this same transaction. Re-observe through the
+    // idempotent completion adapter, without repeating host side effects.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await deps.receipts.commitSuccess(request.transitionId, receipt, request.desiredStates);
+        return { status: "succeeded" as const };
+      } catch (error) {
+        if (!isCompletionContention(error)) throw error;
+      }
+    }
+    return { status: "host_applied_pending_verification" as const };
   } catch (error) {
     if (!deps.receipts.markCompensating || !deps.receipts.markRolledBack || !deps.receipts.markRollbackFailed) return { status: "host_applied_pending_verification" as const };
     const failure = error instanceof Error ? error.message : "post_host_verification_failed";

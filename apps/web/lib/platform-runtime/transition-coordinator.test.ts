@@ -452,6 +452,18 @@ describe("runtime capability transition coordinator", () => {
     expect(d.receipts.commitSuccess).toHaveBeenCalledWith("RCT-1", expect.objectContaining({ status: "applied" }), request.desiredStates);
   });
 
+  it.each([1, 3])("does not compensate solely for %i completion serialization conflicts", async (conflicts) => {
+    const commitSuccess = vi.fn().mockResolvedValue(undefined);
+    for (let i = 0; i < conflicts; i++) commitSuccess.mockRejectedValueOnce(Object.assign(new Error("serialization conflict"), { code: "P2034" }));
+    const d = deps();
+    Object.assign(d.receipts, { commitSuccess, markCompensating: vi.fn(), markRolledBack: vi.fn(), markRollbackFailed: vi.fn() });
+    await expect(coordinateRuntimeCapabilityTransition(request, d)).resolves.toEqual({ status: conflicts === 1 ? "succeeded" : "host_applied_pending_verification" });
+    expect(commitSuccess).toHaveBeenCalledTimes(conflicts === 1 ? 2 : 3);
+    expect(d.receipts.markCompensating).not.toHaveBeenCalled();
+    expect(d.receipts.markRollbackFailed).not.toHaveBeenCalled();
+    expect(d.runPromoter).toHaveBeenCalledOnce();
+  });
+
   it("compensates a host apply when the transactional DB commit fails", async () => {
     const secret = "x".repeat(32);
     const d = deps({ receipts: {
