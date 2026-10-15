@@ -168,12 +168,12 @@
       "turningOn": "Monitoring is starting. This page updates when it finishes.",
       "turningOff": "Monitoring is stopping. This page updates when it finishes.",
       "needsAttention": "What is running does not match the setting.",
-      "unreconciled": "This install's capability record and its saved install state disagree, so monitoring cannot be changed safely yet."
+      "unreconciled": "This install's capability records are incomplete or were written for another release, so monitoring cannot be changed safely yet."
     },
     "reason": {
       "inFlight": "A change is already in progress.",
       "installUnknown": "The install state could not be read, so the switch is unavailable.",
-      "unreconciled": "Capability state needs reconciling first",
+      "unreconciled": "Capability records need repair first",
       "enabledMissing": "Monitoring is on, but these services are not running: {$services}",
       "disabledRunning": "Monitoring is off, but these services are still running: {$services}"
     },
@@ -183,6 +183,9 @@
     "readOnly": "You can see this setting, but changing it needs platform management access.",
     "turnOn": "Turn monitoring on",
     "turnOff": "Turn monitoring off",
+    "reconcileOff": "Match records: monitoring is off",
+    "reconcileOn": "Match records: monitoring is on",
+    "recordMismatch": "The platform's record for monitoring does not match what is running. Matching it changes no services.",
     "working": "Working…",
     "lastChange": {
       "heading": "Last change",
@@ -204,6 +207,10 @@
       "rollbackFailed": "The change failed and putting things back also failed: {$failure} (change {$transitionId}). Open runtime health.",
       "recoveryRequired": "An earlier change needs recovery before monitoring can be changed. Open runtime health.",
       "unreconciled": "Capability state needs reconciling first",
+      "hostStale": "The install changed while this page was open. Refresh and try again.",
+      "databaseStale": "The capability records changed while this page was open. Refresh and try again.",
+      "requestMismatch": "The request no longer matches what the platform sees. Refresh and try again.",
+      "protocolUnavailable": "The host's change tool could not be verified, so nothing was changed. Open runtime health.",
       "unknown": "The platform returned an answer this page does not recognise."
     }
   }

@@ -11,7 +11,7 @@ import "server-only";
 
 import { deriveCallerClient } from "@/lib/mcp/caller-client";
 
-import { parseToolchainDeclaration, type ToolchainDeclaration } from "./toolchain-verdict";
+import { credentialKindOf, parseToolchainDeclaration, type ToolchainDeclaration } from "./toolchain-verdict";
 
 export const OBSERVATION_COALESCE_MS = 5 * 60 * 1000;
 const UNDECLARED = "undeclared";
@@ -90,11 +90,15 @@ export function _resetObservationMemo(): void {
 
 type CredentialLookupDb = {
   mcpApiToken: {
-    findUnique(args: unknown): Promise<{ oauthClientId: string | null; kind: string | null } | null>;
+    findUnique(args: unknown): Promise<{
+      oauthClientId: string | null;
+      kind: string | null;
+      oauthClient?: { registrationKind: string; clientName: string } | null;
+    } | null>;
   };
 };
 
-const credentialCache = new Map<string, { credentialRef: string; tokenKind: string | null }>();
+const credentialCache = new Map<string, { credentialRef: string; credentialKind: string | null }>();
 
 /**
  * The stable credential identity for a token. OAuth access tokens rotate
@@ -104,18 +108,19 @@ const credentialCache = new Map<string, { credentialRef: string; tokenKind: stri
 export async function resolveCredentialRef(
   db: CredentialLookupDb,
   token: { tokenId: string; source: ObservationAuthSource },
-): Promise<{ credentialRef: string; tokenKind: string | null } | null> {
+): Promise<{ credentialRef: string; credentialKind: string | null } | null> {
   if (token.source === "session-jwt") return null;
   const cached = credentialCache.get(token.tokenId);
   if (cached) return cached;
   const row = await db.mcpApiToken.findUnique({
     where: { id: token.tokenId },
-    select: { oauthClientId: true, kind: true },
+    select: { oauthClientId: true, kind: true, oauthClient: { select: { registrationKind: true, clientName: true } } },
   });
+  const credentialKind = credentialKindOf(row?.kind, row?.oauthClient);
   const resolved =
     token.source === "oauth" && row?.oauthClientId
-      ? { credentialRef: `oauth:${row.oauthClientId}`, tokenKind: row.kind ?? null }
-      : { credentialRef: `token:${token.tokenId}`, tokenKind: row?.kind ?? null };
+      ? { credentialRef: `oauth:${row.oauthClientId}`, credentialKind }
+      : { credentialRef: `token:${token.tokenId}`, credentialKind };
   if (credentialCache.size >= MEMO_LIMIT) credentialCache.clear();
   credentialCache.set(token.tokenId, resolved);
   return resolved;
@@ -127,6 +132,20 @@ export function readClientInfo(params: unknown): { name: string | null; version:
   if (!info || typeof info !== "object") return null;
   const text = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim().slice(0, 120) : null);
   return { name: text(info.name), version: text(info.version) };
+}
+
+/**
+ * The client and version a capability-drift check needs, or null: only an
+ * initialize from a declared DPF client that reports clientInfo.version
+ * (BI-64795FD0).
+ */
+export function capabilityDriftSubject(input: {
+  method: string;
+  declaration: ToolchainDeclaration | null;
+  clientInfo: { name: string | null; version: string | null } | null;
+}): { clientKind: string; clientVersion: string } | null {
+  if (input.method !== "initialize" || !input.declaration || !input.clientInfo?.version) return null;
+  return { clientKind: input.declaration.client, clientVersion: input.clientInfo.version };
 }
 
 /**
@@ -143,14 +162,22 @@ export function observeConnection(input: {
     const { prisma } = await import("@dpf/db");
     const credential = await resolveCredentialRef(prisma as never, input.token);
     if (!credential) return;
+    const declaration = parseToolchainDeclaration(input.request.url, input.request.headers);
+    const clientInfo = input.method === "initialize" ? readClientInfo(input.params) : null;
     await recordToolchainObservation(prisma as never, {
       credentialRef: credential.credentialRef,
-      declaration: parseToolchainDeclaration(input.request.url, input.request.headers),
+      declaration,
       authSource: input.token.source,
       probableClient: deriveCallerClient(input.request.headers.get("user-agent")) ?? null,
-      clientInfo: input.method === "initialize" ? readClientInfo(input.params) : null,
+      clientInfo,
       now: new Date(),
     });
+    // BI-64795FD0: a client release the capability profile has not verified.
+    const drift = capabilityDriftSubject({ method: input.method, declaration, clientInfo });
+    if (drift) {
+      const { noteObservedClientVersion } = await import("./client-capability-drift");
+      await noteObservedClientVersion(drift.clientKind, drift.clientVersion);
+    }
   })().catch((error: unknown) => {
     console.warn("[agent-toolchain] connection observation skipped:", error);
   });

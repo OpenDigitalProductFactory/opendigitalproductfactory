@@ -321,7 +321,13 @@ A connector can declare the pack it loaded, with `dpf_pack`, `dpf_digest` (the f
 
 `get_fleet_readiness` returns a `toolchain` section: every credential with the copies it was seen loading and their verdicts, one page at a time. `record_surface_readiness` now keys an MCP caller's row by its own credential, so one token cannot overwrite another host's readiness.
 
-The floor's rules (pack below `minPackVersion`, a stored token where the credential policy says OAuth is available, Grok on anything but its client token) apply only once a release sets a floor in `toolchain-version.json`.
+The floor's rules (pack below `minPackVersion`, a stored token where the credential policy says OAuth is available, Grok on anything but its own credentials client) apply only once a release sets a floor in `toolchain-version.json`.
+
+### Grok's own credential
+
+Grok connects with its own `client_credentials` OAuth client, not an operator token (BI-84C1F526, decision DI-4B843FAF62F9, which supersedes DI-2399DE85DC6A). The verdict counts a Grok declaration as using its own credential only when the token was issued to that client. An operator token from Grok is `stale` during the floor's 7-day grace, which starts at `floor.graceStartsAt`, and `below-floor` after it.
+
+To converge it, the agent calls the `issue_grok_credentials_client` MCP tool. The tool returns the caller's client, or creates it once, and refuses a connection narrower than `dpf.read dpf.work dpf.build`. The agent pipes `data.credentialsClient` to the updater with `--grok-client-stdin`. The updater (`scripts/grok_credential.py`) points `[mcp_servers.dpf]` at `bearer_token_file`, hands the client to this pack's `scripts/refresh-grok-mcp-credential.mjs` on standard input and runs its first refresh. The refresher, its `client_credentials` exchange and the Grok credential library ship in this pack, so a host with no source checkout has them; the old `scripts/` paths in the repository are shims. Grok's SessionStart entry (`hooks/grok-credential-refresh.mjs`) refreshes the token when it is missing or near expiry. It is bounded to a few seconds, fails open, and on failure prints one line naming the repair. The secret never appears on a command line, in output or in the tool's audit row. When a credential is missing or expired, the MCP endpoint's 401 names the same repair link as the `TOOLCHAIN:` notice.
 
 ### Version bumps propagate automatically
 

@@ -318,11 +318,15 @@ if node -e "require.resolve(\"tsx\")" >/dev/null 2>&1; then exec node --import t
 echo "issue-grok-credentials-client: no tsx runtime found in the portal image" >&2
 exit 127
 '@ -replace "`r`n", "`n"
-                $clientOut = & docker exec $portal sh -c $grokIssuer issuer 2>$grokErr
-                if ($LASTEXITCODE -eq 0) {
-                    $clientOut | & node (Join-Path $RepoRoot "scripts\refresh-grok-mcp-credential.mjs") write-client --config $GrokConfigPath
+                # Feed the script on stdin (sh -s), as the link step above does.
+                # Passed as a native `sh -c` argument it arrived truncated, the
+                # issuer never ran, docker exited 0 with no output, and
+                # write-client failed on empty input (BI-8D152751).
+                $clientOut = ($grokIssuer | & docker exec -i $portal sh -s 2>$grokErr)
+                if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace("$clientOut")) {
+                    $clientOut | & node (Join-Path $RepoRoot "packages\dpf-skill-pack\scripts\refresh-grok-mcp-credential.mjs") write-client --config $GrokConfigPath
                     if ($LASTEXITCODE -eq 0) {
-                        & node (Join-Path $RepoRoot "scripts\refresh-grok-mcp-credential.mjs") refresh --mcp-url $McpEndpoint --config $GrokConfigPath
+                        & node (Join-Path $RepoRoot "packages\dpf-skill-pack\scripts\refresh-grok-mcp-credential.mjs") refresh --mcp-url $McpEndpoint --config $GrokConfigPath
                         if ($LASTEXITCODE -eq 0) {
                             Write-Ok "Grok credential refreshed into bearer_token_file."
                         } else {
