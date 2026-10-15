@@ -142,6 +142,12 @@ The CoworkerCapabilityNeed queue was the same shape as ImprovementProposal: auto
 - **Service capability retained.** `resolveCapabilityNeed` / `linkNeedToBacklogItem` stay in the service layer (the latter is reused by the reconcile); only the competing *UI surface* was removed.
 - **UX-Fit decision** (`human_cognitive_load`, `principle_decide`, external_coding_agent): fold-to-evidence, same rationale as §3.5 — one lifecycle replaces two.
 
+### 3.6.1 Repeated tool failures file once per tool (BI-891E4E11, 2026-10-14)
+
+The origin is the dedup key, so it must name the thing that is broken. The work-pattern observer keys a repeated tool failure per coworker and route, which is right for coworker evidence. Projected unchanged, it filed one item per coworker (`capability-need` origin `<agentId>:tool:<need>`) and one per agent+route signal (`improvement-signal` origin `IS-*`). On 2026-10-14 that gave 75 open "Stabilize repeated <tool> tool failure" items for 16 tools, 18 of them for `read_source_at_version`.
+
+Both projection paths now ask `toolDefectOrigin` (`apps/web/lib/operate/tool-defect-origin.ts`) first. Observer evidence with `signal: "tool-failure"` and a structured `toolName` files under origin `{kind: "tool-defect", id: <toolName>}`. Each further coworker or signal is an occurrence of that one item, with its own `intake_origin` activity. Grant denials keep the per-coworker origin, because a missing grant is that coworker's gap. The orphan reconcile reads the need's `evidenceJson` so it picks the same origin as the submit path.
+
 ### 3.7 AssuranceFinding front-door convergence + PlatformIssueReport re-scope (2026-06-20)
 
 Continuing the consolidation sweep after the two genuine redundant-queue folds (§3.5, §3.6), an investigation mapped the remaining intake surfaces. The *genuine* disparate queues (ImprovementProposal, CoworkerCapabilityNeed) had a parallel status lifecycle competing with the backlog and are now eliminated. The rest are NOT redundant queues:
