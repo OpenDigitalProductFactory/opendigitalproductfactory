@@ -28,6 +28,7 @@ import {
   type CapabilityServiceHealthProjection,
 } from "@/lib/platform-runtime/service-health";
 import { loadCapabilityServiceHealth } from "@/lib/platform-runtime/service-health-loader";
+import { CapabilityStateDivergenceError } from "@/lib/platform-runtime/capability-state-divergence";
 import { ContextTraceHealthPanel } from "@/components/platform/ContextTraceHealthPanel";
 import {
   CONTEXT_TRACE_SAMPLE_SIZE,
@@ -146,10 +147,11 @@ export default async function RuntimeHealthPage() {
       return { value: null, unavailable: true as const };
     });
   const capabilityPromise = loadCapabilityServiceHealth()
-    .then((value) => ({ value, unavailable: false as const }))
-    .catch(() => {
+    .then((value) => ({ value, unavailable: false as const, divergence: null }))
+    .catch((error: unknown) => {
       logRuntimeHealthReadFailure("capability-authority");
-      return { value: null, unavailable: true as const };
+      return { value: null, unavailable: true as const,
+        divergence: error instanceof CapabilityStateDivergenceError ? error.divergence : null };
     });
   const queuePromise = readQueueSnapshots({ limit: 24 }).catch(() => {
     logRuntimeHealthReadFailure("queue-snapshots");
@@ -222,12 +224,36 @@ export default async function RuntimeHealthPage() {
             className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
           >
             <h2 id="capability-service-health-title" className="text-sm font-semibold text-[var(--dpf-text)]">
-              Capability service requirements
+              {t("runtimeHealth.capabilityServices.heading")}
             </h2>
             <p className="mt-1 text-xs leading-5 text-[var(--dpf-muted)]">
-              Capability authority is unavailable. Service requirements cannot be classified safely
-              right now.
+              {capabilityResult.divergence
+                ? t("runtimeHealth.capabilityServices.disagreement", { count: capabilityResult.divergence.divergences.length })
+                : t("runtimeHealth.capabilityServices.authorityUnavailable")}
             </p>
+            {capabilityResult.divergence && (
+              <details className="mt-2">
+                <summary className="min-h-8 cursor-pointer rounded px-2 py-1 text-xs text-dpf-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-dpf-accent">
+                  {t("runtimeHealth.capabilityServices.disagreementSummary", { count: capabilityResult.divergence.divergences.length })}
+                </summary>
+                <ul className="mt-2 space-y-2 ps-5 text-xs text-dpf-text">
+                  {capabilityResult.divergence.divergences.map((entry) => (
+                    <li key={entry.capabilityId} className="break-words">
+                      <code>{entry.capabilityId}</code>{" — "}
+                      {t("runtimeHealth.capabilityServices.disagreementStates", {
+                        installation: entry.enabledInInstallState
+                          ? t("runtimeHealth.capabilityServices.installEnabled")
+                          : t("runtimeHealth.capabilityServices.installDisabled"),
+                        recorded: entry.liveState === "active" ? t("runtimeHealth.capabilityServices.stateActive")
+                          : entry.liveState === "disabled" ? t("runtimeHealth.capabilityServices.installDisabled")
+                          : t("runtimeHealth.capabilityServices.stateMissing"),
+                      })}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-xs text-dpf-muted">{t("runtimeHealth.capabilityServices.reconcileAdvice")}</p>
+              </details>
+            )}
           </section>
         )}
       </div>
