@@ -9,7 +9,7 @@ import { runtimeTransitionHostContext } from "./runtime-transition-host-context"
 // flag can even be folded into an unconditional refusal in request bundles.
 // Share only this process's boot barrier; durable DB checks remain authoritative.
 const ADMISSION_KEY = Symbol.for("dpf.runtime-capability-admission.v1");
-type Admission = { status: "reconciling" | "ready" | "recovery_required"; generation: number };
+type Admission = { status: "reconciling" | "ready" | "recovery_required"; generation: number; settlement?: Promise<void>; receiptTimer?: ReturnType<typeof setInterval> };
 const admissionGlobal = globalThis as typeof globalThis & { [ADMISSION_KEY]?: Admission };
 const admission = admissionGlobal[ADMISSION_KEY] ??= { status: "reconciling", generation: 0 };
 
@@ -105,9 +105,9 @@ export async function reconcileRuntimeCapabilityTransitionsOnStartup(host: {
   compensate(row: RuntimeTransitionReconcileRow, reason: string): Promise<void>;
   protocolSecret: string;
   reconcileAuthority?(activeTransitionIds: string[]): Promise<void>;
-}): Promise<void> {
-  const generation = ++admission.generation;
-  admission.status = "reconciling";
+}, options: { receiptOnly?: boolean } = {}): Promise<void> {
+  const generation = options.receiptOnly ? admission.generation : ++admission.generation;
+  if (!options.receiptOnly) admission.status = "reconciling";
   let recoveryRequired = false;
   const listActive = async () => prisma.runtimeCapabilityTransition.findMany({
     where: { status: { in: ["pending", "applying", "host_applied", "compensating"] } },
@@ -115,11 +115,12 @@ export async function reconcileRuntimeCapabilityTransitionsOnStartup(host: {
     select: { transitionId: true, status: true, catalogHash: true, previousStateHash: true, desiredStateHash: true, previousKeys: true, desiredKeys: true, previousProfiles: true, desiredProfiles: true, previousServices: true, desiredServices: true, previousStates: true, desiredStates: true, envelope: true, envelopeSignature: true, failure: true, createdAt: true },
   }) as unknown as Promise<RuntimeTransitionReconcileRow[]>;
   const startupRows = await listActive();
-  await host.reconcileAuthority?.(startupRows.map((row) => row.transitionId));
+  if (!options.receiptOnly) await host.reconcileAuthority?.(startupRows.map((row) => row.transitionId));
   await reconcileRuntimeCapabilityTransitions({
     listActive: async () => startupRows,
     readHostReceipt: host.readReceipt,
     protocolSecret: host.protocolSecret,
+    receiptOnly: options.receiptOnly,
     relaunch: host.relaunch,
     compensate: host.compensate,
     inspectHostInstallState: async (row) => {
@@ -138,31 +139,25 @@ export async function reconcileRuntimeCapabilityTransitionsOnStartup(host: {
       });
     },
     completeFromReceipt: async (row, receipt) => {
-      if (row.envelope?.version === 2 && row.envelope.mode === "reconciliation") {
-        const receipts = createPrismaRuntimeTransitionReceipts(prisma as never);
-        if (row.status === "pending" || row.status === "applying") await receipts.markHostApplied(row.transitionId);
-        await receipts.commitSuccess!(row.transitionId, receipt, row.desiredStates);
-        return;
-      }
-      await prisma.$transaction(async (tx) => {
-        for (const [capabilityId, state] of Object.entries(row.desiredStates)) await tx.platformCapability.update({ where: { capabilityId }, data: { state } });
-        await tx.runtimeCapabilityTransition.update({ where: { transitionId: row.transitionId }, data: { status: "succeeded", hostReceipt: receipt, completedAt: new Date() } });
-        await tx.runtimeCapabilityTransitionEvent.create({ data: { transitionId: row.transitionId, outcome: "succeeded", detail: { receipt, source: "startup-reconciler" } } });
-      });
+      const receipts = createPrismaRuntimeTransitionReceipts(prisma as never);
+      await receipts.commitSuccess!(row.transitionId, receipt, row.desiredStates);
     },
     classifyTerminalReceipt: async (row, receipt) => {
       const status = receipt.status === "rolled_back" ? "rolled_back" : receipt.status === "rollback_failed" ? "rollback_failed" : "failed";
       await prisma.$transaction(async (tx) => {
-        await tx.runtimeCapabilityTransition.update({ where: { transitionId: row.transitionId }, data: { status, hostReceipt: receipt, failure: { code: receipt.failure ?? status }, completedAt: new Date() } });
+        const changed = await tx.runtimeCapabilityTransition.updateMany({ where: { transitionId: row.transitionId, status: row.status, envelopeSignature: row.envelopeSignature }, data: { status, hostReceipt: receipt, failure: { code: receipt.failure ?? status }, completedAt: new Date() } });
+        if (changed.count !== 1) return;
         await tx.runtimeCapabilityTransitionEvent.create({ data: { transitionId: row.transitionId, outcome: status, detail: { receipt, source: "startup-reconciler" } } });
       });
       if (status === "rollback_failed") recoveryRequired = true;
     },
     markRecoveryRequired: async (row, reason) => {
-      recoveryRequired = true;
       await prisma.$transaction(async (tx) => {
         const changed = await tx.runtimeCapabilityTransition.updateMany({ where: { transitionId: row.transitionId, status: row.status, envelopeSignature: row.envelopeSignature }, data: { status: "rollback_failed", failure: { ...row.failure, code: reason, recoveryRequired: true }, completedAt: new Date() } });
-        if (changed.count !== 1) throw new Error("runtime_transition_cas_failed");
+        // A concurrent coordinator may already have settled this exact row.
+        // Never replace its terminal result with a stale recovery failure.
+        if (changed.count !== 1) return;
+        recoveryRequired = true;
         await tx.runtimeCapabilityTransitionEvent.create({ data: { transitionId: row.transitionId, outcome: "rollback_failed", detail: { reason, source: "startup-reconciler" } } });
       });
     },
@@ -170,7 +165,23 @@ export async function reconcileRuntimeCapabilityTransitionsOnStartup(host: {
   // Reap a lease that startup bound to a row which reconciliation just made
   // terminal; otherwise rotation/new transitions wait for an unnecessary TTL.
   const remainingRows = await listActive();
-  await host.reconcileAuthority?.(remainingRows.map((row) => row.transitionId));
+  if (!options.receiptOnly) await host.reconcileAuthority?.(remainingRows.map((row) => row.transitionId));
   // An older startup cannot reopen admission after a newer recovery failed.
-  if (admission.generation === generation) admission.status = recoveryRequired ? "recovery_required" : "ready";
+  if (admission.generation === generation && (!options.receiptOnly || recoveryRequired)) admission.status = recoveryRequired ? "recovery_required" : "ready";
+}
+
+/** Cron-independent observation survives the portal recreation that host apply
+ * causes. It consumes signed receipts only; absent receipts grant no host IO. */
+export function startRuntimeCapabilityReceiptSettlement(
+  settle: () => Promise<void> = async () => reconcileRuntimeCapabilityTransitionsOnStartup(await createProductionRuntimeTransitionHost(), { receiptOnly: true }),
+  report: (error: unknown) => void = error => console.error("[runtime-capabilities] Receipt settlement failed:", error),
+): void {
+  if (admission.receiptTimer) return;
+  const tick = () => {
+    if (admission.settlement) return;
+    admission.settlement = Promise.resolve().then(settle).catch(report).finally(() => { admission.settlement = undefined; });
+  };
+  admission.receiptTimer = setInterval(tick, 30_000);
+  admission.receiptTimer.unref?.();
+  tick();
 }

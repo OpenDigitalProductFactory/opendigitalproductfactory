@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { classifyRuntimeInstallState, coordinateRuntimeCapabilityTransition, computeCapabilityStateVersion, createPrismaRuntimeTransitionReceipts, reconcileRuntimeCapabilityTransitions } from "./transition-coordinator";
 import type { RuntimeCapabilityCoordinatorDeps, RuntimeCapabilityTransitionReceipts } from "./transition-coordinator";
-import { signTransitionPayload } from "./transition-protocol";
+import { signTransitionPayload, type RuntimeTransitionReceipt } from "./transition-protocol";
 import { requiredRuntimeServicesAreHealthy } from "./runtime-capability-executor";
 import { computeCapabilityStateVersion as computeHostStateVersion } from "../../../../scripts/lib/capability-state-hash.mjs";
 
@@ -137,7 +137,7 @@ describe("dual-baseline reconciliation coordinator", () => {
     const envelope = vi.mocked(d.receipts.createPending).mock.calls[0]![0].envelope;
     const states = { ...input.previousStates, ...(stale ? { "runtime:build": "disabled" } : {}) };
     const tx = { $executeRaw: vi.fn(async () => 1),
-      runtimeCapabilityTransition: { findUnique: vi.fn(async () => ({ status: "host_applied", envelope, previousStates: input.previousStates, desiredStates: input.desiredStates })), updateMany: vi.fn(async () => ({ count: 1 })) },
+      runtimeCapabilityTransition: { findUnique: vi.fn(async () => ({ status: "host_applied", envelope, previousStates: input.previousStates, desiredStates: input.desiredStates, hostReceipt: null as RuntimeTransitionReceipt | null })), updateMany: vi.fn(async () => ({ count: 1 })) },
       platformCapability: { findMany: vi.fn(async () => Object.entries(states).map(([capabilityId, state]) => ({ capabilityId, state }))), updateMany: vi.fn(async () => ({ count: 1 })) },
       runtimeCapabilityTransitionEvent: { create: vi.fn(async () => undefined) } };
     const receipts = createPrismaRuntimeTransitionReceipts({ $transaction: async (operation: (tx: unknown) => unknown) => operation(tx) } as never);
@@ -153,9 +153,65 @@ describe("dual-baseline reconciliation coordinator", () => {
     await expect(f.receipts.commitSuccess!(f.input.transitionId, f.receipt, f.input.desiredStates)).rejects.toThrow("runtime_transition_database_stale");
     expect(f.tx.platformCapability.updateMany).not.toHaveBeenCalled();
   });
+  it("accepts an identical concurrent completion without rewriting capability state or audit", async () => {
+    const f = await databaseFixture();
+    const row = await f.tx.runtimeCapabilityTransition.findUnique();
+    f.tx.runtimeCapabilityTransition.findUnique.mockResolvedValue({ ...row, status: "succeeded", hostReceipt: f.receipt });
+    await f.receipts.commitSuccess!(f.input.transitionId, f.receipt, f.input.desiredStates);
+    expect(f.tx.platformCapability.updateMany).not.toHaveBeenCalled();
+    expect(f.tx.runtimeCapabilityTransitionEvent.create).not.toHaveBeenCalled();
+  });
+  it("atomically commits a pending row from a verified receipt after its coordinator disappeared", async () => {
+    const f = await databaseFixture();
+    const row = await f.tx.runtimeCapabilityTransition.findUnique();
+    f.tx.runtimeCapabilityTransition.findUnique.mockResolvedValue({ ...row, status: "pending" });
+    await f.receipts.commitSuccess!(f.input.transitionId, f.receipt, f.input.desiredStates);
+    expect(f.tx.runtimeCapabilityTransition.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: "succeeded", hostAppliedAt: expect.any(Date), hostReceipt: f.receipt }),
+    }));
+  });
+  it("lets the original coordinator observe a winning receipt worker but refuses a rollback", async () => {
+    const model = { updateMany: vi.fn().mockResolvedValue({ count: 0 }), findUnique: vi.fn().mockResolvedValue({ status: "succeeded" }) };
+    const receipts = createPrismaRuntimeTransitionReceipts({ runtimeCapabilityTransition: model } as never);
+    await expect(receipts.markHostApplied("RCT-1")).resolves.toBeUndefined();
+    model.findUnique.mockResolvedValue({ status: "rolled_back" });
+    await expect(receipts.markHostApplied("RCT-1")).rejects.toThrow("runtime_transition_cas_failed");
+  });
+  it("refuses a different receipt after terminal completion", async () => {
+    const f = await databaseFixture();
+    const row = await f.tx.runtimeCapabilityTransition.findUnique();
+    f.tx.runtimeCapabilityTransition.findUnique.mockResolvedValue({ ...row, status: "succeeded", hostReceipt: { ...f.receipt, completedAt: new Date(0).toISOString() } });
+    await expect(f.receipts.commitSuccess!(f.input.transitionId, f.receipt, f.input.desiredStates)).rejects.toThrow("runtime_transition_cas_failed");
+    expect(f.tx.platformCapability.updateMany).not.toHaveBeenCalled();
+  });
 });
 
 describe("runtime capability transition coordinator", () => {
+  it("settles a late receipt without relaunching or compensating on earlier receipt-only passes", async () => {
+    const secret = "x".repeat(32);
+    const envelope = persistedEnvelope;
+    const row = { ...request, ...envelope, previousStates: request.previousStates, desiredStates: request.desiredStates, createdAt: new Date(1_000), status: "pending", envelope, envelopeSignature: signTransitionPayload(envelope, secret) };
+    const unsigned = { ...envelope, status: "applied" as const, completedAt: new Date(2_000).toISOString(), beforeHash: envelope.previousStateHash, afterHash: envelope.desiredStateHash, observedServices: envelope.desiredServices };
+    const receipt = { ...unsigned, signature: signTransitionPayload(unsigned, secret) };
+    const completeFromReceipt = vi.fn(), relaunch = vi.fn(), compensate = vi.fn(), markRecoveryRequired = vi.fn();
+    const d = { listActive: async () => [row], readHostReceipt: vi.fn().mockResolvedValue(null), completeFromReceipt, classifyTerminalReceipt: vi.fn(), relaunch, compensate, markRecoveryRequired, protocolSecret: secret, now: () => 900_000, receiptOnly: true };
+    await reconcileRuntimeCapabilityTransitions(d);
+    expect(relaunch).not.toHaveBeenCalled(); expect(compensate).not.toHaveBeenCalled(); expect(markRecoveryRequired).not.toHaveBeenCalled();
+    d.readHostReceipt.mockResolvedValue(receipt);
+    await reconcileRuntimeCapabilityTransitions(d);
+    expect(completeFromReceipt).toHaveBeenCalledExactlyOnceWith(row, receipt);
+    completeFromReceipt.mockRejectedValueOnce(Object.assign(new Error("serialization conflict"), { code: "P2034" }));
+    await expect(reconcileRuntimeCapabilityTransitions(d)).rejects.toThrow("serialization conflict");
+    expect(markRecoveryRequired).not.toHaveBeenCalled();
+  });
+
+  it("does not resume an in-flight compensation during receipt-only settlement", async () => {
+    const secret = "x".repeat(32);
+    const row = { ...request, ...persistedEnvelope, previousStates: request.previousStates, desiredStates: request.desiredStates, createdAt: new Date(1_000), status: "compensating", envelope: persistedEnvelope, envelopeSignature: signTransitionPayload(persistedEnvelope, secret) };
+    const compensate = vi.fn();
+    await reconcileRuntimeCapabilityTransitions({ listActive: async () => [row], readHostReceipt: vi.fn(), completeFromReceipt: vi.fn(), classifyTerminalReceipt: vi.fn(), relaunch: vi.fn(), compensate, markRecoveryRequired: vi.fn(), protocolSecret: secret, receiptOnly: true });
+    expect(compensate).not.toHaveBeenCalled();
+  });
   it("captures request identity before asynchronous projection work", async () => {
     const mutable = structuredClone(request);
     const d = deps();

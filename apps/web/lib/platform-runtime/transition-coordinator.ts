@@ -56,7 +56,7 @@ export type RuntimeCapabilityCoordinatorDeps = {
 
 type TransitionModel = {
   findFirst(args: unknown): Promise<{ transitionId: string; status: string } | null>;
-  findUnique(args: unknown): Promise<{ status: string; requestedById: string; previousStates: Readonly<Record<string, string>>; desiredStates: Readonly<Record<string, string>>; catalogHash: string; previousStateHash: string; desiredStateHash: string; previousKeys: string[]; desiredKeys: string[]; previousProfiles: string[]; desiredProfiles: string[]; previousServices: string[]; desiredServices: string[]; envelope: RuntimeTransitionEnvelope | null; envelopeSignature: string | null; failure?: RuntimeTransitionReconcileRow["failure"] } | null>;
+  findUnique(args: unknown): Promise<{ status: string; hostReceipt?: RuntimeTransitionReceipt | null; requestedById: string; previousStates: Readonly<Record<string, string>>; desiredStates: Readonly<Record<string, string>>; catalogHash: string; previousStateHash: string; desiredStateHash: string; previousKeys: string[]; desiredKeys: string[]; previousProfiles: string[]; desiredProfiles: string[]; previousServices: string[]; desiredServices: string[]; envelope: RuntimeTransitionEnvelope | null; envelopeSignature: string | null; failure?: RuntimeTransitionReconcileRow["failure"] } | null>;
   create(args: unknown): Promise<unknown>;
   updateMany(args: unknown): Promise<{ count: number }>;
 };
@@ -131,17 +131,28 @@ export function createPrismaRuntimeTransitionReceipts(prisma: TransitionPrisma):
     }, { isolationLevel: "Serializable" }),
     markFailed: (transitionId, failure) => prisma.$transaction(async (tx) => { const r = await tx.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: { in: ["pending", "applying"] } }, data: { status: "failed", failure: { code: failure }, completedAt: new Date() } }); if (r.count !== 1) throw new Error("runtime_transition_cas_failed"); await tx.runtimeCapabilityTransitionEvent.create({ data: { transitionId, outcome: "failed", detail: { failure } } }); }, { isolationLevel: "Serializable" }),
     markHostOutcome: (transitionId, receipt) => prisma.$transaction(async (tx) => { const status = receipt.status === "rolled_back" ? "rolled_back" : receipt.status === "rollback_failed" ? "rollback_failed" : "failed"; const r = await tx.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: { in: ["pending", "applying"] } }, data: { status, hostReceipt: receipt, failure: { code: receipt.failure ?? status }, completedAt: new Date() } }); if (r.count !== 1) throw new Error("runtime_transition_cas_failed"); await tx.runtimeCapabilityTransitionEvent.create({ data: { transitionId, outcome: status, detail: { receipt } } }); }, { isolationLevel: "Serializable" }),
-    markHostApplied: async (transitionId) => { const r = await prisma.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: { in: ["pending", "applying"] } }, data: { status: "host_applied", hostAppliedAt: new Date() } }); if (r.count !== 1) throw new Error("runtime_transition_cas_failed"); },
+    markHostApplied: async (transitionId) => {
+      const r = await prisma.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: { in: ["pending", "applying"] } }, data: { status: "host_applied", hostAppliedAt: new Date() } });
+      if (r.count === 1) return;
+      const row = await prisma.runtimeCapabilityTransition.findUnique({ where: { transitionId }, select: { status: true } });
+      // A receipt worker may win the same completion. commitSuccess still
+      // verifies the immutable envelope and identical terminal receipt.
+      if (row?.status !== "host_applied" && row?.status !== "succeeded") throw new Error("runtime_transition_cas_failed");
+    },
     commitSuccess: (transitionId, receipt, desiredStates) => prisma.$transaction(async (tx) => {
       // BI-8BA6AC56: $executeRaw — void-returning advisory lock crashes $queryRaw under Prisma 7.8.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('runtime-capability-transition'))`;
       let managed = Object.keys(desiredStates);
       let baseline: Readonly<Record<string, string>> | undefined;
+      const row = await tx.runtimeCapabilityTransition.findUnique({ where: { transitionId }, select: { status: true, envelope: true, previousStates: true, desiredStates: true, hostReceipt: true } });
+      if (!row?.envelope
+        || canonicalTransitionPayload(row.envelope) !== canonicalTransitionPayload(Object.fromEntries(Object.keys(row.envelope).map(key => [key, receipt[key as keyof typeof receipt]])))
+        || !sameStateMap(row.desiredStates, desiredStates)) throw new Error("runtime_transition_cas_failed");
+      if (row.status === "succeeded" && row.hostReceipt && canonicalTransitionPayload(row.hostReceipt) === canonicalTransitionPayload(receipt)) return;
+      if (!["pending", "applying", "host_applied"].includes(row.status)) throw new Error("runtime_transition_cas_failed");
+      const recoveredHostAt = row.status !== "host_applied" ? new Date() : undefined;
       if (receipt.version === 2 && receipt.mode === "reconciliation") {
-        const row = await tx.runtimeCapabilityTransition.findUnique({ where: { transitionId }, select: { status: true, envelope: true, previousStates: true, desiredStates: true } });
-        if (!row || row.status !== "host_applied" || row.envelope?.version !== 2 || row.envelope.mode !== "reconciliation"
-          || canonicalTransitionPayload(row.envelope) !== canonicalTransitionPayload(Object.fromEntries(Object.keys(row.envelope).map(key => [key, receipt[key as keyof typeof receipt]])))
-          || !sameStateMap(row.desiredStates, desiredStates)) throw new Error("runtime_transition_cas_failed");
+        if (row.envelope.version !== 2 || row.envelope.mode !== "reconciliation") throw new Error("runtime_transition_cas_failed");
         const rows = await tx.platformCapability.findMany({ where: { capabilityId: { startsWith: "runtime:" } }, select: { capabilityId: true, state: true } });
         if (!sameStateMap(Object.fromEntries(rows.map(capability => [capability.capabilityId, capability.state])), row.previousStates)) throw new Error("runtime_transition_database_stale");
         baseline = row.previousStates;
@@ -149,10 +160,10 @@ export function createPrismaRuntimeTransitionReceipts(prisma: TransitionPrisma):
       }
       for (const capabilityId of managed) {
         const state = desiredStates[capabilityId];
-        const updated = await tx.platformCapability.updateMany({ where: { capabilityId, ...(baseline ? { state: baseline[capabilityId] } : {}) }, data: { state } });
+        const updated = await tx.platformCapability.updateMany({ where: { capabilityId, state: (baseline ?? row.previousStates)[capabilityId] }, data: { state } });
         if (updated.count !== 1) throw new Error(`runtime_capability_missing:${capabilityId}`);
       }
-      const completed = await tx.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: "host_applied" }, data: { status: "succeeded", hostReceipt: receipt, completedAt: new Date() } });
+      const completed = await tx.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: { in: ["pending", "applying", "host_applied"] } }, data: { status: "succeeded", hostReceipt: receipt, completedAt: new Date(), ...(recoveredHostAt ? { hostAppliedAt: recoveredHostAt } : {}) } });
       if (completed.count !== 1) throw new Error("runtime_transition_cas_failed");
       await tx.runtimeCapabilityTransitionEvent.create({ data: { transitionId, outcome: "succeeded", detail: { receipt } } });
     }, { isolationLevel: "Serializable" }),
@@ -214,6 +225,8 @@ export async function reconcileRuntimeCapabilityTransitions(deps: {
   inspectHostInstallState?(row: RuntimeTransitionReconcileRow): Promise<"previous" | "desired" | "unknown">;
   markCleanPrevious?(row: RuntimeTransitionReconcileRow, reason: string): Promise<void>;
   protocolSecret: string;
+  /** Settle already-written receipts only; never replay or compensate host IO. */
+  receiptOnly?: boolean;
   now?: () => number;
 }): Promise<void> {
   for (const row of await deps.listActive()) {
@@ -230,12 +243,14 @@ export async function reconcileRuntimeCapabilityTransitions(deps: {
       continue;
     }
     if (row.status === "compensating") {
+      if (deps.receiptOnly) continue;
       try { await deps.compensate(row, row.failure?.code ?? "interrupted_compensation"); }
       catch (error) { await deps.markRecoveryRequired(row, error instanceof Error ? error.message : "runtime_transition_compensation_failed"); }
       continue;
     }
     const receipt = await deps.readHostReceipt(row.transitionId);
     if (!receipt) {
+      if (deps.receiptOnly) continue;
       const now = deps.now?.() ?? Date.now();
       // Never mint a new host side effect from an expired authority envelope.
       // createdAt is deliberately not used: only the signed expiry is authority.
@@ -266,6 +281,9 @@ export async function reconcileRuntimeCapabilityTransitions(deps: {
       if (status === "applied") await deps.completeFromReceipt(row, receipt);
       else await deps.classifyTerminalReceipt(row, receipt);
     } catch (error) {
+      // Serializable completion may race the still-live coordinator. The next
+      // observation rechecks its durable result; contention is not corruption.
+      if (deps.receiptOnly && error && typeof error === "object" && "code" in error && error.code === "P2034") throw error;
       await deps.markRecoveryRequired(row, error instanceof Error ? error.message : "invalid_host_receipt");
     }
   }

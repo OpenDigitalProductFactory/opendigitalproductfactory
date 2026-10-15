@@ -18,7 +18,34 @@ describe("runtime admission across server module caches", () => {
     vi.resetModules(); vi.resetAllMocks();
     mocks.count.mockResolvedValue(0); mocks.findMany.mockResolvedValue([]);
   });
-  afterEach(() => { Reflect.deleteProperty(globalThis, stateKey); });
+  afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); Reflect.deleteProperty(globalThis, stateKey); });
+
+  it("keeps one receipt observer across module caches and skips overlapping passes", async () => {
+    vi.useFakeTimers();
+    let release!: () => void;
+    const blocked = new Promise<void>(resolve => { release = resolve; });
+    const settle = vi.fn().mockReturnValueOnce(blocked).mockResolvedValue(undefined);
+    const report = vi.fn();
+    (await load()).startRuntimeCapabilityReceiptSettlement(settle, report);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(settle).toHaveBeenCalledOnce();
+    vi.resetModules();
+    (await load()).startRuntimeCapabilityReceiptSettlement(settle, report);
+    release(); await vi.advanceTimersByTimeAsync(30_000);
+    expect(settle).toHaveBeenCalledTimes(2);
+    expect(report).not.toHaveBeenCalled();
+  });
+
+  it("retries observation after an IO failure without reopening failed startup admission", async () => {
+    vi.useFakeTimers();
+    const module = await load();
+    const settle = vi.fn().mockRejectedValueOnce(new Error("receipt mount unavailable")).mockResolvedValue(undefined);
+    const report = vi.fn();
+    module.startRuntimeCapabilityReceiptSettlement(settle, report);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(settle).toHaveBeenCalledTimes(2); expect(report).toHaveBeenCalledOnce();
+    await expect(module.assertRuntimeCapabilityTransitionAdmission()).rejects.toThrow("runtime_capability_reconciliation_in_progress");
+  });
 
   it("refuses a request before this process completes startup", async () => {
     await expect((await load()).assertRuntimeCapabilityTransitionAdmission())
