@@ -801,7 +801,13 @@
     "apps/web/lib/documents/generation/brand-master.ts": [
       "docs/architecture/document-generation-facility.md"
     ],
+    "apps/web/lib/documents/generation/create-family-documents.ts": [
+      "docs/architecture/document-generation-facility.md"
+    ],
     "apps/web/lib/documents/generation/create-presentation.ts": [
+      "docs/architecture/document-generation-facility.md"
+    ],
+    "apps/web/lib/documents/generation/family-document.ts": [
       "docs/architecture/document-generation-facility.md"
     ],
     "apps/web/lib/documents/generation/render-flat.ts": [
@@ -1046,6 +1052,9 @@
     ],
     "apps/web/lib/mcp/packs/deliberation-siem-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
+    ],
+    "apps/web/lib/mcp/packs/document-family-tools.ts": [
+      "docs/architecture/document-generation-facility.md"
     ],
     "apps/web/lib/mcp/packs/feedback-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
@@ -3208,7 +3217,9 @@
     "docs/architecture/document-generation-facility.md": [
       "apps/web/lib/documents/document-previews.ts",
       "apps/web/lib/documents/generation/brand-master.ts",
+      "apps/web/lib/documents/generation/create-family-documents.ts",
       "apps/web/lib/documents/generation/create-presentation.ts",
+      "apps/web/lib/documents/generation/family-document.ts",
       "apps/web/lib/documents/generation/render-flat.ts",
       "apps/web/lib/documents/generation/render-store.ts",
       "apps/web/lib/documents/generation/render.ts",
@@ -3216,6 +3227,7 @@
       "apps/web/lib/documents/preview-manifest.ts",
       "apps/web/lib/ea/diagram-import/parse-flat-odg.ts",
       "apps/web/lib/ea/view-drawing.ts",
+      "apps/web/lib/mcp/packs/document-family-tools.ts",
       "tools/doctools/smoke.sh"
     ],
     "docs/architecture/dpf-patterns.md": [
