@@ -52,6 +52,7 @@ function harness(overrides: Partial<FamilyDocumentDeps> = {}) {
     loadImage,
     resolveOrganizationId: async () => "org-1",
     now: () => new Date("2026-10-14T12:00:00Z"),
+    resolveLocale: async () => "en-GB",
     ...overrides,
   };
   return { deps, render, save, loadImage };

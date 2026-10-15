@@ -1,6 +1,6 @@
 ---
 name: create-office-document
-description: "Produce and revise branded reports, letters, sheets and diagrams."
+description: "Produce branded reports, letters, sheets and diagrams."
 # Agent Skills standard fields (Surface A: Claude Code)
 disable-model-invocation: false
 user-invocable: true

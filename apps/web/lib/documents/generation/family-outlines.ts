@@ -142,8 +142,10 @@ export type LetterOutline = {
   recipient: LetterParty;
   /** Usually left out: the brand master's letterhead carries the organization. */
   sender?: LetterParty;
-  /** Defaults to today, written out ("14 October 2026"). */
+  /** Defaults to today, written out in the letter's language. */
   date?: string;
+  /** A language tag such as en or fr-CA; defaults to the organization's locale. */
+  language?: string;
   reference?: string;
   /** Defaults to "Dear <recipient name>,". */
   salutation?: string;
@@ -168,13 +170,21 @@ export function letterOutlineIssues(outline: LetterOutline): string[] {
   return issues;
 }
 
-const LETTER_DATE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+/** Today written out in the letter's language ("14 October 2026", "October 14, 2026"). */
+function letterDate(now: Date, locale: string): string {
+  try {
+    return new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(now);
+  } catch {
+    return now.toISOString().slice(0, 10);
+  }
+}
 
 function party(value: LetterParty): LetterParty {
   return compact({ name: value.name, lines: value.lines });
 }
 
-export function outlineToLetterSpec(outline: LetterOutline, now: Date): LetterSpec {
+/** `locale` is the organization's; a `language` on the outline wins. */
+export function outlineToLetterSpec(outline: LetterOutline, now: Date, locale: string): LetterSpec {
   const recipientName = typeof outline.recipient?.name === "string" ? outline.recipient.name.trim() : "";
   return compact({
     family: "letter" as const,
@@ -182,7 +192,8 @@ export function outlineToLetterSpec(outline: LetterOutline, now: Date): LetterSp
     subject: outline.subject,
     sender: outline.sender ? party(outline.sender) : undefined,
     recipient: party(outline.recipient),
-    date: outline.date?.trim() || LETTER_DATE.format(now),
+    language: outline.language,
+    date: outline.date?.trim() || letterDate(now, outline.language ?? locale),
     reference: outline.reference,
     salutation: outline.salutation?.trim() || `Dear ${recipientName},`,
     paragraphs: outline.paragraphs,
@@ -283,8 +294,8 @@ export type DrawingOutline = {
   connectors?: DrawingOutlineConnector[];
 };
 
-/** Grid for shapes with no position: four per row, left to right, in millimetres. */
-export const DRAWING_GRID = { columns: 4, left: 20, top: 30, stepX: 75, stepY: 45, width: 50, height: 25 } as const;
+/** Grid for shapes with no position: four per row in reading order, in millimetres. */
+export const DRAWING_GRID = { columns: 4, originX: 20, originY: 30, stepX: 75, stepY: 45, width: 50, height: 25 } as const;
 
 function drawingPages(outline: DrawingOutline): unknown[] | null {
   if (Array.isArray(outline.pages)) return outline.pages;
@@ -323,8 +334,8 @@ function placeShape(shape: DrawingOutlineShape, gridIndex: number) {
   return compact({
     id: shape.id,
     kind: shape.kind ?? "rect",
-    x: unplaced ? DRAWING_GRID.left + column * DRAWING_GRID.stepX : shape.x,
-    y: unplaced ? DRAWING_GRID.top + row * DRAWING_GRID.stepY : shape.y,
+    x: unplaced ? DRAWING_GRID.originX + column * DRAWING_GRID.stepX : shape.x,
+    y: unplaced ? DRAWING_GRID.originY + row * DRAWING_GRID.stepY : shape.y,
     width: shape.width ?? DRAWING_GRID.width,
     height: shape.height ?? DRAWING_GRID.height,
     label: shape.label,

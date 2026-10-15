@@ -83,6 +83,8 @@ export type FamilyDocumentDeps = {
   /** The caller's organization (the install organization). */
   resolveOrganizationId?: () => Promise<string>;
   now?: () => Date;
+  /** The organization's locale, for text the platform writes (a letter's date). */
+  resolveLocale?: () => Promise<string>;
 };
 
 /** Resolves one outline image at a field path; records an issue when the reference is not a stored image. */

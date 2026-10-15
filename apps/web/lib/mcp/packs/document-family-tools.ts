@@ -129,6 +129,7 @@ export const DOCUMENT_FAMILY_TOOL_DEFINITIONS: ToolDefinition[] = [
         recipient: LETTER_PARTY,
         sender: { ...LETTER_PARTY, description: "Usually omitted: the letterhead carries the organization." },
         date: { type: "string", description: "As it should be printed; defaults to today." },
+        language: { type: "string", description: "Language tag such as en or fr-CA; defaults to the organization's locale." },
         reference: { type: "string" },
         salutation: { type: "string" },
         paragraphs: { type: "array", items: { type: "string" }, description: "The body, one entry per paragraph." },

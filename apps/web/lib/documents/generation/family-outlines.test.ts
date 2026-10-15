@@ -88,7 +88,7 @@ function thankYouLetter(overrides: Partial<LetterOutline> = {}): LetterOutline {
 
 describe("outlineToLetterSpec", () => {
   it("fills a dated, addressed letter with a conventional salutation and closing when the outline leaves them out", () => {
-    const spec = outlineToLetterSpec(thankYouLetter(), NOW);
+    const spec = outlineToLetterSpec(thankYouLetter(), NOW, "en-GB");
     expect(spec).toMatchObject({
       family: "letter",
       title: "Your gift",
@@ -114,6 +114,7 @@ describe("outlineToLetterSpec", () => {
         reference: "GIFT-42",
       }),
       NOW,
+      "en-GB",
     );
     expect(spec).toMatchObject({
       title: "Thank-you letter",
@@ -126,7 +127,13 @@ describe("outlineToLetterSpec", () => {
   });
 
   it("titles a letter with no subject after its recipient", () => {
-    expect(outlineToLetterSpec(thankYouLetter({ subject: undefined }), NOW).title).toBe("Letter to Ada Lovelace");
+    expect(outlineToLetterSpec(thankYouLetter({ subject: undefined }), NOW, "en-GB").title).toBe("Letter to Ada Lovelace");
+  });
+
+  it("writes the date in the organization's locale unless the letter names its own language", () => {
+    expect(outlineToLetterSpec(thankYouLetter(), NOW, "en-US").date).toBe("October 14, 2026");
+    const french = outlineToLetterSpec(thankYouLetter({ language: "fr" }), NOW, "en-US");
+    expect(french).toMatchObject({ date: "14 octobre 2026", language: "fr" });
   });
 
   it("names the field to fix when the outline is not shaped like a letter", () => {

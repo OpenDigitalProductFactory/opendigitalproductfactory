@@ -7,6 +7,7 @@
 // whole outline again with the documentId and the result is the next
 // DocumentVersion of the same Document.
 
+import type { OrgLocaleClient } from "@/lib/org-locale/org-locale";
 import {
   createFamilyDocument,
   type FamilyDocumentDeps,
@@ -28,6 +29,12 @@ import {
   type ReportOutline,
   type SheetOutline,
 } from "./family-outlines";
+
+/** The organization's locale (OrgSettings), for a letter's written-out date. */
+async function defaultResolveLocale(): Promise<string> {
+  const [{ prisma }, { resolveOrgLocale }] = await Promise.all([import("@dpf/db"), import("@/lib/org-locale/org-locale")]);
+  return (await resolveOrgLocale(prisma as unknown as OrgLocaleClient)).locale;
+}
 
 /** Document previews are thumbnails on the document page; 72 dpi keeps an A4 page near 600 px. */
 const PREVIEW_DPI = 72;
@@ -99,7 +106,8 @@ export function createLetter(input: CreateInput<LetterOutline>, deps: FamilyDocu
       documentId: input.outline?.documentId,
       actorPrincipalId: input.actorPrincipalId,
       shapeIssues: letterOutlineIssues(input.outline),
-      buildContent: () => outlineToLetterSpec(input.outline, (deps.now ?? (() => new Date()))()),
+      buildContent: async () =>
+        outlineToLetterSpec(input.outline, (deps.now ?? (() => new Date()))(), await (deps.resolveLocale ?? defaultResolveLocale)()),
       previewPages: () => PREVIEW_PAGES.letter,
     },
     deps,

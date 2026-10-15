@@ -102,6 +102,7 @@ function pipeline(store: ReturnType<typeof memoryStore>): FamilyDocumentDeps {
     },
     loadImage: async () => null,
     now: () => new Date("2026-10-14T12:00:00Z"),
+    resolveLocale: async () => "en-US",
   };
 }
 
