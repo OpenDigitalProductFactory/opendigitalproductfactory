@@ -7,7 +7,7 @@ status: active
 - **Umbrella item:** BI-D4BB5AE3 (delivery-large), Workroom WC-7C3279BB
 - **Design:** [2026-10-07-agent-toolchain-release-delivery-design.md](../specs/2026-10-07-agent-toolchain-release-delivery-design.md)
 - **Epic:** EP-CLIENT-CONFIG
-- **Decisions:** DI-7FFCDEC4AB67 (shape), DI-2399DE85DC6A (Grok credential)
+- **Decisions:** DI-7FFCDEC4AB67 (shape), DI-4B843FAF62F9 (Grok credential; supersedes DI-2399DE85DC6A)
 
 > **For agentic workers:** execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff.
 
@@ -23,7 +23,7 @@ status: active
 | P2b | `--from-portal` convergence, declaration in shipped descriptors, JSON report, host-writer duplicate fix | BI-DE1E6485 | P0, P1, P2a |
 | P3 | Verdict, `clientInfo`, `TOOLCHAIN:` instructions, observation store | BI-54469E18 | P1 |
 | P4 | Announce on boot after a release; `/ops/self-upgrade` clients section | BI-E7974C18 | P3 |
-| P5 | Grok `agent-client` token | BI-84C1F526 | P2b, P3 |
+| P5 | Grok's own OAuth credentials client (re-scoped by DI-4B843FAF62F9) | BI-84C1F526 | P2b, P3 |
 | P6 | Floor enforcement (read-only below floor) | BI-DFC0270C | P3, P5 |
 | P7 | Installed-session freshness advisory | BI-A67B65F4 | P1, P2b |
 | P8 | Client capabilities as one verified profile, drift flag, weekly re-verification | BI-64795FD0 | P3 |
@@ -48,6 +48,8 @@ status: active
   - behaviour with `DPF_MCP_URL` set;
   - the ordering between the pin hook and the updater.
 - Record the result per client in the manifest's `clients` map, and the evidence on BI-52934B3E.
+
+As built: the spike was never run live. P2b chose the carriers (header for Claude Code, Codex and Antigravity; query for Grok), so they are encoded, not live-verified.
 
 **Verification:** AC-MANIFEST and AC-SINGLE-VERSION, via:
 - route tests;
@@ -79,7 +81,7 @@ status: active
   - re-exec from the verified pack;
   - `--report-json`;
   - calls to BI-B9F359AC's `converge_claude_project_plugins` and `converge_claude_project_connectors`.
-- Descriptor generation: the declaration is written into `claude.mcp.json` and `antigravity.mcp.json` and into the Codex and Grok shapes, outside any `${DPF_MCP_URL}` expansion.
+- Declaration: as built (#6329), the updater writes it into the shared copy it converges, not into the checked-in descriptors. Claude Code, Codex and Antigravity use the `X-DPF-Toolchain` header; Grok uses the query on its literal URL. A query after a `${DPF_CLAUDE_MCP_URL:-…}` template breaks an endpoint without its own query.
 - `scripts/hooks/lib/pin-plugin-mcp-url.mjs` preserves the query.
 - `apps/web/lib/auth/mcp-host-writer.ts` stops writing a duplicate `dpf` entry.
 - Claude user/local scope: back up, then `claude mcp remove dpf -s user|local` for a `dpf` server that targets the DPF endpoint path.
@@ -131,17 +133,20 @@ status: active
 
 ### P5 — Grok credential (BI-84C1F526)
 
-**Files:**
-- `packages/db/prisma/schema/core-identity.prisma`: `McpApiToken.clientKind`, and the `agent-client` kind.
-- `apps/web/lib/auth/mcp-api-token.ts`.
-- `apps/web/lib/mcp/transport-auth.ts`: exempt `agent-client` from `isPatResolutionDisabled`.
-- An `issue_agent_client_token` MCP tool in an existing auth pack.
-- The updater's Grok path.
+Re-scoped by DI-4B843FAF62F9, which supersedes DI-2399DE85DC6A. #6208 (BI-5BCDB07C) already gave Grok an OAuth `client_credentials` client with a refresher. So there is no `agent-client` token kind, no `McpApiToken.clientKind` column and no PAT-switch exemption.
+
+**Files (as built, #6385):**
+- `apps/web/lib/agent-toolchain/toolchain-verdict.ts`: Grok on its registered credentials client is its own credential; an operator PAT is `stale` in grace and `below-floor` after.
+- `apps/web/lib/agent-toolchain/grok-credential-issue.ts` and the `issue_grok_credentials_client` tool in `surface-readiness-pack.ts`: returns or creates the caller's own client through `ensureGrokCredentialsClient`.
+- `apps/web/lib/governed-tool-audit.ts`: `secretResultKeys` keeps the secret out of the audit row.
+- `apps/web/lib/mcp/transport-auth.ts`: a 401 carries the manifest repair link.
+- `packages/dpf-skill-pack/scripts/grok_credential.py`: the updater's `--grok-client-stdin`.
+- The refresher moves into the skill pack; `hooks/grok-credential-refresh.mjs` runs from Grok's SessionStart entry.
 
 **Verification:** AC-GROK, via:
-- token tests;
-- an updater test with a fixture Grok home;
-- a live Grok connection verdict on this host.
+- verdict, tool and audit-redaction tests;
+- updater and refresher tests with a fixture Grok home;
+- a live Grok connection verdict on this host after release.
 
 **Rollback:** revert. Operator PATs keep working until the floor applies.
 
@@ -156,6 +161,8 @@ status: active
 - a ratchet test on `start_build`, `write_sandbox_file`, `run_sandbox_command` and `tasks/submit`;
 - scope fixtures;
 - a live call from a below-floor client after a test floor raise on the dev install.
+
+**As built (#6386):** default-deny. A tool is allowed below the floor only with `annotations.readOnlyHint: true`, or with `sideEffect: false` and every required grant ending in `_read`, or on the repair allowlist (`load_tools`, `record_surface_readiness`, `issue_grok_credentials_client`). A fault in the check fails open. The floor stays null in `toolchain-version.json` for now.
 
 **Rollback:** lower `minPackVersion` in the next release. The grace period is the first line of safety.
 
@@ -181,6 +188,7 @@ status: active
 - `docs/architecture/agent-client-capability-parity.md` gets a rendered matrix.
 - `apps/web/lib/agent-toolchain/fleet-readiness.ts`: unverified-version flag.
 - An intake call with the key `client-capability:<client>@<version>`.
+- `hookPlane` per client and per host (`cli`, `desktop`, `ide`): events, deny envelope, permission modes, evidence; unproven shown as a gap (founder 2026-10-13).
 - A weekly `scheduledAgentTask` on `apps/web/lib/actions/agent-task-scheduler.ts`.
 
 **Verification:** AC-CAPABILITY-SOURCE and AC-CAPABILITY-DRIFT, via:
@@ -207,7 +215,7 @@ status: active
 | OBJ-OBSERVE | AC-OBSERVE-STORE | AgentToolchainObservation | connection declares toolchain | BI-54469E18 |
 | OBJ-OBSERVE, OBJ-FLOOR | AC-INSTRUCT | buildAgentHostInstructions | connection declares toolchain | BI-54469E18 |
 | OBJ-OBSERVE | AC-RELEASE-VISIBLE | announceToolchainReleaseOnBoot | release publishes toolchain | BI-E7974C18 |
-| OBJ-GROK, OBJ-FLOOR | AC-GROK | issue_agent_client_token | agent converges host | BI-84C1F526 |
+| OBJ-GROK, OBJ-FLOOR | AC-GROK | issue_grok_credentials_client | agent converges host | BI-84C1F526 |
 | OBJ-FLOOR | AC-FLOOR-READONLY | toolchainFloorRefusalResult | connection declares toolchain | BI-DFC0270C |
 | OBJ-FLOOR | AC-FLOOR-SCOPE | resolveToolchainVerdict | connection declares toolchain | BI-DFC0270C |
 | OBJ-BACKSTOP | AC-BACKSTOP | hooks/toolchain-freshness.mjs | agent converges host | BI-A67B65F4 |
@@ -217,11 +225,16 @@ status: active
 
 ## Risks and rollback
 
-- **The carrier breaks auth.** No descriptor changes until the P1 spike measures it per client. The header carrier is the fallback.
+- **The carrier breaks auth.** The OAuth clients use the header, which leaves the connector URL unchanged. The P1 spike was not run live.
 - **The floor refuses a legitimate caller.** Only declared clients are enforced. The auth rule comes from `mcpClientBearerHeaderRequired`. The grace period applies, and the default-deny test has an explicit repair-path allowlist. The floor is lowered by the next release.
 - **The migration lands on a live install.** It is additive only (new model, nullable fields), applied through `/ops/self-upgrade`, never by hand.
 - **Overlap with BI-B9F359AC.** P2b calls its functions after it merges. If its updater report shape changes, P2b adapts; the other session has been asked to signal that.
 
 ## Backlog coverage
 
-Pending. The umbrella is `delivery-large`, so `record_plan_backlog_coverage` needs the spec-approval baseline first. Spec approval needs independent reviewers, dispatched over a signed-in (OAuth) DPF connection. No coverage receipt exists yet, and implementation does not start until one does. The receipt, deliverable-to-item mappings and dependencies will be copied here when recorded.
+Recorded. `record_plan_backlog_coverage` validated the plan across 10 live backlog items on 2026-10-08 (receipt `cmuyta6756nve01owspphdhhw`). The children were then implemented, one PR each:
+
+- Merged: #6132 (P1, BI-52934B3E), #6121 (P2a, BI-772023BC), #6329 (P2b, BI-DE1E6485), #6375 (P3, BI-54469E18), #6311 (P7, BI-A67B65F4).
+- Open on 2026-10-14: #6384 (P4, BI-E7974C18), #6385 (P5, BI-84C1F526), #6386 (P6, BI-DFC0270C).
+- P8 (BI-64795FD0): #6387, open on 2026-10-14.
+- Supporting fixes: #6106 (BI-F8C661D0, merged), #6169 (BI-71488AD8, merged), #6365 (BI-F25D7E88, merged), #6382 (BI-1D5E2644, open).

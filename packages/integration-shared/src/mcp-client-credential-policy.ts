@@ -1,31 +1,28 @@
+import { bearerHeaderRequiredFor } from "./client-capability-rules.cjs";
+import { CLIENT_CAPABILITY_PROFILE } from "./client-capability-profile.generated";
+
 /**
  * Whether a DPF MCP client config for `endpoint` must carry the bearer-header
  * fallback (BI-46B636B0).
  *
- * OAuth support is client-specific. Codex loopback OAuth is verified; other
- * clients retain their existing compatibility behavior until verified.
- * A generated configuration is not evidence of authenticated readiness.
+ * OAuth support is client-specific. Since BI-64795FD0 this is a pure function
+ * of the client capability profile (packages/dpf-skill-pack/client-capabilities.json)
+ * and the endpoint: OAuth is used only where the profile states the client can
+ * complete it on that transport (https, or loopback http). Anything unproven
+ * keeps the bearer. A generated configuration is not evidence of authenticated
+ * readiness.
  *
  * Both writers of the client config (the portal's setup snippets and the
  * toolchain bootstrap planner) consult this one predicate; the SessionStart
  * health hooks apply the same rule to diagnose a config that cannot
- * authenticate.
+ * authenticate. Its fixture, mcp-credential-policy-cases.json, is generated
+ * from the same profile.
  */
 export type McpClient = "codex" | "claude" | "vscode" | "grok" | "antigravity";
 export type McpAuthMode = "oauth" | "legacy";
 
 export function mcpClientBearerHeaderRequired(endpoint: string, client: McpClient = "claude", authMode: McpAuthMode = "oauth"): boolean {
-  if (authMode === "legacy" || client === "grok") return true;
-  let parsed: URL;
-  try {
-    parsed = new URL(endpoint);
-  } catch {
-    return true;
-  }
-  if (parsed.username || parsed.password) return true;
-  if (parsed.protocol === "https:") return false;
-  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
-  return !(client === "codex" && parsed.protocol === "http:" && loopback);
+  return bearerHeaderRequiredFor(CLIENT_CAPABILITY_PROFILE, endpoint, client, authMode);
 }
 
 /**

@@ -34,7 +34,7 @@ For locally capability-activated services, runtime profile names are mechanicall
 | `runtime:browser-automation` | `runtime-browser-automation` | `browser-use` |
 | `runtime:durable-automation` | `runtime-durable-automation` | `redis`, `redis-exporter`, `inngest` |
 | `runtime:local-speech` | `runtime-local-speech` | `dpf-tts` (speech-to-text is provider-managed, not a local service — see below) |
-| `runtime:deep-observability` | `runtime-deep-observability` | Prometheus, Grafana, Loki, Alloy, and PostgreSQL exporter |
+| `runtime:deep-observability` | `runtime-deep-observability` | Prometheus, Grafana, and PostgreSQL exporter (Loki and Alloy are always-on `runtime:core` services, BI-F8024A9D). The operator chooses it at install or in Settings → Monitoring (BI-83260BB3). |
 | `runtime:external-ai` | `runtime-external-ai` on Linux | Ollama from the Linux overlay; configured external providers remain provider-managed |
 | `runtime:adp-integration` | `integrations-adp` (separate-distribution exception) | `adp` |
 | `runtime:development` | `dev` and `integration-test` (lifecycle-only) | `dev-postgres`, `dev-init`, `dev-portal`, and `integration-test-harness` |
