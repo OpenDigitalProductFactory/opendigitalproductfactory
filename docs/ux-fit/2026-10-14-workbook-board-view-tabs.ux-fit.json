@@ -5,7 +5,6 @@
   "scope": {
     "files": [
       "apps/web/app/(shell)/workbooks/[workbookId]/page.tsx",
-      "apps/web/components/workbooks/KanbanBoard.tsx",
       "apps/web/components/workbooks/WorkbookViewTabs.tsx"
     ]
   },
