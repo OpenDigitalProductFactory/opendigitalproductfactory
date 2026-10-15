@@ -605,3 +605,15 @@ describe("failRun records an operator-readable reason", () => {
     expect(mocks.update.mock.calls.at(-1)?.[0]?.data.reason.length).toBeLessThanOrEqual(200);
   });
 });
+
+// BI-0E216B0E: a late failure (a retried step, a stale worker) must never turn a
+// run that boot reconciliation already proved deployed back into a failure.
+describe("failRun never overwrites a succeeded run", () => {
+  it("returns the succeeded row untouched", async () => {
+    const succeeded = { runId: "SUR-DONE", status: "succeeded" };
+    mocks.findUnique.mockResolvedValueOnce(succeeded);
+    mocks.update.mockClear();
+    await expect(failRun("SUR-DONE", "admission-reopened-before-swap: the drain already ended (completed)")).resolves.toBe(succeeded);
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+});

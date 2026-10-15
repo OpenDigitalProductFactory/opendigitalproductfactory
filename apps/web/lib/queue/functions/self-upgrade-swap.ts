@@ -20,7 +20,7 @@ import {
 } from "@/lib/self-upgrade/preflight";
 import { isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
 import { classifyBuildFailure, formatClassifiedExcerpt } from "@/lib/self-upgrade/build-failure-classifier";
-import { completeRun, failRun, recordPromoterReadiness, recordRunRecoveryPoint } from "@/lib/self-upgrade/run-store";
+import { completeRun, failRun, getRun, recordPromoterReadiness, recordRunRecoveryPoint } from "@/lib/self-upgrade/run-store";
 import { clearCooldown, recordCooldown } from "@/lib/self-upgrade/cooldown";
 import { emitUpgradeEvent } from "@/lib/self-upgrade/notifications";
 import {
@@ -64,12 +64,25 @@ export type SelfUpgradeSwapContext = {
   resolvedPromoterDigest?: string;
 };
 
+/** Run states the swap step must never act on again. */
+const FINALIZED_RUN_STATUSES = new Set(["succeeded", "failed", "cancelled", "skipped"]);
+
 async function loadPromoterRuntime() {
   return await import("@/lib/self-upgrade/promoter");
 }
 
 export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Record<string, unknown>> {
   const { runId, quiescenceRunId, dryRun, cooldownMinutes } = ctx;
+  // BI-0E216B0E: the promoter replaces the very portal running this step, so
+  // the job engine retries it on the new portal, where boot reconciliation has
+  // already finalized the run. A retry must not take another backup, re-bind
+  // the handoff to already-migrated state, swap again, or fail a finished run
+  // (SUR-6D9543E6 was reconciled succeeded, then failed by its own retry).
+  const existing = await getRun(runId);
+  if (existing && FINALIZED_RUN_STATUSES.has(existing.status)) {
+    console.warn(`[self-upgrade] ${runId}: swap step re-entered after the run finalized (${existing.status}); nothing to do`);
+    return { ok: existing.status === "succeeded", status: "already-finalized", runId, quiescenceRunId, runStatus: existing.status };
+  }
   // Cooldowns start when the failure happens, not when the attempt began an
   // hour ago (the drain may have waited that long).
   const now = new Date();

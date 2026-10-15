@@ -425,6 +425,13 @@ export async function failRun(runId: string, error: string, reason?: string): Pr
   // The derivation reuses the SAME classification this function already ran
   // below to fingerprint the corrective BI and then threw away; callers that
   // already know the cause (preflight, release-target) pass it explicitly.
+  // BI-0E216B0E: a succeeded run is proven deployed; a late failure from a
+  // retried step or stale worker must not rewrite it (SUR-6D9543E6).
+  const current = await prisma.selfUpgradeRun.findUnique({ where: { runId } });
+  if (current?.status === "succeeded") {
+    console.warn(`[self-upgrade] ${runId}: ignoring a failure reported after the run succeeded: ${error.slice(0, 200)}`);
+    return current;
+  }
   const resolvedReason = (reason ?? deriveFailureReason(error)).slice(0, FAILURE_REASON_MAX);
   const updated = await prisma.selfUpgradeRun.update({
     where: { runId },
