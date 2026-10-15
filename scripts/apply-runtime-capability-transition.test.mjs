@@ -7,6 +7,7 @@ import { createHash, createHmac } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { signTransitionPayload, verifyTransitionSignature } from "./lib/transition-signing.mjs";
+import { mountOverride } from "./lib/govern-capability-compose-args.mjs";
 
 const script = fileURLToPath(new URL("./apply-runtime-capability-transition.mjs", import.meta.url)).replace(/^\/(.:\/)/, "$1");
 const canonical = (v) => JSON.stringify(v, Object.keys(v).sort());
@@ -85,9 +86,60 @@ async function validTransition(dir, health = "healthy", version = 1, { previousR
   await writeFile(join(dir, "install-state.json"), JSON.stringify({ schemaVersion: 1, installerVersion: "test", platform: "linux", arch: "amd64", enabledRuntimeCapabilities: previous.keys, capabilityCatalogHash: catalog.catalogHash, capabilityStateVersion: previous.hash, ...stateExtras }));
   const fakeDocker = join(dir, "fake-docker.mjs");
   const psRows = desired.required.map((Service) => ({ Service, State: "running", Health: health }));
-  await writeFile(fakeDocker, `const args = process.argv.slice(2).join(" ");\nif (args.includes("ps --format json")) process.stdout.write(${JSON.stringify(JSON.stringify(psRows))});\n`);
+  await writeFile(fakeDocker, `const args = process.argv.slice(2).join(" ");\nif (args.includes("config --format json")) process.stdout.write('{}');\nelse if (args.includes("ps --format json")) process.stdout.write(${JSON.stringify(JSON.stringify(psRows))});\n`);
   return { value, signature, catalogPath: catalogPath.pathname.replace(/^\/(.:\/)/, "$1"), desired, env: { DPF_RUNTIME_TRANSITION_SECRET_FILE: await secretFile(dir), DPF_RUNTIME_TRANSITION_ENVELOPE: Buffer.from(JSON.stringify(value)).toString("base64url"), DPF_RUNTIME_TRANSITION_SIGNATURE: signature, DPF_PROMOTER_STATE_DIR: dir, DPF_CAPABILITY_CATALOG_PATH: catalogPath.pathname.replace(/^\/(.:\/)/, "$1"), PROMOTE_COMPOSE_PROJECT: "dpf", DPF_DOCKER_BIN: process.execPath, DPF_DOCKER_PREFIX_ARGS: JSON.stringify([fakeDocker]) } };
 }
+
+test("daemon-visible mount preflight refuses before state mutation when a required bind cannot be mapped", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-transition-unmapped-bind-"));
+  const fixture = await validTransition(dir);
+  const calls = join(dir, "docker-calls.jsonl");
+  const fakeDocker = join(dir, "mount-docker.mjs");
+  await writeFile(fakeDocker, `import { appendFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+appendFileSync(${JSON.stringify(calls)}, JSON.stringify(args) + '\\n');
+if (args.includes('config')) process.stdout.write(JSON.stringify({services:{loki:{volumes:[{type:'bind',source:'/host-source/monitoring/loki/loki-config.yml',target:'/etc/loki/local-config.yaml',read_only:true}]}}}));
+else if (args.includes('inspect')) process.stdout.write('[]');
+else process.exitCode = 43;
+`);
+  const before = await readFile(join(dir, "install-state.json"), "utf8");
+  const result = run({ ...fixture.env, DPF_DOCKER_PREFIX_ARGS: JSON.stringify([fakeDocker]), HOSTNAME: "promoter-fixture", PROMOTE_SOURCE: "/host-source" });
+  assert.notEqual(result.status, 0);
+  assert.equal(await readFile(join(dir, "install-state.json"), "utf8"), before);
+  const executed = (await readFile(calls, "utf8")).trim().split(/\r?\n/).map(JSON.parse);
+  assert.equal(executed.some(args => args.some(arg => ['up', 'stop', 'rm'].includes(arg))), false, "an unmapped bind must never reach host mutation");
+  const receipt = JSON.parse(await readFile(join(dir, "runtime-capability-transitions/RCT-test.json"), "utf8"));
+  assert.equal(receipt.failure, "runtime_compose_mount_preflight_failed");
+});
+
+for (const hostRoot of ['D:\\My $DPF', '/opt/My $DPF']) test(`signed actuator maps bind sources like the canonical mount mapper: ${hostRoot}`, async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-transition-mapped-bind-"));
+  const fixture = await validTransition(dir);
+  const config = { services: { loki: { volumes: [
+    { type: 'bind', source: '/host-source/monitoring/$$config.yml', target: '/etc/config', read_only: true, bind: { create_host_path: false } },
+    { type: 'volume', source: 'existing-data', target: '/data' },
+    { type: 'bind', source: '/var/run/docker.sock', target: '/var/run/docker.sock' },
+  ] } } };
+  const mounts = [{ Type: 'bind', Source: hostRoot, Destination: '/host-source' }];
+  const expected = mountOverride(config, mounts, { composeRoot: '/host-source' });
+  const captured = join(dir, 'observed-mounts.json');
+  const fakeDocker = join(dir, 'mapped-docker.mjs');
+  const psRows = fixture.desired.required.map(Service => ({ Service, State: 'running', Health: 'healthy' }));
+  await writeFile(fakeDocker, `import { readFileSync, writeFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+if (args.includes('config')) process.stdout.write(${JSON.stringify(JSON.stringify(config))});
+else if (args.includes('inspect')) process.stdout.write(${JSON.stringify(JSON.stringify(mounts))});
+else if (args.includes('up')) {
+  if (!args.includes('--wait') || args[args.indexOf('--wait-timeout') + 1] !== '180') process.exit(44);
+  const override = args[args.lastIndexOf('-f') + 1];
+  writeFileSync(${JSON.stringify(captured)}, readFileSync(override));
+} else if (args.includes('ps')) process.stdout.write(${JSON.stringify(JSON.stringify(psRows))});
+`);
+  const result = run({ ...fixture.env, DPF_DOCKER_PREFIX_ARGS: JSON.stringify([fakeDocker]), HOSTNAME: 'promoter-fixture', PROMOTE_SOURCE: '/host-source' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(await readFile(captured, 'utf8')), expected);
+  assert.equal(JSON.parse(await readFile(join(dir, 'runtime-capability-transitions/RCT-test.json'), 'utf8')).status, 'applied');
+});
 
 test("the actuator reads its packaged hash-bound catalog without a host source checkout", async () => {
   const dir = await mkdtemp(join(tmpdir(), "dpf-transition-packaged-catalog-"));
@@ -204,6 +256,7 @@ test("failed reconciliation never restores over a subsequent host writer", async
   const actuator = join(dir, "intervening-writer.mjs"), calls = join(dir, "calls.jsonl"), statePath = join(dir, "install-state.json");
   await writeFile(actuator, `import fs from 'node:fs';
 const args = process.argv.slice(2); fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify(args)+'\\n');
+if(args.includes('config')) process.stdout.write('{}');
 if(args.includes('up')) { const state=JSON.parse(fs.readFileSync(${JSON.stringify(statePath)},'utf8')); state.capabilityStateVersion=${JSON.stringify("f".repeat(64))}; fs.writeFileSync(${JSON.stringify(statePath)},JSON.stringify(state)); process.exit(1); }
 `);
   const result = run({ ...fixture.env(), DPF_DOCKER_PREFIX_ARGS: JSON.stringify([actuator]) });

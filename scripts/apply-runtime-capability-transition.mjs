@@ -189,10 +189,56 @@ const baseArgs = ["compose", "--project-name", composeProject]; for (const f of 
 const dockerPrefix = process.env.DPF_DOCKER_PREFIX_ARGS ? JSON.parse(process.env.DPF_DOCKER_PREFIX_ARGS) : [];
 if (!Array.isArray(dockerPrefix) || dockerPrefix.some((value) => typeof value !== "string")) await fail("invalid_docker_configuration");
 const compose = (args, timeout = 9 * 60 * 1000) => spawnSync(process.env.DPF_DOCKER_BIN ?? "docker", [...dockerPrefix, ...baseArgs, ...args], { encoding: "utf8", timeout });
+// Match govern-capability-compose-args.mountOverride without extending the
+// signed actuator's dependency closure. Only bind overrides are persisted;
+// rendered configuration may contain credentials and must never be logged.
+try {
+  const profiles = [...new Set([...previous.profiles, ...desired.profiles])].sort().flatMap(profile => ["--profile", profile]);
+  const rendered = compose([...profiles, "config", "--format", "json"], 30_000);
+  if (rendered.status !== 0) throw new Error();
+  const mapStrings = (value, transform) => typeof value === "string" ? transform(value)
+    : Array.isArray(value) ? value.map(entry => mapStrings(entry, transform))
+      : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, mapStrings(entry, transform)])) : value;
+  const config = mapStrings(JSON.parse(rendered.stdout), value => value.replaceAll("$$", "$"));
+  if (!config || typeof config !== "object" || Array.isArray(config)) throw new Error();
+  const hasBinds = Object.values(config.services ?? {}).some(service => service.volumes?.some(volume => volume.type === "bind"));
+  let mounts = [];
+  if (hasBinds) {
+    if (!process.env.HOSTNAME) throw new Error();
+    const inspected = spawnSync(process.env.DPF_DOCKER_BIN ?? "docker", [...dockerPrefix, "inspect", process.env.HOSTNAME, "--format", "{{json .Mounts}}"], { encoding: "utf8", timeout: 30_000 });
+    if (inspected.status !== 0) throw new Error();
+    mounts = JSON.parse(inspected.stdout);
+    if (!Array.isArray(mounts)) throw new Error();
+  }
+  const within = (path, root) => path === root || path.startsWith(`${root}/`);
+  const trim = path => path.replace(/\/$/, "");
+  const bindings = mounts.filter(mount => mount.Type === "bind")
+    .map(mount => ({ ...mount, Destination: trim(mount.Destination) })).sort((a, b) => b.Destination.length - a.Destination.length);
+  const root = trim(process.env.PROMOTE_SOURCE ?? "/host-source");
+  const services = {};
+  for (const [name, service] of Object.entries(config.services ?? {})) {
+    const volumes = [];
+    for (const volume of service.volumes ?? []) {
+      if (volume.type !== "bind") continue;
+      const binding = bindings.find(mount => within(volume.source, mount.Destination));
+      if (binding) volumes.push(mapStrings({ ...volume, source: trim(binding.Source.replaceAll("\\", "/")) + volume.source.slice(binding.Destination.length) }, value => value.replaceAll("$", () => "$$")));
+      else if (within(volume.source, root)) throw new Error();
+    }
+    if (volumes.length) services[name] = { volumes };
+  }
+  if (Object.keys(services).length) {
+    const overridePath = join(receiptDir, `${envelope.transitionId}.compose-mounts.json`);
+    await atomicJson(overridePath, { services });
+    process.on("exit", () => { try { rmSync(overridePath); } catch {} });
+    baseArgs.push("-f", overridePath);
+  }
+} catch { await fail("runtime_compose_mount_preflight_failed"); }
 const reconcile = (from, to) => {
   const disabled = from.required.filter((service) => !to.required.includes(service));
   if (disabled.length) { const stopped = compose(["stop", ...disabled]); if (stopped.status !== 0) return stopped; const removed = compose(["rm", "-f", ...disabled]); if (removed.status !== 0) return removed; }
-  const args = []; for (const p of to.profiles) args.push("--profile", p); args.push("up", "-d", ...to.required);
+  // Detached startup is not readiness. Bound each readiness wait, leaving room
+  // for rollback; legacy stop/remove subprocesses retain their own timeouts.
+  const args = []; for (const p of to.profiles) args.push("--profile", p); args.push("up", "-d", "--wait", "--wait-timeout", "180", ...to.required);
   return compose(args);
 };
 const observe = () => {

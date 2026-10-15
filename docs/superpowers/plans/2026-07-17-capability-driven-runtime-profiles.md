@@ -12,6 +12,12 @@ status: active
 
 **Tech Stack:** Node.js ESM, JSON manifests, Docker Compose profiles, Next.js 16/React, TypeScript, Vitest, Node test runner, PowerShell 5.1+, POSIX shell.
 
+## Recovery.93 bind-path failure checkpoint
+
+The first live reconciliation reached the host and failed on a Loki bind rooted at the promoter's `/host-source`; rollback also failed, leaving the portal Created. Preserve RCT-BI5-91-20261015, its failed approvals, signed receipt and journal. No retry or lock clearing is authorized by this repair. The existing daemon-visible mount mapping in `govern-capability-compose-args.mjs` is the behavioral reference. The actuator must render and validate mounts before install-state mutation, carry the translated override through apply, observation and rollback, preserve named volumes and literal dollars, and refuse unresolved sources without launching a mutation. Its signed actuator identity must continue to cover the runtime implementation; avoid an unbound helper dependency. Verify realistic Windows and POSIX mappings, missing mount/render failures, unchanged state on preflight refusal, and existing protocol/replay/rollback tests. Source checks do not establish live recovery. Independent restoration currently has no executable Windows procedure; an exact bounded operator exception is pending.
+
+Readiness uses Compose `up --wait --wait-timeout 180` for apply and rollback before the existing signed health observation. This bounds each readiness wait; legacy stop/remove calls retain their own timeouts, so no total ten-minute guarantee is claimed. [Docker documents the readiness options](https://docs.docker.com/reference/cli/docker/compose/up/); its [start implementation](https://github.com/docker/compose/blob/main/pkg/compose/start.go) preserves successful one-shot dependency semantics. Actual source verification: unmapped-bind regression RED before the repair, two wait-argument regressions RED before adding the wait, then 79 affected Node tests passed. Native/full-runtime gates and repaired live reconciliation remain unrun.
+
 ---
 
 ## Chunk 1: Canonical capability and service projection
