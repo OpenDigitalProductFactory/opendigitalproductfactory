@@ -25,8 +25,8 @@ dead end or allowing an unproven parent to close. No child BI is a new deliverab
 1. Freeze this plan and record native atomic coverage before source changes.
 2. Add failing policy and adapter regressions. Prove that valid decomposed
    completion can close, while xlarge implementation remains denied.
-3. Reuse the existing governed plan-coverage validator and immutable artifact
-   reader in a bounded aggregate-completion helper. Select only the newest
+3. Reuse the existing current-baseline coverage projector, its recorded immutable
+   plan identity and the deliverable graph validator in a bounded helper. Select only the newest
    parent coverage. Require a valid decomposed graph, at least two distinct
    real children, no self mapping and every required child done. Missing,
    malformed, stale, cyclic, unavailable or incomplete evidence stays closed.
@@ -74,3 +74,9 @@ reviewed baseline and outcome mapping, and database serialization. A failed chil
 read is not delivery. No live record is changed to make the fix pass. Revert the
 policy/adapter repair to restore the previous closed boundary; historical
 evidence remains untouched. No migration.
+
+Original native atomic coverage receipt cmv9ehpkr0ev401nzpgt0s8ji accepted this
+plan at ea309e1e09852297be856bc57fcafa4a2be9108d before production changes.
+Final immutable coverage is refreshed after publication. Reusing the established
+baseline/plan reader avoids re-reviewing an unchanged immutable plan or rewriting
+a delivered workroom's head solely to satisfy aggregate closure.

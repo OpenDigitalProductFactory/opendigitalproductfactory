@@ -211,6 +211,12 @@ const GENERIC_REMEDIES: Record<ReadinessCode, string | null> = {
  * the item body and the live install, not the reviewer lane.
  */
 const SHAPE_REMEDIES: Partial<Record<ReadinessShape, Partial<Record<ReadinessCode, string>>>> = {
+  xlarge: {
+    PLAN_COVERAGE_REQUIRED:
+      "Use the initiative's current governed decomposition covering at least two distinct existing children. Repair the named coverage issue; do not create duplicate children or change the initiative's shape to close it.",
+    DELIVERY_EVIDENCE_REQUIRED:
+      "Complete every required child in the existing decomposition. The parent's PR merge or deployment cannot substitute for child delivery.",
+  },
   small: {
     RESEARCH_REQUIRED:
       "For a small item, research is the reproduction: the defect or gap confirmed on a named ref and a failing-to-passing proof. For a small fix, record both with record_execution_evidence (kind \"source_verified\" with the source URL, and kind \"test_pass\"); that satisfies research at claim. Otherwise record it with record_initiative_evidence(gate: \"research\").",

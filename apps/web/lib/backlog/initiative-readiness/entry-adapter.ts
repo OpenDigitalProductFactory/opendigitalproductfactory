@@ -424,6 +424,7 @@ export function projectBacklogItemReadiness(args: {
    */
   buildDesign?: { reviewPassed: boolean; acceptanceCriteriaCount: number } | null;
   completion?: {
+    decomposition?: ReadinessEvidenceState;
     deliveryEvidence: ReadinessEvidenceState;
     acceptanceEvidence: ReadinessEvidenceState;
     objectiveReconciliation: ReadinessEvidenceState;
@@ -582,6 +583,7 @@ export function projectBacklogItemReadiness(args: {
     plan: pass(coverage),
     planReview: pass(state(evidence, "plan-review")),
     planCoverage: pass(coverage),
+    decomposition: args.completion?.decomposition,
     traceability: pass(coverage),
     dependencies: dependency === "missing" ? "not-applicable" : dependency,
     authorization: args.authorization,
