@@ -13,7 +13,8 @@ status: draft
 ## Backlog coverage
 
 - Parent: `BI-957915CB`
-- Decision: atomic, delivered as two PRs in order. PR 1 (`feat/document-permissions-and-files`) closes the security gap; PR 2 (`feat/document-permissions-and-files-2`) adds upload and collections on top of the enforced store.
+- Decision: atomic
+- Delivery: two PRs in order. PR 1 (`feat/document-permissions-and-files`) closes the security gap; PR 2 (`feat/document-permissions-and-files-2`) adds upload and collections on top of the enforced store.
 - Baseline: the spec-approval baseline minted from the design's objective and acceptance markers
 - Receipt: blocked-by: record_plan_backlog_coverage binds the immutable blob of this exact file, so the receipt is minted after this commit is pushed and is held in the live backlog against BI-957915CB
 - Rationale: upload and collections are only safe once the store enforces access, and both read through the same viewer clause, so they are one deliverable shipped in a dependency order rather than separate items.
