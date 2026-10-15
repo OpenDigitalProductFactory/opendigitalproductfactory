@@ -365,6 +365,8 @@ async function main(argv = process.argv.slice(2)) {
     root,
     graceDays: args.graceDays,
     policy,
+    // Why every claim-dependent tree was kept, or how ownership was proven (BI-83345811).
+    claims: { available: claims.available, reason: claims.reason },
     decisions,
     summary,
     removals: args.dryRun ? [] : removals,
