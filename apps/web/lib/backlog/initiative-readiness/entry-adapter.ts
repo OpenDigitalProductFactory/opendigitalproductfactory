@@ -9,6 +9,7 @@ import type { InitiativeArtifactRef } from "./receipt-schema";
 import { readinessCodesForEvidenceDimension } from "./readiness-guidance";
 import type { DeliverySensitivityAssessment } from "./delivery-sensitivity";
 import { effectiveShape } from "./shape-requirements";
+import { judgedDesignDigest } from "./judged-design-artifact";
 import type {
   InitiativeReadinessDecision,
   InitiativeReadinessFacts,
@@ -212,11 +213,13 @@ export function persistedTerminalCompletionDecision(
  * plan-review because "this document is a design specification", and a
  * receipt recorded against the plan read as stale against the design digest).
  */
-type AcceptedDigests = { canonical: string | null; plan: string | null };
+// `canonical` is the design the design gates judge (judged-design-artifact.ts,
+// BI-4592CF69); `baseline` is the approved one plan reviews may still cite.
+type AcceptedDigests = { canonical: string | null; baseline: string | null; plan: string | null };
 
 function isStaleFor(gate: string, artifactDigest: unknown, digests: AcceptedDigests): boolean {
   if (gate === "plan-review") {
-    const accepted = [digests.plan, digests.canonical].filter((value): value is string => Boolean(value));
+    const accepted = [digests.plan, digests.baseline].filter((value): value is string => Boolean(value));
     return accepted.length > 0 && !accepted.includes(String(artifactDigest));
   }
   return Boolean(digests.canonical) && artifactDigest !== digests.canonical;
@@ -240,26 +243,14 @@ function projectGateReceipt(
 }
 
 /**
- * BI-7531B73C: a design amended after its spec approval. A review that fails
- * the approved design can only be answered by changing the design, and every
- * receipt against the changed design reads stale against the baseline's digest.
- * When a design-bound receipt recorded after the baseline names another design
- * digest, the approval is owed again: spec approval reads stale, readiness
- * routes it, and the existing supersession path mints the new baseline.
- * Plan-review receipts bind the plan, so they never count.
+ * BI-7531B73C: a design amended after its spec approval owes the approval
+ * again. Which design is "amended" is decided once, in judged-design-artifact.ts
+ * (BI-4592CF69), so readiness judges the same design the reviewer routes name.
+ * A failed review of the amended design stays a failure.
  */
-function designAmendedAfterBaseline(
-  activities: readonly InitiativeReadinessActivity[],
-  baseline: Baseline | null,
-  planDigest: string | null,
-): boolean {
-  if (!baseline) return false;
-  return activities.some((activity) => {
-    if (activity.kind !== "initiative_gate_receipt" || activity.recordedAt <= baseline.recordedAt) return false;
-    if (normalizeGate(activity.gateKey) === "plan-review") return false;
-    const digest = object(activity.payload)?.artifactDigest;
-    return typeof digest === "string" && digest !== baseline.artifactDigest && digest !== planDigest;
-  });
+function specApprovalState(recorded: ReadinessEvidenceState, amended: boolean): ReadinessEvidenceState {
+  if (!amended) return recorded;
+  return recorded === "fail" ? "fail" : "stale";
 }
 
 function latestGateStates(
@@ -464,7 +455,17 @@ export function projectBacklogItemReadiness(args: {
   // retroactively stale author research against the previously recorded source.
   const digest = baseline.current?.origin === "item-body" ? null : baseline.current?.artifactDigest ?? null;
   const projectedCoverage = projectPlanCoverage(inherited ? inherited.activities : args.activities, baseline.current);
-  const digests: AcceptedDigests = { canonical: digest, plan: projectedCoverage.planDigest };
+  // Only the scope owner can amend its design. A child that inherits the
+  // parent's scope keeps judging the parent's baseline: it cannot re-approve it.
+  const judged = inherited
+    ? { amended: false, judgedDigest: digest }
+    : judgedDesignDigest({ baseline: baseline.current, activities: args.activities, planDigest: projectedCoverage.planDigest });
+  const designAmended = judged.amended;
+  const digests: AcceptedDigests = {
+    canonical: digest === null ? null : judged.judgedDigest,
+    baseline: digest,
+    plan: projectedCoverage.planDigest,
+  };
   const ownReceipts = latestGateStates(args.activities, digests, args.item.itemId);
   const parentReceipts = inherited ? latestGateStates(inherited.activities, digests, inherited.parentItemId) : null;
   const receipts = parentReceipts
@@ -569,11 +570,7 @@ export function projectBacklogItemReadiness(args: {
     canonicalDesign: pass(baselineState),
     canonicalDesignAmbiguous: recognizeMerge ? false : baseline.ambiguous,
     research: pass(researchState),
-    specApproval: pass(
-      !inherited && designAmendedAfterBaseline(args.activities, baseline.current, projectedCoverage.planDigest)
-        ? "stale"
-        : state(evidence, "spec-approval"),
-    ),
+    specApproval: pass(specApprovalState(state(evidence, "spec-approval"), designAmended)),
     specialistReviews: {
       architecture: pass(state(evidence, "architecture-review")),
       data: state(evidence, "data-review"),
@@ -592,7 +589,9 @@ export function projectBacklogItemReadiness(args: {
     capsuleIdentity: args.capsuleIdentity,
     deliveryEvidence: args.completion?.deliveryEvidence ?? "missing",
     acceptanceEvidence: args.completion?.acceptanceEvidence ?? "missing",
-    objectiveBaseline: pass(baselineState),
+    // The amended spec design must be approved before its baseline is current
+    // again. A body baseline versions acceptance, not a spec, so it never is.
+    objectiveBaseline: pass(designAmended && digest !== null ? "stale" : baselineState),
     objectiveBaselineConflict: args.completion?.objectiveBaselineConflict,
     objectiveReconciliation: args.completion?.objectiveReconciliation ?? "missing",
     archetypeProvisioning: {
