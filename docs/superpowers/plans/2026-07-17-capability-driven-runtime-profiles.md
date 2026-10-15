@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Capability-Driven Runtime Profiles Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use `dpf-tdd` while implementing, `dpf-local-merge-ci-before-push` for the completion gate, and `dpf-pr-with-dco` for delivery. Steps use checkbox (`- [ ]`) syntax for tracking.
