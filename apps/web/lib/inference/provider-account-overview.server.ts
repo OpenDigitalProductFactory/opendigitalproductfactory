@@ -15,9 +15,10 @@ import { capacityRoutingExclusionReason } from "@/lib/routing/capacity-routing-e
 import { accountRuntimeKey } from "@/lib/routing/provider-account-candidates";
 import { isAccountCapacityState } from "@/lib/routing/provider-capacity/scopes";
 
-export async function getProviderAccountCopy() {
-  const t = await getT("providerAccounts");
-  return Object.fromEntries(Object.keys(SOURCE_CATALOG.providerAccounts).map(key => [key, t(key as keyof typeof SOURCE_CATALOG.providerAccounts)]));
+export async function getProviderAccountCopy(): Promise<Record<string, string>> {
+  const [t, setup] = await Promise.all([getT("providerAccounts"), getT("setup")]);
+  return { ...Object.fromEntries(Object.keys(SOURCE_CATALOG.providerAccounts).map(key => [key, t(key as keyof typeof SOURCE_CATALOG.providerAccounts)])),
+    modelsExecution: setup("providerConnection.modelsExecution") };
 }
 
 export async function loadProviderAccountOverview(input: {
