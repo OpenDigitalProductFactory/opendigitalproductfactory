@@ -208,7 +208,7 @@ Guards also run in two places that cannot submit: GitHub Actions (no portal cred
 
 ## 6. Delivery ledger
 
-Medium shape, one implementation PR, all deliverables on BI-FEDD8F45. Plan: `docs/superpowers/plans/2026-10-14-guard-outcome-efficacy-plan.md`, written after spec approval.
+Medium shape, one implementation PR, all deliverables on BI-FEDD8F45. Plan: [implementation plan](../plans/2026-10-14-guard-outcome-efficacy-plan.md).
 
 | Key | Deliverable | Sections / acceptance | Depends on | Live BI |
 | --- | --- | --- | --- | --- |
