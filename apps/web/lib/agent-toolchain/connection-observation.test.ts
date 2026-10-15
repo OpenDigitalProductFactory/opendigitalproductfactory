@@ -7,11 +7,14 @@ vi.mock("server-only", () => ({}));
 import {
   OBSERVATION_COALESCE_MS,
   _resetObservationMemo,
+  capabilityDriftSubject,
   readClientInfo,
   recordToolchainObservation,
   resolveCredentialRef,
 } from "./connection-observation";
-import { rollUpToolchainCopies, type ToolchainObservationRow } from "./fleet-readiness";
+import { getToolchainCopies, rollUpToolchainCopies, type ToolchainObservationRow } from "./fleet-readiness";
+import { GROK_OWN_CREDENTIAL_KIND } from "./toolchain-verdict";
+import { GROK_CREDENTIALS_CLIENT_NAME } from "@/lib/auth/grok-credentials-client";
 
 /** A fake table shared by two "processes" (two memo resets). */
 function fakeTable() {
@@ -86,9 +89,15 @@ describe("recordToolchainObservation", () => {
 
 describe("resolveCredentialRef", () => {
   it("keys OAuth tokens by their client, bearer tokens by themselves, and skips sessions", async () => {
-    const db = { mcpApiToken: { findUnique: vi.fn(async ({ where }: { where: { id: string } }) => (where.id === "t-oauth" ? { oauthClientId: "oc-1", kind: "oauth_access" } : { oauthClientId: null, kind: "operator" })) } };
-    expect(await resolveCredentialRef(db, { tokenId: "t-oauth", source: "oauth" })).toEqual({ credentialRef: "oauth:oc-1", tokenKind: "oauth_access" });
-    expect(await resolveCredentialRef(db, { tokenId: "t-pat", source: "pat" })).toEqual({ credentialRef: "token:t-pat", tokenKind: "operator" });
+    const rows: Record<string, { oauthClientId: string | null; kind: string; oauthClient: { registrationKind: string; clientName: string } | null }> = {
+      "t-oauth": { oauthClientId: "oc-1", kind: "oauth_access", oauthClient: { registrationKind: "dcr", clientName: "Claude Code" } },
+      "t-grok": { oauthClientId: "oc-grok", kind: "oauth_access", oauthClient: { registrationKind: "credentials", clientName: GROK_CREDENTIALS_CLIENT_NAME } },
+      "t-pat": { oauthClientId: null, kind: "operator", oauthClient: null },
+    };
+    const db = { mcpApiToken: { findUnique: vi.fn(async ({ where }: { where: { id: string } }) => rows[where.id] ?? null) } };
+    expect(await resolveCredentialRef(db, { tokenId: "t-oauth", source: "oauth" })).toEqual({ credentialRef: "oauth:oc-1", credentialKind: "oauth_access" });
+    expect(await resolveCredentialRef(db, { tokenId: "t-grok", source: "oauth" })).toEqual({ credentialRef: "oauth:oc-grok", credentialKind: GROK_OWN_CREDENTIAL_KIND });
+    expect(await resolveCredentialRef(db, { tokenId: "t-pat", source: "pat" })).toEqual({ credentialRef: "token:t-pat", credentialKind: "operator" });
     expect(await resolveCredentialRef(db, { tokenId: "session:u:a", source: "session-jwt" })).toBeNull();
   });
 });
@@ -133,5 +142,66 @@ describe("rollUpToolchainCopies", () => {
     );
     expect(rollup!.verdict).toBe("current");
     expect(rollup!.copies.find((copy) => copy.silent)).toBeTruthy();
+  });
+
+  it("passes each credential's kind, so Grok on its own credentials client is current after grace", async () => {
+    const floored = { ...published, floor: { minPackVersion: "0.3.0", graceStartsAt: "2026-09-01T00:00:00Z" } };
+    const grok = (credentialRef: string) => row({ credentialRef, clientKind: "grok", authMode: credentialRef.startsWith("oauth:") ? "oauth" : "bearer" });
+    const db = {
+      agentToolchainObservation: { findMany: vi.fn(async () => [grok("oauth:oc-grok"), grok("token:t-pat")]) },
+      oAuthClient: { findMany: vi.fn(async () => [{ id: "oc-grok", registrationKind: "credentials", clientName: GROK_CREDENTIALS_CLIENT_NAME }]) },
+      mcpApiToken: { findMany: vi.fn(async () => [{ id: "t-pat", kind: "operator" }]) },
+    };
+    const { credentials } = await getToolchainCopies(db, { published: floored, mcpEndpoint: "https://dpf.example/api/mcp/v1", now, staleAfterMs: 7 * 86_400_000 });
+    const verdictOf = (ref: string) => credentials.find((c) => c.credentialRef === ref)!.verdict;
+    expect(verdictOf("oauth:oc-grok")).toBe("current");
+    expect(verdictOf("token:t-pat")).toBe("below-floor");
+  });
+});
+
+// BI-64795FD0 (AC-CAPABILITY-DRIFT): the fleet view names a client version the
+// capability profile has not verified.
+describe("getToolchainCopies capability drift", () => {
+  const published = { packVersion: "0.3.0", packDigest: "ab".repeat(32), floor: { minPackVersion: null, graceStartsAt: null } };
+  const now = new Date("2026-10-13T00:00:00Z");
+  const observed = (clientKind: string, clientInfoVersion: string | null): ToolchainObservationRow => ({
+    credentialRef: `oauth:${clientKind}`,
+    loadedDigest: "abababababababab",
+    clientKind,
+    probableClient: null,
+    loadedPackVersion: "0.3.0",
+    authMode: "oauth",
+    clientInfoName: clientKind,
+    clientInfoVersion,
+    lastObservedAt: now,
+  });
+
+  it("marks a client capabilities-unverified for a version newer than the profile", async () => {
+    const db = {
+      agentToolchainObservation: { findMany: async () => [observed("claude-code", "2.1.300"), observed("codex", "0.142.5")] },
+      oAuthClient: { findMany: async () => [] },
+      mcpApiToken: { findMany: async () => [] },
+    };
+    const result = await getToolchainCopies(db, { published, mcpEndpoint: "https://dpf.example/api/mcp/v1", now, staleAfterMs: 7 * 86_400_000 });
+    expect(result.capabilityDrift.map((drift) => `${drift.clientKind}: ${drift.label}`)).toEqual([
+      "claude-code: capabilities unverified for 2.1.300",
+    ]);
+  });
+});
+
+describe("observeConnection files capability drift on initialize", () => {
+  it("passes the declared client and its clientInfo.version to the drift note", () => {
+    expect(capabilityDriftSubject({
+      method: "initialize",
+      declaration: { pack: "0.3.0", digest: "abababababababab", client: "grok" },
+      clientInfo: { name: "grok", version: "0.3.1" },
+    })).toEqual({ clientKind: "grok", clientVersion: "0.3.1" });
+  });
+
+  it("has no subject without a declaration, a version or an initialize", () => {
+    const declared = { pack: "0.3.0", digest: "abababababababab", client: "grok" };
+    expect(capabilityDriftSubject({ method: "initialize", declaration: null, clientInfo: { name: "grok", version: "0.3.1" } })).toBeNull();
+    expect(capabilityDriftSubject({ method: "initialize", declaration: declared, clientInfo: { name: "grok", version: null } })).toBeNull();
+    expect(capabilityDriftSubject({ method: "tools/list", declaration: declared, clientInfo: null })).toBeNull();
   });
 });

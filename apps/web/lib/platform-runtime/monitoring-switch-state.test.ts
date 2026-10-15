@@ -19,7 +19,7 @@ function input(overrides: Partial<MonitoringSwitchInput> = {}): MonitoringSwitch
     dbState: "disabled",
     observed: {},
     decision: null,
-    divergent: false,
+    unreconcilable: false,
     pendingTransition: null,
     ...overrides,
   };
@@ -64,20 +64,30 @@ describe("deriveMonitoringSwitchState", () => {
     expect(state.reason).toBe("monitoringSettings.reason.disabledRunning");
   });
 
-  it("is unreconciled and locked when the two authorities disagree", () => {
-    const state = deriveMonitoringSwitchState(input({ observed: allUp, divergent: true }));
+  it("stays locked only when the records cannot be reconciled (missing rows or another catalog)", () => {
+    const state = deriveMonitoringSwitchState(input({ observed: allUp, unreconcilable: true }));
     expect(state).toMatchObject({ status: "unreconciled", canToggle: false, reason: "monitoringSettings.reason.unreconciled" });
   });
 
-  it("treats a DB row that disagrees with install-state about monitoring as unreconciled", () => {
+  it("reports the host's off state and offers to match the record when only the monitoring row says active", () => {
+    // The live drift: install-state enables only core, the row says active, no containers.
+    const state = deriveMonitoringSwitchState(input({ installEnabled: ["runtime:core"], dbState: "active" }));
+    expect(state).toMatchObject({ status: "off", canToggle: true, reason: null, recordMismatch: true });
+  });
+
+  it("reports the host's on state and offers to match the record when only the monitoring row says disabled", () => {
     const state = deriveMonitoringSwitchState(input({ installEnabled: [MONITORING_CAPABILITY], dbState: "disabled", observed: allUp }));
-    expect(state.status).toBe("unreconciled");
-    expect(state.canToggle).toBe(false);
+    expect(state).toMatchObject({ status: "on", canToggle: true, recordMismatch: true });
+  });
+
+  it("has no record mismatch when the row agrees with the host", () => {
+    expect(deriveMonitoringSwitchState(input()).recordMismatch).toBe(false);
+    expect(deriveMonitoringSwitchState(input({ installEnabled: [MONITORING_CAPABILITY], dbState: "active", observed: allUp })).recordMismatch).toBe(false);
   });
 
   it("locks the switch while a transition is in flight", () => {
     expect(deriveMonitoringSwitchState(input({ pendingTransition: "enabling" }))).toMatchObject({ status: "turning-on", canToggle: false, reason: "monitoringSettings.reason.inFlight" });
-    expect(deriveMonitoringSwitchState(input({ pendingTransition: "disabling", divergent: true }))).toMatchObject({ status: "turning-off", canToggle: false });
+    expect(deriveMonitoringSwitchState(input({ pendingTransition: "disabling", unreconcilable: true }))).toMatchObject({ status: "turning-off", canToggle: false });
   });
 
   it("cannot toggle when install-state is unreadable", () => {

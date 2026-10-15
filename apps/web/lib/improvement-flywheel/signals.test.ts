@@ -58,6 +58,29 @@ describe("createOrTouchImprovementSignal", () => {
     expect([...rows.values()][0]?.recurrenceCount).toBe(4);
   });
 
+  // BI-891E4E11: the observer keys its signal per agent+route, but a repeated
+  // tool failure belongs to the tool. Both agents' signals must file under the
+  // same tool-scoped origin so backlog ingest folds them into one item.
+  it("projects repeated tool-failure signals from different coworkers onto one tool-scoped origin", async () => {
+    memoryStore();
+    ingestBacklogItem.mockResolvedValue({ itemId: "BI-TOOL" });
+    const evidence = { signal: "tool-failure", toolName: "read_source_at_version" };
+    for (const agentId of ["AGT-WS-REVIEW", "AGT-WS-BUILD"]) {
+      const observation = {
+        sourceType: "work_pattern_observer",
+        sourceId: `tool-failure:${agentId.toLowerCase()}|/build|tool|stabilize repeated read_source_at_version tool failure`,
+        title: "Stabilize repeated read_source_at_version tool failure",
+        evidence,
+        agentId,
+      };
+      for (let n = 0; n < 3; n += 1) await createOrTouchImprovementSignal(observation);
+    }
+    expect(ingestBacklogItem).toHaveBeenCalledTimes(2);
+    for (const [call] of ingestBacklogItem.mock.calls) {
+      expect(call.origin).toEqual({ kind: "tool-defect", id: "read_source_at_version" });
+    }
+  });
+
   it("recovers one unique-key collision using the same source identity", async () => {
     memoryStore({ signalId: "IS-WINNER", recurrenceCount: 1, backlogItemId: null, evidence: {}, title: input.title });
     upsert.mockRejectedValueOnce(Object.assign(new Error("unique collision"), { code: "P2002" }));

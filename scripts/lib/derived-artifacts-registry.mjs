@@ -87,6 +87,28 @@ export const DERIVED_ARTIFACTS = [
     check: ["node", "packages/dpf-skill-pack/scripts/generate-operating-contract.mjs", "--check"],
   },
   {
+    // BI-64795FD0: every statement of a client capability derives from one
+    // profile. The credential policy's data copy, its test fixture and the
+    // rendered matrix in the parity tracker are regenerated from it.
+    id: "client-capabilities",
+    description: "Client capability profile -> credential-policy data, policy fixture and parity matrix",
+    sourceGlobs: [
+      "packages/dpf-skill-pack/client-capabilities.json",
+      "packages/dpf-skill-pack/scripts/gen-client-capabilities.mjs",
+      "packages/dpf-skill-pack/hooks/pretooluse-guard-selftest.mjs",
+      "packages/dpf-skill-pack/scripts/toolchain_convergence.py",
+      "packages/integration-shared/src/client-capability-rules.cjs",
+      "docs/architecture/agent-client-capability-parity.md",
+    ],
+    artifactPaths: [
+      "packages/integration-shared/src/client-capability-profile.generated.ts",
+      "packages/dpf-skill-pack/scripts/mcp-credential-policy-cases.json",
+      "docs/architecture/agent-client-capability-parity.md",
+    ],
+    generate: ["node", "packages/dpf-skill-pack/scripts/gen-client-capabilities.mjs"],
+    check: ["node", "packages/dpf-skill-pack/scripts/gen-client-capabilities.mjs", "--check"],
+  },
+  {
     id: "doc-impact",
     description: "Doc-impact manifest (route/code -> user-guide page edges)",
     sourceGlobs: [

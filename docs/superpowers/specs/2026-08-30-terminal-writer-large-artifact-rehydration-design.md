@@ -127,6 +127,10 @@ The asynchronous return path is intentionally excluded from this atomic decision
 - **Data:** no migration and no source bytes added to TaskRun persistence. Existing metadata and ToolExecution rows remain authoritative.
 - **Rollback:** reverting the constant restores the former fail-closed ceiling without corrupting persisted state. Existing waiting TaskRuns remain resumable after a later compatible release.
 
+## Request-time size notice (BI-4592CF69)
+
+A design larger than the 64,000-character aggregate can still be reviewed in one pass, but an interrupted review of it can never resume: hydration fails with `terminal_writer_context_oversize`. The author used to learn that only at the failed resume. A new design-spec or spec-approval review request now reads the bound design once, in `reviewDocumentPreflight` (`apps/web/lib/mcp-task-review-document.ts`), and returns a plain notice with the design's size and the cap. The cap is the one exported constant, `TERMINAL_WRITER_RECOVERY_MAX_CHARS`. The notice never blocks the request, and the cap itself is unchanged.
+
 ## Recovery behavior
 
 After the protected release is live, replay the original idempotent request for TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-47E477394386` exactly once. The server must resume that row rather than create a sibling, reread the bound blob from line one in eight pages, and expose only `record_initiative_evidence` for the independently selected terminal disposition. Success is a genuine receipt attached to the same TaskRun; any mismatch, timeout, approval requirement, or incomplete source remains an auditable fail-closed state.

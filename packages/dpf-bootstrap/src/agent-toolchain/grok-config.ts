@@ -22,7 +22,7 @@ export type GrokConfigPlan = {
 const DPF_MCP_KEY = "dpf";
 const GROK_BEARER_FILE_NAME = "dpf-mcp-token";
 
-/** Sibling of the config file. Matches scripts/lib/grok-credential.mjs. */
+/** Sibling of the config file. Matches packages/dpf-skill-pack/scripts/lib/grok-credential.mjs. */
 export function grokBearerTokenFilePath(configPath: string): string {
   let end = configPath.length;
   while (end > 0 && (configPath[end - 1] === "/" || configPath[end - 1] === "\\")) end -= 1;

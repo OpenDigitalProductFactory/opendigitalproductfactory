@@ -35,6 +35,15 @@ function redactWriteOnlyParameters(
   }));
 }
 
+/** The result as the audit row keeps it: declared secret keys never persist. */
+function auditableResult(result: ToolResult, tool: ToolDefinition | undefined): ToolResult {
+  const keys = tool?.secretResultKeys ?? [];
+  if (keys.length === 0 || !result.data) return result;
+  const data = { ...result.data };
+  for (const key of keys) if (key in data) data[key] = "[REDACTED]";
+  return { ...result, data };
+}
+
 export async function writeGovernedToolAudit(data: {
   toolName: string;
   tool?: ToolDefinition;
@@ -88,7 +97,7 @@ export async function writeGovernedToolAudit(data: {
     // indistinguishable from a crash. Keep the code alone so the efficiency
     // scan can tell a governed refusal from a fault (BI-MCP-EFF query_detections,
     // surface_open, and the other read tools whose results were `{}`).
-    result: isMetricsOnly ? metricsOnlyResult(data.result) : data.result as unknown as object,
+    result: isMetricsOnly ? metricsOnlyResult(data.result) : auditableResult(data.result, data.tool) as unknown as object,
     success: data.result.success, executionMode: data.source,
     routeContext: data.context?.routeContext ?? null, durationMs: data.durationMs,
     auditClass, capabilityId: deriveCapabilityId(data.toolName),
@@ -125,8 +134,10 @@ export async function writeGovernedToolAudit(data: {
   }
 }
 
-export async function updateGovernedToolAudit(id: string, result: ToolResult, durationMs: number): Promise<void> {
-  const data = { result: result as unknown as object, success: result.success, durationMs };
+export async function updateGovernedToolAudit(
+  id: string, result: ToolResult, durationMs: number, tool?: ToolDefinition,
+): Promise<void> {
+  const data = { result: auditableResult(result, tool) as unknown as object, success: result.success, durationMs };
   try {
     if (updateOverride) await updateOverride(id, data);
     else await prisma.toolExecution.update({ where: { id }, data });
