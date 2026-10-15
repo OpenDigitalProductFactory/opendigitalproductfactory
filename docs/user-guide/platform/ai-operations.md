@@ -124,11 +124,13 @@ preserves each answer, completion reason, token counts, trace and admission
 events. A pass requires an observed queued handoff, release and two nonempty,
 complete answers. Missing contention, cancellation, capacity holds and truncated
 answers leave the check unverified. This check never changes capability ratings.
+Missing admission or completion metadata also leaves the check unverified when
+answer text is present. An unobserved release is not evidence of a leaked slot.
 
 Background evaluations and endpoint probes use the background admission lane,
 so queued interactive requests take priority. A concurrent first-time evaluation
 must acquire its model's reservation before it performs inference. Docker Model
-Runner and Ollama both use the local engine's concurrency limit.
+Runner and Ollama share the single local-compute admission lane.
 
 The server checks production coworkers' route readiness every six hours. It
 raises a critical health issue when ordinary requests have no eligible route and
