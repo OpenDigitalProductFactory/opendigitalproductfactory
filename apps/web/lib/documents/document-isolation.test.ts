@@ -8,7 +8,7 @@ const semanticHits = vi.hoisted(() => ({ ids: [] as string[] }));
 vi.mock("./rendition-trigger", () => ({ requestDocumentRenditions: vi.fn(async () => true) }));
 vi.mock("./embeddings", () => ({
   storeDocumentVector: vi.fn(async () => false),
-  // Qdrant nominates by similarity alone; it knows nothing about access.
+  // The vector index nominates by similarity alone; it knows nothing about access.
   searchDocumentVectors: vi.fn(async () => semanticHits.ids.map((documentId) => ({ id: documentId, documentId, title: "", contentPreview: "", score: 0.9 }))),
 }));
 vi.mock("@dpf/db/graph-sync", () => ({ syncDocumentReference: vi.fn(async () => undefined) }));

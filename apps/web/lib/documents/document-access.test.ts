@@ -6,6 +6,7 @@ import { canManageDocumentAccess, isDocumentReadable, readableDocumentWhere } fr
 import { matchesWhere } from "./document-access.test-support";
 
 const NOW = new Date("2026-10-14T12:00:00Z");
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function doc(overrides: Record<string, unknown> = {}) {
   return {
@@ -15,8 +16,8 @@ function doc(overrides: Record<string, unknown> = {}) {
     createdByPrincipalId: "creator",
     accessGrants: [
       { principalId: "grantee", expiresAt: null },
-      { principalId: "expired", expiresAt: new Date("2026-10-01T00:00:00Z") },
-      { principalId: "later", expiresAt: new Date("2026-11-01T00:00:00Z") },
+      { principalId: "expired", expiresAt: new Date(NOW.getTime() - 13 * DAY_MS) },
+      { principalId: "later", expiresAt: new Date(NOW.getTime() + 18 * DAY_MS) },
     ],
     ...overrides,
   };
