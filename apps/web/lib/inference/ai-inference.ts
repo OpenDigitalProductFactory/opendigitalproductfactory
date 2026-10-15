@@ -72,6 +72,8 @@ export type InferenceResult = {
   responseId?: string;
   /** True when the provider stopped at the output-token ceiling (BI-1D144CC1). */
   truncated?: boolean;
+  /** Actual provider completion reason; never inferred from content or truncation. */
+  finishReason?: string;
   /**
    * Verbatim provider response body (matches AdapterResult.raw). Optional —
    * adapters may leave it undefined when nothing useful exists beyond `content`.
@@ -494,6 +496,7 @@ export async function callProvider(
     ...(result.toolCalls.length > 0 && { toolCalls: result.toolCalls }),
     responseId: result.responseId,
     truncated: result.truncated ?? false,
+    ...(result.finishReason !== undefined && { finishReason: result.finishReason }),
     // Adapters may set result.raw (e.g. transcription adapter for Whisper
     // verbose_json segments). Passed through verbatim; undefined when absent.
     ...(result.raw !== undefined && { raw: result.raw }),
