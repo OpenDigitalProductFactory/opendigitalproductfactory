@@ -1133,6 +1133,9 @@
     "apps/web/lib/operate/sole-platform-readiness.ts": [
       "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md"
     ],
+    "apps/web/lib/operate/tool-defect-origin.ts": [
+      "docs/architecture/improvement-signal-intake.md"
+    ],
     "apps/web/lib/org-locale/locale-context.ts": [
       "docs/architecture/localization-runbook.md"
     ],
@@ -3301,7 +3304,8 @@
       "scripts/installer/install-release-assets.mjs"
     ],
     "docs/architecture/improvement-signal-intake.md": [
-      "apps/web/lib/improvement-flywheel/signals.ts"
+      "apps/web/lib/improvement-flywheel/signals.ts",
+      "apps/web/lib/operate/tool-defect-origin.ts"
     ],
     "docs/architecture/initiative-readiness-runbook.md": [
       "apps/web/lib/backlog/acceptance-sweep/execution-evidence-owner.ts",
