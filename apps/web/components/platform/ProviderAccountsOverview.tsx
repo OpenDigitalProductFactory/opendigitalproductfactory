@@ -40,8 +40,15 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
   const [success, setSuccess] = useState<string | null>(null);
   const catalogRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const accountTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const addProviderRef = useRef<HTMLButtonElement>(null);
   useEffect(() => { if (showCatalog && !firstRun) catalogRef.current?.querySelector("input")?.focus(); }, [showCatalog, firstRun]);
-  useEffect(() => { if (newProvider) formRef.current?.querySelector("input")?.focus(); }, [newProvider]);
+  useEffect(() => {
+    if (newProvider) { formRef.current?.querySelector("input")?.focus(); return; }
+    const trigger = accountTriggerRef.current;
+    accountTriggerRef.current = null;
+    if (trigger) (trigger.isConnected ? trigger : addProviderRef.current)?.focus();
+  }, [newProvider]);
   const normalized = search.trim().toLocaleLowerCase();
   const visibleRows = rows.filter(row => `${row.label} ${row.providerName} ${row.allowedWork} ${row.statusLabel}`.toLocaleLowerCase().includes(normalized));
   const catalogById = new Map(catalog.map(provider => [provider.providerId, provider]));
@@ -69,22 +76,24 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
       <Link href={providerAccountHref(row)} data-owner-first-next-action={!canWrite && row.connectionId === visibleRows[0]?.connectionId ? "" : undefined} className="py-2 text-[var(--dpf-accent)]">{copy.manage}</Link>
       {canWrite && firstAccountByProvider.get(row.providerId) === row.connectionId
         && supportsAccount(catalogById.get(row.providerId)) &&
-        <button type="button" className={buttonClass} disabled={pending} onClick={() => beginAccount(catalogById.get(row.providerId)!)}>{copy.addAccount}</button>}
+        <button type="button" className={buttonClass} disabled={pending} onClick={event => beginAccount(catalogById.get(row.providerId)!, event.currentTarget)}>{copy.addAccount}</button>}
     </div> },
   ];
 
-  function beginAccount(provider: ProviderAccountCatalogRow) {
+  function beginAccount(provider: ProviderAccountCatalogRow, trigger: HTMLButtonElement) {
+    accountTriggerRef.current = trigger;
     setNewProvider(provider);
     setMethod(provider.supportedAuthMethods.find(auth => supportedMethods.includes(auth)) ?? "");
     setLabel("");
     setError(null);
     setSuccess(null);
+    formRef.current?.querySelector("input")?.focus();
   }
 
   return <section className="space-y-3" aria-label={copy.connection} aria-busy={pending}>
     <div className="flex flex-wrap items-center justify-between gap-2">
       <FilterBar facets={[{ kind: "search", key: "query", placeholder: copy.searchAccounts }]} value={{ query: search }} onChange={next => setSearch(next.query ?? "")} resultCount={visibleRows.length} />
-      {canWrite && <button type="button" data-owner-first-next-action className={buttonClass} disabled={pending} aria-expanded={showCatalog} aria-controls={`${id}-catalog`} onClick={() => setShowCatalog(!showCatalog)}>{copy.addProvider}</button>}
+      {canWrite && <button ref={addProviderRef} type="button" data-owner-first-next-action className={buttonClass} disabled={pending} aria-expanded={showCatalog} aria-controls={`${id}-catalog`} onClick={() => setShowCatalog(!showCatalog)}>{copy.addProvider}</button>}
     </div>
     <DataTable columns={columns} rows={visibleRows} getRowKey={row => row.connectionId} empty={copy.noAccounts} dense responsive ariaLabel={copy.connection} />
     {showCatalog && <Surface padding="sm"><div ref={catalogRef} id={`${id}-catalog`}>
@@ -107,7 +116,7 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
         {catalog.filter(provider => `${provider.name} ${provider.summary}`.toLocaleLowerCase().includes(catalogSearch.trim().toLocaleLowerCase())).map(provider => <li key={provider.providerId} className="rounded border border-[var(--dpf-border)] p-2">
           <Link className="inline-block py-2 font-medium text-[var(--dpf-accent)]" href={`/platform/ai/providers/${encodeURIComponent(provider.providerId)}`}>{provider.name}</Link>
           <p className="m-0 text-xs text-[var(--dpf-muted)]">{provider.summary}</p>
-          {canWrite && supportsAccount(provider) && <button type="button" className={`${buttonClass} mt-2`} disabled={pending} onClick={() => beginAccount(provider)}>{copy.addAccount}</button>}
+          {canWrite && supportsAccount(provider) && <button type="button" className={`${buttonClass} mt-2`} disabled={pending} onClick={event => beginAccount(provider, event.currentTarget)}>{copy.addAccount}</button>}
         </li>)}
       </ul>
     </div></Surface>}
