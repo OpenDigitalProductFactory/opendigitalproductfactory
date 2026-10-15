@@ -11,24 +11,30 @@
 // presentation's documentId, and the result is the next DocumentVersion of the
 // same Document. Nobody edits the office file's XML.
 //
+// Everything after the outline-to-spec mapping (organization and revision
+// checks, image loading, validation, render, save) is the shared pipeline in
+// family-document.ts, which the report, letter, sheet and drawing tools also
+// run on (BI-012487AA).
+//
 // Expected failures come back typed (ActionResult); this never throws for them.
 
-import { prisma } from "@dpf/db";
 import { ok, type ActionFailure, type ActionSuccess } from "@/lib/shared/action-result";
 import { isRecord } from "@/lib/shared/coerce";
-import { getErrorMessage } from "@/lib/shared/get-error-message";
-import { renderDocument, type RenderDocumentRequest, type RenderResult, type RenderedDocument } from "./render";
-import { saveRenderedDocument, type SavedRender } from "./render-store";
-import { MAX_IMAGE_BYTES, validateRenderRequest, type RenderFormat, type RenderRequestInput } from "./spec";
+import {
+  compact,
+  createFamilyDocument,
+  specImage,
+  type FamilyDocumentDeps,
+  type FamilyProfile,
+  type OutlineImage,
+} from "./family-document";
+import type { RenderFormat, RenderRequestInput } from "./spec";
 
 export const PRESENTATION_DOCUMENT_KIND = "generated-deck";
 export const PRESENTATION_FORMATS: RenderFormat[] = ["pptx", "pdf"];
 /** Slide previews are thumbnails on the document page; 72 dpi keeps a 10-inch slide at 720 px. */
 export const PRESENTATION_PREVIEW_DPI = 72;
 export const MAX_PRESENTATION_SLIDES = 100;
-
-type ImageMime = "image/png" | "image/jpeg" | "image/gif";
-const IMAGE_MIMES: readonly string[] = ["image/png", "image/jpeg", "image/gif"];
 
 export type SlideLayout = "title" | "section" | "bullets" | "chart" | "image" | "table";
 
@@ -43,7 +49,7 @@ export type OutlineSlide = {
   /** Passed to the deck spec as-is: `{ columns, rows }`. */
   table?: unknown;
   /** A stored image (`documentId`) or inline base64 (`data` + `mimeType`), always with alt text. */
-  image?: { documentId?: string; data?: string; mimeType?: string; alt: string };
+  image?: OutlineImage;
   caption?: string;
 };
 
@@ -85,23 +91,18 @@ export type CreatePresentationResult =
   | ActionSuccess<CreatedPresentation>
   | (ActionFailure & { reason: CreatePresentationFailureReason });
 
-export type CreatePresentationDeps = {
-  render?: (request: RenderDocumentRequest) => Promise<RenderResult>;
-  save?: (
-    rendered: RenderedDocument,
-    target: { organizationId: string; documentId?: string | null; tags?: string[]; actorPrincipalId?: string | null },
-  ) => Promise<SavedRender>;
-  loadDocument?: (documentId: string) => Promise<{ documentKind: string; organizationId: string } | null>;
-  /** A stored image's bytes as base64, or null when the document is not a PNG, JPEG or GIF. */
-  loadImage?: (documentId: string) => Promise<{ data: string; mimeType: ImageMime } | null>;
-  resolveOrganizationId?: () => Promise<string>;
+/** The shared pipeline's seams (render, save, document and image loading, organization). */
+export type CreatePresentationDeps = FamilyDocumentDeps;
+
+export const PRESENTATION_PROFILE: FamilyProfile = {
+  family: "deck",
+  noun: "presentation",
+  plural: "presentations",
+  toolName: "create_presentation",
+  formats: PRESENTATION_FORMATS,
+  previewDpi: PRESENTATION_PREVIEW_DPI,
+  sizeHint: "slides or images",
 };
-
-const fail = (reason: CreatePresentationFailureReason, error: string): CreatePresentationResult => ({ ok: false, error, reason });
-
-function compact<T extends Record<string, unknown>>(value: T): T {
-  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined && entry !== "")) as T;
-}
 
 function layoutOf(slide: OutlineSlide, index: number): SlideLayout {
   if (slide.layout) return slide.layout;
@@ -129,7 +130,7 @@ function toDeckSlide(slide: OutlineSlide, index: number, outline: PresentationOu
       return compact({
         layout,
         ...base,
-        image: slide.image ? compact({ data: slide.image.data, mimeType: slide.image.mimeType, alt: slide.image.alt }) : undefined,
+        image: specImage(slide.image),
         caption: slide.caption,
       }) as DeckSlide;
   }
@@ -169,135 +170,35 @@ function outlineShapeIssues(outline: PresentationOutline): string[] {
   return issues;
 }
 
-/** Replace stored-image references with their bytes; name every slide whose reference is not an image. */
-async function resolveImages(
-  outline: PresentationOutline,
-  loadImage: NonNullable<CreatePresentationDeps["loadImage"]>,
-): Promise<{ outline: PresentationOutline; issues: string[] }> {
-  const issues: string[] = [];
-  const slides = await Promise.all(
-    outline.slides.map(async (slide, index) => {
-      const ref = slide.image?.documentId?.trim();
-      if (!slide.image || !ref || slide.image.data) return slide;
-      const image = await loadImage(ref).catch(() => null);
-      if (!image) {
-        issues.push(`slides.${index}.image.documentId: ${ref} is not a stored PNG, JPEG or GIF image`);
-        return slide;
-      }
-      return { ...slide, image: { ...slide.image, data: image.data, mimeType: image.mimeType } };
-    }),
-  );
-  return { outline: { ...outline, slides }, issues };
-}
-
-const RENDER_FAILURE_COPY: Record<Exclude<CreatePresentationFailureReason, "invalid-outline" | "document-not-found" | "not-a-presentation">, string> = {
-  "converter-unavailable": "Presentations cannot be produced right now: the document engine is not available on this install. Nothing was saved.",
-  "input-too-large": "The presentation is too large to produce (usually its images). Use fewer or smaller images. Nothing was saved.",
-  timeout: "Producing the presentation took too long. Try fewer slides or smaller images. Nothing was saved.",
-  "render-failed": "The document engine could not produce the presentation. Nothing was saved.",
-};
-
-async function defaultLoadDocument(documentId: string) {
-  return prisma.document.findUnique({ where: { documentId }, select: { documentKind: true, organizationId: true } });
-}
-
-async function defaultLoadImage(documentId: string): Promise<{ data: string; mimeType: ImageMime } | null> {
-  const document = await prisma.document.findUnique({
-    where: { documentId },
-    select: {
-      currentVersion: {
-        select: { contentFormat: true, contentBlob: { select: { storageKey: true, sha256: true, mimeType: true, sizeBytes: true } } },
-      },
-    },
-  });
-  const blob = document?.currentVersion?.contentBlob;
-  const mimeType = (blob?.mimeType ?? document?.currentVersion?.contentFormat ?? "").split(";")[0]!.trim().toLowerCase();
-  if (!blob || !IMAGE_MIMES.includes(mimeType) || blob.sizeBytes > MAX_IMAGE_BYTES) return null;
-  const { readDocumentBlob } = await import("@/lib/documents/blob-storage");
-  const bytes = await readDocumentBlob({ storageKey: blob.storageKey, expectedSha256: blob.sha256 });
-  return { data: bytes.toString("base64"), mimeType: mimeType as ImageMime };
-}
-
-async function defaultResolveOrganizationId(): Promise<string> {
-  const { resolveDocumentOrganizationId } = await import("@/lib/documents/document-store");
-  return resolveDocumentOrganizationId();
-}
-
 export async function createPresentation(
   input: { outline: PresentationOutline; actorPrincipalId?: string | null },
   deps: CreatePresentationDeps = {},
 ): Promise<CreatePresentationResult> {
-  const shapeIssues = outlineShapeIssues(input.outline);
-  if (shapeIssues.length > 0) return fail("invalid-outline", `The outline is invalid: ${shapeIssues.join("; ")}`);
-
-  const revising = input.outline.documentId?.trim() || null;
-  let organizationId: string;
-  try {
-    if (revising) {
-      const existing = await (deps.loadDocument ?? defaultLoadDocument)(revising);
-      if (!existing) return fail("document-not-found", `There is no document ${revising} to revise.`);
-      if (existing.documentKind !== PRESENTATION_DOCUMENT_KIND) {
-        return fail(
-          "not-a-presentation",
-          `${revising} is a ${existing.documentKind}, not a presentation made with create_presentation. Omit documentId to create a new presentation.`,
+  const { outline } = input;
+  let slideCount = 0;
+  const result = await createFamilyDocument(
+    {
+      profile: PRESENTATION_PROFILE,
+      documentId: outline?.documentId,
+      actorPrincipalId: input.actorPrincipalId,
+      shapeIssues: outlineShapeIssues(outline),
+      buildContent: async (resolveImage) => {
+        const slides = await Promise.all(
+          outline.slides.map(async (slide, index) =>
+            slide.image ? { ...slide, image: await resolveImage(slide.image, `slides.${index}.image`) } : slide,
+          ),
         );
-      }
-      organizationId = existing.organizationId;
-    } else {
-      organizationId = await (deps.resolveOrganizationId ?? defaultResolveOrganizationId)();
-    }
-  } catch (error) {
-    return fail("render-failed", `The presentation could not be prepared: ${getErrorMessage(error)}`);
+        const content = outlineToDeckSpec({ ...outline, slides });
+        slideCount = content.slides.length;
+        return content;
+      },
+      previewPages: (content) => content.slides.length,
+    },
+    deps,
+  );
+  if (!result.ok) {
+    return { ok: false, error: result.error, reason: result.reason === "wrong-document-kind" ? "not-a-presentation" : result.reason };
   }
-
-  const resolved = await resolveImages(input.outline, deps.loadImage ?? defaultLoadImage);
-  const content = outlineToDeckSpec(resolved.outline);
-  const request = {
-    content,
-    formats: PRESENTATION_FORMATS,
-    previews: { maxPages: content.slides.length, dpi: PRESENTATION_PREVIEW_DPI },
-  };
-  const validated = validateRenderRequest(request);
-  const specIssues = validated.ok
-    ? []
-    : validated.issues.map((issue) => `${issue.path.replace(/^content\./, "") || "(outline)"}: ${issue.message}`);
-  const issues = [...resolved.issues, ...specIssues];
-  if (issues.length > 0) {
-    const shown = issues.slice(0, 6);
-    const more = issues.length > shown.length ? `; and ${issues.length - shown.length} more` : "";
-    return fail("invalid-outline", `The outline is invalid: ${shown.join("; ")}${more}`);
-  }
-
-  const rendered = await (deps.render ?? renderDocument)({
-    ...request,
-    templateRef: { kind: "brand-master", organizationId },
-  });
-  if (!rendered.ok) {
-    const reason = rendered.reason === "invalid-spec" ? "render-failed" : rendered.reason;
-    return fail(reason, `${RENDER_FAILURE_COPY[reason]} (${rendered.error})`);
-  }
-
-  let saved: SavedRender;
-  try {
-    saved = await (deps.save ?? saveRenderedDocument)(rendered.data, {
-      organizationId,
-      documentId: revising,
-      tags: ["presentation"],
-      actorPrincipalId: input.actorPrincipalId ?? null,
-    });
-  } catch (error) {
-    return fail("render-failed", `The presentation was produced but could not be saved: ${getErrorMessage(error)}`);
-  }
-
-  return ok({
-    documentId: saved.documentId,
-    versionId: saved.versionId,
-    version: saved.version,
-    revised: revising !== null,
-    slideCount: content.slides.length,
-    previewCount: saved.previews.length,
-    formats: rendered.data.files.map((file) => file.format),
-    route: `/workspace/documents/${encodeURIComponent(saved.documentId)}`,
-    warnings: rendered.data.warnings,
-  });
+  const { pageCount: _pageCount, ...created } = result.data;
+  return ok({ ...created, slideCount });
 }

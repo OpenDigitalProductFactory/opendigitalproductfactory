@@ -12,7 +12,9 @@ import { prepareUpgradeSource, defaultGitRunner } from "./prepare-source";
 // and the upgrade must succeed anyway because the merge happens elsewhere.
 
 const GIT_AVAILABLE = spawnSync("git", ["--version"], { encoding: "utf8" }).status === 0;
-const REAL_GIT_TEST_TIMEOUT_MS = 30_000;
+// Measures a hang, not host speed (BI-F25D7E88): real clones and merges run
+// past 30 s on a loaded Windows gate host.
+const REAL_GIT_TEST_TIMEOUT_MS = 120_000;
 
 const GIT_ENV = {
   ...process.env,

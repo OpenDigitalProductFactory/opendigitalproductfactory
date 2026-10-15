@@ -4,8 +4,9 @@
 // Design: docs/superpowers/specs/2026-10-13-monitoring-operator-choice-design.md §6.
 // State comes from observation (install-state + capability row + running
 // services), not the row alone; the switch is read-only without
-// manage_platform, and locked with an honest reason while capability state
-// needs reconciling (BI-5ACBAC50). The admin layout already gates view_admin.
+// manage_platform. A monitoring record that disagrees with install-state is
+// named and the switch offers to match it (BI-F0C2E8F5); the switch locks only
+// when the records cannot be reconciled. The admin layout already gates view_admin.
 import Link from "next/link";
 import { namespaceMessages } from "@dpf/i18n";
 import type { MessageKey } from "@dpf/i18n";
@@ -72,7 +73,10 @@ export default async function MonitoringSettingsPage() {
         {state.status === "needs-attention" && state.reason && (
           <p className="text-sm text-[var(--dpf-warning)]">{t(state.reason, reasonArgs)}</p>
         )}
-        {state.status === "unreconciled" && (
+        {state.recordMismatch && (
+          <p className="text-sm text-[var(--dpf-warning)]">{t("monitoringSettings.recordMismatch")}</p>
+        )}
+        {(state.status === "unreconciled" || state.recordMismatch) && (
           <p className="text-xs text-[var(--dpf-muted)]">
             {view.divergenceSummary}{" "}
             <Link href="/platform/ai/runtime-health" className="text-[var(--dpf-accent)] underline-offset-2 hover:underline">
@@ -91,7 +95,7 @@ export default async function MonitoringSettingsPage() {
           {mayManage ? (
             <MonitoringSwitch
               enabled={view.enabled}
-              enabledKeys={view.enabledKeys ?? []}
+              recordMismatch={state.recordMismatch}
               canToggle={state.canToggle && view.enabledKeys !== null}
               reasonKey={state.canToggle ? null : state.reason}
               reasonArgs={reasonArgs}

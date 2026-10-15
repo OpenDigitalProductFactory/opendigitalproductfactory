@@ -2,7 +2,15 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@dpf/db", () => ({ prisma: {} }));
 
+import catalogSeed from "../../../../scripts/capability-service-catalog.generated.json";
 import { loadMonitoringSwitchView, monitoringBudgetCost } from "./monitoring-switch-loader";
+
+const catalog = catalogSeed as { catalogHash: string; capabilities: Array<{ capabilityId: string }> };
+const CATALOG_HASH = catalog.catalogHash;
+/** Every catalog capability has a record, as the reconciliation contract requires. */
+function rows(active: string[]) {
+  return catalog.capabilities.map(({ capabilityId }) => ({ capabilityId, state: (active.includes(capabilityId) ? "active" : "disabled") as "active" | "disabled" }));
+}
 
 const fullBudget = {
   optionalProfileServices: {
@@ -12,10 +20,7 @@ const fullBudget = {
   },
 };
 
-const coreStates = [
-  { capabilityId: "runtime:core", state: "active" as const },
-  { capabilityId: "runtime:deep-observability", state: "disabled" as const },
-];
+const coreStates = rows(["runtime:core"]);
 
 describe("monitoringBudgetCost", () => {
   it("sums the three monitoring services", () => {
@@ -51,6 +56,7 @@ describe("loadMonitoringSwitchView", () => {
     const view = await loadMonitoringSwitchView({
       readInstallState: async () => ({
         enabledRuntimeCapabilities: ["runtime:core"],
+        capabilityCatalogHash: CATALOG_HASH,
         runtimeCapabilityDecisions: { "runtime:deep-observability": { decision: "disabled", source: "installer-flag", decidedAt: "2026-10-13T00:00:00Z" } },
       }),
       readCapabilityStates: async () => coreStates,
@@ -73,7 +79,7 @@ describe("loadMonitoringSwitchView", () => {
 
   it("shows turning-on while an active transition enables monitoring", async () => {
     const view = await loadMonitoringSwitchView({
-      readInstallState: async () => ({ enabledRuntimeCapabilities: ["runtime:core"] }),
+      readInstallState: async () => ({ enabledRuntimeCapabilities: ["runtime:core"], capabilityCatalogHash: CATALOG_HASH }),
       readCapabilityStates: async () => coreStates,
       readObservedServices: async () => ({}),
       readLatestTransition: async () => ({
@@ -83,5 +89,42 @@ describe("loadMonitoringSwitchView", () => {
       budgetFile: {},
     });
     expect(view.state.status).toBe("turning-on");
+  });
+
+  // BI-F0C2E8F5: the live install — host core-only, monitoring row and other
+  // seeded rows active, no monitoring containers. Reconciliation repairs the
+  // monitoring row, so the switch must not lock.
+  it("does not lock when only the records disagree with the host", async () => {
+    const view = await loadMonitoringSwitchView({
+      readInstallState: async () => ({ enabledRuntimeCapabilities: ["runtime:core"], capabilityCatalogHash: CATALOG_HASH }),
+      readCapabilityStates: async () => rows(["runtime:core", "runtime:deep-observability", "runtime:build", "runtime:external-ai"]),
+      readObservedServices: async () => ({}),
+      readLatestTransition: async () => null,
+      budgetFile: {},
+    });
+    expect(view.state).toMatchObject({ status: "off", canToggle: true, recordMismatch: true });
+    expect(view.divergenceSummary).toMatch(/runtime:deep-observability/);
+  });
+
+  it("locks as unreconciled when a catalog capability has no record", async () => {
+    const view = await loadMonitoringSwitchView({
+      readInstallState: async () => ({ enabledRuntimeCapabilities: ["runtime:core"], capabilityCatalogHash: CATALOG_HASH }),
+      readCapabilityStates: async () => rows(["runtime:core"]).filter((row) => row.capabilityId !== "runtime:build"),
+      readObservedServices: async () => ({}),
+      readLatestTransition: async () => null,
+      budgetFile: {},
+    });
+    expect(view.state).toMatchObject({ status: "unreconciled", canToggle: false, reason: "monitoringSettings.reason.unreconciled" });
+  });
+
+  it("locks as unreconciled when install-state was written for another catalog", async () => {
+    const view = await loadMonitoringSwitchView({
+      readInstallState: async () => ({ enabledRuntimeCapabilities: ["runtime:core"], capabilityCatalogHash: "f".repeat(64) }),
+      readCapabilityStates: async () => coreStates,
+      readObservedServices: async () => ({}),
+      readLatestTransition: async () => null,
+      budgetFile: {},
+    });
+    expect(view.state).toMatchObject({ status: "unreconciled", canToggle: false });
   });
 });
