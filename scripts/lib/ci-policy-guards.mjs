@@ -264,6 +264,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // then recorded as done by Save-Progress. Optional-script guards must say so.
       conformanceTest("scripts/check-installer-skip-visibility.test.mjs"),
       conformanceTest("scripts/check-setup-worktree-hygiene.test.mjs"),
+      // BI-8D152751: the Grok credential step must feed its issuer on stdin.
+      conformanceTest("scripts/bootstrap-grok-credential-issuer.test.mjs"),
     ], { inputs: ["code"] }),
     guard("installer-state-contract", "Installer State Contract", [
       // Drives real bash: install-dpf.sh runs under `set -euo pipefail`, and the

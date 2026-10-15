@@ -41,6 +41,7 @@ async function main(): Promise<void> {
   const { ensureGrokCredentialsClient, GROK_CREDENTIALS_CLIENT_NAME } = await import("../lib/auth/grok-credentials-client");
   const { prepareClientSecret } = await import("../lib/auth/oauth-tokens");
   const { decryptSecret } = await import("../lib/govern/credential-crypto");
+  const { grokAgentRecordId, bindGrokClientAgent } = await import("../lib/auth/grok-agent-binding");
 
   const user = await prisma.user.findFirst({ where: { email } });
   if (!user) {
@@ -59,6 +60,7 @@ async function main(): Promise<void> {
         revokedAt: true,
         allowedScopes: true,
         clientSecretEnc: true,
+        agentId: true,
       },
     }),
     create: async (input) => {
@@ -72,14 +74,17 @@ async function main(): Promise<void> {
           ownerUserId: input.ownerUserId,
           allowedScopes: [...input.allowedScopes],
           redirectUris: [],
+          agentId: input.agentId,
         },
       });
     },
+    grokAgent: () => grokAgentRecordId(prisma),
+    bindAgent: (oAuthClientId, agentRecordId) => bindGrokClientAgent(prisma, oAuthClientId, agentRecordId),
     decrypt: decryptSecret,
     prepareSecret: prepareClientSecret,
   });
 
-  console.error(`Grok credentials client ${result.clientId} ${result.created ? "created" : "reused"} for ${email}`);
+  console.error(`Grok credentials client ${result.clientId} ${result.created ? "created" : "reused"} for ${email}${result.agentBound ? " (acts as AGT-EXT-GROK)" : " (NOT bound to AGT-EXT-GROK: Grok cannot write workrooms)"}`);
   console.log(JSON.stringify({
     clientId: result.clientId,
     clientSecret: result.clientSecret,
