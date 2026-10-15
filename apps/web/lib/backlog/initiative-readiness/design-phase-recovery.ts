@@ -95,6 +95,18 @@ export function decisionForIndependentReview(
     if (!decision) return null;
     const owed = designPhaseReviewDecision(decision);
     if (owed) return owed;
+    // BI-C56AE9A2: a decomposed parent cannot implement, but can still owe
+    // review of its covered plan at completion. Match that issuer's lane only;
+    // never revive unrelated design gates or change implementation admission.
+    const terminal = decisions.completion;
+    const isOwedPlanReview = (entry: InitiativeReadinessDecision["unmet"][number]) =>
+      entry.code === "PLAN_REVIEW_REQUIRED" && entry.accountableRole === "plan-reviewer"
+      && (entry.state === "missing" || entry.state === "fail");
+    if (writerToolName === "record_initiative_design_review" && terminal && terminal.verdict !== "allowed") {
+      const blockers = terminal.blockers.filter(isOwedPlanReview);
+      const unmet = terminal.unmet.filter(isOwedPlanReview);
+      if (blockers.length || unmet.length) return { ...terminal, blockers, unmet };
+    }
     // BI-EE99767C: the claim issuer sequences spec approval before plan coverage
     // when coverage needs a baseline. A fix carries only PLAN_REQUIRED here;
     // completion names its baseline owner. Route that prerequisite, not every
