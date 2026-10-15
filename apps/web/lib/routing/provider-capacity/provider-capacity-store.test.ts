@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -31,6 +31,8 @@ beforeEach(() => {
   mockUpsert.mockResolvedValue({ id: "capacity-row" });
   vi.mocked(prisma.$queryRaw).mockResolvedValue([{ ...credential, id: "immutable-a", credentialId: credential.id }]);
 });
+
+afterEach(() => vi.restoreAllMocks());
 
 describe("provider capacity store", () => {
   it("projects current account recovery facts without credential or raw provider material", async () => {
@@ -91,11 +93,18 @@ describe("provider capacity store", () => {
       .toMatchObject({ safeSummary: "Reconnect this account.", action: "reconnect", isHumanActionRequired: true });
   });
   it("shares a conservative consumer quota restriction across aliases while keeping authentication local", async () => {
+    const clock = vi.spyOn(Date, "now").mockReturnValue(NOW.getTime());
+    const retryAt = new Date(NOW.getTime() + 60_000);
     vi.mocked(prisma.providerCapacityStatus.findMany).mockResolvedValue([
-      { providerId: "codex", state: "quota_resets_at", retryAt: new Date("2026-10-15T00:00:00Z"), lastObservedAt: NOW, providerConnection: null },
+      { providerId: "codex", state: "quota_resets_at", retryAt, lastObservedAt: NOW, providerConnection: null },
     ] as never);
     const quota = await loadProviderCapacitySnapshots();
+    expect(quota.get("codex")).toMatchObject({ state: "quota_resets_at", retryAtMs: retryAt.getTime() });
     expect(quota.get("chatgpt")).toEqual(quota.get("codex"));
+    clock.mockReturnValue(retryAt.getTime() - 1);
+    expect((await loadProviderCapacitySnapshots()).get("chatgpt")).toEqual(quota.get("codex"));
+    clock.mockReturnValue(retryAt.getTime());
+    expect((await loadProviderCapacitySnapshots()).has("chatgpt")).toBe(false);
     vi.mocked(prisma.providerCapacityStatus.findMany).mockResolvedValue([{ providerId: "codex", state: "reauth_required", retryAt: null, lastObservedAt: NOW, providerConnection: null }] as never);
     expect((await loadProviderCapacitySnapshots()).has("chatgpt")).toBe(false);
   });
