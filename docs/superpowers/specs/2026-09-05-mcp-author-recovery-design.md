@@ -264,3 +264,43 @@ checks the returned remedy. Official web typechecks and protected CI precede
 installed native dispatch. One atomic `reviewer-packet-contract` deliverable maps
 to BI-C56AE9A2, AC-C56-PACKET, AC-C56-REFUSAL and AC-C56-REMEDY under
 OBJ-MCP-RECOVERY and OBJ-MCP-PROCESS; its flow is the Ordered atomic fix above.
+
+## 2026-10-15: completion-issued review lanes remain requestable
+
+Continue BI-C56AE9A2 in WC-B37DBE9A. On served recovery96, the original
+provider parent BI-71ABBD95 has completed children and retains its xlarge shape,
+plan commit 99986af2 and plan blob 7bde23c6. Its ordinary plan claim is allowed,
+while implementation is correctly denied with DECOMPOSITION_REQUIRED. A typed
+completion attempt returns a plan-review packet, but unchanged dispatch refuses
+it because validation selects only the implementation decision. The exact
+provider evidence is retained separately; it is not an approval or a test fixture
+containing private operational records.
+
+This atomic continuation extends AC-C56-PACKET and AC-C56-REMEDY above:
+
+1. Add a failing issuer/validator regression using an allowed plan decision,
+   decomposition-only implementation decision and completion-owned plan review.
+   Include stale/completed review, altered packet and self-review controls.
+2. Reuse the shared design-phase decision policy to recognize the owed terminal
+   plan-review lane without reviving unrelated completed design gates. Preserve
+   immutable coverage/baseline validation, exact packet equality and caller,
+   reviewer, OAuth, grant and Workroom checks. Never allow xlarge implementation.
+3. Add a failing canonical item-read regression for objective-reconciliation-only
+   recovery. Project the existing terminal resolver's result for owed terminal
+   reviews, including its refusals/escalations; do not create a packet store,
+   alternate objective writer or new authority lane. A plan review can retain
+   precedence over objective mapping until it has a real receipt.
+4. Run the affected resolver, authorization, item-read and negative-control tests,
+   both official web TypeScript programs and applicable guards. Independently
+   review the immutable change, publish through the protected queue, and let the
+   existing provider owner exercise the newly served exact route. Neither source
+   verification nor task submission establishes review or parent acceptance.
+
+The steps form one revertible delivery mapped to BI-C56AE9A2 under
+OBJ-MCP-RECOVERY and OBJ-MCP-PROCESS, covering AC-C56-PACKET, AC-C56-REFUSAL and
+AC-C56-REMEDY. More than 20% of effort consolidates the existing decision and
+recovery projection contract. There is no schema, UI renderer or runtime config
+change. The original quoted medium criteria and six-route obligations above
+remain applicable and unverified beyond their actual evidence. Rollback reverts
+this continuation without deleting original refusals, tasks, budgets or receipts.
+The separate missing-terminal-writer task remains an execution recovery matter.
