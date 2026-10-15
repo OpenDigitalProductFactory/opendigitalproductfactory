@@ -6,7 +6,8 @@ status: active
 
 Scope manifest for BI-2F7BE778. The design is §3.5 and §7 of the
 [knowledge linking design](2026-10-14-knowledge-linking-design.md). The scope
-rules R1, R4 and R7 apply.
+rules R1, R4 and R7 apply. Depends on BI-825D3487 (corpus read grants) and
+reuses the shared reader from BI-4EAFF7AC.
 
 ## Objectives and acceptance
 

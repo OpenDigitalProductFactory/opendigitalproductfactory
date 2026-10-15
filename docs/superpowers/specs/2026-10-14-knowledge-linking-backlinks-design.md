@@ -7,7 +7,8 @@ status: active
 Scope manifest for BI-4EAFF7AC. The design is §4 of the
 [knowledge linking design](2026-10-14-knowledge-linking-design.md), and the
 scope rules R1–R7 in its §2 apply in full. This item depends on BI-23900D0A,
-which makes the link rows correct.
+which makes the link rows correct, and on BI-825D3487, which provides the
+corpus read grants. It builds the shared reader (§3.4) that later items reuse.
 
 ## Objectives and acceptance
 
@@ -22,3 +23,4 @@ which makes the link rows correct.
 | AC-KLB-3 | OBJ-KLB-1 | The panel works on kernel, overlay and override pages, shows a plain empty state, and passes the UX-fit review and the theme rules. |
 | AC-KLB-4 | OBJ-KLB-2 | A contract test plants an inbound link from a page in another organization and one from a page outside the reader's corpus grant. Neither appears and neither is counted. |
 | AC-KLB-5 | OBJ-KLB-2 | "Link it" appears only on overlay pages the reader may edit, and it creates a proposal. It never appears on kernel or profession pages. |
+| AC-KLB-6 | OBJ-KLB-2 | The wiki route takes the reader's organization from the session, not `prisma.organization.findFirst()`. A test with two organizations shows each reader only their own organization's overlay backlinks. |

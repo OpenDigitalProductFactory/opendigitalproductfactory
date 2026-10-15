@@ -6,7 +6,9 @@ status: active
 
 Scope manifest for BI-359C7C2F. The design is §3.5 and §9 of the
 [knowledge linking design](2026-10-14-knowledge-linking-design.md). Scope
-rules R1, R2 and R5 apply. This ships after BI-MCP-EFF-4F823E5B.
+rules R1, R2 and R5 apply. It depends on BI-825D3487 (corpus read grants) and
+reuses the shared reader from BI-4EAFF7AC. Resolving `KA-` ids needs
+BI-67F04B3F. By preference it ships after BI-MCP-EFF-4F823E5B.
 
 ## Objectives and acceptance
 
@@ -19,4 +21,4 @@ rules R1, R2 and R5 apply. This ships after BI-MCP-EFF-4F823E5B.
 | AC-KLQ-1 | OBJ-KLQ-1 | Ctrl+K or Cmd+K opens the switcher from any shell page. Typing an exact `BI-`, `EP-`, `DOC-`, `KA-` or `WC-` id and pressing Enter once opens that entity. |
 | AC-KLQ-2 | OBJ-KLQ-1 | Title search across backlog items, epics, wiki pages, documents and Workrooms returns within 300 ms at the 95th percentile on the dev install. The dialog works entirely from the keyboard, follows the theme, and has a recorded UX-fit review. |
 | AC-KLQ-3 | OBJ-KLQ-2 | An existing id the reader cannot open shows the same "No match" message as an id that does not exist. Search results include only entities that pass `canReadEntity`. |
-| AC-KLQ-4 | OBJ-KLQ-2 | The browser's recent list stores only ids, and the server re-checks it each time the dialog opens. |
+| AC-KLQ-4 | OBJ-KLQ-2 | The browser's recent list stores only ids, is keyed by principal, and is cleared on sign-out. The server re-checks it each time the dialog opens. |

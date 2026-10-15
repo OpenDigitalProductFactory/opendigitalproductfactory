@@ -6,7 +6,8 @@ status: active
 
 Scope manifest for BI-A63A9476. The design is in §3 and §5 of the
 [knowledge linking design](2026-10-14-knowledge-linking-design.md). Scope
-rules R1–R7 in its §2 apply in full.
+rules R1–R7 in its §2 apply in full. This item depends on BI-825D3487 (corpus
+read grants) and BI-4EAFF7AC (shared reader).
 
 ## Objectives and acceptance
 
@@ -20,7 +21,9 @@ rules R1–R7 in its §2 apply in full.
 |------------|------------|-----------|
 | AC-KLR-1 | OBJ-KLR-1 | In backlog, epic, document, Workroom message and wiki bodies, a known id the reader can open renders as a link. An unknown id and an id the reader cannot open both render the same way, as plain text. |
 | AC-KLR-2 | OBJ-KLR-1 | Saving a body creates and removes `REFERENCES` edges in `graph_edge` idempotently. Re-running `references:rebuild` changes nothing. No new table is added; the substrate check is recorded in §3.1 of the design. |
-| AC-KLR-3 | OBJ-KLR-2 | The backlog item panel, the epic card, the document page and the wiki panel each show "Referenced by" with source, kind, scope and snippet. `get_backlog_item` returns the same `referencedBy` list to agents. |
+| AC-KLR-3 | OBJ-KLR-2 | The backlog item panel, the epic card, the document page and the wiki panel each show "Referenced by" with source, kind, scope and a snippet taken from the source at read time. `get_backlog_item` returns `referencedBy` with id, kind, title and scope only, and never a snippet. |
 | AC-KLR-4 | OBJ-KLR-3 | The writer refuses edges from kernel or profession pages to WWWD records, and lint reports any such edge. |
 | AC-KLR-5 | OBJ-KLR-3 | A contract test shows that a reference from a source the reader cannot open is missing from every read surface, counts included. The test covers another organization, restricted backlog sensitivity, a room the reader is not admitted to, and a corpus outside the agent's grants. |
-| AC-KLR-6 | OBJ-KLR-3 | `wiki_kernel_read`, `wiki_org_read` and `wiki_profession_read` exist, and `registry_read` implies all three. A coworker holding only one of them sees references only within that corpus. |
+| AC-KLR-6 | OBJ-KLR-3 | A coworker whose organization has removed one corpus grant (BI-825D3487) sees no references whose far end is in that corpus. |
+| AC-KLR-7 | OBJ-KLR-3 | For backlog items, epics, documents, Workrooms and messages, `graph_node` and `graph_edge` hold no titles or snippets. The admin graph explorer does not list `REFERENCES` edges or those nodes outside the shared reader. Each `REFERENCES` edge records `writtenBy`. |
+| AC-KLR-8 | OBJ-KLR-1 | Rebuilding the documents graph and the knowledge graph leaves `REFERENCES` edges untouched, and the projection reconcile reports a `references` count. |

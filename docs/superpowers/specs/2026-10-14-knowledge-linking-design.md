@@ -7,8 +7,9 @@ status: active
 | Field | Value |
 |-------|-------|
 | **Epic** | EP-0237A305 |
-| **Items** | BI-23900D0A (link-write repair), BI-4EAFF7AC (backlinks), BI-A63A9476 (entity references), BI-67F04B3F (KnowledgeArticle absorption), BI-2F7BE778 (editor autocomplete and preview), BI-5412E422 (vault export), BI-359C7C2F (quick switcher) |
-| **Precondition** | BI-MCP-EFF-4F823E5B (`search_knowledge` fails 71% of calls) is repaired before BI-359C7C2F ships |
+| **Items** | BI-825D3487 (corpus-scoped read grants), BI-23900D0A (link-write repair), BI-4EAFF7AC (backlinks), BI-A63A9476 (entity references), BI-67F04B3F (KnowledgeArticle absorption), BI-2F7BE778 (editor autocomplete and preview), BI-5412E422 (vault export), BI-359C7C2F (quick switcher) |
+| **Depends on (outside the epic)** | BI-957915CB (enforced document permissions), required before BI-5412E422 |
+| **Ordering preference** | BI-MCP-EFF-4F823E5B (`search_knowledge` fails 71% of calls) lands before BI-359C7C2F. The switcher does not call that tool, but search reliability comes first. |
 | **Builds on** | [EP-WIKI-001 Platform Kernel Wiki](2026-05-09-platform-kernel-wiki-design.md), [EP-WIKI-005 Visual Navigation](2026-05-09-wiki-visual-navigation-design.md), [Principles as a Wiki Kind](2026-05-12-principles-as-wiki-kind-design.md) |
 | **Supersedes** | EP-WIKI-001 §11 migration steps (see §6) |
 | **Funding** | Founder-funded shared platform work; weighted toward integration and refactoring |
@@ -26,8 +27,8 @@ marked objectives and acceptance and points back to its section here:
 | BI-5412E422 | §8 | [knowledge-linking-vault-export](2026-10-14-knowledge-linking-vault-export-design.md) |
 | BI-359C7C2F | §9 | [knowledge-linking-quick-switcher](2026-10-14-knowledge-linking-quick-switcher-design.md) |
 
-BI-23900D0A is a bug fix. Its acceptance lives in its backlog body, and §4.1
-here describes it.
+BI-825D3487 (§2 R5) and BI-23900D0A (§4.1) carry their acceptance in their
+backlog bodies.
 
 The manifests are separate files because the readiness baseline
 (`apps/web/lib/backlog/initiative-readiness/baseline-manifest.ts`) reads every
@@ -114,29 +115,57 @@ directly. An edge can exist only because someone allowed to write the source
 body wrote the id into it. This blocks forged provenance, such as an agent
 planting a fake "cited by principle X" link.
 
-**R4. Edges cross scopes in one direction only.** A WWWD record may reference
-WWMD and WSID pages; that is normal, because an organization builds on
-platform doctrine and craft. A WWMD kernel page never references an
-organization's records, because it ships to every install. A WSID page never
-references WWWD records. The writer refuses edges that break this, and lint
-reports them. Each edge records its source and target scope, so a reader can
-filter to links within one scope.
+**R4. Edges cross scopes in one direction only.** A scope is a pair:
+(corpus, organization).
 
-**R5. Agents see only the corpus their job needs.** Today every coworker
-receives `registry_read`, which covers the knowledge base, the wiki and
-portfolio context together (`COWORKER_READ_BASELINE_GRANTS` in
-`apps/web/lib/tak/agent-grants.ts`). This epic adds three narrower read
-grants: `wiki_kernel_read`, `wiki_org_read` and `wiki_profession_read`.
-`registry_read` implies all three through the existing one-way
-`GRANT_IMPLICATIONS` table, so no current coworker loses access. A regulated
-install can then give a coworker only the corpus its role needs. Linking read
-paths check the narrow grant for each entity's corpus. Defaults stay the same;
-narrowing them is an organization decision (WWWD), not a platform one.
+- A WWWD record may reference WWMD and WSID pages. That is normal, because an
+  organization builds on platform doctrine and craft.
+- A WWMD kernel page never references an organization's records, because it
+  ships to every install.
+- A WSID page never references WWWD records.
+- A WWWD record never references another organization's WWWD record. This
+  matters on an MSP install that holds several customer estates.
+- A backlog item with no `organizationId` is install-scoped platform work. It
+  may reference the install's WWWD records, but never across customer
+  estates.
 
-**R6. Export is the highest-risk path.** Export moves knowledge out of the
-platform. It is started by a person, needs its own grant (`knowledge_export`,
-which nothing implies and the coworker baseline does not include), covers one
-scope per run, and is audited (§8).
+The writer refuses edges that break these rules. Each edge records its source
+and target scope, so a reader can filter to links within one scope.
+
+When the author meets a refused reference and when the author writes an
+unknown id, the editor and lint show the same "unresolved reference". A
+different message would tell the author that the target exists.
+
+**R5. Agents see only the corpus their job needs (BI-825D3487).** Today the
+code merges `registry_read` into every coworker
+(`COWORKER_READ_BASELINE_GRANTS`, `apps/web/lib/tak/agent-grants.ts:114-123`).
+That grant covers all three corpora at once, and `wiki_query`,
+`search_knowledge_base`, `principle_decide` and `evaluate_profession_decision`
+are gated on it alone. An implication from `registry_read` could therefore
+never narrow anything.
+
+BI-825D3487 adds three grants: `wiki_kernel_read`, `wiki_org_read` and
+`wiki_profession_read`.
+
+- **Default.** Every coworker holds all three, so today's behaviour is
+  unchanged.
+- **Narrowing.** The grants are stored per coworker as `AgentToolGrant` rows,
+  the existing per-coworker grant store edited from the coworker record. An
+  organization can remove a corpus from a coworker; that is a WWWD decision.
+- **Enforcement.** Every knowledge read tool filters its results by the
+  caller's corpus grants: the existing tools and every linking path in this
+  epic. A tool whose whole purpose is one corpus (`principle_decide` for the
+  kernel, `evaluate_profession_decision` for the profession corpus) refuses
+  cleanly when the caller lacks that grant.
+
+Narrowing the defaults themselves is an organization decision, not a platform
+one.
+
+**R6. Export is the highest-risk path.** Export takes knowledge out of the
+platform. In this epic only a person can start one, from the portal. There is
+no MCP export tool; a later item may add one with human approval for each
+run. Export needs its own grant, `knowledge_export`, which no other grant
+implies. Each run covers one scope and is audited (§8).
 
 **R7. Kernel pages stay read-only in the runtime.** A "link it" action on a
 kernel page offers nothing. Kernel edits stay PR-only (EP-WIKI-001 §0.4).
@@ -171,33 +200,67 @@ bodies.
 | Epic | `epicId` (`EP-…`) | `Epic` | WWWD |
 | Document | `documentId` (`DOC-…`, existing) | `Document` (existing) | WWWD |
 | Workroom | room id (`WC-…`) | `Workroom` | WWWD, room-gated |
+| Workroom message (a source only) | `WorkItemMessage` id | `WorkroomMessage` | WWWD, gated by its room (`props.roomId`) |
 | Knowledge article | none; absorbed into wiki pages (§6) | | |
 
 Keys are the semantic ids people already write, so a mention resolves to a
-key without a lookup table. Node props cache only what a reference row needs
-to display (title, kind, status, scope). Authorization never reads them (R1).
+key without a lookup table.
+
+Workroom messages are keyed per message. If they were keyed per room, each
+new message's edge replacement would delete the edges from earlier messages.
+
+**Nodes and edges hold no content.** For gated kinds (backlog item, epic,
+document, Workroom, message) the graph stores only the key, the label, the
+scope and `organizationId`. Titles, statuses and snippets are read from the
+source row at read time, after `canReadEntity` has passed. Other readers of
+the mirror include the admin graph explorer
+(`apps/web/lib/graph/explorer-queries.ts`, gated only by `view_admin`). If the
+mirror held content, those readers would bypass R1. Keeping content out also
+means a title or snippet is never stale.
+
+The writer refuses to upsert a node whose key already exists under an
+incompatible label. Today `upsertGraphNode` silently merges labels, and
+`graph_node.key` is one global namespace.
 
 ### 3.3 Edge types
 
 | `rel_type` | Meaning | Writer |
 |------------|---------|--------|
-| `LINKS_TO` | wiki `[[slug]]` link | existing `syncWikiPageLink`, now also called on commit (§4.1) |
+| `LINKS_TO` | wiki `[[slug]]` link | existing `syncWikiPageLink`, switched to replace semantics on commit (§4.1) |
 | `REFERENCES` | an entity id in any body, or a `[[slug]]` in a non-wiki body | new reference writer (§5) |
 
-`REFERENCES` props are `sourceScope`, `targetScope`, `sourceField` (`body`,
-`description` or `message`), `snippet` (up to 160 characters around the first
-mention) and `syncedAt`. Repeated mentions of one target from the same source
-collapse into one edge, the same way `DOC_REFERENCES` handles them. The graph
-module has no single-edge delete today; §5 adds
-`replaceGraphEdgesFromSource(srcKey, relType, edges)` to `graph-sync.ts`.
+`REFERENCES` edges carry these props:
+
+- `sourceScope` and `targetScope`;
+- `sourceField`: `body`, `description` or `message`;
+- `writtenBy`: the principal whose write produced the edge, which is the
+  provenance R3 relies on;
+- `projection: "references"`: an ownership marker;
+- `syncedAt`.
+
+They carry no snippet. Repeated mentions of one target from the same source
+collapse into one edge, as `DOC_REFERENCES` already does.
+
+The graph module has no single-edge delete today. §5 adds
+`replaceGraphEdgesFromSource(srcKey, relType, edges)` to `graph-sync.ts`, and
+both `LINKS_TO` and `REFERENCES` use it.
+
+**Edge ownership.** Existing whole-label wipes would destroy edges they do not
+own. `clearGraphByLabel` (`pg-graph.ts:573`), called by
+`rebuild-documents-graph.ts`, deletes every edge that touches a `Document`
+node, references included. This epic restricts `clearGraphByLabel` and each
+rebuild job to the edge types they own. `REFERENCES` edges are removed only
+by the reference writer, or when their source or target entity is deleted.
 
 ### 3.4 One parser, one renderer, one reader
 
 - **Parser.** One extractor in `packages/db/src/wiki-frontmatter.ts`, fixed by
   BI-23900D0A, understands `[[slug]]` and `[[slug|label]]`. The slug may
-  contain `/`, as in `principles/no-assumptions`. A sibling function
-  `extractEntityIds` recognises `\b(BI|EP|DOC|KA|WC)-[A-Z0-9-]+\b`. Both skip
-  fenced code, inline code and URLs. The lint detector's private copy
+  contain `/`, as in `principles/no-assumptions`. A sibling function,
+  `extractEntityIds`, recognises
+  `(?<![A-Za-z0-9-])(BI|EP|DOC|KA|WC)-[A-Z0-9]+(?:-[A-Z0-9]+)*`. The lookbehind
+  stops it matching inside keys such as `ACT-WC-…`. Both functions skip fenced
+  code, inline code and URLs. The lint detector's private copy
   (`apps/web/lib/wiki/lint-detectors.ts:209-217`) is deleted in favour of the
   shared one.
 - **Renderer.** A markdown-it inline rule `dpf_entity_ref`, registered next to
@@ -205,24 +268,36 @@ module has no single-edge delete today; §5 adds
   every `MarkdownHtml` surface gets it. The server resolves the readable ids
   in a body before rendering and passes them in as a set. Readable ids become
   links. All other ids stay plain text, so an unknown id and an unreadable id
-  look the same (R1).
+  look the same (R1). On kernel pages, entity ids always render as plain text.
+  The 48 such ids in 26 kernel files are historical citations from the
+  platform's own backlog, and R4 forbids kernel→WWWD edges. Lint reports them
+  at info level.
   `ownerSafeBuildText` in `components/build/BuildOperatorOverview.tsx` hides
   ids on purpose for owner-facing build text, and it stays as it is.
 - **Reader.** `apps/web/lib/references/read-references.ts` exposes
-  `listInbound(targetKey, reader)` and `listOutbound(sourceKey, reader)`. They
-  read `graph_edge`, then filter each far end through
-  `canReadEntity(reader, kind, key)`. That function dispatches to each
-  entity's access rule:
+  `listInbound(targetKey, reader, page)` and
+  `listOutbound(sourceKey, reader, page)`. Each read runs in three steps:
+  1. The query pushes the cheap filters into SQL: the organization and corpus
+     columns stored on the edges (R4 and R5).
+  2. The batch check `canReadEntities(reader, kind, keys[])` runs once per
+     kind, never once per row.
+  3. Titles and snippets are loaded from the source rows that passed.
+
+  Pagination is keyset-based and applied after filtering, so a cap never
+  counts rows the reader cannot see. The scale ceiling is a few thousand
+  inbound edges per target. Heavily cited kernel principles are the worst
+  case. The per-kind rules are:
 
   | Entity | Rule |
   |--------|------|
-  | Wiki page | Organization scope (`organizationId IN (null, readerOrg)`), plus the corpus grant (R5) for agents |
-  | Backlog item, epic | Backlog read capability, plus `BacklogItem.sensitivity` |
-  | Workroom | Room admission |
-  | Document | A new `canReadDocument`: organization scope as `document-store.ts` applies today, plus `accessScope`. Any scope other than `organization` needs a matching `DocumentAccessGrant` (the model exists, but no code reads it yet). |
+  | Wiki page | Organization scope: `organizationId IN (null, readerOrg)`, with the reader's organization taken from the session. Agents also need the corpus grant for the page (R5). |
+  | Backlog item, epic | Backlog read capability. Items marked `confidential` or `restricted` also require that level in the reader's `Principal.sensitivityClearance`; for an agent, in the clearance of both the coworker and its operator. Both enums use the same four levels. |
+  | Workroom, Workroom message | Room admission |
+  | Document | `canReadDocument`, owned by BI-957915CB (enforced document permissions). Until that item lands, the reader applies organization scope, and the readable set excludes any document whose `accessScope` is not `organization`. Excluding them never leaks; it only hides more than strictly necessary. |
 
   Every linking feature calls this reader. No feature queries edges and
-  decides visibility on its own.
+  decides visibility on its own. The admin graph explorer excludes the gated
+  labels and `REFERENCES` edges unless it reads them through this function.
 
 ### 3.5 Shared listbox
 
@@ -247,8 +322,22 @@ Backlinks are only as good as `WikiPageLink`, and today it is incomplete:
 - `linkPages` only upserts, so removed links persist.
 - `LINKS_TO` is refreshed only by the batch rebuild.
 
-BI-23900D0A fixes the shared extractor, adds the kernel fallback, replaces a
-page's out-links on commit, calls `syncWikiPageLink` on commit, and backfills.
+BI-23900D0A makes these changes:
+
+- Merges the two duplicate commit paths (`syncOutLinks` in
+  `apps/web/lib/wiki/proposal-commit.ts:599` and `apps/web/lib/actions/wiki-edit.ts:102`)
+  into one function.
+- Fixes the shared extractor.
+- Resolves link targets explicitly: the page's own organization first, then
+  the kernel, then the profession corpus. `@@unique([organizationId, slug])`
+  does not constrain null organizations, so a null-organization lookup alone
+  cannot tell a kernel page from a profession page.
+- On commit, replaces the page's out-links in both `WikiPageLink` and
+  `LINKS_TO` through `replaceGraphEdgesFromSource`. `pruneKnowledge` removes
+  edges only when an endpoint page is gone, so a link removed between two live
+  pages would otherwise stay.
+- Backfills existing pages.
+
 BI-4EAFF7AC depends on it.
 
 ### 4.2 Panel
@@ -261,9 +350,13 @@ screens. `BacklinkGroup` is moved out of
 component with real links (today its chips are `<span>`s), and the material
 panel keeps using it.
 
+**Organization.** The route resolves the reader's organization from the
+session. This replaces `prisma.organization.findFirst()`
+(`page.tsx:36`) for this page (R2).
+
 **Data.** Until BI-A63A9476 lands, the panel uses the existing
 `wikiPageLink.findMany` helper in `material-backlinks.ts:353-374`, wrapped by
-the shared reader's `canReadEntity`. After BI-A63A9476 it reads inbound
+the shared reader's `canReadEntities`. After BI-A63A9476 it reads inbound
 `LINKS_TO` and `REFERENCES` edges through `listInbound`, which also shows
 backlog items, epics and documents that cite the page. This lets
 BI-4EAFF7AC ship first.
@@ -285,8 +378,9 @@ A collapsed section lists readable pages whose body contains this page's
 title, or the last segment of its slug, as whole words. Matches inside code
 or inside an existing link are excluded, as are pages that already link here.
 `WikiPage` has no full-text column. The query uses `pg_trgm` (installed) with
-a new GIN trigram index on `WikiPage.body`, followed by a whole-word check in
-code, and is capped at 20 rows.
+a new GIN trigram index on `WikiPage.body`. The organization and corpus
+filters run in SQL, then a whole-word check runs in code. The 20-row cap
+applies after filtering.
 
 Each row offers **Link it**:
 
@@ -315,7 +409,8 @@ committed write of a body field:
   `BacklogPanel` actions),
 - `Epic.description`,
 - the text of each new current `DocumentVersion`,
-- Workroom messages (append-only, so each is written once),
+- each Workroom message (`WorkItemMessage`). Messages are append-only, so each
+  is written once and keyed by its own id,
 - `WikiPage.body` on revision commit, for entity ids only. Wiki-to-wiki links
   stay on `LINKS_TO`.
 
@@ -328,9 +423,20 @@ and queued for retry, and the user's save is never blocked; the reconcile
 job repairs any gap.
 
 **Rebuild.** `pnpm --filter @dpf/db references:rebuild` runs the writer over
-every body. A scheduled weekly reconcile, modelled on
-`graph-projection-reconcile.ts`, does the same. Both can be re-run at any
-time.
+every body. A weekly scheduled job does the same, and also adds a `references`
+count to `reconcileGraphProjections` (`graph-projection-reconcile.ts`). That
+reconcile only counts and reports; the rebuild is what repairs. Both can be
+re-run at any time.
+
+**Lifecycle.**
+
+- `merge_backlog_items` re-points the merged item's inbound edges to the
+  surviving item.
+- A retired item keeps its edges. The reader shows its status, read at the
+  time of the request.
+- Deleting a wiki page, document or message removes the edges that start or
+  end at it.
+- The node holds no content (§3.2), so renames need no graph update.
 
 **Read surfaces.** All of these go through `listInbound`:
 
@@ -340,17 +446,20 @@ time.
 - the document page (`workspace/documents/[documentId]`);
 - the wiki panel (§4).
 
-Each row shows the source entity, its kind, its scope and the snippet. The
-MCP `get_backlog_item` response gains a `referencedBy` array under the same
-filter, so agents see what people see and nothing more.
+Each row shows the source entity, its kind and scope, and a snippet taken from
+the source row at read time. The MCP `get_backlog_item` response gains a
+`referencedBy` array, filtered the same way. It holds only id, kind, title and
+scope, and no snippet. That way text planted by a less privileged writer never
+reaches a privileged agent's context unless the agent opens the source itself
+(OWASP LLM01, indirect prompt injection).
 
 **Rendering.** The backlog item panel gains a read view of the body through
 `MarkdownHtml`. `EpicCard` swaps its URL-splitting regex for `MarkdownHtml`.
 Both, along with document and Workroom message views, pick up the
 `dpf_entity_ref` rule.
 
-**Corpus grants.** The narrow read grants from R5 ship here, because this is
-the first item that reads across corpora.
+**Corpus grants.** The narrow read grants come from BI-825D3487, which lands
+first (R5). This item checks them on every read surface it adds.
 
 **Out of scope.** People @mentions and subscriptions (owned by EP-D7361FCF;
 the parser must not claim `@`) and graph visualization (EP-WIKI-005).
@@ -374,18 +483,49 @@ longer possible. This section replaces §11's steps. §11's direction still
 stands: one knowledge model, with wiki search as the search surface.
 
 **Scope.** Knowledge articles are an organization's own knowledge, so they
-become **WWWD overlay pages**, with `organizationId` set to the owning
-organization and `isKernel = false`. They never become kernel or profession
-pages.
+become **WWWD overlay pages** with `isKernel = false`. They never become
+kernel or profession pages.
 
-**Current consumers** (all to be repointed):
+`KnowledgeArticle` has no `organizationId`, so the migration decides the
+organization in this order:
+
+1. The organization of the anchored product or portfolio.
+2. The author's organization.
+3. The install's single organization, when exactly one exists. Install is the
+   tenant.
+
+If the organization is still ambiguous, for example on an MSP install with
+several customer estates, the migration holds the article and lists it for
+an administrator. It never guesses, and it never uses `findFirst`.
+
+`visibility` maps as follows:
+
+- `internal` → an organization page.
+- `public` → an organization page with `metadata.visibility = public`.
+  Publishing beyond the organization stays a separate decision.
+- `team` → kept as a **draft** overlay page until the data-architecture
+  steward decides how team visibility maps. Otherwise a team-only article
+  would become readable by the whole organization.
+
+**Current consumers** (all to be repointed or retired):
 
 - Routes: `app/(shell)/knowledge/*` and `portfolio/product/[id]/knowledge`.
+  Components: `components/knowledge/*`.
 - MCP tools in `lib/mcp/packs/knowledge-pack.ts`: `search_knowledge_base`,
-  `create_knowledge_article`, `flag_stale_knowledge`.
-- Libraries: `lib/actions/knowledge.ts`, `route-knowledge-pointers.ts`,
-  `coworker-self-tasks.ts:448`, `product-operating-context-query*.ts`.
-- `semantic-memory.ts`: `storeKnowledgeArticle` writes points
+  `create_knowledge_article`, `flag_stale_knowledge`. Their grant entries in
+  `agent-grants.ts`, `packages/db/data/grant_catalog.json` and
+  `packages/db/src/platform-tools-snapshot.json`, plus
+  `lib/gpp/known-unclassified-side-effect-tools.ts` and
+  `lib/tak/tool-result-provenance.ts`.
+- Libraries:
+  - `lib/actions/knowledge.ts`, `lib/actions/agent-coworker.ts`,
+    `route-knowledge-pointers.ts`;
+  - `coworker-self-tasks.ts:448`, `product-operating-context-query*.ts`,
+    `product-management-playbook.ts`;
+  - the route contexts `lib/tak/{agriculture,product-line,product}-route-context.ts`
+    and `route-context-map.ts`;
+  - `lib/govern/data/legacy-coverage-baseline.ts`.
+- `semantic-memory.ts`: `storeKnowledgeArticle` writes the points
   `knowledge-article-<id>` into the `platform-knowledge` collection.
 
 **Migration** (additive, never destructive, per `never-wipe-db-for-code-fixes`):
@@ -402,9 +542,12 @@ pages.
      `tags` and `reviewIntervalDays`.
 2. **Revisions.** Copy each `KnowledgeArticleRevision` into
    `WikiPageRevision`, keeping version numbers, authors and timestamps.
-3. **Anchors.** Keep product and portfolio anchors in `metadata.anchors` and
-   project them as `ANCHORED_TO` graph edges, so no join table is added. The
-   product knowledge tab reads those edges.
+3. **Anchors.** Keep EP-WIKI-001 §11's normalized direction. Rename
+   `KnowledgeArticleProduct` and `KnowledgeArticlePortfolio` to
+   `WikiPageProduct` and `WikiPagePortfolio`, so they key on the page and keep
+   their foreign keys and cascades. The product knowledge tab reads those
+   tables. Anchors are relational source data, and are not demoted to JSON or
+   to a derived edge.
 4. **Embeddings.** Embed the new pages into `wiki-pages` and delete the
    `knowledge-article-*` points from `platform-knowledge`. `search_knowledge`,
    which searches that whole collection, keeps working for capabilities and
@@ -422,8 +565,9 @@ pages.
 All three log a deprecation notice, and `/knowledge` redirects to the wiki
 with an organization filter.
 
-**Retirement** (a later release, after the window): drop the four
-`KnowledgeArticle*` models. A guard first checks that every row has a mapped
+**Retirement** (a later release, after the window): drop `KnowledgeArticle`
+and `KnowledgeArticleRevision`. The join tables survive under their new
+names. A guard first checks that every row has a mapped
 page, and the data-architecture steward records the retention decision for
 the retired tables.
 
@@ -488,11 +632,9 @@ as a vault, with no plugins needed.
 
 **Who may export, and how much (R6):**
 
-- The `knowledge_export` grant is required. Nothing implies it, and the
-  coworker baseline does not include it. The MCP tool
-  `export_knowledge_vault` checks the grant as well as the caller's identity.
-  A coworker can export only if a person has deliberately granted it that
-  right.
+- A person starts each export from the portal. The `knowledge_export`
+  capability is required, and no other grant implies it. This epic adds no
+  MCP export tool, so coworkers cannot export (R6).
 - Each run covers exactly one scope:
   - **Organization**: overlay and override pages, plus documents the caller
     can read.
@@ -505,10 +647,14 @@ as a vault, with no plugins needed.
 - Every page and document passes `canReadEntity` for the caller. A restricted
   document the caller cannot read is left out of the zip and counted in the
   audit record only.
-- The audit record is written through `logComplianceAction`
-  (`lib/actions/compliance-helpers.ts`, `ComplianceAuditLog`) before the
-  download starts. It holds the caller, the scope, the counts and the
-  SHA-256 of the zip.
+- Before the download starts, the audit record is written through
+  `logComplianceAction` (`lib/actions/compliance-helpers.ts`,
+  `ComplianceAuditLog`). Its actor column is an `EmployeeProfile` key, so the
+  exporter's principal id, scope, counts and the SHA-256 of the zip go into
+  the record's JSON value. If the principal cannot be identified, the export
+  is refused.
+- Restricted documents need real enforcement, so export depends on
+  BI-957915CB (enforced document permissions).
 
 **Format.**
 
@@ -538,10 +684,9 @@ every link to them. Ids and links to anything outside the export become plain
 text, because a link to something absent would reveal that it exists. Raw
 source citations become ordinary markdown links to their URLs.
 
-**Zip dependency.** The app has no zip library. Add one pinned
-dependency with no native code and no transitive dependencies (preferred:
-`fflate`, MIT). It goes through the normal dependency and supply-chain
-review.
+**Zip library.** `fflate` (MIT) is already a dependency of `@dpf/db`
+(`packages/db/package.json`). Reuse it. If the web app needs it directly, pin
+the same version.
 
 **Round trip.** A parse test reads every exported file back and checks that
 the frontmatter equals the typed fields.
@@ -575,10 +720,11 @@ rows across backlog items, epics, wiki pages, documents and Workrooms.
 
 - Ranking: `pg_trgm` similarity on titles first, then a title-prefix bonus,
   then how recently the entity was updated.
-- No route-visit tracking exists, so the dialog instead keeps a per-browser
-  list of the last 20 opened ids (ids only, never titles or bodies). Those
-  ids are re-checked on the server every time the dialog opens, and shown
-  first while the input is empty.
+- No route-visit tracking exists. Instead, the dialog keeps a per-browser list
+  of the last 20 opened ids, stored only as ids (never titles or bodies),
+  keyed by principal and cleared on sign-out. The server re-checks those ids
+  every time the dialog opens. While the input is empty, they are shown
+  first.
 - Each kind is queried only if the reader holds that kind's grant, and every
   row passes `canReadEntity`.
 - Rows show the title, kind and scope badge.
@@ -589,9 +735,11 @@ Target: under 300 ms at the 95th percentile on the dev install.
 search tools, and a cross-kind finder for agents would be a new broad read
 path (R5).
 
-**Dependency.** `search_knowledge` fails 71% of calls today
-(BI-MCP-EFF-4F823E5B). The switcher does not call it, but that failure is the
-signal that search reliability must come first. The switcher ships after it.
+**Order.** `search_knowledge` fails 71% of calls today
+(BI-MCP-EFF-4F823E5B). The switcher does not call it, so this is not a
+technical dependency. It is an ordering preference: search reliability comes
+first. The switcher does depend on BI-825D3487 for corpus grants and, for
+`KA-` ids, on BI-67F04B3F.
 
 **Acceptance (prose).** An exact id opens on one Enter. Title search meets
 the latency target. No result reveals anything the reader cannot open. The
@@ -620,27 +768,32 @@ dialog); OWASP Top 10 A01:2021; OWASP Top 10 for LLM Applications 2025
 
 | Order | Item | Size | Why |
 |-------|------|------|-----|
-| 1 | BI-MCP-EFF-4F823E5B | (owned separately) | Search reliability first |
+| Order | Item | Size | Why |
+|-------|------|------|-----|
+| 1 | BI-825D3487 corpus-scoped read grants | medium | The founder's scope-separation requirement; every read path checks these grants |
 | 1 | BI-23900D0A link-write repair | small | Backlinks depend on correct rows |
-| 2 | BI-4EAFF7AC backlinks | small | The data exists; ships with the shared reader |
-| 2 | BI-2F7BE778 editor | medium | Shared `Combobox`, suggest endpoint, extracted resolver, preview |
-| 3 | BI-A63A9476 references | medium | Parser, writer, reader, rebuild, four surfaces, corpus grants |
-| 3 | BI-67F04B3F absorption | large | Data migration, aliases, later retirement |
-| 4 | BI-359C7C2F switcher | medium | Needs item 1 and reuses `Combobox` and `canReadEntity` |
-| 4 | BI-5412E422 export | medium | Reuses `canReadEntity`; simpler after absorption |
+| 1 | BI-MCP-EFF-4F823E5B | (owned separately) | Search reliability first (a preference) |
+| 2 | BI-4EAFF7AC backlinks | medium | Builds the shared reader and `canReadEntities`, the session organization, the trigram index and the panel |
+| 2 | BI-2F7BE778 editor | medium | Shared `Combobox`, suggestion endpoint, extracted resolver, preview |
+| 3 | BI-A63A9476 references | medium | Parser, writer, edge ownership, rebuild, four surfaces |
+| 3 | BI-67F04B3F absorption | large | Data migration, organization resolution, aliases, later retirement |
+| 4 | BI-359C7C2F switcher | medium | Reuses `Combobox` and `canReadEntities`; `KA-` ids need absorption |
+| 4 | BI-5412E422 export | medium | Needs BI-957915CB; simpler after absorption |
 
-`canReadEntity` (§3.4) is built by whichever of BI-4EAFF7AC, BI-2F7BE778 or
-BI-A63A9476 reaches implementation first, and the others reuse it. Its
-document rule (`canReadDocument`) belongs to BI-A63A9476, the first item that
-shows documents.
+BI-4EAFF7AC builds the shared reader (§3.4), because it is the first item at
+order 2. Every later item reuses it. The reader's document rule comes from
+BI-957915CB.
 
 ## 12. Risks
 
 | Risk | Mitigation |
 |------|------------|
 | A missed visibility check leaks a title or snippet | One reader (§3.4) for every feature. Each feature gets a contract test that plants an entity from another scope or an unreadable one and asserts it is absent, including from counts |
-| `canReadDocument` makes documents stricter than today | It applies `accessScope` and grants that no code enforces yet. Roll it out first to the new read paths, then to the document page with a release note |
-| Reference edges drift from the bodies | Idempotent writer, weekly reconcile, rebuild command |
-| Absorption loses article history | Revisions are copied with their version numbers; a mapping check guards the drop; steward review |
-| Export becomes an exfiltration channel | Separate grant, one scope per run, started by a person, audited with a digest (R6) |
-| Narrow grants change how agents behave | `registry_read` implies all three, so nothing changes until an organization narrows a coworker |
+| The graph mirror becomes a second read path | Nodes and edges for gated kinds hold no titles or snippets (§3.2); the admin explorer excludes gated labels and `REFERENCES` unless it reads through the shared reader |
+| Linking agents read text planted by less privileged writers (indirect prompt injection) | MCP `referencedBy` carries no snippets; edges record `writtenBy` (§5) |
+| Documents still readable on paths outside this epic | BI-957915CB enforces document permissions on `doc_load`, `doc_search` and the document page; until it lands, the reader hides non-`organization` documents |
+| Rebuild jobs wipe edges they do not own | Ownership marker and type-restricted wipes (§3.3) |
+| Reference edges drift from the bodies | Idempotent writer, weekly rebuild, counted reconcile |
+| Absorption loses article history or widens visibility | Revisions copied with their version numbers; ambiguous organization held, never guessed; `team` articles held as drafts; a mapping check guards the drop; steward review |
+| Export becomes an exfiltration channel | Started by a person only, separate capability, one scope per run, principal-identified audit with a digest (R6) |
+| Corpus grants change how agents behave | All three are held by default, so nothing changes until an organization narrows a coworker |
