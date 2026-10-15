@@ -34,7 +34,7 @@ For locally capability-activated services, runtime profile names are mechanicall
 | `runtime:browser-automation` | `runtime-browser-automation` | `browser-use` |
 | `runtime:durable-automation` | `runtime-durable-automation` | `redis`, `redis-exporter`, `inngest` |
 | `runtime:local-speech` | `runtime-local-speech` | `dpf-tts` (speech-to-text is provider-managed, not a local service — see below) |
-| `runtime:deep-observability` | `runtime-deep-observability` | Prometheus, Grafana, Loki, Alloy, and PostgreSQL exporter |
+| `runtime:deep-observability` | `runtime-deep-observability` | Prometheus, Grafana, and PostgreSQL exporter (Loki and Alloy are always-on `runtime:core` services, BI-F8024A9D). The operator chooses it at install or in Settings → Monitoring (BI-83260BB3). |
 | `runtime:external-ai` | `runtime-external-ai` on Linux | Ollama from the Linux overlay; configured external providers remain provider-managed |
 | `runtime:adp-integration` | `integrations-adp` (separate-distribution exception) | `adp` |
 | `runtime:development` | `dev` and `integration-test` (lifecycle-only) | `dev-postgres`, `dev-init`, `dev-portal`, and `integration-test-harness` |
@@ -59,6 +59,8 @@ The governed [Compose wrapper](../../scripts/dpf-compose.mjs) locates the instal
 Enabling resolves the full dependency closure, persists the desired catalog/state identity, starts the required services, and commits live capability state only after the signed host receipt proves the exact topology and required health. Disabling first closes work admission. If a declared work guard has queued or running work, the request returns `drain_required` with blocker counts and leaves the current projection active. Once drained, the transition stops and removes services no longer required.
 
 The transition protocol uses an HMAC-signed, expiring envelope containing the transition identifier, prior and desired keys, hashes, profiles, and services. The promoter has the only read-write `/dpf-state` mount. The host apply script serializes transitions, writes the install snapshot atomically, reconciles explicit service deltas, observes the Compose project, and writes a signed receipt. Its journal permits a crash-safe retry. A failed reconcile or required-health check restores the previous install snapshot and service closure; an unverifiable rollback is reported as `rollback_failed`, never as success. Startup reconciliation completes or compensates pending database receipts before admitting another transition.
+
+Host apply can recreate the portal before it writes its receipt. A process-owned observer checks for late signed receipts every 30 seconds, independently of optional job infrastructure. This observer never launches or compensates host work when a receipt is absent. Startup and live completion share the transactional envelope, database-baseline and audit fences; identical completion is idempotent. Serialization contention leaves the existing transition available for the next pass. Admission still checks durable active and recovery-required rows, and background observation cannot reopen a failed startup barrier.
 
 Health is an observation of the desired state, not permission to enable or disable a capability.
 
@@ -162,7 +164,224 @@ Reporting is not repair. The diagnosis says what diverged; it never decides whic
 authority wins, because reconciling without first finding the writer that moved
 state outside the transition protocol leaves the cause in place.
 
+## Existing-install reconciliation — BI-5ACBAC50
+
+The current implementation supports version 2 reconciliation with distinct,
+complete host and database baselines, immutable packaged code identity, touched-only
+database updates, and persisted compensation. Preview reports disagreement without
+choosing desired settings; apply requires an explicit request. Browser actions
+authorize the session's `manage_platform` capability. Governed MCP checks the same
+capability and existing token/coworker grants, then passes its authenticated user
+to the shared command service; a browser cookie is not an MCP prerequisite.
+
+The backend checkpoint passed all six real PostgreSQL cases and its canonical
+gate; PR 6366 also passed protected integration and merged. Those are source and
+cloud proofs. Canonical deployment and live reconciliation remain separate
+acceptance gates, and no native review verdict is implied.
+
+The bounded design passed independent review; implementation is in progress
+and has not run on an installation.
+It completes the remaining reconciliation scope of BI-5ACBAC50, using the
+existing transition coordinator, host authority, receipt ledger and operational
+projection. It does not reopen the broader substrate workstreams.
+
+On served revision `f881fcb84de1bb07748f017ce07ecb85042507ac`, the mounted host
+snapshot enables core only while the database retains the optional capabilities'
+seed-active values. There are no runtime transition rows. SUR-885E9856's recorded
+required services exactly match the read-only host projection and omit sandbox;
+the promoter therefore skips its sandbox-refresh step. Its portal succeeded,
+but that result does not qualify the sandbox image or CLI. The existing item's
+August 27 diagnosis already explains the disagreement at initial seeding.
+
+The normal transition is deliberately unable to repair this baseline: its
+previous keys and hash come from live database state, while the host verifies
+them against its persisted snapshot. Do not remove that refusal, overwrite the
+snapshot, flip database rows, or enable every seed-active capability.
+
+Decision `DI-375608F0065D` selects an explicit dual-baseline reconciliation over
+a separate correction followed by ordinary activation. The platform consult was
+usable, high confidence and autonomy eligible with no commandment conflict.
+This chooses a source architecture, not a desired live capability set.
+
+**Contract.** Extend the existing transition with an explicit reconciliation
+mode. Bind the actual validated host enabled set, catalog/state hashes and
+identity separately from the complete observed database capability-state map.
+The durable request, signed envelope and idempotent replay must cover both
+baselines and the explicit proposed desired results. Ordinary transitions retain
+their consistency precondition. A changed baseline, unknown key, stale catalog,
+unreadable host state or unknown operator intent refuses the apply with a
+specific recovery result rather than assuming either authority wins.
+
+Normalize unproven seed claims only through this reviewed transition. Maintain
+separate desired host-enabled keys and a desired database-state map, with an
+explicit set of managed/touched capability keys. Derive host changes from the
+verified snapshot plus explicitly requested capabilities. Preserve every
+untouched database value; do not infer intent from a seed default or a running
+leftover container. Bind both desired results and the touched keys in the signed
+request and durable replay identity. A preview names EVERY changed database state
+and physical service, kept volumes, health requirements, remaining disagreement
+and rollback target. Unknown unrelated intent remains unchanged with explicit
+residual drift, or receives a real decision before any normalization. A partial
+repair never claims global agreement. A single global desired set is unsafe.
+
+**Integrity.** Source revision `1cf5311615da456dff8679d1d112b2237cb7c280`
+reproduces a prerequisite defect: the legacy signature serializer drops nested
+`observedHealth` members, so changing unhealthy to healthy retains its signature.
+A versioned envelope and receipt must recursively bind every baseline and health
+value through the shared signing implementation. The standalone host must use
+that same implementation. Reconciliation requires BOTH server and host to support
+version 2. Unknown or older versions refuse BEFORE authority reservation, journal
+creation or state mutation; there is no fallback to version 1. Deliver the shared
+verifier and actuator in the verified canonical promoter image closure:
+`promote.sh` executes its packaged actuator and signing module, rather than the
+host install's script copy. Run a read-only protocol/version probe on that exact
+immutable image and compare its source identity with the server before enabling
+reconciliation. Installer-owned client assets still converge through their normal
+release path; a portal image swap does not prove those files changed. A missing
+delivery path is a source blocker, never permission for an ad hoc installed copy.
+
+Preserve historical legacy parsing with an explicit
+unverified-health disposition; an old signature cannot establish newly verified
+health. Never relabel historical records as tampered merely because they predate
+the stronger format, and never promote their unsigned fields into live evidence.
+A legacy receipt may not be replayed into a fresh version 2 reconciliation.
+
+**Execution.** Reuse the existing transition authority lock, serializable database
+admission, host apply journal, bounded lease and signed receipt. Admission compares
+the observed database baseline inside its transaction; host apply compares the
+observed host baseline inside its existing guarded write. Database success occurs
+only after the exact desired topology and required health are independently
+observed. Compensation compares against THIS saga's applied host snapshot and
+managed database values before restoring the actual observed prior topology and
+database values. It must never overwrite a subsequent writer: changed ownership,
+hash or touched value reports recovery-required instead of forcing rollback.
+Untouched values remain untouched. Record any restored baseline disagreement
+truthfully. A stale
+or interrupted request resumes only its own bound journal; it cannot adopt another
+owner's receipt. Keep authority, credential and destructive confirmation gates.
+
+**Ordered delivery and qualification.**
+
+1. Reproduce seeded initial disagreement, ordinary-transition refusal, and
+   nested-signature omission on the named source. Record source proof separately
+   from the read-only live observations and native initiative receipts.
+2. Qualify versioned recursive signing and shared host verification first:
+   nested health/baseline/desired-result/touched-key tampering, key ordering,
+   host/server capability probes, mixed or unknown versions before any mutation,
+   old flat envelopes and truthful legacy historical reads.
+3. Extend the existing coordinator and host apply boundary with dual baseline
+   validation, replay identity and compensation. Exercise two concurrent writers,
+   drift between preview/admission/apply, wrong owner, expired launch, crash at
+   each durable boundary and failed required health against real persistence.
+4. Correct fresh bootstrap claims through host-grounded activation; preserve
+   existing operator state during registry sync. Define the old-install migration
+   stance explicitly, including retained ephemeral build and development services.
+5. Expose the same governed preview and actuator to supported clients; add no
+   second transition engine or independent writer. Reuse the existing runtime
+   health projection and shared disclosure/table/status components.
+6. Publish through independent source review, DCO, protected checks and one
+   canonical image producer. After deployment, perform one authorized transition
+   and verify agreement, exact sandbox image/CLI and subsequent upgrade behavior.
+   The expected DEV build capability is not declared active by this document.
+
+At least 20% of this repair consolidates duplicated projection, signing and
+baseline validation. No source test, consultation, merged PR or healthy portal
+substitutes for the live reconciliation and build-engine acceptance.
+
+### Historical implementation evidence
+
+The following incremental notes preserve earlier test results and the boundaries
+that existed at each checkpoint. Their statements about unimplemented modes or
+pending source qualification are superseded by the current contract above; they
+do not describe the latest source or establish live acceptance.
+
+The first signing regression reproduced two failures before the repair, then
+passed all 13 shared-signing tests. The host actuator now imports that same
+signer; its ten existing crash, rollback, schema, expiry and health tests pass.
+The expired-envelope fixture now supplies its own temporary state directory so
+it cannot contend with another test or install's apply lock. All 54 related
+protocol/coordinator/upgrade preflight tests pass. These are source proofs only:
+version 2 apply, compatibility probes, dual-baseline admission, compensation,
+canonical release and live reconciliation are still unqualified.
+
+Independent review then reproduced a malformed version 2 payload without its
+kind falling back to legacy signing. Both direct signing and live/historical
+receipt verification regressions failed before correction. Version 2 now refuses
+a missing or wrong kind before serialization; the corrected shared/host suite
+passes 24 tests and the related protocol suite passes 55. This review finding
+does not establish a live exploit or qualify version 2 application.
+
+The read-only packaged probe now reports signing, apply and reconciliation
+support separately, alongside its source label and actuator/signer byte hashes.
+Its command uses the validated immutable image without host mounts, secrets,
+Docker socket or network, and bounds memory/CPU. The actual shell entrypoint and
+direct actuator tests verify that a probe leaves its state directory empty and
+refuses mixed probe/apply arguments. The probe advertises apply version 1 and no
+reconciliation support until implementation qualifies them. All 26 shared/host
+tests and 205 related promoter/protocol/coordinator/upgrade tests pass. No live
+image probe, admission integration, full gate or reconciliation is claimed.
+
+Before executing an image probe, its command also bounds PIDs and forbids an
+implicit pull; the verified artifact must already be present. The protocol
+reader requires the trusted source SHA and both expected byte digests, rejects
+malformed or contradictory version sets, and does not infer apply support from
+signing support. Its expected identities must come from the verified canonical
+server/candidate closure, never caller-provided policy claims. The existing
+owned-container timeout/fencing runner remains required when this discovery is
+wired into admission. Source tests do not establish that runtime wiring.
+
+The actuator now accepts version 2 ordinary transitions with an explicit
+`mode: transition`, preserving the existing consistent-baseline precondition.
+Its receipts recursively authenticate observed health; source fixtures exercise
+replay and every existing durable crash boundary in both versions. A signed
+`mode: reconciliation` still refuses before any journal or install-state write.
+The packaged probe therefore advertises apply versions 1 and 2, and no
+reconciliation support. The server coordinator still issues version 1 until
+trusted packaged-probe admission is wired. These source prerequisites do not
+qualify dual-baseline application, legacy health evidence or a live transition.
+
+The packaged discovery runner now uses the existing owned-container process
+budget, with a 60-second limit and 4 KiB stdout ceiling. It checks server/image
+source agreement before execution, then validates the reported source and byte
+digests through the shared protocol reader. Failed execution, timeout, output
+overrun, malformed output or contradictory support cannot supply evidence.
+Eight new source regressions failed before this runner existed, then all 198
+related promoter, protocol, coordinator and upgrade tests passed. The caller must
+still obtain expected digests from the trusted server closure and wire discovery
+before reconciliation admission; no actual image probe or live apply is claimed.
+
+The host actuator also uses the already-packaged shared capability-state hash
+helper instead of maintaining its own serialization. This preserves the existing
+ordinary-transition hash and consistent-baseline requirement. The existing hash,
+signing, host crash/recovery and promoter closure suites pass 45 source tests;
+this refactor supplies no live capability or reconciliation evidence.
+
+The coordinator now snapshots caller identity and complete state maps before
+asynchronous projection. Durable admission compares the complete observed
+database baseline inside its serializable transaction; replay also compares the
+original requester and both complete state maps. Seven preserved regressions
+failed before this repair, then all 114 tests across three executed affected
+files passed. Both official web TypeScript programs passed. These are source
+prerequisite checks: the packaged reconciliation mode, owned compensation,
+bootstrap synchronization, real PostgreSQL qualification and live agreement
+remain unverified. No capability was activated by these checks.
+
 ## Safe operating rules
+
+Runtime Health keeps active required, degraded and provider-managed service
+requirements visible. Known inactive optional services remain available in a
+collapsed, keyboard-operable disclosure; they do not reduce platform health.
+Identical required-service recovery advice is shown once, while distinct actions
+and provider navigation remain visible. This presentation preserves the canonical
+health projection and every service record; it changes neither capability intent
+nor observed availability.
+
+When all active entries are required services with the same availability and
+status, one visible status describes the group. Each service references that
+status with `aria-describedby`; its name, details and actions remain individual.
+Mixed, degraded and provider-managed groups keep individual status labels. Static
+view copy uses the request's existing admin translator, with the same catalog
+provided to the product-health client view.
 
 - Change physical service facts in the substrate manifest and regenerate the catalog; do not hand-edit the generated catalog.
 - Change capability dependencies or activation policy in the canonical capability seed/sync path; do not encode them in Compose.

@@ -10,6 +10,7 @@ import { CHANGE_REVIEW_TOOL_GRANTS } from "./change-review-tool-grants";
 import { CONTRIBUTOR_INVENTORY_TOOL_GRANTS } from "./contributor-inventory-tool-grants";
 import { PAYABLES_TOOL_GRANTS } from "./payables-tool-grants";
 import { PROVIDER_MANAGEMENT_TOOL_GRANTS } from "./provider-management-tool-grants";
+import { PLATFORM_UPDATE_TOOL_GRANTS } from "./platform-update-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 /**
  * Implications between agent grant categories. A grant on the left of the
@@ -271,8 +272,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Surface readiness (G9, multi-client governance parity, BI-6AC65187): a
   // client surface's self-reported heartbeat rides the same tier as the other
   // heartbeats; the fleet rollup is an ops read like the coordination map.
-  record_surface_readiness: ["work_capsule_write"],
-  get_fleet_readiness: ["work_capsule_read"],
+  record_surface_readiness: ["work_capsule_write"], get_fleet_readiness: ["work_capsule_read"],
+  issue_grok_credentials_client: ["sandbox_execute"], // BI-84C1F526: Grok credential carries dpf.build
   register_runtime_target: ["work_capsule_write"],
   verify_archetype_projection: ["sandbox_execute"],
   heartbeat_runtime_target: ["work_capsule_write"],
@@ -782,10 +783,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // build can complete step 4 of routing a learning to the commons.
   contribute_finding_to_hive: ["backlog_write"],
   set_change_disposition: ["backlog_write"],
-  apply_platform_update:  ["admin_write"],
-  // BI-C26F7EE1: read-only operator preview of the upstream change set —
-  // paired with apply_platform_update's admin_write as the read tier.
-  summarize_upgrade_impact: ["admin_read"],
+  ...PLATFORM_UPDATE_TOOL_GRANTS,
 
   // Contributor inventory sync: on-demand trigger so an agent need not wait for the 10-minute cron (BI-063BDF1B Phase 5).
   trigger_contributor_inventory_sync: ["admin_write"],

@@ -32,7 +32,8 @@
       "profiles": [],
       "ports": [],
       "volumes": [
-        "dpf-source-code:/workspace"
+        "dpf-source-code:/workspace",
+        "${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro"
       ],
       "dependsOn": [
         "postgres"

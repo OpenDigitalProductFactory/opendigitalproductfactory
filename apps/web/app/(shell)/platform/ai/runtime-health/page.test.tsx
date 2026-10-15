@@ -119,7 +119,7 @@ describe("RuntimeHealthPage", () => {
     expect(html).toContain("Model Selection &amp; Runtime Health");
     expect(html).toContain("All phases route to cloud providers.");
     expect(html).toContain('href="/platform/ai/readiness"');
-    expect(html).toContain("Capability service requirements");
+    expect(html).toContain("Service requirements");
     expect(html).toContain("Optional — inactive");
     expect(html).toContain('data-testid="phase-routing-table-scroll"');
     expect(html).toContain('min-width:0');
@@ -129,20 +129,64 @@ describe("RuntimeHealthPage", () => {
   it("does not infer service requirements when capability authority is unavailable", async () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const { loadCapabilityServiceHealth } = await import("@/lib/platform-runtime/service-health-loader");
-    vi.mocked(loadCapabilityServiceHealth).mockRejectedValueOnce(new Error("install_catalog_stale"));
+    vi.mocked(loadCapabilityServiceHealth).mockRejectedValueOnce(Object.assign(new Error("install_catalog_stale"), {
+      divergence: { divergences: [{ capabilityId: "private-diagnostic", liveState: "active" }], summary: "private-diagnostic" },
+    }));
     const { default: RuntimeHealthPage } = await import("./page");
 
     const html = renderToStaticMarkup(await RuntimeHealthPage());
 
     expect(html).toContain("Capability authority is unavailable");
-    expect(html).toContain("Service requirements cannot be classified safely right now.");
+    expect(html).toContain("service requirements cannot be classified safely.");
     expect(html).not.toContain("install_catalog_stale");
+    expect(html).not.toContain("private-diagnostic");
     expect(html).not.toContain("Optional — inactive");
     expect(JSON.stringify(log.mock.calls)).not.toContain("install_catalog_stale");
     expect(log).toHaveBeenCalledWith("[runtime-health] read unavailable", expect.objectContaining({
       event: "runtime_health_read_unavailable",
       source: "capability-authority",
     }));
+    log.mockRestore();
+  });
+
+  it("preserves every diagnosed disagreement without exposing the underlying error or claiming healthy services", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { createOperationalCapabilityState } = await import("@/lib/platform-runtime/operational-state");
+    let divergenceError: unknown;
+    try {
+      createOperationalCapabilityState({
+        installSnapshot: { enabledRuntimeCapabilities: ["runtime:core", "runtime:build"] },
+        capabilityStates: [
+          { capabilityId: "runtime:adp-integration", state: "disabled" },
+          { capabilityId: "runtime:browser-automation", state: "disabled" },
+          { capabilityId: "runtime:core", state: "active" },
+          { capabilityId: "runtime:build", state: "disabled" },
+          { capabilityId: "runtime:deep-observability", state: "active" },
+          { capabilityId: "runtime:development", state: "disabled" },
+          { capabilityId: "runtime:durable-automation", state: "disabled" },
+          { capabilityId: "runtime:external-ai", state: "disabled" },
+          { capabilityId: "runtime:local-speech", state: "disabled" },
+        ],
+        observedServices: {}, observedProviders: {},
+      });
+    } catch (error) { divergenceError = error; }
+    expect(divergenceError).toBeInstanceOf(Error);
+    expect((divergenceError as Error).message).toMatch(/^capability_state_stale:/);
+    const { loadCapabilityServiceHealth } = await import("@/lib/platform-runtime/service-health-loader");
+    vi.mocked(loadCapabilityServiceHealth).mockRejectedValueOnce(divergenceError);
+    const { default: RuntimeHealthPage } = await import("./page");
+    const html = renderToStaticMarkup(await RuntimeHealthPage());
+    expect(html).toContain("capabilities disagree with the installation");
+    expect(html).toMatch(/<details[^>]*><summary/);
+    expect(html).not.toMatch(/<details[^>]*\bopen/);
+    expect(html).toContain("runtime:build");
+    expect(html).toContain("runtime:deep-observability");
+    expect(html).toContain("Installation: enabled; recorded state: disabled");
+    expect(html).toContain("Installation: disabled; recorded state: active");
+    expect(html).not.toContain("capability_state_stale");
+    expect(html).not.toContain("Optional — inactive");
+    expect(html).not.toContain("Required services available");
+    expect(JSON.stringify(log.mock.calls)).not.toContain("capability_state_stale");
     log.mockRestore();
   });
 

@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ provider: vi.fn(), credential: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: { modelProvider: { findUnique: mocks.provider } } }));
 vi.mock("./provider-account-credentials", () => ({
+  getDecryptedCredential: mocks.credential,
   findProviderCredential: mocks.credential,
   resolveCredentialProviderId: (id: string) => id,
 }));
@@ -26,5 +27,5 @@ it.each(["wrkspc_AccountA", null])("default Anthropic discovery uses its credent
   const headers = fetchMock.mock.calls[0][1].headers;
   expect(headers["x-api-key"]).toBe("test-key");
   expect(headers["anthropic-workspace-id"]).toBe(workspace ?? undefined);
-  expect(mocks.credential).toHaveBeenLastCalledWith("anthropic", undefined);
+  expect(mocks.credential).toHaveBeenLastCalledWith("anthropic");
 });

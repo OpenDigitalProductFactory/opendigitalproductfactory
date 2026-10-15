@@ -103,6 +103,8 @@ export interface AdapterResult {
    * returning the fragment (BI-1D144CC1). Absent/false means a clean stop.
    */
   truncated?: boolean;
+  /** Actual provider completion reason, absent when the provider did not supply one. */
+  finishReason?: string;
   /**
    * The model's own reasoning/scratchpad for this turn, when the provider emits
    * it as a channel SEPARATE from the answer — llama.cpp / Docker Model Runner

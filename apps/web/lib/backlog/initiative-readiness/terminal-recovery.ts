@@ -79,6 +79,8 @@ export type BaselinePayload = Record<string, unknown> & {
 };
 
 export type TerminalRecoveryPorts = {
+  /** Live scope declaration, shared with claim-time canonical artifact discovery. */
+  loadBacklogBody?(itemId: string): Promise<string | null>;
   bodyReviewerCanRead?(args: { userId: string; agentId: string; capsuleId: string; baseline: BaselinePayload }): Promise<boolean>;
   validateBodyBaselineCurrent?(args: { baseline: BaselinePayload; room: TerminalRecoveryRoom; itemId: string }): Promise<boolean>;
   loadLiveRooms(args: { itemId: string; refusedWorkroomId: string | null }): Promise<TerminalRecoveryRoom[]>;
@@ -101,6 +103,7 @@ export type TerminalRecoveryPorts = {
     repositoryFullName: string;
     baseSha: string;
     headSha: string;
+    backlogBody?: string | null;
     purpose?: "post-implementation-review";
   }): Promise<Awaited<ReturnType<typeof discoverCanonicalReviewArtifact>>>;
   resolveRecovery(args: Parameters<typeof resolveInitiativeReviewerRecovery>[0]): Promise<InitiativeReviewerRecovery>;
@@ -380,6 +383,9 @@ async function defaultLoadObjectiveMappingHistory(args: {
 
 /** Production ports; a caller overrides only the ports it must (the acceptance sweep excludes the author, BI-DF255666). */
 export const DEFAULT_TERMINAL_RECOVERY_PORTS: TerminalRecoveryPorts = {
+  loadBacklogBody: async (itemId) => (await prisma.backlogItem.findUnique({
+    where: { itemId }, select: { body: true },
+  }))?.body ?? null,
   bodyReviewerCanRead: async ({ userId, agentId, capsuleId, baseline }) => {
     const authorIds = [...new Set([baseline.bodyAuthorPrincipalId, baseline.sourceAuthorPrincipalId]
       .filter((id): id is string => typeof id === "string" && id.length > 0))];

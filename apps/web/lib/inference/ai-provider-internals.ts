@@ -4,7 +4,6 @@
 // Used by page-load health checks and guarded provider server actions.
 
 import { prisma, type Prisma } from "@dpf/db";
-import { decryptSecret, encryptSecret } from "@/lib/credential-crypto";
 import {
   getTestUrl,
   parseModelsResponse,
@@ -20,8 +19,8 @@ import { seedKnownModels } from "@/lib/inference/known-model-seeding";
 import { recordDiscoveredAuthEligibility } from "@/lib/routing/model-auth-eligibility";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { persistDiscoveredInventory } from "./discovered-model-inventory";
-import { findProviderCredential, resolveCredentialProviderId } from "./provider-account-credentials";
-export { resolveCredentialProviderId } from "./provider-account-credentials";
+import { findDefaultProviderCredential, getDecryptedCredential, getProviderBearerToken } from "./provider-account-credentials";
+export { getDecryptedCredential, getProviderBearerToken, resolveCredentialProviderId } from "./provider-account-credentials";
 import { supportsTextGeneration } from "@/lib/routing/model-classifier";
 import { providerWorkspaceHeaders } from "./provider-workspace";
 import { modelOutputCapacityFields, refreshModelOutputCapacity } from "./model-output-capacity";
@@ -87,52 +86,6 @@ export function resolveSyncedToolUse(input: {
 
 // ─── Shared helpers (exported for use by ai-providers.ts server actions) ─────
 
-/** Decrypt the API key / client secret for a provider (server-only).
- *  Returns null when the credential row is missing OR when decryption fails
- *  (e.g. the encryption key was rotated after these credentials were stored). */
-export async function getDecryptedCredential(providerId: string, connectionId?: string) {
-  const cred = await findProviderCredential(providerId, connectionId);
-  if (!cred) {
-    // CodeQL js/log-injection: providerId is user-influenced. JSON.stringify
-    // is a CodeQL-recognised sanitiser — escapes CR/LF, quotes the value.
-    console.warn(`[credentials] getDecryptedCredential(${JSON.stringify(providerId)}) → null: row not found`);
-    return null;
-  }
-  const secretRef    = cred.secretRef    ? decryptSecret(cred.secretRef)    : null;
-  const clientSecret = cred.clientSecret ? decryptSecret(cred.clientSecret) : null;
-  const cachedToken  = cred.cachedToken  ? decryptSecret(cred.cachedToken)  : null;
-  const refreshToken = cred.refreshToken ? decryptSecret(cred.refreshToken) : null;
-  // If every encrypted field failed to decrypt, the key was rotated — treat as no credential.
-  const hadEncrypted = [cred.secretRef, cred.clientSecret, cred.cachedToken, cred.refreshToken]
-    .some(v => v?.startsWith("enc:"));
-  const allFailed = hadEncrypted && !secretRef && !clientSecret && !cachedToken && !refreshToken;
-  if (allFailed) {
-    // CodeQL js/log-injection: providerId is user-influenced. JSON.stringify
-    // is a CodeQL-recognised sanitiser — escapes CR/LF, quotes the value.
-    const safeProviderId = JSON.stringify(providerId);
-    console.warn(`[credentials] All encrypted fields for ${safeProviderId} failed to decrypt — re-configure this provider.`);
-    console.warn(`[credentials] Diagnostic for ${safeProviderId}: ` +
-      `secretRef=${cred.secretRef ? `enc(${cred.secretRef.slice(0,8)})→${secretRef ? "ok" : "null"}` : "none"}, ` +
-      `clientSecret=${cred.clientSecret ? `enc(${cred.clientSecret.slice(0,8)})→${clientSecret ? "ok" : "null"}` : "none"}, ` +
-      `cachedToken=${cred.cachedToken ? `enc(${cred.cachedToken.slice(0,8)})→${cachedToken ? "ok" : "null"}` : "none"}, ` +
-      `refreshToken=${cred.refreshToken ? `enc(${cred.refreshToken.slice(0,8)})→${refreshToken ? "ok" : "null"}` : "none"}`);
-    // Flag for the admin UI so it stops showing green.  Fire-and-forget — we
-    // already know the decrypt failed, so we return null either way.  See
-    // PROVIDER-ACTIVATION-AUDIT.md F-16.
-    if (cred.status !== "key_rotated") {
-      prisma.credentialEntry
-        .update({ where: { id: cred.id }, data: { status: "key_rotated" } })
-        // CodeQL #47 (js/tainted-format-string) + js/log-injection:
-        // providerId is user-influenced. JSON.stringify is the recognised
-        // sanitiser; the format string is constant so %s can't be hijacked.
-        .catch((err) => console.warn("[credentials] Failed to mark %s as key_rotated: %s",
-          JSON.stringify(providerId),
-          err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err))));
-    }
-    return null;
-  }
-  return { ...cred, secretRef, clientSecret, cachedToken, refreshToken };
-}
 
 /**
  * Cheap pre-flight: does this provider have credential material adequate for
@@ -155,15 +108,7 @@ export async function providerHasConfiguredCredential(
   // No-auth endpoints (local model runner, self-hosted) need no credential.
   if (method === "none" || method === "") return true;
 
-  const cred = await prisma.credentialEntry.findUnique({
-    where: { providerId: resolveCredentialProviderId(providerId) },
-    select: {
-      secretRef: true,
-      clientSecret: true,
-      cachedToken: true,
-      refreshToken: true,
-    },
-  });
+  const cred = await findDefaultProviderCredential(providerId);
   if (!cred) return false;
 
   if (method === "api_key") return Boolean(cred.secretRef);
@@ -238,82 +183,6 @@ export function buildAutoDiscoveryEvalEvents(
       userId,
     },
   }));
-}
-
-/** OAuth token exchange — obtain or refresh bearer token for a provider.
- *  Dispatches by authMethod: oauth2_authorization_code uses refreshOAuthToken,
- *  oauth2_client_credentials uses the client_credentials grant.
- */
-export async function getProviderBearerToken(providerId: string, connectionId?: string): Promise<{ token: string } | { error: string }> {
-  const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
-  if (!provider) return { error: "Provider not found" };
-
-  const connection = connectionId ? await prisma.aiProviderConnection.findUnique({ where: { connectionId } }) : null;
-  if (connectionId && (!connection || connection.providerId !== providerId)) return { error: "Provider connection not found" };
-  if (["oauth", "oauth2_authorization_code"].includes(connection?.authMethod ?? provider.authMethod)) {
-    const { refreshOAuthToken } = await import("@/lib/provider-oauth");
-    const credential = await getDecryptedCredential(providerId, connectionId);
-    if (!credential) return { error: "No credential configured" };
-
-    if (credential.cachedToken && credential.tokenExpiresAt) {
-      const buffer = 5 * 60 * 1000;
-      if (credential.tokenExpiresAt.getTime() > Date.now() + buffer) {
-        return { token: credential.cachedToken };
-      }
-    }
-    // chatgpt shares Codex OAuth — refresh via codex provider (has tokenUrl/clientId)
-    const refreshProviderId = !connectionId && providerId === "chatgpt" ? "codex" : providerId;
-    return refreshOAuthToken(refreshProviderId, connectionId);
-  }
-
-  // Existing client_credentials flow
-  const credential = await getDecryptedCredential(providerId, connectionId);
-  if (!credential) return { error: "No credential configured" };
-  if (!credential.clientId || !credential.clientSecret || !credential.tokenEndpoint) {
-    return { error: "OAuth credentials incomplete — need client ID, secret, and token endpoint" };
-  }
-
-  // Return cached token if still valid (5-minute buffer)
-  if (credential.cachedToken && credential.tokenExpiresAt) {
-    const buffer = 5 * 60 * 1000;
-    if (credential.tokenExpiresAt.getTime() > Date.now() + buffer) {
-      return { token: credential.cachedToken };
-    }
-  }
-
-  // Exchange for new token
-  const params = new URLSearchParams({
-    grant_type: "client_credentials",
-    client_id: credential.clientId,
-    client_secret: credential.clientSecret,
-    ...(credential.scope ? { scope: credential.scope } : {}),
-  });
-
-  try {
-    const res = await fetch(credential.tokenEndpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: params.toString(),
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) return { error: `Token exchange failed: HTTP ${res.status}` };
-
-    const body = await res.json() as { access_token: string; expires_in: number };
-    const expiresAt = new Date(Date.now() + body.expires_in * 1000);
-
-    await prisma.credentialEntry.update({
-      where: { id: credential.id },
-      data: {
-        cachedToken: encryptSecret(body.access_token),
-        tokenExpiresAt: expiresAt,
-        status: "ok",
-      },
-    });
-
-    return { token: body.access_token };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : "Token exchange error" };
-  }
 }
 
 // ─── ChatGPT Backend Model Discovery ────────────────────────────────────────

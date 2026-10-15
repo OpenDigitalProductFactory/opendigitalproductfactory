@@ -20,30 +20,29 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
-import { mcpClientBearerHeaderRequired, type McpClient } from "@dpf/integration-shared/mcp-client-credential-policy";
+import { clientCapabilityRow, type ClientCapabilityRow } from "@dpf/integration-shared/client-capability-profile";
+import { mcpClientBearerHeaderRequired } from "@dpf/integration-shared/mcp-client-credential-policy";
 
 import { buildPackArchive } from "./pack-archive";
 import { deliveredDigest, listPackFiles } from "./pack-digest";
+import { DECLARING_CLIENT_KINDS } from "./toolchain-verdict";
 
 export const TOOLCHAIN_MANIFEST_SCHEMA_VERSION = 1;
 
-/** The client kinds that load the dpf-platform pack, and their credential-policy key. */
-export const TOOLCHAIN_CLIENT_KINDS: Readonly<Record<string, McpClient>> = Object.freeze({
-  "claude-code": "claude",
-  codex: "codex",
-  grok: "grok",
-  antigravity: "antigravity",
-});
+/** The client kinds that load the dpf-platform pack; one home, in toolchain-verdict.ts. */
+export const TOOLCHAIN_CLIENT_KINDS = DECLARING_CLIENT_KINDS;
 
 export type ToolchainFloor = { minPackVersion: string | null; graceStartsAt: string | null };
 
 export type ToolchainClientShape = {
   /** Auth the connector uses at this endpoint, from mcpClientBearerHeaderRequired. */
   authMode: "oauth" | "bearer";
-  /** How the declaration rides the connection (design §5.2); see DECLARATION_CARRIERS. */
+  /** How the declaration rides the connection (design §5.2), from the capability profile; see DECLARATION_CARRIERS. */
   declarationCarrier: "query" | "header";
-  /** False until the carrier spike verifies it for this client. */
+  /** True only once the profile records the carrier as verified for this client. */
   carrierVerified: boolean;
+  /** The client's row of packages/dpf-skill-pack/client-capabilities.json (BI-64795FD0). */
+  capabilities: ClientCapabilityRow | null;
 };
 
 export type UnsignedToolchainManifest = {
@@ -104,27 +103,42 @@ function readVersionSource(root: string): { packVersion: string; floor: Toolchai
  * sign-in and the desktop app's URL check do not change with each release, and
  * a `${DPF_MCP_URL:-…}` template never needs a query appended after it. Grok
  * authenticates with a bearer and its descriptor URL is literal, so it keeps
- * the query. The updater (toolchain_convergence.DEFAULT_CARRIERS) reads this
- * map from the signed manifest. Unverified until the carrier spike measures it.
+ * the query. Since BI-64795FD0 the values come from the capability profile
+ * (client-capabilities.json, declarationCarrier); the profile generator checks
+ * they equal the updater's fallback, toolchain_convergence.DEFAULT_CARRIERS.
+ * The updater reads this map from the signed manifest. Unverified until the
+ * carrier spike measures it.
  */
-export const DECLARATION_CARRIERS: Readonly<Record<string, ToolchainClientShape["declarationCarrier"]>> = Object.freeze({
-  "claude-code": "header",
-  codex: "header",
-  grok: "query",
-  antigravity: "header",
-});
+export const DECLARATION_CARRIERS: Readonly<Record<string, ToolchainClientShape["declarationCarrier"]>> = Object.freeze(
+  Object.fromEntries(
+    Object.keys(TOOLCHAIN_CLIENT_KINDS).map((kind) => [
+      kind,
+      clientCapabilityRow(kind)?.capabilities.declarationCarrier.value ?? "header",
+    ]),
+  ),
+);
 
 export function clientShapes(mcpEndpoint: string): Record<string, ToolchainClientShape> {
   return Object.fromEntries(
-    Object.entries(TOOLCHAIN_CLIENT_KINDS).map(([kind, policyClient]) => [
-      kind,
-      {
-        authMode: mcpClientBearerHeaderRequired(mcpEndpoint, policyClient) ? "bearer" : "oauth",
-        declarationCarrier: DECLARATION_CARRIERS[kind] ?? "header",
-        carrierVerified: false,
-      } satisfies ToolchainClientShape,
-    ]),
+    Object.entries(TOOLCHAIN_CLIENT_KINDS).map(([kind, policyClient]) => {
+      const capabilities = clientCapabilityRow(kind);
+      return [
+        kind,
+        {
+          authMode: mcpClientBearerHeaderRequired(mcpEndpoint, policyClient) ? "bearer" : "oauth",
+          declarationCarrier: DECLARATION_CARRIERS[kind] ?? "header",
+          carrierVerified: capabilities?.capabilities.declarationCarrier.status === "verified",
+          capabilities,
+        } satisfies ToolchainClientShape,
+      ];
+    }),
   );
+}
+
+/** Version, delivered digest and floor of one pack tree: what a connection is compared with. */
+export function readPublishedToolchain(packRoot: string): { packVersion: string; packDigest: string; floor: ToolchainFloor } {
+  const { packVersion, floor } = readVersionSource(packRoot);
+  return { packVersion, packDigest: deliveredDigest(packRoot), floor };
 }
 
 /** Pure: build the archive and unsigned manifest for one pack tree. */

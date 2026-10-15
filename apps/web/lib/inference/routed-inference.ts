@@ -33,6 +33,9 @@ import {
   loadApprovedActivityHarnessOverrides,
 } from "@/lib/routing/activity-harness-approval-source";
 import { callWithFallbackChain } from "@/lib/routing/fallback";
+import { bindProviderAccountSuitability } from "@/lib/routing/provider-account-candidates";
+import { accountAffinityKey } from "@/lib/routing/provider-account-allocation";
+import { conservativeQuotaScope } from "@/lib/routing/provider-capacity/scopes";
 import { prisma } from "@dpf/db";
 import { getLocalOnlyInference } from "@/lib/inference/local-only";
 import { resolveDispatchPosture, type DispatchPosture } from "@/lib/golden-triangle/dispatch";
@@ -41,7 +44,7 @@ import {
   buildInitialRouteContext,
 } from "@/lib/inference/route-contract-builder";
 import { assertDurableExecutionConstraint } from "./durable-execution-constraint";
-import { persistRoutedTokenUsage, routedContextKey } from "./routed-token-usage";
+import { persistAcceptedRoutedTokenUsage, persistRoutedTokenUsage, routedContextKey } from "./routed-token-usage";
 import type { RouteAndCallOptions } from "./routed-inference-options";
 import { applyCallerExecutionPlanOverrides } from "./routed-inference-plan-overrides";
 import {
@@ -72,6 +75,8 @@ export type { RouteAndCallOptions } from "./routed-inference-options";
 /** Unified inference result — flat token fields, V2 metadata included. */
 export interface RoutedInferenceResult {
   providerId: string;
+  providerConnectionId?: string;
+  quotaScopeKey?: string;
   modelId: string;
   content: string;
   toolCalls: ToolCallEntry[];
@@ -256,13 +261,13 @@ async function prepareRoute(
     },
   });
 
-  const [manifests, policies, overrides] = await Promise.all([
+  const [loadedManifests, policies, overrides] = await Promise.all([
     loadEndpointManifests(Date.now(), resolveLocalRoutingRuntime),
     loadPolicyRules(),
     loadOverrides(taskType),
   ]);
 
-  if (manifests.length === 0) {
+  if (loadedManifests.length === 0) {
     throw new NoEligibleEndpointsError(
       taskType,
       "No active endpoint manifests found. Configure at least one AI provider with a profiled model.",
@@ -280,6 +285,9 @@ async function prepareRoute(
     contract = preparedSuitability.contract;
     suitability = preparedSuitability.suitability;
   }
+  const manifests = suitability?.mode === "enforced"
+    ? bindProviderAccountSuitability(loadedManifests, contract.sensitivity, suitability.policy.allowedProviderConnectionIds)
+    : loadedManifests;
 
   const activityHarnessConfidenceOverrides =
     options?.activityContract && !prep?.skipRecipe
@@ -292,6 +300,7 @@ async function prepareRoute(
     activityContract: options?.activityContract,
     activityHarnessConfidenceOverrides,
     preferences: endpointPreferencesFromOptions(options),
+    accountAffinityKey: accountAffinityKey(options?.agentId, options?.threadId),
   });
   decision.inferenceDataScreenReceipt = screen.receipt;
   if (!decision.policyRulesApplied.includes("inference-dispatch")) {
@@ -473,7 +482,7 @@ async function routeAndCallAttempt(
         relaxedContract,
         policies,
         overrides,
-        { preferences: endpointPreferencesFromOptions(options) },
+        { preferences: endpointPreferencesFromOptions(options), accountAffinityKey: accountAffinityKey(options?.agentId, options?.threadId) },
       );
       const strippedScreen = rescreenRoutedInferenceWithoutTools(prepared.screenInput);
       dispatchScreenInput = strippedScreen.screenInput;
@@ -627,19 +636,17 @@ async function routeAndCallAttempt(
         options,
         traceId,
       });
-      await persistRoutedTokenUsage({
+      await persistAcceptedRoutedTokenUsage({
         traceId,
         agentId: options.agentId ?? "unknown",
         providerId: admitted.providerId,
+        providerConnectionId: decision.executionPlan?.providerConnectionId,
         contextKey: routedContextKey(options),
-        inputTokens: 0,
-        outputTokens: 0,
-        inferenceMs: 0,
-        recordZeroUsage: true,
-        requirePersistence: true,
       });
       return {
         providerId: admitted.providerId,
+        providerConnectionId: decision.executionPlan?.providerConnectionId,
+        quotaScopeKey: decision.executionPlan?.providerConnectionId ? conservativeQuotaScope(admitted.providerId) : undefined,
         modelId: admitted.modelId,
         content: "",
         toolCalls: [],
@@ -664,7 +671,7 @@ async function routeAndCallAttempt(
       decision.executionPlan,
       options?.previousResponseId,
       options?.mcpSession,
-      { traceId, agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null, buildId: options?.buildId ?? null, threadId: options?.threadId ?? null },
+      { traceId, agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null, buildId: options?.buildId ?? null, threadId: options?.threadId ?? null, previousResponseProviderConnectionId: options?.previousResponseProviderConnectionId },
       dispatchScreenInput,
       ...(cancellation ? [cancellation] as [AbortSignal] : [] as []),
     );
@@ -676,6 +683,7 @@ async function routeAndCallAttempt(
       agentId: options?.agentId ?? "unknown",
       providerId: result.providerId,
       contextKey: routedContextKey(options),
+      ...(result.providerConnectionId ? { providerConnectionId: result.providerConnectionId, quotaScopeKey: result.quotaScopeKey } : {}),
       inputTokens: result.tokenUsage?.inputTokens ?? 0,
       outputTokens: result.tokenUsage?.outputTokens ?? 0,
       inferenceMs: result.inferenceMs,
@@ -683,6 +691,8 @@ async function routeAndCallAttempt(
 
     return {
       providerId: result.providerId,
+      providerConnectionId: result.providerConnectionId,
+      quotaScopeKey: result.quotaScopeKey,
       modelId: result.modelId,
       content: result.content,
       toolCalls: result.toolCalls,
@@ -709,7 +719,7 @@ async function routeAndCallAttempt(
     decision.executionPlan,
     options?.previousResponseId,
     options?.mcpSession,
-    { traceId, agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null, buildId: options?.buildId ?? null, threadId: options?.threadId ?? null },
+    { traceId, agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null, buildId: options?.buildId ?? null, threadId: options?.threadId ?? null, previousResponseProviderConnectionId: options?.previousResponseProviderConnectionId },
     dispatchScreenInput,
     ...(cancellation ? [cancellation] as [AbortSignal] : [] as []),
   );
@@ -752,6 +762,7 @@ async function routeAndCallAttempt(
     traceId,
     agentId: options?.agentId ?? "unknown",
     providerId: result.providerId,
+    ...(result.providerConnectionId ? { providerConnectionId: result.providerConnectionId, quotaScopeKey: result.quotaScopeKey } : {}),
     contextKey: routedContextKey(options),
     inputTokens: result.tokenUsage?.inputTokens ?? 0,
     outputTokens: result.tokenUsage?.outputTokens ?? 0,
@@ -761,6 +772,8 @@ async function routeAndCallAttempt(
   // 7. Normalize result to RoutedInferenceResult
   return {
     providerId: result.providerId,
+    providerConnectionId: result.providerConnectionId,
+    quotaScopeKey: result.quotaScopeKey,
     modelId: result.modelId,
     content: result.content,
     toolCalls: result.toolCalls,

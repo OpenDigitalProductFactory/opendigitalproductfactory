@@ -264,6 +264,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // then recorded as done by Save-Progress. Optional-script guards must say so.
       conformanceTest("scripts/check-installer-skip-visibility.test.mjs"),
       conformanceTest("scripts/check-setup-worktree-hygiene.test.mjs"),
+      // BI-8D152751: the Grok credential step must feed its issuer on stdin.
+      conformanceTest("scripts/bootstrap-grok-credential-issuer.test.mjs"),
     ], { inputs: ["code"] }),
     guard("installer-state-contract", "Installer State Contract", [
       // Drives real bash: install-dpf.sh runs under `set -euo pipefail`, and the
@@ -283,11 +285,21 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-58C58CB6: these sat on the test-inventory allowlist, ran nowhere
         // in CI, and drifted on every host until BI-76334D21 caught them.
         "scripts/installer/install-state-transaction.test.mjs",
+        "scripts/installer/offline-recovery-authority.test.mjs",
+        "scripts/installer/offline-recovery-kit.test.mjs",
+        "scripts/installer/offline-recovery-kit-prepare.test.mjs",
+        "scripts/installer/runtime-apply-lock.test.mjs",
         "scripts/installer/migrate-install-state.test.mjs",
         "scripts/installer/resolve-host-identity.test.mjs",
         "scripts/installer/validate-install-state.test.mjs",
         "scripts/installer/native-edge-host-contract.test.mjs",
+        // BI-31F11C37: the installers' monitoring question.
+        "scripts/installer/monitoring-choice.test.mjs",
       ),
+      conformanceTest("scripts/ci-runtime-install-state-fixture.test.mjs"),
+      // BI-31F11C37: both installers ask, accept the flag and record the
+      // choice before profiles resolve; reads the live installer sources.
+      conformanceTest("scripts/installer/monitoring-choice-installer-contract.test.mjs"),
       // BI-3267763F: no compose default, installer output or self-upgrade
       // leaves Inngest on the signing/event keys once published in this repo.
       conformanceTest("scripts/installer/inngest-keys-contract.test.mjs"),
@@ -422,6 +434,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-5BCDB07C: the Grok refresher writes bearer_token_file and stops
       // when the credentials client is refused. Listed here so CI runs it.
       node("--test", "scripts/lib/grok-credential.test.mjs"),
+      // BI-84C1F526: Grok's SessionStart refreshes that file from the pack copy.
+      node("--test", "packages/dpf-skill-pack/hooks/grok-credential-refresh.test.mjs"),
       node("scripts/check-authoring-cost-dimensions.mjs"),
       node("scripts/check-ci-policy-test-inventory.mjs"),
     ]),
@@ -1105,6 +1119,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "packages/dpf-skill-pack/hooks/process-spine-health.test.mjs",
         "packages/dpf-skill-pack/scripts/generate-operating-contract.test.mjs",
+        "packages/dpf-skill-pack/scripts/gen-client-capabilities.test.mjs",
       ),
       node(
         "--test",

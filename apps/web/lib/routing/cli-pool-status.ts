@@ -13,8 +13,30 @@
 import { excerptHeadAndTail } from "@/lib/shared/excerpt-head-and-tail";
 import { prisma } from "@dpf/db";
 import { parseUnifiedRateLimitHeaders, type WeeklyQuotaSnapshot } from "./weekly-quota";
+import { conservativeQuotaScope } from "./provider-capacity/scopes";
 
 export type CliAdapterType = "claude-cli" | "codex-cli";
+export type CliPoolIdentity = { providerId: string; providerConnectionId: string };
+
+export function indexCliPoolResetTimes(rows: readonly { adapterType: string | null; adapterKind?: string | null; resetAt: Date | null }[]): Map<CliAdapterType, number | null> {
+  const map = new Map<CliAdapterType, number | null>();
+  for (const row of rows) {
+    const adapter: CliAdapterType | null = row.adapterType === "codex-cli" || row.adapterType === "claude-cli" ? row.adapterType
+      : row.adapterKind === "codex" ? "codex-cli" : row.adapterKind === "claude_code" ? "claude-cli" : null;
+    if (!adapter) continue;
+    const reset = row.resetAt?.getTime() ?? null;
+    if (!map.has(adapter) || (reset ?? 0) > (map.get(adapter) ?? 0)) map.set(adapter, reset);
+  }
+  return map;
+}
+
+function poolWhere(adapterType: CliAdapterType, identity?: CliPoolIdentity) {
+  return identity ? { scopeKey: `cli:${adapterType}:${conservativeQuotaScope(identity.providerId)}` } : { adapterType };
+}
+
+function poolIdentityFields(adapterType: CliAdapterType, identity?: CliPoolIdentity) {
+  return identity ? { adapterType: null, adapterKind: adapterType === "codex-cli" ? "codex" as const : "claude_code" as const, ...poolWhere(adapterType, identity) } : { adapterType };
+}
 
 /**
  * Fallback backoff window (seconds) applied when a CLI reports a rate limit but
@@ -152,6 +174,7 @@ export async function recordCliRateLimit(
   adapterType: CliAdapterType,
   providerId: string,
   errorText: string,
+  identity?: CliPoolIdentity,
 ): Promise<void> {
   try {
     const retryAfterSeconds = parseRetryAfterSeconds(errorText);
@@ -176,9 +199,9 @@ export async function recordCliRateLimit(
       subscriptionCap ? retryAfterSeconds : cooldownSeconds, errorText, subscriptionCap);
 
     await prisma.cliPoolStatus.upsert({
-      where: { adapterType },
+      where: poolWhere(adapterType, identity),
       create: {
-        adapterType,
+        ...poolIdentityFields(adapterType, identity),
         providerId,
         rateLimitedAt: now,
         resetAt,
@@ -207,11 +230,18 @@ export async function recordCliRateLimit(
  */
 export async function getCliPoolStatus(
   adapterType: CliAdapterType,
+  identity?: CliPoolIdentity,
 ): Promise<CliPoolState | null> {
   try {
-    const row = await prisma.cliPoolStatus.findUnique({
-      where: { adapterType },
+    let row = await prisma.cliPoolStatus.findUnique({
+      where: poolWhere(adapterType, identity),
     });
+    // Legacy observations remain authoritative until their cooldown expires.
+    // Separate credentials do not prove separate upstream quota ownership.
+    if (identity) {
+      const legacy = await prisma.cliPoolStatus.findUnique({ where: { adapterType } });
+      if (legacy && (!row || (legacy.resetAt?.getTime() ?? 0) > (row.resetAt?.getTime() ?? 0))) row = legacy;
+    }
     if (!row) return null;
 
     const now = Date.now();
@@ -221,7 +251,7 @@ export async function getCliPoolStatus(
       isExhausted && resetMs != null ? Math.ceil((resetMs - now) / 1_000) : null;
 
     return {
-      adapterType: row.adapterType as CliAdapterType,
+      adapterType,
       providerId: row.providerId,
       rateLimitedAt: row.rateLimitedAt,
       resetAt: row.resetAt,
@@ -247,11 +277,14 @@ export async function getAllCliPoolStatuses(): Promise<CliPoolState[]> {
       orderBy: { adapterType: "asc" },
     });
     const now = Date.now();
-    return rows.map((row) => {
+    return rows.flatMap((row): CliPoolState[] => {
+      const adapterType: CliAdapterType | null = row.adapterType === "codex-cli" || row.adapterType === "claude-cli" ? row.adapterType
+        : row.adapterKind === "codex" ? "codex-cli" : row.adapterKind === "claude_code" ? "claude-cli" : null;
+      if (!adapterType) return [];
       const resetMs = row.resetAt ? row.resetAt.getTime() : null;
       const isExhausted = resetMs != null && resetMs > now;
-      return {
-        adapterType: row.adapterType as CliAdapterType,
+      return [{
+        adapterType,
         providerId: row.providerId,
         rateLimitedAt: row.rateLimitedAt,
         resetAt: row.resetAt,
@@ -260,7 +293,7 @@ export async function getAllCliPoolStatuses(): Promise<CliPoolState[]> {
         isExhausted,
         secondsUntilReset: isExhausted && resetMs != null ? Math.ceil((resetMs - now) / 1_000) : null,
         ...weeklyFields(row),
-      };
+      }];
     });
   } catch (err) {
     console.warn("[cli-pool-status] Failed to read all pool statuses:", err);
@@ -285,12 +318,13 @@ export async function recordCliWeeklyQuota(
   adapterType: CliAdapterType,
   providerId: string,
   snapshot: WeeklyQuotaSnapshot,
+  identity?: CliPoolIdentity,
 ): Promise<void> {
   try {
     await prisma.cliPoolStatus.upsert({
-      where: { adapterType },
+      where: poolWhere(adapterType, identity),
       create: {
-        adapterType,
+        ...poolIdentityFields(adapterType, identity),
         providerId,
         // Neutral create timestamp; resetAt stays null → not exhausted.
         rateLimitedAt: snapshot.observedAt,
@@ -323,17 +357,18 @@ export async function recordCliWeeklyQuota(
  * the drain policy depends on. When the row carries no weekly snapshot, we delete
  * it (original behaviour) so an idle adapter leaves no residual row.
  */
-export async function clearCliRateLimit(adapterType: CliAdapterType): Promise<void> {
+export async function clearCliRateLimit(adapterType: CliAdapterType, identity?: CliPoolIdentity): Promise<void> {
   try {
-    const row = await prisma.cliPoolStatus.findUnique({ where: { adapterType } });
+    const where = poolWhere(adapterType, identity);
+    const row = await prisma.cliPoolStatus.findUnique({ where });
     if (!row) return;
     if (row.weeklyUtilization == null) {
-      await prisma.cliPoolStatus.deleteMany({ where: { adapterType } });
+      await prisma.cliPoolStatus.deleteMany({ where });
       return;
     }
     // Preserve the weekly snapshot; clear only the exhaustion fields.
     await prisma.cliPoolStatus.update({
-      where: { adapterType },
+      where,
       data: { resetAt: null, retryAfterSeconds: null, errorSnippet: null, updatedAt: new Date() },
     });
   } catch (err) {

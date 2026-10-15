@@ -27,6 +27,28 @@ describe("golden-test provenance", () => {
     expect(result).toMatchObject({ traceId: args[8].traceId, score: 10 });
   });
 
+  it.each(["exact", "tool_call"] as const)("does not score a known-truncated %s match", async scoring => {
+    const test = { ...fixture, scoring, expectedOutput: scoring === "exact" ? "OK" : "lookup" };
+    dispatch.mockResolvedValue({ content: "OK", toolCalls: [{ name: "lookup", arguments: {} }], truncated: true });
+    const result = await runGoldenTest("local", "selected-model", test);
+    expect(result).toMatchObject({ score: null, truncated: true, response: "OK", traceId: dispatch.mock.calls[0]![8].traceId });
+    expect(result.error).toMatch(/truncated.*unverified/i);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not turn a truncated mismatch into a measured failure", async () => {
+    dispatch.mockResolvedValue({ content: "WRONG", truncated: true });
+    const result = await runGoldenTest("local", "selected-model", fixture);
+    expect(result).toMatchObject({ score: null, truncated: true, response: "WRONG" });
+  });
+
+  it.each([["OK", 10], ["WRONG", 0]])("retains measured scoring for a complete control (%s)", async (content, score) => {
+    dispatch.mockResolvedValue({ content, truncated: false });
+    const result = await runGoldenTest("local", "selected-model", fixture);
+    expect(result).toMatchObject({ score, truncated: false });
+    expect(result.error).toBeUndefined();
+  });
+
   it("retains the dispatch trace for a terminal error", async () => {
     dispatch.mockRejectedValue(new Error("transport unavailable"));
     const result = await runGoldenTest("local", "selected-model", fixture);

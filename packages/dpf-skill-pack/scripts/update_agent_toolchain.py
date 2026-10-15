@@ -22,6 +22,9 @@ from typing import Any, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib.parse import urlparse
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from grok_credential import converge_grok_credential, find_grok_refresher  # noqa: E402
+
 
 PLUGIN_NAME = "dpf-platform"
 CODEX_PLUGIN_ID = f"{PLUGIN_NAME}@personal"
@@ -2314,6 +2317,11 @@ def main(argv: list[str]) -> int:
         action="store_true",
         help="Exit 2 when Codex is installed but hook trust has not been granted (BI-66EBEA06).",
     )
+    parser.add_argument(
+        "--grok-client-stdin",
+        action="store_true",
+        help="Read Grok's credentials client (from issue_grok_credentials_client) as JSON on stdin (BI-84C1F526).",
+    )
     parser.add_argument("--dry-run", action="store_true")
     # BI-DE1E6485 (design 2026-10-07 §5.3): pull the pack from the portal,
     # verified by the installation's signature, instead of a local directory.
@@ -2461,6 +2469,18 @@ def main(argv: list[str]) -> int:
                 process_spine_root, dry_run=args.dry_run
             )
         print(f"  Grok competitive: {grok_competitive_status}")
+        # Grok's own OAuth credentials client, refreshed into bearer_token_file
+        # (BI-84C1F526, DI-4B843FAF62F9). The secret arrives on stdin only.
+        grok_credential_status = converge_grok_credential(
+            home=home, refresher=find_grok_refresher(skill_pack), mcp_url=args.mcp_url,
+            client_payload=sys.stdin.read() if args.grok_client_stdin else None,
+            dry_run=args.dry_run, default_mcp_url=mcp_url,
+            # The query carrier declare_grok_descriptor writes into grok.mcp.json, so the
+            # config.toml connector declares the pack too (design §5.2).
+            declare_url=(lambda url: declarations.query_url(url, "grok"))
+            if declarations is not None and declarations.carrier("grok") == "query" else None,
+        )
+        print(f"  Grok credential: {grok_credential_status}")
         if report:
             report.add("codex", "user", codex_status)
             report.add("grok", "user", grok_status)

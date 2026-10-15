@@ -114,6 +114,12 @@ export type ToolDefinition = {
    */
   retainAuditParameters?: boolean;
   /**
+   * Keys of `result.data` that hold a secret handed to the caller. The caller
+   * still receives them; the audit row stores "[REDACTED]" instead
+   * (BI-84C1F526, the Grok credentials client).
+   */
+  secretResultKeys?: readonly string[];
+  /**
    * How far this tool's effect reaches. DECLARED, not inferred: "can this be
    * undone" is not recoverable from the name, the schema, or `sideEffect`
    * (true for `update_backlog_item` and `place_linkedin_ad` alike).
@@ -207,6 +213,7 @@ export type ToolDefinition = {
 };
 
 export type EndpointTestRunRequest = {
+  concurrencyOnly?: boolean;
   endpointId?: string;
   modelId?: string;
   taskType?: string;

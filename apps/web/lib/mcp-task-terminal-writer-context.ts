@@ -14,7 +14,12 @@ import {
 
 // The reader's own page ceiling (BI-E8237EAE): a page it served is never "oversize".
 const MAX_PAGE_CHARS = SOURCE_READ_MAX_CHARS;
-const MAX_HYDRATED_CHARS = 64_000;
+/**
+ * The most source a resumed terminal writer can re-read. Exported so a review
+ * request can tell the author up front when a design is larger (BI-4592CF69).
+ */
+export const TERMINAL_WRITER_RECOVERY_MAX_CHARS = 64_000;
+const MAX_HYDRATED_CHARS = TERMINAL_WRITER_RECOVERY_MAX_CHARS;
 // A page COUNT, not derived from the page size: persisted histories read at the
 // historical 3,200-char page still need 20 pages to cover 64k, and a larger
 // reader page must never shrink how much of that history can be rehydrated.

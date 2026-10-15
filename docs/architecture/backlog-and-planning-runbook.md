@@ -1,5 +1,10 @@
 # Backlog & planning runbook
 
+An already decomposed xlarge initiative can complete after child delivery and
+outcome reconciliation; its implementation prohibition still stands. Follow the
+[aggregate completion procedure](initiative-readiness-runbook.md#1-the-lifecycle-sequence)
+with the existing plan mappings rather than creating another set of children.
+
 Plan-review recovery binds the immutable plan recorded in valid coverage for the current scope baseline and Workroom repository. Design approval continues to bind the canonical design. If the plan commit, blob, or safe `docs/superpowers/plans/*.md` path is missing, stale, or belongs to another repository, record complete current plan coverage and retry readiness; a design cannot substitute for a plan. The plan-specific request key prevents replay of a historical review routed to the design. Historical receipts remain available for audit.
 
 Scope documents use `**OBJ-ID:** statement` objectives and a Markdown table with acceptance ID, objective IDs and statement as its first three columns. Objective paragraphs may wrap; acceptance rows must fit on one source line. Bare three-cell rows remain compatible with legacy scope. Additional columns (such as evidence) need a declared table header and remain metadata. Escape literal pipes in cells as `\|` and literal backslashes as `\\`; Build Studio does this when projecting structured criteria. The parser checks row width, identifiers and links, reports malformed rows by line number, and excludes code examples and quotations. It preserves the complete normalized statement in its semantic digest and the exact source bytes in the artifact digest. Existing baseline receipts remain immutable.

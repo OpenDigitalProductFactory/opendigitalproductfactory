@@ -32,6 +32,13 @@ _dry_run=0
 _readiness=0
 _promoter_dir="${DPF_PROMOTER_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 
+for _protocol_arg in "$@"; do
+  if [[ "$_protocol_arg" == "--runtime-capability-protocol-info" ]]; then
+    [[ "$#" -eq 1 ]] || { printf 'invalid_runtime_protocol_probe_arguments\n' >&2; exit 64; }
+    exec node "$_promoter_dir/apply-runtime-capability-transition.mjs" --runtime-capability-protocol-info
+  fi
+done
+
 # A registry release promoter is selected by immutable digest before this
 # script starts. Portals released before the release-mode carrier existed can
 # launch that exact candidate but cannot pass DPF_PROMOTION_MODE or its release

@@ -43,6 +43,8 @@ const FLOW_STATE_BY_ACTION_AND_REASON: FlowStateTable = {
     no_posture: "blocked",
     quiet: "awaiting-trigger",
     cycle_complete: "awaiting-trigger",
+    // The item is not wanted now (done, deferred, delivered): no demand in the stream.
+    work_item_inactive: "awaiting-trigger",
   },
   stop: {
     unreachable_substrate: "blocked",

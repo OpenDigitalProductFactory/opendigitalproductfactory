@@ -524,6 +524,41 @@ model AgentSurfaceReadiness {
   @@index([reportedAt(sort: Desc)])
 }
 
+// BI-54469E18 (design 2026-10-07-agent-toolchain-release-delivery §5.2b). What
+// the server SAW on an MCP connection: which credential connected and which
+// dpf-platform pack it declared it loaded. One row per credential and loaded
+// digest, so a host with one current project and one pinned project shows both.
+// Self-reported host state stays on AgentSurfaceReadiness; the verdict
+// (current / stale / below-floor / undeclared) is computed when read, never stored.
+/// Connection-observed agent toolchain copies, one row per credential and loaded digest. Operational drift telemetry; 30 days covers a release cycle.
+/// @dpf lifecycle=telemetry-bounded retention=30d categories=telemetry timeAxis=lastObservedAt
+model AgentToolchainObservation {
+  id                String                 @id @default(cuid())
+  // Server-derived credential identity: oauth:<OAuthClient.id> or token:<McpApiToken.id>.
+  credentialRef     String
+  // First 16 hex of the declared delivered digest, or "undeclared".
+  loadedDigest      String
+  // Declared client kind, else undeclared.
+  clientKind        String
+  // User-Agent hint for display only; never used for enforcement.
+  probableClient    String?
+  loadedPackVersion String?
+  authMode          AgentToolchainAuthMode
+  clientInfoName    String?
+  clientInfoVersion String?
+  firstObservedAt   DateTime               @default(now())
+  lastObservedAt    DateTime               @default(now())
+
+  @@unique([credentialRef, loadedDigest])
+  @@index([lastObservedAt(sort: Desc)])
+}
+
+enum AgentToolchainAuthMode {
+  oauth
+  bearer
+  session
+}
+
 model CoworkerSelfAssessment {
   id                String                   @id @default(cuid())
   assessmentId      String                   @unique

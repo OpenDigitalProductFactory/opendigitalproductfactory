@@ -115,10 +115,22 @@ older runs without those traces remain unattributed at the individual-call level
 Scenario quality updates are recorded after the selected run finishes completely;
 a missing required grader score leaves it unverified.
 
+For a local concurrency check, an authorized coworker can select
+`concurrencyOnly=true` in `run_endpoint_tests` with an explicit local `endpointId`
+and discovered `modelId`. This runs exactly two ordinary calls in one 30-second
+observation, instead of capability probes or scenarios. It cannot be combined
+with exhaustive options, a task type, or `probesOnly=true`. The recorded run
+preserves each answer, completion reason, token counts, trace and admission
+events. A pass requires an observed queued handoff, release and two nonempty,
+complete answers. Missing contention, cancellation, capacity holds and truncated
+answers leave the check unverified. This check never changes capability ratings.
+Missing admission or completion metadata also leaves the check unverified when
+answer text is present. An unobserved release is not evidence of a leaked slot.
+
 Background evaluations and endpoint probes use the background admission lane,
 so queued interactive requests take priority. A concurrent first-time evaluation
 must acquire its model's reservation before it performs inference. Docker Model
-Runner and Ollama both use the local engine's concurrency limit.
+Runner and Ollama share the single local-compute admission lane.
 
 The server checks production coworkers' route readiness every six hours. It
 raises a critical health issue when ordinary requests have no eligible route and
@@ -179,6 +191,31 @@ the wording of that message matches the same cause.
 - assignment changes that solve one route but weaken another
 - capacity work that produces token spend without durable evidence, backlog movement, or reviewable output
 - capability needs without submitter context, route context, or a clear backlog follow-up
+
+## Repair disagreement in installed runtime capabilities
+
+When runtime health reports that installed services and saved capability settings
+disagree, ask your platform coworker to inspect the runtime reconciliation preview.
+The preview changes nothing. It reports the validated installation snapshot,
+saved settings, disagreement and the packaged code that can apply a repair.
+
+Choose which capabilities should be enabled before applying the repair. Optional
+services are never enabled merely because their initial saved settings say active.
+The coworker submits the complete observed baselines, explicitly chosen enabled
+capabilities, desired saved settings and the keys allowed to change through the
+same governed runtime transition. Untouched settings, including custom operator
+states, remain unchanged. Active attributed work can require a drain first.
+
+A changed baseline refuses the repair. An interrupted request keeps its original
+transition identity, signed recovery packet and immutable promoter image. Keep
+that request for supported recovery; starting another request does not settle an
+uncertain outcome. Completion requires a signed host result, required service
+health and the owned saved-state commit. Remaining disagreement stays visible.
+
+Coworker tools: `preview_runtime_capability_reconciliation` is read-only;
+`reconcile_runtime_capabilities` applies explicit intent with platform-management
+authority. Unavailable compatibility evidence requires the qualified platform
+update before the repair can proceed.
 
 ## Defaults for work rooms
 
