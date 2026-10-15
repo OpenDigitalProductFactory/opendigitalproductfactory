@@ -4,7 +4,13 @@ import { assertRuntimeCompensationDatabaseBaseline, classifyRuntimeInstallState,
 import { canonicalTransitionPayload, createRuntimeCompensationEnvelope, signTransitionPayload, verifyHistoricalTransitionReceipt, type RuntimeTransitionEnvelope, type RuntimeTransitionReceipt } from "./transition-protocol";
 import { runPromoter } from "@/lib/self-upgrade/promoter";
 
-let admission: "reconciling" | "ready" | "recovery_required" = "reconciling";
+// Instrumentation, MCP and SSR have separate module caches. A module-local
+// flag can even be folded into an unconditional refusal in request bundles.
+// Share only this process's boot barrier; durable DB checks remain authoritative.
+const ADMISSION_KEY = Symbol.for("dpf.runtime-capability-admission.v1");
+type Admission = { status: "reconciling" | "ready" | "recovery_required"; generation: number };
+const admissionGlobal = globalThis as typeof globalThis & { [ADMISSION_KEY]?: Admission };
+const admission = admissionGlobal[ADMISSION_KEY] ??= { status: "reconciling", generation: 0 };
 
 export async function assertRuntimeCapabilityTransitionAdmission(): Promise<void> {
   // DB-global truth is authoritative across portal replicas and restarts. The
@@ -13,8 +19,8 @@ export async function assertRuntimeCapabilityTransitionAdmission(): Promise<void
     prisma.runtimeCapabilityTransition.count({ where: { status: { in: ["pending", "applying", "host_applied", "compensating"] } } }),
     prisma.runtimeCapabilityTransition.count({ where: { status: "rollback_failed", failure: { path: ["recoveryRequired"], equals: true } } }),
   ]);
-  if (recovery > 0 || admission === "recovery_required") throw new Error("runtime_capability_recovery_required");
-  if (active > 0 || admission !== "ready") throw new Error("runtime_capability_reconciliation_in_progress");
+  if (recovery > 0 || admission.status === "recovery_required") throw new Error("runtime_capability_recovery_required");
+  if (active > 0 || admission.status !== "ready") throw new Error("runtime_capability_reconciliation_in_progress");
 }
 
 const receiptPath = (id: string) => `/dpf-state/runtime-capability-transitions/${id}.json`;
@@ -100,7 +106,8 @@ export async function reconcileRuntimeCapabilityTransitionsOnStartup(host: {
   protocolSecret: string;
   reconcileAuthority?(activeTransitionIds: string[]): Promise<void>;
 }): Promise<void> {
-  admission = "reconciling";
+  const generation = ++admission.generation;
+  admission.status = "reconciling";
   let recoveryRequired = false;
   const listActive = async () => prisma.runtimeCapabilityTransition.findMany({
     where: { status: { in: ["pending", "applying", "host_applied", "compensating"] } },
@@ -164,5 +171,6 @@ export async function reconcileRuntimeCapabilityTransitionsOnStartup(host: {
   // terminal; otherwise rotation/new transitions wait for an unnecessary TTL.
   const remainingRows = await listActive();
   await host.reconcileAuthority?.(remainingRows.map((row) => row.transitionId));
-  admission = recoveryRequired ? "recovery_required" : "ready";
+  // An older startup cannot reopen admission after a newer recovery failed.
+  if (admission.generation === generation) admission.status = recoveryRequired ? "recovery_required" : "ready";
 }
