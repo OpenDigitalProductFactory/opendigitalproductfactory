@@ -8,11 +8,17 @@ vi.mock("@/lib/actions/calendar-feed", () => ({
 }));
 vi.mock("@/components/ui/Dialog", () => ({ confirmDialog: vi.fn() }));
 
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { CalendarFeedSubscribePanel } from "./CalendarFeedSubscribePanel";
 
 describe("CalendarFeedSubscribePanel (BI-051A74CE)", () => {
   it("offers a private link and never renders a user-id URL", () => {
-    const html = renderToStaticMarkup(<CalendarFeedSubscribePanel />);
+    const html = renderToStaticMarkup(
+      <MessagesProvider locale="en-US" messages={{ shell: namespaceMessages("en-US", "shell") }}>
+        <CalendarFeedSubscribePanel />
+      </MessagesProvider>,
+    );
     expect(html).toContain("Subscribe from another calendar app");
     expect(html).toContain("Create link");
     expect(html).toContain("Older links that used your account id no longer work");

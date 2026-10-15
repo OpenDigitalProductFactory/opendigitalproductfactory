@@ -1,3 +1,6 @@
+---
+status: active
+---
 # EP-CALENDAR-001: Workspace Calendar & Activity Feed — Design Spec
 
 **Date:** 2026-03-17

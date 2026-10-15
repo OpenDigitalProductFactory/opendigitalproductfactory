@@ -27,5 +27,23 @@
     "offBody": "Prometheus and Grafana are not running, so metrics and metric alerts are not collected. Logs are still captured.",
     "offLink": "See runtime services",
     "offAlertsNote": "Log alerts only — metric monitoring is off."
+  },
+  "calendarFeed": {
+    "heading": "Subscribe from another calendar app",
+    "create": "Create link",
+    "replace": "Replace link",
+    "turnOff": "Turn off",
+    "copy": "Copy",
+    "activeSince": "A private link is active since {$date}. It shows only what your role can see. Anyone with the link can read it.",
+    "inactive": "Create a private link to see this calendar in Google Calendar, Outlook or Apple Calendar. Older links that used your account id no longer work.",
+    "linkLabel": "Private calendar subscription link",
+    "shownOnce": "Copy it now. For your security it is shown only once.",
+    "copied": "Link copied",
+    "copyFailed": "Copy failed: select the link and copy it",
+    "turnedOff": "Subscription link turned off",
+    "replaceTitle": "Replace subscription link",
+    "replaceMessage": "Calendar apps using the current link stop updating. You will need to add the new link to them.",
+    "turnOffTitle": "Turn off subscription link",
+    "turnOffMessage": "Calendar apps using this link stop updating."
   }
 }
