@@ -13,7 +13,7 @@ import { resolveMcpTaskAuthorityKey } from "@/lib/auth/oauth-task-authority";
 import { deterministicExternalTaskRunId, remoteTaskRequestMatches } from "@/lib/mcp-task-capacity-contract";
 import { loadTaskInitiativeReviewOutcome } from "@/lib/mcp-task-review-outcome";
 import { BUILD_STUDIO_ASSISTANT_AGENT_ID, buildStudioOwedRoutes } from "@/lib/backlog/initiative-readiness/build-studio-owed-routes";
-import { validateReviewDocument } from "@/lib/mcp-task-review-document";
+import { reviewDocumentPreflight } from "@/lib/mcp-task-review-document";
 
 /** Match the durable request identity, never a caller's task-handle assertion. */
 async function matchingReviewRequest(params: Record<string, unknown>, userId: string, context: ToolExecutionContext) {
@@ -44,7 +44,8 @@ async function hasCompletedReview(params: Record<string, unknown>, userId: strin
   return Boolean(request && await loadTaskInitiativeReviewOutcome(request.taskRunId, request.binding));
 }
 
-type RequestAuthority = { bounded: boolean; refusal?: ToolResult };
+/** `notice` is plain-words advice for the author; it never blocks (BI-4592CF69). */
+type RequestAuthority = { bounded: boolean; refusal?: ToolResult; notice?: string };
 const deny = (message: string): RequestAuthority => ({ bounded: true, refusal: {
   success: false, error: "independent_review_request_denied", message,
   data: { action: "Refresh the item's readiness and submit its exact review request. Access to its Workroom must already be authorized." },
@@ -162,13 +163,15 @@ export async function authorizeCoworkerRequest(
   // issuance are established. Existing requests join their recorded work;
   // neither a provider outage nor a new parser can erase historical evidence.
   if (!options?.sourceOnly && binding.writerToolName === "record_initiative_design_review"
-    && binding.gate === "spec-approval" && !await matchingReviewRequest(params, userId, context)) {
-    const documentRefusal = await validateReviewDocument(binding);
+    && (binding.gate === "spec-approval" || binding.gate === "design-spec")
+    && !await matchingReviewRequest(params, userId, context)) {
+    const { refusal: documentRefusal, notice } = await reviewDocumentPreflight(binding);
     if (documentRefusal) return { bounded: true, refusal: { success: false,
       error: documentRefusal.error, message: documentRefusal.message,
       data: { gateStatus: documentRefusal.gateStatus,
         action: "Correct the scope document and refresh its immutable review request, or retry the same request after source access is restored." },
     } };
+    if (notice) return { bounded: true, notice };
   }
   return { bounded: true };
 }
