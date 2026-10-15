@@ -58,6 +58,16 @@ describe("standing-room selection", () => {
     }
   });
 
+  // BI-B5751303 (WWMD DI-80078CF9CB11): a Build Studio room is driven only by
+  // Build Studio. Once budgets were funded the drive dispatched agents into 97
+  // build-studio rooms in one tick, duplicating Build Studio's own pipeline.
+  it("leaves rooms owned by the Build Studio executor to Build Studio", async () => {
+    const { db, seen } = stubDb();
+    await loadStandingRoomIds(db);
+    const sql = seen.join(" ");
+    expect(sql).toMatch(/"executorKind"\s+IS\s+DISTINCT\s+FROM\s+'build-studio'/i);
+  });
+
   it("orders deterministically before applying the cap", async () => {
     // Without ORDER BY, which rooms fall inside the cap is whatever the planner
     // returned that day — so a room could be scanned on one tick and invisible
