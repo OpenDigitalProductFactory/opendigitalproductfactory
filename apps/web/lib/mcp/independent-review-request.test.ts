@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ agent: vi.fn(), token: vi.fn(), room: vi.fn(),
   human: vi.fn(), currentConsent: vi.fn(), access: vi.fn(), item: vi.fn(), recovery: vi.fn(),
-  task: vi.fn(), authorityKey: vi.fn(), outcome: vi.fn(), itemRow: vi.fn(), alias: vi.fn(), buildStudioRoutes: vi.fn() }));
+  task: vi.fn(), authorityKey: vi.fn(), outcome: vi.fn(), itemRow: vi.fn(), alias: vi.fn(), buildStudioRoutes: vi.fn(),
+  preflight: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: {
   agent: { findUnique: mocks.agent }, mcpApiToken: { findUnique: mocks.token },
   workroom: { findFirst: mocks.room },
@@ -21,7 +22,7 @@ vi.mock("./packs/backlog-pack-read-tools", () => ({ getBacklogItem: mocks.item }
 vi.mock("@/lib/backlog/initiative-readiness/terminal-recovery", () => ({ resolveTerminalInitiativeRecovery: mocks.recovery }));
 // This suite isolates authorization and exact issuance. The companion document
 // suite exercises the real parser and preflight after these checks succeed.
-vi.mock("@/lib/mcp-task-review-document", () => ({ validateReviewDocument: async () => null }));
+vi.mock("@/lib/mcp-task-review-document", () => ({ reviewDocumentPreflight: mocks.preflight }));
 
 import { authorizeCoworkerRequest } from "./independent-review-request";
 import type { ToolExecutionContext } from "@/lib/mcp-tool-types";
@@ -58,6 +59,7 @@ beforeEach(() => {
   mocks.recovery.mockResolvedValue({ reviewerRoutes: [{ independent: true, requestCoworker: packet }] });
   mocks.authorityKey.mockResolvedValue("oauth-family:consent-family");
   mocks.task.mockResolvedValue(null);
+  mocks.preflight.mockResolvedValue({ refusal: null, notice: null });
 });
 
 describe("consent-bound independent review request", () => {
@@ -150,6 +152,17 @@ describe("consent-bound independent review request", () => {
     mocks.item.mockResolvedValue({ success: true, data: { scopeKind: "organization", readiness: { decisions: { implementation } } } });
     expect((await authorizeCoworkerRequest(design, "human", ctx, { sourceOnly: true })).refusal).toBeDefined();
     expect((await authorizeCoworkerRequest(packet, "human", ctx, { sourceOnly: true })).refusal).toBeDefined();
+  });
+  it("returns the design size notice with a new design-spec request, without refusing it (BI-4592CF69)", async () => {
+    const design = { ...packet, initiativeReviewBinding: { ...binding, writerToolName: "record_initiative_design_review", gate: "design-spec" },
+      requiredToolNames: ["read_source_at_version", "record_initiative_design_review"] };
+    const implementation = { target: "implementation", verdict: "input-required", subject: { id: "BI-TEST" }, blockers: [],
+      unmet: [{ code: "CANONICAL_DESIGN_REQUIRED", accountableRole: "design-checklist-reviewer" }] };
+    mocks.item.mockResolvedValue({ success: true, data: { readiness: { decisions: { implementation } } } });
+    mocks.recovery.mockResolvedValue({ reviewerRoutes: [{ independent: true, requestCoworker: design }] });
+    mocks.preflight.mockResolvedValue({ refusal: null, notice: "This design is 70,000 characters." });
+    expect(await authorizeCoworkerRequest(design, "human", context)).toEqual({ bounded: true, notice: "This design is 70,000 characters." });
+    expect(mocks.preflight).toHaveBeenCalledWith(design.initiativeReviewBinding);
   });
   it("accepts only a regenerated packet after current human, consent, grants and exact room checks", async () => {
     expect(await authorizeCoworkerRequest(packet, "human", context)).toEqual({ bounded: true });

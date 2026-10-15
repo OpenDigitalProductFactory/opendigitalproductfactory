@@ -84,13 +84,13 @@ export const MONITORING_SETTINGS_PURPOSE_CONTRACTS: PurposeContractModule = [
         recovery: RECOVERY,
       },
       "monitoring-unreconciled": {
-        statePredicate: "Install-state and the capability record disagree, so a change would be refused as stale.",
+        statePredicate: "The capability records cannot be reconciled with install-state: a catalog capability has no record, or install-state was written for another catalog.",
         stateSource: STATE_SOURCE,
         essentialEvidenceKeys: ["status-unreconciled", "divergence-summary", "disabled-switch-reason"],
         primaryExperience: { kind: "informational", messageKey: "monitoringSettings.reason.unreconciled" },
         prohibitedActionKeys: ["toggle-while-unreconciled"],
-        completionSignal: "The operator is told capability state needs reconciling first and where to look.",
-        errorCorrection: "The operator follows the runtime health link; the switch unlocks once the record agrees.",
+        completionSignal: "The operator is told the capability records need repair first and where to look.",
+        errorCorrection: "The operator follows the runtime health link; the switch unlocks once the records are complete.",
         recovery: RECOVERY,
       },
     },
@@ -101,7 +101,8 @@ export const MONITORING_SETTINGS_PURPOSE_CONTRACTS: PurposeContractModule = [
         "The operator states the observed monitoring state, and a requested change ends in a named outcome rather than silence.",
       falseSuccessConditions: [
         "Monitoring reads as on while one of its services is absent.",
-        "The switch accepts a request while capability state disagrees.",
+        "The switch accepts a request while the capability records cannot be reconciled.",
+        "A monitoring record that disagrees with install-state is shown as the monitoring state.",
         "A failed request is shown without its reason or change id.",
       ],
       acceptanceThresholds: [

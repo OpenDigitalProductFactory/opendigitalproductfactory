@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ add: vi.fn(), push: vi.fn(), refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push, refresh: mocks.refresh }) }));
@@ -14,6 +14,37 @@ beforeEach(() => { vi.resetAllMocks(); mocks.add.mockResolvedValue({ ok: true, d
 afterEach(cleanup);
 
 describe("compact provider account overview", () => {
+  it.each(["row", "catalog"])("restores the exact %s Add account trigger after cancellation", source => {
+    render(<ProviderAccountsOverview rows={[row]} catalog={catalog} firstRun={false} canWrite copy={copy} />);
+    let opener = screen.getByRole("button", { name: "Add account" });
+    if (source === "catalog") {
+      fireEvent.click(screen.getByRole("button", { name: "Add provider" }));
+      const entry = screen.getByRole("link", { name: "Anthropic" }).closest("li")!;
+      opener = within(entry).getByRole("button", { name: "Add account" });
+    }
+    opener.focus();
+    fireEvent.click(opener);
+    expect(document.activeElement).toBe(screen.getByLabelText("Account name"));
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    cancel.focus();
+    fireEvent.click(cancel);
+    expect(screen.queryByRole("form")).toBeNull();
+    expect(document.activeElement).toBe(opener);
+  });
+  it("restores Add provider when the catalog trigger is no longer mounted", () => {
+    render(<ProviderAccountsOverview rows={[row]} catalog={catalog} firstRun={false} canWrite copy={copy} />);
+    const addProvider = screen.getByRole("button", { name: "Add provider" });
+    fireEvent.click(addProvider);
+    const entry = screen.getByRole("link", { name: "Anthropic" }).closest("li")!;
+    fireEvent.click(within(entry).getByRole("button", { name: "Add account" }));
+    addProvider.focus();
+    fireEvent.click(addProvider);
+    expect(screen.queryByRole("heading", { name: "Available providers" })).toBeNull();
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    cancel.focus();
+    fireEvent.click(cancel);
+    expect(document.activeElement).toBe(addProvider);
+  });
   it.each([true, false])("keeps an account next action visible when advisory help is disclosed (write=%s)", canWrite => {
     const { container } = render(<><details><summary>Allowed work</summary>
       <button data-owner-first-next-action>Ask for advice</button></details>

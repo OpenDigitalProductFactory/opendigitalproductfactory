@@ -264,6 +264,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // then recorded as done by Save-Progress. Optional-script guards must say so.
       conformanceTest("scripts/check-installer-skip-visibility.test.mjs"),
       conformanceTest("scripts/check-setup-worktree-hygiene.test.mjs"),
+      // BI-8D152751: the Grok credential step must feed its issuer on stdin.
+      conformanceTest("scripts/bootstrap-grok-credential-issuer.test.mjs"),
     ], { inputs: ["code"] }),
     guard("installer-state-contract", "Installer State Contract", [
       // Drives real bash: install-dpf.sh runs under `set -euo pipefail`, and the
@@ -432,6 +434,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-5BCDB07C: the Grok refresher writes bearer_token_file and stops
       // when the credentials client is refused. Listed here so CI runs it.
       node("--test", "scripts/lib/grok-credential.test.mjs"),
+      // BI-84C1F526: Grok's SessionStart refreshes that file from the pack copy.
+      node("--test", "packages/dpf-skill-pack/hooks/grok-credential-refresh.test.mjs"),
       node("scripts/check-authoring-cost-dimensions.mjs"),
       node("scripts/check-ci-policy-test-inventory.mjs"),
     ]),
@@ -1115,6 +1119,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "packages/dpf-skill-pack/hooks/process-spine-health.test.mjs",
         "packages/dpf-skill-pack/scripts/generate-operating-contract.test.mjs",
+        "packages/dpf-skill-pack/scripts/gen-client-capabilities.test.mjs",
       ),
       node(
         "--test",

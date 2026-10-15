@@ -31,6 +31,8 @@ export class InferenceError extends Error {
      * always trying to cause (BI-52C6FE5A).
      */
     public readonly localPoolExhausted?: boolean,
+    /** Failure was in this account's credential exchange, before model inference. */
+    public readonly tokenExchangeConnectionId?: string,
   ) {
     super(message);
     this.name = "InferenceError";

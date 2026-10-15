@@ -58,6 +58,9 @@ export interface RequestContract {
   maxLatencyMs?: number;
   allowedProviders?: string[];
   deniedProviders?: string[];
+  /** Account fences compiled from the selected work's sensitivity and evidence. */
+  allowedProviderConnectionIds?: string[];
+  deniedProviderConnectionIds?: string[];
   residencyPolicy?: "local_only" | "approved_cloud" | "any_enabled";
   /** Account-scoped router obligations compiled by provider suitability. */
   openRouterObligations?: import("./provider-suitability/types").OpenRouterPolicyObligations;

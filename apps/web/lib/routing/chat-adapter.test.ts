@@ -257,18 +257,14 @@ describe("chatAdapter", () => {
 
   // ── 1b. OpenAI-compat: finish_reason captured as `truncated` (BI-1D144CC1) ──
 
-  it("OpenAI-compat: finish_reason=length is captured as truncated=true", async () => {
-    stubFetchOk({
-      choices: [{ message: { content: "The first three steps are" }, finish_reason: "length" }],
-      usage: { prompt_tokens: 10, completion_tokens: 5 },
-    });
-
-    const result = await chatAdapter.execute(makeRequest({
-      providerId: "ollama",
-      modelId: "llama3.1",
-    }));
-
-    expect(result.truncated).toBe(true);
+  it.each(["local", "ollama"].flatMap(providerId => ["stop", "length", "content_filter", undefined]
+    .map(finishReason => ({ providerId, finishReason }))))("retains actual completion reason for $providerId ($finishReason)", async ({ providerId, finishReason }) => {
+    stubFetchOk({ choices: [{ message: { content: "READY", reasoning_content: "private scratchpad" },
+      ...(finishReason ? { finish_reason: finishReason } : {}) }], usage: {} });
+    const result = await chatAdapter.execute(makeRequest({ providerId, modelId: "test-model" }));
+    expect(result).toMatchObject({ text: "READY", truncated: finishReason === "length" });
+    expect(result.finishReason).toBe(finishReason);
+    expect(result.raw).toBeUndefined();
   });
 
   // ── Reasoning capture (BI-1E77BEE3) ───────────────────────────────────────

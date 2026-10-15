@@ -84,7 +84,7 @@ import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workr
 import { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
 import { scheduleWorkroomAgentTask } from "./workroom-drive-scheduling";
 export { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
-import { repairUnownedDeliveryRooms, ROOM_OWNER_USER_INCLUDE, roomOwnerUserId } from "@/lib/work-management/delivery-room-ownership";
+import { loadHandedOverUserIds, repairUnownedDeliveryRooms, ROOM_OWNER_USER_INCLUDE, roomOwnerUserId } from "@/lib/work-management/delivery-room-ownership";
 
 export type WorkroomDriveRoom = {
   id: string;
@@ -582,6 +582,8 @@ async function loadStandingRooms(
       ...ROOM_OWNER_USER_INCLUDE,
     },
   });
+  // BI-858FDE5A: a handed-over requester/creator no longer names a new task's owner.
+  const handedOverUserIds = await loadHandedOverUserIds(prisma as never);
 
   return rows.flatMap((row) => {
     const shapeRef = resolveWorkShapeClaim(row.scopeClaims);
@@ -601,7 +603,7 @@ async function loadStandingRooms(
       workspaceState: row.workspaceState,
       leaseExpiresAt: row.leaseExpiresAt,
       leaseHolderPrincipalId: row.leaseHolderPrincipalId,
-      ownerUserId: roomOwnerUserId(row),
+      ownerUserId: roomOwnerUserId(row, handedOverUserIds),
       participants: row.participants.map((participant) => {
         const kind = participant.principal.kind === "agent"
           ? "agent" as const

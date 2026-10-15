@@ -10,6 +10,22 @@ This is the immutable implementation/coverage entry for existing BI-5ACBAC50 and
 
 ## Evidence and boundaries
 
+### Published promoter binding repair (2026-10-15)
+
+Native preview on served9ca09de2 reached the authenticated handler but failed `promoter_inspect_failed`: no source-built `dpf-promoter:<served-sha>` exists on this consumer release install. The ordinary repair-promoter action is release-managed and cannot create that source candidate. No reconciliation was admitted; the transition ledger was empty.
+
+Reuse the installed release context parser and existing immutable artifact validator. Consumer/customer reconciliation uses its installed immutable release tag and server registry owner, never the moving discovery channel. Ambiguous/missing release identity refuses before artifact resolution; wrong source/contract/protocol still refuses before host authority. Source installs retain their existing candidate lookup. No manual tag, build, new resolver, authority change or runtime file edit. Tests cover consumer/customer binding, mutable tag/missing or invalid owner refusals, and retained source mismatch refusal. The actual served call and its source repair remain distinct acceptance evidence.
+
+### Runtime disagreement presentation repair (2026-10-14)
+
+The canonical recovery88 install still enables core only while nine database runtime rows contain seven active states. Runtime-health displays only a generic unavailable message, discarding the existing complete divergence diagnosis. This is the existing item's visibility requirement, not authority to activate seeded capabilities.
+
+Reuse `CapabilityDivergenceReport` in a typed error shared by the operational loader and page. Display a concise count with a native closed disclosure listing every capability, installation enablement and recorded state. Keep service health unclassified; unknown errors and arbitrary attached diagnostic objects remain opaque. No navigation, mutation control, automatic transition, authority, schema or engine is added. Healthy service presentation remains unchanged.
+
+UX fit: Platform `/platform/ai/runtime-health`, operator persona, local disclosure only. Prototype `D:/DPF-temp/execution-visibility-evidence/capability-divergence-prototype.html` preceded source changes; browser rendering is unrun at the existing local-file security boundary. Advisory UX engagement CE-109BBA67 is requested, not a verdict. WWMD DI-891A7B41052A selected count-and-native-disclosure with usable signal; earlier DI-46C7FCA4CB5A was insufficient-signal, not a choice. Author feature values are ordinal estimates, not measured UX outcomes.
+
+Verification: the real operational-loader disagreement must fail before the page retains its typed diagnosis; unknown error text and forged diagnosis attachments must stay private. Run affected projection, loader and page tests, official package typechecks, guards, independent source assessment, protected CI and served closed/open/narrow/keyboard acceptance. Source qualifications do not constitute reconciliation or parent acceptance.
+
 The historical prepared source is `e4ca1f1ad82e3b8355f7cdc2d03de77210a855c5`, with shared recursive signing, trusted packaged-probe primitives and ordinary version-2 apply. Its source tests and independent assessments are retained with original attribution. Continued atomic reconciliation is now implemented on owned branch `fix/runtime-capability-convergence`, HEAD `e8955429ed196c0eca27990636f8b142d410cc1a`, with uncommitted source changes. The packaged probe advertises implemented version-2 reconciliation; that metadata is not integration, publication or live acceptance evidence.
 
 Read-only observations on 2026-10-12 still show host schema2/win32/amd64 with core only, catalog52358eb9e4f8… and state76c08f072b16…, while the portal database has nine runtime rows, seven active. This is disagreement, not authorization to activate all seven. Ordinary coordinator validation binds previous keys to database active rows, while the host actuator compares its actual snapshot; it correctly refuses the inconsistent baseline.

@@ -27,8 +27,7 @@ type AnnounceTx = {
     create: (args: unknown) => Promise<unknown>;
     updateMany: (args: unknown) => Promise<unknown>;
   };
-  agentToolchainObservation: { findMany: (args?: unknown) => Promise<never[]> };
-};
+} & Parameters<typeof buildConnectedClientsView>[0];
 
 type AnnounceDb = AnnounceTx & { $transaction: <T>(fn: (tx: AnnounceTx) => Promise<T>) => Promise<T> };
 
