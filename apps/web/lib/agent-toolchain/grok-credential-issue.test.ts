@@ -12,7 +12,10 @@ const FULL = grantsForPublicScopes([...GROK_CREDENTIAL_SCOPES]);
 
 function deps(rows: Array<Record<string, unknown>> = []): GrokCredentialIssueDeps & { create: ReturnType<typeof vi.fn> } {
   const create = vi.fn(async () => {});
+  const bindAgent = vi.fn(async () => {});
   return {
+    grokAgent: async () => "agent-grok",
+    bindAgent,
     rows: vi.fn(async () => rows as never),
     create,
     decrypt: (enc: string) => enc.replace(/^enc:/, ""),
@@ -31,7 +34,8 @@ describe("issueGrokCredentialsClientForCaller", () => {
     expect(client.clientId).toMatch(/^dpfoc_/);
     expect(client.clientSecret).toBe("dpfocs_new");
     expect(result.data!.created).toBe(true);
-    expect(d.create).toHaveBeenCalledWith(expect.objectContaining({ ownerUserId: "user-1", registrationKind: "credentials" }));
+    expect(d.create).toHaveBeenCalledWith(expect.objectContaining({ ownerUserId: "user-1", registrationKind: "credentials", agentId: "agent-grok" }));
+    expect(result.data!.agentBound).toBe(true);
     expect(result.message).not.toContain("dpfocs_new");
   });
 
@@ -39,10 +43,12 @@ describe("issueGrokCredentialsClientForCaller", () => {
     const d = deps([{
       oAuthClientId: "dpfoc_existing", clientName: GROK_CREDENTIALS_CLIENT_NAME, registrationKind: "credentials",
       ownerUserId: "user-1", revokedAt: null, allowedScopes: [...GROK_CREDENTIAL_SCOPES], clientSecretEnc: "enc:dpfocs_old",
+      agentId: null,
     }]);
     const result = await issueGrokCredentialsClientForCaller("user-1", caller, d);
     expect(result.data).toMatchObject({ credentialsClient: { clientId: "dpfoc_existing", clientSecret: "dpfocs_old" }, created: false });
     expect(d.create).not.toHaveBeenCalled();
+    expect(d.bindAgent).toHaveBeenCalledWith("dpfoc_existing", "agent-grok");
   });
 
   it("refuses a caller without its own external credential", async () => {
