@@ -69,5 +69,6 @@ Revert the PR. The beacon, the action, the tool and the claim go with it. A foll
 - Parent: `BI-C447E10F`
 - Rationale: the steps are sequencing, not independent deliverables. A tally without a writer counts nothing. A writer without the actor rule would count automation, which the acceptance forbids. A read tool without the tally has nothing to read. None of them ships value on its own.
 - Receipt: blocked-by: the coverage receipt is minted by record_plan_backlog_coverage at this plan's commit and lives in the MCP substrate; writing its id here would move the head that the plan review binds to
+- Dependencies: none
 - Deliverables:
   - route-visit-tally -> `BI-C447E10F`; depends on: none
