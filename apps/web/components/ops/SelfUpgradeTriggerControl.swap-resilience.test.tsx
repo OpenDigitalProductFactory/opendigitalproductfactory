@@ -10,7 +10,7 @@
 // hold a calm "reconnecting" state instead of escalating to the (shell) error
 // boundary.
 import "@/test-setup";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
@@ -212,20 +212,20 @@ describe("SelfUpgradeTriggerControl – forced upgrade swap resilience", () => {
     expect(JSON.parse(String((fetchMock.mock.calls[0]![1] as RequestInit).body))).toEqual({ runId: "QR-DRAIN", action: "keep-waiting" });
   });
 
-  it("clears the indeterminate admission latch once a durable run appears", async () => {
-    triggerMock.mockRejectedValue(makeE394());
+  it.each(["response-first", "run-first"] as const)("clears the indeterminate admission latch once a durable run appears (%s)", async (order) => {
+    let rejectAdmission!: (error: Error) => void;
+    triggerMock.mockImplementationOnce(() => new Promise((_resolve, reject) => {
+      rejectAdmission = reject;
+    }));
 
     const { rerender } = render(<SelfUpgradeTriggerControl {...baseProps} />);
 
     fireEvent.click(screen.getByRole("checkbox", { name: /emergency override/i }));
     fireEvent.click(screen.getByRole("button", { name: /upgrade now/i }));
 
-    await waitFor(() => {
-      expect(screen.getByText(/Admission response interrupted:/i)).toBeInTheDocument();
-    });
+    expect(triggerMock).toHaveBeenCalledOnce();
 
-    // The poll reaches the new container: a fresh run is now visible.
-    rerender(
+    const observeDurableRun = () => rerender(
       <SelfUpgradeTriggerControl
         {...baseProps}
         latestRun={makeRun("succeeded", {
@@ -233,10 +233,25 @@ describe("SelfUpgradeTriggerControl – forced upgrade swap resilience", () => {
         })}
       />,
     );
+    if (order === "run-first") {
+      await act(async () => { observeDurableRun(); });
+      expect(screen.getByRole("button", { name: /upgrade now/i })).toBeDisabled();
+    }
 
-    await waitFor(() => {
-      expect(screen.queryByText(/Admission response interrupted:/i)).not.toBeInTheDocument();
-    });
+    await act(async () => { rejectAdmission(makeE394()); });
+    if (order === "response-first") {
+      expect(screen.getByText(/Admission response interrupted:/i)).toBeInTheDocument();
+      const trigger = screen.getByRole("button", { name: /upgrade now/i });
+      expect(trigger).toBeDisabled();
+      fireEvent.click(trigger);
+      expect(triggerMock).toHaveBeenCalledOnce();
+      // Flush the observed server update and its effects as one React interaction.
+      await act(async () => { observeDurableRun(); });
+    }
+
+    expect(screen.queryByText(/Admission response interrupted:/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /upgrade now/i })).toBeEnabled();
+    expect(triggerMock).toHaveBeenCalledOnce();
   });
 
   it("keeps a normal queued trigger working (no false reconnecting state)", async () => {

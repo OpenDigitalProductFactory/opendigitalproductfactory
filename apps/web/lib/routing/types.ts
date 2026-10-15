@@ -61,6 +61,13 @@ export interface EndpointManifest {
   // Identity
   id: string;
   providerId: string;
+  /** Explicit account identity; absent only for legacy caller-built manifests. */
+  providerConnectionId?: string;
+  providerConnectionVersion?: string;
+  /** Catalog profile identity remains shared across account candidates. */
+  modelProfileId?: string;
+  accountAuthMethod?: string;
+  executionChannel?: string;
   modelId: string;     // from ModelProfile
   name: string;
   endpointType: string;
@@ -183,6 +190,11 @@ export interface PolicyCondition {
 export interface CandidateTrace {
   endpointId: string;
   providerId: string;
+  providerConnectionId?: string;
+  providerConnectionVersion?: string;
+  modelProfileId?: string;
+  accountAuthMethod?: string;
+  executionChannel?: string;
   modelId: string;
   endpointName: string;
   fitnessScore: number;

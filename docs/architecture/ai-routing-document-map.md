@@ -12,6 +12,7 @@ records.
 | What code chooses and dispatches a route? | `apps/web/lib/inference/routed-inference.ts`, `apps/web/lib/routing/request-contract.ts`, and `apps/web/lib/routing/pipeline-v2.ts` |
 | What policy decides whether governed data may leave the install? | `apps/web/lib/govern/data/policy-decision.ts` and `apps/web/lib/govern/data/policy-enforcement.ts` |
 | How is provider/account suitability compiled into route constraints? | [AI provider suitability routing design](../superpowers/specs/2026-07-19-ai-provider-suitability-routing-design.md) and its implemented contracts |
+| How does routing distinguish multiple accounts of one provider? | [Provider account identity](provider-accounts.md), [account routing guide](../user-guide/ai-workforce/provider-account-routing.md), and [capacity refactor delivery plan](../superpowers/plans/2026-10-14-provider-account-capacity-refactor.md). The delivery plan distinguishes source qualification from served acceptance. |
 | How is the designed route projected into EA? | `apps/web/lib/ea/ai-routing-architecture-registry.ts`, `apps/web/lib/ea/ai-routing-architecture-extract.ts`, and `apps/web/lib/ea/reconcile-ai-routing-architecture.ts`; one versioned registry projects synchronized BPMN, SysML, and ArchiMate model kinds |
 | What happened operationally? | Route decisions, adapter attempts, inference outcomes, token usage, capacity state, and safe screen/suitability receipts in the live install, correlated by request-scoped `traceId` for new traffic |
 

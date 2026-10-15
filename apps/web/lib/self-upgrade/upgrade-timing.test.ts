@@ -70,6 +70,49 @@ describe("withWindowBypass", () => {
 });
 
 describe("decideUpgradeTiming — agent", () => {
+  it("runs a verified DEV evolution request outside business hours as an agent", async () => {
+    const input = {
+      requester: "agent" as const,
+      config: CONFIG,
+      now: NOW,
+      instanceStance: { environmentClass: "development", primaryPurpose: "evolve-dpf" } as const,
+    };
+    expect(await decideUpgradeTiming(input))
+      .toEqual({ kind: "run-now", windowBypassed: true });
+  });
+
+  it.each([
+    { environmentClass: "production", primaryPurpose: "evolve-dpf" },
+    { environmentClass: "staging", primaryPurpose: "evolve-dpf" },
+    { environmentClass: "test", primaryPurpose: "evolve-dpf" },
+    { environmentClass: "development", primaryPurpose: "operate-organization" },
+    { environmentClass: "unknown", primaryPurpose: "evolve-dpf" },
+  ] as const)("retains the ordinary window for $environmentClass/$primaryPurpose", async (instanceStance) => {
+    const input = { requester: "agent" as const, config: CONFIG, now: NOW, instanceStance };
+    // Malformed external values are rejected by the real server loader; the
+    // timing predicate must also never match them accidentally.
+    expect(await decideUpgradeTiming(input as Parameters<typeof decideUpgradeTiming>[0]))
+      .toMatchObject({ kind: "defer", reason: "outside-window" });
+  });
+
+  it("retains the existing scheduled-window deferral through an explicit DEV blackout", async () => {
+    const blackoutEnd = new Date("2026-10-07T16:30:00.000Z");
+    mocks.getActiveSelfUpgradeBlackout.mockResolvedValue({ name: "Operator pause", endAt: blackoutEnd });
+    const decision = await decideUpgradeTiming({
+      requester: "agent", config: CONFIG, now: NOW,
+      instanceStance: { environmentClass: "development", primaryPurpose: "evolve-dpf" },
+    });
+    expect(decision).toMatchObject({ kind: "defer", reason: "blackout-period", nextWindowStart: WINDOW_OPENS,
+      runAt: WINDOW_OPENS });
+  });
+
+  it("does not require an organization's timezone for verified DEV evolution", async () => {
+    mocks.resolveEffectiveUpgradeWindow.mockResolvedValue(windowState(false, { source: "needs-timezone", nextWindowStart: null }));
+    expect(await decideUpgradeTiming({ requester: "agent", config: CONFIG, now: NOW,
+      instanceStance: { environmentClass: "development", primaryPurpose: "evolve-dpf" },
+    })).toEqual({ kind: "run-now", windowBypassed: true });
+  });
+
   it("defers outside the window and says when the scheduled cron picks it up", async () => {
     const decision = await decideUpgradeTiming({ requester: "agent", config: CONFIG, now: NOW });
 
