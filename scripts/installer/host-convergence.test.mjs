@@ -197,42 +197,86 @@ test("macOS/Linux: enrolled hosts mint no token; failures report and record noth
   }
 });
 
-// ── One-time bridge for launch scripts written before BI-084F85E5 ───────────
-test("the bridge recognises only the autostart launch script as its parent", async () => {
-  const { isAutostartLauncher, launcherPathFrom } = await import("./autostart-bridge.mjs");
-  assert.equal(isAutostartLauncher("/bin/bash /home/a/.dpf/dpf-autostart.sh"), true);
-  assert.equal(launcherPathFrom("/bin/bash /home/a/.dpf/dpf-autostart.sh"), "/home/a/.dpf/dpf-autostart.sh");
-  for (const other of ["/bin/bash /opt/dpf/scripts/installer/dpf-start.consumer.sh /opt/dpf /s.json -f docker-compose.yml", "sh /promoter/promote.sh", "node install-dpf.sh", ""]) {
-    assert.equal(isAutostartLauncher(other), false, other);
+// ── Self-upgrade bridge for launch scripts written before BI-084F85E5 ───────
+const BRIDGE_CASES = {
+  // install-dpf.sh since 2026-07-18 (#3266): the resolver runs inline.
+  july: [
+    "#!/usr/bin/env bash",
+    "set -euo pipefail",
+    'cd "/opt/dpf"',
+    '_dpf_projection="$(node scripts/lib/resolve-capability-compose-profiles.mjs --state "/home/a/.dpf/install-state.json" --host "$(uname)" --migrate --write)"',
+    "export COMPOSE_PROFILES",
+    "exec docker compose -f docker-compose.yml -f docker-compose.release.yml up -d",
+    "",
+  ].join("\n"),
+  // install-dpf.sh 2026-05-10 .. 2026-07-18 (#427): compose only, no shipped code at boot.
+  may: ["#!/usr/bin/env bash", "set -euo pipefail", 'cd "/Users/ops/dpf"', "exec docker compose -f docker-compose.yml up -d", ""].join("\n"),
+};
+
+async function bridgeFixture(launchText, { entrypoint = true } = {}) {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-bridge-"));
+  const stateDir = join(dir, "state");
+  const installRoot = join(dir, "install");
+  await mkdir(stateDir, { recursive: true });
+  await mkdir(join(installRoot, "scripts", "installer"), { recursive: true });
+  if (entrypoint) await writeFile(join(installRoot, "scripts", "installer", "dpf-start.consumer.sh"), "#!/bin/sh\n");
+  if (launchText !== null) await writeFile(join(stateDir, "dpf-autostart.sh"), launchText);
+  return { dir, stateDir, installRoot, launcher: join(stateDir, "dpf-autostart.sh") };
+}
+
+test("the self-upgrade bridges every launch script generation to the shipped pointer, once", async () => {
+  const { bridgeAutostartLaunchScript } = await import("./autostart-bridge.mjs");
+  for (const [generation, text] of Object.entries(BRIDGE_CASES)) {
+    const fx = await bridgeFixture(text);
+    try {
+      assert.equal(bridgeAutostartLaunchScript(fx), "bridged", generation);
+      const pointer = await readFile(fx.launcher, "utf8");
+      const install = text.match(/^cd "([^"]+)"$/m)[1];
+      const chain = text.match(/^exec docker compose (.+) up -d$/m)[1];
+      assert.ok(pointer.includes(`exec /bin/bash "${install}/scripts/installer/dpf-start.consumer.sh" "${install}" "$(cd "$(dirname "$0")" && pwd)/install-state.json" ${chain}`), `${generation}: ${pointer}`);
+      assert.equal(bridgeAutostartLaunchScript(fx), "unchanged", `${generation}: a bridged script is left alone`);
+    } finally { await rm(fx.dir, { recursive: true, force: true }); }
   }
 });
 
-test("the bridge rewrites an inline launch script to the shipped pointer, keeping its chain, once", { skip: !posix && "POSIX host only" }, async () => {
-  const { bridgeAutostartFromParent, bridgedLaunchScript } = await import("./autostart-bridge.mjs");
-  const dir = await mkdtemp(join(tmpdir(), "dpf-bridge-"));
+test("the bridge leaves Windows, operator scripts and installs without the entrypoint untouched", async () => {
+  const { bridgeAutostartLaunchScript } = await import("./autostart-bridge.mjs");
+  const none = await bridgeFixture(null);
+  const custom = await bridgeFixture("#!/bin/sh\necho my own start\n");
+  const noEntrypoint = await bridgeFixture(BRIDGE_CASES.july, { entrypoint: false });
   try {
-    const launcher = join(dir, "dpf-autostart.sh");
-    const old = [
-      "#!/usr/bin/env bash",
-      "set -euo pipefail",
-      'cd "/opt/dpf"',
-      '_dpf_projection="$(node scripts/lib/resolve-capability-compose-profiles.mjs --state "/home/a/.dpf/install-state.json" --host "$(uname)" --migrate --write)"',
-      "export COMPOSE_PROFILES",
-      "exec docker compose -f docker-compose.yml -f docker-compose.release.yml up -d",
-      "",
-    ].join("\n");
-    await writeFile(launcher, old);
-    assert.equal(bridgeAutostartFromParent({ commandLine: `/bin/bash ${launcher}`, spawnConverge: false }), "bridged");
-    const pointer = await readFile(launcher, "utf8");
-    assert.match(pointer, /^exec \/bin\/bash "\/opt\/dpf\/scripts\/installer\/dpf-start\.consumer\.sh" "\/opt\/dpf" "\/home\/a\/\.dpf\/install-state\.json" -f docker-compose\.yml -f docker-compose\.release\.yml$/m);
-    assert.equal(bridgedLaunchScript(pointer), null, "an already bridged script is left alone");
-    assert.equal(bridgeAutostartFromParent({ commandLine: `/bin/bash ${launcher}`, spawnConverge: false }), "already-bridged");
-    assert.equal(bridgeAutostartFromParent({ commandLine: "node something", spawnConverge: false }), "not-launcher");
-    assert.equal(bridgedLaunchScript("#!/bin/sh\necho custom\n"), null, "an operator's own script is never rewritten");
-  } finally { await rm(dir, { recursive: true, force: true }); }
+    assert.equal(bridgeAutostartLaunchScript(none), "no-launch-script");
+    assert.equal(bridgeAutostartLaunchScript(custom), "unchanged");
+    assert.equal(await readFile(custom.launcher, "utf8"), "#!/bin/sh\necho my own start\n");
+    assert.equal(bridgeAutostartLaunchScript(noEntrypoint), "entrypoint-missing");
+    assert.equal(await readFile(noEntrypoint.launcher, "utf8"), BRIDGE_CASES.july, "never points at a file that is not there");
+    assert.equal(bridgeAutostartLaunchScript({}), "no-state-dir");
+  } finally {
+    for (const fx of [none, custom, noEntrypoint]) await rm(fx.dir, { recursive: true, force: true });
+  }
 });
 
-test("new launch scripts point at the shipped entrypoint, which converges after health", async () => {
+test("the bridged pointer starts the shipped entrypoint with the state beside it", { skip: !posix && "POSIX host only" }, async () => {
+  const { bridgeAutostartLaunchScript } = await import("./autostart-bridge.mjs");
+  const fx = await bridgeFixture(BRIDGE_CASES.may);
+  try {
+    const text = BRIDGE_CASES.may.replace('cd "/Users/ops/dpf"', `cd "${fx.installRoot}"`);
+    await writeFile(fx.launcher, text);
+    await writeFile(join(fx.installRoot, "scripts", "installer", "dpf-start.consumer.sh"), '#!/bin/sh\nprintf "%s\n" "$@"\n');
+    assert.equal(bridgeAutostartLaunchScript(fx), "bridged");
+    const run = spawnSync("/bin/bash", [fx.launcher], { encoding: "utf8" });
+    assert.equal(run.status, 0, run.stderr);
+    assert.deepEqual(run.stdout.trim().split("\n"), [fx.installRoot, join(fx.stateDir, "install-state.json"), "-f", "docker-compose.yml"]);
+  } finally { await rm(fx.dir, { recursive: true, force: true }); }
+});
+
+test("promote.sh runs the bridge from the install root after the release commit; new launch scripts are pointers", async () => {
+  const promote = await readFile(join(root, "scripts", "promote.sh"), "utf8");
+  const commit = promote.indexOf("emit_step release-identity-commit");
+  const bridge = promote.indexOf('node "$_bridge_root/scripts/installer/autostart-bridge.mjs"');
+  assert.ok(commit > 0 && bridge > commit, "the bridge runs after the verified assets are committed");
+  assert.match(promote, /_bridge_root="\$\{PROMOTE_INSTALL_ROOT:-\$\{PROMOTE_SOURCE:-\}\}"/);
+  assert.match(promote, /--state-dir "\$DPF_PROMOTER_STATE_DIR"/);
   const autostart = await readFile(join(root, "scripts", "installer", "lib", "autostart.sh"), "utf8");
   assert.match(autostart, /exec \/bin\/bash "\$install_path\/scripts\/installer\/dpf-start\.consumer\.sh" "\$install_path" "\$state_path" \$compose_chain/);
   const start = await readFile(join(root, "scripts", "installer", "dpf-start.consumer.sh"), "utf8");
@@ -242,5 +286,5 @@ test("new launch scripts point at the shipped entrypoint, which converges after 
   assert.match(dockerfile, /cp scripts\/installer\/dpf-start\.consumer\.sh scripts\/installer\/native-edge-host\.sh scripts\/installer\/autostart-bridge\.mjs \/dpf-release-assets\/scripts\/installer\//);
   assert.match(dockerfile, /scripts\/installer\/lib\/host-convergence\.sh \/dpf-release-assets\/scripts\/installer\/lib\//);
   const resolver = await readFile(join(root, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), "utf8");
-  assert.match(resolver, /args\.migrate && args\.write && process\.platform !== "win32"/);
+  assert.doesNotMatch(resolver, /autostart-bridge/, "the resolver carries no side effect");
 });

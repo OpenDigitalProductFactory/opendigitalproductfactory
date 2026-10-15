@@ -1227,6 +1227,27 @@ if [[ $_release_mode -eq 1 && $_dry_run -eq 0 ]]; then
   fi
 fi
 
+# --- Step 7a: autostart-bridge (BI-084F85E5, BI-EEFDB9E8) ---
+# macOS/Linux autostart runs a launch script install-dpf.sh wrote once into the
+# state directory, outside the install root, so no release-asset install can
+# replace it. Rewrite it into the one-line pointer to the shipped
+# scripts/installer/dpf-start.consumer.sh, which converges the host (the native
+# host-upkeep agent) at the next boot or login. It runs from the install root,
+# not the promoter image: an older portal stages the promoter from its own file
+# list, so a new file reaches this promotion only as a verified release asset.
+# Windows has no launch script there and is a no-op; any failure is reported and
+# never fails a promotion that has already succeeded.
+if [[ $_dry_run -eq 0 && -n "${DPF_PROMOTER_STATE_DIR:-}" ]]; then
+  _bridge_root="${PROMOTE_INSTALL_ROOT:-${PROMOTE_SOURCE:-}}"
+  if [[ -n "$_bridge_root" && -f "$_bridge_root/scripts/installer/autostart-bridge.mjs" ]]; then
+    node "$_bridge_root/scripts/installer/autostart-bridge.mjs" \
+      --state-dir "$DPF_PROMOTER_STATE_DIR" --install-root "$_bridge_root" || \
+      printf 'step=autostart-bridge status=failed\n'
+  else
+    printf 'step=autostart-bridge status=module-missing\n'
+  fi
+fi
+
 # --- Step 7b: sandbox-refresh ---
 # Rebuild + recreate the dpf-sandbox image the same way step 3/4 do the portal
 # (BI-A8686CFC). The promote chain historically rebuilt ONLY the portal, so

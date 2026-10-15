@@ -204,17 +204,6 @@ async function main() {
       });
     }
     process.stdout.write(`${JSON.stringify(projection)}\n`);
-    // BI-084F85E5: a macOS/Linux autostart launch script written before host
-    // convergence runs only this shipped file at boot. When that script is our
-    // parent, bridge it once to the shipped start entrypoint. Only the launch
-    // script passes --migrate --write from a POSIX host; the bridge checks the
-    // parent itself and never touches this command's output or exit status.
-    if (args.migrate && args.write && process.platform !== "win32") {
-      try {
-        const { bridgeAutostartFromParent } = await import("../installer/autostart-bridge.mjs");
-        bridgeAutostartFromParent();
-      } catch {}
-    }
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 2;

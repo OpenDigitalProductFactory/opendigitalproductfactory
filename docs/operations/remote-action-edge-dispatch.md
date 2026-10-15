@@ -71,9 +71,12 @@ On macOS and Linux the autostart launch script (`~/.dpf/dpf-autostart.sh`) lives
 outside the install directory, so it is now a one-line pointer to the shipped
 `scripts/installer/dpf-start.consumer.sh`, which does the same thing through
 `scripts/installer/lib/host-convergence.sh`. A launch script written before this
-change is bridged once (BI-EEFDB9E8). At boot it runs the shipped compose-profile
-resolver, which sees the old launch script as its parent, rewrites it atomically
-into the pointer, and starts host convergence for that boot. A host-runtime
+change is bridged once by the self-upgrade itself (BI-EEFDB9E8). The promoter
+mounts the state directory, so after the release assets are committed
+`promote.sh` runs the shipped `scripts/installer/autostart-bridge.mjs` from the
+install root. That rewrites the launch script atomically into the pointer,
+keeping its install path and compose chain, and works for every launch script
+generation. The next boot or login then converges the host. A host-runtime
 change must now say how existing installs converge on Windows, macOS and Linux,
 or the Convergence-Impact gate fails it.
 

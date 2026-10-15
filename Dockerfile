@@ -143,8 +143,8 @@ COPY scripts/installer/native-edge-host.ps1 ./scripts/installer/
 # as release assets, so each self-upgrade replaces them in the install dir.
 COPY scripts/installer/dpf-start.consumer.ps1 ./scripts/installer/
 COPY scripts/installer/lib/host-convergence.ps1 ./scripts/installer/lib/
-# ...and their macOS/Linux twins, plus the one-time bridge for launch scripts
-# written before them (the resolver above imports it at boot).
+# ...and their macOS/Linux twins, plus the self-upgrade step that bridges launch
+# scripts written before them (promote.sh runs it from the install root).
 COPY scripts/installer/dpf-start.consumer.sh scripts/installer/native-edge-host.sh scripts/installer/autostart-bridge.mjs ./scripts/installer/
 COPY scripts/installer/lib/host-convergence.sh ./scripts/installer/lib/
 COPY scripts/bootstrap-organization-pki.ps1 scripts/rotate-runtime-transition-secret.mjs ./scripts/
