@@ -1,5 +1,16 @@
 # Platform Support Watch-List (living document)
 
+## Capability reconciliation on release installs (BI-5ACBAC50)
+
+The portal's Linux container is not the host platform. Explicit v2 runtime
+reconciliation filters service eligibility using the signed installation's
+Windows, macOS or Linux identity on both server and packaged actuator. Preserve
+the recorded release Compose overlays and canonical environment file through
+initial execution and signed recovery. Base-only Compose can reintroduce source
+builds on a source-free consumer install. The actuator's packaged catalog remains
+bound to the signed catalog hash. Source fixtures cover the platform matrix and
+release context; live host application requires a qualified containing release.
+
 ## Host process inventory before admission (BI-6DE5A3B6)
 
 Windows process inventory uses explicit UTF-8, terminating PowerShell errors,

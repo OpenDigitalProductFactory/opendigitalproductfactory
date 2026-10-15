@@ -63,7 +63,7 @@ test("the packaged read-only probe rejects a schema-invalid snapshot without hos
   assert.deepEqual(await readdir(dir), []);
 });
 
-async function validTransition(dir, health = "healthy", version = 1, { previousRequested = [], desiredRequested, stateExtras = {} } = {}) {
+async function validTransition(dir, health = "healthy", version = 1, { previousRequested = [], desiredRequested, stateExtras = {}, hostPlatform } = {}) {
   const catalogPath = new URL("./capability-service-catalog.generated.json", import.meta.url);
   const catalog = JSON.parse(await readFile(catalogPath, "utf8"));
   const project = (requested) => {
@@ -73,7 +73,7 @@ async function validTransition(dir, health = "healthy", version = 1, { previousR
     for (const capability of catalog.capabilities) if (capability.activationPolicy === "always") add(capability.capabilityId);
     for (const id of requested) add(id);
     const keys = [...enabled].sort();
-    const services = catalog.capabilities.filter((capability) => enabled.has(capability.capabilityId)).flatMap((capability) => capability.services).filter((service) => service.targetClassification !== "ephemeral-lifecycle");
+    const services = catalog.capabilities.filter((capability) => enabled.has(capability.capabilityId)).flatMap((capability) => capability.services).filter((service) => service.targetClassification !== "ephemeral-lifecycle" && (!hostPlatform || service.hostPlatforms.includes(hostPlatform)));
     return { keys, profiles: [...new Set(services.flatMap((service) => service.profiles))].sort(), required: [...new Set(services.map((service) => service.service))].sort(), hash: createHash("sha256").update(`${catalog.catalogHash}\n${catalog.capabilities.map((capability) => `${capability.capabilityId}=${enabled.has(capability.capabilityId) ? "active" : "disabled"}`).sort().join("\n")}`).digest("hex") };
   };
   const previous = project(previousRequested);
@@ -88,6 +88,14 @@ async function validTransition(dir, health = "healthy", version = 1, { previousR
   await writeFile(fakeDocker, `const args = process.argv.slice(2).join(" ");\nif (args.includes("ps --format json")) process.stdout.write(${JSON.stringify(JSON.stringify(psRows))});\n`);
   return { value, signature, catalogPath: catalogPath.pathname.replace(/^\/(.:\/)/, "$1"), desired, env: { DPF_RUNTIME_TRANSITION_SECRET_FILE: await secretFile(dir), DPF_RUNTIME_TRANSITION_ENVELOPE: Buffer.from(JSON.stringify(value)).toString("base64url"), DPF_RUNTIME_TRANSITION_SIGNATURE: signature, DPF_PROMOTER_STATE_DIR: dir, DPF_CAPABILITY_CATALOG_PATH: catalogPath.pathname.replace(/^\/(.:\/)/, "$1"), PROMOTE_COMPOSE_PROJECT: "dpf", DPF_DOCKER_BIN: process.execPath, DPF_DOCKER_PREFIX_ARGS: JSON.stringify([fakeDocker]) } };
 }
+
+test("the actuator reads its packaged hash-bound catalog without a host source checkout", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-transition-packaged-catalog-"));
+  const fixture = await validTransition(dir);
+  const result = run({ ...fixture.env, DPF_CAPABILITY_CATALOG_PATH: undefined });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(await readFile(join(dir, "runtime-capability-transitions/RCT-test.json"), "utf8")).status, "applied");
+});
 
 test("version 2 ordinary apply recursively authenticates health and preserves replay identity", async () => {
   const dir = await mkdtemp(join(tmpdir(), "dpf-transition-v2-"));
@@ -136,6 +144,17 @@ async function reconciliationFixture(dir, { touched, databaseStates, ...options 
     DPF_RUNTIME_TRANSITION_SIGNATURE: signTransitionPayload(value, secret) });
   return { value, env };
 }
+
+for (const [platform, hostPlatform] of [["win32", "windows"], ["darwin", "macos"], ["linux", "linux"]]) test(`reconciliation applies the signed ${platform} service projection`, async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-reconciliation-platform-"));
+  const fixture = await reconciliationFixture(dir, { desiredRequested: ["runtime:external-ai"], stateExtras: { platform }, hostPlatform });
+  assert.equal(fixture.value.desiredServices.includes("ollama"), platform === "linux");
+  const result = run(fixture.env());
+  assert.equal(result.status, 0, result.stderr);
+  const receipt = JSON.parse(await readFile(join(dir, "runtime-capability-transitions/RCT-test.json"), "utf8"));
+  assert.equal(receipt.status, "applied");
+  assert.deepEqual(receipt.desiredServices, fixture.value.desiredServices);
+});
 
 test("reconciliation refuses missing immutable protocol identity before journaling", async () => {
   const dir = await mkdtemp(join(tmpdir(), "dpf-reconciliation-missing-protocol-")), fixture = await reconciliationFixture(dir);
@@ -278,7 +297,7 @@ test("fails closed before mutation when the signed catalog projection is unavail
   const dir = await mkdtemp(join(tmpdir(), "dpf-transition-"));
   await writeFile(join(dir, "install-state.json"), JSON.stringify({ schemaVersion: 1, capabilityCatalogHash: "f".repeat(64), capabilityStateVersion: "b".repeat(64) }));
   const value = envelope(); const signature = createHmac("sha256", secret).update(canonical(value)).digest("hex");
-  const result = run({ DPF_RUNTIME_TRANSITION_SECRET_FILE: await secretFile(dir), DPF_RUNTIME_TRANSITION_ENVELOPE: Buffer.from(JSON.stringify(value)).toString("base64url"), DPF_RUNTIME_TRANSITION_SIGNATURE: signature, DPF_PROMOTER_STATE_DIR: dir, PROMOTE_COMPOSE_PROJECT: "dpf" });
+  const result = run({ DPF_RUNTIME_TRANSITION_SECRET_FILE: await secretFile(dir), DPF_RUNTIME_TRANSITION_ENVELOPE: Buffer.from(JSON.stringify(value)).toString("base64url"), DPF_RUNTIME_TRANSITION_SIGNATURE: signature, DPF_PROMOTER_STATE_DIR: dir, PROMOTE_COMPOSE_PROJECT: "dpf", DPF_CAPABILITY_CATALOG_PATH: join(dir, "absent-catalog.json") });
   assert.equal(result.status, 78); assert.match(result.stderr, /capability_catalog_unreadable/);
   assert.equal(JSON.parse(await readFile(join(dir, "install-state.json"), "utf8")).capabilityCatalogHash, "f".repeat(64));
 });

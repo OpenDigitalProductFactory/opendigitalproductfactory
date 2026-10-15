@@ -129,12 +129,18 @@ try { if (!journal) { await mkdir(claim); await writeFile(join(claim, "expires-a
   } catch (error) { if (error?.code !== "ENOENT") contend("transition_already_claimed"); contend("invalid_transition_claim"); }
 }
 
-const catalogPath = process.env.DPF_CAPABILITY_CATALOG_PATH ?? "/host-source/scripts/capability-service-catalog.generated.json";
+const catalogPath = process.env.DPF_CAPABILITY_CATALOG_PATH ?? new URL("./capability-service-catalog.generated.json", import.meta.url);
 let catalog;
 try { catalog = JSON.parse(await readFile(catalogPath, "utf8")); } catch { await fail("capability_catalog_unreadable"); }
 const { catalogHash, ...catalogContent } = catalog;
 if (catalogHash !== envelope.catalogHash || sha(catalogBytes(catalogContent)) !== catalogHash) await fail("capability_catalog_mismatch");
 const byId = new Map(catalog.capabilities.map((c) => [c.capabilityId, c]));
+// Keep the v2 host projection aligned with the server and canonical catalog
+// resolver without importing bytes outside this actuator's signed closure.
+const hostPlatform = envelope.version === 2 && envelope.mode === "reconciliation"
+  ? new Map([["win32", "windows"], ["darwin", "macos"], ["linux", "linux"]]).get(envelope.reconciliation?.observedHost?.platform)
+  : undefined;
+if (envelope.version === 2 && envelope.mode === "reconciliation" && !hostPlatform) await fail("runtime_transition_host_platform_unverifiable");
 const project = (keys) => {
   const enabled = new Set();
   const add = (id) => {
@@ -149,7 +155,7 @@ const project = (keys) => {
   const enabledKeys = [...enabled].sort();
   const services = catalog.capabilities.filter((capability) => enabled.has(capability.capabilityId))
     .flatMap((capability) => capability.services)
-    .filter((service) => service.targetClassification !== "ephemeral-lifecycle");
+    .filter((service) => service.targetClassification !== "ephemeral-lifecycle" && (!hostPlatform || service.hostPlatforms.includes(hostPlatform)));
   return {
     enabledKeys,
     profiles: [...new Set(services.flatMap((service) => service.profiles))].sort(),

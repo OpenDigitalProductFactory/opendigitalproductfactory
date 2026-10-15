@@ -10,8 +10,9 @@ import { countAttributedWork, createPrismaWorkAttributionStore } from "./work-at
 import { computeCapabilityStateVersion, coordinateRuntimeCapabilityTransition, createPrismaRuntimeTransitionReceipts } from "./transition-coordinator";
 import { canonicalTransitionPayload, prepareRuntimeReconciliationIntent, type RuntimeReconciliationIntent, type RuntimeTransitionReceipt } from "./transition-protocol";
 import { computeCapabilityStateVersion as computeHostStateVersion } from "../../../../scripts/lib/capability-state-hash.mjs";
+import { runtimeTransitionHostContext, runtimeTransitionHostPlatform } from "./runtime-transition-host-context";
 
-type CatalogEntry = { capabilityId: string; dependencies: string[]; services: Array<{ service: string; profiles: string[]; dependsOn: string[]; targetClassification?: string; healthSemantics?: string }> };
+type CatalogEntry = { capabilityId: string; dependencies: string[]; services: Array<{ service: string; profiles: string[]; dependsOn: string[]; targetClassification?: string; healthSemantics?: string; hostPlatforms: string[] }> };
 const catalog = catalogSeed as { catalogHash: string; capabilities: CatalogEntry[] };
 
 export function requiredRuntimeServicesAreHealthy(
@@ -26,14 +27,14 @@ export function requiredRuntimeServicesAreHealthy(
   });
 }
 
-function resolveProjection(keys: readonly string[], states: Readonly<Record<string, string>>) {
+function resolveProjection(keys: readonly string[], states: Readonly<Record<string, string>>, hostPlatform?: string) {
   const byId = new Map(catalog.capabilities.map((entry) => [entry.capabilityId, entry]));
   const enabled = new Set<string>();
   const add = (id: string) => { const entry = byId.get(id); if (!entry) throw new Error(`unknown_runtime_capability:${id}`); if (enabled.has(id)) return; entry.dependencies.forEach(add); enabled.add(id); };
   keys.forEach(add);
   const enabledKeys = [...enabled].sort();
   if (JSON.stringify(enabledKeys) !== JSON.stringify([...keys].sort())) throw new Error("runtime_capability_dependency_closure_required");
-  const services = catalog.capabilities.filter((entry) => enabled.has(entry.capabilityId)).flatMap((entry) => entry.services).filter((service) => service.targetClassification !== "ephemeral-lifecycle");
+  const services = catalog.capabilities.filter((entry) => enabled.has(entry.capabilityId)).flatMap((entry) => entry.services).filter((service) => service.targetClassification !== "ephemeral-lifecycle" && (!hostPlatform || service.hostPlatforms.includes(hostPlatform)));
   return { catalogHash: catalog.catalogHash, stateHash: computeCapabilityStateVersion(catalog.catalogHash, states), enabledKeys, composeProfiles: [...new Set(services.flatMap((service) => service.profiles))].sort(), requiredServices: [...new Set(services.map((service) => service.service))].sort() };
 }
 
@@ -140,8 +141,9 @@ export async function executeProductionRuntimeCapabilityTransition(input: { tran
   const desiredSet = new Set(input.desiredKeys);
   const desiredStates = prepared ? { ...prepared.desiredDatabaseStates } : Object.fromEntries(rows.map((row) => [row.capabilityId, desiredSet.has(row.capabilityId) ? "active" : "disabled"]));
   const hostStates = (keys: readonly string[]) => Object.fromEntries(catalog.capabilities.map(entry => [entry.capabilityId, keys.includes(entry.capabilityId) ? "active" : "disabled"]));
-  const previousProjection = resolveProjection(previousKeys, prepared ? hostStates(previousKeys) : previousStates);
-  const desiredProjection = resolveProjection(input.desiredKeys, prepared ? hostStates(input.desiredKeys) : desiredStates);
+  const hostPlatform = prepared ? runtimeTransitionHostPlatform(prepared.observedHost) : undefined;
+  const previousProjection = resolveProjection(previousKeys, prepared ? hostStates(previousKeys) : previousStates, hostPlatform);
+  const desiredProjection = resolveProjection(input.desiredKeys, prepared ? hostStates(input.desiredKeys) : desiredStates, hostPlatform);
   if (prepared) {
     previousProjection.stateHash = prepared.observedHost.capabilityStateVersion;
     desiredProjection.stateHash = computeHostStateVersion(catalog.catalogHash, input.desiredKeys, catalog.capabilities.map(entry => entry.capabilityId));
@@ -155,7 +157,7 @@ export async function executeProductionRuntimeCapabilityTransition(input: { tran
   const protocolSecret = (await readFile("/dpf-state/runtime-transition.secret", "utf8")).trim();
   const hostInstallPath = process.env.DPF_HOST_INSTALL_PATH, stateDirHostPath = process.env.DPF_STATE_DIR_HOST, protocolSecretFileHostPath = process.env.DPF_RUNTIME_TRANSITION_SECRET_FILE_HOST;
   if (!hostInstallPath || !stateDirHostPath || !protocolSecretFileHostPath) throw new Error("runtime_transition_host_configuration_missing");
-  const promoterParams = { hostInstallPath, stateDirHostPath, runtimeCapabilitySecretFileHostPath: protocolSecretFileHostPath, targetSha: protocol?.artifact.sourceSha ?? process.env.DEPLOYED_SHA ?? "runtime-capability-transition", ...(protocol ? { promoterImage: protocol.artifact.digest } : {}), backupPath: "/backups/runtime-capability-transition", healthUrl: `${process.env.APP_URL ?? "http://localhost:3000"}/api/health`, composeFiles: (process.env.DPF_SELF_UPGRADE_COMPOSE_FILES ?? "docker-compose.yml").split(/\s+/).filter(Boolean), composeProject: process.env.COMPOSE_PROJECT_NAME ?? "dpf" };
+  const promoterParams = { ...runtimeTransitionHostContext(prepared?.observedHost), runtimeCapabilitySecretFileHostPath: protocolSecretFileHostPath, targetSha: protocol?.artifact.sourceSha ?? process.env.DEPLOYED_SHA ?? "runtime-capability-transition", ...(protocol ? { promoterImage: protocol.artifact.digest } : {}), backupPath: "/backups/runtime-capability-transition", healthUrl: `${process.env.APP_URL ?? "http://localhost:3000"}/api/health` };
   if (!(await reconcileAuthority(promoterParams))) return { status: "transition_in_progress" as const };
   const reserve = await runPromoter({ ...promoterParams, runtimeCapabilityTransitionId: input.transitionId, runtimeTransitionAuthorityOperation: "reserve", containerName: `dpf-promoter-authority-${input.transitionId}`, timeoutMs: 60_000 });
   if (reserve.exitCode !== 0) return { status: "transition_in_progress" as const };

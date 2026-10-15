@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { assertRuntimeCompensationDatabaseBaseline, classifyRuntimeInstallState, createPrismaRuntimeTransitionReceipts, reconcileRuntimeCapabilityTransitions, type RuntimeTransitionReconcileRow } from "./transition-coordinator";
 import { canonicalTransitionPayload, createRuntimeCompensationEnvelope, signTransitionPayload, verifyHistoricalTransitionReceipt, type RuntimeTransitionEnvelope, type RuntimeTransitionReceipt } from "./transition-protocol";
 import { runPromoter } from "@/lib/self-upgrade/promoter";
+import { runtimeTransitionHostContext } from "./runtime-transition-host-context";
 
 // Instrumentation, MCP and SSR have separate module caches. A module-local
 // flag can even be folded into an unconditional refusal in request bundles.
@@ -39,11 +40,10 @@ function promoterParams(row: RuntimeTransitionReconcileRow, envelope: RuntimeTra
   if (envelope.version === 2 && envelope.mode === "reconciliation"
     && (!identity || !/^sha256:[a-f0-9]{64}$/.test(identity.promoterDigest) || !/^[a-f0-9]{40}$/.test(identity.sourceSha))) throw new Error("runtime_transition_protocol_identity_missing");
   return {
-    hostInstallPath, stateDirHostPath, runtimeCapabilitySecretFileHostPath: secretPath,
+    ...runtimeTransitionHostContext(envelope.version === 2 && envelope.mode === "reconciliation" ? envelope.reconciliation?.observedHost : undefined), runtimeCapabilitySecretFileHostPath: secretPath,
     targetSha: identity?.sourceSha ?? process.env.DEPLOYED_SHA ?? "runtime-capability-transition", ...(identity ? { promoterImage: identity.promoterDigest } : {}), backupPath: "/backups/runtime-capability-transition",
     healthUrl: `${process.env.APP_URL ?? "http://localhost:3000"}/api/health`,
-    composeFiles: (process.env.DPF_SELF_UPGRADE_COMPOSE_FILES ?? "docker-compose.yml").split(/\s+/).filter(Boolean),
-    composeProject: process.env.COMPOSE_PROJECT_NAME ?? "dpf", runtimeCapabilityTransitionId: envelope.transitionId,
+    runtimeCapabilityTransitionId: envelope.transitionId,
     runtimeCapabilityEnvelope: Buffer.from(JSON.stringify(envelope)).toString("base64url"), runtimeCapabilitySignature: signature,
     containerName: `dpf-promoter-${envelope.transitionId}`, timeoutMs: 600_000,
   };
