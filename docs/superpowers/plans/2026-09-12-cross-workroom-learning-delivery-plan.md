@@ -149,3 +149,144 @@ Do not close the umbrella until all four objectives and all twelve acceptance ca
 Parent: BI-IMP-9DA35549. Decision: decomposed. Live mappings and dependencies are in the delivery graph above. New child BIs BI-11458908, BI-BF20F828 and BI-64E86574 reference the approved design; existing UI, domain and standards owners are reused.
 
 Coverage receipt: `cmtyolx721ihv01mbf0d9tewb`, recorded September 12, 2026 by governed `record_plan_backlog_coverage`, validates all six live mappings above. Initial immutable plan: commit `6c16742983293ef2867043ce4f1e9b2e4d7de8f8`, blob `de57af1124a83f5f39434209c1cec90b027deb59`, at this path in `OpenDigitalProductFactory/opendigitalproductfactory`. This provenance addition does not alter the deliverable graph. Independent plan review remains required before implementation.
+
+## Phase 2 recovery addendum — populated activity migration
+
+This addendum implements only the migration-recovery slice of BI-BF20F828 under
+WC-1ABA2F71. It preserves the delivery graph and historical coverage above.
+It does not close the broader review-cycle or parent acceptance outcomes.
+Source delivery is not served acceptance. SUR-5B92E384 failed before advancing
+the healthy canonical image; the first PostgreSQL error was the append-only
+work-intent guard, not the secondary aborted-transaction error.
+
+The approved scope is design commit
+`1e6de76fc77c9252f49fcdba8d025484c2cbb0c4`, blob
+`0456552c4d4fdc4055e0d8748ebc67171ff8ca2e`, section 14, with canonical baseline
+`baseline-e414c445-31b8-475a-908b-d2105ba6b25f`. Independent spec approval is
+`initiative-42d65d61-9961-4154-be95-da0c708cf4b5`; independent architecture
+approval is `initiative-f54d8b5c-95d1-42ac-b937-411e5db5f8cc`.
+Plan admission IRD-4ABBB809FDC9 is allowed. Implementation is not yet admitted.
+
+### Selected direction and boundaries
+
+DI-A43F9A0E6826 selects transaction-contained preparation over a committed
+skip-update trigger: composite 8.119 versus 7.153, margin 0.966, high confidence,
+autonomyEligible true, no commandment conflict or autonomy blockers. Features
+are qualitative engineering estimates, not measurements: preparation has greater
+temporary shared-function reach but stronger transactional reversibility and
+maintainability. The largest reported contributors were Jurisdiction-layered
+analysis and Propose, Acknowledge, Reassign; those generic scores do not prove
+database correctness. The earlier featureless DI-B166928828BA remains an
+abstention. Independent plan review and real PostgreSQL evidence remain required.
+
+Use an additive preparation migration ordered before
+`20261014012000_workroom_activity_ingestion_hardening`; never edit that migration
+or any other published migration. Under the existing exclusive table locks,
+permit only a protected WorkCapsuleActivity NULL-to-assigned sequence transition
+with every other field identical. Preserve all DELETE refusals and every other
+table using the shared function. Assign positions only where the entire room's
+NULL population has integer headroom. Restore the exact original refusal
+function before committing. No disabled trigger or relaxed guard may be
+committed. Already-applied hardening histories are a no-op; overflow rooms keep
+their original NULL rows and retention-unverified coverage.
+
+The unchanged hardening migration handles ordinary remaining NULL rows.
+Assigned positions are new ingestion metadata, never reconstructed chronology.
+Preserve every prior assigned position, activity field, receipt and failure row.
+Do not reset, mark applied, use a live SQL hotfix or retry the unchanged upgrade.
+
+### R1 — reproduce and classify history
+
+Deliver `recovery-history` under OBJ-RECOVERY / AC-05,
+`contract:durable-review-cycle`, `flow:capture-to-safe-resume`.
+Extend the existing
+`packages/db/src/workroom-activity-ingestion.postgres.test.ts` fixture and
+reuse the inventory/human-principal classifier test conventions. Before runtime
+edits, claim the exact paths and consume their testImpact and guardObligation
+entries; this document's resolved docs-only impact contract does not qualify SQL.
+
+In the governed PostgreSQL lease, construct the real predecessor schema and
+protected work-intent records, ordinary NULL rows, assigned positions, unrelated
+governance activities and overflow rooms. Execute the original migration and
+retain its exact first error as Red. Prove its transaction effects and guard
+definitions roll back, rather than inferring that from logs. Inspect actual
+production migration-history metadata only through authorized read authority.
+Current admin_query_db lacks admin_read: this blocks that inspection, not source
+planning. Do not substitute shell, another actor or denied deliberation reads.
+
+Define verification `VR-HISTORY`: exact migration name, published checksum,
+unfinished ledger row identity and failure signature; global unresolved-row
+count, applied steps and absence of durable partial effects. Account explicitly
+for the secondary failure to persist Prisma logs. Missing or ambiguous failure
+signature must fail closed. If live metadata cannot support safe automatic
+classification, stop that automatic-recovery path and report the precise missing
+evidence; do not widen matching to make the case pass.
+
+### R2 — atomic preparation and promoter integration
+
+Deliver `recovery-forward-path` under OBJ-RECOVERY / AC-05,
+`contract:durable-review-cycle`, `flow:capture-to-safe-resume`, after R1.
+Add the preparation migration under `packages/db/prisma/migrations` and an exact
+classifier alongside `packages/db/scripts/lib/human-principal-migration-recovery.mjs`
+and `inventory-snapshot-migration-recovery.mjs`. Integrate a bounded executable
+helper through `scripts/promote.sh` using those existing owners. Extend
+`apps/web/lib/self-upgrade/promote-script-contract.test.ts` and the functional
+promoter tests; do not create a second migration runner or recovery controller.
+
+Verification `VR-FORWARD`: unchanged published checksums; exact original refusal
+restored on success and interruption; all original semantic bytes and assigned
+positions preserved; counters monotone; no overflow renumbering; no metadata
+exception outside the preparation transaction. Test all attachments of the shared
+refusal function, mixed protected/ordinary rows and concurrent blocked writers.
+Test clean, failed, already-applied and repeated-deployment histories.
+
+Only after VR-HISTORY establishes the exact known effect-free failure may the
+promoter use its reviewed normal Prisma rolled-back resolution, verifying the
+same ledger row and globally clear unresolved history afterward. Never mark the
+migration applied. Candidate preparation and failed-migration checksums must
+match committed bytes. Test unrelated failures, mixed failures, checksum drift,
+partial effects, missing logs and concurrent state changes as refusals.
+Record real output; a fixture existing without execution is not a pass.
+
+### R3 — governed delivery and served acceptance
+
+Deliver `recovery-acceptance` under OBJ-RECOVERY / AC-05,
+`contract:durable-review-cycle`, `flow:capture-to-safe-resume`, after R1 and R2.
+Verification `VR-LIVE`: affected local tests and package typechecks, full canonical
+migration/build gate, independent review, DCO PR and protected merge queue.
+Advance only through the authorized canonical self-upgrade path. Preserve the
+healthy prior image until migration and health checks succeed. No new upgrade
+request or admin operation is authorized by this plan.
+
+After actual advancement, re-run the root preflight for merge84 and the genuine
+served provider/review acceptance paths. Preserve the old AC-LIP5 failure and
+eight nonblocking review observations; this migration repair cannot resolve
+them by assertion. Keep wider document, calibration and offline recovery work
+with their existing owners. A failed deployment remains failed evidence.
+
+Rollback is transaction rollback before preparation commit and source-level
+withdrawal before merge. After merge, correct through another forward migration.
+Never delete evidence or rewrite history to roll back. If preparation commits but
+the following migration fails, the original guards must already be restored and
+the next attempt must classify the actual current history before proceeding.
+
+### Recovery coverage and stop condition
+
+Decision: atomic for this recovery slice, mapped to existing BI-BF20F828.
+R1, R2 and R3 are internal sequencing, not independently shippable deliverables:
+preparation without exact-history handling leaves failed installs blocked;
+resolution without preparation repeats the failure; neither proves deployment.
+Do not replace the parent graph or claim this covers unrelated child outcomes.
+New immutable recovery coverage and independent plan review are still pending.
+
+| Deliverable | BI | Depends on | Requirement | Contract | Flow | Verification |
+| --- | --- | --- | --- | --- | --- | --- |
+| recovery-history | BI-BF20F828 | none | OBJ-RECOVERY, AC-05 | contract:durable-review-cycle | flow:capture-to-safe-resume | VR-HISTORY |
+| recovery-forward-path | BI-BF20F828 | recovery-history | OBJ-RECOVERY, AC-05 | contract:durable-review-cycle | flow:capture-to-safe-resume | VR-FORWARD |
+| recovery-acceptance | BI-BF20F828 | recovery-history, recovery-forward-path | OBJ-RECOVERY, AC-05 | contract:durable-review-cycle | flow:capture-to-safe-resume | VR-LIVE |
+
+All repair implementation and functional checks above are unrun at this planning
+checkpoint. Continue only after canonical coverage and independent plan review
+admit implementation. Missing history authority stops automatic history repair;
+missing source admission stops code edits. Neither justifies a duplicate paid
+review, another backlog item or a production workaround.
