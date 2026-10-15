@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import { completeBacklogItemTransition } from "./backlog-terminal-transition";
 import { evaluateBacklogItemCompletion, readBacklogItemCompletion } from "./backlog-completion-evaluation";
 import type { MergeDeliverySignal } from "./merge-delivery-signal";
+import { item as initiativeItem, readyActivities } from "./entry-adapter.test-fixtures";
 
 const NOW = "2026-10-06T12:00:00.000Z";
 
@@ -94,6 +95,66 @@ async function bothViews(signal: MergeDeliverySignal, itemOverrides: Record<stri
 function unmetCodes(decision: { unmet: { code: string }[]; blockers: { code: string }[] }) {
   return [...decision.unmet, ...decision.blockers].map((entry) => entry.code).sort();
 }
+
+describe("decomposed initiative completion (BI-DA407BD9)", () => {
+  function aggregateFixture(childStatus = "done", outcome = "pass", missingPlanReview = false) {
+    const f = fixture(initiativeItem);
+    const activities = readyActivities().filter(row => !missingPlanReview || row.gateKey !== "plan-review");
+    const coverage = activities.find(row => row.kind === "plan_backlog_coverage")!;
+    const coveragePayload = { ...coverage.payload, decision: "decomposed", planArtifactDigest: `sha256:${"d".repeat(64)}`,
+      planArtifactRef: { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "a".repeat(40),
+        providerBlobId: "b".repeat(40), path: "docs/superpowers/plans/plan.md" },
+      deliverables: ["BI-A", "BI-B"].map((backlogItemId, i) => ({ key: `child-${i}`, title: backlogItemId,
+        independentlyShippable: true, backlogItemId, dependsOn: [] })),
+    };
+    coverage.payload = coveragePayload as typeof coverage.payload;
+    f.client.backlogItemActivity.findMany.mockResolvedValue(activities as never);
+    Object.assign(f.client.backlogItem, { findMany: vi.fn().mockResolvedValue([
+      { itemId: "BI-A", status: "done" }, { itemId: "BI-B", status: childStatus },
+    ]) });
+    Object.assign(f.client, { workroom: { findFirst: vi.fn().mockResolvedValue({
+      scopeClaims: [{ workShape: "delivery-xlarge@1.0.0" }],
+    }) } });
+    const resolveDeploymentClosure = vi.fn(async () => ({ kind: "unavailable" as const, reason: "not needed" }));
+    const dependencies = { ...deps("merged"), resolveDeploymentClosure,
+      reconcileObjectives: () => ({ state: outcome, baselineId: "baseline-1", evidenceRefs: outcome === "pass" ? ["parent-outcome"] : [] }) };
+    return { ...f, dependencies, resolveDeploymentClosure };
+  }
+  async function evaluate(f: ReturnType<typeof aggregateFixture>) {
+    return evaluateBacklogItemCompletion({ db: f.client as never, item: f.item as never, rawManifest: undefined,
+      transitionObject: { kind: "backlog-item", id: f.item.itemId, expectedVersion: "read", targetState: "completion" },
+      evaluatedAt: NOW, dependencies: f.dependencies as never });
+  }
+  it("allows real child delivery and parent outcomes through the same gate and read evaluation", async () => {
+    const gateSide = aggregateFixture();
+    const gate = await completeBacklogItemTransition({ db: gateSide.db as never, itemId: gateSide.item.itemId,
+      expectedStatus: "awaiting-acceptance", resolution: "Children delivered and hypothesis reconciled.",
+      completionEvidence: undefined, actor, authority: { ...authority, objectRef: gateSide.item.itemId },
+      evaluatedAt: NOW, dependencies: gateSide.dependencies as never });
+    const readSide = aggregateFixture();
+    const read = await readBacklogItemCompletion({ itemRowId: readSide.item.id, status: "awaiting-acceptance",
+      evaluatedAt: NOW, db: readSide.client as never, dependencies: readSide.dependencies as never });
+    expect(gate.ok).toBe(true);
+    expect(read?.decision.verdict).toBe("allowed");
+    expect(unmetCodes(read!.decision)).toEqual([]);
+    expect(readSide.updateMany).not.toHaveBeenCalled();
+    expect(readSide.resolveDeploymentClosure).not.toHaveBeenCalled();
+  });
+  it("does not let the parent's merge close an unfinished child", async () => {
+    const result = await evaluate(aggregateFixture("in-progress"));
+    expect(result.decision.verdict).not.toBe("allowed");
+    expect(unmetCodes(result.decision)).toContain("DELIVERY_EVIDENCE_REQUIRED");
+    expect(result.decision.unmet.find(row => row.code === "DELIVERY_EVIDENCE_REQUIRED")?.nextAction).toContain("BI-B");
+  });
+  it("does not let the parent's merge invent outcome reconciliation", async () => {
+    const result = await evaluate(aggregateFixture("done", "missing"));
+    expect(unmetCodes(result.decision)).toContain("OBJECTIVE_RECONCILIATION_REQUIRED");
+    expect(result.independentAcceptanceDecision?.verdict).not.toBe("allowed");
+  });
+  it("does not let the parent's merge replace an independent plan review", async () => {
+    expect(unmetCodes((await evaluate(aggregateFixture("done", "pass", true))).decision)).toContain("PLAN_REVIEW_REQUIRED");
+  });
+});
 
 describe("the read projection evaluates completion as the completion gate does (BI-094B41AC)", () => {
   it("independent acceptance cannot be discharged by merge recognition", async () => {
