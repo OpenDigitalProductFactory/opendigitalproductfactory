@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Capability-Driven Runtime Profiles Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use `dpf-tdd` while implementing, `dpf-local-merge-ci-before-push` for the completion gate, and `dpf-pr-with-dco` for delivery. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -52,6 +56,10 @@
 - [ ] **Step 7: Commit** with `git commit -s -m "feat(substrate): compile capability service catalog"`.
 
 ### Task 3: Protect capability deactivation with a drain decision
+
+**Admission repair checkpoint (2026-10-15, BI-5ACBAC50):** The served request bundle folded the module-local boot flag into an unconditional reconciliation refusal while instrumentation retained its own mutable copy. Share the boot status across module caches in the same Node process using a versioned global symbol, following the resource-lane registry. Every admission still checks durable active and recovery-required transitions. Uninitialized or failed startup stays closed; a generation check prevents an older startup from reopening admission after a newer failure. Module-reset regressions cover readiness, failure visibility and concurrent startup, alongside durable-blocker checks. This does not initialize another process or repair a failed host reconciliation. Preserve the original failed request and verify recovery only after a canonical containing deployment; source tests are not live acceptance. No operator UI or install procedure changes are required.
+
+**Host context repair checkpoint (2026-10-15, BI-5ACBAC50):** Explicit v2 reconciliation must preserve the validated installation's Compose chain, canonical environment file and host identity on both initial execution and signed restart/compensation. A shared server context builder reuses the release-install parser and host-identity resolver. Both server and packaged actuator filter services by the observed host platform, so Linux-only inference is not activated on Windows or macOS. Existing v1 replay projections remain unchanged. The actuator reads its packaged catalog and still verifies the signed catalog hash; no new code import extends its signed closure. Regression fixtures cover the dropped release overlay/environment, Windows/macOS exclusions and Linux control, signed compensation context and source-free packaged catalog. Canonical host application remains unverified until a containing release is deployed; preserve the original failed request throughout recovery.
 
 **Execution checkpoint (2026-07-18):** The pure transition and durable-receipt foundation is implemented. The signed host envelope now binds both profile and exact service projections; the host applies an explicit stop/remove/start delta, verifies required and forbidden services, reverses the delta on failure, supports bounded signed-expiry stale-claim recovery, and the installer state contract requires capability fields with legacy-safe null defaults. The coordinator persists before availability checks and verifies the signed receipt even on nonzero host exit. Production action/authentication, installer secret generation/rotation, boot-time concrete adapters, complete transactional audit integration, and canonical-runtime crash/rollback verification remain incomplete. Steps 7-9 remain deliberately unchecked and capability mutation must not be exposed yet.
 

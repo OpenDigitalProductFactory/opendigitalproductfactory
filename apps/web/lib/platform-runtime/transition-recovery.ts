@@ -3,8 +3,15 @@ import { readFile } from "node:fs/promises";
 import { assertRuntimeCompensationDatabaseBaseline, classifyRuntimeInstallState, createPrismaRuntimeTransitionReceipts, reconcileRuntimeCapabilityTransitions, type RuntimeTransitionReconcileRow } from "./transition-coordinator";
 import { canonicalTransitionPayload, createRuntimeCompensationEnvelope, signTransitionPayload, verifyHistoricalTransitionReceipt, type RuntimeTransitionEnvelope, type RuntimeTransitionReceipt } from "./transition-protocol";
 import { runPromoter } from "@/lib/self-upgrade/promoter";
+import { runtimeTransitionHostContext } from "./runtime-transition-host-context";
 
-let admission: "reconciling" | "ready" | "recovery_required" = "reconciling";
+// Instrumentation, MCP and SSR have separate module caches. A module-local
+// flag can even be folded into an unconditional refusal in request bundles.
+// Share only this process's boot barrier; durable DB checks remain authoritative.
+const ADMISSION_KEY = Symbol.for("dpf.runtime-capability-admission.v1");
+type Admission = { status: "reconciling" | "ready" | "recovery_required"; generation: number };
+const admissionGlobal = globalThis as typeof globalThis & { [ADMISSION_KEY]?: Admission };
+const admission = admissionGlobal[ADMISSION_KEY] ??= { status: "reconciling", generation: 0 };
 
 export async function assertRuntimeCapabilityTransitionAdmission(): Promise<void> {
   // DB-global truth is authoritative across portal replicas and restarts. The
@@ -13,8 +20,8 @@ export async function assertRuntimeCapabilityTransitionAdmission(): Promise<void
     prisma.runtimeCapabilityTransition.count({ where: { status: { in: ["pending", "applying", "host_applied", "compensating"] } } }),
     prisma.runtimeCapabilityTransition.count({ where: { status: "rollback_failed", failure: { path: ["recoveryRequired"], equals: true } } }),
   ]);
-  if (recovery > 0 || admission === "recovery_required") throw new Error("runtime_capability_recovery_required");
-  if (active > 0 || admission !== "ready") throw new Error("runtime_capability_reconciliation_in_progress");
+  if (recovery > 0 || admission.status === "recovery_required") throw new Error("runtime_capability_recovery_required");
+  if (active > 0 || admission.status !== "ready") throw new Error("runtime_capability_reconciliation_in_progress");
 }
 
 const receiptPath = (id: string) => `/dpf-state/runtime-capability-transitions/${id}.json`;
@@ -33,11 +40,10 @@ function promoterParams(row: RuntimeTransitionReconcileRow, envelope: RuntimeTra
   if (envelope.version === 2 && envelope.mode === "reconciliation"
     && (!identity || !/^sha256:[a-f0-9]{64}$/.test(identity.promoterDigest) || !/^[a-f0-9]{40}$/.test(identity.sourceSha))) throw new Error("runtime_transition_protocol_identity_missing");
   return {
-    hostInstallPath, stateDirHostPath, runtimeCapabilitySecretFileHostPath: secretPath,
+    ...runtimeTransitionHostContext(envelope.version === 2 && envelope.mode === "reconciliation" ? envelope.reconciliation?.observedHost : undefined), runtimeCapabilitySecretFileHostPath: secretPath,
     targetSha: identity?.sourceSha ?? process.env.DEPLOYED_SHA ?? "runtime-capability-transition", ...(identity ? { promoterImage: identity.promoterDigest } : {}), backupPath: "/backups/runtime-capability-transition",
     healthUrl: `${process.env.APP_URL ?? "http://localhost:3000"}/api/health`,
-    composeFiles: (process.env.DPF_SELF_UPGRADE_COMPOSE_FILES ?? "docker-compose.yml").split(/\s+/).filter(Boolean),
-    composeProject: process.env.COMPOSE_PROJECT_NAME ?? "dpf", runtimeCapabilityTransitionId: envelope.transitionId,
+    runtimeCapabilityTransitionId: envelope.transitionId,
     runtimeCapabilityEnvelope: Buffer.from(JSON.stringify(envelope)).toString("base64url"), runtimeCapabilitySignature: signature,
     containerName: `dpf-promoter-${envelope.transitionId}`, timeoutMs: 600_000,
   };
@@ -100,7 +106,8 @@ export async function reconcileRuntimeCapabilityTransitionsOnStartup(host: {
   protocolSecret: string;
   reconcileAuthority?(activeTransitionIds: string[]): Promise<void>;
 }): Promise<void> {
-  admission = "reconciling";
+  const generation = ++admission.generation;
+  admission.status = "reconciling";
   let recoveryRequired = false;
   const listActive = async () => prisma.runtimeCapabilityTransition.findMany({
     where: { status: { in: ["pending", "applying", "host_applied", "compensating"] } },
@@ -164,5 +171,6 @@ export async function reconcileRuntimeCapabilityTransitionsOnStartup(host: {
   // terminal; otherwise rotation/new transitions wait for an unnecessary TTL.
   const remainingRows = await listActive();
   await host.reconcileAuthority?.(remainingRows.map((row) => row.transitionId));
-  admission = recoveryRequired ? "recovery_required" : "ready";
+  // An older startup cannot reopen admission after a newer recovery failed.
+  if (admission.generation === generation) admission.status = recoveryRequired ? "recovery_required" : "ready";
 }
