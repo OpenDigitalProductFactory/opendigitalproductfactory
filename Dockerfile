@@ -139,6 +139,10 @@ COPY scripts/installer/install-state.v2.schema.json ./scripts/installer/
 COPY scripts/installer/monitoring-choice.mjs ./scripts/installer/
 COPY scripts/check-compose-resource-budgets.mjs ./scripts/
 COPY scripts/installer/native-edge-host.ps1 ./scripts/installer/
+# BI-084F85E5: the consumer start script and the host convergence it runs ship
+# as release assets, so each self-upgrade replaces them in the install dir.
+COPY scripts/installer/dpf-start.consumer.ps1 ./scripts/installer/
+COPY scripts/installer/lib/host-convergence.ps1 ./scripts/installer/lib/
 COPY scripts/bootstrap-organization-pki.ps1 scripts/rotate-runtime-transition-secret.mjs ./scripts/
 COPY scripts/installer/prepare-runtime-state.mjs scripts/installer/stage-ca-password.mjs ./scripts/installer/
 COPY scripts/publish-host-gpu.ps1 ./scripts/
@@ -313,10 +317,11 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     cp scripts/installer/install-state.v1.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state.v2.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/native-edge-host.ps1 /dpf-release-assets/scripts/installer/ && \
+    cp scripts/installer/dpf-start.consumer.ps1 /dpf-release-assets/dpf-start.ps1 && \
     cp scripts/installer/monitoring-choice.mjs /dpf-release-assets/scripts/installer/ && \
     cp scripts/check-compose-resource-budgets.mjs /dpf-release-assets/scripts/ && \
     cp config/install-resource-budgets.json /dpf-release-assets/config/ && \
-    cp scripts/installer/lib/state.ps1 scripts/installer/lib/compose-chain.ps1 scripts/installer/lib/activation-overlays.txt scripts/installer/lib/canonical-origin.ps1 scripts/installer/lib/machine-trust.ps1 scripts/installer/lib/mcp-client-env.ps1 /dpf-release-assets/scripts/installer/lib/ && \
+    cp scripts/installer/lib/state.ps1 scripts/installer/lib/compose-chain.ps1 scripts/installer/lib/activation-overlays.txt scripts/installer/lib/canonical-origin.ps1 scripts/installer/lib/machine-trust.ps1 scripts/installer/lib/mcp-client-env.ps1 scripts/installer/lib/host-convergence.ps1 /dpf-release-assets/scripts/installer/lib/ && \
     cp config/consumer-install/agent-pointer.md /dpf-release-assets/AGENTS.md && \
     mkdir -p /dpf-release-assets/scripts/safety && \
     cp scripts/safety/dpf-shell-guard.ps1 scripts/safety/dpf-shell-guard.sh \

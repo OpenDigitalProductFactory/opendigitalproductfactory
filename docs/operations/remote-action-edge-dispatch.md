@@ -57,6 +57,18 @@ in `scopePolicy.hostUpkeep`; an operator who later disables it is not
 overridden. Without `-WithEdge` the node runs `DPF_EDGE_ROLE=host-upkeep`:
 heartbeat and the action channel, with no network sweep and no discovery.
 
+**Existing installs (BI-084F85E5).** A container self-upgrade cannot install a
+host service, so host-side pieces converge through the release assets. The
+self-upgrade sets `DPF_REMOTE_ACTION_DISPATCH_ENABLED=1` wherever
+`DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1` and the key is absent, and on Windows it
+replaces `dpf-start.ps1`, which runs at sign-in. Once the portal is healthy that
+script installs or upgrades the native agent for the running release and role,
+skipping the work when the agent is already current. It mints an enrollment
+token only for a machine that was never enrolled, and logs to
+`~/.dpf/logs/host-convergence.log`. A failure never blocks startup. The
+macOS/Linux launch script lives outside the install directory and needs its own
+one-time bridge (BI-EEFDB9E8).
+
 ## Request and evidence flow
 
 1. The native Edge Node connects to the dedicated HTTPS action URL using its
