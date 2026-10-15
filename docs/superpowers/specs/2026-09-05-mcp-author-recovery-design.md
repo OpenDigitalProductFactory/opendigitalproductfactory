@@ -243,3 +243,24 @@ Original BI acceptance concerning bounded delivery of six or more routes remains
 an explicit verification obligation; this repair does not claim a new paginated
 reader or durable packet store. Installed dispatch and independent review remain
 unrun until the release and real task evidence are recorded.
+
+The item's retained medium acceptance criteria are quoted here for coverage;
+quoting them does not assert they have passed:
+
+- On an effective-large item with six or more unmet gates, the caller can obtain the exact `research` packet through a call whose response fits the client budget.
+- A packet obtained that way dispatches successfully.
+- `workIntent: design`/`review` either return the routes or name the call that will.
+- The refusal text distinguishes "you altered the packet" from "the packet was never delivered".
+
+The historical research-packet wording must be reconciled with the current
+author-owned research lane during acceptance; no reviewer-only research writer
+is created by this repair. The bounded packet-size and retained-packet criteria
+remain unverified, rather than being silently excused by this declaration fix.
+
+Verification references: `terminal-recovery.test.ts` compares real provider
+discovery and real packet construction; `independent-review-request.test.ts`
+retains negative authority and exact-equality controls; `load-tools.test.ts`
+checks the returned remedy. Official web typechecks and protected CI precede
+installed native dispatch. One atomic `reviewer-packet-contract` deliverable maps
+to BI-C56AE9A2, AC-C56-PACKET, AC-C56-REFUSAL and AC-C56-REMEDY under
+OBJ-MCP-RECOVERY and OBJ-MCP-PROCESS; its flow is the Ordered atomic fix above.

@@ -48,7 +48,7 @@ async function hasCompletedReview(params: Record<string, unknown>, userId: strin
 type RequestAuthority = { bounded: boolean; refusal?: ToolResult; notice?: string };
 const deny = (message: string): RequestAuthority => ({ bounded: true, refusal: {
   success: false, error: "independent_review_request_denied", message,
-  data: { action: "Refresh the item's readiness and submit its exact review request. Access to its Workroom must already be authorized." },
+  data: { action: "For design, architecture or plan review, refresh claim_backlog_item_for_work on the exact Workroom with workIntent plan or implementation and submit recovery.reviewerRoutes[].requestCoworker unchanged. For terminal review, read get_backlog_item recovery. Workroom access must already be authorized." },
 } });
 
 /** An evidence author may request an independent review, never impersonate its writer.
