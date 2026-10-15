@@ -374,6 +374,8 @@ export async function loadStandingRoomIds(db: {
     FROM "WorkCapsule"
     WHERE "archivedAt" IS NULL
       AND "status" NOT IN ('abandoned', 'archived', 'complete')
+      -- BI-B5751303: Build Studio drives its own rooms; a drive agent there duplicates it.
+      AND "executorKind" IS DISTINCT FROM 'build-studio'
       AND EXISTS (
         SELECT 1 FROM jsonb_array_elements(
           CASE jsonb_typeof("scopeClaims")
