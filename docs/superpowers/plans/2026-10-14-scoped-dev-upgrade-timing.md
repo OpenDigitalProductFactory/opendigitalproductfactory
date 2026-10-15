@@ -52,5 +52,9 @@ mutation accompanies this source change.
 
 ## Backlog coverage
 
-One atomic deliverable maps to BI-DE9FB008. The immutable plan coverage receipt
-is pending; implementation does not begin until the normal writer accepts it.
+One atomic deliverable maps to BI-DE9FB008. Native receipt
+`cmv96kkhy11bf01qo076n18ly` accepted atomic coverage of the original immutable
+plan at commit `3a6c7e22a4b00f4a3d70990e45c192bf36ed7719`, blob
+`17a1d34bdebcaa0b66c2e1c60150926c0b84ea97`, before source implementation.
+The final frozen plan receives refreshed normal coverage after this receipt
+reference is committed; the original evidence remains unchanged.
