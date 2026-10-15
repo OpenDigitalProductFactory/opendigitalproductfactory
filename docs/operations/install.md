@@ -48,9 +48,12 @@ The snapshot also records, in the optional `runtimeCapabilityDecisions` map,
 whether a person chose each operator-controlled capability: `decision`
 (`enabled`, `disabled` or `undecided`), `source` and `decidedAt`. Monitoring
 (`runtime:deep-observability`) is the first such capability. A state without a
-recorded decision is written as `undecided` / `upgrade-carried`, and its enabled
-capabilities are left exactly as they were, so the portal can offer the choice
-instead of silently changing the install (BI-83260BB3).
+recorded decision is written as `undecided` / `upgrade-carried` the next time
+the installer or `dpf-start` resolves profiles, and its enabled capabilities
+are left exactly as they were, so the portal can offer the choice instead of
+silently changing the install (BI-83260BB3). A self-upgrade does not add the
+record: its install-state migration must stay byte-deterministic for the signed
+handoff. Until the record exists, Settings → Monitoring treats it as undecided.
 
 On a fresh install, and on a re-run where no choice is recorded yet, both
 installers ask one question before the platform first starts: turn monitoring
