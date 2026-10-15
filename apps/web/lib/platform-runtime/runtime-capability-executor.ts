@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { prisma } from "@dpf/db";
 import { readImageVersion } from "@/lib/platform/image-version";
+import { parseReleaseInstallContext } from "@/lib/self-upgrade/release-target";
+import { RELEASE_IMAGE_TAG } from "@/lib/self-upgrade/registry-release";
 import catalogSeed from "../../../../scripts/capability-service-catalog.generated.json";
 import { isPromoterAvailable, resolvePromoterArtifact, runPromoter, runRuntimeCapabilityProtocolProbe } from "@/lib/self-upgrade/promoter";
 import { countAttributedWork, createPrismaWorkAttributionStore } from "./work-attribution";
@@ -73,7 +75,19 @@ async function inspectPackagedReconciliationProtocol(observedHostSnapshot?: Runt
     readFile("/promoter/scripts/lib/transition-signing.mjs"),
   ]);
   const expected = { sourceSha, actuatorSha256: createHash("sha256").update(actuator).digest("hex"), signerSha256: createHash("sha256").update(signer).digest("hex") };
-  const artifact = await resolvePromoterArtifact({ targetSha: sourceSha });
+  // Consumer installs carry published promoter images, not a source-built
+  // dpf-promoter:<sha>. Resolve the installed immutable release, never its
+  // moving discovery channel; the existing artifact validator still binds the
+  // source revision and packaged protocol bytes before any host authority.
+  const installMode = observedHostSnapshot && "installMode" in observedHostSnapshot ? observedHostSnapshot.installMode : null;
+  const releaseInstall = installMode === "consumer" || installMode === "customer";
+  const release = releaseInstall ? parseReleaseInstallContext({ state: observedHostSnapshot, markerMode: null, env: process.env }) : null;
+  if (releaseInstall && (!release || !RELEASE_IMAGE_TAG.test(release.imageTag) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/.test(release.ghcrOwner))) {
+    throw new Error("runtime_protocol_release_identity_missing");
+  }
+  const reference = release ? `ghcr.io/${release.ghcrOwner.toLowerCase()}/dpf-promoter:${release.imageTag}` : null;
+  const artifact = await resolvePromoterArtifact({ targetSha: sourceSha,
+    ...(reference ? { promoterImage: reference, candidateReference: reference } : {}) });
   const info = await runRuntimeCapabilityProtocolProbe({ artifact, expected, containerName: `dpf-runtime-protocol-${randomUUID()}`, ...(observedHostSnapshot ? { observedHostSnapshot } : {}) });
   if (!info.signingVersions.includes(2) || !info.applyVersions.includes(2) || !info.reconciliationVersions.includes(2)) throw new Error("runtime_reconciliation_protocol_unsupported");
   return { info, artifact };

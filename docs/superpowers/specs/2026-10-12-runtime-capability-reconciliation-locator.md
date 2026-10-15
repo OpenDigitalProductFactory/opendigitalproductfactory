@@ -10,6 +10,12 @@ This is the immutable implementation/coverage entry for existing BI-5ACBAC50 and
 
 ## Evidence and boundaries
 
+### Published promoter binding repair (2026-10-15)
+
+Native preview on served9ca09de2 reached the authenticated handler but failed `promoter_inspect_failed`: no source-built `dpf-promoter:<served-sha>` exists on this consumer release install. The ordinary repair-promoter action is release-managed and cannot create that source candidate. No reconciliation was admitted; the transition ledger was empty.
+
+Reuse the installed release context parser and existing immutable artifact validator. Consumer/customer reconciliation uses its installed immutable release tag and server registry owner, never the moving discovery channel. Ambiguous/missing release identity refuses before artifact resolution; wrong source/contract/protocol still refuses before host authority. Source installs retain their existing candidate lookup. No manual tag, build, new resolver, authority change or runtime file edit. Tests cover consumer/customer binding, mutable tag/missing or invalid owner refusals, and retained source mismatch refusal. The actual served call and its source repair remain distinct acceptance evidence.
+
 ### Runtime disagreement presentation repair (2026-10-14)
 
 The canonical recovery88 install still enables core only while nine database runtime rows contain seven active states. Runtime-health displays only a generic unavailable message, discarding the existing complete divergence diagnosis. This is the existing item's visibility requirement, not authority to activate seeded capabilities.

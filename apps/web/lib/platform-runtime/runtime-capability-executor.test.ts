@@ -74,6 +74,60 @@ describe("production reconciliation protocol admission", () => {
     expect(mocks.readFile).not.toHaveBeenCalledWith("/dpf-state/runtime-transition.secret", "utf8");
   });
 
+  it.each(["consumer", "customer"])("probes the installed immutable release promoter on a %s install", async (installMode) => {
+    const explicit = explicitRequest();
+    vi.stubEnv("GHCR_OWNER", "Fixture-Owner");
+    vi.stubEnv("DPF_IMAGE_CHANNEL_TAG", "latest");
+    vi.stubEnv("DPF_IMAGE_TAG", "v2026.10.14-dev-recovery.1");
+    Object.assign(explicit.reconciliation.observedHost, { installMode, imageTag: "v2026.10.15-dev-recovery.96", installPath: "C:/fixture/install" });
+    await readProductionRuntimeCapabilityReconciliationPreview();
+    const reference = "ghcr.io/fixture-owner/dpf-promoter:v2026.10.15-dev-recovery.96";
+    expect(mocks.resolveArtifact).toHaveBeenCalledWith({ targetSha: "a".repeat(40), promoterImage: reference, candidateReference: reference });
+    expect(mocks.probe).toHaveBeenCalledWith(expect.objectContaining({ artifact: expect.objectContaining({ digest: `sha256:${"b".repeat(64)}` }) }));
+    expect(mocks.promoter).not.toHaveBeenCalled();
+    expect(mocks.coordinate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { tag: "latest", owner: "fixture-owner" },
+    { tag: "v2026.10.15-dev-recovery.96", owner: "" },
+    { tag: "v2026.10.15-dev-recovery.96", owner: "other/namespace" },
+  ])("refuses ambiguous release identity without a source-image fallback: %j", async ({ tag, owner }) => {
+    const explicit = explicitRequest();
+    vi.stubEnv("GHCR_OWNER", owner);
+    Object.assign(explicit.reconciliation.observedHost, { installMode: "consumer", imageTag: tag, installPath: "C:/fixture/install" });
+    await expect(readProductionRuntimeCapabilityReconciliationPreview()).rejects.toThrow("runtime_protocol_release_identity_missing");
+    expect(mocks.resolveArtifact).not.toHaveBeenCalled();
+    expect(mocks.probe).not.toHaveBeenCalled();
+    expect(mocks.promoter).not.toHaveBeenCalled();
+    expect(mocks.coordinate).not.toHaveBeenCalled();
+  });
+
+  it("keeps the verified release digest pinned through authority reservation and application", async () => {
+    const explicit = explicitRequest();
+    vi.stubEnv("GHCR_OWNER", "fixture-owner");
+    Object.assign(explicit.reconciliation.observedHost, { installMode: "consumer", imageTag: "v2026.10.15-dev-recovery.96", installPath: "C:/fixture/install" });
+    await expect(executeProductionRuntimeCapabilityTransition(explicit)).resolves.toEqual({ status: "succeeded" });
+    expect(mocks.resolveArtifact).toHaveBeenCalledWith(expect.objectContaining({ candidateReference: "ghcr.io/fixture-owner/dpf-promoter:v2026.10.15-dev-recovery.96" }));
+    expect(mocks.promoter.mock.calls.length).toBeGreaterThan(0);
+    for (const [params] of mocks.promoter.mock.calls) expect(params.promoterImage).toBe(`sha256:${"b".repeat(64)}`);
+    expect(mocks.coordinate).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
+      reconciliationPromoterDigest: `sha256:${"b".repeat(64)}`,
+      promoterParams: expect.objectContaining({ promoterImage: `sha256:${"b".repeat(64)}` }),
+    }));
+  });
+
+  it("retains release contract/source refusal before probing or reserving host authority", async () => {
+    const explicit = explicitRequest();
+    vi.stubEnv("GHCR_OWNER", "fixture-owner");
+    Object.assign(explicit.reconciliation.observedHost, { installMode: "consumer", imageTag: "v2026.10.15-dev-recovery.96", installPath: "C:/fixture/install" });
+    mocks.resolveArtifact.mockRejectedValue(new Error("promoter_source_sha_mismatch"));
+    await expect(executeProductionRuntimeCapabilityTransition(explicit)).resolves.toEqual({ status: "failed", failure: "runtime_reconciliation_protocol_unavailable" });
+    expect(mocks.probe).not.toHaveBeenCalled();
+    expect(mocks.promoter).not.toHaveBeenCalled();
+    expect(mocks.coordinate).not.toHaveBeenCalled();
+  });
+
   it("refuses an intervening database writer before host authority reservation", async () => {
     const explicit = explicitRequest();
     mocks.rows.mockResolvedValue(Object.entries({ ...explicit.reconciliation.observedDatabaseStates, "runtime:build": "disabled" }).map(([capabilityId, state]) => ({ capabilityId, state, manifest: {} })));
