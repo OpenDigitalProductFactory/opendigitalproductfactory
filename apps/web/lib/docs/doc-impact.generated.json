@@ -2349,6 +2349,9 @@
     "scripts/install-worktree-janitor-schedule.sh": [
       "docs/install/worktree-janitor-schedule.md"
     ],
+    "scripts/installer/autostart-bridge.mjs": [
+      "docs/operations/remote-action-edge-dispatch.md"
+    ],
     "scripts/installer/doctools-prepull.test.mjs": [
       "docs/install/platform-support-watchlist.md"
     ],
@@ -3744,6 +3747,7 @@
     "docs/operations/remote-action-edge-dispatch.md": [
       "docker-compose.edge-actions.yml",
       "dpf-start.ps1",
+      "scripts/installer/autostart-bridge.mjs",
       "scripts/installer/dpf-start.consumer.sh",
       "scripts/installer/lib/host-convergence.sh"
     ],

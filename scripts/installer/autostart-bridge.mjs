@@ -28,6 +28,7 @@ import { chmodSync, existsSync, readFileSync, renameSync, writeFileSync } from "
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
+import { scriptArgv } from "../lib/script-argv.mjs";
 
 export const POINTER = "scripts/installer/dpf-start.consumer.sh";
 export const LAUNCH_SCRIPT = "dpf-autostart.sh";
@@ -76,7 +77,7 @@ export function bridgeAutostartLaunchScript({ stateDir, installRoot }) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const { values } = parseArgs({
-    args: process.argv.slice(2),
+    args: scriptArgv(),
     options: { "state-dir": { type: "string" }, "install-root": { type: "string" } },
     strict: false,
   });
