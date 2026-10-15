@@ -50,7 +50,7 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
     if (!firstAccountByProvider.has(account.providerId)) firstAccountByProvider.set(account.providerId, account.connectionId);
   }
   const columns: Column<ProviderAccountOverviewRow>[] = [
-    { key: "account", header: copy.accountName, cell: row => <div>
+    { key: "account", header: copy.accountName, mobileFullWidth: true, hideMobileLabel: true, cell: row => <div>
       <Link href={providerAccountHref(row)} className="font-medium text-[var(--dpf-accent)]">{row.label}</Link>
       <div className="text-xs text-[var(--dpf-muted)]">{row.providerName} · {row.statusLabel}</div>
       {row.resolvesPhases.length > 0 && <div className="text-xs text-[var(--dpf-muted)]">{copy.resolvesPhases} {row.resolvesPhases.join(", ")}</div>}
@@ -62,10 +62,10 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
     { key: "models", header: copy.models, cell: row => <div>{row.modelSummary}
       {row.capabilitySummary && <div className="text-xs text-[var(--dpf-muted)]">{row.capabilitySummary}</div>}
     </div> },
-    { key: "capacity", header: copy.capacity, cell: row => <div>{row.capacitySummary}
+    { key: "capacity", header: copy.capacity, mobileFullWidth: true, cell: row => <div>{row.capacitySummary}
       {row.resetSummary && <div className="text-xs text-[var(--dpf-muted)]">{row.resetSummary}</div>}
     </div> },
-    { key: "manage", header: copy.manage, cell: row => <div className="flex flex-wrap gap-2">
+    { key: "manage", header: copy.manage, mobileFullWidth: true, hideMobileLabel: true, cell: row => <div className="flex flex-wrap gap-2">
       <Link href={providerAccountHref(row)} data-owner-first-next-action={!canWrite && row.connectionId === visibleRows[0]?.connectionId ? "" : undefined} className="py-2 text-[var(--dpf-accent)]">{copy.manage}</Link>
       {canWrite && firstAccountByProvider.get(row.providerId) === row.connectionId
         && supportsAccount(catalogById.get(row.providerId)) &&
@@ -86,7 +86,7 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
       <FilterBar facets={[{ kind: "search", key: "query", placeholder: copy.searchAccounts }]} value={{ query: search }} onChange={next => setSearch(next.query ?? "")} resultCount={visibleRows.length} />
       {canWrite && <button type="button" data-owner-first-next-action className={buttonClass} disabled={pending} aria-expanded={showCatalog} aria-controls={`${id}-catalog`} onClick={() => setShowCatalog(!showCatalog)}>{copy.addProvider}</button>}
     </div>
-    <DataTable columns={columns} rows={visibleRows} getRowKey={row => row.connectionId} empty={copy.noAccounts} dense ariaLabel={copy.connection} />
+    <DataTable columns={columns} rows={visibleRows} getRowKey={row => row.connectionId} empty={copy.noAccounts} dense responsive ariaLabel={copy.connection} />
     {showCatalog && <Surface padding="sm"><div ref={catalogRef} id={`${id}-catalog`}>
       <h2 className="m-0 text-sm font-semibold">{copy.catalog}</h2>
       {firstRun && canWrite && <SubmitButton type="button" className="mt-2" pending={pending} pendingLabel={copy.working} onClick={() => {

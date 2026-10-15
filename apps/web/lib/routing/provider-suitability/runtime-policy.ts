@@ -46,6 +46,8 @@ export function applyProviderSuitabilityPolicyToContract(input: {
   policy: ProviderSuitabilityPolicy;
   rollout: ProviderSuitabilityRollout;
   archetypeCategory: string | null;
+  /** Canonical active accounts. Omission retains legacy provider-only ambiguity protection. */
+  accountCandidates?: Array<{ providerId: string; connectionId: string }>;
 }): ProviderSuitabilityRuntimeBinding {
   const selectedVertical = input.archetypeCategory !== null && SELECTED_VERTICALS.has(input.archetypeCategory);
   const restrictedOpenRouter = input.rollout.restrictedOpenRouter &&
@@ -60,16 +62,26 @@ export function applyProviderSuitabilityPolicyToContract(input: {
   const policyRuleId = `provider-suitability:${input.policy.policyId}:${mode}`;
   if (!enforce) return { contract: input.contract, mode, policyRuleId };
 
+  const allowedAccounts = intersection(input.contract.allowedProviderConnectionIds, input.policy.allowedProviderConnectionIds);
+  const deniedAccounts = sortedUnique([...(input.contract.deniedProviderConnectionIds ?? []), ...input.policy.deniedProviderConnectionIds]);
+  const approvedProviders = input.accountCandidates
+    ? sortedUnique(input.accountCandidates.filter(account => allowedAccounts.includes(account.connectionId) && !deniedAccounts.includes(account.connectionId)).map(account => account.providerId))
+    : input.policy.allowedProviders;
+  const providerDenials = input.accountCandidates
+    ? input.policy.deniedProviders.filter(providerId => !approvedProviders.includes(providerId))
+    : input.policy.deniedProviders;
+
   return {
     mode,
     policyRuleId,
     contract: {
       ...input.contract,
-      allowedProviders: intersection(input.contract.allowedProviders, input.policy.allowedProviders),
+      allowedProviders: intersection(input.contract.allowedProviders, approvedProviders),
       deniedProviders: sortedUnique([
         ...(input.contract.deniedProviders ?? []),
-        ...input.policy.deniedProviders,
+        ...providerDenials,
       ]),
+      ...(input.accountCandidates ? { allowedProviderConnectionIds: allowedAccounts, deniedProviderConnectionIds: deniedAccounts } : {}),
       residencyPolicy: stricterResidency(input.contract.residencyPolicy, input.policy.residencyPolicy),
       ...(input.policy.openRouterObligations
         ? { openRouterObligations: input.policy.openRouterObligations }

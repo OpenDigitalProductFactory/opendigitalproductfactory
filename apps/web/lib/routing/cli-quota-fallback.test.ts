@@ -91,7 +91,8 @@ afterEach(() => vi.useRealTimers());
 it("classifies the exact live org-spend banner as rate_limit even without envelope metadata", async () => {
   output({ result: quota, usage: {} });
   expect(await settle(cliAdapter.execute(request))).toMatchObject({ error: { code: "rate_limit" } });
-  expect(mocks.poolLimit).toHaveBeenCalledWith("claude-cli", "anthropic-sub", quota);
+  // An unbound legacy request retains the shared pool, without an account scope.
+  expect(mocks.poolLimit).toHaveBeenCalledWith("claude-cli", "anthropic-sub", quota, undefined);
   expect(mocks.poolClear).not.toHaveBeenCalled();
 });
 it("records stdout quota capacity before the fallback can dispatch", async () => {

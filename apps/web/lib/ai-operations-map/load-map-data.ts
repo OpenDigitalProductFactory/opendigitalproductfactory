@@ -648,7 +648,7 @@ export async function loadOperationsMapData(
     adapterRuns,
     outcomes: routeOutcomes,
     tokenUsage,
-    capacity: providerCapacity,
+    capacity: providerCapacity.flatMap(row => row.providerId ? [{ ...row, providerId: row.providerId }] : []),
     providers,
   });
 

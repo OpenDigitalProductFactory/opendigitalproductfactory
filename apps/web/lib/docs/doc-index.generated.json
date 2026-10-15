@@ -11827,6 +11827,17 @@
         "how-work-rooms-behave"
       ]
     },
+    "docs/user-guide/ai-workforce/provider-account-routing.md": {
+      "publicHref": "/user-guide/ai-workforce/provider-account-routing/",
+      "portalHref": "/docs/ai-workforce/provider-account-routing",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "choose-accounts-for-the-work",
+        "capacity-and-recovery",
+        "usage-records"
+      ]
+    },
     "docs/user-guide/ai-workforce/provider-anthropic.md": {
       "publicHref": "/user-guide/ai-workforce/provider-anthropic/",
       "portalHref": "/docs/ai-workforce/provider-anthropic",
