@@ -60,9 +60,8 @@ export async function resolveAggregateCompletion(args: {
     return closed("malformed", "Repair malformed deliverables in the current decomposition before closing the initiative.", refs);
   }
   const graph = deliverables as PlanBacklogDeliverable[];
-  const independentIds = new Set(graph.filter(row => row.independentlyShippable).map(row => row.backlogItemId).filter(nonempty));
   const childIds = [...new Set(graph.map(row => row.backlogItemId).filter(nonempty))];
-  if (independentIds.size < 2 || childIds.includes(args.itemId)) {
+  if (childIds.length < 2 || childIds.includes(args.itemId)) {
     return closed("malformed", "Decompose into at least two distinct real child items; the parent cannot be its own delivery.", refs);
   }
   try {

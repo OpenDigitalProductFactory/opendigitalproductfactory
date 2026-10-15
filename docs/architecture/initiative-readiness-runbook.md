@@ -53,7 +53,7 @@ They meet at one edge: a readiness **review gate** is *routed into* a Workroom, 
 
 An xlarge initiative does not enter implementation itself. After decomposition,
 close it through the existing completion writer using its current governed plan
-coverage, at least two distinct independent children and actual parent outcome
+coverage, at least two distinct mapped children and actual parent outcome
 reconciliation. Every explicitly mapped child must be done, including a mapped
 sequencing child. A parent PR merge or deployment does not replace child delivery,
 independent plan review or hypothesis outcomes. Coverage and delivery refusals

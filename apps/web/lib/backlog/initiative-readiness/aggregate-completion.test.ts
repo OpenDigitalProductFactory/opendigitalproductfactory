@@ -66,6 +66,11 @@ describe("xlarge aggregate completion evidence", () => {
     const f = fixture([...deliverables.map(row => ({ itemId: row.backlogItemId, status: "done" })), { itemId: "BI-C", status: "open" }]);
     expect(await f.run([activity({ ...payload(), deliverables: graph })])).toMatchObject({ decomposition: "pass", delivery: "missing" });
   });
+  it("counts existing mapped children without demanding a different shipping classification", async () => {
+    const graph = [deliverables[0], { ...deliverables[1], independentlyShippable: false }];
+    expect(await fixture().run([activity({ ...payload(), deliverables: graph })]))
+      .toMatchObject({ decomposition: "pass", delivery: "pass" });
+  });
   it("does not turn a failed child read into delivery", async () => {
     const f = fixture(); f.findMany.mockRejectedValue(new Error("unavailable"));
     expect(await f.run()).toMatchObject({ decomposition: "missing", delivery: "missing" });
