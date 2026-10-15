@@ -192,3 +192,75 @@ decision regressions reproduced the refusal before the repair; the repaired
 request uses filtered implementation obligations for design/architecture writers
 and retains completion for terminal writers. Targeted tests pass; deployment and
 live acceptance are not yet claimed.
+
+## 2026-10-15: declared designs survive reviewer revalidation
+
+Backlog: BI-C56AE9A2. Repair room: WC-B37DBE9A. This bounded follow-up extends
+AC-MCP-RECOVERY-4 and -5; it does not approve the evaluator design or implement it.
+
+On BI-1B7BB954, claim issuance returned an exact design-spec packet for an existing
+design declared in the live item body on an unchanged branch. Dispatch rejected
+the unchanged packet twice, including after its prescribed refresh. At source
+b6a710031ac2264ec3aef7b8b8abaa3961350a59, claim discovery passes that declaration
+to the canonical provider reader, while terminal revalidation omits it. The
+first regression uses the real reader and grant-based packet resolver: issuance
+produces one packet and revalidation produces none. Provider/grant/identity inputs
+are held constant. This is distinct from truncated output; both can prevent a
+caller from using the returned remedy.
+
+### Ordered atomic fix
+
+1. Retain the failing unchanged-branch producer/revalidator comparison and add
+   negative controls for changed, ambiguous and missing declared designs.
+2. Load the declaration from the live backlog owner in terminal design recovery;
+   pass it through the existing provider-verified discovery path. Never trust a
+   candidate-supplied artifact, skip exact packet equality, or weaken author,
+   reviewer, room, OAuth, grant, baseline or immutable-source checks.
+3. Correct the author-facing discovery/refusal remedy to name the actual exact
+   claim and recovery packet location. Keep terminal review and ordinary grants
+   unchanged. Consolidate the declaration-discovery seam rather than adding a
+   packet store or reviewer authority.
+4. Run related routing, discovery, authorization and negative-control tests plus
+   official web typechecks. Independently assess the committed delta, publish
+   normally and verify an actual unchanged server packet reaches a native task
+   after the containing release is served. Dispatch is not approval.
+
+The steps are one revertible repair under BI-C56AE9A2, not independently
+shippable products. No schema or runtime configuration changes are needed.
+At least 20% of effort consolidates the existing artifact discovery and actionable
+remedy contract. Rollback reverts this repair without deleting historical packets,
+refusals, tasks or receipts.
+
+### Follow-up acceptance
+
+| Acceptance | Objectives | Required outcome |
+| --- | --- | --- |
+| AC-C56-PACKET | OBJ-MCP-RECOVERY | On an unchanged branch, the exact packet for the live item's declared design survives native revalidation; the caller does not reconstruct it. |
+| AC-C56-REFUSAL | OBJ-MCP-RECOVERY | A changed, missing or ambiguous declaration refuses the old packet; altered packet fields and author-as-reviewer remain denied. |
+| AC-C56-REMEDY | OBJ-MCP-PROCESS | Discovery and refusal name the supported exact claim recovery location instead of promising a packet absent from the item reader. |
+
+Original BI acceptance concerning bounded delivery of six or more routes remains
+an explicit verification obligation; this repair does not claim a new paginated
+reader or durable packet store. Installed dispatch and independent review remain
+unrun until the release and real task evidence are recorded.
+
+The item's retained medium acceptance criteria are quoted here for coverage;
+quoting them does not assert they have passed:
+
+- On an effective-large item with six or more unmet gates, the caller can obtain the exact `research` packet through a call whose response fits the client budget.
+- A packet obtained that way dispatches successfully.
+- `workIntent: design`/`review` either return the routes or name the call that will.
+- The refusal text distinguishes "you altered the packet" from "the packet was never delivered".
+
+The historical research-packet wording must be reconciled with the current
+author-owned research lane during acceptance; no reviewer-only research writer
+is created by this repair. The bounded packet-size and retained-packet criteria
+remain unverified, rather than being silently excused by this declaration fix.
+
+Verification references: `terminal-recovery.test.ts` compares real provider
+discovery and real packet construction; `independent-review-request.test.ts`
+retains negative authority and exact-equality controls; `load-tools.test.ts`
+checks the returned remedy. Official web typechecks and protected CI precede
+installed native dispatch. One atomic `reviewer-packet-contract` deliverable maps
+to BI-C56AE9A2, AC-C56-PACKET, AC-C56-REFUSAL and AC-C56-REMEDY under
+OBJ-MCP-RECOVERY and OBJ-MCP-PROCESS; its flow is the Ordered atomic fix above.
