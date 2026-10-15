@@ -5,6 +5,7 @@ import { rotateProductionRuntimeTransitionSecret } from "@/lib/platform-runtime/
 import { previewRuntimeCapabilityReconciliationForActor, requestRuntimeCapabilityTransitionForActor, type RuntimeCapabilityMutationInput as RuntimeCommandInput } from "@/lib/platform-runtime/runtime-capability-commands";
 import { assertRuntimeCapabilityTransitionAdmission } from "@/lib/platform-runtime/transition-recovery";
 import { buildMonitoringReconciliationIntent } from "@/lib/platform-runtime/monitoring-reconciliation-intent";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 export type RuntimeCapabilityMutationInput = RuntimeCommandInput;
 
 export async function previewRuntimeCapabilityReconciliation() {
@@ -46,13 +47,13 @@ export async function requestMonitoringChange(input: { transitionId: string; tur
   try {
     request = buildMonitoringReconciliationIntent(await previewRuntimeCapabilityReconciliationForActor(userId), turnOn);
   } catch (error) {
-    console.error("[monitoring-settings] reconciliation preview failed", { event: "monitoring_reconciliation_preview_failed", transitionId, error: error instanceof Error ? error.message : String(error) });
+    console.error("[monitoring-settings] reconciliation preview failed", { event: "monitoring_reconciliation_preview_failed", transitionId, error: getErrorMessage(error) });
     return { status: "failed" as const, failure: error instanceof Error && error.message === "monitoring_has_dependents" ? "monitoring_has_dependents" : "runtime_reconciliation_protocol_unavailable" };
   }
   try {
     return await requestRuntimeCapabilityTransitionForActor({ transitionId, desiredKeys: request.desiredKeys, mode: "reconciliation", reconciliation: request.reconciliation }, userId);
   } catch (error) {
-    console.error("[monitoring-settings] change request failed", { event: "monitoring_change_request_failed", transitionId, error: error instanceof Error ? error.message : String(error) });
+    console.error("[monitoring-settings] change request failed", { event: "monitoring_change_request_failed", transitionId, error: getErrorMessage(error) });
     return { status: "failed" as const, failure: failureCode(error, "runtime_transition_request_failed") };
   }
 }
