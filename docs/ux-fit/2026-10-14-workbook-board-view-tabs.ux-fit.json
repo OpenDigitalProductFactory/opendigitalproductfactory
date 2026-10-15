@@ -1,0 +1,17 @@
+{
+  "version": "1",
+  "decidedOption": "view-link-tabs",
+  "decisionInteractionId": "DI-FA68C5D59E58",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/workbooks/[workbookId]/page.tsx",
+      "apps/web/components/workbooks/KanbanBoard.tsx",
+      "apps/web/components/workbooks/WorkbookViewTabs.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["view-link-tabs", "grid-views-menu", "separate-board-route"]
+  },
+  "notes": "UX fit review (BI-FE8DF004): fits-with-guardrails. Owning area Workspace > Workbooks, route /workbooks/[workbookId]. Persona: a person opening a tracker a coworker built from a brief. Navigation layer: local page nav only (Grid + one tab per saved kanban board), rendered only when the table has a board, so grid-only tables keep today's layout. Reuses the existing KanbanBoard (now honouring a saved board's card fields) and theme tokens; no new primitive. Source truth: WorkbookView rows via listViews. A stale board (group-by column deleted) falls back to the grid. Tabs navigate only; nothing sends a prompt. Live browser check after release is pending."
+}

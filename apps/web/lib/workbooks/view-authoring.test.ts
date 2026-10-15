@@ -60,7 +60,7 @@ describe("resolveBoardView — which board the workbook page opens", () => {
   const grid: StoredView = { viewId: "VW-grid", name: "Mine", viewType: "grid", isDefault: true, config: {} };
 
   it("opens the requested kanban view", () => {
-    expect(resolveBoardView([grid, board], "VW-board", COLUMNS)).toEqual({ view: board, groupByColumnId: "COL-status" });
+    expect(resolveBoardView([grid, board], "VW-board", COLUMNS)).toEqual({ view: board, groupByColumnId: "COL-status", cardFields: [] });
   });
 
   it("opens a default kanban view when none is requested, and the grid when asked", () => {

@@ -213,7 +213,11 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   ],
   "admin-assistant": ["admin_read", "admin_write", "agent_control_read", "registry_read", "web_search", "file_read", "approval_probe_read"],
   coo: ["portfolio_read", "registry_read", "backlog_read", "backlog_write", "agent_control_read", "email_config", "thread_write"],
-  "doc-specialist": ["file_read", "registry_read", "portfolio_read", "document_read", "document_write", "document_publish"],
+  // workbook_read/workbook_write (BI-FE8DF004): the documentation specialist is
+  // the office-records coworker, so it also builds Workbooks (trackers, tables,
+  // typed columns, kanban views) from a brief. A workbook it creates is owned by
+  // the person it acts for, as in the UI. 8 grants, under the cap of 10.
+  "doc-specialist": ["file_read", "registry_read", "portfolio_read", "document_read", "document_write", "document_publish", "workbook_read", "workbook_write"],
   "compliance-officer": [
     "policy_write",
     // BI-8E1FD1BD: this coworker could already research a statutory figure with

@@ -4444,7 +4444,9 @@
           "portfolio_read",
           "document_read",
           "document_write",
-          "document_publish"
+          "document_publish",
+          "workbook_read",
+          "workbook_write"
         ]
       }
     }
