@@ -290,3 +290,35 @@ checkpoint. Continue only after canonical coverage and independent plan review
 admit implementation. Missing history authority stops automatic history repair;
 missing source admission stops code edits. Neither justifies a duplicate paid
 review, another backlog item or a production workaround.
+
+### Child baseline reconciliation
+
+The first recovery coverage call correctly refused the accidental twelve-case
+parent baseline and also identified wrong reference types: requirementRefs must
+be objective IDs and verificationRefs must be acceptance IDs. Do not repeat it
+with false mappings. The proposed
+[child scope](../specs/2026-10-15-workroom-continuity-recovery-scope.md) retains
+the six continuity cases assigned to BI-BF20F828 verbatim and adds explicit
+migration cases. It needs independent approval and baseline supersession; the
+old baseline and other child owners remain intact.
+
+After that approval, coverage for this child includes the existing Phase 2
+continuity sequence as well as the atomic recovery addendum. Coverage describes
+planned work, not completed implementation or acceptance. The root's current
+source repair does not implement new profile, application, UI, domain or
+standards features; the parent graph still routes those to their named owners.
+Do not close this child until its retained continuity criteria and repair
+criteria have actual acceptance evidence.
+
+| Deliverable | Requirement refs | Contract refs | Flow refs | Verification refs |
+| --- | --- | --- | --- | --- |
+| continuity-qualification | OBJ-RECOVERY, OBJ-LEARNING, OBJ-OPERATION | contract:durable-review-cycle | flow:capture-to-safe-resume | AC-04, AC-05, AC-06, AC-10, AC-11, AC-12 |
+| recovery-history | OBJ-MIGRATION | contract:durable-review-cycle | flow:capture-to-safe-resume | AC-MIG-HISTORY |
+| recovery-forward-path | OBJ-MIGRATION | contract:durable-review-cycle | flow:capture-to-safe-resume | AC-MIG-FORWARD, AC-MIG-REFUSAL |
+| recovery-acceptance | OBJ-MIGRATION | contract:durable-review-cycle | flow:capture-to-safe-resume | AC-MIG-LIVE |
+
+All four map to existing BI-BF20F828. Recovery history precedes the forward path;
+continuity qualification and the forward path precede final acceptance. They
+are internal sequencing under the existing continuity delivery boundary. No
+other owner is a child of this child. Independent plan review must confirm this
+scope accounting before the corrected coverage call can admit implementation.
