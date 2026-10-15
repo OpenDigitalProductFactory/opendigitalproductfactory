@@ -130,13 +130,17 @@ export async function routeDesignReviewsBeforeBaseline(args: {
   currentAgentId: string | null;
   baseSha: string;
   dispatchContext: InitiativeRecoveryDispatchContext;
-  ports: Pick<TerminalRecoveryPorts, "discoverArtifact" | "resolveRecovery" | "loadPlanArtifact">;
+  ports: Pick<TerminalRecoveryPorts, "discoverArtifact" | "resolveRecovery" | "loadPlanArtifact" | "loadBacklogBody">;
 }): Promise<InitiativeReviewerRecovery> {
   const { dispatchContext: room, ports } = args;
+  // Match the claim issuer's live declaration. An unchanged branch need not
+  // edit its already-canonical design just to survive exact packet validation.
+  const backlogBody = await ports.loadBacklogBody?.(args.designPhase.subject.id);
   const discovered = await ports.discoverArtifact({
     repositoryFullName: room.repositoryFullName,
     baseSha: args.baseSha,
     headSha: room.headSha,
+    ...(backlogBody ? { backlogBody } : {}),
   });
   return ports.resolveRecovery({
     decision: args.designPhase,
