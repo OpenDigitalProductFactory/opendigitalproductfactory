@@ -1,0 +1,49 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "User.calendarFeedTokenHash / User.calendarFeedTokenIssuedAt, written by rotateCalendarFeedToken and revokeCalendarFeedToken (apps/web/lib/workforce/calendar-feed-token.ts) through the session-scoped actions in apps/web/lib/actions/calendar-feed.ts",
+    "Read by resolveCalendarFeedOwner for GET /api/calendar/feed/[userId] (apps/web/app/api/calendar/feed/[userId]/route.ts)"
+  ],
+  "privacyAssessment": {
+    "personalData": true,
+    "sensitivity": "restricted: a SHA-256 of a bearer secret that grants read access to the owner's calendar feed; the plaintext is never stored",
+    "dataSubjectRights": "Follows the User row: erased with the account. The owner can revoke it at any time from the workspace calendar.",
+    "reviewDisposition": "Credential hash on the account row; same access as the User row. No new personal content."
+  },
+  "migration": {
+    "name": "20261015000000_user_calendar_feed_token",
+    "backfill": "None. Every existing row gets NULL (no subscription link), which the feed treats as refuse. Verified against a throwaway postgres:16-alpine: empty table applied twice (idempotent), 500-row table applied with 0 hashes set, unique index enforced.",
+    "rollback": "Forward-only and additive. Older code never reads the columns; under older code the feed is id-only again, so do not roll back the route without the columns."
+  },
+  "tests": [
+    "apps/web/lib/workforce/calendar-feed-token.test.ts",
+    "apps/web/lib/workforce/calendar-feed.test.ts",
+    "apps/web/lib/actions/calendar-feed.test.ts",
+    "apps/web/app/api/calendar/feed/[userId]/route.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:user",
+      "prismaModel": "User",
+      "lifecycleDisposition": "Existing model; the columns follow the account row.",
+      "fields": [
+        {
+          "fieldId": "data:user#calendarFeedTokenHash",
+          "resolution": "governed",
+          "reason": "SHA-256 of the owner's private calendar subscription token; the .ics feed serves only a request presenting the matching token for this user.",
+          "provenance": "BI-051A74CE",
+          "flags": []
+        },
+        {
+          "fieldId": "data:user#calendarFeedTokenIssuedAt",
+          "resolution": "governed",
+          "reason": "When the current calendar subscription token was issued; shown to the owner.",
+          "provenance": "BI-051A74CE",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}
