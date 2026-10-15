@@ -18,6 +18,22 @@ order: 2
 4. Publish only when the content is ready to be treated as the current operating record.
 5. Archive documents that should remain discoverable as history but should not guide current work.
 
+## Add a File
+
+Drop a file on the box at the top of Managed Documents, or select **Choose file**. Word, Excel, PowerPoint, OpenDocument, RTF, PDF, text and markdown files up to 20 MB are accepted. The file becomes a managed document that you own, and the page opens it. Its PDF, searchable text and previews appear as soon as the background conversion finishes, exactly as for a file a coworker saved.
+
+Tick **Only me** before you drop the file to make it a restricted document (see below). Otherwise everyone who can open Managed Documents can read it.
+
+## Collections
+
+A collection groups documents, like a folder. The collections you can open are listed above the search box; select one to see only its documents, or **All documents** to see everything.
+
+- **New collection** creates one. Tick **Only me** to make the collection itself restricted.
+- A file you drop while a collection is open is added to that collection.
+- A collection only shows the documents you may read. A restricted document in a shared collection stays hidden from people who may not read it, and a restricted collection is hidden as a whole.
+
+An AI coworker files a document in a collection with `doc_link` and the reference type `contains`.
+
 ## Who Can Read a Document
 
 Every document has an access setting.

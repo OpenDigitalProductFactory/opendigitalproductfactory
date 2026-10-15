@@ -16,6 +16,9 @@ function matchesScalar(value: unknown, condition: unknown, now: Date): boolean {
       case "in":
         if (!(operand as unknown[]).includes(value)) return false;
         break;
+      case "notIn":
+        if ((operand as unknown[]).includes(value)) return false;
+        break;
       case "not":
         if (matchesScalar(value, operand, now)) return false;
         break;

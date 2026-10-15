@@ -113,7 +113,11 @@ export function createDocumentWorld() {
     sourceVersion: { version: 1, id: ref.sourceVersionId },
     targetVersion: ref.targetVersionId ? { version: 1, id: ref.targetVersionId } : null,
   });
-  const findDocs = (where: unknown) => documents.filter((doc) => matchesWhere(doc, where, NOW));
+  const withIncoming = (doc: Row): Row => ({
+    ...doc,
+    incomingReferences: references.filter((ref) => ref.targetDocumentId === doc.id).map(withReferenceRelations),
+  });
+  const findDocs = (where: unknown) => documents.filter((doc) => matchesWhere(withIncoming(doc), where, NOW));
   const uniqueWhere = (where: Record<string, unknown>) =>
     documents.find((doc) => (where.id !== undefined ? doc.id === where.id : doc.documentId === where.documentId)) ?? null;
 

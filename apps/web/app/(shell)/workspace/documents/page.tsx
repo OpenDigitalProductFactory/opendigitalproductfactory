@@ -4,6 +4,10 @@ import { Archive, FileText, Search } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { searchManagedDocuments } from "@/lib/documents/document-store";
 import { readableDocumentWhere, resolveDocumentViewer } from "@/lib/documents/document-access";
+import { COLLECTION_DOCUMENT_KIND, listCollections } from "@/lib/documents/document-collections";
+import { DOCUMENT_UPLOAD_ACCEPT, DOCUMENT_UPLOAD_LIMIT_BYTES } from "@/lib/documents/document-upload";
+import { DocumentCollectionsNav } from "./DocumentCollectionsNav";
+import { DocumentUploadZone } from "./DocumentUploadZone";
 import { prisma } from "@dpf/db";
 import { LocalTime } from "@/components/ui/LocalTime";
 
@@ -14,6 +18,7 @@ type Props = {
     kind?: string;
     tag?: string;
     owner?: string;
+    collection?: string;
   }>;
 };
 
@@ -41,9 +46,13 @@ export default async function DocumentsPage({ searchParams }: Props) {
   // Only documents this person may read are listed, and only their owners
   // are offered as a filter (BI-957915CB).
   const viewer = await resolveDocumentViewer(session.user.id);
-  const [documents, owners] = await Promise.all([
+  const collectionId = sp.collection?.trim() || null;
+  const [documents, owners, collections] = await Promise.all([
     searchManagedDocuments({
       viewer,
+      // Collections are listed above the table, not in it (BI-957915CB).
+      collectionId,
+      excludeKinds: sp.kind ? [] : [COLLECTION_DOCUMENT_KIND],
       query: sp.q ?? null,
       currentState: sp.state || null,
       documentKind: sp.kind || null,
@@ -57,7 +66,9 @@ export default async function DocumentsPage({ searchParams }: Props) {
       select: { id: true, displayName: true },
       take: 100,
     }),
+    listCollections(viewer),
   ]);
+  const activeCollection = collectionId ? collections.find((collection) => collection.documentId === collectionId) ?? null : null;
 
   const updated = documents.filter((doc) => doc.updatedAt.getTime() > Date.now() - 7 * 24 * 60 * 60 * 1000).length;
   const published = documents.filter((doc) => doc.currentState === "published").length;
@@ -88,7 +99,20 @@ export default async function DocumentsPage({ searchParams }: Props) {
         </div>
       </div>
 
+      <DocumentCollectionsNav
+        collections={collections.map((collection) => ({ documentId: collection.documentId, title: collection.title }))}
+        activeCollectionId={activeCollection?.documentId ?? null}
+      />
+
+      <DocumentUploadZone
+        accept={DOCUMENT_UPLOAD_ACCEPT}
+        limitMb={DOCUMENT_UPLOAD_LIMIT_BYTES / (1024 * 1024)}
+        collectionId={activeCollection?.documentId ?? null}
+        collectionTitle={activeCollection?.title ?? null}
+      />
+
       <form className="grid gap-2 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3 md:grid-cols-[minmax(0,1fr)_140px_140px_180px_auto]">
+        {activeCollection && <input type="hidden" name="collection" value={activeCollection.documentId} />}
         <label className="flex items-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3">
           <Search className="h-4 w-4 text-[var(--dpf-muted)]" aria-hidden="true" />
           <input
@@ -134,7 +158,7 @@ export default async function DocumentsPage({ searchParams }: Props) {
           return (
             <Link
               key={tab.label}
-              href={buildHref({ q: sp.q, kind: sp.kind, tag: sp.tag, owner: sp.owner, state: tab.value })}
+              href={buildHref({ q: sp.q, kind: sp.kind, tag: sp.tag, owner: sp.owner, collection: sp.collection, state: tab.value })}
               className={[
                 "px-3 py-2 text-xs font-medium transition-colors",
                 active
@@ -151,7 +175,11 @@ export default async function DocumentsPage({ searchParams }: Props) {
       {documents.length === 0 ? (
         <div className="flex items-center gap-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 text-sm text-[var(--dpf-muted)]">
           <Archive className="h-5 w-5 text-[var(--dpf-muted)]" aria-hidden="true" />
-          No managed documents match these filters.
+          {collectionId && !activeCollection
+            ? "This collection was not found."
+            : activeCollection
+              ? `${activeCollection.title} has no documents you can open yet. Drop a file above to add one.`
+              : "No managed documents match these filters."}
         </div>
       ) : (
         <div className="overflow-hidden rounded-lg border border-[var(--dpf-border)]">

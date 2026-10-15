@@ -13,6 +13,10 @@ import {
 } from "./document-access";
 
 export const DOCUMENT_STATES = ["draft", "published", "archived"] as const;
+
+/** A collection is a document of this kind; its members are "contains" references (BI-957915CB). */
+export const COLLECTION_DOCUMENT_KIND = "collection";
+export const COLLECTION_MEMBER_REF_TYPE = "contains";
 export type DocumentState = typeof DOCUMENT_STATES[number];
 
 export type DocumentReferenceInput = {
@@ -60,6 +64,10 @@ export type DocumentSearchInput = {
   ownerPrincipalId?: string | null;
   tags?: string[];
   limit?: number;
+  /** Only members of this collection; an unreadable collection has none (BI-957915CB). */
+  collectionId?: string | null;
+  /** Leave out documents of these kinds unless documentKind names one. */
+  excludeKinds?: string[];
   /** Who is searching: only documents this viewer may read are returned (BI-957915CB). */
   viewer: DocumentViewer;
 };
@@ -554,6 +562,17 @@ export async function searchManagedDocuments(input: DocumentSearchInput, db: Doc
   if (input.organizationId) where.organizationId = input.organizationId;
   if (state) where.currentState = state;
   if (input.documentKind) where.documentKind = input.documentKind;
+  else if (input.excludeKinds?.length) where.documentKind = { notIn: input.excludeKinds };
+  if (input.collectionId) {
+    where.incomingReferences = {
+      some: {
+        refType: COLLECTION_MEMBER_REF_TYPE,
+        sourceDocument: {
+          is: { AND: [{ documentId: input.collectionId, documentKind: COLLECTION_DOCUMENT_KIND }, readableDocumentWhere(input.viewer)] },
+        },
+      },
+    };
+  }
   if (input.ownerPrincipalId) where.ownerPrincipalId = input.ownerPrincipalId;
   if (tags.length > 0) where.tags = { some: { tag: { in: tags } } };
   if (query) {
