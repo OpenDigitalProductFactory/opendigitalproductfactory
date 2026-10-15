@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Scoped DEV upgrade timing
 
 Backlog: **BI-DE9FB008**. Workroom: **WC-3BEE075D**.
