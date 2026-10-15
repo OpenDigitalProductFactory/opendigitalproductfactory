@@ -122,7 +122,7 @@ test("an install with no release record follows the latest release", { skip: !ha
 test("the release ships the start script and the module, and the start script converges after health", async () => {
   const dockerfile = await readFile(join(root, "Dockerfile"), "utf8");
   assert.match(dockerfile, /cp scripts\/installer\/dpf-start\.consumer\.ps1 \/dpf-release-assets\/dpf-start\.ps1/);
-  assert.match(dockerfile, /scripts\/installer\/lib\/host-convergence\.ps1 \/dpf-release-assets\/scripts\/installer\/lib\//);
+  assert.match(dockerfile, /scripts\/installer\/lib\/host-convergence\.ps1 [^\n]*\/dpf-release-assets\/scripts\/installer\/lib\//);
   const start = await readFile(join(root, "scripts", "installer", "dpf-start.consumer.ps1"), "utf8");
   const health = start.indexOf("$healthy = $true");
   const convergence = start.indexOf("Invoke-DPFHostConvergence");
@@ -132,4 +132,115 @@ test("the release ships the start script and the module, and the start script co
   const installer = await readFile(join(root, "install-dpf.ps1"), "utf8");
   assert.match(installer, /scripts\\installer\\dpf-start\.consumer\.ps1/, "the installer reads the shipped script, not an embedded copy");
   assert.match(installer, /New-DPFEdgeBootstrapToken -PortalContainer/, "the installer uses the shipped token issuance");
+});
+
+// ── macOS / Linux twin (host-convergence.sh) ────────────────────────────────
+// Drives real bash with the host commands (uname, systemctl, docker) replaced by
+// recorders on PATH. POSIX hosts only: the Windows bash here is WSL or Git Bash,
+// and these paths are host paths.
+const shModule = join(root, "scripts", "installer", "lib", "host-convergence.sh");
+const posix = process.platform !== "win32";
+
+async function shFixture({ version = "v2026.10.15-test.1", enrolled = false, installFails = false } = {}) {
+  const fx = await fixture({ version, enrolled });
+  const bin = join(fx.dir, "bin");
+  await mkdir(bin, { recursive: true });
+  const stub = async (name, body) => { await writeFile(join(bin, name), `#!/bin/sh\n${body}\n`); spawnSync("chmod", ["0755", join(bin, name)]); };
+  await stub("uname", "echo Linux");
+  await stub("systemctl", `[ -f '${fx.dir}/service-enabled' ]`);
+  await stub("docker", `echo "docker $*" >> '${fx.trace}'; case "$1" in ps) echo portal-id ;; exec) echo 'noise'; echo 'dpfboot_SHTOKEN' ;; esac`);
+  await writeFile(join(fx.install, "scripts", "installer", "native-edge-host.sh"), [
+    "dpf_native_edge_install() {",
+    `  echo "install token=$2 version=$DPF_NATIVE_EDGE_VERSION role=$4" >> '${fx.trace}'`,
+    installFails ? "  return 1" : `  touch '${fx.dir}/service-enabled'`,
+    "}",
+  ].join("\n"));
+  return { ...fx, bin };
+}
+
+function shConverge(fx, role = "host-upkeep") {
+  const result = spawnSync("bash", ["-c", `. '${shModule}'; dpf_host_converge '${fx.install}' '${role}'`], {
+    encoding: "utf8",
+    env: { ...process.env, PATH: `${fx.bin}:${process.env.PATH}`, DPF_STATE_DIR: fx.state },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout.trim().split("\n").at(-1);
+}
+
+test("macOS/Linux: a fresh host enrolls the agent at the release, then stays current", { skip: !posix && "POSIX host only" }, async () => {
+  const fx = await shFixture();
+  try {
+    assert.equal(shConverge(fx), "converged");
+    const trace = await read(fx.trace);
+    assert.match(trace, /docker exec portal-id sh -c .*issue-edge-bootstrap-token\.ts/);
+    assert.match(trace, /install token=dpfboot_SHTOKEN version=v2026\.10\.15-test\.1 role=host-upkeep/);
+    assert.equal(await read(join(fx.state, "edge-node", "installed-version")), "v2026.10.15-test.1|host-upkeep");
+    await rm(fx.trace, { force: true });
+    assert.equal(shConverge(fx), "current");
+    assert.equal(await read(fx.trace), "");
+    assert.equal(shConverge(fx, "full"), "converged", "a changed role converges again");
+  } finally { await rm(fx.dir, { recursive: true, force: true }); }
+});
+
+test("macOS/Linux: enrolled hosts mint no token; failures report and record nothing", { skip: !posix && "POSIX host only" }, async () => {
+  const enrolled = await shFixture({ enrolled: true });
+  const broken = await shFixture({ enrolled: true, installFails: true });
+  try {
+    assert.equal(shConverge(enrolled), "converged");
+    assert.doesNotMatch(await read(enrolled.trace), /^docker /m);
+    assert.equal(shConverge(broken), "failed");
+    assert.equal(await read(join(broken.state, "edge-node", "installed-version")), "");
+    assert.match(await read(join(broken.state, "logs", "host-convergence.log")), /failed version=/);
+  } finally {
+    await rm(enrolled.dir, { recursive: true, force: true });
+    await rm(broken.dir, { recursive: true, force: true });
+  }
+});
+
+// ── One-time bridge for launch scripts written before BI-084F85E5 ───────────
+test("the bridge recognises only the autostart launch script as its parent", async () => {
+  const { isAutostartLauncher, launcherPathFrom } = await import("./autostart-bridge.mjs");
+  assert.equal(isAutostartLauncher("/bin/bash /home/a/.dpf/dpf-autostart.sh"), true);
+  assert.equal(launcherPathFrom("/bin/bash /home/a/.dpf/dpf-autostart.sh"), "/home/a/.dpf/dpf-autostart.sh");
+  for (const other of ["/bin/bash /opt/dpf/scripts/installer/dpf-start.consumer.sh /opt/dpf /s.json -f docker-compose.yml", "sh /promoter/promote.sh", "node install-dpf.sh", ""]) {
+    assert.equal(isAutostartLauncher(other), false, other);
+  }
+});
+
+test("the bridge rewrites an inline launch script to the shipped pointer, keeping its chain, once", { skip: !posix && "POSIX host only" }, async () => {
+  const { bridgeAutostartFromParent, bridgedLaunchScript } = await import("./autostart-bridge.mjs");
+  const dir = await mkdtemp(join(tmpdir(), "dpf-bridge-"));
+  try {
+    const launcher = join(dir, "dpf-autostart.sh");
+    const old = [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      'cd "/opt/dpf"',
+      '_dpf_projection="$(node scripts/lib/resolve-capability-compose-profiles.mjs --state "/home/a/.dpf/install-state.json" --host "$(uname)" --migrate --write)"',
+      "export COMPOSE_PROFILES",
+      "exec docker compose -f docker-compose.yml -f docker-compose.release.yml up -d",
+      "",
+    ].join("\n");
+    await writeFile(launcher, old);
+    assert.equal(bridgeAutostartFromParent({ commandLine: `/bin/bash ${launcher}`, spawnConverge: false }), "bridged");
+    const pointer = await readFile(launcher, "utf8");
+    assert.match(pointer, /^exec \/bin\/bash "\/opt\/dpf\/scripts\/installer\/dpf-start\.consumer\.sh" "\/opt\/dpf" "\/home\/a\/\.dpf\/install-state\.json" -f docker-compose\.yml -f docker-compose\.release\.yml$/m);
+    assert.equal(bridgedLaunchScript(pointer), null, "an already bridged script is left alone");
+    assert.equal(bridgeAutostartFromParent({ commandLine: `/bin/bash ${launcher}`, spawnConverge: false }), "already-bridged");
+    assert.equal(bridgeAutostartFromParent({ commandLine: "node something", spawnConverge: false }), "not-launcher");
+    assert.equal(bridgedLaunchScript("#!/bin/sh\necho custom\n"), null, "an operator's own script is never rewritten");
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("new launch scripts point at the shipped entrypoint, which converges after health", async () => {
+  const autostart = await readFile(join(root, "scripts", "installer", "lib", "autostart.sh"), "utf8");
+  assert.match(autostart, /exec \/bin\/bash "\$install_path\/scripts\/installer\/dpf-start\.consumer\.sh" "\$install_path" "\$state_path" \$compose_chain/);
+  const start = await readFile(join(root, "scripts", "installer", "dpf-start.consumer.sh"), "utf8");
+  assert.ok(start.indexOf("healthy=1") < start.indexOf("dpf_host_converge"), "convergence runs only after the portal is healthy");
+  assert.doesNotMatch(start + autostart, /\breboot\b|shutdown -r|systemctl (reboot|poweroff)/, "never reboots the host");
+  const dockerfile = await readFile(join(root, "Dockerfile"), "utf8");
+  assert.match(dockerfile, /cp scripts\/installer\/dpf-start\.consumer\.sh scripts\/installer\/native-edge-host\.sh scripts\/installer\/autostart-bridge\.mjs \/dpf-release-assets\/scripts\/installer\//);
+  assert.match(dockerfile, /scripts\/installer\/lib\/host-convergence\.sh \/dpf-release-assets\/scripts\/installer\/lib\//);
+  const resolver = await readFile(join(root, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), "utf8");
+  assert.match(resolver, /args\.migrate && args\.write && process\.platform !== "win32"/);
 });

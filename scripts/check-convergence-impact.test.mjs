@@ -188,3 +188,47 @@ test("gate passes when the PR body states the mechanism", () => {
   });
   assert.equal(r.ok, true);
 });
+
+// ── platform coverage (BI-084F85E5) ──
+test("host-runtime code classifies: agent installers, start entrypoints, autostart, the agent itself", () => {
+  for (const f of [
+    "scripts/installer/native-edge-host.ps1",
+    "scripts/installer/native-edge-host.sh",
+    "scripts/installer/dpf-start.consumer.sh",
+    "scripts/installer/lib/host-convergence.ps1",
+    "scripts/installer/lib/autostart.sh",
+    "scripts/installer/linux-systemd.service.tmpl",
+    "scripts/installer/macos-edge-node.plist.tmpl",
+    "services/edge-node-go/internal/action/docker_vm_restart.go",
+  ]) assert.ok(kinds([f]).includes("host-runtime"), f);
+  assert.ok(!kinds(["scripts/installer/install-state.schema.json"]).includes("host-runtime"));
+});
+
+test("gate FAILS a host-runtime change whose decisions converge only one platform", () => {
+  const r = evaluateConvergenceGate({
+    changedFiles: ["scripts/installer/native-edge-host.ps1"],
+    commitMessages: `${TRAILER_NAME}: operator-action — re-run install-dpf.ps1 on each Windows host to install the agent`,
+    registry,
+  });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "platform-coverage-missing");
+  assert.match(r.errors[0], /no decision names: macos, linux/);
+});
+
+test("gate passes a host-runtime change that says how every platform converges", () => {
+  const perPlatform = evaluateConvergenceGate({
+    changedFiles: ["scripts/installer/native-edge-host.sh", "scripts/installer/native-edge-host.ps1"],
+    commitMessages: [
+      `${TRAILER_NAME}: self-upgrade-step — Windows: the shipped dpf-start.ps1 converges the agent at the next sign-in`,
+      `${TRAILER_NAME}: self-upgrade-step — macOS and Linux: the shipped dpf-start.consumer.sh converges it at the next boot`,
+    ].join("\n"),
+    registry,
+  });
+  assert.equal(perPlatform.ok, true, perPlatform.errors?.join("; "));
+  const notHostSide = evaluateConvergenceGate({
+    changedFiles: ["scripts/promote.sh"],
+    commitMessages: `${TRAILER_NAME}: self-upgrade-step — promoter-migration-envelope.mjs self-issues for N-1 callers`,
+    registry,
+  });
+  assert.equal(notHostSide.ok, true, "platform coverage applies only to host-runtime changes");
+});

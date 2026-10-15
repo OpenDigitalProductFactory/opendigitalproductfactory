@@ -1698,6 +1698,8 @@
       "docs/operations/disaster-recovery.md"
     ],
     "dpf-start.ps1": [
+      "docs/install/windows.md",
+      "docs/operations/remote-action-edge-dispatch.md",
       "docs/runbooks/bet5-windows-self-upgrade.md"
     ],
     "e2e/fixtures/evidence.ts": [
@@ -2350,6 +2352,9 @@
     "scripts/installer/doctools-prepull.test.mjs": [
       "docs/install/platform-support-watchlist.md"
     ],
+    "scripts/installer/dpf-start.consumer.sh": [
+      "docs/operations/remote-action-edge-dispatch.md"
+    ],
     "scripts/installer/gpp-permit-secret-contract.test.mjs": [
       "docs/architecture/gated-permissions-process.md"
     ],
@@ -2362,6 +2367,9 @@
     ],
     "scripts/installer/lib/docker.test.mjs": [
       "docs/install/platform-support-watchlist.md"
+    ],
+    "scripts/installer/lib/host-convergence.sh": [
+      "docs/operations/remote-action-edge-dispatch.md"
     ],
     "scripts/installer/lib/platform.sh": [
       "docs/install/platform-support-watchlist.md"
@@ -3651,7 +3659,8 @@
       "services/edge-node/scripts/verify-lifecycle.ts"
     ],
     "docs/install/windows.md": [
-      "dpf-reinstall.ps1"
+      "dpf-reinstall.ps1",
+      "dpf-start.ps1"
     ],
     "docs/install/worktree-janitor-schedule.md": [
       "scripts/install-worktree-janitor-schedule.sh",
@@ -3733,7 +3742,10 @@
       "scripts/check-no-private-identity.mjs"
     ],
     "docs/operations/remote-action-edge-dispatch.md": [
-      "docker-compose.edge-actions.yml"
+      "docker-compose.edge-actions.yml",
+      "dpf-start.ps1",
+      "scripts/installer/dpf-start.consumer.sh",
+      "scripts/installer/lib/host-convergence.sh"
     ],
     "docs/operations/runtime-glossary.md": [
       "docker-compose.dev-against-live-db.yml",

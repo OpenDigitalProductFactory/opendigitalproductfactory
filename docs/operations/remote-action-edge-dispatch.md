@@ -65,9 +65,17 @@ replaces `dpf-start.ps1`, which runs at sign-in. Once the portal is healthy that
 script installs or upgrades the native agent for the running release and role,
 skipping the work when the agent is already current. It mints an enrollment
 token only for a machine that was never enrolled, and logs to
-`~/.dpf/logs/host-convergence.log`. A failure never blocks startup. The
-macOS/Linux launch script lives outside the install directory and needs its own
-one-time bridge (BI-EEFDB9E8).
+`~/.dpf/logs/host-convergence.log`. A failure never blocks startup.
+
+On macOS and Linux the autostart launch script (`~/.dpf/dpf-autostart.sh`) lives
+outside the install directory, so it is now a one-line pointer to the shipped
+`scripts/installer/dpf-start.consumer.sh`, which does the same thing through
+`scripts/installer/lib/host-convergence.sh`. A launch script written before this
+change is bridged once (BI-EEFDB9E8). At boot it runs the shipped compose-profile
+resolver, which sees the old launch script as its parent, rewrites it atomically
+into the pointer, and starts host convergence for that boot. A host-runtime
+change must now say how existing installs converge on Windows, macOS and Linux,
+or the Convergence-Impact gate fails it.
 
 ## Request and evidence flow
 
