@@ -16,6 +16,10 @@ const principalLinking = vi.hoisted(() => ({
   syncUserPrincipal: vi.fn(),
 }));
 vi.mock("@/lib/identity/principal-linking", () => principalLinking);
+// BI-957915CB: every document tool resolves the person it acts for.
+vi.mock("@/lib/documents/document-access", () => ({
+  resolveDocumentViewer: vi.fn(async (userId: string) => ({ principalId: `principal-${userId}` })),
+}));
 
 import { documentPack } from "./document-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
@@ -119,7 +123,7 @@ describe("document pack — handler envelopes", () => {
     expect(result.success).toBe(true);
     expect(result.message).toContain("DOC-001");
     expect(documentStore.searchManagedDocuments).toHaveBeenCalledWith(
-      expect.objectContaining({ mode: "hybrid", query: "brief" }),
+      expect.objectContaining({ mode: "hybrid", query: "brief", viewer: { principalId: "principal-user-1" } }),
     );
   });
 
@@ -164,10 +168,10 @@ describe("document pack — handler envelopes", () => {
     const versions = await documentPack.handlers.doc_version_list!({ documentId: "DOC-001" }, "user-1");
     expect(versions.success).toBe(true);
     expect(versions.message).toContain("2 document versions");
-    expect(documentStore.listManagedDocumentVersions).toHaveBeenCalledWith("DOC-001");
+    expect(documentStore.listManagedDocumentVersions).toHaveBeenCalledWith("DOC-001", { principalId: "principal-user-1" });
 
     const refs = await documentPack.handlers.doc_list_references!({ documentId: "DOC-001" }, "user-1");
     expect(refs.success).toBe(true);
-    expect(documentStore.listManagedDocumentReferences).toHaveBeenCalledWith("DOC-001");
+    expect(documentStore.listManagedDocumentReferences).toHaveBeenCalledWith("DOC-001", { principalId: "principal-user-1" });
   });
 });

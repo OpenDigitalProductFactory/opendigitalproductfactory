@@ -8,6 +8,14 @@ const principalLinking = vi.hoisted(() => ({
   syncUserPrincipal: vi.fn(),
 }));
 vi.mock("@/lib/identity/principal-linking", () => principalLinking);
+// BI-957915CB: every document tool resolves the person it acts for.
+vi.mock("@/lib/documents/document-access", () => ({
+  resolveDocumentViewer: vi.fn(async (userId: string) => ({ principalId: `principal-${userId}` })),
+}));
+const readable = vi.hoisted(() => ({ ids: new Set<string>(["DOC-DECK", "DOC-LOGO"]) }));
+vi.mock("@/lib/documents/document-store", () => ({
+  readableDocumentIds: vi.fn(async (ids: string[]) => new Set(ids.filter((id) => readable.ids.has(id)))),
+}));
 
 import { documentPack } from "./document-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
@@ -76,6 +84,19 @@ describe("create_presentation", () => {
     const result = await documentPack.handlers.create_presentation!({ ...OUTLINE, documentId: "DOC-DECK" }, "user-1", {});
     expect(result.success).toBe(true);
     expect(result.message).toMatch(/DOC-DECK v2/);
+  });
+
+  it("refuses, as not found, to revise a deck or embed an image the person may not read (BI-957915CB)", async () => {
+    const revise = await documentPack.handlers.create_presentation!({ ...OUTLINE, documentId: "DOC-SECRET" }, "user-1", {});
+    expect(revise).toMatchObject({ success: false, error: "Document not found: DOC-SECRET." });
+
+    const embed = await documentPack.handlers.create_presentation!(
+      { ...OUTLINE, slides: [...OUTLINE.slides, { title: "Logo", image: { documentId: "DOC-SECRET-IMG", alt: "logo" } }] },
+      "user-1",
+      {},
+    );
+    expect(embed).toMatchObject({ success: false, error: "Document not found: DOC-SECRET-IMG." });
+    expect(presentation.createPresentation).not.toHaveBeenCalled();
   });
 
   it("returns the failure the coworker must act on, without throwing", async () => {
