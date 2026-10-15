@@ -44,6 +44,7 @@ import {
 } from "./objective-reconciliation";
 import { type InheritanceDb, loadInheritedInitiativeScope } from "./parent-scope-inheritance";
 import type { InitiativeReadinessDecision, InitiativeTransitionObject } from "./types";
+import { resolveAggregateCompletion, type AggregateCompletionDb } from "./aggregate-completion";
 
 /** The shape an operational close is gated as (BI-B22E50BC). */
 const OPERATIONAL_CLOSE_WORK_SHAPE = "delivery-small@1.0.0";
@@ -238,6 +239,8 @@ export async function evaluateBacklogItemCompletion(args: {
 }): Promise<BacklogCompletionEvaluation> {
   const { db, item, evaluatedAt } = args;
   const deps = args.dependencies ?? {};
+  const boundWorkShape = await readBoundWorkShapeRef(db as unknown as BoundWorkShapeDb, item.itemId);
+  const aggregate = readinessShapeFromWorkShape(boundWorkShape) === "xlarge";
   const activities = await db.backlogItemActivity.findMany({
     where: { backlogItemId: item.id, kind: { in: [...BACKLOG_COMPLETION_ACTIVITY_KINDS] } },
     orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
@@ -291,7 +294,8 @@ export async function evaluateBacklogItemCompletion(args: {
     }
   }
   const acceptanceState = reconciliation.state;
-  const directMerge = isDirectMergePlatformWork(item);
+  // An initiative's own PR cannot prove its children or hypothesis outcomes.
+  const directMerge = !aggregate && isDirectMergePlatformWork(item);
   const deploymentResult = directMerge
     ? await (deps.resolveDeploymentClosure ?? resolveBacklogDeploymentClosure)({
       itemId: item.itemId, workType: item.workType, roots: mergeSignalRoots(),
@@ -329,14 +333,13 @@ export async function evaluateBacklogItemCompletion(args: {
   const currentFailures = currentFailuresOf(completion);
   const acceptanceFailures = currentFailures.filter((failure) => ACCEPTANCE_FAILURE_DIMENSIONS.has(failure.dimension));
   const failureRefs = (failures: readonly CurrentEvidenceFailure[]) => failures.map((failure) => failure.evidenceActivityId);
-  const delivery = currentFailures.length > 0
+  let delivery = currentFailures.length > 0
     ? "fail" as const
     : mergedThroughGates === "merged" || deployment ? "pass" as const : deliveryState(completion);
   const directDocumentationAcceptance = completion.kind === "evaluated"
     && completion.verdict.allowed
     && completion.verdict.normalizedManifest?.workClass === "documentation"
     && (completion.verdict.acceptanceEvidenceRefs?.length ?? 0) > 0;
-  const boundWorkShape = await readBoundWorkShapeRef(db as unknown as BoundWorkShapeDb, item.itemId);
   // BI-B22E50BC: an operational close (a chore, tool or skill done with no code:
   // a dismissed alert, a config change, a runbook run) never claims a workroom,
   // so it has no bound shape and fell onto the v2 fix table, which owes a spec
@@ -366,7 +369,7 @@ export async function evaluateBacklogItemCompletion(args: {
   const mergeAccepts = !deployment && recognizeMergeThroughGates
     && reconciliation.state !== "conflict" && reconciliation.state !== "malformed";
   const acceptancePass = acceptanceFailures.length === 0
-    && (reconciliation.state === "pass" || directDocumentationAcceptance || smallShapeAcceptance || mergeAccepts);
+    && (reconciliation.state === "pass" || (!aggregate && (directDocumentationAcceptance || smallShapeAcceptance || mergeAccepts)));
   const acceptanceFailed = acceptanceFailures.length > 0 || reconciliation.state === "fail";
   const objectiveReconciliationPass = reconciliation.state === "pass" || smallShapeAcceptance || mergeAccepts;
   const deliveryEvidenceRefs = completion.kind === "evaluated"
@@ -420,11 +423,27 @@ export async function evaluateBacklogItemCompletion(args: {
     evaluatedAt,
   };
   const project = deps.projectReadiness ?? projectBacklogItemReadiness;
+  if (aggregate) {
+    const source = projectBacklogItemReadiness({ ...projectionInput, recognizeMergeThroughGates: false });
+    const children = await resolveAggregateCompletion({ itemId: item.itemId,
+      activities: activities as InitiativeReadinessActivity[], source, db: db as unknown as AggregateCompletionDb });
+    delivery = currentFailures.length > 0 ? "fail" : children.delivery;
+    projectionInput.completion = { ...projectionInput.completion!, decomposition: children.decomposition,
+      deliveryEvidence: delivery,
+      objectiveReconciliation: reconciliation.state === "pass" ? "pass" : reconciliation.state === "fail" ? "fail" : "missing",
+      evidenceRefs: { ...projectionInput.completion!.evidenceRefs,
+        PLAN_COVERAGE_REQUIRED: children.evidenceRefs,
+        DELIVERY_EVIDENCE_REQUIRED: currentFailures.length > 0 ? failureRefs(currentFailures) : children.evidenceRefs },
+      requirementReasons: { ...projectionInput.completion!.requirementReasons,
+        PLAN_COVERAGE_REQUIRED: children.coverageReasons,
+        DELIVERY_EVIDENCE_REQUIRED: currentFailures.length > 0 ? currentFailureReasons(currentFailures) : children.deliveryReasons },
+    };
+  }
   const projected = project(projectionInput);
   const independent = project({ ...projectionInput, completion: {
     ...projectionInput.completion!,
     acceptanceEvidence: acceptanceFailures.length === 0
-      && (reconciliation.state === "pass" || directDocumentationAcceptance || smallShapeAcceptance)
+      && (reconciliation.state === "pass" || (!aggregate && (directDocumentationAcceptance || smallShapeAcceptance)))
       ? "pass" : acceptanceFailed ? "fail" : "missing",
     objectiveReconciliation: reconciliation.state === "pass" || smallShapeAcceptance
       ? "pass" : reconciliation.state === "fail" ? "fail" : "missing",
