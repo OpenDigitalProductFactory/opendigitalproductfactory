@@ -242,25 +242,28 @@ async function getFleetReadinessHandler(
 }
 
 async function issueGrokCredentialsClientHandler(userId: string, context?: ToolExecutionContext): Promise<ToolResult> {
-  const [{ prisma }, { issueGrokCredentialsClientForCaller }, { GROK_CREDENTIALS_CLIENT_NAME }, { prepareClientSecret }, { decryptSecret }] =
+  const [{ prisma }, { issueGrokCredentialsClientForCaller }, { GROK_CREDENTIALS_CLIENT_NAME }, { prepareClientSecret }, { decryptSecret }, { grokAgentRecordId, bindGrokClientAgent }] =
     await Promise.all([
       import("@dpf/db"),
       import("@/lib/agent-toolchain/grok-credential-issue"),
       import("@/lib/auth/grok-credentials-client"),
       import("@/lib/auth/oauth-tokens"),
       import("@/lib/govern/credential-crypto"),
+      import("@/lib/auth/grok-agent-binding"),
     ]);
   return issueGrokCredentialsClientForCaller(userId, context ?? {}, {
     rows: (ownerUserId) =>
       prisma.oAuthClient.findMany({
         where: { ownerUserId, clientName: GROK_CREDENTIALS_CLIENT_NAME },
-        select: { oAuthClientId: true, clientName: true, registrationKind: true, ownerUserId: true, revokedAt: true, allowedScopes: true, clientSecretEnc: true },
+        select: { oAuthClientId: true, clientName: true, registrationKind: true, ownerUserId: true, revokedAt: true, allowedScopes: true, clientSecretEnc: true, agentId: true },
       }),
     create: async (row) => {
       await prisma.oAuthClient.create({ data: { ...row, allowedScopes: [...row.allowedScopes], redirectUris: [] } });
     },
     decrypt: decryptSecret,
     prepareSecret: prepareClientSecret,
+    grokAgent: () => grokAgentRecordId(prisma),
+    bindAgent: (oAuthClientId, agentRecordId) => bindGrokClientAgent(prisma, oAuthClientId, agentRecordId),
   });
 }
 

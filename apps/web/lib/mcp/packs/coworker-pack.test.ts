@@ -174,6 +174,13 @@ describe("coworker pack — handler behavior (delegation preserved)", () => {
     expect(external.dispatch).toHaveBeenCalledOnce();
     expect(collab.requestCoworker).not.toHaveBeenCalled();
   });
+  it("passes a review-request notice to the author with the dispatched task (BI-4592CF69)", async () => {
+    authority.authorize.mockResolvedValue({ bounded: true, notice: "This design is 70,000 characters." });
+    external.dispatch.mockResolvedValue({ success: true, message: "Task submitted.", data: { taskRunId: "TR-1" } });
+    const result = await coworkerPack.handlers.request_coworker({ targetAgent: "reviewer", objective: "review" }, "u1", {});
+    expect(result).toMatchObject({ success: true, message: "Task submitted. This design is 70,000 characters.",
+      data: { taskRunId: "TR-1", reviewDocumentNotice: "This design is 70,000 characters." } });
+  });
   it("returns the authority refusal without dispatching on either surface", async () => {
     const refusal = { success: false, error: "independent_review_request_denied", message: "Not admitted" };
     authority.authorize.mockResolvedValue({ bounded: true, refusal });
