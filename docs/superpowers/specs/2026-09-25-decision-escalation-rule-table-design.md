@@ -8,6 +8,31 @@ Backlog: BI-74B2A8CD (EP-AUTONOMOUS-DECIDE). Depends on BI-F6FD946F (PR #5658),
 which gives the corpus-gap route somewhere to go. Consumed by BI-E27F3600, which
 supplies the independent reviewer this design routes undecided steps to.
 
+## 0. Amendment, 2026-10-15 (re-surveyed on origin/main @ 804ca0150b3)
+
+`main` moved 708 commits after this design was approved. The objectives and
+acceptance (§6) are unchanged. What changed underneath them:
+
+- **BI-7FFFBEE3 (#6073, #6074)** replaced the evaluator's hard-coded
+  `high | critical → escalate` with a per-profile delegated limit
+  (`autonomyPolicy.maxRiskForRecommendation`, else `maxRiskForArbitration`),
+  `evaluator.ts:183-200`. The platform profile already arbitrates up to high risk.
+  The old `confidence < 0.9` step is now `minimumConfidenceForArbitration`
+  (`:257-266`). §3.3 is rewritten for this.
+- **New escalating branch:** `constitutional-alignment-application.ts:47` escalates
+  on a non-ambiguous alignment `escalate`. It joins the bases in §3.2.
+- **Surfaces:** about 20, not 9 (§3.5).
+- **Shared tables:** `lib/kernel/governing-principles.ts:103-124` cites a governing
+  principle for each directional escalation reason, with BI-74B2A8CD as owner of
+  lexical-fallback, critical-risk, aligned-not-settled and high-risk. Its test
+  ratchets the count of unwritten rules. Removing a reason updates that table in
+  the same change.
+- **Idempotent replay:** `decisionInteractionRowToEvaluation` (`persistence.ts:132`)
+  does not restore `gapReason`, `stanceAlignment` or `relevanceMethod`. A replayed
+  row therefore reads its route from the new column rather than recomputing it.
+- **Principle page** still names `check-escalation-gate.ts`, which does not exist
+  (unchanged; fixed here as planned).
+
 ## 1. Problem
 
 The platform has two escalation concepts, and only one of them is governed.
@@ -99,6 +124,8 @@ export const DECISION_BASES = [
   "corpus-gap",        // coverage gap, below confidence/band/ceiling, not confident enough for the risk
   "vector-gap",        // mixed stance, principle conflict
   "capability-gap",    // lexical relevance: embeddings unavailable
+  "policy-limit",      // risk above the profile's delegated limit (BI-7FFFBEE3), or a
+                       // constitutional alignment "escalate" verdict
   "evaluation-fault",  // the evaluator or resolver threw
 ] as const;
 
@@ -135,17 +162,26 @@ result to its basis, using fields the result already carries: `outcomeType`,
 `relevanceMethod`, and a new `evaluationFault: true` set only by the two
 `failClosedEvaluation` functions. No ladder branch computes a route itself.
 
-### 3.3 Ladder changes the rulings require
+### 3.3 How the rulings land (amended 2026-10-15)
 
-- `evaluator.ts:185`: escalate on `critical` only (R2). A `high` decision falls
-  through to the confidence checks. `:249` ("not high enough for a
-  ${risk}-risk decision") already raises the bar, so a high-risk decision
-  needs ≥ 0.9 or arbitration eligibility to be decided.
-- `directional-outcome.ts:124` (high-risk approval): removed (R2).
-- `directional-outcome.ts:114` (`aligned-not-settled`): no longer escalates. The
-  result carries `novelProposition: true`, and the rationale says the owner has
-  not ruled on this question before (R1). The `gapReason` value stays in the
-  type for historical rows.
+- **R2 lands through routing, not the evaluator.** BI-7FFFBEE3 already made a
+  high-risk escalation a delegated-policy decision, so the evaluator keeps
+  escalating a tier above a profile's limit, and keeps naming the profile and
+  policy field. The rule table classifies it as basis `policy-limit`. Because
+  only `critical` is damaging, that escalation routes to `independent_review`,
+  never to a person. `critical` stays damaging and routes `human`. No profile
+  policy is edited by this change.
+- **R1 lands in the evaluator.** The `aligned-not-settled` branch in
+  `directional-outcome.ts` (`:120-129` on 804ca0150b3) no longer escalates. The
+  ladder continues to the arbitrate and recommend checks, and the result carries
+  `novelProposition: true` with a rationale saying the owner has not ruled on
+  this question before. The `gapReason` value stays in the type for historical
+  rows. The directional high-risk branch (`:131-139`) stays, and routes as
+  `policy-limit` like the evaluator's.
+- **Governing principles:** `aligned-not-settled` leaves
+  `DIRECTIONAL_ESCALATION_REASONS`, so the ratcheted count of unwritten rules
+  goes down by one. `critical-risk`, `high-risk` and `lexical-fallback` now cite
+  `escalation-is-a-gate-not-a-trust-tier`.
 
 ### 3.4 Recording the route
 
@@ -175,8 +211,23 @@ export function isHumanEscalation(row: { outcomeType: string; escalationRoute: s
 ```
 
 `humanEscalationWhere()` is `OR [{ escalationRoute: "human" }, { escalationRoute: null,
-outcomeType: { in: ["defer","escalate"] } }]`. Every surface in §1's list replaces
-its literal `outcomeType: { in: [...] }` with it. `UNRESOLVED_OUTCOMES` in
+outcomeType: { in: ["defer","escalate"] } }]`. Every surface that reads
+escalate/defer as "a person must answer" replaces its literal selection with it.
+On 804ca0150b3 that is:
+- the founder review page and MCP pack
+- the owner ruling queue and the concierge sweep
+- the attention source
+- the coworker-decisions hub, decisions, review page and review action
+- org-decision-capture, decision-perspective capture
+- the coworker route context
+- decision-audit and decision-help
+- the triage conductor
+
+Readers that use escalate/defer to mean "no answer" rather than "a person"
+(craft-consult-demand, acumen-gap-nomination, self-review measures,
+autonomous-build eligibility, the one-shot lane, the policy authority projector,
+escalation hygiene, retract-superseded, canvas labels) keep reading
+`outcomeType`. `UNRESOLVED_OUTCOMES` in
 `owner-ruling-queue.ts` stays as the legacy leg inside the helper and is not
 re-declared anywhere else. A guard (§3.7) fails the build if a new file selects
 `outcomeType: { in: [...escalate...] }` outside the helper.
