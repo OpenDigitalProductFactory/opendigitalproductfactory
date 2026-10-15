@@ -38,6 +38,9 @@ import {
   type ResolvedMcpToken,
 } from "@/lib/auth/mcp-api-token";
 import { deriveCallerClient } from "@/lib/mcp/caller-client";
+import { observeConnection } from "@/lib/agent-toolchain/connection-observation";
+import { toolchainNoticeFor } from "@/lib/agent-toolchain/toolchain-notice";
+import { refuseBelowToolchainFloor } from "@/lib/mcp/toolchain-floor";
 import { connectionDelegationFor } from "@/lib/mcp/connection-delegation";
 import { normalizeTokenScope, requiredTokenScopeForTool, tokenAdmitsTool, tokenScopeSatisfies } from "@/lib/mcp/token-tool-scope";
 import { buildMcpInitializeResult } from "@/lib/mcp/initialize";
@@ -45,7 +48,9 @@ import { oauthSetupRequiredResult } from "@/lib/auth/oauth-setup-required";
 import { resolveResourceOrigin } from "@/lib/auth/oauth-metadata";
 import { buildStepUpChallenge, type StepUpContext } from "@/lib/auth/oauth-step-up";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
-import { PLATFORM_TOOLS, resolveAnnotations, type ToolDefinition } from "@/lib/mcp-tools";
+import { PLATFORM_TOOLS, resolveAnnotations } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import { isToolAllowedDuringQuiescence, QUIESCENCE_SAFE_SIDE_EFFECT_TOOLS } from "@/lib/mcp/quiescence-safe-tools";
 import { submitRemoteCoworkerTask } from "@/lib/mcp-task-submit";
 import { getQuiescenceConfig } from "@/lib/self-upgrade/quiescence";
 import { getToolGrantMapping, expandGrants, isToolAllowedByGrants } from "@/lib/tak/agent-grants";
@@ -56,6 +61,7 @@ import {
 } from "@/lib/mcp/listing-authority-resolver";
 import { currentUserContext } from "@/lib/govern/current-user-context";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
+import { resolveToolResultProvenance, untrustedResultLabel } from "@/lib/tak/tool-result-provenance";
 import {
   resolveEffectiveTierForAuthSource,
   selectToolsForListing,
@@ -79,9 +85,13 @@ import {
   type ResolvedMcpTransportAuth as ResolvedAuth,
 } from "@/lib/mcp/transport-auth";
 import { openMcpTaskStatusStream } from "@/lib/mcp/task-status-stream";
-import { LOAD_TOOLS_LISTED, buildLoadToolsResult, buildLoadToolsStatus, buildUnknownToolResult, classifyLoadToolsNoMatch, loadToolsSseResponse } from "@/lib/mcp/load-tools";
+import { LOAD_TOOLS_LISTED, buildLoadToolsResult, buildLoadToolsStatus, resolveLoadToolsRequest, buildUnknownToolResult, classifyLoadToolsNoMatch, loadToolsSseResponse } from "@/lib/mcp/load-tools";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
-import { prisma } from "@dpf/db";
+import { invisibleRemovalNotice, looksLikeSmuggling, sanitizeUntrustedValue } from "@dpf/validators";
+import { sanitizeForLog } from "@/lib/security/safe-log";
+import { workroomBindingRefusal } from "@/lib/auth/workroom-session-token";
+// GPP Phase 2 PR-C: a replayed permit handle rides in tools/call params._meta.
+import { permitResultMeta, presentedPermitHandle } from "@/lib/gpp/permit-carriage";
 
 // Protocol revisions: the governed N/N-1 window + grandfathered set, declared
 // ONLY in @/lib/mcp/protocol-versions.ts (W12, BI-EE64547B; guard-enforced).
@@ -180,20 +190,6 @@ function tokenScopesAllowTool(tool: ToolDefinition, token: ResolvedMcpToken, gra
   return tokenAdmitsTool(tool, grantMap[tool.name], token);
 }
 
-const QUIESCENCE_SAFE_SIDE_EFFECT_TOOLS = new Set([
-  // Releasing a lease is cleanup, and is what prevents quiescence-blocked
-  // local-CI evidence writes from leaking scarce nonprod environments.
-  "release_nonprod_environment_lease",
-  // Renewing keeps a gate that is already running alive through a drain, so
-  // its verdict is not lost to the lease lapsing mid-build (2026-09-24).
-  "renew_nonprod_environment_lease",
-]);
-
-function isToolAllowedDuringQuiescence(toolName: string, tool: ToolDefinition | undefined): boolean {
-  if (toolName === "get_quiescence_status") return true;
-  if (tool?.sideEffect === false) return true;
-  return QUIESCENCE_SAFE_SIDE_EFFECT_TOOLS.has(toolName);
-}
 
 async function quiescenceRefusalResult(
   toolName: string,
@@ -313,9 +309,10 @@ async function handleLoadTools(
   const toolByName = new Map(PLATFORM_TOOLS.map((tool) => [tool.name, tool]));
   const knownNames = new Set(toolByName.keys());
   const authorizedNames = new Set(authorized.map((tool) => tool.name));
-  const selected = resolveLoadToolsSelection(authorized, args);
+  const discovery = resolveLoadToolsRequest(args, granted);
+  const selected = resolveLoadToolsSelection(authorized, { names: discovery.names });
   // Judge against what selection drew from (agent-filtered), not the token-only list.
-  const noMatch = classifyLoadToolsNoMatch(args, knownNames, authorizedNames, new Set(selected.map((t) => t.name)));
+  const noMatch = classifyLoadToolsNoMatch(discovery, knownNames, authorizedNames, new Set(selected.map((t) => t.name)));
   // W12 (BI-EE64547B): internal session-JWT calls are per-call stateless — the
   // result still carries the selected definitions inline, but no per-token
   // session row is written (internal lists are full-tier; nothing to append).
@@ -323,7 +320,7 @@ async function handleLoadTools(
     token.source === "session-jwt"
       ? mergeLoadedToolNames([], selected.map((t) => t.name))
       : await loadToolsForSession(token.tokenId, selected.map((t) => t.name));
-  const status = buildLoadToolsStatus(args, {
+  const status = buildLoadToolsStatus(discovery, {
     knownNames, authorizedNames, loadedToolNames, authority, isAllowedByGrants: isToolAllowedByGrants,
     tokenGrants: (name) => tokenScopesAllowTool(toolByName.get(name)!, token, grantMap),
     roleAllows: (name) => roleAllowsTool(toolByName.get(name)!, userContext),
@@ -413,6 +410,7 @@ async function handleTasksSubmit(
 }
 
 async function handleInitialize(
+  request: Request,
   id: JsonRpcId,
   token: ResolvedAuth,
   params?: Record<string, unknown>,
@@ -421,6 +419,7 @@ async function handleInitialize(
     id,
     await buildMcpInitializeResult({
       params,
+      toolchainNotice: await toolchainNoticeFor(request, token),
       authority: {
         scope: normalizeTokenScope(token),
         scopes: token.scopes,
@@ -480,6 +479,7 @@ async function handleToolsCall(
   }
   const toolName = canonicalWorkroomToolName(params["name"]);
   const args = (params["arguments"] as Record<string, unknown> | undefined) ?? {};
+  const permitHandle = presentedPermitHandle(params["_meta"]);
 
   // load_tools is a transport-level meta-tool, not a governed domain tool:
   // handle it inline (it manages per-token discovery state) and never route it
@@ -560,8 +560,10 @@ async function handleToolsCall(
     return jsonRpcOk(id, quiescenceRefusal);
   }
 
+  const roomRefusal = workroomBindingRefusal(token, args); // BI-05715F4C
+  if (roomRefusal) return jsonRpcOk(id, roomRefusal);
   const userContext = await loadUserContext(token.userId);
-  const result = await governedExecuteTool({
+  const executed = await governedExecuteTool({
     toolName,
     rawParams: args,
     userId: token.userId,
@@ -580,9 +582,28 @@ async function handleToolsCall(
       authSource: token.source,
       tokenScope, tokenGrantScopes: expandedScopes,
       ...connectionDelegationFor(token),
+      ...(permitHandle ? { permitHandle } : {}),
     },
     source: token.source === "session-jwt" ? "internal-mcp-session" : "external-jsonrpc",
   });
+
+  // External CLIs feed this result straight into their model, so hidden
+  // Unicode is removed here exactly as the native loop removes it in
+  // clampToolResultForModel (BI-7AD0DA3D). The audited ToolResult stays whole.
+  const cleaned = sanitizeUntrustedValue({ message: executed.message, error: executed.error, data: executed.data });
+  const smugglingSuspected = looksLikeSmuggling(cleaned);
+  if (smugglingSuspected) {
+    console.warn("[mcp/v1] hidden-unicode payload removed from tool result tool=%s removed=%d", sanitizeForLog(toolName), cleaned.total);
+  }
+  // Spotlighting label (BI-1045525F): untrusted provenance is named in the text.
+  const label = untrustedResultLabel(resolveToolResultProvenance(toolName, PLATFORM_TOOLS));
+  const prefix = [label, smugglingSuspected ? invisibleRemovalNotice(cleaned) : ""].filter(Boolean).join("\n");
+  const result = {
+    ...executed,
+    message: prefix ? `${prefix}\n${cleaned.value.message ?? ""}` : cleaned.value.message,
+    error: cleaned.value.error,
+    data: cleaned.value.data,
+  };
 
   // Convert ToolResult into MCP tools/call response shape:
   //   - content[]: a single text block carrying a JSON serialization of the
@@ -620,7 +641,8 @@ async function handleToolsCall(
       dataForText = marker;
     }
   }
-  const text = JSON.stringify(
+  // BI-05715F4C: Claude's --permission-prompt-tool parses the text as the bare {behavior, ...} answer.
+  const text = toolName === "approve_runtime_permission" ? JSON.stringify(dataForText ?? {}) : JSON.stringify(
     {
       success: result.success,
       message: result.message,
@@ -638,6 +660,8 @@ async function handleToolsCall(
   if (structured !== undefined) {
     responseBody["structuredContent"] = structured;
   }
+  const meta = permitResultMeta({ data: result.data, governance: executed.governance }); // GPP PR-G, additive
+  if (meta) responseBody["_meta"] = meta;
   return jsonRpcOk(id, responseBody);
 }
 
@@ -660,9 +684,11 @@ export async function POST(request: Request): Promise<Response> {
       "request must have jsonrpc='2.0' and method string",
     );
   }
-
+  observeConnection({ request, token, method: body.method, params: body.params });
   // Notifications (no id) — return 202 Accepted, no body, per spec.
   const isNotification = body.id === undefined;
+  const floorRefusal = isNotification ? null : await refuseBelowToolchainFloor(request, token, body); // BI-DFC0270C
+  if (floorRefusal) return floorRefusal;
 
   // MCP 2025-11-25 protocol negotiation: a non-initialize request MAY carry an
   // MCP-Protocol-Version header. When present it must be a version we speak;
@@ -689,7 +715,7 @@ export async function POST(request: Request): Promise<Response> {
         if (isNotification) {
           return new Response(null, { status: 202 });
         }
-        return await handleInitialize(body.id ?? null, token, body.params);
+        return await handleInitialize(request, body.id ?? null, token, body.params);
 
       case "notifications/initialized":
         return new Response(null, { status: 202 });

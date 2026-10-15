@@ -184,7 +184,7 @@ describe("reconcileCodeGraph", () => {
   });
 
   it("projects CodeSymbol nodes and DEFINES edges from extracted facts", async () => {
-    // Intent preserved from the Neo4j era (which batched via UNWIND): every
+    // Intent (from the original batched projection): every
     // extracted symbol becomes a CodeSymbol node and each symbol its file
     // defines becomes a DEFINES edge. The Postgres mirror UPSERTs one row per
     // fact rather than one batched statement per label, so we assert on the

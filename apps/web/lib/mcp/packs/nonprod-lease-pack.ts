@@ -11,11 +11,12 @@
 // Definitions moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { LocalCiHostPressure } from "@/lib/nonprod/local-ci-pool-policy";
 import type { HostResourceLeaseEvidence } from "@/lib/nonprod/environment-lease-pool-policy";
 import { HEAVY_RESOURCE_CLASSES, isHeavyResourceClass } from "@/lib/nonprod/host-resource-policy";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { isRecord } from "@/lib/shared/coerce";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 // Per-key trimmed string coercer — a copy of the inline helper the former switch
@@ -25,11 +26,7 @@ function stringValueFor(params: Record<string, unknown>) {
   return (key: string) => (typeof params[key] === "string" ? String(params[key]).trim() : "");
 }
 
-function objectValue(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : undefined;
-}
+const objectValue = (value: unknown) => isRecord(value) ? value : undefined;
 
 function positivePorts(value: unknown): number[] {
   return Array.isArray(value)
@@ -162,8 +159,8 @@ const definitions: ToolDefinition[] = [
     description:
       "Request admission to a governed shared nonproduction environment for preview, UX verification, or local integration. " +
       "Reusing claimKey returns the same durable queue entry (idempotent wait). " +
-      "Do not claim in a tight loop without a stable claimKey. " +
-      "When queued, terminate the polling runner and resume from the returned TaskRun — do not renew or open a second claim.",
+      "Do not poll this tool. When queued, stop and resume from the returned TaskRun — do not renew or open a second claim. " +
+      "lease_terminal means this claimKey is finished (released, cancelled, or expired): do not retry it (retryable: false). A new admission needs a new claimKey, and only when the work is still wanted.",
     inputSchema: {
       type: "object",
       properties: {
@@ -217,6 +214,7 @@ const definitions: ToolDefinition[] = [
           enum: [1],
           description: "Versioned local-CI slot capability. Omit for legacy singleton-only admission.",
         },
+        productionBuild: { type: "string", enum: ["local", "delegated"], description: "\"delegated\": the merge queue's required build owns the production build, so admission reserves no builder memory (BI-3A14308C). Omit for \"local\"." },
         hostPressure: {
           ...hostPressureSchema,
           description: "Recent fail-closed host observation used only to decide whether slot-1 may admit.",
@@ -270,6 +268,8 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
     // changes identity or authority → consult-gated (TAK §8.4.1).
     consequence: "authority",
+    consequenceForCall: async (call) =>
+      (await import("@/lib/nonprod/lease-cleanup-consequence")).leaseCleanupConsequenceForCall(call),
     buildPhases: ["ideate", "plan", "build", "review", "ship"],
   },
   {
@@ -278,7 +278,7 @@ const definitions: ToolDefinition[] = [
       "Heartbeat an active shared nonproduction environment lease, optionally binding its assigned slot before host mutation. " +
       "Only the owning session can renew, and a lapsed lease is not revivable. " +
       "Renew on a human-scale cadence (on gate stages / ~minutes), not every few seconds. " +
-      "On owner mismatch or not_found: stop retrying; re-claim with claimKey if work continues.",
+      "On owner mismatch, not_found or lease_terminal: stop; never automatically re-claim or scan replacement keys. A new explicitly wanted admission needs a new claimKey; queued claims resume through their durable TaskRun.",
     inputSchema: {
       type: "object",
       properties: {
@@ -541,6 +541,7 @@ async function claimNonprodEnvironmentLeaseHandler(
     taskRunId: stringValue("taskRunId") || undefined,
     cleanupCommand: stringValue("cleanupCommand") || undefined,
     slotManifestVersion: slotManifestVersion as 1 | undefined,
+    productionBuild: stringValue("productionBuild") === "delegated" ? "delegated" : undefined,
     hostPressure: hostPressure as LocalCiHostPressure | undefined,
     resourceClass: isHeavyResourceClass(resourceClass) ? resourceClass : undefined,
     expectedMemoryBytes,
@@ -550,7 +551,7 @@ async function claimNonprodEnvironmentLeaseHandler(
   }).catch((error: unknown) => {
     // BI-D35B85BF: a resume that would cancel a running or foreign lease is refused, not thrown.
     const code = getErrorMessage(error);
-    if (code === "nonprod_resume_lease_active" || code === "nonprod_resume_not_owner") return { refused: code } as const;
+    if (/^nonprod_resume_(?:lease_active|not_owner|identity_mismatch|lease_expired)$/.test(code)) return { refused: code } as const;
     throw error;
   });
   if ("refused" in result) {
@@ -604,8 +605,8 @@ async function claimNonprodEnvironmentLeaseHandler(
       success: false,
       entityId: result.lease.leaseId,
       error: "lease_terminal",
-      message: `Nonproduction lease request is already ${result.reason}; create a new claimKey to request admission again.`,
-      data: { lease: toolLease, reason: result.reason, ...common },
+      message: `Nonproduction lease request is already ${result.reason}. Do not call again with this claimKey (retryable: false). A new admission needs a new claimKey, and only when the work is still wanted.`,
+      data: { lease: toolLease, reason: result.reason, retryable: false, ...common },
     };
   }
   if (result.status === "subscribed") {
@@ -708,9 +709,10 @@ async function releaseNonprodEnvironmentLeaseHandler(params: Record<string, unkn
         data: { retryable: false, leaseId },
       };
     }
+    const errorCode = detail === "nonprod_lease_not_owner" ? detail : "release_failed";
     return {
       success: false,
-      error: "release_failed",
+      error: errorCode,
       message: `Could not release lease ${leaseId}: ${detail}. Do not blind-retry (retryable: false).`,
       data: { retryable: false, leaseId },
     };

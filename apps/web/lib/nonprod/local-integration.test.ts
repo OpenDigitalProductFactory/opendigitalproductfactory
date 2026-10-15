@@ -8,7 +8,7 @@ vi.mock("@/lib/actions/external-evidence", () => ({
   recordExternalEvidence: mockRecordExternalEvidence,
 }));
 
-import { recordLocalIntegrationResult } from "./local-integration";
+import { recordLocalIntegrationResult, TEST_STUB_EVIDENCE_REFUSED } from "./local-integration";
 
 describe("recordLocalIntegrationResult", () => {
   const platformConfig = {
@@ -25,12 +25,44 @@ describe("recordLocalIntegrationResult", () => {
     environmentLease.updateMany.mockResolvedValue({ count: 1 });
   });
 
+  it("replays an acknowledged result without creating a second evidence row", async () => {
+    const gateKey = "a".repeat(64);
+    const evidence = { sha: "b".repeat(40), content: { synthesizedTreeSha: "c".repeat(40) } };
+    const input = {
+      actorUserId: "user-1", provider: "codex" as const, externalSessionId: "session-1",
+      routeContext: "/build", candidateBranch: "fix/recovery", mode: "single-branch" as const,
+      status: "passed" as const, summary: "Passed", gateKey, leaseId: "NPEL-REPLAY", evidence,
+    };
+    environmentLease.findUnique.mockResolvedValue({
+      leaseId: input.leaseId, claimKey: `gate:${gateKey}`, ownerSessionId: input.externalSessionId, ownerProvider: input.provider,
+      status: "released", evidenceRecordId: "already-recorded",
+    });
+    const prior = { id: "already-recorded", actorUserId: input.actorUserId,
+      provider: input.provider, target: input.candidateBranch, operationType: "local_integration_ci",
+      details: { externalSessionId: input.externalSessionId, gateKey, leaseId: input.leaseId,
+        status: input.status, evidence } };
+    const findEvidence = vi.fn().mockResolvedValue(prior);
+    const result = await recordLocalIntegrationResult(input, { platformConfig, environmentLease, findEvidence });
+    expect(result.id).toBe(prior.id);
+    expect(mockRecordExternalEvidence).not.toHaveBeenCalled();
+    await expect(recordLocalIntegrationResult({ ...input, actorUserId: "other" }, {
+      platformConfig, environmentLease, findEvidence,
+    })).rejects.toThrow(/conflict/);
+    await expect(recordLocalIntegrationResult({ ...input, provider: "claude" }, {
+      platformConfig, environmentLease, findEvidence,
+    })).rejects.toThrow(/owner/);
+    await expect(recordLocalIntegrationResult({ ...input, evidence: { ...evidence, sha: "d".repeat(40) } }, {
+      platformConfig, environmentLease, findEvidence,
+    })).rejects.toThrow(/conflict/);
+  });
+
   it("binds immutable gate evidence only when the recording session owns the canonical lease", async () => {
     const gateKey = "a".repeat(64);
     environmentLease.findUnique.mockResolvedValue({
       leaseId: "NPEL-GATE",
       claimKey: `gate:${gateKey}`,
       ownerSessionId: "codex-session-1",
+      ownerProvider: "codex",
       status: "active",
       evidenceRecordId: null,
     });
@@ -57,10 +89,116 @@ describe("recordLocalIntegrationResult", () => {
         leaseId: "NPEL-GATE",
         claimKey: `gate:${gateKey}`,
         ownerSessionId: "codex-session-1",
+        ownerProvider: "codex",
         evidenceRecordId: null,
       },
       data: { evidenceRecordId: "external-1" },
     });
+  });
+
+  it("AC-2: a leased gate result folds its builder peak into the calibration row", async () => {
+    const gateKey = "c".repeat(64);
+    environmentLease.findUnique.mockResolvedValue({
+      leaseId: "NPEL-PEAK",
+      claimKey: `gate:${gateKey}`,
+      ownerSessionId: "claude-session-1",
+      ownerProvider: "claude",
+      status: "active",
+      evidenceRecordId: null,
+    });
+    const builderCalibration = {
+      findUnique: vi.fn().mockResolvedValue(null),
+      updateMany: vi.fn(),
+      create: vi.fn().mockResolvedValue({}),
+    };
+
+    await recordLocalIntegrationResult({
+      actorUserId: "user-1",
+      provider: "claude",
+      externalSessionId: "claude-session-1",
+      routeContext: "/build",
+      candidateBranch: "feat/measured-reserve",
+      mode: "single-branch",
+      status: "passed",
+      summary: "Merged-code gate passed.",
+      gateKey,
+      leaseId: "NPEL-PEAK",
+      evidence: {
+        controlPlane: {
+          builderMemory: {
+            bi: "BI-D3BF53A9",
+            status: "measured",
+            peakBytes: 7 * 1024 ** 3,
+            peakScope: "this-build",
+            memoryLimitBytes: 16 * 1024 ** 3,
+            oomKills: 0,
+          },
+        },
+      },
+    }, { platformConfig, environmentLease, builderCalibration });
+
+    expect(builderCalibration.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        key: "local_ci.builder_memory_calibration",
+        value: expect.objectContaining({
+          samples: [expect.objectContaining({ peakBytes: 7 * 1024 ** 3, oomKills: 0 })],
+        }),
+      }),
+    });
+    expect(mockRecordExternalEvidence).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.objectContaining({ builderMemoryCalibration: "recorded" }),
+    }));
+  });
+
+  it("AC-2: an unleased result never feeds the calibration, and a store failure never blocks recording", async () => {
+    const builderCalibration = {
+      findUnique: vi.fn().mockRejectedValue(new Error("db down")),
+      updateMany: vi.fn(),
+      create: vi.fn(),
+    };
+    const evidence = {
+      controlPlane: {
+        builderMemory: { status: "measured", peakBytes: 7 * 1024 ** 3, oomKills: 0, memoryLimitBytes: 16 * 1024 ** 3 },
+      },
+    };
+    await recordLocalIntegrationResult({
+      actorUserId: "user-1",
+      provider: "claude",
+      externalSessionId: "claude-session-1",
+      routeContext: "/build",
+      candidateBranch: "feat/measured-reserve",
+      mode: "single-branch",
+      status: "passed",
+      summary: "Unleased.",
+      evidence,
+    }, { platformConfig, builderCalibration });
+    expect(builderCalibration.findUnique).not.toHaveBeenCalled();
+
+    const gateKey = "d".repeat(64);
+    environmentLease.findUnique.mockResolvedValue({
+      leaseId: "NPEL-DOWN",
+      claimKey: `gate:${gateKey}`,
+      ownerSessionId: "claude-session-1",
+      ownerProvider: "claude",
+      status: "active",
+      evidenceRecordId: null,
+    });
+    await expect(recordLocalIntegrationResult({
+      actorUserId: "user-1",
+      provider: "claude",
+      externalSessionId: "claude-session-1",
+      routeContext: "/build",
+      candidateBranch: "feat/measured-reserve",
+      mode: "single-branch",
+      status: "passed",
+      summary: "Store down.",
+      gateKey,
+      leaseId: "NPEL-DOWN",
+      evidence,
+    }, { platformConfig, environmentLease, builderCalibration })).resolves.toBeDefined();
+    expect(mockRecordExternalEvidence).toHaveBeenLastCalledWith(expect.objectContaining({
+      details: expect.objectContaining({ builderMemoryCalibration: "error" }),
+    }));
   });
 
   it("refuses a subscriber attempt to record the canonical executor result", async () => {
@@ -68,6 +206,7 @@ describe("recordLocalIntegrationResult", () => {
       leaseId: "NPEL-GATE",
       claimKey: `gate:${"a".repeat(64)}`,
       ownerSessionId: "winner-session",
+      ownerProvider: "codex",
       status: "active",
       evidenceRecordId: null,
     });
@@ -118,6 +257,7 @@ describe("recordLocalIntegrationResult", () => {
         mode: "single-branch",
         status: "passed",
         capacityCircuitBreaker: "not-applicable",
+        builderMemoryCalibration: "not-leased",
         evidence: { commands: ["pnpm --filter web typecheck"] },
       },
     });
@@ -314,5 +454,126 @@ describe("recordLocalIntegrationResult — evidence output offload (BI-39AAE9B8)
     expect(writeEvidenceBlob).not.toHaveBeenCalled();
     const call = mockRecordExternalEvidence.mock.calls.at(-1)?.[0] as { details: { evidence: unknown } };
     expect(call.details.evidence).toBe(evidence);
+  });
+});
+
+// BI-F5344F65. A DPF_ALLOW_LOCAL_CI_STUB run builds nothing, yet reports
+// status "passed" under a real lease. It marks its payload testStub, and the
+// portal must record none of it: no evidence row a PR could cite, no pool-policy
+// change and no builder calibration.
+describe("recordLocalIntegrationResult refuses test-stub evidence", () => {
+  const platformConfig = { findUnique: vi.fn(), updateMany: vi.fn() };
+  const environmentLease = { findUnique: vi.fn(), updateMany: vi.fn() };
+  const builderCalibration = { findUnique: vi.fn(), updateMany: vi.fn(), create: vi.fn() };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  for (const status of ["passed", "failed", "blocked_control_plane_starvation"] as const) {
+    it(`refuses a ${status} stub result before it writes anything`, async () => {
+      const gateKey = "e".repeat(64);
+      environmentLease.findUnique.mockResolvedValue({
+        leaseId: "NPEL-STUB",
+        claimKey: `gate:${gateKey}`,
+        ownerSessionId: "claude-session-stub",
+        status: "active",
+        evidenceRecordId: null,
+      });
+
+      await expect(recordLocalIntegrationResult({
+        actorUserId: "user-1",
+        provider: "claude",
+        externalSessionId: "claude-session-stub",
+        routeContext: "/build",
+        candidateBranch: "fix/admitted-owner-recovery",
+        mode: "single-branch",
+        status,
+        summary: "local-CI lease gate passed.",
+        gateKey,
+        leaseId: "NPEL-STUB",
+        evidence: {
+          testStub: true,
+          gatePassed: status === "passed",
+          buildCommand: "sandbox checkout/build stub",
+          sha: "f".repeat(40),
+          headTreeHash: "a".repeat(40),
+        },
+      }, { platformConfig, environmentLease, builderCalibration })).rejects.toMatchObject({
+        code: TEST_STUB_EVIDENCE_REFUSED,
+        message: expect.stringMatching(/DPF_ALLOW_LOCAL_CI_STUB/),
+      });
+
+      expect(mockRecordExternalEvidence).not.toHaveBeenCalled();
+      expect(platformConfig.findUnique).not.toHaveBeenCalled();
+      expect(platformConfig.updateMany).not.toHaveBeenCalled();
+      expect(builderCalibration.findUnique).not.toHaveBeenCalled();
+      expect(environmentLease.updateMany).not.toHaveBeenCalled();
+    });
+  }
+});
+
+// BI-C9912C22 AC-1: WC-BFDF763B was adopted before its first sync, so its
+// headSha was still null when pregate passed for 4f51f57e9. The writer demanded
+// headSha equality and stored the pass with workCapsuleId NULL, so no failure
+// analysis for that room could ever cite it.
+describe("local-CI evidence attribution to an adopted Workroom (BI-C9912C22)", () => {
+  const gateKey = "d".repeat(64);
+  const sha = "4f51f57e96397ee09a3cced5098491da720d7891";
+  const platformConfig = { findUnique: vi.fn(), updateMany: vi.fn() };
+  const environmentLease = { findUnique: vi.fn(), updateMany: vi.fn() };
+  const builderCalibration = { findUnique: vi.fn().mockResolvedValue(null), updateMany: vi.fn(), create: vi.fn().mockResolvedValue({}) };
+  const record = (workroom: { findMany: ReturnType<typeof vi.fn> }) => recordLocalIntegrationResult({
+    actorUserId: "user-1",
+    provider: "claude",
+    externalSessionId: "cab18f6e-session",
+    routeContext: "/build",
+    candidateBranch: "fix/external-agents-decision-record-grant",
+    mode: "single-branch",
+    status: "passed",
+    summary: "local-CI lease gate passed.",
+    gateKey,
+    leaseId: "NPEL-ADOPTED",
+    evidence: { gatePassed: true, sha, headTreeHash: "e".repeat(40) },
+  }, { platformConfig, environmentLease, builderCalibration, workroom } as never);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    environmentLease.findUnique.mockResolvedValue({
+      leaseId: "NPEL-ADOPTED", claimKey: `gate:${gateKey}`, ownerSessionId: "cab18f6e-session", ownerProvider: "claude",
+      status: "active", evidenceRecordId: null,
+    });
+    environmentLease.updateMany.mockResolvedValue({ count: 1 });
+  });
+
+  it("links the pass to the session's adopted room on the branch even before the room records its head", async () => {
+    const workroom = { findMany: vi.fn().mockResolvedValue([{ id: "room-adopted", headSha: null }]) };
+    await record(workroom);
+    expect(workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { headBranch: "fix/external-agents-decision-record-grant", executorRef: "cab18f6e-session", archivedAt: null },
+    }));
+    expect(mockRecordExternalEvidence).toHaveBeenCalledWith(expect.objectContaining({ workCapsuleId: "room-adopted" }));
+  });
+
+  it("links the pass when the room's recorded head is an older commit on the same branch", async () => {
+    const workroom = { findMany: vi.fn().mockResolvedValue([{ id: "room-stale", headSha: "1".repeat(40) }]) };
+    await record(workroom);
+    expect(mockRecordExternalEvidence).toHaveBeenCalledWith(expect.objectContaining({ workCapsuleId: "room-stale" }));
+  });
+
+  it("prefers the room whose head is exactly the gated commit", async () => {
+    const workroom = { findMany: vi.fn().mockResolvedValue([
+      { id: "room-other", headSha: null }, { id: "room-exact", headSha: sha },
+    ]) };
+    await record(workroom);
+    expect(mockRecordExternalEvidence).toHaveBeenCalledWith(expect.objectContaining({ workCapsuleId: "room-exact" }));
+  });
+
+  it("leaves the pass unlinked rather than guessing between two inexact rooms", async () => {
+    const workroom = { findMany: vi.fn().mockResolvedValue([
+      { id: "room-a", headSha: null }, { id: "room-b", headSha: "1".repeat(40) },
+    ]) };
+    await record(workroom);
+    expect(mockRecordExternalEvidence).toHaveBeenCalledWith(expect.objectContaining({ workCapsuleId: undefined }));
   });
 });

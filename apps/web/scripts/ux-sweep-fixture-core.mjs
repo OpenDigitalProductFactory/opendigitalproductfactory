@@ -191,6 +191,57 @@ export async function convergeUxSweepFixture(db, now = new Date(), { dbNull } = 
 }
 
 /**
+ * Populated CI estate, before the authenticated shell's first-run host scan.
+ * Constant keys make both fixture passes idempotent. Never replace real runs
+ * or delete observations. Canonical persistence owns the atomic run/estate
+ * transaction and its graph projection; do not invent row-only substitutes.
+ */
+export function uxSweepEstateFacts() {
+  const items = [
+    ["host", "Fixture machine", "hostname:ux-sweep-machine", { hostname: "ux-sweep-machine", platform: "linux" }],
+    ["host", "LAN Host 10.1.0.10", "arp:02AABBCCDD10", { address: "10.1.0.10", mac: "02:AA:BB:CC:DD:10", osiLayer: 3, osiLayerName: "network", networkAddress: "10.1.0.10", protocolFamily: "ipv4" }],
+    ["host", "LAN Host 172.18.0.2", "arp:02AABBCCDD20", { address: "172.18.0.2", mac: "02:AA:BB:CC:DD:20", osiLayer: 3, osiLayerName: "network", networkAddress: "172.18.0.2", protocolFamily: "ipv4" }],
+    ["gateway", "Gateway 10.1.0.1", "gateway:10.1.0.1", { address: "10.1.0.1" }],
+    ["subnet", "10.1.0.0/24", "subnet:10.1.0.0/24", { networkAddress: "10.1.0.0/24" }],
+    ["network_interface", "Interface 10.1.0.10", "nic:000D3A000010", { address: "10.1.0.10", mac: "00:0D:3A:00:00:10" }],
+    ["docker_runtime", "Docker", "socket:/var/run/docker.sock", { socketPath: "/var/run/docker.sock", serverVersion: "26.0.0" }],
+    ["docker_container", "Fixture portal", "container:ux-sweep-portal", { containerName: "ux-sweep-portal" }],
+    ["gateway", "Docker GW fixture (172.18.0.1)", "docker-gw:fixture", { address: "172.18.0.1" }],
+    ["gateway", "Docker GW bridge (172.17.0.1)", "docker-gw:bridge", { address: "172.17.0.1" }],
+  ].map(([itemType, name, externalRef, attributes]) => ({
+    sourceKind: "dpf_bootstrap", itemType, name, externalRef, attributes,
+  }));
+  const relationships = [
+    [1, 4, "MEMBER_OF"], [3, 4, "MEMBER_OF"], [5, 4, "MEMBER_OF"],
+    [0, 5, "HAS_INTERFACE"], [6, 7, "HOSTS"],
+  ].map(([from, to, relationshipType]) => ({
+    sourceKind: "dpf_bootstrap", relationshipType,
+    fromExternalRef: items[from].externalRef, toExternalRef: items[to].externalRef,
+  }));
+  return { items, relationships };
+}
+
+export async function convergeUxSweepEstate(db, now, persist) {
+  const real = await db.discoveryRun.findFirst({
+    where: { sourceSlug: { not: "ux-route-sweep" } }, select: { id: true },
+  });
+  if (real) return null;
+  const existing = await db.discoveryRun.findFirst({
+    where: { sourceSlug: "ux-route-sweep", runKey: "DISC-UX-SWEEP" },
+    select: { id: true },
+  });
+  if (existing) return { runId: existing.id, reused: true };
+  if (typeof persist !== "function") throw new Error("Canonical estate persistence is required");
+  // The normal discovery transaction owns attribution, membership, quality
+  // issues and graph-mirror projection. A row-only sentinel cannot stand in
+  // for the read model the browser actually renders.
+  const result = await persist(uxSweepEstateFacts(), {
+    runKey: "DISC-UX-SWEEP", sourceSlug: "ux-route-sweep", trigger: "fixture",
+  });
+  return { runId: result.runId, reused: false };
+}
+
+/**
  * Idempotent: one storefront on the seeded platform organisation, one
  * animals-available section, four listed animals with stable refs. Returns
  * null (and provisions nothing) when the seed carries no pet-rescue archetype,

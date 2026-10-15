@@ -66,6 +66,11 @@ if ! command -v docker >/dev/null 2>&1; then
   fail "Docker is not installed. Install Docker Desktop (macOS) or Docker Engine (Linux)."
 fi
 ok "Docker found: $(docker --version | cut -d' ' -f3 | tr -d ',')"
+if [ "$DPF_PLATFORM" = "darwin" ]; then
+  # BI-75ECED42: Docker Desktop restarts the whole engine when it installs an
+  # update of its own, killing a running upgrade or build mid-way.
+  warn "Docker Desktop: turn off automatic updates for an operated install (Settings > Software updates). An update restarts every container, including mid-upgrade."
+fi
 
 if ! command -v node >/dev/null 2>&1; then
   fail "Node.js is not installed. Install Node 20+ from https://nodejs.org/"
@@ -141,6 +146,34 @@ fi
 for _env_file in apps/web/.env.local .env; do
   if [ "$(dpf_env_ensure_secret_hex DPF_GIT_WEBHOOK_SECRET "$_env_file" 32)" != "kept" ]; then
     ok "Generated DPF_GIT_WEBHOOK_SECRET in $_env_file"
+  fi
+done
+
+# GPP permit signing key (BI-8541D491): same rules and same two files as the
+# webhook secret; each portal signs its own permits. Never printed.
+for _env_file in apps/web/.env.local .env; do
+  if [ "$(dpf_env_ensure_secret_hex DPF_GPP_PERMIT_SECRET "$_env_file" 32)" != "kept" ]; then
+    ok "Generated DPF_GPP_PERMIT_SECRET in $_env_file"
+  fi
+done
+
+# Reach-link and delegation-receipt signing keys (BI-F6929F50), and the
+# self-upgrade target-binding and delivery-cursor keys (BI-231A4BC7): same rules
+# and same two files as the permit key, so AUTH_SECRET no longer signs them.
+for _env_file in apps/web/.env.local .env; do
+  for _signing_key in DPF_ATTENTION_REACH_SECRET DPF_DELEGATION_RECEIPT_SECRET DPF_SELF_UPGRADE_TARGET_BINDING_SECRET DPF_DELIVERY_TASK_CURSOR_SECRET; do
+    if [ "$(dpf_env_ensure_secret_hex "$_signing_key" "$_env_file" 32)" != "kept" ]; then
+      ok "Generated $_signing_key in $_env_file"
+    fi
+  done
+done
+
+# Inngest signing and event keys (BI-3267763F): the root .env feeds the compose
+# stack, which refuses to render without them. Generated when missing, a
+# placeholder, or the old public default; never rotated once set.
+for _inngest_key in INNGEST_SIGNING_KEY INNGEST_EVENT_KEY; do
+  if [ "$(dpf_env_ensure_secret_hex "$_inngest_key" .env 32)" != "kept" ]; then
+    ok "Generated ${_inngest_key} in .env"
   fi
 done
 

@@ -6,11 +6,17 @@
 // and annotates every row with its true-liveness verdict plus a summary. Shared
 // by the `list_work_capsules` MCP tool so the handler stays thin.
 
+import type { Prisma } from "@dpf/db";
 import { classifyWorkCapsuleLiveness,
   isDemonstrablyWorking,
   type WorkCapsuleLiveness,
 } from "./liveness";
 import { projectWorkroomRecovery } from "./workroom-recovery-projection";
+import { readBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
+import { projectPrFollowThroughStatus } from "@/lib/build/pr-follow-through";
+import { projectInvocationAttribution, recordedDriveTask } from "./invocation-attribution";
+import { readStoredWorkroomDriveState, projectStoredWorkroomDriveObservation } from "@/lib/work-management/workroom-drive-state";
+import { loadWorkroomDisplayTitles, workroomDisplayTitle, type WorkroomTitleDb } from "./workroom-display-titles.server";
 
 const INVENTORY_SELECT = {
   capsuleId: true,
@@ -40,12 +46,26 @@ const INVENTORY_SELECT = {
   lastSyncedAt: true,
   updatedAt: true,
   featureBuildId: true,
-  taskRun: { select: { taskRunId: true, status: true, updatedAt: true } },
-} as const;
+  workspaceState: true,
+  activities: {
+    orderBy: { recordedAt: "desc" }, take: 1,
+    where: { OR: [
+      { kind: { in: ["concierge-sweep", "embedding-coverage"] } },
+      { kind: "workroom-drive", AND: [
+        { payload: { path: ["action"], equals: "dispatch_agent" } },
+        { payload: { path: ["reason"], equals: "agent_stage" } },
+      ] },
+    ] },
+    select: { kind: true, payload: true },
+  },
+  taskRun: { select: { taskRunId: true, status: true, updatedAt: true, source: true, initiatingAgentId: true, currentAgentId: true, parentTaskRunId: true } },
+} as const satisfies Prisma.WorkroomSelect;
 
 export type InventoryDb = {
+  backlogItem?: WorkroomTitleDb["backlogItem"];
   workroom: { findMany(args: unknown): Promise<any[]> };
   featureBuild: { findMany(args: unknown): Promise<any[]> };
+  scheduledAgentTask?: { findMany(args: unknown): Promise<Array<{ taskId: string; agentId: string }>> };
   nonProductionEnvironmentLease?: { findMany(args: unknown): Promise<any[]> };
 };
 
@@ -73,16 +93,24 @@ export type CapsuleLivenessSummary = {
  */
 export async function loadCapsuleLivenessInventory(
   db: InventoryDb,
-  args: { where: Record<string, unknown>; take: number; compact?: boolean },
+  args: { where: Record<string, unknown>; take: number; compact?: boolean; portalSummary?: boolean },
   now: Date = new Date(),
 ): Promise<{ capsulesAll: Array<Record<string, unknown>>; livenessSummary: CapsuleLivenessSummary }> {
   const rows = await db.workroom.findMany({
     where: args.where,
     orderBy: [{ updatedAt: "desc" }, { capsuleId: "asc" }],
     take: args.take,
-    select: args.compact ? { ...INVENTORY_SELECT, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false } : INVENTORY_SELECT,
+    select: args.portalSummary
+      ? { ...INVENTORY_SELECT, id: true, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false }
+      : args.compact ? { ...INVENTORY_SELECT, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false } : INVENTORY_SELECT,
   });
+  const titles = args.portalSummary ? await loadWorkroomDisplayTitles(db, rows) : null;
 
+  const taskIds = rows.map((row) => recordedDriveTask(row)?.taskId).filter((id): id is string => Boolean(id));
+  const tasks = taskIds.length && db.scheduledAgentTask ? await db.scheduledAgentTask.findMany({
+    where: { taskId: { in: [...new Set(taskIds)] } }, select: { taskId: true, agentId: true },
+  }) : [];
+  const tasksById = new Map(tasks.map((task) => [task.taskId, task]));
   const buildIds = rows.map((r) => r.featureBuildId).filter((id): id is string => Boolean(id));
   const buildsById = new Map<string, { phase: string | null; lastActivityAt: Date | null }>();
   if (buildIds.length > 0) {
@@ -113,19 +141,25 @@ export async function loadCapsuleLivenessInventory(
     || (normalize(row.headBranch) && normalize(lease.branchName) === normalize(row.headBranch)));
 
   const capsulesAll = rows.map((row) => {
+    const drive = args.portalSummary ? readStoredWorkroomDriveState(row.workspaceState) : null;
     const featureBuild = row.featureBuildId ? buildsById.get(row.featureBuildId) ?? null : null;
     const lease = leaseFor(row);
     const verdict = classifyWorkCapsuleLiveness({
       ...row,
       featureBuild,
+      prFollowThrough: prFollowThroughOf(row.workspaceState),
       durableWait: lease ? {
         state: lease.status,
         signaledAt: lease.heartbeatAt ?? lease.admittedAt ?? lease.queuedAt ?? lease.updatedAt ?? null,
       } : null,
     }, now);
-    const { featureBuildId: _omit, taskRun: _taskRun, ...rest } = row;
+    const { featureBuildId: _omit, taskRun: _taskRun, workspaceState: _workspace, activities: _activities, ...rest } = row;
     return {
       ...rest,
+      ...(titles ? { title: workroomDisplayTitle(row, titles) } : {}),
+      ...(drive ? { drive: { action: drive.lastAction, reason: drive.lastReason,
+        attentionRecorded: Boolean(projectStoredWorkroomDriveObservation(row.workspaceState).attentionReason) } } : {}),
+      attribution: projectInvocationAttribution(row, tasksById.get(recordedDriveTask(row)?.taskId ?? "")),
       recovery: projectWorkroomRecovery({ ...row, taskRun: row.taskRun }),
       liveness: verdict.liveness,
       isLive: verdict.isLive,
@@ -174,4 +208,13 @@ export function summarizeCapsuleLiveness(capsulesAll: Array<Record<string, unkno
         maxNoTransitionMs: transitionAges.length ? Math.max(...transitionAges) : null,
       },
   };
+}
+
+/** The room's PR follow-through status as last read from the provider (BI-88341B5D §3.7). */
+function prFollowThroughOf(workspaceState: unknown): { status: NonNullable<ReturnType<typeof projectPrFollowThroughStatus>>; observedAt: Date } | null {
+  const delivery = readBuildPrDeliveryState(workspaceState);
+  const status = projectPrFollowThroughStatus(delivery);
+  if (!status || !delivery?.lastObservedAt) return null;
+  const observedAt = new Date(delivery.lastObservedAt);
+  return Number.isNaN(observedAt.getTime()) ? null : { status, observedAt };
 }

@@ -12,10 +12,6 @@
       "mcp__dpf__propose_improvement"
     ]
   },
-  "enableAllProjectMcpServers": true,
-  "enabledMcpjsonServers": [
-    "dpf"
-  ],
   "hooks": {
     "PreToolUse": [
       {

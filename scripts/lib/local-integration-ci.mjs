@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolveHostCommandInvocation } from "./host-command-invocation.mjs";
-import { EXIT_CHILD_SIGNAL_DEATH } from "./sandbox-freshness.mjs";
+import { EXIT_CANDIDATE_MERGE_CONFLICT, EXIT_CHILD_SIGNAL_DEATH } from "./sandbox-freshness.mjs";
 
 /**
  * The exit code a local-CI STAGE uses to say it ran but reached no verdict
@@ -30,8 +30,38 @@ export function integrationBranchName(candidateBranch, slotKey = "") {
   }`;
 }
 
-export function defaultBuildStrategy(hostPlatform = process.platform) {
+/**
+ * BI-3A14308C (WWMD DI-ED547297DC9F, AGENTS.md section 4: "the heavy build runs
+ * once, in the cloud"). The merge queue's required `pnpm --filter web build`
+ * job is the binding production-build evidence (.github/workflows/ci.yml), so
+ * the local gate delegates that build by default. It no longer reserves
+ * 14+ GiB of builder memory before typecheck and vitest can start, on hosts
+ * where that reserve closed the pool for every session.
+ */
+export const DELEGATED_BUILD_STRATEGY = "merge-queue";
+
+/** The strategy a gate uses when it DOES build locally, per host. */
+export function localBuildStrategy(hostPlatform = process.platform) {
   return hostPlatform === "win32" ? "docker-build" : "host-next";
+}
+
+/**
+ * The build strategy for this gate. Delegated to the merge queue unless the
+ * operator asks for a local build with DPF_LOCAL_CI_BUILD_STRATEGY: `local`
+ * (the host's local strategy), `docker-build` or `host-next`. The strategy is
+ * part of the toolchain fingerprint, so a delegated run never reuses a verdict
+ * minted by a run that built, or the reverse.
+ */
+export function defaultBuildStrategy(hostPlatform = process.platform, env = process.env) {
+  const requested = env?.DPF_LOCAL_CI_BUILD_STRATEGY;
+  if (requested === "local") return localBuildStrategy(hostPlatform);
+  if (requested === "docker-build" || requested === "host-next") return requested;
+  return DELEGATED_BUILD_STRATEGY;
+}
+
+/** Whether a strategy builds nothing locally (the merge queue owns the build). */
+export function buildIsDelegated(buildStrategy) {
+  return buildStrategy === DELEGATED_BUILD_STRATEGY;
 }
 
 export function dockerBuildTag(candidateBranch, slotKey = "") {
@@ -148,6 +178,44 @@ export function createCommandFailureDiagnostics({ invocation, result, elapsedMs 
   };
 }
 
+function isGitMergeCommand(command) {
+  return command[0] === "git" && command[1] === "merge";
+}
+
+/**
+ * BI-FCC1DCB2. After a `git merge` exits non-zero, ask git which paths it left
+ * unmerged. An empty answer means the merge failed for another reason (an
+ * unknown ref, a dirty tree), and the caller keeps git's own status. The probe
+ * reads git's index state, never its prose, so a changed message cannot turn a
+ * conflict back into a product failure.
+ */
+export function readUnmergedPaths({ spawnSyncImpl = spawnSync, env } = {}) {
+  const result = spawnSyncImpl("git", ["diff", "--name-only", "--diff-filter=U", "-z"], {
+    encoding: "utf8",
+    shell: false,
+    env,
+  });
+  if (result?.status !== 0 || typeof result.stdout !== "string") return [];
+  return [...new Set(result.stdout.split("\0").filter(Boolean))].sort();
+}
+
+/**
+ * The merge conflict a metadata record carries, only when that record describes
+ * the run asking (BI-FCC1DCB2). The lease separates two runs on one commit;
+ * the candidate SHA is the fallback when either side predates the lease stamp.
+ * A previous run's paths are worse than none: they would send the author to
+ * resolve files that no longer conflict.
+ */
+export function metadataMergeConflictForRun(metadata, { leaseId = "", sha = "" } = {}) {
+  const conflict = metadata?.execution?.mergeConflict;
+  if (!conflict || !Array.isArray(conflict.paths)) return null;
+  const runLease = String(metadata.runLeaseId || "");
+  if (leaseId && runLease) return runLease === leaseId ? conflict : null;
+  const candidateSha = String(metadata.candidateSha || "");
+  if (sha && candidateSha && candidateSha !== sha) return null;
+  return conflict;
+}
+
 export function executeLocalIntegrationPlan(plan, {
   spawnSyncImpl = spawnSync,
   baseEnv = process.env,
@@ -182,6 +250,28 @@ export function executeLocalIntegrationPlan(plan, {
         elapsedMs: now() - commandStartedAt,
       });
       error(`[local-integration-ci] command-failure ${JSON.stringify(diagnostics)}`);
+      // BI-FCC1DCB2: a merge that stopped on conflicts is a verdict about the
+      // branch, with a remedy the author owns. Name the paths, put the scratch
+      // workspace back on the base, and exit the code that says so.
+      const unmergedPaths = !diagnostics.hostLaunchFailure && isGitMergeCommand(command)
+        ? readUnmergedPaths({ spawnSyncImpl, env: invocation.env })
+        : [];
+      if (unmergedPaths.length > 0) {
+        spawnSyncImpl("git", ["merge", "--abort"], { stdio: "ignore", shell: false, env: invocation.env });
+        const mergeConflict = {
+          mergedRef: command.at(-1),
+          baseRef: plan.baseRef ?? "origin/main",
+          paths: unmergedPaths,
+        };
+        error(`[local-integration-ci] merge-conflict ${JSON.stringify(mergeConflict)}`);
+        return {
+          status: EXIT_CANDIDATE_MERGE_CONFLICT,
+          completedCommandCount,
+          failedCommand: [...command],
+          diagnostics,
+          mergeConflict,
+        };
+      }
       return {
         // BI-1669E08A: a host that could not START the command graded nothing.
         // EXIT_CHILD_SIGNAL_DEATH is the code classifyGateOutcome already reads
@@ -254,6 +344,16 @@ export function createToolchainFingerprint(input) {
 }
 
 export function createProductionArtifactIdentity(input) {
+  if (buildIsDelegated(input.buildStrategy)) {
+    // Nothing was built here. Name who owns the build rather than inventing
+    // an artifact, so no reader mistakes a delegated run for a local build.
+    return {
+      kind: "delegated",
+      integrationTreeSha: input.integrationTreeSha,
+      identity: DELEGATED_BUILD_STRATEGY,
+      locator: ".github/workflows/ci.yml (merge_group production build)",
+    };
+  }
   if (input.buildStrategy === "docker-build") {
     return {
       kind: "docker-image",
@@ -305,7 +405,7 @@ export function collectToolchainFingerprint({ buildStrategy, cwd = process.cwd()
 export function createLocalIntegrationPlan(input) {
   const branch = integrationBranchName(input.candidateBranch, input.slotKey);
   const baseRef = input.baseRef ?? "origin/main";
-  const buildStrategy = input.buildStrategy ?? defaultBuildStrategy(input.hostPlatform);
+  const buildStrategy = input.buildStrategy ?? defaultBuildStrategy(input.hostPlatform, input.env);
   const productionBuildCommand = buildStrategy === "docker-build"
     ? [
         "node",
@@ -410,7 +510,8 @@ export function createLocalIntegrationPlan(input) {
       "--base",
       baseRef,
     ],
-    productionBuildCommand,
+    // BI-3A14308C: a delegated plan ends at vitest; the merge queue builds.
+    ...(buildIsDelegated(buildStrategy) ? [] : [productionBuildCommand]),
   ];
   const commands = executionLane === "documentation"
     ? [...setupCommands, ...guardCommands]

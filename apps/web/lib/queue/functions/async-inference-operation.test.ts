@@ -12,8 +12,8 @@ const quiescence = vi.hoisted(() => ({
   atEntry: vi.fn(),
 }));
 
-vi.mock("../inngest-client", () => ({
-  inngest: { createFunction: (...args: unknown[]) => inngestMock.createFunction(...args) },
+vi.mock("@/lib/jobs", () => ({
+  jobs: { createFunction: (...args: unknown[]) => inngestMock.createFunction(...args) },
 }));
 vi.mock("@/lib/inference/async-operation-runtime", () => ({
   runPrismaAsyncOperationWake: (...args: unknown[]) => runtime.runWake(...args),

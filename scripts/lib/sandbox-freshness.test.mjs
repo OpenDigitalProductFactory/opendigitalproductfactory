@@ -9,9 +9,11 @@ import {
 } from "./local-integration-status.mjs";
 import {
   CRITICAL_PACKAGES,
+  EXIT_CANDIDATE_MERGE_CONFLICT,
   EXIT_CHILD_SIGNAL_DEATH,
   EXIT_VITEST_RUNNER_TERMINATION,
   EXIT_CONTROL_PLANE_STARVATION,
+  EXIT_RUNNER_PREREQUISITE_UNAVAILABLE,
   EXIT_BUILDER_RESOURCE_EXHAUSTED,
   EXIT_GREEN,
   EXIT_SANDBOX_DRIFT,
@@ -27,7 +29,11 @@ import {
   parseWorkspacePackageGlobs,
   shouldEscalateConvergence,
   shouldForceConvergenceAfterInstall,
+  parseLsofCwd,
+  readProcessCwd,
+  resolveInstallWaitConfig,
   stalePackagePathsForRelink,
+  waitForSandboxInstalls,
 } from "./sandbox-freshness.mjs";
 
 const LOCKFILE = `lockfileVersion: '9.0'
@@ -90,6 +96,34 @@ test("parseLockedVersion reads importer-scoped resolved versions", () => {
   assert.equal(parseLockedVersion(LOCKFILE, "packages", "next"), "");
 });
 
+// BI-D2FE6931: TypeScript 7 is installed under an npm alias. pnpm records an
+// aliased dependency's version as "<target>@<version>"; the installed
+// package.json says just "<version>". Reading the alias form verbatim would
+// report drift on every run.
+test("parseLockedVersion reads an npm-aliased dependency as its target version", () => {
+  const aliased = `lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    devDependencies:
+      typescript7:
+        specifier: npm:typescript@7.0.2
+        version: typescript@7.0.2
+      scoped-alias:
+        specifier: npm:@scope/pkg@1.2.3
+        version: '@scope/pkg@1.2.3(react@19.2.7)'
+`;
+  assert.equal(parseLockedVersion(aliased, ".", "typescript7"), "7.0.2");
+  assert.equal(parseLockedVersion(aliased, ".", "scoped-alias"), "1.2.3");
+});
+
+test("critical package sentinels include the TypeScript 7 checker pinned at the root", () => {
+  const ts7 = CRITICAL_PACKAGES.find((pkg) => pkg.name === "typescript7");
+  assert.ok(ts7, "a TypeScript 7 bump must reach the local-CI sandbox before it grades a diff");
+  assert.deepEqual(ts7.importers, ["."]);
+});
+
 test("critical package sentinels include the unit-test runner used by local-CI", () => {
   const vitest = CRITICAL_PACKAGES.find((pkg) => pkg.name === "vitest");
   assert.ok(vitest, "vitest must be checked before recording local-CI test evidence");
@@ -117,6 +151,201 @@ test("detectInstallProcesses parses ps output and excludes self", () => {
   assert.deepEqual(found.map((p) => p.pid), [123, 789]);
   assert.equal(found[0].etimeMinutes, 62);
   assert.equal(found[1].etimeMinutes, 2 * 24 * 60 + 3 * 60 + 4);
+});
+
+// BI-8DC6F267: the duplicate-install guard protects ONE node_modules. An
+// install in another worktree does not touch this sandbox, so only installs
+// whose working directory is the sandbox root (or inside it) count.
+const SCOPE_PS = [
+  "  101 01:46 pnpm install",
+  "  102 00:30 pnpm install --frozen-lockfile",
+  "  103 00:12 pnpm --filter web install",
+  "  104 00:05 pnpm install",
+  "  105 00:05 pnpm install",
+].join("\n");
+const SCOPE_CWDS = {
+  101: "/work/worktrees/other-session",
+  102: "/work/sandbox",
+  103: "/work/sandbox/apps/web",
+  104: "/work/sandbox-2",
+  // 105: cwd unreadable
+};
+const fakeReadCwd = (pid) => SCOPE_CWDS[pid] ?? null;
+
+test("AC-1: an install running in another directory is not counted against the sandbox", () => {
+  const found = detectInstallProcesses(SCOPE_PS, { rootDir: "/work/sandbox", readCwd: fakeReadCwd });
+  const pids = found.map((p) => p.pid);
+  assert.equal(pids.includes(101), false, "another worktree's install must not block this sandbox");
+  // A sibling whose path merely starts with the sandbox path is still another directory.
+  assert.equal(pids.includes(104), false, "/work/sandbox-2 is not inside /work/sandbox");
+});
+
+test("AC-2: an install running in the sandbox root or a package inside it still counts", () => {
+  const found = detectInstallProcesses(SCOPE_PS, { rootDir: "/work/sandbox", readCwd: fakeReadCwd });
+  const byPid = new Map(found.map((p) => [p.pid, p]));
+  assert.ok(byPid.has(102), "install at the sandbox root must count");
+  assert.ok(byPid.has(103), "install in a workspace package of the sandbox must count");
+  assert.equal(byPid.get(102).cwd, "/work/sandbox");
+});
+
+test("AC-4: an install whose cwd cannot be read is counted (never risk a duplicate install)", () => {
+  const found = detectInstallProcesses(SCOPE_PS, { rootDir: "/work/sandbox", readCwd: fakeReadCwd });
+  const unknown = found.find((p) => p.pid === 105);
+  assert.ok(unknown, "unreadable cwd must fall back to blocking");
+  assert.equal(unknown.cwd, null);
+  assert.equal(unknown.cwdUnknown, true);
+  const throwing = detectInstallProcesses("  7 00:01 pnpm install", {
+    rootDir: "/work/sandbox",
+    readCwd: () => {
+      throw new Error("EPERM");
+    },
+  });
+  assert.deepEqual(throwing.map((p) => p.pid), [7]);
+});
+
+test("detectInstallProcesses matches the sandbox through any of its path spellings", () => {
+  // macOS: the sandbox is addressed as /var/... while lsof reports /private/var/...
+  const found = detectInstallProcesses("  8 00:01 pnpm install", {
+    rootDir: ["/var/folders/x/sandbox", "/private/var/folders/x/sandbox"],
+    readCwd: () => "/private/var/folders/x/sandbox",
+  });
+  assert.deepEqual(found.map((p) => p.pid), [8]);
+});
+
+test("detectInstallProcesses without a rootDir keeps the host-wide behaviour", () => {
+  const found = detectInstallProcesses(SCOPE_PS);
+  assert.deepEqual(found.map((p) => p.pid), [101, 102, 103, 104, 105]);
+});
+
+test("parseLsofCwd reads the name field of `lsof -a -p PID -d cwd -Fn`", () => {
+  assert.equal(parseLsofCwd("p4242\nfcwd\nn/Users/me/dpf/.local-ci-runner-slot-1\n"), "/Users/me/dpf/.local-ci-runner-slot-1");
+  assert.equal(parseLsofCwd("n/path with spaces/x\n"), "/path with spaces/x");
+  assert.equal(parseLsofCwd(""), null);
+  assert.equal(parseLsofCwd("p4242\n"), null);
+});
+
+test("readProcessCwd uses lsof on macOS", () => {
+  const calls = [];
+  const cwd = readProcessCwd(4242, {
+    platform: "darwin",
+    spawn: (cmd, args) => {
+      calls.push([cmd, ...args]);
+      return { status: 0, stdout: "p4242\nfcwd\nn/work/sandbox\n" };
+    },
+    readlink: () => {
+      throw new Error("must not read /proc on macOS");
+    },
+  });
+  assert.equal(cwd, "/work/sandbox");
+  assert.deepEqual(calls, [["lsof", "-a", "-p", "4242", "-d", "cwd", "-Fn"]]);
+});
+
+test("readProcessCwd reads /proc/PID/cwd on Linux, falling back to lsof", () => {
+  assert.equal(
+    readProcessCwd(77, {
+      platform: "linux",
+      readlink: (p) => {
+        assert.equal(p, "/proc/77/cwd");
+        return "/work/sandbox";
+      },
+      spawn: () => {
+        throw new Error("lsof not needed when /proc answers");
+      },
+    }),
+    "/work/sandbox",
+  );
+  assert.equal(
+    readProcessCwd(77, {
+      platform: "linux",
+      readlink: () => {
+        throw new Error("ENOENT");
+      },
+      spawn: () => ({ status: 0, stdout: "p77\nfcwd\nn/elsewhere\n" }),
+    }),
+    "/elsewhere",
+  );
+});
+
+test("readProcessCwd returns null when the cwd cannot be read", () => {
+  assert.equal(readProcessCwd(5, { platform: "darwin", spawn: () => ({ status: 1, stdout: "" }) }), null);
+  assert.equal(readProcessCwd(5, { platform: "darwin", spawn: () => ({ error: new Error("ENOENT"), status: null }) }), null);
+  assert.equal(
+    readProcessCwd(5, {
+      platform: "linux",
+      readlink: () => {
+        throw new Error("EACCES");
+      },
+      spawn: () => ({ status: 1, stdout: "" }),
+    }),
+    null,
+  );
+  assert.equal(readProcessCwd(5, { platform: "win32" }), null);
+});
+
+function fakeClock() {
+  let now = 0;
+  return {
+    now: () => now,
+    sleep: async (ms) => {
+      now += ms;
+    },
+  };
+}
+
+test("AC-3: waitForSandboxInstalls waits for a same-sandbox install that finishes within the bound", async () => {
+  const clock = fakeClock();
+  let scans = 0;
+  const running = [{ pid: 102, etime: "00:30", etimeMinutes: 0, command: "pnpm install", cwd: "/work/sandbox" }];
+  const result = await waitForSandboxInstalls({
+    scan: () => (++scans <= 3 ? running : []),
+    timeoutMs: 600_000,
+    pollMs: 5_000,
+    ...clock,
+  });
+  assert.equal(result.timedOut, false);
+  assert.equal(result.waited, true);
+  assert.deepEqual(result.processes, []);
+  assert.equal(result.waitedMs, 15_000);
+  assert.deepEqual(result.observedPids, [102]);
+});
+
+test("waitForSandboxInstalls does not wait when nothing is running", async () => {
+  const clock = fakeClock();
+  const result = await waitForSandboxInstalls({ scan: () => [], timeoutMs: 600_000, pollMs: 5_000, ...clock });
+  assert.equal(result.waited, false);
+  assert.equal(result.timedOut, false);
+  assert.equal(result.waitedMs, 0);
+});
+
+test("waitForSandboxInstalls reports a timeout when the install outlives the bound", async () => {
+  const clock = fakeClock();
+  const running = [{ pid: 102, etime: "45:00", etimeMinutes: 45, command: "pnpm install", cwd: "/work/sandbox" }];
+  let scans = 0;
+  const result = await waitForSandboxInstalls({
+    scan: () => {
+      scans += 1;
+      return running;
+    },
+    timeoutMs: 20_000,
+    pollMs: 5_000,
+    ...clock,
+  });
+  assert.equal(result.timedOut, true);
+  assert.deepEqual(result.processes.map((p) => p.pid), [102]);
+  assert.ok(clock.now() <= 20_000, `wait must stay within its bound, slept ${clock.now()}ms`);
+  assert.ok(scans <= 6, `polling must be bounded, saw ${scans} scans`);
+});
+
+test("resolveInstallWaitConfig defaults to a 10 minute bound and honours env overrides", () => {
+  assert.deepEqual(resolveInstallWaitConfig({}), { timeoutMs: 600_000, pollMs: 5_000 });
+  assert.deepEqual(
+    resolveInstallWaitConfig({ DPF_LOCAL_CI_FRESHNESS_INSTALL_WAIT_MS: "120000", DPF_LOCAL_CI_FRESHNESS_INSTALL_POLL_MS: "250" }),
+    { timeoutMs: 120_000, pollMs: 250 },
+  );
+  // 0 disables the wait (report not-ready immediately); junk falls back to the default.
+  assert.equal(resolveInstallWaitConfig({ DPF_LOCAL_CI_FRESHNESS_INSTALL_WAIT_MS: "0" }).timeoutMs, 0);
+  assert.equal(resolveInstallWaitConfig({ DPF_LOCAL_CI_FRESHNESS_INSTALL_WAIT_MS: "soon" }).timeoutMs, 600_000);
+  assert.equal(resolveInstallWaitConfig({ DPF_LOCAL_CI_FRESHNESS_INSTALL_POLL_MS: "-5" }).pollMs, 5_000);
 });
 
 test("parseEtimeMinutes handles mm:ss, hh:mm:ss and dd-hh:mm:ss", () => {
@@ -433,6 +662,7 @@ test("every status classifyGateOutcome can emit is one the recorder accepts", ()
     EXIT_CONTROL_PLANE_STARVATION,
     EXIT_VITEST_RUNNER_TERMINATION,
     EXIT_CHILD_SIGNAL_DEATH,
+    EXIT_CANDIDATE_MERGE_CONFLICT,
     75,
     130,
     143,
@@ -454,6 +684,30 @@ test("every status classifyGateOutcome can emit is one the recorder accepts", ()
       + "Add it to LOCAL_INTEGRATION_STATUSES in scripts/lib/local-integration-status.mjs.",
     );
   }
+});
+
+// BI-FCC1DCB2. A candidate that does not merge onto origin/main was recorded as
+// blocked_control_plane_starvation, and authors retried for hours. It is an
+// author-actionable verdict: the recorder's existing `conflict` status, naming
+// the paths, never infrastructure, and never a product-evidence run that owes
+// a completion checkpoint (that demand is what turned it into starvation).
+test("a candidate merge conflict is a `conflict` verdict naming the paths, not starvation", () => {
+  const mergeConflict = { mergedRef: "abc123", baseRef: "origin/main", paths: ["agent_registry.json", "coworker-grants.ts"] };
+  for (const freshnessVerdict of [null, "", "green", "drifted"]) {
+    const outcome = classifyGateOutcome({ freshnessVerdict, gateExitCode: EXIT_CANDIDATE_MERGE_CONFLICT, mergeConflict });
+    assert.equal(outcome.status, "conflict", String(freshnessVerdict));
+    assert.equal(outcome.gatePassed, false);
+    assert.equal(outcome.productEvidence, false, "a run that stopped at the merge owes no completion checkpoint");
+    assert.match(outcome.summary, /merge origin\/main into your branch and resolve: agent_registry\.json, coworker-grants\.ts/);
+    assert.doesNotMatch(outcome.summary, /infrastructure/i);
+    assert.deepEqual(outcome.mergeConflict, mergeConflict);
+  }
+});
+
+test("a merge conflict whose paths were not recorded still names the remedy", () => {
+  const outcome = classifyGateOutcome({ gateExitCode: EXIT_CANDIDATE_MERGE_CONFLICT });
+  assert.equal(outcome.status, "conflict");
+  assert.match(outcome.summary, /merge origin\/main into your branch and resolve/);
 });
 
 test("a status the recorder does not know still records rather than dropping the write", () => {
@@ -497,4 +751,17 @@ test("the two causes are told apart by their summaries, not by their status", ()
   const plane = classifyGateOutcome({ freshnessVerdict: null, gateExitCode: EXIT_CONTROL_PLANE_STARVATION });
   assert.equal(builder.status, plane.status);
   assert.notEqual(builder.summary, plane.summary);
+});
+
+test("a runner that could not set up its prerequisites is infrastructure, not a verdict", () => {
+  // Observed 2026-10-02: the base refresh hit "Could not resolve host:
+  // github.com", the runner exited 1, and the record read `failed` with no
+  // reason — a FAIL against a SHA nothing had graded.
+  const outcome = classifyGateOutcome({ freshnessVerdict: null, gateExitCode: EXIT_RUNNER_PREREQUISITE_UNAVAILABLE });
+  assert.equal(outcome.status, "blocked_control_plane_starvation");
+  assert.equal(outcome.gatePassed, false);
+  assert.equal(outcome.productEvidence, false);
+  assert.match(outcome.summary, /before it could grade/);
+  const plane = classifyGateOutcome({ freshnessVerdict: null, gateExitCode: EXIT_CONTROL_PLANE_STARVATION });
+  assert.notEqual(outcome.summary, plane.summary, "different remedies, different summaries");
 });

@@ -117,8 +117,8 @@ vi.mock("@/lib/self-upgrade/cooldown", () => ({
   DEFAULT_COOLDOWN_MINUTES: 30,
 }));
 
-vi.mock("@/lib/queue/inngest-client", () => ({
-  inngest: {
+vi.mock("@/lib/jobs", () => ({
+  jobs: {
     send: vi.fn().mockResolvedValue(undefined),
     // createFunction is called at module-init by self-upgrade.ts; stub it to avoid TypeError
     createFunction: vi.fn().mockReturnValue({ id: "mocked-fn" }),
@@ -189,7 +189,7 @@ import { isUpgradeWindowOpen, nextUpgradeWindowOpen } from "@/lib/self-upgrade/w
 import { resolveAutoUpgradeWindow, nextAutoWindowOpen } from "@/lib/self-upgrade/auto-window";
 import { getActiveSelfUpgradeBlackout } from "@/lib/self-upgrade/blackout";
 import { getLastCheckedAt } from "@/lib/self-upgrade/last-check";
-import { inngest } from "@/lib/queue/inngest-client";
+import { jobs } from "@/lib/jobs";
 import { revalidatePath } from "next/cache";
 import { runSelfUpgradeRollback, SelfUpgradeRollbackError } from "@/lib/self-upgrade/rollback";
 import { createSelfUpgradeTargetBinding } from "@/lib/self-upgrade/target-binding";
@@ -547,10 +547,9 @@ describe("getSelfUpgradeStatus", () => {
     expect(result.windowSource).toBe("needs-timezone");
     expect(result.autoWindowSummary).toBeNull();
     expect(result.nextWindowStart).toBeNull();
-    // No window is handed to the gate (24/7 + unknown tz → not auto-runnable).
-    expect(isUpgradeWindowOpen).toHaveBeenCalledWith(
-      expect.objectContaining({ explicitWindows: undefined }),
-    );
+    // 24/7 + unknown tz → no window is evaluated and none is open (BI-2128872C:
+    // effective-window.ts, shared with the scheduled gate).
+    expect(result.inMaintenanceWindow).toBe(false);
   });
 
   // BI-59591B14 — surface an active operator blackout so the panel can explain a
@@ -975,9 +974,8 @@ describe("triggerSelfUpgrade – manual is not window-gated", () => {
     const result = await triggerSelfUpgrade();
 
     expect(result).toMatchObject({ queued: true, admitted: true, runId: "SUR-QUEUED1" });
-    expect(admitSelfUpgrade).toHaveBeenCalled();
-    // It doesn't even consult the window for a manual trigger.
-    expect(vi.mocked(isUpgradeWindowOpen)).not.toHaveBeenCalled();
+    // BI-2128872C AC-2: it runs now, and the run records that it bypassed the window.
+    expect(admitSelfUpgrade).toHaveBeenCalledWith(expect.objectContaining({ triggeredBy: `manual:${mockSession.user.id}+outside-window` }));
   });
 
   it("emergency override dispatches with force (bypasses the quiescence drain)", async () => {
@@ -1013,7 +1011,7 @@ describe("triggerSelfUpgrade – guard: already-running", () => {
     expect(result).toEqual(
       expect.objectContaining({ queued: false, reason: "already-running" }),
     );
-    expect(vi.mocked(inngest.send)).not.toHaveBeenCalled();
+    expect(vi.mocked(jobs.send)).not.toHaveBeenCalled();
   });
 
   it("includes runId of the active run in the response", async () => {
@@ -1040,7 +1038,7 @@ describe("triggerSelfUpgrade – guard: already-running", () => {
     expect(result).toEqual(
       expect.objectContaining({ queued: false, reason: "already-running" }),
     );
-    expect(vi.mocked(inngest.send)).not.toHaveBeenCalled();
+    expect(vi.mocked(jobs.send)).not.toHaveBeenCalled();
   });
 
   it("does not dispatch a duplicate event while the latest run is still queued", async () => {
@@ -1060,7 +1058,7 @@ describe("triggerSelfUpgrade – guard: already-running", () => {
       runId: "SUR-QUEUED1",
     });
     expect(createRun).not.toHaveBeenCalled();
-    expect(vi.mocked(inngest.send)).not.toHaveBeenCalled();
+    expect(vi.mocked(jobs.send)).not.toHaveBeenCalled();
   });
 });
 
@@ -1078,7 +1076,7 @@ describe("triggerSelfUpgrade – guard: invalid-config", () => {
     expect(result).toEqual(
       expect.objectContaining({ queued: false, reason: "disabled" }),
     );
-    expect(vi.mocked(inngest.send)).not.toHaveBeenCalled();
+    expect(vi.mocked(jobs.send)).not.toHaveBeenCalled();
   });
 
   it("dryRun bypasses the disabled guard and dispatches the event", async () => {

@@ -53,12 +53,14 @@ const PUBLIC_SCOPE_TIER: Record<PublicScope, McpTokenScope> = {
 export const PUBLIC_SCOPE_TO_GRANTS: Record<PublicScope, readonly string[]> = {
   "dpf.read": [
     "agent_control_read",
+    "approval_probe_read",
     "architecture_read",
     "backlog_read",
     "banking_read",
     "browser_read",
     "code_graph_read",
     "consumer_read",
+    "contributor_inventory_read",
     "coworker_catalog_read",
     "coworker_screen_read",
     "crm_read",
@@ -68,6 +70,7 @@ export const PUBLIC_SCOPE_TO_GRANTS: Record<PublicScope, readonly string[]> = {
     "external_registry_search",
     "file_read",
     "marketing_read",
+    "payables_read",
     "policy_read",
     "portfolio_read",
     "registry_read",
@@ -97,6 +100,8 @@ export const PUBLIC_SCOPE_TO_GRANTS: Record<PublicScope, readonly string[]> = {
     "deliberation_create",
     "document_publish",
     "document_write",
+    // BI-4C17BF51. Renders an EA view and stores it as a document, so it is a write.
+    "ea_drawing_export",
     "ea_graph_write",
     "initiative_archetype_review",
     "initiative_architecture_review",

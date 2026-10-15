@@ -18,7 +18,7 @@
 // resolved. A retracted row keeps `humanOutcome` null forever, and it is
 // honest for it to stay that way — no human ever answered it.
 
-import type { ToolConsequenceScope } from "@/lib/mcp-tools";
+import type { ToolConsequenceScope } from "@/lib/tool-consequence";
 
 export type RetractableRow = {
   interactionId: string;

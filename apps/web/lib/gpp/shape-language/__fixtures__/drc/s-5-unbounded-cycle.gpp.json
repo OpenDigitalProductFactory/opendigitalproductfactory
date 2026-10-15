@@ -1,0 +1,74 @@
+{
+  "format": "gpp-shape/0.1",
+  "key": "soundness-unbounded-cycle",
+  "version": "1.0.0",
+  "title": "Soundness fixture soundness-unbounded-cycle",
+  "description": "Seeded S-5: a cycle between a and b with no rework edge.",
+  "triggers": [
+    "claim"
+  ],
+  "stages": [
+    {
+      "key": "a",
+      "title": "Stage a",
+      "accountablePrincipalRef": "role:shape-owner",
+      "advance": {
+        "kind": "status-change",
+        "condition": "Stage a recorded its evidence."
+      },
+      "evidence": [
+        "manual-check"
+      ]
+    },
+    {
+      "key": "b",
+      "title": "Stage b",
+      "accountablePrincipalRef": "role:shape-owner",
+      "advance": {
+        "kind": "status-change",
+        "condition": "Stage b recorded its evidence."
+      },
+      "evidence": [
+        "manual-check"
+      ]
+    }
+  ],
+  "flow": {
+    "nodes": [],
+    "edges": [
+      {
+        "from": "a",
+        "to": "b"
+      },
+      {
+        "from": "b",
+        "to": "a"
+      }
+    ]
+  },
+  "stopConditions": [
+    {
+      "kind": "success",
+      "condition": "Every stage recorded its evidence.",
+      "disposition": "proceed"
+    },
+    {
+      "kind": "failure",
+      "condition": "A stage cannot produce its evidence.",
+      "disposition": "refused"
+    },
+    {
+      "kind": "budget",
+      "condition": "The cycle budget is spent.",
+      "disposition": "inconclusive"
+    }
+  ],
+  "grants": [],
+  "measures": [],
+  "budgets": [],
+  "reviewPoint": {
+    "everyDays": 7,
+    "description": "Weekly review."
+  },
+  "collaborationShape": null
+}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { projectAiReadinessAttentionItems } from "./attention";
-import type { AiReadinessSummary } from "./readiness-summary";
+import type { AiReadinessSummary } from "./readiness-summary-types";
 
 const baseSummary: AiReadinessSummary = {
   state: "blocked",

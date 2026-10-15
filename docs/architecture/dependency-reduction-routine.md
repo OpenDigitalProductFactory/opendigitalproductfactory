@@ -62,9 +62,250 @@ The analysis tiers duplicate package versions so signal separates from noise:
   `^4`, `undici` `^8`, `@types/node` `^26`); extra versions are transitive.
 
 `scripts/sbom/check-sbom-drift.mjs` (`pnpm check:sbom-drift`) **hard-fails a PR**
-that introduces a *new* Tier-1 split (`SBOM Divergence Guard` job in `ci.yml`),
-and reports deltas for the rest. Accepted splits live in `sbom/baseline.json`;
-ratchet down as they're fixed (`--update-baseline` to accept intentionally).
+that introduces a *new* Tier-1 split (`SBOM Divergence Guard` job in `ci.yml`).
+Accepted splits live in `sbom/baseline.json`; ratchet down as they're fixed
+(`--update-baseline` to accept intentionally).
+
+### Specifier drift (one specifier per package)
+
+Tier 1 fires only once our declarations *resolve* apart. Before that they drift in
+text: `net-snmp` was `^3.26.3` in `packages/db` and `^3.14.0` in `services/edge-node`,
+both resolving to 3.26.3 until the next lockfile refresh would have split them.
+Every registry package that two or more platform workspaces declare therefore has
+its range written once, in the default [pnpm catalog](https://pnpm.io/catalogs)
+(`catalog:` in `pnpm-workspace.yaml`), and each `package.json` declares it as
+`"catalog:"` (plan 2026-09-08 S11). The same guard fails a PR in which two
+workspaces declare one registry package any other way: different ranges, the same
+range typed twice, or one workspace opting out of the catalog. `workspace:`,
+`link:` and `file:` specifiers are exempt. A dependency that only one workspace
+declares keeps its range in that `package.json`.
+
+A deliberate difference goes in `sbom/baseline.json` `acceptedSpecifierDrift` as
+name → reason; today that is only the exact `typescript` pin in
+`packages/repo-guard-runtime`, which the guard AST runtime verifies against the
+lockfile. An entry that no longer drifts fails as stale, so the map only shrinks.
+
+**Adding a shared dependency.** When a second workspace starts using a package
+another workspace already declares (or a new package lands in two at once):
+
+1. Add `name: <range>` under `catalog:` in `pnpm-workspace.yaml`, keeping the
+   highest floor any workspace had.
+2. Set the specifier to `"catalog:"` in every `package.json` that declares it.
+3. Regenerate with `pnpm install --lockfile-only`, then confirm
+   `pnpm install --lockfile-only --frozen-lockfile` passes and
+   `node scripts/sbom/check-sbom-drift.mjs` is green.
+
+A version bump is then one line in `pnpm-workspace.yaml`. Dependabot updates
+catalog entries in place. A brand-new package still goes through the New
+Dependency Gate (Axis 3) first.
+
+The root npm entry in `.github/dependabot.yml` owns the platform's coupled
+dependency exclusions and groups compatible minor and patch updates. The
+marketing-media probe and mobile workspace have separate entries; policies on
+those entries do not govern the platform. Floating UI stays on the versions
+checked by the Diagram Dependency Pin Guard. Move that family only with a
+review of its pins. Mailparser and ImapFlow also pin shared MIME dependencies
+exactly, so update them together when a parser bump would retain both versions.
+Check the resulting graph against the existing SBOM budgets before publication.
+
+The catalog is safe for the service images because every image that installs from
+this workspace copies `pnpm-workspace.yaml` beside the lockfile before
+`pnpm install --frozen-lockfile` (root `Dockerfile`, `services/adp`,
+`services/edge-node`, `services/integration-test-harness`). Their
+`pnpm deploy --legacy` trees keep the `catalog:` and `workspace:` specifiers in the
+copied `package.json` as written, which is harmless: the runtime stage only runs
+`node`, never a package manager, and the deployed `node_modules` holds the locked
+versions. `apps/mobile` resolves in its own single-workspace lockfile root, so it
+has no second workspace to drift against and no catalog.
+
+Two things keep those images on the lockfile. `scripts/check-docker-patch-context.mjs`
+fails any Dockerfile whose `pnpm install` lacks `--frozen-lockfile` or turns it
+off. `services/edge-node` used `--no-frozen-lockfile` until 2026-09-30, so a stale
+lockfile was quietly re-resolved from the registry at build time. The second is
+the `.npmrc`: the image builds do not copy the root `.npmrc`, and they must not.
+Its `node-linker=hoisted` makes `pnpm deploy --legacy` skip the lockfile and
+resolve every range afresh, even after a frozen install and even with
+`--frozen-lockfile` on the deploy. Replayed on the edge-node build stage, that
+shipped net-snmp 3.29.1 against a locked 3.26.3; on the adp build stage it
+shipped tdigest 0.1.3 against a locked 0.1.2. All three service images
+(`services/adp`, `services/edge-node`, `services/integration-test-harness`)
+therefore run `scripts/sbom/assert-deploy-matches-lockfile.mjs` after their
+deploy, which fails the build when the deploy tree holds any version outside
+the lockfile's production closure for that importer.
+
+### Shape budgets (the surface only shrinks)
+
+The same guard also **hard-fails a PR that pushes the dependency shape above its
+budget**. `sbom/baseline.json` carries `budgets` for four totals: resolved
+components, duplicated names, excess instances and multi-major names. Before
+the budgets, the totals were informational only. Between 2026-09-08 and
+2026-09-25 they regrew by 34 components and 19 duplicated names while every
+other gate was green.
+
+- **Lowering is automatic.** `--update-baseline` moves each budget down to the
+  current total and never up. Run it in any PR that removes or dedupes packages.
+- **Raising is a recorded decision.** `--raise-budget "<reason>"` moves the
+  budgets to the current totals and writes the reason into `lastBudgetRaise`,
+  so reviewers see it in the diff. Name what the growth retires, or why nothing
+  can ([absorb, don't adopt](../founder-kernel/wiki/principles/absorb-dont-adopt.md)).
+- **Try `pnpm dedupe` first.** A routine Dependabot bump often leaves a
+  same-major duplicate behind, and dedupe clears it without new packages.
+
+### Lockfile roots
+
+The platform resolves in more than one lockfile. `apps/mobile` has its own
+workspace and lockfile (plan 2026-09-08 M6), so the Expo, React Native and Jest
+toolchain never enters the portal's tree, SBOM or image.
+`scripts/sbom/lockfile-roots.mjs` is the single list of lockfile roots, and
+every supply-chain gate iterates it:
+
+- the OSV scan (`scan-dependencies.mjs`) queries each distinct `name@version` across all roots;
+- the release-age gate checks every root's new entries, and requires each root's
+  `minimumReleaseAge` to be at least the platform floor;
+- the New Dependency Gate reads every root's direct dependencies, mapped to repo paths;
+- the shape budgets keep a separate section per root in `sbom/baseline.json` (`roots.<id>`);
+- the Override Provenance Guard and the build-script policy guard read every root's `pnpm-workspace.yaml`.
+
+Root overrides do not reach a separate workspace. When a root security floor
+targets a package in another root's tree, repeat it there with its advisory
+comment. Measure it, don't assume it: resolved without the floors, the mobile
+tree picked up `brace-expansion@2.1.7`, `decode-uri-component@0.2.2` and `uuid@7`.
+
+To add a lockfile root, register it in `lockfile-roots.mjs`, give its workspace
+file the release-age floor and the floors its tree needs, add a Dependabot entry
+for its directory, and run `check-sbom-drift.mjs --update-baseline` to create its
+budgets.
+
+### Pruning overrides
+
+An override that no longer changes resolution is dead weight in the control
+surface. The per-floor prune screen is empirical: drop one entry, resolve with
+`pnpm install --lockfile-only` against a fresh store, and compare the resolved
+`name@version` set with the committed lockfile. If the set is identical, the
+floor is redundant, because every consumer's range already selects a version at
+or above it. Confirm the candidates by removing them *together*, then regenerate
+with `pnpm regen:lockfile`.
+
+Do not compare lockfile bytes. Re-resolution rewrites registry deprecation text
+and peer suffixes even when no version moves.
+
+The Jest 30 unification block passes the one-at-a-time screen but fails the
+joint one: without it, jest-expo and the React Native toolchain bring Jest 29
+back. It leaves with the mobile workspace split (plan 2026-09-08 M6).
+`pnpm audit:stale-overrides` remains the advisory-side cross-check.
+
+### Typecheck program budget (checked lines only grow with the diff)
+
+The web production program (`apps/web/tsconfig.json`) is typechecked on every
+push, so every line it checks costs time on every push. The ratchet
+`scripts/sbom/check-typecheck-baseline.mjs` fails a PR that grows the program
+by lines its diff does not explain (plan 2026-09-08 M11 step 4). Its anchor is
+`sbom/typecheck-baseline.json`.
+
+It reads the program from the compile CI already runs. `scripts/run-tsc.mjs`,
+given `DPF_TSC_PROGRAM_REPORT=<file>`, adds `--listFiles --extendedDiagnostics`
+to the same tsc run and writes the file list and diagnostics to `<file>`. The
+report records which compiler produced it (`compilerVersion`). TypeScript 7, the
+default checker since BI-2B8D67A9, ships its `lib.*.d.ts` in the platform
+package `@typescript/typescript-<platform>-<arch>/lib`, and the ratchet counts
+those as library lines exactly like TypeScript 6's `typescript/lib`. The
+Typecheck job sets it, then runs the ratchet on the report. That costs no
+second compile. The job uploads the resulting analysis as the
+`typecheck-program-analysis` artifact.
+
+Every checked line falls into one bucket:
+
+| Bucket | What | Gate |
+| --- | --- | --- |
+| project | `apps/web` source the tsconfig includes | reported: a diff explains every line |
+| generated | Prisma client (`packages/db/generated`), `.next/types` | reported: the schema or route diff explains it |
+| outside | first-party source from other directories (`packages/db/src`, `scripts/lib`, ...) | lines reported; a **new** directory fails until accepted |
+| excluded | `apps/web` files the production tsconfig excludes (tests, e2e, `scripts/`, vitest config) that an import pulls back in | hard budget, no tolerance |
+| dependency | TypeScript's `lib.*.d.ts` plus everything under `node_modules` | hard budget, 1% tolerance |
+
+Budgets hold only the lines no diff explains. Comparing total lines against a
+committed number would go stale after the first ordinary PR. Every later PR
+would then fail on growth it did not cause, or every PR would have to rewrite
+the baseline.
+
+The rules match the shape budgets above:
+
+- **Lowering is automatic.** `--update-baseline` lowers budgets and shrinks
+  the accepted source set. It never raises them.
+- **Raising is a recorded decision.** `--raise-budget "<reason>"` moves
+  budgets and the accepted set to the current program and writes the reason
+  into `lastBudgetRaise`. No local compile is needed: pass the CI artifact with
+  `--analysis <typecheck-program-analysis.json>`.
+- **The 1% dependency tolerance** lets a patch bump of a typed dependency pass
+  with a warning. The tolerated growth accumulates, so the PR that crosses 1%
+  must record a reason.
+- **Check time is recorded, never gated.** Wall-clock depends on the machine and
+  its load. Files, lines, identifiers, symbols and types are recorded under
+  `measured.tsc` for reference.
+- **Excluded patterns only tighten.** The baseline keeps the tsconfig
+  `exclude` list it was measured with. Dropping `**/*.test.ts` from the tsconfig
+  does not re-admit the tests: they still count as excluded lines.
+
+To measure locally, run
+`flock /tmp/dpf-heavy.lock node scripts/sbom/check-typecheck-baseline.mjs --measure`.
+It runs a full web typecheck, about 150 s at 5.5 GB peak on the sandbox. Add
+`--update-baseline` to lock in a reduction. `--measure` passes
+`--incremental false`, so it compiles cold even when the worktree holds a
+`tsconfig.tsbuildinfo`.
+
+#### Warm start in CI
+
+Both apps/web programs are `incremental`, and tsc writes their build info
+next to the tsconfig: `apps/web/tsconfig.tsbuildinfo` and
+`apps/web/tsconfig.test.tsbuildinfo`. The Typecheck and Typecheck (web tests)
+jobs restore both through `.github/actions/web-tsbuildinfo-cache` before they
+compile. The key is the TypeScript version, a hash of the lockfile and the
+three tsconfigs, then the commit SHA. The restore key drops the SHA, so a run
+gets the newest `main` entry with the same inputs. Only the push-to-main job
+`typecheck-cache` saves (spec 2026-09-30 web-runtime-import-cycle §6 PR-1);
+PR and merge_group runs never write. That job is separate because a push whose
+merge-group evidence is reused skips Typecheck entirely. A miss restores
+nothing, and the compile runs cold as before.
+
+The ratchet is unaffected. `--listFiles` prints every program file on a warm
+run too, so the report's file list and totals match a cold run's. Only
+`Check time` changes, and it is absent when nothing needed checking. It was
+informational before and stays so.
+
+Build info from another commit is safe. tsc versions each file by a hash of
+its text. It re-checks a changed file and every file that imports a changed
+declaration signature. It discards build info from another TypeScript
+version or other compiler options. This was checked on 2026-10-01 against
+`origin/main` `fbee99d6c`, with build info from `origin/main~15` (180 files
+changed, 25 added). Three errors were injected:
+
+- a type error in a file the range changed;
+- a changed exported return type in a changed file, which broke 13 importers,
+  10 of them unchanged in the range;
+- a deleted module that the range left unchanged, imported by 4 files, 3 of
+  them unchanged.
+
+Cold, warm from `main~15` and warm from `main` reported the same 24 errors
+and the same file list.
+
+Wall time in the sandbox, including `next typegen`:
+
+| Production program | Wall time |
+| --- | --- |
+| Cold | 240 s |
+| Warm, no change | 31 s |
+| Warm, comment in `components/ui/Button.tsx` | 46 s |
+| Warm, new export in `lib/shared/coerce.ts` | 133 s |
+| Warm from 15 commits back (165 program files changed, the `@dpf/i18n` catalog among them) | 248 s (no gain) |
+
+The test program takes 365 s cold and 41 s warm with no change. A change to a
+file nearly everything imports, such as the i18n catalog, the Prisma client or
+`.next/types`, re-checks most of the program. Expect a near-cold time then.
+
+Known gap: a production file that starts importing an existing file from an
+accepted directory adds lines that no diff line wrote. The file is still
+first-party source that the program needs, so the ratchet reports it and
+does not gate it.
 
 ## Axis 2 — vulnerability & lifecycle (the local Dependabot-equivalent)
 
@@ -174,6 +415,12 @@ deliberate, recorded decision — not a silent lockfile change.
   package age + downloads, maintainer count, license, `pnpm scan:deps` (OSV), and
   whether an existing dependency already covers it. **The allowlist entry is the
   vetting record.**
+- **Retired names** live in the allowlist's `retired` map: packages a recorded
+  decision removed, each with a date and the reason (for example Stoplight
+  Prism, replaced by the harness's own OpenAPI runtime). The gate refuses a
+  retired name even when someone re-acknowledges it, and `--update-allowlist`
+  never adds one back. Reversing a retirement means deleting its `retired`
+  entry in the same PR and saying why.
 - Pure Node, network-free → safe as a required PR check.
 
 ### Why this shape (WWMD)

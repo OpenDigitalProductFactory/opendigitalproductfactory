@@ -981,6 +981,22 @@ At minimum, a receipt `MUST` contain:
 | `evidence_refs` | Supporting evidence or artifact references |
 | `signature` | Signature or equivalent integrity mechanism |
 
+#### 10.2.1 Principle-Directed Execution Binding
+
+**Working-draft amendment, EP-B932453F / BI-A484D58F.** `GAID-PD-001`: when a
+receipt represents an action governed by [TAK §7.13](trusted-ai-kernel.md#713-principle-directed-decision-contract),
+it `MUST` resolve the evaluated operating-profile version, decision reference,
+authorization reference and effect/attempt identity. A later observation `MUST`
+link to that effect identity and distinguish confirmed success, confirmed failure,
+reversal and an uncertain effect. References may be access-controlled; verification
+responses expose only the relying party's authorized view under §10.5.
+
+This binds identity and provenance. TAK owns the decision and execution controls;
+the receipt does not grant permission. A transported assertion is verified against
+its issuer, scope, revision and current status before reliance. Independent review
+and a versioned implementation statement are required before claiming support for
+this proposed amendment.
+
 ### 10.3 Trace Context and Delegation
 
 For multi-step or multi-agent flows:

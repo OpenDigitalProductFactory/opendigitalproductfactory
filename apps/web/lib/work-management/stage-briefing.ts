@@ -42,6 +42,9 @@ export type StageBriefInput = {
   evidenceKinds: readonly string[];
   /** Stop conditions that end the run rather than continuing. */
   stopConditions: readonly string[];
+  /** The platform tools the stage declares it needs (WorkShapeStage.tools —
+   *  GPP element 5 "Capability set"). Empty or omitted: no line is added. */
+  stageTools?: readonly string[];
 };
 
 /** The tool a stage's outcome must be recorded through. A completing receipt is
@@ -49,6 +52,10 @@ export type StageBriefInput = {
  *  a completed TaskRun is the executor's claim about itself, and 337 of them
  *  were false (see BI-76B35820 and the refusal of PR #5168). */
 export const STAGE_EVIDENCE_TOOL = "record_workroom_evidence";
+
+function declaredTools(tools: readonly string[] | undefined): string[] {
+  return [...new Set((tools ?? []).map((tool) => tool.trim()).filter((tool) => tool.length > 0))];
+}
 
 function line(label: string, value: string | null | undefined): string | null {
   const trimmed = value?.trim();
@@ -81,6 +88,12 @@ export function buildStageBrief(input: StageBriefInput): string {
       : null,
     ``,
     `Do the work with your tools. Read the real sources; do not answer from memory or assumption.`,
+    // Named so the run can find them: the scheduler pins these same names into
+    // the attachment budget (taskConfig.workroomStage.tools), so the line and
+    // the attached surface agree.
+    declaredTools(input.stageTools).length > 0
+      ? `Tools for this stage: ${declaredTools(input.stageTools).join(", ")}. They are attached to this run; use them to read the sources.`
+      : null,
     evidence.length > 0
       ? `Before you finish, record what you did by calling ${STAGE_EVIDENCE_TOOL} with capsuleId "${input.capsuleId}", stageKey "${input.stageKey}", kind ${evidence.map((kind) => `"${kind}"`).join(" or ")}, and outcome "completed".`
       : `Before you finish, record what you did by calling ${STAGE_EVIDENCE_TOOL} with capsuleId "${input.capsuleId}", stageKey "${input.stageKey}", and outcome "completed".`,
@@ -103,4 +116,52 @@ export function stageEvidenceKinds(
   const stage = definition.stages.find((candidate) => candidate.key === stageKey);
   const evidence = (stage as { evidence?: readonly string[] } | undefined)?.evidence;
   return Array.isArray(evidence) ? evidence : [];
+}
+
+/**
+ * The stage's declared tools (WorkShapeStage.tools), or an empty list.
+ *
+ * GPP binding element 2 "Attachment" + element 5 "Capability set": read per
+ * stage, not per shape. An empty list means the stage declared nothing and is
+ * dispatched exactly as before.
+ */
+export function stageDeclaredTools(
+  definition: WorkShapeDefinitionContract | null,
+  stageKey: string | null,
+): readonly string[] {
+  if (!definition || !stageKey) return [];
+  const stage = definition.stages.find((candidate) => candidate.key === stageKey);
+  return Array.isArray(stage?.tools) ? declaredTools(stage.tools) : [];
+}
+
+/**
+ * The brief input for one stage, read from the shape definition. Everything the
+ * shape declares about the stage reaches the coworker — title, definition of
+ * done, evidence kinds, stop conditions and, since BI-43C3E914, its declared
+ * tools — so a caller cannot forward some of it and drop the rest.
+ */
+export function stageBriefInputFromDefinition(input: {
+  capsuleId: string;
+  roomObjective: string | null;
+  shapeKey: string;
+  shapeVersion: string;
+  definition: WorkShapeDefinitionContract | null;
+  stageKey: string;
+}): StageBriefInput {
+  const { definition, stageKey } = input;
+  const stage = definition?.stages.find((candidate) => candidate.key === stageKey);
+  return {
+    capsuleId: input.capsuleId,
+    roomObjective: input.roomObjective,
+    shapeKey: input.shapeKey,
+    shapeVersion: input.shapeVersion,
+    shapeTitle: definition?.title ?? null,
+    shapeDescription: definition?.description ?? null,
+    stageKey,
+    stageTitle: stage?.title ?? null,
+    doneWhen: stage?.advance.condition ?? null,
+    evidenceKinds: stageEvidenceKinds(definition, stageKey),
+    stopConditions: (definition?.stopConditions ?? []).map((entry) => entry.condition),
+    stageTools: stageDeclaredTools(definition, stageKey),
+  };
 }

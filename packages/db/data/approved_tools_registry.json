@@ -149,6 +149,112 @@
       "supersedes": null,
       "createdAt": "2026-07-20",
       "updatedAt": "2026-07-20"
+    },
+    {
+      "id": "tool-eval-maplibre-gl-20260925",
+      "toolName": "MapLibre GL JS (maplibre-gl)",
+      "version": "6.11.2",
+      "sourceUrl": "https://github.com/maplibre/maplibre-gl-js",
+      "verdict": {
+        "decision": "conditional",
+        "rationale": "BSD-3 open-source WebGL vector map renderer selected for every DPF geographic scene; no key, account or telemetry; styles are generated first-party from --dpf-* tokens with no off-origin URL.",
+        "riskLevel": "low",
+        "threatCategories": [
+          "network_isolation",
+          "supply_chain",
+          "code_execution",
+          "resource_management"
+        ],
+        "confidenceScore": 0.85
+      },
+      "conditions": [
+        "pin exact version",
+        "styles carry no off-origin URL (no remote glyphs, sprite or tiles)",
+        "worker served only from the first-party allowlisted route",
+        "loaded only by dynamic import inside the geographic component",
+        "re-evaluate on a major version or security advisory"
+      ],
+      "findings": [
+        {
+          "reviewerAgentId": "claude-code",
+          "category": "compliance",
+          "severity": "info",
+          "title": "Permissive licence set",
+          "description": "maplibre-gl BSD-3-Clause; 18 direct deps all BSD-2/3, ISC, MIT or MIT-or-Apache-2.0 (npm registry, 2026-09-25).",
+          "evidence": "docs/security/tool-evaluations/2026-09-25-maplibre-pmtiles.md",
+          "recommendation": "Compatible with DPF distribution.",
+          "mitigatable": true,
+          "mitigation": null
+        }
+      ],
+      "toolType": "npm_package",
+      "proposedBy": "BI-814F86E1 (geographic map renderer)",
+      "proposedAt": "2026-09-25",
+      "status": "conditional",
+      "reviewers": [
+        {
+          "reviewerId": "claude-code",
+          "role": "implementing-agent",
+          "reviewedAt": "2026-09-25"
+        }
+      ],
+      "approvedBy": "founder direction (2026-09-25: deliver the mapping capability) + WWMD principle_decide maplibre-pmtiles-inhouse-wrapper (high, margin 1.23)",
+      "approvedAt": "2026-09-25",
+      "reEvaluateAfter": "2027-03-25",
+      "supersedes": null,
+      "createdAt": "2026-09-25",
+      "updatedAt": "2026-09-25"
+    },
+    {
+      "id": "tool-eval-pmtiles-20260925",
+      "toolName": "PMTiles (pmtiles)",
+      "version": "4.5.0",
+      "sourceUrl": "https://github.com/protomaps/PMTiles",
+      "verdict": {
+        "decision": "conditional",
+        "rationale": "BSD-3 single-file tile archive reader; reads operator-installed packs from the install's own range route; one dependency (fflate, MIT).",
+        "riskLevel": "low",
+        "threatCategories": [
+          "supply_chain",
+          "input_validation"
+        ],
+        "confidenceScore": 0.85
+      },
+      "conditions": [
+        "pin exact version",
+        "read only same-origin /api/map-assets packs",
+        "re-evaluate on a major version or security advisory"
+      ],
+      "findings": [
+        {
+          "reviewerAgentId": "claude-code",
+          "category": "compliance",
+          "severity": "info",
+          "title": "Permissive licence",
+          "description": "pmtiles BSD-3-Clause; fflate MIT.",
+          "evidence": "docs/security/tool-evaluations/2026-09-25-maplibre-pmtiles.md",
+          "recommendation": "Compatible with DPF distribution.",
+          "mitigatable": true,
+          "mitigation": null
+        }
+      ],
+      "toolType": "npm_package",
+      "proposedBy": "BI-814F86E1 (geographic map renderer)",
+      "proposedAt": "2026-09-25",
+      "status": "conditional",
+      "reviewers": [
+        {
+          "reviewerId": "claude-code",
+          "role": "implementing-agent",
+          "reviewedAt": "2026-09-25"
+        }
+      ],
+      "approvedBy": "founder direction (2026-09-25: deliver the mapping capability) + WWMD principle_decide maplibre-pmtiles-inhouse-wrapper (high, margin 1.23)",
+      "approvedAt": "2026-09-25",
+      "reEvaluateAfter": "2027-03-25",
+      "supersedes": null,
+      "createdAt": "2026-09-25",
+      "updatedAt": "2026-09-25"
     }
   ]
 }

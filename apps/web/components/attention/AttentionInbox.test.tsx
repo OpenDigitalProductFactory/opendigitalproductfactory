@@ -30,9 +30,9 @@ function bill(): AttentionItem {
 
 function platformHealth(): AttentionItem {
   return {
-    id: "platform-health:qdrant",
+    id: "platform-health:redis",
     source: "platform-health",
-    title: "qdrant is offline",
+    title: "redis is offline",
     context: "Vector store degraded",
     decisionClass: { scorability: "unscorable" },
     riskClass: "bounded-write",
@@ -96,6 +96,6 @@ describe("AttentionInbox", () => {
     expect(html).toContain("all caught up");
     expect(html).toContain("Your digital team is handling 1 item");
     // The raw technical title is never surfaced to the owner.
-    expect(html).not.toContain("qdrant is offline");
+    expect(html).not.toContain("redis is offline");
   });
 });

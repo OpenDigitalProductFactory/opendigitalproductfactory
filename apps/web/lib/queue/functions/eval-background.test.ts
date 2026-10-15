@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { currentInferenceOrigin } from "@/lib/inference/inference-admission";
 
 const mocks = vi.hoisted(() => ({
   prisma: {
@@ -6,14 +7,24 @@ const mocks = vi.hoisted(() => ({
       updateMany: vi.fn(),
       findUnique: vi.fn(),
       create: vi.fn(),
+      upsert: vi.fn(),
     },
   },
+  handlers: new Map<string, (input: any) => Promise<unknown>>(),
+  eval: vi.fn(),
+  probe: vi.fn(),
+  gate: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({ prisma: mocks.prisma }));
 // The Inngest client pulls in the whole queue graph at import; stub it.
-vi.mock("../inngest-client", () => ({ inngest: { createFunction: () => ({}) } }));
-vi.mock("../quiescence-gates", () => ({ gateAtEntry: vi.fn() }));
+vi.mock("@/lib/jobs", () => ({ jobs: { createFunction: (config: { id: string }, handler: any) => {
+  mocks.handlers.set(config.id, handler);
+  return {};
+} } }));
+vi.mock("../quiescence-gates", () => ({ gateAtEntry: mocks.gate }));
+vi.mock("@/lib/routing/eval-runner", () => ({ runDimensionEval: mocks.eval }));
+vi.mock("@/lib/operate/endpoint-test-runner", () => ({ runEndpointTests: mocks.probe }));
 
 import { claimEvalSlot } from "./eval-background";
 
@@ -21,9 +32,23 @@ const NOW = new Date("2026-07-14T12:00:00.000Z");
 
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.gate.mockResolvedValue({ proceed: true });
 });
 
 describe("claimEvalSlot (BI-C8164664)", () => {
+  it("loses a first-run creation race instead of duplicating inference", async () => {
+    mocks.prisma.scheduledJob.updateMany.mockResolvedValue({ count: 0 });
+    mocks.prisma.scheduledJob.findUnique.mockResolvedValue(null);
+    mocks.prisma.scheduledJob.create.mockRejectedValue({ code: "P2002" });
+    await expect(claimEvalSlot("local/new-model", NOW)).resolves.toBe(false);
+  });
+
+  it("surfaces storage failure instead of claiming work without a reservation", async () => {
+    mocks.prisma.scheduledJob.updateMany.mockResolvedValue({ count: 0 });
+    mocks.prisma.scheduledJob.findUnique.mockResolvedValue(null);
+    mocks.prisma.scheduledJob.create.mockRejectedValue(new Error("storage unavailable"));
+    await expect(claimEvalSlot("local/new-model", NOW)).rejects.toThrow("storage unavailable");
+  });
   it("wins the claim when the last eval attempt is older than the cooldown (or none)", async () => {
     mocks.prisma.scheduledJob.updateMany.mockResolvedValue({ count: 1 });
 
@@ -60,5 +85,33 @@ describe("claimEvalSlot (BI-C8164664)", () => {
       lastStatus: "running",
       lastRunAt: NOW,
     });
+  });
+});
+
+describe("background inference priority", () => {
+  const step = { run: async (_name: string, fn: () => unknown) => fn() };
+
+  it("runs evaluations in the autonomous lane and restores the caller origin", async () => {
+    mocks.eval.mockImplementation(async () => {
+      await Promise.resolve();
+      expect(currentInferenceOrigin()).toBe("autonomous");
+      return { skipped: true };
+    });
+    await mocks.handlers.get("ai/eval-background")!({
+      event: { data: { endpointId: "ep", modelId: "local/model", userId: "owner", force: true } }, step,
+    });
+    expect(mocks.eval).toHaveBeenCalledOnce();
+    expect(currentInferenceOrigin()).toBe("interactive");
+  });
+
+  it("runs endpoint probes in the autonomous lane", async () => {
+    mocks.probe.mockImplementation(async () => {
+      await Promise.resolve();
+      expect(currentInferenceOrigin()).toBe("autonomous");
+      return [];
+    });
+    await mocks.handlers.get("ai/probe-background")!({ event: { data: { endpointId: "ep" } }, step });
+    expect(mocks.probe).toHaveBeenCalledOnce();
+    expect(currentInferenceOrigin()).toBe("interactive");
   });
 });

@@ -78,6 +78,34 @@ export type ResolvedLocalCiPoolPolicy = {
    * evidence. Present whenever the canonical broker contributed.
    */
   decidedHostPressure?: LocalCiHostPressure;
+  /**
+   * The builder admission reserve the canonical resolver applied and where it
+   * came from: measured gate peaks, the checked-in calibration, or the ceiling
+   * after an OOM kill (BI-903FB5F9).
+   */
+  builderReserve?: {
+    bytes: number;
+    source: "measured" | "checked-in" | "ceiling";
+    reason: string;
+    sampleCount: number;
+  };
+  /**
+   * The arithmetic behind a headroom refusal (BI-D3BF53A9): what was
+   * available, the floor kept back, the per-slot reserve, and the shortfall.
+   * A closed pool that only says "headroom-low" cannot be told apart from a
+   * wall, and sessions reached for host maintenance that could not help.
+   */
+  headroom?: LocalCiHeadroomShortfall;
+};
+
+export type LocalCiHeadroomShortfall = {
+  /** Which machine was measured: the Docker VM (builder) or the host (stage). */
+  measuredOn: "docker-vm" | "host";
+  availableBytes: number;
+  floorBytes: number;
+  reserveBytes: number;
+  /** reserve - (available - floor); positive when the pool is closed on it. */
+  shortfallBytes: number;
 };
 
 /**
@@ -296,6 +324,33 @@ export function localCiHostStageHeadroomCapacity(input: {
   );
 }
 
+/** The shortfall behind a headroom refusal, or nothing when it is unmeasured. */
+export function localCiHeadroomShortfall(input: {
+  measuredOn: LocalCiHeadroomShortfall["measuredOn"];
+  availableBytes: number | undefined;
+  floorBytes: number;
+  reserveBytes: number;
+}): LocalCiHeadroomShortfall | undefined {
+  if (
+    !Number.isFinite(input.availableBytes)
+    || !Number.isFinite(input.floorBytes)
+    || !Number.isFinite(input.reserveBytes)
+  ) {
+    return undefined;
+  }
+  const availableBytes = input.availableBytes as number;
+  return {
+    measuredOn: input.measuredOn,
+    availableBytes,
+    floorBytes: input.floorBytes,
+    reserveBytes: input.reserveBytes,
+    shortfallBytes: Math.max(
+      0,
+      input.reserveBytes - Math.max(0, availableBytes - input.floorBytes),
+    ),
+  };
+}
+
 type PolicyEnv = Record<string, string | undefined>;
 type PlatformConfigReader = {
   findUnique: (args: {
@@ -418,8 +473,10 @@ function unavailable(input: {
   manifestCapacity: number;
   reason: string;
   config: LocalCiPoolConfig;
+  headroom?: LocalCiHeadroomShortfall;
 }): ResolvedLocalCiPoolPolicy {
   return {
+    ...(input.headroom ? { headroom: input.headroom } : {}),
     policyVersion: LOCAL_CI_POOL_POLICY_VERSION,
     source: input.source,
     requestedCapacity: input.requestedCapacity,
@@ -486,6 +543,13 @@ export function resolveLocalCiPoolPolicy(input: {
   host: LocalCiHostPressure;
   manifestSlotCount: number;
   reserveAdmissionHeadroom?: boolean;
+  /**
+   * BI-3A14308C (WWMD DI-ED547297DC9F): false when the gate builds no local
+   * production image because the merge queue owns that build. The host-stage
+   * reserve still applies; only the builder reserve is waived. Defaults to
+   * true, so a caller that does not say keeps today's admission.
+   */
+  reserveBuilderHeadroom?: boolean;
   env?: PolicyEnv;
   now?: Date;
   /**
@@ -493,6 +557,11 @@ export function resolveLocalCiPoolPolicy(input: {
    * valid config row exists, so an operator's explicit row always wins.
    */
   installation?: LocalCiInstallationProfile | null;
+  /**
+   * Builder admission reserve kept current from measured gate peaks
+   * (BI-903FB5F9). Absent: the checked-in calibration applies, as before.
+   */
+  builderReserveBytes?: number;
 }): ResolvedLocalCiPoolPolicy {
   const manifestCapacity = Number.isFinite(input.manifestSlotCount)
     && input.manifestSlotCount >= LOCAL_CI_MIN_CAPACITY
@@ -548,12 +617,15 @@ export function resolveLocalCiPoolPolicy(input: {
   }
 
   if (input.reserveAdmissionHeadroom) {
+    const reserveBuilder = input.reserveBuilderHeadroom !== false;
     const builderMemoryBytes = localCiBuilderAdmissionReserveBytes({
       hardCeilingBytes: localCiSlotResources.builderPolicy.memoryBytes,
-      calibratedReserveBytes:
-        localCiSlotResources.builderPolicy.admissionReserveBytes,
+      calibratedReserveBytes: input.builderReserveBytes
+        ?? localCiSlotResources.builderPolicy.admissionReserveBytes,
     });
-    const hostBuildCapacity = localCiBuildHeadroomCapacity({
+    // A delegated gate builds nothing in the Docker VM, so it reserves no
+    // builder memory there: its build capacity is the whole manifest.
+    const hostBuildCapacity = !reserveBuilder ? manifestCapacity : localCiBuildHeadroomCapacity({
       dockerAvailableMemoryBytes:
         Math.max(0, (input.host.dockerAvailableMemoryBytes ?? Number.NaN)
           - config.ceilings.minAvailableMemoryBytes),
@@ -569,16 +641,23 @@ export function resolveLocalCiPoolPolicy(input: {
         manifestCapacity,
         reason: "host-build-headroom-low",
         config,
+        headroom: localCiHeadroomShortfall({
+          measuredOn: "docker-vm",
+          availableBytes: input.host.dockerAvailableMemoryBytes,
+          floorBytes: config.ceilings.minAvailableMemoryBytes,
+          reserveBytes: builderMemoryBytes,
+        }),
       });
     }
+    const hostStageMemoryBytes = localCiHostStageAdmissionReserveBytes({
+      hardCeilingBytes: localCiSlotResources.hostStagePolicy.memoryBytes,
+      calibratedReserveBytes:
+        localCiSlotResources.hostStagePolicy.admissionReserveBytes,
+    });
     const hostStageCapacity = localCiHostStageHeadroomCapacity({
       availableMemoryBytes: input.host.availableMemoryBytes ?? Number.NaN,
       minAvailableMemoryBytes: config.ceilings.minAvailableMemoryBytes,
-      hostStageMemoryBytes: localCiHostStageAdmissionReserveBytes({
-        hardCeilingBytes: localCiSlotResources.hostStagePolicy.memoryBytes,
-        calibratedReserveBytes:
-          localCiSlotResources.hostStagePolicy.admissionReserveBytes,
-      }),
+      hostStageMemoryBytes,
       manifestCapacity,
     });
     if (hostStageCapacity === 0) {
@@ -588,6 +667,12 @@ export function resolveLocalCiPoolPolicy(input: {
         manifestCapacity,
         reason: "host-stage-headroom-low",
         config,
+        headroom: localCiHeadroomShortfall({
+          measuredOn: "host",
+          availableBytes: input.host.availableMemoryBytes,
+          floorBytes: config.ceilings.minAvailableMemoryBytes,
+          reserveBytes: hostStageMemoryBytes,
+        }),
       });
     }
     if (hostBuildCapacity === 1 && requestedCapacity === 2) {

@@ -435,7 +435,7 @@ Every archetype begins from a clean DB state. Two reset tiers based on what is a
 | Component | Full install (Run 0 only) | DB-only reset (every archetype after Run 0) |
 |-----------|--------------------------|--------------------------|
 | PostgreSQL data | wiped + re-seeded | **restored from golden dump** (provider-configured, no org) |
-| Neo4j, Qdrant, Redis | wiped | **kept** — empty anyway |
+| Redis | wiped | **kept** — empty anyway |
 | Docker containers | torn down and recreated | **kept running** |
 | Docker images | used as-is (no rebuild) | **kept** — unchanged |
 | LLM model weights | used as-is | **kept** — never re-downloaded |

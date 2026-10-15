@@ -43,6 +43,7 @@ import {
   normalizeDeferralInput,
   type NormalizedDeferral,
 } from "@/lib/backlog/deferral-contract";
+import { closeOpenBuildPhaseRunsForTerminalBuild } from "@/lib/build/close-terminal-phase-runs";
 
 /** Self-fix-feasibility class — why an autonomous producer could not self-repair. */
 export const SELF_FIX_CLASS = {
@@ -305,6 +306,7 @@ export async function escalateBuildToHuman(args: EscalateBuildArgs): Promise<Esc
       },
     });
     wipFreed = true;
+    await closeOpenBuildPhaseRunsForTerminalBuild(buildId, { now });
     // BI-8BD61C30: tear down isolation worktree when escalating (same as self-abandon).
     const { releaseSandboxForTerminalBuild } = await import(
       "@/lib/build/sandbox/sandbox-build-gc"

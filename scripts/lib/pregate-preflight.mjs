@@ -30,8 +30,9 @@
 // honest early warning, so a false local failure would erode trust faster
 // than a missed one.
 
-import { spawnSync } from "node:child_process";
-import { scrubGitRepoLocationEnv } from "./git-hook-env.mjs";
+import { createObservedProcessRunner } from "./local-ci-process-observer.mjs";
+import { guardGitEnv } from "./git-hook-env.mjs";
+import { guardShellEnv } from "./guard-bash.mjs";
 
 import {
   POLICY_GUARD_PROFILES,
@@ -73,6 +74,9 @@ export const LOCAL_SAFE_PR_GUARD_IDS = Object.freeze([
   "convergence-impact-gate",
   "spec-plan-doc-gate",
   "seed-fit-gate",
+  // Reads the commit range host-side; PR title/body are CI-only extras
+  // (BI-5D412E3C), so a local run still answers for the commit messages.
+  "hidden-unicode-commit-text-guard",
 ]);
 
 // Exit-output signatures that mean "this host cannot run the guard", not
@@ -161,26 +165,42 @@ export function buildPreflightPlan({ profiles = POLICY_GUARD_PROFILES, changeSco
  * GIT_DIR, and a guard that builds a temp git fixture would otherwise commit
  * to the REAL repository — which is how a 15,511-file deletion landed on a
  * pushing branch. Guards resolve their repository from cwd, never from the
- * hook's environment.
+ * hook's environment. Git's automatic maintenance is off for the same
+ * children, so a fixture's commits never race a background repack
+ * (BI-E0FEB8E9).
  */
-export function createDefaultExecute(env = process.env) {
-  const guardEnv = scrubGitRepoLocationEnv(env);
-  return function defaultExecute(command, args) {
+// Full source guard loops have exceeded ten minutes on measured developer
+// hosts. Keep a finite budget without turning normal execution into a timeout.
+export const HOST_GUARD_MAX_DURATION_MS = 30 * 60_000;
+
+export function createDefaultExecute(env = process.env, { maxDurationMs = HOST_GUARD_MAX_DURATION_MS,
+  signal, progress = () => {}, terminationGraceMs = 10_000, closeGraceMs = 10_000 } = {}) {
+  if (!Number.isInteger(maxDurationMs) || maxDurationMs <= 0) throw new TypeError("host guard duration must be a positive finite budget");
+  let guardEnv;
+  return async function defaultExecute(command, args, observation = {}) {
+    try {
+      guardEnv ??= guardShellEnv(guardGitEnv(env));
+    } catch (error) {
+      return { exitCode: 1, output: `${error.name}: ${error.message}`, runnerFailure: false };
+    }
     const invocation = resolvePolicyGuardInvocation(command, args, { env: guardEnv });
-    const result = spawnSync(invocation.command, invocation.args, {
-      cwd: process.cwd(),
-      env: guardEnv,
-      encoding: "utf8",
-      shell: false,
-    });
-    const output = `${result.stdout ?? ""}${result.stderr ?? ""}${result.error?.message ?? ""}`;
-    if (result.status !== 0) process.stderr.write(output);
+    const run = createObservedProcessRunner({ maxDurationMs, terminationGraceMs, closeGraceMs,
+      sampleHost: () => null, stdout: { write() {} }, stderr: { write() {} }, onProgress: progress });
+    progress({ ...observation, phase: "started" });
+    const result = await run({ command: invocation.command, args: invocation.args,
+      cwd: process.cwd(), env: guardEnv, shell: false, signal, observation });
+    const output = `${result.outputTail ?? ""}${result.error?.message ?? ""}`;
+    const outcome = result.cancelled ? "cancelled" : result.deadlineExceeded ? "timed_out"
+      : result.closeTimedOut || result.error || result.status === null ? "runner_failed" : null;
+    const exitCode = outcome ? 88 : result.status ?? 1;
+    if (exitCode !== 0) process.stderr.write(output);
+    progress({ ...observation, phase: "completed", exitCode, outcome, deadlineAt: result.deadlineAt });
     // A guard command the host refused to launch, killed by a signal, or the
     // guard-loop runner's reserved runner-failure exit code — keyed on exit code,
     // never on output text — so runPreflight never mislabels an evicted spawn as
     // deterministic, nor downgrades a real violation that merely mentions one.
     const runnerFailure = isRunnerFailureResult({ args, status: result.status, error: result.error });
-    return { exitCode: result.status ?? 1, output, runnerFailure };
+    return { exitCode, output, runnerFailure: Boolean(outcome) || runnerFailure, outcome };
   };
 }
 
@@ -200,7 +220,8 @@ export async function runPreflight({
   logger = () => {},
   now = () => Date.now(),
   env = process.env,
-  execute = createDefaultExecute(env),
+  signal,
+  execute = createDefaultExecute(env, { signal }),
 } = {}) {
   const skipReason = env[PREFLIGHT_SKIP_ENV];
   if (skipReason) {
@@ -210,36 +231,38 @@ export async function runPreflight({
   const wrapped = new Map();
   const result = await runPolicyProfile({
     entries: plan,
-    execute: (command, args) => {
-      const { exitCode, output, runnerFailure } = execute(command, args);
+    execute: async (command, args, observation) => {
+      const { exitCode, output, runnerFailure, outcome } = await execute(command, args, observation);
       if (exitCode !== 0) {
         // Precedence: a stable missing-runtime signal (environment) wins over a
         // transient host-pressure signal (runner) wins over a real violation.
         // `runnerFailure` is keyed on exit code / spawn signals, not output
         // text, so a real violation is never downgraded to a warning.
-        const kind = isEnvironmentFailureOutput(output)
+        const kind = outcome || (isEnvironmentFailureOutput(output)
           ? "environment"
           : runnerFailure
             ? "runner"
-            : "violation";
+            : "violation");
         wrapped.set([command, ...args].join(" "), kind);
       }
       return exitCode;
     },
     logger,
     now,
+    shouldStop: () => Boolean(signal?.aborted),
   });
 
   const entries = result.entries.map((entry) => {
     if (entry.status !== "failed") return entry;
     const kind = wrapped.get(entry.failedCommand);
     if (kind === "environment") return { ...entry, status: "skipped_environment" };
-    if (kind === "runner") return { ...entry, status: "runner_failed" };
+    if (kind === "runner" || kind === "runner_failed") return { ...entry, status: "runner_failed" };
+    if (kind === "timed_out" || kind === "cancelled") return { ...entry, status: kind };
     return entry;
   });
 
   return {
-    ok: entries.every((entry) => entry.status !== "failed"),
+    ok: entries.every((entry) => !["failed", "timed_out", "cancelled"].includes(entry.status)),
     skipped: false,
     skipReason: null,
     entries,

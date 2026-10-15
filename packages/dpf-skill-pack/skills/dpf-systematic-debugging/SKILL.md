@@ -33,6 +33,10 @@ enforces:
 
 Hypothesis-and-isolate is assumed, not taught. In DPF the failure modes are substrate- and concurrency-shaped rather than logic-shaped, so the generic loop misleads more often than it helps. What follows is only the DPF-specific gating.
 
+## Route platform or gate failures first
+
+For a broken upgrade, unavailable MCP/portal/CI, permission denial or occupied break-fix lane, read [recovery routing](references/recovery-routing.md) before the normal steps below. A recovery route preserves authorization and reports unrun gates honestly. Ordinary queue contention still waits.
+
 ## When to use
 
 - A build, job, or runtime is failing, stuck, or wedged and you need the root cause.

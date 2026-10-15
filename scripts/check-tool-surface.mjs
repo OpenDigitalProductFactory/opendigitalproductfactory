@@ -31,7 +31,6 @@
 //   node scripts/check-tool-surface.mjs --update   # re-baseline, then write the reasons
 
 import { readFileSync, writeFileSync, readdirSync } from "node:fs";
-import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -40,6 +39,8 @@ import {
   enforceClaimReview,
   reviewClaims,
 } from "./check-context-economy.mjs";
+
+import { gitText } from "./lib/git.mjs";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BASELINE_PATH = join(REPO_ROOT, "scripts", "tool-surface-baseline.json");
@@ -205,9 +206,9 @@ function readBaseline(path) {
 
 function readBaselineAtBase() {
   try {
-    const out = execFileSync("git", ["show", "origin/main:scripts/tool-surface-baseline.json"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
+    const out = gitText(["show", "origin/main:scripts/tool-surface-baseline.json"], {
+      cwd: process.cwd(),
+      trim: false,
     });
     return JSON.parse(out).entries ?? null;
   } catch {

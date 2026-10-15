@@ -37,7 +37,6 @@ import {
   unlinkWorkLocationAddress,
   previewCityMerge,
   mergeCity,
-  previewRegionMerge,
   mergeRegion,
   searchAdminRegions,
   searchRegionMergeCandidates,

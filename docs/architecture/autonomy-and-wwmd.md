@@ -54,10 +54,10 @@ Code references:
 WWMD owns the decisions about how the platform itself evolves and how the shared ecosystem behaves: build and architecture trade-offs, what generalizes into the Hive Mind commons versus stays local, contribution and governance standards for the substrate every install shares. It is deliberately *not* the layer for a customer's business calls — that is WWWD's job. Its doctrine is the founder kernel: tiered principles authored, reviewed, and versioned in the governed wiki. Retrieval for `principle_decide` splits **relevance from authority**:
 
 - **Commandments always come from Postgres** — the authoring store — and are always in scope. They are never subject to a similarity search deciding whether they "apply."
-- **Core and contextual principles are found by vector search in Qdrant**, which ranks relevance — core principles top-K ranked, contextual principles additionally gated by a cosine-similarity threshold (default `0.75`) so narrow operational rules only enter when genuinely close to the question.
-- **A Qdrant hit alone can never score.** The vector index nominates; the real principle rows — vectors, tiers, weights — are fetched from Postgres by page id. Phantom hits (index entries whose page no longer exists) are detected and dropped, and their count is reported, because a vector index that disagrees with the authoring store is itself a finding.
+- **Core and contextual principles are found by vector search in pgvector**, which ranks relevance — core principles top-K ranked, contextual principles additionally gated by a cosine-similarity threshold (default `0.75`) so narrow operational rules only enter when genuinely close to the question.
+- **A vector hit alone can never score.** The vector index nominates; the real principle rows — vectors, tiers, weights — are fetched from Postgres by page id. Phantom hits (index entries whose page no longer exists) are detected and dropped, and their count is reported, because a vector index that disagrees with the authoring store is itself a finding.
 
-This split — *Qdrant is the relevance index, Postgres is the authority* — is what keeps semantic search from quietly becoming a decision-maker.
+This split — *the vector index is the relevance index, the principle rows are the authority* — is what keeps semantic search from quietly becoming a decision-maker.
 
 ### WWWD — your organization's business decisions
 
@@ -148,7 +148,7 @@ Code references:
     <text x="158" y="250" fill="var(--fg-muted, #a4adb8)" font-size="12">platform evolution &amp; ecosystem</text>
     <text x="158" y="278" fill="var(--fg-muted, #a4adb8)" font-size="12">founder-kernel wiki</text>
     <text x="158" y="296" fill="var(--fg-muted, #a4adb8)" font-size="12">tiered principles</text>
-    <text x="158" y="322" fill="var(--fg-muted, #a4adb8)" font-size="11">Qdrant ranks relevance &middot; Postgres holds authority</text>
+    <text x="158" y="322" fill="var(--fg-muted, #a4adb8)" font-size="11">pgvector ranks relevance &middot; principle rows hold authority</text>
     <text x="440" y="230" font-size="15" font-weight="700">WWWD</text>
     <text x="440" y="250" fill="var(--fg-muted, #a4adb8)" font-size="12">your business stance</text>
     <text x="440" y="278" fill="var(--fg-muted, #a4adb8)" font-size="12">org-authored corpus:</text>
@@ -299,6 +299,23 @@ Code references:
 - [`graduated-autonomy.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/decision-perspective/graduated-autonomy.ts) — risk-tier derivation from sensitivity × lifecycle transition
 - [`build-studio-gate.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/decision-perspective/build-studio-gate.ts) — the Build Studio plan-advancement gate
 
+### From a decision to a permission
+
+An outcome from this ladder settles a *question*. It does not, by itself, make any tool
+reachable. The [Gated Permissions Process (GPP)](gated-permissions-process.md) is the standard that
+pairs the two. Each stage of a piece of work carries a binding that names:
+
+- which scope owns the gate (WWMD, WWWD or WSID)
+- which capability set an `admit` from that gate unlocks
+- for how long, and under what stop conditions
+
+`TAK` then enforces the result on every call. A strong score never widens the tool envelope, and
+holding a grant never answers who decided. The
+[pairing diagram](gated-permissions-process.md#73-the-pairing-at-a-glance) shows both sides
+meeting at runtime, and
+[GPP Annex C](gated-permissions-process.md#annex-c-informative-build-studio-as-a-gpp-model) walks
+through it for Build Studio, whose plan-advancement gate is the one cited above.
+
 ## JSI: weights that learn the job
 
 The scoring above uses declared weights. **Job-Specific Intelligence (JSI)** is the layer that lets those weights *learn* — carefully, on three deliberately different timescales, because a job is not a corpus: two organizations with identical doctrine can still weigh the same trade-off differently, and that revealed difference is data.
@@ -364,9 +381,43 @@ A coworker can act faster over time, but the organization can always reconstruct
 
 The shadow ledger and trust states described above are a second, parallel record: they are how "this coworker has earned autopilot on invoice matching but is still proposing on refunds" is a queryable fact rather than a feeling.
 
+A decision reaches the shadow ledger only when it names the coworker that made it. `DecisionInteraction.agentId` is a foreign key onto the coworker record; it is null for decisions no coworker made, such as the hourly triage drain or an operator's review. A decision that names a coworker gets exactly one ledger row, keyed by its interaction id. The row is written at `shadow` when the decision is recorded. When `record_decision_outcome` reports what was actually done, the same row receives the actual decision, the outcome and the agreement. Agreement stays null until that report arrives, and stays null for a report of "left unresolved". The two vocabularies are mapped by one explicit table, and a value missing from it is refused rather than placed in a nearby bucket:
+
+| Decision `domainClass` | Ledger `activityType` |
+|---|---|
+| `plan-readiness` | `governed_decision_plan_readiness` |
+| `architecture-tradeoff` | `governed_decision_architecture_tradeoff` |
+| `risk-assessment` | `governed_decision_risk_assessment` |
+| `professional-practice` | `governed_decision_professional_practice` |
+| `kernel-consult` | `governed_decision_kernel_consult` |
+
+| Decision `riskTier` | Ledger `riskClass` |
+|---|---|
+| `low` | `internal-reversible` |
+| `medium` | `internal-irreversible` |
+| `high` | `outbound-or-floor` |
+| `critical` | `outbound-or-floor` |
+
+The risk mapping matches the funding gate's mapping on the three tiers both share. The ledger records evidence and authorizes nothing: no code path reads a bridged row back to raise a trust level.
+
+### Governed-decision trust state (report only)
+
+A scheduled job, *Decision trust measurement* (every 6 hours, with a run-now event), turns the ledger into `TrustState` rows, one per coworker × activity type × risk class. Each pass does two things, and both are idempotent:
+
+1. It backfills the ledger through the same writer a live decision uses. Most attributed decisions were made before the bridge existed, so a coworker would otherwise be missing from the measurement. A backfilled row carries the decision's own time. A row whose decision has since been resolved is completed.
+2. It recomputes every governed-decision `TrustState` from the whole ledger: `sampleCount`, `agreementCount`, `agreementRate`, `lastLedgerId` and `lastEvaluatedAt`.
+
+Only human-resolved decisions are samples. A coworker's report on its own decision is counted separately and never pooled into the rate, the same rule slice 1 applies to its resolvers. A decision with no known resolution is counted as unresolved, and one the kernel abstained on is counted as having no recommendation.
+
+A new row is created at `shadow`. An update never writes `currentLevel`, and the stored recommendation is always a fixed hold at `shadow`. No code path in this measurement raises a level or recommends raising one. Graduation is a separate decision for the founder, taken against these numbers.
+
+`report_decision_trust_state` (MCP, read-only) shows the sample count beside each rate. It withholds the rate below 10 human-resolved samples, the smallest sample the trust rules act on, and shows "insufficient samples" in its place. A coworker with attributed decisions that no trust row covers yet is listed rather than left out. Every report says what it cannot show: agreement is concordance, not correctness, and a human who rubber-stamps produces high agreement and no information.
+
 Code references:
 
 - [`DecisionInteraction`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/packages/db/prisma/schema.prisma), [`persistDecisionInteraction`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/decision-perspective/persistence.ts)
+- [`decision-shadow-ledger-mapping.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/decision/decision-shadow-ledger-mapping.ts), [`decision-shadow-ledger-bridge.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/decision/decision-shadow-ledger-bridge.ts)
+- [`decision-trust-state.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/decision/decision-trust-state.ts), [`decision-trust-state-store.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/decision/decision-trust-state-store.ts)
 
 ## The learning loop
 

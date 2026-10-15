@@ -7,6 +7,7 @@ import { itemBodyBaselineState } from "./item-body-baseline";
 import type { InheritedInitiativeScope } from "./parent-scope-inheritance";
 import type { InitiativeArtifactRef } from "./receipt-schema";
 import { readinessCodesForEvidenceDimension } from "./readiness-guidance";
+import type { DeliverySensitivityAssessment } from "./delivery-sensitivity";
 import { effectiveShape } from "./shape-requirements";
 import type {
   InitiativeReadinessDecision,
@@ -42,8 +43,12 @@ export type InitiativeReadinessItem = {
   activeBuildKind?: string | null;
   /** v3: the Workroom's declared/derived delivery shape as `delivery-<shape>@<version>`, when bound. */
   workShape?: string | null;
-  /** v3: deliverable sensitivity (design 3.2); distinct from BacklogItem.sensitivity, the data classification. */
-  deliverySensitivity?: ReadinessSensitivity | null;
+  /**
+   * v3: deliverable sensitivity (design 3.2); distinct from BacklogItem.sensitivity,
+   * the data classification. Pass the assessment (BI-243BC956) so the decision can
+   * cite what raised the shape; a bare level is still accepted.
+   */
+  deliverySensitivity?: ReadinessSensitivity | DeliverySensitivityAssessment | null;
   /** v3: the item body is the baseline for small/medium shapes. */
   body?: string | null;
 };
@@ -55,10 +60,12 @@ export function readinessShapeFromWorkShape(ref: string | null | undefined): Rea
 }
 
 type Baseline = {
+  origin?: string;
   baselineId: string;
   supersedesBaselineId: string | null;
   artifactDigest: string;
   profile: InitiativeReadinessFacts["profile"];
+  recordedAt: Date;
 };
 
 function object(value: unknown): Record<string, unknown> | null {
@@ -89,10 +96,12 @@ function parseBaselines(activities: readonly InitiativeReadinessActivity[], item
       return { current: null, malformed: true, ambiguous: true };
     }
     parsed.push({
+      origin: typeof payload.origin === "string" ? payload.origin : undefined,
       baselineId: payload.baselineId,
       supersedesBaselineId: payload.supersedesBaselineId as string | null,
       artifactDigest: payload.artifactDigest,
       profile: profile as Baseline["profile"],
+      recordedAt: row.recordedAt,
     });
   }
   const ids = new Set(parsed.map((entry) => entry.baselineId));
@@ -230,6 +239,29 @@ function projectGateReceipt(
   return { state: decision as ReadinessEvidenceState, malformed: false, gate };
 }
 
+/**
+ * BI-7531B73C: a design amended after its spec approval. A review that fails
+ * the approved design can only be answered by changing the design, and every
+ * receipt against the changed design reads stale against the baseline's digest.
+ * When a design-bound receipt recorded after the baseline names another design
+ * digest, the approval is owed again: spec approval reads stale, readiness
+ * routes it, and the existing supersession path mints the new baseline.
+ * Plan-review receipts bind the plan, so they never count.
+ */
+function designAmendedAfterBaseline(
+  activities: readonly InitiativeReadinessActivity[],
+  baseline: Baseline | null,
+  planDigest: string | null,
+): boolean {
+  if (!baseline) return false;
+  return activities.some((activity) => {
+    if (activity.kind !== "initiative_gate_receipt" || activity.recordedAt <= baseline.recordedAt) return false;
+    if (normalizeGate(activity.gateKey) === "plan-review") return false;
+    const digest = object(activity.payload)?.artifactDigest;
+    return typeof digest === "string" && digest !== baseline.artifactDigest && digest !== planDigest;
+  });
+}
+
 function latestGateStates(
   activities: readonly InitiativeReadinessActivity[],
   digests: AcceptedDigests,
@@ -286,6 +318,27 @@ function unreadEvidenceByCode(
     }
   }
   return byCode;
+}
+
+/**
+ * BI-6EB2DBBB: whether the item already carries a small fix's research — the
+ * reproduction on a named ref (`source_verified`) and a failing-to-passing proof
+ * whose latest test record passes (`test_pass` not superseded by `test_fail`).
+ * Both are written by record_execution_evidence, which the author can reach.
+ */
+export function hasRecordedReproduction(activities: readonly InitiativeReadinessActivity[]): boolean {
+  let source = false;
+  let latestTest: { at: number; pass: boolean } | null = null;
+  for (const activity of activities) {
+    if (activity.kind !== "evidence") continue;
+    const evidenceKind = object(activity.payload)?.evidenceKind;
+    if (evidenceKind === "source_verified") source = true;
+    if (evidenceKind === "test_pass" || evidenceKind === "test_fail") {
+      const at = activity.recordedAt.getTime();
+      if (!latestTest || at >= latestTest.at) latestTest = { at, pass: evidenceKind === "test_pass" };
+    }
+  }
+  return source && latestTest?.pass === true;
 }
 
 type InitiativePlanArtifact = Extract<InitiativeArtifactRef, { kind: "repo-blob-at-commit" }>;
@@ -394,6 +447,8 @@ export function projectBacklogItemReadiness(args: {
   governed: boolean;
   baselineId: string | null;
   planArtifact: InitiativePlanArtifact | null;
+  /** Additive projection evidence; legacy projection ports may omit it. */
+  planArtifactDigest?: string | null;
   /** Parent item whose scope this projection borrowed, or null when the item stands alone. */
   inheritedFrom: string | null;
   artifactHints: { hasSpec: boolean; hasPlan: boolean };
@@ -405,7 +460,9 @@ export function projectBacklogItemReadiness(args: {
     : null;
   const inherited = parent?.current ? args.inheritedScope! : null;
   const baseline = inherited ? parent! : own;
-  const digest = baseline.current?.artifactDigest ?? null;
+  // A body snapshot versions acceptance, not the research artifact. It cannot
+  // retroactively stale author research against the previously recorded source.
+  const digest = baseline.current?.origin === "item-body" ? null : baseline.current?.artifactDigest ?? null;
   const projectedCoverage = projectPlanCoverage(inherited ? inherited.activities : args.activities, baseline.current);
   const digests: AcceptedDigests = { canonical: digest, plan: projectedCoverage.planDigest };
   const ownReceipts = latestGateStates(args.activities, digests, args.item.itemId);
@@ -428,7 +485,10 @@ export function projectBacklogItemReadiness(args: {
   // The derivations below serve the proportional gate table only, so they key on
   // the shape the gates will actually apply: sensitivity that raises small or
   // medium to large also takes these derivations away.
-  const applied = shape ? effectiveShape(shape, args.item.deliverySensitivity, profile) : null;
+  const sensitivity = typeof args.item.deliverySensitivity === "string"
+    ? { level: args.item.deliverySensitivity, trigger: null }
+    : args.item.deliverySensitivity ?? null;
+  const applied = shape ? effectiveShape(shape, sensitivity?.level, profile, args.item.workType) : null;
   const proportional = applied === "small" || applied === "medium";
   // BI-0E2E3BC5: a Build Studio build records its research and acceptance
   // criteria in the design document its reviewers passed, and writes no
@@ -480,11 +540,20 @@ export function projectBacklogItemReadiness(args: {
   // BI-0E2E3BC5 adds the one earlier source: a Build Studio design its reviewers
   // passed, which exists before any delivery and is what a medium item's research
   // is. A failed or absent review confers nothing.
+  //
+  // BI-6EB2DBBB adds the claim-time source the operator directed on 2026-09-23:
+  // for a SMALL FIX, research is the reproduction the author already produced —
+  // the defect on a named ref and a failing-to-passing test, recorded as
+  // execution evidence before the claim. It needs no separately granted writer,
+  // so an external session can claim a small fix. Net-new work, medium and
+  // larger shapes, and a fix with no recorded reproduction still need the
+  // recorded research receipt.
   const recordedResearch = state(evidence, "research");
+  const smallFixReproduced = applied === "small" && profile === "fix" && hasRecordedReproduction(args.activities);
   const researchState: ReadinessEvidenceState =
     recordedResearch === "missing"
       && proportional
-      && (args.completion?.deliveryEvidence === "pass" || reviewedBuildDesign)
+      && (args.completion?.deliveryEvidence === "pass" || reviewedBuildDesign || smallFixReproduced)
       ? "pass"
       : recordedResearch;
   const facts: InitiativeReadinessFacts = {
@@ -492,13 +561,19 @@ export function projectBacklogItemReadiness(args: {
     transitionObject: args.transitionObject,
     profile: profile ?? "doc-only",
     shape,
-    sensitivity: args.item.deliverySensitivity ?? null,
+    sensitivity: sensitivity?.level ?? null,
+    sensitivityTrigger: sensitivity?.trigger ?? null,
+    workType: args.item.workType ?? null,
     evaluatedAt: args.evaluatedAt,
     classification: profile ? "pass" : "missing",
     canonicalDesign: pass(baselineState),
     canonicalDesignAmbiguous: recognizeMerge ? false : baseline.ambiguous,
     research: pass(researchState),
-    specApproval: pass(state(evidence, "spec-approval")),
+    specApproval: pass(
+      !inherited && designAmendedAfterBaseline(args.activities, baseline.current, projectedCoverage.planDigest)
+        ? "stale"
+        : state(evidence, "spec-approval"),
+    ),
     specialistReviews: {
       architecture: pass(state(evidence, "architecture-review")),
       data: state(evidence, "data-review"),
@@ -537,6 +612,7 @@ export function projectBacklogItemReadiness(args: {
     governed,
     baselineId: baseline.current?.baselineId ?? null,
     planArtifact: projectedCoverage.planArtifact,
+    planArtifactDigest: projectedCoverage.planDigest,
     inheritedFrom: inherited?.parentItemId ?? null,
     artifactHints: args.artifactHints ?? { hasSpec: false, hasPlan: false },
     decision: evaluateInitiativeReadiness(facts, args.target),
@@ -550,8 +626,14 @@ export function projectBacklogItemReadinessSummary(args: {
   hasSpec: boolean;
   hasPlan: boolean;
   evaluatedAt: string;
+  /**
+   * BI-094B41AC: the completion gate's own evaluation for this item
+   * (readBacklogItemCompletion), when the caller ran it. A persisted terminal
+   * decision still wins; absent both, completion is projected as before.
+   */
+  completionDecision?: InitiativeReadinessDecision | null;
 }) {
-  const terminalCompletion = persistedTerminalCompletionDecision(args.activities, args.item);
+  const terminalCompletion = persistedTerminalCompletionDecision(args.activities, args.item) ?? args.completionDecision ?? null;
   const decisions = Object.fromEntries((["design", "plan", "implementation", "completion"] as const).map((target) => {
     if (target === "completion" && terminalCompletion) return [target, terminalCompletion];
     const projected = projectBacklogItemReadiness({

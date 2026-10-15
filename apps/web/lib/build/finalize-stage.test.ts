@@ -9,6 +9,7 @@ import {
   authorFailureAnalysis,
   authorGateDecisions,
   composeFailureAnalysis,
+  explainRetryReason,
   type FailureAnalysisNarrative,
   parseTrailerLines,
   trailerKeysForFailedGuards,
@@ -100,5 +101,60 @@ describe("authorFailureAnalysis", () => {
     expect(out.kind).toBe("ok");
     expect(llm).toHaveBeenCalledTimes(2);
     if (out.kind === "ok") expect(validateFailureAnalysis(out.failureAnalysis, identity, evidence).valid).toBe(true);
+  });
+
+  // FB-D671B016 (2026-09-25): the model marked risks "accepted", the validator
+  // refused both attempts with an opaque code, and finalize stopped every round.
+  it("states the disposition rule up front and restates a refused disposition in words", async () => {
+    const accepted = { ...narrative, scenarios: narrative.scenarios.map((s) => ({ ...s, residualRisk: { ...s.residualRisk, disposition: "accepted" as const } })) };
+    const llm = vi.fn()
+      .mockResolvedValueOnce(JSON.stringify(accepted))
+      .mockResolvedValueOnce(JSON.stringify(narrative));
+    const out = await authorFailureAnalysis({
+      llm, identity, designReference: `featureBuild/FB-D671B016/designDoc@${"c".repeat(40)}`,
+      evidence, diffSummary: "M packages/db/src/seed-wiki-kernel.ts",
+    });
+    expect(out.kind).toBe("ok");
+    expect(llm.mock.calls[0]![0]).toContain("Never mark a risk \"accepted\" or \"deferred\"");
+    const key = narrative.scenarios[0]!.key;
+    expect(llm.mock.calls[1]![0]).toContain(`scenario "${key}" used a disposition other than "mitigated"`);
+  });
+});
+
+// BI-83E1ADF8 (2026-10-01): FB-8AB05E04 marked a real risk "blocked" as the
+// prompt asks, finalize called it malformed, and the sweep re-ran it 8 times.
+describe("an unmitigated risk is a verdict, not a malformed answer", () => {
+  const withDisposition = (disposition: "blocked" | "accepted") => ({
+    ...narrative, scenarios: narrative.scenarios.map((s) => ({ ...s, residualRisk: { ...s.residualRisk, disposition } })),
+  });
+  const run = (llm: (p: string) => Promise<string>) => authorFailureAnalysis({
+    llm, identity, designReference: `featureBuild/FB-8AB05E04/designDoc@${"c".repeat(40)}`,
+    evidence, diffSummary: "M apps/web/lib/routing/adapter-telemetry-writer.ts",
+  });
+
+  it("returns a blocked risk at once, without asking the model to relabel it", async () => {
+    const llm = vi.fn().mockResolvedValue(JSON.stringify(withDisposition("blocked")));
+    const out = await run(llm);
+    expect(llm).toHaveBeenCalledTimes(1);
+    expect(out).toEqual({ kind: "risk-blocked", risks: [expect.objectContaining({ key: "bad-tier-seeded", disposition: "blocked", severity: "medium" })] });
+  });
+
+  it("retries an accepted risk once, then returns it as unmitigated", async () => {
+    const llm = vi.fn().mockResolvedValue(JSON.stringify(withDisposition("accepted")));
+    const out = await run(llm);
+    expect(llm).toHaveBeenCalledTimes(2);
+    expect(out.kind).toBe("risk-blocked");
+  });
+
+  it("keeps other validation failures invalid", async () => {
+    const blockedAndStale = vi.fn().mockResolvedValue(JSON.stringify({ ...withDisposition("blocked"), noEliminationRationale: undefined }));
+    const out = await run(blockedAndStale);
+    expect(out).toMatchObject({ kind: "invalid", reasons: expect.arrayContaining(["elimination-rationale-missing"]) });
+  });
+});
+
+describe("explainRetryReason", () => {
+  it("passes through a reason it has no wording for", () => {
+    expect(explainRetryReason("stale-evidence:abc")).toBe("stale-evidence:abc");
   });
 });

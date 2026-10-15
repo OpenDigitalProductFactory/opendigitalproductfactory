@@ -182,8 +182,13 @@ export async function dispatchBuildForApprovedPlan(params: {
     });
 
     if (buildWithBranch?.phase === "plan" && buildWithBranch.buildBranch) {
-      // start_build set the branch — advance phase to build manually
-      await prisma.featureBuild.update({ where: { buildId }, data: { phase: "build" } });
+      // start_build set the branch — advance phase to build through the shared
+      // transition (GPP C-8, PR-F). This path evaluates no gate at the transition:
+      // readiness and dependencies were checked upstream (above and inside
+      // start_build), and the WWMD gate is not evaluated here. See
+      // PLAN_TO_BUILD_GATE_PROFILES["build-on-plan-approval"].
+      const { transitionPlanToBuild } = await import("@/lib/build/plan-to-build-transition");
+      await transitionPlanToBuild({ buildId, path: "build-on-plan-approval", steps: {} });
       await log("Phase advanced to build (start_build confirmed sandbox ready)");
     } else if (buildWithBranch?.phase !== "build") {
       await log(`Phase is ${buildWithBranch?.phase} after start_build — cannot advance, skipping orchestrator`);

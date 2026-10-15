@@ -13,7 +13,6 @@ import {
 import { runAgenticLoop, type AgenticResult } from "@/lib/agentic-loop";
 import { agentEventBus, type AgentEvent } from "@/lib/agent-event-bus";
 import { getAvailableTools, toolsToOpenAIFormat } from "@/lib/mcp-tools";
-import { getBuildContextSection } from "@/lib/build/build-agent-prompts";
 import { appendGovernedSpecialistCorpus } from "@/lib/build/build-specialist-corpus";
 import {
   buildDependencyGraph,
@@ -719,6 +718,35 @@ export function parseQAVerification(qaContent: string): QAVerification {
 
 // ─── Task Resume Logic ─────────────────────────────────────────────────────
 
+type ExecuteTool = (typeof import("@/lib/mcp-tools"))["executeTool"];
+
+/**
+ * Persist a build's verification verdict on THAT build. The tool resolves its
+ * target from an explicit buildId; without one it falls back to "the owner's
+ * only open build" and refuses when there are several (BI-F82915D7). On a live
+ * install the owner had 128 open builds, so every unscoped save was refused and
+ * no build since 2026-09-15 kept a typecheck verdict: evidence auto-accept read
+ * `typecheckPassed` as missing and every build stalled at review->ship. A refused
+ * save now fails loudly instead of being dropped.
+ */
+export async function saveVerificationOutForBuild(
+  executeTool: ExecuteTool,
+  buildId: string,
+  value: Record<string, unknown>,
+  userId: string,
+  threadId: string | undefined,
+): Promise<void> {
+  const result = await executeTool(
+    "saveBuildEvidence",
+    { buildId, field: "verificationOut", value },
+    userId,
+    { routeContext: "/build", agentId: "AGT-ORCH-300", threadId },
+  );
+  if (!result.success) {
+    throw new Error(`verificationOut not saved for ${buildId}: ${result.error ?? result.message ?? "unknown"}`);
+  }
+}
+
 /** Stored task result shape from saveBuildEvidence("taskResults", ...) */
 export type StoredTaskResult = {
   taskIndex?: number;
@@ -1074,6 +1102,52 @@ export type OrchestratorResult = {
 export async function runBuildOrchestrator(params: Parameters<typeof runBuildOrchestratorInner>[0]): Promise<OrchestratorResult> {
   const { withOrchestrationRunning } = await import("./build-liveness");
   return withOrchestrationRunning(params.buildId, () => runBuildOrchestratorInner(params));
+}
+
+/**
+ * BI-B2EEA6DE: one repair task for guard findings on an assembled build. It
+ * goes through the same specialist dispatch, engine selection and liveness as
+ * a plan task, so a repair is not a second, unaudited way to run an agent.
+ */
+export async function runGauntletRepairTask(params: {
+  buildId: string;
+  userId: string;
+  task: { title: string; implement: string; verify: string };
+}): Promise<boolean> {
+  const { withOrchestrationRunning } = await import("./build-liveness");
+  return withOrchestrationRunning(params.buildId, async () => {
+    const build = await prisma.featureBuild.findUnique({
+      where: { buildId: params.buildId },
+      select: { title: true, kind: true, threadId: true },
+    });
+    if (!build) return false;
+    const { BUILD_DISPATCH_USER_SELECT } = await import("./build-on-plan-approval");
+    const user = await prisma.user.findUnique({ where: { id: params.userId }, select: BUILD_DISPATCH_USER_SELECT });
+    if (!user) return false;
+    const buildContext = `Guard-finding repair for "${build.title}" (${build.kind})`;
+    const { deriveDeliverableSensitivity, mapBuildDeliverableToRoutingSensitivity } = await import("@/lib/explore/build-process-matrix");
+    const dispatchConfig = await getBuildStudioConfig({
+      sensitivity: mapBuildDeliverableToRoutingSensitivity(deriveDeliverableSensitivity({ text: buildContext })),
+    });
+    const task: AssignedTask = {
+      taskIndex: 0,
+      title: params.task.title,
+      specialist: "software-engineer",
+      files: [],
+      task: { title: params.task.title, testFirst: "", implement: params.task.implement, verify: params.task.verify },
+    };
+    const result = await dispatchSpecialist({
+      task,
+      userId: params.userId,
+      platformRole: user.groups?.[0]?.platformRole?.roleId ?? null,
+      isSuperuser: user.isSuperuser ?? false,
+      buildId: params.buildId,
+      buildContext,
+      parentThreadId: build.threadId ?? `gauntlet-repair-${params.buildId}-${Date.now()}`,
+      dispatchConfig,
+    });
+    return result.success;
+  });
 }
 
 async function runBuildOrchestratorInner(params: {
@@ -1507,22 +1581,19 @@ async function runBuildOrchestratorInner(params: {
         changedFiles,
       });
 
-      await executeTool("saveBuildEvidence", {
-        field: "verificationOut",
-        value: {
-          ...verification,
-          // Gate-facing fields reflect the changed surface, not the whole repo.
-          typecheckPassed: scoped.typecheckPassed ?? verification.typecheckPassed,
-          testsFailed: scoped.testsFailed ?? verification.testsFailed,
-          testsPassed: scoped.testsPassed ?? verification.testsPassed,
-          outOfScopeNoise: scoped.outOfScopeNoise,
-          globalTestsFailed: scoped.globalTestsFailed,
-          failureAxis: scoped.failureAxis,
-          scopedToChangedFiles: changedFiles,
-          fullOutput: qaContent.slice(0, 2000),
-          timestamp: new Date().toISOString(),
-        },
-      }, userId, { routeContext: "/build", agentId: "AGT-ORCH-300", threadId: parentThreadId });
+      await saveVerificationOutForBuild(executeTool, buildId, {
+        ...verification,
+        // Gate-facing fields reflect the changed surface, not the whole repo.
+        typecheckPassed: scoped.typecheckPassed ?? verification.typecheckPassed,
+        testsFailed: scoped.testsFailed ?? verification.testsFailed,
+        testsPassed: scoped.testsPassed ?? verification.testsPassed,
+        outOfScopeNoise: scoped.outOfScopeNoise,
+        globalTestsFailed: scoped.globalTestsFailed,
+        failureAxis: scoped.failureAxis,
+        scopedToChangedFiles: changedFiles,
+        fullOutput: qaContent.slice(0, 2000),
+        timestamp: new Date().toISOString(),
+      }, userId, parentThreadId);
 
       // BI-99B06AD1 — build/codegen verification → bounded fix loop. If THIS
       // build's own changed surface failed typecheck/tests, don't just stall at
@@ -1594,23 +1665,20 @@ async function runBuildOrchestratorInner(params: {
         if (loop.rounds > 0) {
           // Persist the post-repair verdict so the phase gate evaluates the
           // repaired state rather than the pre-repair failure.
-          await executeTool("saveBuildEvidence", {
-            field: "verificationOut",
-            value: {
-              ...verification,
-              typecheckPassed: loop.final.typecheckPassed ?? scoped.typecheckPassed,
-              testsFailed: loop.final.testsFailed ?? scoped.testsFailed,
-              testsPassed: loop.repaired ? 1 : (scoped.testsPassed ?? verification.testsPassed),
-              outOfScopeNoise: scoped.outOfScopeNoise,
-              globalTestsFailed: scoped.globalTestsFailed,
-              failureAxis: loop.final.failureAxis,
-              scopedToChangedFiles: changedFiles,
-              fullOutput: (loop.final.output ?? qaContent).slice(0, 2000),
-              timestamp: new Date().toISOString(),
-              verificationRepairRounds: loop.rounds,
-              verificationRepaired: loop.repaired,
-            },
-          }, userId, { routeContext: "/build", agentId: "AGT-ORCH-300", threadId: parentThreadId });
+          await saveVerificationOutForBuild(executeTool, buildId, {
+            ...verification,
+            typecheckPassed: loop.final.typecheckPassed ?? scoped.typecheckPassed,
+            testsFailed: loop.final.testsFailed ?? scoped.testsFailed,
+            testsPassed: loop.repaired ? 1 : (scoped.testsPassed ?? verification.testsPassed),
+            outOfScopeNoise: scoped.outOfScopeNoise,
+            globalTestsFailed: scoped.globalTestsFailed,
+            failureAxis: loop.final.failureAxis,
+            scopedToChangedFiles: changedFiles,
+            fullOutput: (loop.final.output ?? qaContent).slice(0, 2000),
+            timestamp: new Date().toISOString(),
+            verificationRepairRounds: loop.rounds,
+            verificationRepaired: loop.repaired,
+          }, userId, parentThreadId);
           await prisma.buildActivity.create({
             data: {
               buildId,
@@ -1711,8 +1779,8 @@ async function runBuildOrchestratorInner(params: {
     const { canTransitionPhase } = await import("@/lib/feature-build-types");
     const { checkBuildPhaseGate } = await import("@/lib/work-posture/verification-depth-gate");
     const updatedBuild = await prisma.featureBuild.findUnique({ where: { buildId } });
-    // The synthetic QA task (taskIndex === -1, "Full verification: tests +
-    // typecheck") is dispatched to the model, which runs the full suite via
+    // The synthetic QA task (taskIndex === -1, "Scoped verification: changed-file
+    // tests + typecheck") is dispatched to the model, which ran the full suite via
     // opencode — flaky and slow on a local model (observed: 61s pass for one
     // build, then a 301s rate-limit FAILURE for the next) and REDUNDANT: the
     // authoritative verification is the scoped checkPhaseGate below, which reads

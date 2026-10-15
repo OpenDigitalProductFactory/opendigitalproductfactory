@@ -29,6 +29,11 @@ export type AgentActionProposalRow = {
   proposedAt: Date;
   /** The coworker that proposed this — drives the honest byline (BI-AB12B3D3). */
   agentId: string;
+  /**
+   * Set on a still-proposed row only when the reference monitor refused its
+   * approval (convert-and-run, BI-04E5A511): the reason it can no longer run.
+   */
+  resultError?: string | null;
 };
 
 /** Pure projection of one proposed agent action into an attention item. */
@@ -69,12 +74,12 @@ export function agentProposalToAttentionItem(row: AgentActionProposalRow): Atten
       actions: [{
         kind: "open-in-context",
         label: "Review proactivity change",
-        href: "/platform/ai",
+        href: "/platform/ai/overview",
       }, {
         kind: "snooze",
         label: "Snooze",
       }],
-      deepLink: "/platform/ai",
+      deepLink: "/platform/ai/overview",
       audience: { operator: true },
       proactivity: {
         level: proactivityChange.currentLevel,
@@ -115,6 +120,7 @@ export function agentProposalToAttentionItem(row: AgentActionProposalRow): Atten
   return {
     id: `agent-proposal:${row.proposalId}`,
     source: "agent-proposal",
+    ...(row.resultError ? { noLongerRunnable: row.resultError } : {}),
     title: `Approve: ${presentation.title}`,
     context: isActivityRoutingAction
       ? presentation.summary
@@ -132,9 +138,9 @@ export function agentProposalToAttentionItem(row: AgentActionProposalRow): Atten
     actions: [{
       kind: "open-in-context",
       label: isActivityRoutingAction ? "Review routing workbench" : "Review in AI Workforce",
-      href: isActivityRoutingAction ? "/platform/ai/operations-map" : "/platform/ai",
+      href: isActivityRoutingAction ? "/platform/ai/operations-map" : "/platform/ai/overview",
     }],
-    deepLink: isActivityRoutingAction ? "/platform/ai/operations-map" : "/platform/ai",
+    deepLink: isActivityRoutingAction ? "/platform/ai/operations-map" : "/platform/ai/overview",
     audience: { operator: true },
     author: attentionAuthorForAgent(row.agentId, { trustLevel: "propose" }),
   };
@@ -142,10 +148,12 @@ export function agentProposalToAttentionItem(row: AgentActionProposalRow): Atten
 
 export async function loadAgentProposalItems(db: Db): Promise<AttentionItem[]> {
   const rows = await db.agentActionProposal.findMany({
-    where: { status: "proposed" },
+    // BI-7BCC87BB: a time-off request is its own business-approval item, keyed by
+    // requestId (business-approvals.ts); a legacy leave.decide row would duplicate it.
+    where: { status: "proposed", actionType: { not: LEAVE_DECISION_ACTION } },
     orderBy: { proposedAt: "desc" },
     take: 50,
-    select: { proposalId: true, actionType: true, parameters: true, proposedAt: true, agentId: true },
+    select: { proposalId: true, actionType: true, parameters: true, proposedAt: true, agentId: true, resultError: true },
   });
-  return rows.map(agentProposalToAttentionItem);
+  return rows.filter((row) => row.actionType !== LEAVE_DECISION_ACTION).map(agentProposalToAttentionItem);
 }

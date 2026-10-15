@@ -4,13 +4,11 @@
 // Measurement only: no suite selection, no required-check changes, no silent
 // green from flakes. Used by scripts/ci-observation.mjs and calibration CI.
 
+import { isRecord } from "./is-record.mjs";
+
 export const CI_OBSERVATION_SCHEMA_VERSION = 1;
 
 const SHA40_RE = /^[0-9a-f]{40}$/i;
-
-function isPlainObject(value) {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
 
 function metricSlice(raw) {
   const total = Number(raw?.total ?? 0);
@@ -151,7 +149,7 @@ export function summarizeCoverage(input = {}) {
   const ownedFiles = [...new Set(
     (input.ownedFiles ?? []).map((f) => normalizeRepoRelative(f, repoRoot)),
   )].sort();
-  const coverageSummary = isPlainObject(input.coverageSummary) ? input.coverageSummary : {};
+  const coverageSummary = isRecord(input.coverageSummary) ? input.coverageSummary : {};
   const total = coverageSummary.total ?? {};
 
   const reportedPaths = Object.keys(coverageSummary)

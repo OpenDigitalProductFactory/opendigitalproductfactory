@@ -44,7 +44,29 @@ export type AgentMessageRow = {
     status: string;
     resultEntityId?: string;
     resultError?: string;
+    /**
+     * Approval convergence PR-C (BI-04E5A511): the reference monitor refused
+     * the proposed call when it was approved. Nothing ran and the proposal is
+     * still pending; the card shows why and offers only its decline action.
+     * Persisted as the still-proposed row's resultError, so it survives a reload.
+     */
+    noLongerRunnable?: string;
   };
+  /**
+   * BI-C8EC05C9: the approval requests (CoworkerActionEnvelope) this turn
+   * raised, by chatMessageId, each decided with Authorize / Decline. Absent
+   * when there are none.
+   */
+  approvalRequests?: InlineApprovalRequest[];
+};
+
+/** One approval request shown inline on the chat message that raised it. */
+export type InlineApprovalRequest = {
+  envelopeId: string;
+  toolName: string;
+  status: string;
+  expiresAt: string | null;
+  rationale: string;
 };
 
 /** Resolved agent info returned by resolveAgentForRoute. */

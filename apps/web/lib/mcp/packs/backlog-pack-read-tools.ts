@@ -1,4 +1,4 @@
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 import { resolveEpicRowId, resolveListLimit } from "./backlog-read-helpers";
 import { addScopeFilters, backlogScopeSelect, scopeData } from "./backlog-scope-metadata";
 
@@ -312,6 +312,7 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
   const { deriveLifecycleLabel } = await import("@/lib/governed-backlog-workflow");
   const { buildSpecPlanReferenceIndex, specPlanCorpusCaveat } = await import("@/lib/backlog/spec-plan-search");
   const { projectBacklogItemReadinessSummary } = await import("@/lib/backlog/initiative-readiness/entry-adapter");
+  const { withReadinessGoverningPrinciples } = await import("@/lib/kernel/governing-principles");
   const refIndex = await buildSpecPlanReferenceIndex();
   const specPlanCaveat = specPlanCorpusCaveat(refIndex.corpus);
   const evaluatedAt = new Date().toISOString();
@@ -319,7 +320,8 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
     const semanticEpic = i.epic?.epicId ?? null;
     const hasSpec = refIndex.specs.has(i.itemId) || Boolean(semanticEpic && refIndex.specs.has(semanticEpic));
     const hasPlan = refIndex.plans.has(i.itemId) || Boolean(semanticEpic && refIndex.plans.has(semanticEpic));
-    const readiness = projectBacklogItemReadinessSummary({
+    // BI-DEDAC950: the governing principle per unmet code, beside the decisions.
+    const readiness = withReadinessGoverningPrinciples(projectBacklogItemReadinessSummary({
       item: {
         id: i.id,
         itemId: i.itemId,
@@ -336,7 +338,7 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
       hasSpec,
       hasPlan,
       evaluatedAt,
-    });
+    }));
     return ({
     itemId: i.itemId,
     title: i.title,
@@ -381,7 +383,7 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
   };
 }
 
-export async function getBacklogItem(params: Record<string, unknown>, currentAgentId: string | null = null): Promise<ToolResult> {
+export async function getBacklogItem(params: Record<string, unknown>, currentAgentId: string | null = null, currentUserId?: string): Promise<ToolResult> {
   const { prisma } = await import("@dpf/db");
   const itemIdRaw = String(params["itemId"] ?? "").trim();
   if (!itemIdRaw)
@@ -431,18 +433,29 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
   const demandView = mapDemandRows([item])[0]!;
   const { projectBacklogItemReadinessSummary } = await import("@/lib/backlog/initiative-readiness/entry-adapter");
   const { loadInheritedInitiativeScope } = await import("@/lib/backlog/initiative-readiness/parent-scope-inheritance");
+  const { withReadinessGoverningPrinciples } = await import("@/lib/kernel/governing-principles");
   const hasSpec = specPlanRefs.some((entry) => entry.kind === "spec");
   const hasPlan = specPlanRefs.some((entry) => entry.kind === "plan");
   const inheritedScope = await loadInheritedInitiativeScope(prisma, { childItemId: item.itemId, childRowId: item.id });
-  const { readBoundWorkShapeRef } = await import("@/lib/backlog/initiative-readiness/bound-work-shape");
-  const { deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
+  const { readBoundEditPaths, readBoundWorkShapeRef } = await import("@/lib/backlog/initiative-readiness/bound-work-shape");
+  const { assessDeliverySensitivity } = await import("@/lib/backlog/initiative-readiness/delivery-sensitivity");
   const boundWorkShape = await readBoundWorkShapeRef(prisma, item.itemId);
-  const readiness = projectBacklogItemReadinessSummary({
+  const declaredPaths = await readBoundEditPaths(prisma, item.itemId).catch(() => []);
+  const evaluatedAt = new Date().toISOString();
+  // BI-094B41AC: an item awaiting acceptance reads the completion gate's own
+  // evaluation (merge signal included), so this view and the gate agree. Null
+  // — any other status, or an evaluation that could not run — keeps the
+  // existing projection.
+  const { readBacklogItemCompletion } = await import("@/lib/backlog/initiative-readiness/backlog-completion-evaluation");
+  const gateCompletion = await readBacklogItemCompletion({ itemRowId: item.id, status: item.status, evaluatedAt });
+  // BI-DEDAC950: the governing principle per unmet code, beside the decisions.
+  const projectedReadiness = withReadinessGoverningPrinciples(projectBacklogItemReadinessSummary({
+    completionDecision: gateCompletion?.decision ?? null,
     inheritedScope,
     item: {
       id: item.id,
       workShape: boundWorkShape,
-      deliverySensitivity: deriveDeliverableSensitivity({ text: `${item.title ?? ""}\n${item.body ?? ""}`, workType: item.workType }),
+      deliverySensitivity: assessDeliverySensitivity({ title: item.title, body: item.body, workType: item.workType, declaredPaths }),
       body: item.body,
       itemId: item.itemId,
       status: item.status,
@@ -459,14 +472,18 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
       .map((activity) => ({ ...activity, gateKey: activity.gateKey ?? null })),
     hasSpec,
     hasPlan,
-    evaluatedAt: new Date().toISOString(),
-  });
+    evaluatedAt,
+  }));
+  const readiness = gateCompletion
+    ? { ...projectedReadiness, completionEvaluation: { source: "completion-gate" as const, mergeDelivery: gateCompletion.mergedThroughGates } }
+    : projectedReadiness;
   const completion = readiness.decisions?.completion;
   const needsPirRecovery = completion && completion.verdict !== "allowed"
     && [...completion.blockers, ...completion.unmet]
       .some((entry) => entry.code === "POST_IMPLEMENTATION_REVIEW_REQUIRED");
   const recovery = needsPirRecovery
     ? await (await import("@/lib/backlog/initiative-readiness/terminal-recovery")).resolveTerminalInitiativeRecovery({
+      currentUserId,
         decision: completion, currentAgentId, refusedWorkroomId: null,
       })
     : undefined;

@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { prisma, type Prisma } from "@dpf/db";
+import { prisma, type DocumentRenditionKind, type Prisma } from "@dpf/db";
 import { syncDocumentReference } from "@dpf/db/graph-sync";
 import { DOCUMENT_TEXT_INLINE_LIMIT_BYTES } from "./blob-storage";
 import { searchDocumentVectors, storeDocumentVector } from "./embeddings";
@@ -89,7 +89,7 @@ export type ManagedDocumentVersion = {
 
 export type ManagedDocumentRendition = {
   id: string;
-  kind: "pdf" | "plain_text" | "preview";
+  kind: DocumentRenditionKind;
   mimeType: string | null;
   blobId: string | null;
   createdAt: Date;
@@ -295,7 +295,7 @@ async function projectDocumentReferencesToGraph(documentDbId: string, db: Docume
       refType: reference.refType,
       anchor: reference.anchor,
     }).catch((err: unknown) => {
-      console.warn("[document-store] Neo4j document reference projection failed:", err);
+      console.warn("[document-store] graph document reference projection failed:", err);
     });
   }
 }

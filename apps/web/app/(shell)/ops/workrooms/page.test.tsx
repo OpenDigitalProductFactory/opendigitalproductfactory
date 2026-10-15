@@ -18,18 +18,21 @@ vi.mock("@/lib/work-capsules/liveness-inventory", () => ({
       {
         capsuleId: "WC-RUN", backlogItemId: null, title: "Reconcile payables", status: "working",
         source: "external-adoption", executorKind: "claude", portfolioRole: "forEmployees",
+        attribution: { executor: "claude", invocation: "Session payables-session" },
         headBranch: null, pullRequestUrl: null, updatedAt: now, liveness: "live", isLive: true,
         isReapable: false, livenessReason: "lease active", trueLivenessAt: fresh,
       },
       {
         capsuleId: "WC-BLOCK", backlogItemId: null, title: "Release review", status: "blocked",
         source: "external-adoption", executorKind: "codex", portfolioRole: "foundational",
+        attribution: { executor: "codex", invocation: "Session release-session" },
         headBranch: null, pullRequestUrl: null, updatedAt: now, liveness: "live", isLive: true,
         isReapable: false, livenessReason: "waiting on reviewer", trueLivenessAt: fresh,
       },
       {
         capsuleId: "WC-NOWHERE", backlogItemId: null, title: "Unplaced work", status: "ready",
         source: "external-adoption", executorKind: null, portfolioRole: null,
+        attribution: { executor: "Executor not recorded", invocation: "Invocation history not recorded" },
         headBranch: null, pullRequestUrl: null, updatedAt: now, liveness: "no-signal", isLive: false,
         isReapable: false, livenessReason: "no signal", trueLivenessAt: null,
       },
@@ -67,6 +70,8 @@ describe("Work activity page", () => {
     const html = renderToStaticMarkup(await WorkroomsPage());
     expect(html).toContain("/workspace/cases/work-capsule%3AWC-BLOCK");
     expect(html).toContain("/workspace/cases/work-capsule%3AWC-RUN");
+    expect(html).not.toContain("Session payables-session");
+    expect(html).toContain("Session release-session");
   });
 
   it("does not claim work is executing without evidence", async () => {
@@ -77,7 +82,7 @@ describe("Work activity page", () => {
 
   it("lists held Workrooms with why and for how long (BI-E8C78E80)", async () => {
     const html = renderToStaticMarkup(await WorkroomsPage());
-    expect(html).toContain("Held Workrooms");
+    expect(html).toContain("Shared recovery issues");
     expect(html).toContain("Onboard new foster");
     expect(html).toContain("missing explicit coordinator");
     expect(html).toContain("3 h");

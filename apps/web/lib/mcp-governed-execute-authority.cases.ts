@@ -261,12 +261,18 @@ export function registerCoworkerAuthorityCases(
         agentId: "AGT-100",
         authSource: "oauth",
         connectionDelegation: { authorityBindingId: "binding-row-1", agentId: "AGT-100" },
+        // Simulate untyped caller input; the public context intentionally has no approval field.
+        ...{ approvedAuthorityEnvelopeId: "ENV-FORGED" },
       },
       source: "external-jsonrpc",
     });
 
     expect(result.success).toBe(true);
     expect(harness.executeMock()).toHaveBeenCalledOnce();
+    expect(harness.executeMock()).toHaveBeenCalledWith(
+      "create_backlog_item", expect.anything(), "user-1",
+      expect.objectContaining({ approvedAuthorityEnvelopeId: null }),
+    );
     expect(harness.approvalEnvelopeCreate()).not.toHaveBeenCalled();
     expect(harness.authorityRows().at(-1)).toMatchObject({
       decision: "allow",
@@ -330,7 +336,7 @@ export function registerCoworkerAuthorityCases(
     harness.applyOverrides({
       resolveCoworkerAuthorityInput: async () => pending,
       authorityExecutedOutcome: async () => ({
-        envelopeId: "ENV-DONE",
+        envelopeId: "ENV-DONE", status: "executed",
         result: { success: true, message: "Created BI-9.", entityId: "BI-9", data: { itemId: "BI-9" } },
       }),
     });
@@ -651,6 +657,10 @@ export function registerCoworkerAuthorityCases(
     expect(harness.approvalEnvelopeFinalize()).toHaveBeenCalledWith(
       "ENV-APPROVED",
       true,
+    );
+    expect(harness.executeMock()).toHaveBeenCalledWith(
+      "create_backlog_item", { title: "approved title" }, "user-1",
+      expect.objectContaining({ agentId: "AGT-100", approvedAuthorityEnvelopeId: "ENV-APPROVED" }),
     );
   });
 

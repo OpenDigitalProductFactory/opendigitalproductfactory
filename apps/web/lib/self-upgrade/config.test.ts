@@ -29,6 +29,7 @@ vi.mock("@dpf/db", () => ({
 }));
 
 import { prisma } from "@dpf/db";
+import { DEFAULT_DRAIN_WAIT_BUDGET_MS } from "./drain-wait";
 const mockFindUnique = vi.mocked(prisma.platformConfig.findUnique);
 
 describe("parseSelfUpgradeConfig", () => {
@@ -55,6 +56,7 @@ describe("parseSelfUpgradeConfig", () => {
       channel: "stable",
       checkIntervalHours: 24,
       cooldownMinutes: 30,
+      drainWaitBudgetMs: 60 * 60 * 1000,
       batchMinPendingPrs: 10,
       batchMaxWaitHours: 168,
       healthTarget: 100,
@@ -65,12 +67,20 @@ describe("parseSelfUpgradeConfig", () => {
     });
   });
 
+  it("parses drainWaitBudgetMs and falls back to 60 minutes when invalid (BI-F9EE05E5)", () => {
+    expect(parseSelfUpgradeConfig({ drainWaitBudgetMs: 900_000 }).drainWaitBudgetMs).toBe(900_000);
+    for (const bad of [0, -5, "60", Number.NaN, null]) {
+      expect(parseSelfUpgradeConfig({ drainWaitBudgetMs: bad }).drainWaitBudgetMs).toBe(60 * 60 * 1000);
+    }
+  });
+
   it("returns disabled defaults when raw is undefined", () => {
     expect(parseSelfUpgradeConfig(undefined)).toEqual({
       enabled: false,
       channel: "stable",
       checkIntervalHours: 24,
       cooldownMinutes: 30,
+      drainWaitBudgetMs: 60 * 60 * 1000,
       batchMinPendingPrs: 10,
       batchMaxWaitHours: 168,
       healthTarget: 100,
@@ -87,6 +97,7 @@ describe("parseSelfUpgradeConfig", () => {
       channel: "stable",
       checkIntervalHours: 24,
       cooldownMinutes: 30,
+      drainWaitBudgetMs: 60 * 60 * 1000,
       batchMinPendingPrs: 10,
       batchMaxWaitHours: 168,
       healthTarget: 100,
@@ -100,6 +111,7 @@ describe("parseSelfUpgradeConfig", () => {
       channel: "stable",
       checkIntervalHours: 24,
       cooldownMinutes: 30,
+      drainWaitBudgetMs: 60 * 60 * 1000,
       batchMinPendingPrs: 10,
       batchMaxWaitHours: 168,
       healthTarget: 100,
@@ -421,6 +433,7 @@ describe("getSelfUpgradeConfig", () => {
       channel: "stable",
       checkIntervalHours: 24,
       cooldownMinutes: 30,
+      drainWaitBudgetMs: 60 * 60 * 1000,
       batchMinPendingPrs: 10,
       batchMaxWaitHours: 168,
       healthTarget: 100,
@@ -500,6 +513,7 @@ describe("nextMaintenanceWindowStart", () => {
     channel: "stable",
     checkIntervalHours: 24,
     cooldownMinutes: 30,
+    drainWaitBudgetMs: DEFAULT_DRAIN_WAIT_BUDGET_MS,
     batchMinPendingPrs: 10,
     batchMaxWaitHours: 168,
     healthTarget: 100,

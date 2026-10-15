@@ -5,7 +5,7 @@
 // ratified. This is the first contract module in the registry; the shape below is
 // the reference for the ones that follow.
 
-import type { PurposeContractModule } from ".";
+import type { PurposeContractModule } from "../page-purpose";
 
 export const GRAPH_EXPLORER_PURPOSE_CONTRACTS: PurposeContractModule = [
   {

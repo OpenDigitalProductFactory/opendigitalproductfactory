@@ -15,12 +15,11 @@
 
 import { prisma } from "@dpf/db";
 
-import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
-import { resolveAutoUpgradeWindow } from "@/lib/self-upgrade/auto-window";
 import { getActiveSelfUpgradeBlackout } from "@/lib/self-upgrade/blackout";
 import type { SelfUpgradeConfig } from "@/lib/self-upgrade/config";
+import { getDeferredUpgradeRequest, isDeferredRequestPending } from "@/lib/self-upgrade/deferred-request";
+import { resolveEffectiveUpgradeWindow } from "@/lib/self-upgrade/effective-window";
 import { getLastCheckedAt, isCheckIntervalElapsed } from "@/lib/self-upgrade/last-check";
-import { isUpgradeWindowOpen } from "@/lib/self-upgrade/window";
 
 const DECLINE_CONFIG_KEY = "self_upgrade.lastScheduledDecline";
 
@@ -56,7 +55,9 @@ type ScheduledGateConfig = Pick<SelfUpgradeConfig, "maintenanceWindows" | "check
  * timezone — never a silent never-runs.
  *
  * Interval: only the scheduled cron is rate-limited, so the hourly tick polls
- * no more often than the operator configured.
+ * no more often than the operator configured. A request an agent deferred to
+ * the window (BI-2128872C) waives the interval while no check has run since it
+ * was made, so the first in-window tick honours it.
  *
  * Every decline here is a clean no-op: no drain, no cooldown.
  */
@@ -74,21 +75,15 @@ export async function evaluateScheduledGate(args: {
       extra: { blackoutUntil: blackout.endAt.toISOString() },
     };
   }
-  const { schedule, timezone, timezoneKnown, lowTrafficWindows } =
-    await resolveOperatingScheduleForSystem();
-  const auto = config.maintenanceWindows.length > 0
-    ? null
-    : resolveAutoUpgradeWindow({ schedule, timeZone: timezone, timezoneKnown, lowTrafficWindows });
-  if (auto?.kind === "needs-timezone") return { reason: "no-window-needs-timezone" };
-  const explicitWindows = config.maintenanceWindows.length > 0
-    ? config.maintenanceWindows
-    : auto?.kind === "auto-overnight" ? auto.windows : undefined;
-  if (!isUpgradeWindowOpen({ explicitWindows, schedule, timeZone: timezone })) {
-    return { reason: "outside-window" };
-  }
+  const window = await resolveEffectiveUpgradeWindow({ config, now });
+  if (window.source === "needs-timezone") return { reason: "no-window-needs-timezone" };
+  if (!window.open) return { reason: "outside-window" };
   if (!args.dryRun) {
     const lastCheckedAt = await getLastCheckedAt();
-    if (!isCheckIntervalElapsed(lastCheckedAt, config.checkIntervalHours, now)) {
+    if (
+      !isCheckIntervalElapsed(lastCheckedAt, config.checkIntervalHours, now) &&
+      !isDeferredRequestPending(await getDeferredUpgradeRequest(), lastCheckedAt)
+    ) {
       return { reason: "interval-not-elapsed" };
     }
   }

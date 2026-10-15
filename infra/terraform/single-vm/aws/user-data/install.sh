@@ -124,9 +124,6 @@ POSTGRES_USER=dpf
 POSTGRES_PASSWORD=dpf_dev
 DATABASE_URL=postgresql://dpf:dpf_dev@postgres:5432/dpf
 
-# Neo4j
-NEO4J_AUTH=neo4j/dpf_dev_password
-
 # Auth.js secret
 AUTH_SECRET=$AUTH_SECRET
 

@@ -4,7 +4,7 @@
  *
  * The kernel principle `compose-report-kit-for-reporting-ux` (AGENTS.md §12)
  * says status/severity colors resolve through ONE registry —
- * `apps/web/components/ui/report-kit/statusColors.ts` (status → semantic
+ * `apps/web/lib/ui-model/statusColors.ts` (status → semantic
  * `Intent` → `--dpf-*` token) — surfaced via `<StatusBadge domain=… status=…>`,
  * never a per-file `Record<Status, Intent>` (or raw color) map that silently
  * drifts from the palette.
@@ -17,7 +17,9 @@
  *
  * Scope: apps/web/lib + apps/web/components (source only, tests excluded).
  * report-kit itself IS the canonical palette home (its VARIANT_INTENT etc. are
- * the registry internals) and is skipped by path.
+ * the registry internals) and is skipped by path, as is the registry module,
+ * which lives in lib so lib code can resolve intents without importing
+ * components/** (M11 lib/ui layering).
  *
  * Run: node scripts/check-no-local-status-color.mjs
  */
@@ -27,6 +29,7 @@ import { pathToFileURL } from "node:url";
 
 // The canonical palette home — its own Intent maps ARE the registry.
 export const CANONICAL_DIR = "apps/web/components/ui/report-kit";
+export const CANONICAL_REGISTRY = "apps/web/lib/ui-model/statusColors.ts";
 
 // Files that ALREADY defined a local status→Intent map at the BI-81EE4A46
 // baseline. Migration backlog: delete an entry when its file resolves colors
@@ -93,7 +96,7 @@ export function scanRepo(root = process.cwd()) {
   for (const base of [join(root, "apps", "web", "lib"), join(root, "apps", "web", "components")]) {
     for (const file of walk(base)) {
       const rel = relative(root, file).replace(/\\/g, "/");
-      if (rel.startsWith(CANONICAL_DIR) || ALLOWLIST.has(rel)) continue;
+      if (rel.startsWith(CANONICAL_DIR) || rel === CANONICAL_REGISTRY || ALLOWLIST.has(rel)) continue;
       let body;
       try {
         body = readFileSync(file, "utf8");
@@ -132,7 +135,7 @@ function main() {
     console.error("");
     console.error("Status/severity colors resolve through ONE registry. Instead of a local map, use:");
     console.error('  <StatusBadge domain="<yourDomain>" status={value} />   // report-kit statusColors');
-    console.error("or add your domain to report-kit/statusColors.ts if it is genuinely new.");
+    console.error("or add your domain to lib/ui-model/statusColors.ts if it is genuinely new.");
     console.error("");
     console.error("Offending definitions:");
     for (const v of violations) console.error(`  ${v.file}:${v.line}  ${v.text}`);

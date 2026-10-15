@@ -51,6 +51,21 @@
       "pattern": "^[a-f0-9]{64}$",
       "description": "Deterministic hash of the catalog and sorted runtime capability states."
     },
+    "runtimeCapabilityDecisions": {
+      "type": "object",
+      "description": "Whether a person chose each operator-controlled runtime capability, and how (BI-83260BB3, docs/superpowers/specs/2026-10-13-monitoring-operator-choice-design.md §4). Mirrors membership of enabledRuntimeCapabilities; 'undecided' means nobody chose the current topology and the portal should ask.",
+      "propertyNames": { "pattern": "^runtime:[a-z0-9-]+$" },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["decision", "source", "decidedAt"],
+        "additionalProperties": false,
+        "properties": {
+          "decision": { "enum": ["enabled", "disabled", "undecided"] },
+          "source": { "enum": ["installer-prompt", "installer-flag", "headless-default", "upgrade-carried", "portal"] },
+          "decidedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
     "platform": {
       "type": "string",
       "enum": ["darwin", "linux", "win32"],
@@ -142,7 +157,7 @@
     },
     "agentToolchain": {
       "type": "object",
-      "description": "Result of the most recent dpf-bootstrap-agent-toolchain run. Persisted so re-installs are idempotent and `install-dpf.sh doctor` can report the contributor's kernel-awareness state. Source: docs/superpowers/specs/2026-05-26-agent-toolchain-bootstrap-design.md.",
+      "description": "DEPRECATED (BI-95DF1BFC): legacy copy of the agent-toolchain readiness block. The bootstrap now writes ~/.dpf/agent-toolchain-state.json and migration drops this key; it stays in the schema only so states written before that migrate cleanly. Source: docs/superpowers/specs/2026-05-26-agent-toolchain-bootstrap-design.md.",
       "required": [
         "appliedAt",
         "dpfPlatformVersion",
@@ -172,7 +187,8 @@
               "properties": {
                 "ok": { "const": true },
                 "toolCount": { "type": "integer", "minimum": 0 },
-                "observedAt": { "type": "string", "format": "date-time" }
+                "observedAt": { "type": "string", "format": "date-time" },
+                "delivery": {"type": "object", "required": ["ready", "missingTokenTools", "missingCoworkerTools", "unavailableTools"], "properties": {"ready": {"type": "boolean"}, "missingTokenTools": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "maxLength": 128, "pattern": "^[a-z][a-z0-9_]*$"}}, "missingCoworkerTools": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "maxLength": 128, "pattern": "^[a-z][a-z0-9_]*$"}}, "unavailableTools": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "maxLength": 128, "pattern": "^[a-z][a-z0-9_]*$"}}}, "additionalProperties": false}
               },
               "additionalProperties": false
             },
@@ -189,10 +205,12 @@
                     "mcp-unavailable",
                     "endpoint_unreachable",
                     "scope_insufficient",
+                    "coworker_grants_insufficient",
                     "unexpected_shape"
                   ]
                 },
-                "httpStatus": { "type": ["integer", "null"] }
+                "httpStatus": { "type": ["integer", "null"] },
+                "delivery": {"type": "object", "required": ["ready", "missingTokenTools", "missingCoworkerTools", "unavailableTools"], "properties": {"ready": {"type": "boolean"}, "missingTokenTools": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "maxLength": 128, "pattern": "^[a-z][a-z0-9_]*$"}}, "missingCoworkerTools": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "maxLength": 128, "pattern": "^[a-z][a-z0-9_]*$"}}, "unavailableTools": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "maxLength": 128, "pattern": "^[a-z][a-z0-9_]*$"}}}, "additionalProperties": false}
               },
               "additionalProperties": false
             }

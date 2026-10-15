@@ -1,0 +1,52 @@
+{
+  "format": "gpp-shape/0.1",
+  "key": "drc-c4-grant-not-held",
+  "version": "1.0.0",
+  "title": "DRC fixture drc-c4-grant-not-held",
+  "description": "Seeded C-4: the accountable agent holds no grant the declared tool requires.",
+  "triggers": [
+    "claim"
+  ],
+  "stages": [
+    {
+      "key": "a",
+      "title": "Stage a",
+      "accountablePrincipalRef": "agent:customer-advisor",
+      "advance": {
+        "kind": "status-change",
+        "condition": "Stage a recorded its evidence."
+      },
+      "evidence": [
+        "manual-check"
+      ],
+      "tools": [
+        "list_bills"
+      ]
+    }
+  ],
+  "stopConditions": [
+    {
+      "kind": "success",
+      "condition": "Every stage recorded its evidence.",
+      "disposition": "proceed"
+    },
+    {
+      "kind": "failure",
+      "condition": "A stage cannot produce its evidence.",
+      "disposition": "refused"
+    },
+    {
+      "kind": "budget",
+      "condition": "The cycle budget is spent.",
+      "disposition": "inconclusive"
+    }
+  ],
+  "grants": [],
+  "measures": [],
+  "budgets": [],
+  "reviewPoint": {
+    "everyDays": 7,
+    "description": "Weekly review."
+  },
+  "collaborationShape": null
+}

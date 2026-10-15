@@ -17,10 +17,16 @@ export type CapacityDeferral = {
   message: string;
 };
 
-export function describeCapacityDeferral(err: unknown): CapacityDeferral | null {
-  if (!(err instanceof Error)) return null;
-  const name = (err as { name?: string }).name;
-  if (name === "LocalProviderCapacityDeferredError") {
+const HOST_GPU_BUSY_MESSAGE =
+  "Deferred: the local GPU is in use by another program, so the local model waits until the card is free — capacity backpressure, not a model verdict.";
+const LOCAL_RUNNER_BUSY_MESSAGE =
+  "Deferred: another local model request already holds the GPU — capacity backpressure, not a model verdict.";
+
+function describeCapacityError(err: Error): CapacityDeferral | null {
+  if (err.name === "LocalProviderCapacityDeferredError") {
+    const reason = (err as { reason?: unknown }).reason;
+    if (reason === "host-gpu-busy") return { expectedFreeAt: null, message: HOST_GPU_BUSY_MESSAGE };
+    if (reason === "local-runner-busy") return { expectedFreeAt: null, message: LOCAL_RUNNER_BUSY_MESSAGE };
     const expectedFreeAt = (err as { expectedFreeAt?: Date | null }).expectedFreeAt ?? null;
     const window = expectedFreeAt instanceof Date && !Number.isNaN(expectedFreeAt.getTime())
       ? ` The host is expected free at ${expectedFreeAt.toISOString()}.`
@@ -35,6 +41,17 @@ export function describeCapacityDeferral(err: unknown): CapacityDeferral | null 
       expectedFreeAt: null,
       message: "Deferred: every inference slot stayed busy for the whole wait — capacity backpressure, not a model verdict.",
     };
+  }
+  return null;
+}
+
+export function describeCapacityDeferral(err: unknown): CapacityDeferral | null {
+  let current: unknown = err;
+  for (let hop = 0; hop < 4; hop++) {
+    if (!(current instanceof Error)) return null;
+    const described = describeCapacityError(current);
+    if (described) return described;
+    current = (current as { cause?: unknown }).cause;
   }
   return null;
 }

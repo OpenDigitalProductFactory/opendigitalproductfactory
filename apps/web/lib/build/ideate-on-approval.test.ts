@@ -8,16 +8,22 @@ const { mockPrisma } = vi.hoisted(() => ({
   },
 }));
 
-const { mockDispatchIdeateResearch, mockGetBuildStudioConfig, mockExecuteTool } = vi.hoisted(() => ({
+const { mockDispatchIdeateResearch, mockGetBuildStudioConfig, mockExecuteTool, mockReleaseUnfinishedBuildPhaseRun } = vi.hoisted(() => ({
   mockDispatchIdeateResearch: vi.fn(),
   mockGetBuildStudioConfig: vi.fn(),
   mockExecuteTool: vi.fn(),
+  mockReleaseUnfinishedBuildPhaseRun: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@dpf/db", () => ({ prisma: mockPrisma }));
 
 vi.mock("./ideate-dispatch", () => ({
   dispatchIdeateResearch: mockDispatchIdeateResearch,
+}));
+
+vi.mock("./build-phase-run", () => ({
+  startBuildPhaseRun: vi.fn().mockResolvedValue(undefined),
+  releaseUnfinishedBuildPhaseRun: mockReleaseUnfinishedBuildPhaseRun,
 }));
 
 // BI-0B95D268: the infrastructure retry waits for the sandbox container; the
@@ -362,6 +368,7 @@ describe("dispatchIdeateForApprovedBuild", () => {
       "u-1",
       expect.any(Object),
     );
+    expect(mockReleaseUnfinishedBuildPhaseRun).not.toHaveBeenCalled();
     // Selection evidence, the dispatch log, and the saved success are visible.
     expect(mockPrisma.buildActivity.create).toHaveBeenCalledTimes(3);
   });
@@ -386,6 +393,7 @@ describe("dispatchIdeateForApprovedBuild", () => {
 
     expect(outcome.kind).toBe("dispatched-failure");
     expect(mockExecuteTool).not.toHaveBeenCalled();
+    expect(mockReleaseUnfinishedBuildPhaseRun).toHaveBeenCalledWith("FB-X", "ideate");
   });
 
   it("returns dispatched-failure when saveBuildEvidence rejects", async () => {

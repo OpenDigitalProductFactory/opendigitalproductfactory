@@ -53,7 +53,7 @@ describe("classifyOwnerAttentionLane", () => {
   ])("routes platform plumbing to the custodian lane: %s", (source) => {
     const decision = classifyOwnerAttentionLane(
       item(source, {
-        title: "qdrant is offline",
+        title: "redis is offline",
         riskClass: "high-risk",
         triage: {
           timeToAct: "none",

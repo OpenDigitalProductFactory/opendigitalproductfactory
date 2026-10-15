@@ -154,8 +154,10 @@ if [ -f "scripts/pre-push-dco-check.mjs" ]; then
 fi
 
 # Recorded override: allowed, but never silent. The reason is persisted so the
-# PR-health guard can read it back as an explicit operator attestation.
-if [ "${DPF_SKIP_PREPUSH_GATE:-}" = "1" ]; then
+# PR-health guard can read it back as an explicit operator attestation. It is a
+# function so the cloud-agent-session path below records through the same
+# validation, record writer and guard-parity preflight; it always exits.
+recorded_override() {
   reason="${DPF_SKIP_PREPUSH_GATE_REASON:-}"
   if [ -z "$reason" ]; then
     echo "[pre-push-gate] DPF_SKIP_PREPUSH_GATE=1 requires DPF_SKIP_PREPUSH_GATE_REASON." >&2
@@ -271,6 +273,10 @@ fs.writeFileSync(file, JSON.stringify(record, null, 2) + "\n");
 
   completion_notice
   exit 0
+}
+
+if [ "${DPF_SKIP_PREPUSH_GATE:-}" = "1" ]; then
+  recorded_override
 fi
 
 # Docs-only diffs need no sandbox run UNLESS the diff invalidates a
@@ -338,6 +344,18 @@ if [ -f "scripts/pregate-status.mjs" ]; then
     echo "[pre-push-gate] local-CI gate passed for $branch@$sha"
     completion_notice
     exit 0
+  fi
+  # A cloud agent session (claude.ai/code container, CLAUDE_CODE_REMOTE=true)
+  # has no local DPF install and cannot reach the local-CI lease, so pregate can
+  # never run there. Record the push under external-contribution-no-install —
+  # never a pass, PR-visible, still DCO-checked and preflighted — instead of
+  # refusing it. A genuine PASS and the docs-only exemption above still win.
+  # Reason mirrors CLOUD_AGENT_SESSION_OVERRIDE_REASON in
+  # packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs; keep in sync.
+  if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then
+    echo "[pre-push-gate] cloud agent session (CLAUDE_CODE_REMOTE=true): pregate cannot run here — recording the push as gate-not-run."
+    DPF_SKIP_PREPUSH_GATE_REASON="external-contribution-no-install: cloud agent session (CLAUDE_CODE_REMOTE=true), no local DPF install or local-CI lease; cloud CI is the gate"
+    recorded_override
   fi
   echo "[pre-push-gate] Run the sandbox gate first:  pnpm run pregate" >&2
   echo "[pre-push-gate] (claims the shared local-integration-ci lease, runs the checked-in" >&2

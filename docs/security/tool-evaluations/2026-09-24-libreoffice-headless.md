@@ -116,6 +116,32 @@ Condition 3 now reads: `dpf-render` alone may lift `DisableActiveContent`, in it
 per-run profile, while the template screen above stands. Any other relaxation,
 or opening an uploaded document through `dpf-render`, is a new evaluation.
 
+## Addendum 2026-09-25: the trusted document path (BI-BFF142A1)
+
+Founder decision, 2026-09-25: trusted path only. S6's findings 11 to 13 are
+accepted. `dpf-convert` stays fully hardened for customer files. `dpf-render`
+alone lifts `DisableActiveContent`, in its per-run profile copy, and only for
+blank documents, screened flat-ODF templates, and (new here) flat ODF that DPF
+generated itself.
+
+Reproduced on `c9fd3d7c126`: `dpf-convert` exits 3 for a flat ODS carrying one
+bar chart object. Relaxing only `DisableActiveContent` makes the file load.
+Relaxing only `DisableOLEAutomation` or only `BlockUntrustedRefererLinks` does
+not. Measured on the same image: a zipped `.ods` or `.odt` with a chart does
+convert. Its text is read, the PDF keeps the chart's stored picture, and the
+`.docx`/`.xlsx` output drops the chart. The hardened profile is therefore not a
+blanket refusal of every customer file with a chart. The honest-message check
+runs only after the converter refuses a file.
+
+| # | Category | Severity | Finding | Required treatment |
+| --- | --- | --- | --- | --- |
+| 14 | Linked content | medium | `dpf-render`'s document mode opens a DPF-written flat ODF that embeds chart objects, with `DisableActiveContent` off. | The portal writes the document (`export-fods.ts`); no customer bytes are sent. `dpf-render` screens it first (exit 2 on refusal). Each embedded object must be an inline chart sub-document with no attribute but `draw:notify-on-update-of-ranges`, at most 16 per document. Each chart body and the rest of the document must pass the template screen: no scripts, event bindings, DDE, applets, plugins, OLE objects, floating frames or external links. The document opens with `MacroExecutionMode` NEVER and `UpdateDocMode` NO_UPDATE, in a container with no network. `smoke.sh` section 6 proves that a non-chart object, an external link inside a chart, and a document with scripts are each refused. It also proves that the macro probe stays negative under the render profile. |
+
+Condition 3 now reads: `dpf-render` alone may lift `DisableActiveContent`, in
+its per-run profile, for specs, screened templates and screened DPF-generated
+flat ODF. `dpf-convert` and any customer-supplied document never get the
+relaxed profile. Any other relaxation is a new evaluation.
+
 ## Sources
 
 - [LibreOffice security advisories](https://www.libreoffice.org/about-us/security/advisories/)

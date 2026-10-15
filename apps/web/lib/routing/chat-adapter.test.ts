@@ -1,8 +1,8 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+vi.mock("@/lib/routing/local-provider-capacity", () => ({ assertLocalProviderCapacityAvailable: vi.fn() }));
 // ── Mocks (must be declared before imports) ──────────────────────────────────
-
-// Mock ai-inference: provide real pure functions but avoid DB imports
-vi.mock("@/lib/ai-inference", () => {
+// Fake both inference leaves (error, message format) with copies of their pure functions.
+const aiInferenceFake = vi.hoisted(() => {
   class InferenceError extends Error {
     name = "InferenceError";
     constructor(
@@ -137,13 +137,14 @@ vi.mock("@/lib/ai-inference", () => {
     formatMessageForResponses,
   };
 });
+vi.mock("@/lib/routing/inference-error", () => aiInferenceFake);
+vi.mock("@/lib/routing/provider-message-format", () => aiInferenceFake);
 
 // ── Imports (after mocks) ────────────────────────────────────────────────────
-
 import type { AdapterRequest } from "./adapter-types";
 import type { RoutedExecutionPlan } from "./recipe-types";
 import { chatAdapter, withLocalInferenceLock } from "./chat-adapter";
-import { InferenceError } from "@/lib/ai-inference";
+import { InferenceError } from "@/lib/routing/inference-error";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -334,8 +335,7 @@ describe("chatAdapter", () => {
     expect(result.text).not.toContain("Scratchpad");
   });
 
-  it("falls back to reasoning as text ONLY when there is no content at all", async () => {
-    // Last-resort path: a thinking-only reply would otherwise render blank.
+  it("keeps a reasoning-only response out of the answer channel", async () => {
     stubFetchOk({
       choices: [{ message: { reasoning_content: "Only thinking, no answer emitted." }, finish_reason: "stop" }],
       usage: { prompt_tokens: 1, completion_tokens: 1 },
@@ -343,7 +343,7 @@ describe("chatAdapter", () => {
 
     const result = await chatAdapter.execute(makeRequest({ providerId: "local", modelId: "qwen3.8-27b" }));
 
-    expect(result.text).toBe("Only thinking, no answer emitted.");
+    expect(result.text).toBe("");
     expect(result.reasoning).toBe("Only thinking, no answer emitted.");
   });
 

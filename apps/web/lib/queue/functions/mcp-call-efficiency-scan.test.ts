@@ -4,7 +4,7 @@ const mock = vi.hoisted(() => ({
   createFunction: vi.fn((config: unknown, handler: unknown) => ({ config, handler })),
   report: vi.fn(), gate: vi.fn(), owner: vi.fn(),
 }));
-vi.mock("../inngest-client", () => ({ inngest: { createFunction: mock.createFunction } }));
+vi.mock("@/lib/jobs", () => ({ jobs: { createFunction: mock.createFunction } }));
 vi.mock("../quiescence-gates", () => ({ gateAtEntry: mock.gate }));
 vi.mock("../scheduled-owner", () => ({ resolveScheduledOwnerUserId: mock.owner }));
 vi.mock("@/lib/operate/mcp-call-efficiency/report", () => ({ runCallEfficiencyReport: mock.report }));

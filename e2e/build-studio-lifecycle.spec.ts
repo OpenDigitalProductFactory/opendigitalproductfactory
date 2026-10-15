@@ -9,7 +9,6 @@ import {
   loginToDPF,
   waitForCoworkerIdle,
   extractLastResponse,
-  sendAndWait,
 } from "./helpers";
 
 const SCREENSHOTS = "e2e-report/lifecycle";
@@ -20,28 +19,6 @@ async function screenshot(page: Page, name: string) {
   const path = `${SCREENSHOTS}/${String(step).padStart(2, "0")}-${name}.png`;
   await page.screenshot({ path, fullPage: true });
   console.log(`[screenshot] ${path}`);
-}
-
-async function getPhaseFromUI(page: Page): Promise<string> {
-  return page.evaluate(() => {
-    const nav = document.querySelector('nav[aria-label="Build phase progress"]');
-    if (!nav) return "unknown";
-    const current = nav.querySelector('[class*="current"], [aria-current]');
-    if (current) {
-      const label = current.closest("[class]")?.textContent?.trim();
-      if (label) return label.toLowerCase();
-    }
-    // Fallback: find the phase with "current" in its aria description
-    const items = nav.querySelectorAll("[role], [class]");
-    for (const item of items) {
-      const text = item.textContent?.trim() ?? "";
-      const ariaLabel = item.getAttribute("aria-label") ?? "";
-      if (ariaLabel.includes("current") || text.includes("current")) {
-        return text.replace(/\d+/g, "").replace("current", "").trim().toLowerCase();
-      }
-    }
-    return "unknown";
-  });
 }
 
 test.describe("Build Studio Lifecycle", () => {

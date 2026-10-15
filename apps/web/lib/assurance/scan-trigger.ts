@@ -1,4 +1,4 @@
-import { inngest, type AssuranceScanRunEvent } from "@/lib/queue/inngest-client";
+import { jobs, type AssuranceScanRunEvent } from "@/lib/jobs";
 
 export async function queueBuildAssuranceScan(input: { buildId: string; requestedByUserId: string }) {
   const event: AssuranceScanRunEvent = {
@@ -6,5 +6,5 @@ export async function queueBuildAssuranceScan(input: { buildId: string; requeste
     data: input,
   };
 
-  return inngest.send(event);
+  return jobs.send(event);
 }

@@ -15,7 +15,7 @@ vi.mock("@/lib/tak/agent-grants", () => ({
   expandGrants: (grants: string[]) => grants,
 }));
 
-import { findStandingConnection } from "./standing-connection";
+import { findStandingConnection, findStandingConnectionForUser } from "./standing-connection";
 
 const row = (overrides: Record<string, unknown> = {}) => ({
   id: "TOK-NEW", kind: "oauth_access", userId: "user-1", agentId: "AGT-EXT-CODEX", revokedAt: null,
@@ -57,5 +57,36 @@ describe("findStandingConnection", () => {
     current.authority.mockResolvedValue(true);
     current.user.mockResolvedValue(null);
     await expect(findStandingConnection("user-1", "AGT-EXT-CODEX", "request_coworker", "x")).resolves.toBeNull();
+  });
+});
+
+describe("findStandingConnectionForUser (BI-926A7E90 §4)", () => {
+  it("prefers the named assistants, then falls back to any live admitting connection of the person", async () => {
+    prismaMock.mcpApiToken.findMany.mockResolvedValue([
+      row({ id: "TOK-OTHER", agentId: "AGT-SOMETHING" }),
+      row({ id: "TOK-CODEX", agentId: "AGT-EXT-CODEX" }),
+      row({ id: "TOK-CLAUDE", agentId: "AGT-EXT-CLAUDE" }),
+    ]);
+    current.authority.mockResolvedValue(true);
+    const preferred = await findStandingConnectionForUser("user-1", "request_coworker", "platform-reviewer-dispatch", {
+      preferAgentIds: ["AGT-EXT-CLAUDE", "AGT-EXT-CODEX"],
+    });
+    expect(preferred?.context).toMatchObject({ agentId: "AGT-EXT-CLAUDE", apiTokenId: "TOK-CLAUDE" });
+    expect(prismaMock.mcpApiToken.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { kind: "oauth_access", revokedAt: null, userId: "user-1" },
+    }));
+
+    current.authority.mockImplementation(async (token: { id: string }) => token.id === "TOK-OTHER");
+    const fallback = await findStandingConnectionForUser("user-1", "request_coworker", "x", { preferAgentIds: ["AGT-EXT-CLAUDE"] });
+    expect(fallback?.context).toMatchObject({ agentId: "AGT-SOMETHING", apiTokenId: "TOK-OTHER" });
+  });
+
+  it("finds nothing when no connection admits the tool or none is live", async () => {
+    prismaMock.mcpApiToken.findMany.mockResolvedValue([row({ scopes: ["registry_read"] }), row({ id: "TOK-NOAGENT", agentId: null })]);
+    current.authority.mockResolvedValue(true);
+    await expect(findStandingConnectionForUser("user-1", "request_coworker", "x")).resolves.toBeNull();
+    prismaMock.mcpApiToken.findMany.mockResolvedValue([row()]);
+    current.authority.mockResolvedValue(false);
+    await expect(findStandingConnectionForUser("user-1", "request_coworker", "x")).resolves.toBeNull();
   });
 });

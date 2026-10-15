@@ -63,6 +63,18 @@ const (
 	EnvOrganizationTrustRole = "DPF_ORGANIZATION_TRUST_ROLE"
 	EnvPkiDir                = "DPF_PKI_DIR"
 	EnvOrganizationCAURL     = "DPF_ORGANIZATION_CA_URL"
+
+	// BI-F8F8C383: the operator-approved Docker VM restart. Both optional: the
+	// Docker Desktop path defaults to the per-user then the machine install,
+	// and without a task name the restart relies on restart policies alone.
+	EnvDockerDesktopExe  = "DPF_DOCKER_DESKTOP_EXE"
+	EnvAutostartTaskName = "DPF_AUTOSTART_TASK_NAME"
+
+	// EnvEdgeRole selects what the node does (BI-28EFE18A). "host-upkeep" runs
+	// only heartbeat and the action channel: every install gets this node for
+	// host upkeep, while network discovery stays an opt-in edge feature. Empty
+	// or "full" keeps the complete edge behaviour.
+	EnvEdgeRole = "DPF_EDGE_ROLE"
 )
 
 // Config is the loaded, validated runtime configuration.
@@ -83,6 +95,30 @@ type Config struct {
 	OrganizationTrustRole          string
 	PkiDir                         string
 	OrganizationCAURL              string
+	DockerDesktopExe               string
+	AutostartTaskName              string
+	EdgeRole                       string
+}
+
+// HostUpkeepOnly reports whether the node runs only host upkeep: heartbeat and
+// the action channel, with no network sweep and no federation discovery.
+func (c *Config) HostUpkeepOnly() bool {
+	return c.EdgeRole == "host-upkeep"
+}
+
+// DockerVmRestartEnabled reports whether this host can run the operator-approved
+// Docker VM restart: only a native agent sits outside the VM it restarts. All
+// three platforms qualify (BI-28EFE18A); the handler itself refuses on a native
+// Linux Engine, where there is no VM and only a reboot would help.
+func (c *Config) DockerVmRestartEnabled() bool {
+	if c.InstallMode != "native" {
+		return false
+	}
+	switch c.Platform {
+	case "win32", "darwin", "linux":
+		return true
+	}
+	return false
 }
 
 func (c *Config) OrganizationJoinEnabled() bool {
@@ -124,6 +160,9 @@ func Load(version string) (*Config, error) {
 		OrganizationTrustRole:          strings.TrimSpace(os.Getenv(EnvOrganizationTrustRole)),
 		PkiDir:                         filepath.Clean(strings.TrimSpace(os.Getenv(EnvPkiDir))),
 		OrganizationCAURL:              strings.TrimRight(strings.TrimSpace(os.Getenv(EnvOrganizationCAURL)), "/"),
+		DockerDesktopExe:               strings.TrimSpace(os.Getenv(EnvDockerDesktopExe)),
+		AutostartTaskName:              strings.TrimSpace(os.Getenv(EnvAutostartTaskName)),
+		EdgeRole:                       strings.TrimSpace(os.Getenv(EnvEdgeRole)),
 	}
 
 	if cfg.EdgeNodeName == "" {

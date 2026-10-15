@@ -14,6 +14,11 @@ overrides:
   # (resolves to 3.3.16); the root floor does not reach this standalone
   # project. Floor the 3.x line to the patched 3.3.17.
   'nanoid@<3.3.17': '^3.3.17'
+  # source-map-js >= 1.0.0 < 1.2.2: GHSA-68fv-2mgg-jv7q / CVE-2026-93749
+  # (Dependabot #224, high). Indexed source-map section offsets can stall the
+  # event loop. css-tree and postcss resolve 1.2.1. The root floor does not
+  # reach this standalone probe. Patch floor.
+  'source-map-js@<1.2.2': '1.2.2'
 
 allowBuilds:
   "@google/genai@1.52.0": false

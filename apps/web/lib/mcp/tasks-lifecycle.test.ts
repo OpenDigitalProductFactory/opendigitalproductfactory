@@ -1,6 +1,7 @@
 // apps/web/lib/mcp/tasks-lifecycle.test.ts
 import { beforeEach, describe, it, expect, vi } from "vitest";
 const db = vi.hoisted(() => ({ taskRun: { findUnique: vi.fn(), updateMany: vi.fn(), update: vi.fn() },
+  taskNode: { findMany: vi.fn() }, runtimeVerification: { findFirst: vi.fn() },
   externalEvidenceRecord: { findFirst: vi.fn() } }));
 vi.mock("@dpf/db", () => ({ prisma: db }));
 import {
@@ -10,6 +11,7 @@ import {
   tasksLifecycleEnabled,
   handleTasksCancel,
   handleTasksResult,
+  handleTasksGet,
 } from "./tasks-lifecycle";
 
 describe("tasks-lifecycle state adapter (Slice 4 Phase 0)", () => {
@@ -70,7 +72,22 @@ describe("semantic review task lifecycle", () => {
     status: "completed", createdAt: now, updatedAt: now, completedAt: now,
     a2aMetadata: { gateKind: "semantic-review", capsuleId: "WC-1" },
     progressPayload: { evidenceRecordId: "receipt-1", semanticReview: { schemaVersion: 1, state: "completed" } } };
-  beforeEach(() => { vi.clearAllMocks(); db.taskRun.findUnique.mockResolvedValue(row); });
+  beforeEach(() => { vi.clearAllMocks(); db.taskRun.findUnique.mockResolvedValue(row);
+    db.taskNode.findMany.mockResolvedValue([]); db.runtimeVerification.findFirst.mockResolvedValue(null); });
+  it("reports expired infrastructure recovery without instructing endless polling", async () => {
+    db.taskRun.findUnique.mockResolvedValue({ ...row, status: "input-required", completedAt: null,
+      progressPayload: { semanticReview: { schemaVersion: 1, deadlineAt: "2000-01-01T00:00:00Z",
+        recoveryAttempt: 1, reason: "review-capacity-deferred" } } });
+    const result = await handleTasksResult("user-1", { taskId: "TR-REVIEW" });
+    expect(result).toMatchObject({ kind: "ok", value: { structuredContent: {
+      recovery: { budget: "expired", pollUseful: false, classification: "infrastructure-inconclusive",
+        details: { nodes: [], remediation: { executionSettled: false, retryAuthorized: false } } },
+    } } });
+    expect(JSON.stringify(result)).not.toContain("Poll tasks/get until it completes");
+    expect(await handleTasksGet("user-1", { taskId: "TR-REVIEW" })).toMatchObject({ kind: "ok",
+      value: { recovery: { budget: "expired", pollUseful: false,
+        details: { nodes: [], remediation: { executionSettled: false, retryAuthorized: false } } } } });
+  });
   it("loads the canonical receipt through the caller, task, and Workroom binding", async () => {
     const receipt = { schemaVersion: "semantic-change-review-receipt.v2", result: { decision: "pass" } };
     db.externalEvidenceRecord.findFirst.mockResolvedValue({ id: "receipt-1", details: receipt, createdAt: now });
@@ -92,6 +109,8 @@ describe("semantic review task lifecycle", () => {
   it("never reads receipt data for another caller", async () => {
     expect(await handleTasksResult("user-2", { taskId: "TR-REVIEW" })).toMatchObject({ kind: "forbidden" });
     expect(db.externalEvidenceRecord.findFirst).not.toHaveBeenCalled();
+    expect(db.taskNode.findMany).not.toHaveBeenCalled();
+    expect(db.runtimeVerification.findFirst).not.toHaveBeenCalled();
   });
   it("preserves completion when it wins a concurrent cancellation", async () => {
     db.taskRun.findUnique.mockResolvedValueOnce({ ...row, status: "working", completedAt: null }).mockResolvedValue(row);

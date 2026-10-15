@@ -1,23 +1,25 @@
+# Endpoint and credential come from the environment, like the gate scripts
+# (scripts/pregate.mjs): DPF_MCP_URL, else the local endpoint, and the bearer
+# from DPF_MCP_BEARER_TOKEN. No project .mcp.json is read (BI-5201141C): on
+# https Claude Code's dpf connector is the plugin's URL-only OAuth descriptor.
 param(
-  [string]$ConfigPath = ".mcp.json",
+  [string]$McpUrl = "",
   [string]$OutputPath = ""
 )
 
 $ErrorActionPreference = "Stop"
 
 function Read-McpConfig {
-  param([string]$Path)
+  param([string]$Url)
 
-  if (-not (Test-Path -LiteralPath $Path)) {
-    throw "MCP config not found: $Path"
+  if (-not $Url) { $Url = $env:DPF_MCP_URL }
+  if (-not $Url) { $Url = "http://127.0.0.1:3000/api/mcp/v1" }
+  $token = $env:DPF_MCP_BEARER_TOKEN
+  if (-not $token) {
+    throw "DPF_MCP_BEARER_TOKEN is not set; the benchmark calls the MCP endpoint with a bearer."
   }
 
-  $config = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
-  if (-not $config.mcpServers -or -not $config.mcpServers.dpf) {
-    throw "MCP config does not contain mcpServers.dpf"
-  }
-
-  return $config.mcpServers.dpf
+  return [pscustomobject]@{ url = $Url; authorization = "Bearer $token" }
 }
 
 function Read-McpTextJson {
@@ -87,9 +89,9 @@ function Invoke-McpToolMeasured {
   }
 }
 
-$script:Server = Read-McpConfig -Path $ConfigPath
+$script:Server = Read-McpConfig -Url $McpUrl
 $script:Headers = @{
-  Authorization = $script:Server.headers.Authorization
+  Authorization = $script:Server.authorization
   "Content-Type" = "application/json"
 }
 

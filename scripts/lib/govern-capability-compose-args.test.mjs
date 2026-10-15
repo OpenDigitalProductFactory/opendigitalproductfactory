@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { delimiter, join, resolve } from "node:path";
+import { delimiter, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -83,6 +83,7 @@ test("dpf-compose emits the exact disabled-profile failure before Docker", async
   const statePath = join(dir, "install-state.json");
   try {
     await writeFile(statePath, JSON.stringify({
+      schemaVersion: 1, installerVersion: "test", arch: "amd64",
       installPath: root,
       platform: "win32",
       enabledRuntimeCapabilities: [...enabled],
@@ -119,6 +120,7 @@ test("dpf-compose governs profile and topology environment before fake Docker", 
     const enabled = new Set(enabledValues);
     const lines = catalog.capabilities.map(({ capabilityId }) => `${capabilityId}=${enabled.has(capabilityId) ? "active" : "disabled"}`).sort().join("\n");
     await writeFile(statePath, JSON.stringify({
+      schemaVersion: 1, installerVersion: "test", arch: "amd64",
       installPath: root,
       platform: "win32",
       enabledRuntimeCapabilities: [...enabled],
@@ -150,15 +152,15 @@ test("dpf-compose governs profile and topology environment before fake Docker", 
     assert.match(mismatchedFile.stderr, /compose_file_sources_mismatch/);
     await assert.rejects(readFile(trace), { code: "ENOENT" });
 
-    await writeState(["runtime:core", "runtime:local-speech"]);
+    await writeState(["runtime:core", "runtime:deep-observability"]);
     const validFiles = [join(root, "docker-compose.yml"), join(root, "docker-compose.release.yml")];
     const valid = invoke(
-      { COMPOSE_PROFILES: "tts,integration-test", COMPOSE_FILE: validFiles.join(delimiter), COMPOSE_PATH_SEPARATOR: "|", COMPOSE_PROJECT_NAME: "dpf-env-test" },
+      { COMPOSE_PROFILES: "observability-ui,integration-test", COMPOSE_FILE: validFiles.join(delimiter), COMPOSE_PATH_SEPARATOR: "|", COMPOSE_PROJECT_NAME: "dpf-env-test" },
       ["--env-file", maliciousEnvFile, "-f", validFiles[0], "-f", validFiles[1], "config"],
     );
     assert.equal(valid.status, 0, valid.stderr);
     const forwarded = JSON.parse(await readFile(trace, "utf8"));
-    assert.equal(forwarded.profiles, "runtime-local-speech,integration-test");
+    assert.equal(forwarded.profiles, "runtime-deep-observability,integration-test");
     assert.deepEqual(forwarded.argv.slice(0, 4), ["-f", validFiles[0], "-f", validFiles[1]]);
     assert.equal(forwarded.file, validFiles.join(delimiter));
     assert.equal(forwarded.separator, delimiter);

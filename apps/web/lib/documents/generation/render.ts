@@ -39,7 +39,7 @@ export const DEFAULT_RENDER_TIMEOUT_MS = 240_000;
 export const DEFAULT_MAX_REQUEST_BYTES = 64 * 1024 * 1024;
 export const DEFAULT_MAX_RENDER_OUTPUT_BYTES = 300 * 1024 * 1024;
 
-/** Office MIME types come from the converter's table (their one home); Draw's two are added here. */
+/** Office MIME types come from the converter's table, their one home. */
 export const RENDER_FORMAT_MIME: Record<RenderFormat, string> = {
   pptx: CONVERTER_TARGET_MIME.pptx,
   odp: CONVERTER_TARGET_MIME.odp,
@@ -48,8 +48,8 @@ export const RENDER_FORMAT_MIME: Record<RenderFormat, string> = {
   xlsx: CONVERTER_TARGET_MIME.xlsx,
   ods: CONVERTER_TARGET_MIME.ods,
   pdf: CONVERTER_TARGET_MIME.pdf,
-  odg: "application/vnd.oasis.opendocument.graphics",
-  svg: "image/svg+xml",
+  odg: CONVERTER_TARGET_MIME.odg,
+  svg: CONVERTER_TARGET_MIME.svg,
 };
 
 export type TemplateRef = { kind: "builtin" } | { kind: "brand-master"; organizationId: string };
@@ -89,8 +89,9 @@ export type RenderDeps = {
   maxOutputBytes?: number;
 };
 
-const fail = (reason: RenderFailureReason, error: string, issues?: SpecIssue[]): RenderFailure =>
+export const renderFailure = (reason: RenderFailureReason, error: string, issues?: SpecIssue[]): RenderFailure =>
   issues ? { ok: false, error, reason, issues } : { ok: false, error, reason };
+const fail = renderFailure;
 
 function lastLines(text: string, count = 3): string {
   return text.trim().split(/\r?\n/).slice(-count).join(" | ");
@@ -128,7 +129,7 @@ async function defaultResolveTemplate(ref: TemplateRef, family: DocumentFamily):
 }
 
 /** dpf-render's contract: 0 ok, 2 bad request, 3 failed, 4 too large or empty, 124 timed out. */
-function interpretExit(result: BudgetedProcessResult): RenderFailure | null {
+export function interpretRenderExit(result: BudgetedProcessResult): RenderFailure | null {
   const detail = `exit ${result.exitCode}: ${lastLines(result.stderr) || "no diagnostics"}`;
   if (result.outputLimitExceeded) return fail("render-failed", `the rendered output exceeded the limit; ${detail}`);
   switch (result.exitCode) {
@@ -243,6 +244,6 @@ export async function renderDocument(request: RenderDocumentRequest, deps: Rende
     } catch (err) {
       return fail("converter-unavailable", `could not start docker: ${getErrorMessage(err)}`);
     }
-    return interpretExit(result) ?? unpack(result.stdoutBytes, content.family, content.title, formats);
+    return interpretRenderExit(result) ?? unpack(result.stdoutBytes, content.family, content.title, formats);
   });
 }

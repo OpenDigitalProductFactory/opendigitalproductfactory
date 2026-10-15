@@ -14,6 +14,7 @@
 import { createHash } from "node:crypto";
 
 import type { ProjectionContractSpec } from "./projection-serialization";
+import { isRecord } from "@dpf/validators";
 
 export const OPERATIONAL_POSTURE_SCHEMA_VERSIONS = ["dpf.operational-posture/1"] as const;
 export type OperationalPostureSchemaVersion = (typeof OPERATIONAL_POSTURE_SCHEMA_VERSIONS)[number];
@@ -123,10 +124,6 @@ export const OPERATIONAL_POSTURE_PROJECTION_TEMPLATE: ProjectionContractSpec = {
 
 export interface OperationalPostureValidationContext {
   previousOriginVersion?: number;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isNonEmptyString(value: unknown, max: number): boolean {

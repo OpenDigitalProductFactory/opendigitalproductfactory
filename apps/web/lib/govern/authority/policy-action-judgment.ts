@@ -3,6 +3,7 @@ import "server-only";
 import type { ToolPackHandler } from "@/lib/mcp/tool-pack";
 import type { KernelConsultPolicyProjection } from "@/lib/decision/kernel-consult-ledger";
 import { INITIATIVE_READINESS_LANES } from "@/lib/tak/initiative-readiness-tool-grants";
+import { isExactAuthorResearchParams } from "./coworker-authority-decision";
 import type { PolicyAuthorityProjectionAttempt } from "./coworker-tool-authority-gate";
 
 type JudgmentInput = Parameters<PolicyAuthorityProjectionAttempt>[0];
@@ -53,27 +54,43 @@ export function routinePolicyActionEligibility(
     return { eligible: false, reason: "backlog-subject-required" };
   }
   const binding = input.task?.initiativeReviewBinding;
-  if (!binding) {
-    return { eligible: false, reason: "immutable-review-binding-required" };
-  }
-  if (
-    binding.writerToolName !== input.action.toolName
-    || binding.itemId !== input.subject.id
-  ) {
+  const author = input.authorResearchBinding;
+  if (author && (input.action.toolName !== "record_initiative_evidence"
+    || !isExactAuthorResearchParams(input.rawParams)
+    || input.subject.id !== author.itemId
+    || input.rawParams.itemId !== author.itemId
+    || (input.rawParams.artifactRef as { revisionId: string }).revisionId !== author.revisionId
+    || input.rawParams.reason !== author.reason
+    || input.authContext.actingHumanUserId !== author.authorUserId
+    || input.authContext.principalId !== author.authorPrincipalId
+    || input.action.routeContext !== `/build/work/${author.workroomId}`
+    || input.room?.workroomId !== author.workroomId
+    || !input.action.agentGrantAllowed || input.action.roomAuthorityAllowed === false)) {
     return { eligible: false, reason: "review-binding-mismatch" };
   }
-  const workroom = binding.workroomRef;
-  if (!workroom) {
+  if (!binding && !author) {
+    return { eligible: false, reason: "immutable-review-binding-required" };
+  }
+  if (binding && (
+    binding.writerToolName !== input.action.toolName
+    || binding.itemId !== input.subject.id
+  )) {
+    return { eligible: false, reason: "review-binding-mismatch" };
+  }
+  const workroom = binding?.workroomRef;
+  if (binding && !workroom) {
     return { eligible: false, reason: "workroom-binding-required" };
   }
-  if (
+  // A repository blob must sit at the Workroom head; a Build Studio revision is
+  // bound by its own immutable id and digest, not by a commit (BI-926A7E90).
+  if (binding && workroom && (
     binding.artifactRef.repositoryFullName !== workroom.repositoryFullName
-    || binding.artifactRef.commitSha !== workroom.headSha
-  ) {
+    || (binding.artifactRef.kind === "repo-blob-at-commit" && binding.artifactRef.commitSha !== workroom.headSha)
+  )) {
     return { eligible: false, reason: "workroom-binding-mismatch" };
   }
   const lane = INITIATIVE_READINESS_LANES[input.action.toolName];
-  if (!lane || !lane.gates.some((gate) => gate === binding.gate)) {
+  if (!lane || !lane.gates.some((gate) => gate === (binding?.gate ?? "research"))) {
     return { eligible: false, reason: "gate-not-authorized" };
   }
   if (
@@ -151,7 +168,12 @@ export function buildPolicyActionJudgmentRequest(
         `Should WWMD authorize the exact bounded initiative-readiness action ${actionKey} ` +
         `for ${subjectRef} at ${routeContext}, bound to immutable input fingerprint ` +
         `${approvalBinding.inputFingerprint}? Apply Mark's current promoted DPF principles. ` +
-        "Proceed only when the bounded action is justified; defer on ambiguity and decline when policy opposes it.",
+        "Proceed only when the bounded action is justified; defer on ambiguity and decline when policy opposes it."
+        + (authorityInput.authorResearchBinding
+          ? ` This is only the creator's authored research fact at accepted revision ${authorityInput.authorResearchBinding.revisionId},`
+            + ` digest ${authorityInput.authorResearchBinding.valueDigest}, in Workroom ${authorityInput.authorResearchBinding.workroomId}.`
+            + " It grants neither work-start approval nor an independent review verdict; unknown author agent remains unknown."
+          : ""),
       callingPopulation: "in_platform_coworker",
       // BI-9C384562: name the owning scope; the population heuristic alone routes
       // an in-platform coworker to the organization profile.

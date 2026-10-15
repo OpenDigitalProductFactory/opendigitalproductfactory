@@ -2,6 +2,10 @@
  * Plan idempotent writes for the repo-root MCP client config files that point
  * Claude Code and VS Code at the DPF MCP server:
  *   - `<repoRoot>/.mcp.json`        (Claude Code: mcpServers.dpf, http transport)
+ *                                   -- only where Claude cannot authorize by OAuth
+ *                                   (plain http, or explicit legacy mode); on https
+ *                                   the dpf-platform plugin owns the Claude
+ *                                   connector (BI-5201141C)
  *   - `<repoRoot>/.vscode/mcp.json` (VS Code: servers.dpf, http transport)
  *
  * Both reference the `${DPF_MCP_BEARER_TOKEN}` env var rather than embedding the
@@ -152,9 +156,18 @@ export function planMcpClientConfig(
   const same = (existing: string | null, desired: string) =>
     existing !== null && existing.trimEnd() === desired.trimEnd();
 
+  // BI-5201141C (design 12.4.4): where Claude Code authorizes by OAuth, the
+  // dpf-platform plugin's URL-only connector is its one dpf connector. Claude
+  // Code de-duplicates plugin and project servers by endpoint, so a repo
+  // .mcp.json at any other URL loads as a second server. Plan none, and leave
+  // an existing operator file alone. Plain http and explicit legacy mode keep
+  // the header-bearing compatibility file: there it is the credential path.
+  const pluginOwnsClaudeConnector = !mcpClientBearerHeaderRequired(mcpEndpoint, "claude", authMode);
   const mcpPath = joinPath(repoRoot, ".mcp.json");
-  const desiredMcp = mergeManagedServer(existingMcpJson, claudeCodeContent(mcpEndpoint, authMode), "mcpServers");
-  if (desiredMcp !== null && !same(existingMcpJson, desiredMcp)) {
+  const desiredMcp = pluginOwnsClaudeConnector
+    ? existingMcpJson
+    : mergeManagedServer(existingMcpJson, claudeCodeContent(mcpEndpoint, authMode), "mcpServers");
+  if (!pluginOwnsClaudeConnector && desiredMcp !== null && !same(existingMcpJson, desiredMcp)) {
     writes.push({ path: mcpPath, content: desiredMcp });
   }
 
@@ -167,7 +180,7 @@ export function planMcpClientConfig(
   return {
     writes,
     rationale:
-      desiredMcp === null || desiredVscode === null ? "Invalid MCP JSON preserved; repair it before rerunning setup." : writes.length === 0
+      (!pluginOwnsClaudeConnector && desiredMcp === null) || desiredVscode === null ?"Invalid MCP JSON preserved; repair it before rerunning setup." : writes.length === 0
         ? "MCP client config already converged."
         : `Writing ${writes.length} MCP client config file(s) for ${repoRoot}.`,
   };

@@ -130,6 +130,52 @@ This gives every property the goal asks for, without new archetype machinery:
   a new install projects, an upgrading install re-projects, and neither needs an AI client present
   (AGENTS.md §1, *platform function never depends on a client*).
 
+### 4.1a Delivered — and the storage question the slice actually hit (2026-10-01)
+
+Slice 3's derivation landed early and then sat unreachable: `buildArchetypeJobDefinitions` was
+pure, tested, correct — and had **zero callers**, and was absent from `packages/db`'s `exports`
+map. Every unit test passed the whole time, because a projection nobody calls is correct in
+isolation forever. §4.1's claim that deploy and upgrade convergence came "free" was true of the
+*mechanism* and false of the *wire*.
+
+**Where it is wired.** Inside `projectOperationalValueStreamForArchetype`, not at the three call
+sites. That function is the single door storefront setup, archetype-reset and the boot backfill all
+reach, and the one place the OVSM is derived. Wiring the three sites separately would have invited
+a fourth to be added later with one of the three forgotten — the one-of-N-call-sites defect this
+codebase has produced repeatedly. One seam cannot be half-wired.
+
+**Nothing is persisted.** Four homes were scored through the kernel
+(`job-definition-convergence`, platform-development, elevated): a new `CoworkerJobDefinition`
+table, projection into the existing `AgentPromptContext`, `EaElement` business-role rows mirroring
+the sibling projection, and derive-on-read. **Derive-on-read won — composite 8.52, margin 0.80,
+high confidence, autonomy-eligible.** The reasoning that carried it: the OVSM is already the
+per-org source of truth and already overridable, so a stored copy is a second home for a fact the
+archetype layer owns, and would need its own staleness story on every archetype change.
+
+So what converges at deploy and upgrade is the **worklist**, not a stored definition: which roles
+this organisation's value stream implies, which axes are derivable, which are left unanswered, and
+what priming each role's stages require. Measured across the live catalogue at the time it landed:
+
+| archetypes | roles derived | with standing work | carrying derived priming | stages owned by nobody |
+|---|---|---|---|---|
+| 107 | 116 | 111 | 112 | 0 |
+
+The tailoring is observable rather than asserted: a veterinary clinic's "Business operator" derives
+8 accountabilities, three honestly-open axes (authority, qualifications, supervision) and the
+constraint `clinical-adjacent-no-advice`; a hair salon's operator derives different constraints,
+because its stages differ.
+
+**Non-fatal, unlike its sibling.** The EA view is the architecture contract, so that projection
+still throws. A job worklist is a report, and failing an install because a report could not be
+computed trades a real outcome for an advisory one.
+
+**Where it stops.** The derived `requiredContext` is returned and NOT written onto any coworker's
+prompt context. That needs a mapping from an archetype role NAME ("Business operator", as the value
+stream names it) to a canonical `AGT-*` identity, and no such mapping exists. Inventing one would
+bind priming to the wrong coworker silently. Slice 4 is therefore **open on that mapping, not on
+the derivation** — the payload belongs to the establishment door, which already knows which
+identity it is establishing.
+
 ### 4.2 What priming becomes
 
 Axis 6 stops being a free-text wish. The corpus a role must hold is derivable from the stages it
@@ -171,7 +217,12 @@ and here is when we will revisit" — and it should have exactly one.
    is neither satisfied nor waived.
 3. **Third projection.** `archetype-job-definition-projection.ts` beside its two siblings,
    deriving definitions from the OVSM per org, converging on deploy and upgrade.
+   **DELIVERED** — derivation first, then the wire (§4.1a). Convergence is derive-on-read by
+   kernel ruling; no definition is stored.
 4. **Priming.** Required-context derivation from owned stages, seeded and re-seeded by (3).
+   **Derivation delivered** by (3): 112 of 116 derived roles carry required context. What remains
+   is BINDING it to an identity — the archetype role name → `AGT-*` mapping does not exist, and
+   guessing it would prime the wrong coworker silently (§4.1a).
 5. **Run the estate through it.** §7.
 
 ## 7. Running the existing gaps through the process

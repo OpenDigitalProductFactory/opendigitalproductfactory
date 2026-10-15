@@ -14,17 +14,57 @@ import {
   PREFLIGHT_SKIP_ENV,
   planPreflight,
   runPreflight,
+  createDefaultExecute,
 } from "./lib/pregate-preflight.mjs";
 import { classifyChangedFiles } from "./ci-change-scope.mjs";
 import { checkStaleRootClone } from "./lib/stale-root-clone.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { ensureCompileReady, getChangedFilesAgainstMain } from "./lib/ensure-compile-ready.mjs";
+import { buildGateContext } from "./lib/gate-context.mjs";
+import { guardReceiptDirectory, identifyGuardExecution, runWithGuardReceipt } from "./lib/pregate-preflight-receipt.mjs";
 
 /**
  * BI-8CDA7F95: classify the diff with the classifier the cloud trusts. When the
  * changed files cannot be resolved (no merge base — the clone re-shallowed,
  * BI-4EE2E5C0), the scope is unknown and EVERY guard runs.
  */
+/**
+ * The obligations this diff carries, rendered for a refusal banner.
+ *
+ * Compact on purpose: the attestations that are REQUIRED (with the one note
+ * that matters — whether it belongs in the PR body rather than a commit
+ * trailer), and the derived artifacts that are stale WITH the command that
+ * regenerates each. Anything longer gets skimmed, which is how the pointer this
+ * replaced came to be ignored.
+ *
+ * Never throws: a refusal banner that fails to render must not mask the guard
+ * failure it is explaining.
+ */
+export function obligationLines(repoRoot) {
+  try {
+    const changedFiles = getChangedFilesAgainstMain(repoRoot);
+    if (!Array.isArray(changedFiles) || changedFiles.length === 0) return [];
+    const context = buildGateContext({ changedFiles, repoRoot });
+    const lines = [];
+    const required = (context.trailers ?? []).filter((t) => t.level === "required");
+    if (required.length > 0) {
+      lines.push(`this diff REQUIRES ${required.length} attestation(s):`);
+      for (const t of required) {
+        const where = /PR BODY/i.test(t.note ?? "") ? "  [PR BODY, not a commit trailer]" : "";
+        lines.push(`  ${t.trailer}${where}  — ${t.because}`);
+      }
+    }
+    const derived = (context.derivedArtifacts ?? []).filter((d) => d.generate);
+    if (derived.length > 0) {
+      lines.push(`regenerate ${derived.length} derived artifact group(s) in THIS change:`);
+      for (const d of derived) lines.push(`  ${d.generate.join(" ")}   (${d.id})`);
+    }
+    return lines;
+  } catch {
+    return [];
+  }
+}
+
 function resolveChangeScope(worktreePath) {
   const changedFiles = getChangedFilesAgainstMain(worktreePath);
   if (!Array.isArray(changedFiles)) return { changeScope: null, changedFiles: null };
@@ -67,7 +107,7 @@ export async function main() {
   const staleRoot = checkStaleRootClone({ worktreeRoot: process.cwd() });
   if (!staleRoot.ok) {
     process.stderr.write(`[pregate-preflight] ${staleRoot.message}\n`);
-    process.exitCode = 1;
+    process.exitCode = 88;
     return;
   }
   if (staleRoot.behind === 0 && staleRoot.rootClonePath) {
@@ -95,7 +135,7 @@ export async function main() {
         `(${readinessGate.reason}) — guards cannot run and would env-skip. Provision it, then re-run. ` +
         `Emergency skip (recorded honesty, CI still enforces): set DPF_SKIP_COMPILE_READY_GATE="<why>".\n`,
     );
-    process.exitCode = 1;
+    process.exitCode = 88;
     return;
   }
   if (readinessGate.action === "healed") {
@@ -117,8 +157,24 @@ export async function main() {
   }
 
   const startedAt = Date.now();
-  const result = await runPreflight({
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  process.once("SIGINT", cancel);
+  process.once("SIGTERM", cancel);
+  let execution;
+  try { execution = await runWithGuardReceipt({
+    directory: guardReceiptDirectory(),
+    stage: "pregate-preflight",
+    identify: () => process.env[PREFLIGHT_SKIP_ENV] ? null : identifyGuardExecution({ plan: planned.entries }),
+    passed: result => !result.skipped && result.entries.length === planned.entries.length && result.entries.every(entry => entry.status === "passed"),
+    execute: ({ progress }) => runPreflight({
     plan: planned.entries,
+    signal: controller.signal,
+    execute: createDefaultExecute(process.env, { signal: controller.signal, progress(event) {
+      progress(event);
+      if (event.phase) process.stdout.write(`[pregate-preflight] ${event.guardId ?? "guard"}: ${event.phase}\n`);
+      else process.stdout.write(`[pregate-preflight] ${event.guardId ?? "guard"}: running (pid ${event.childPid ?? "unknown"})\n`);
+    } }),
     // Failure lines are printed from the FINAL classified entries below —
     // an env-degraded guard transiently looks "failed" at finish-time and
     // must not be announced as a failure here.
@@ -127,7 +183,20 @@ export async function main() {
         process.stdout.write(`[pregate-preflight] ${event.entry.name}…\n`);
       }
     },
-  });
+    }),
+  }); } finally {
+    process.removeListener("SIGINT", cancel);
+    process.removeListener("SIGTERM", cancel);
+  }
+  const { result } = execution;
+  const fullyVerified = execution.identityVerified && !result.skipped && result.entries.length === planned.entries.length
+    && result.entries.every(entry => entry.status === "passed");
+  process.stdout.write(`DPF_HOST_PREFLIGHT_RESULT=${JSON.stringify({ status: fullyVerified ? "passed" : "inconclusive",
+    entries: result.entries.map(({ id, status }) => ({ id, status })) })}\n`);
+  if (execution.reused) {
+    process.stdout.write(`[pregate-preflight] REUSED ${result.entries.length} successful guards executed at ${execution.executedAt}; identical inputs, no guards rerun. Not integration evidence.\n`);
+    return;
+  }
 
   if (result.skipped) {
     process.stdout.write(
@@ -143,7 +212,13 @@ export async function main() {
   const runnerFailed = result.entries.filter(
     (entry) => entry.status === "runner_failed",
   );
+  const interrupted = result.entries.filter(entry => ["timed_out", "cancelled"].includes(entry.status));
   const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+  if (interrupted.length) {
+    for (const entry of interrupted) process.stderr.write(`[pregate-preflight] ${entry.name}: ${entry.status} — no passing verification; inspect the persisted host receipt before retry.\n`);
+    process.exitCode = 88;
+    return;
+  }
 
   for (const entry of environmentSkipped) {
     // BI-99CAE42F: never recommend a bare --filter install from the workspace root.
@@ -169,8 +244,26 @@ export async function main() {
     for (const entry of failed) {
       process.stderr.write(`  - ${entry.name}: ${entry.failedCommand}\n`);
     }
+    // PUSH, DO NOT ADVERTISE.
+    //
+    // This used to print "see every constraint that applies to this diff: pnpm
+    // gate:context" and nothing else. That line is a POINTER, and a pointer
+    // costs the reader a decision it will usually decline: measured over one
+    // session of nine PRs, the agent driving them saw this hint on every
+    // preflight run and ran `gate:context` zero times — discovering each
+    // required attestation and each stale derived artifact by colliding with its
+    // refusal instead.
+    //
+    // Prose that asks an agent to remember a second command does not survive
+    // context compaction, and it did not survive here. So the obligations are
+    // EMITTED at the moment of refusal, where they cannot be missed without
+    // ignoring the refusal itself, and each one carries the command that
+    // satisfies it rather than a description of what is wrong.
+    for (const line of obligationLines(process.cwd())) {
+      process.stderr.write(`[pregate-preflight] ${line}\n`);
+    }
     process.stderr.write(
-      `[pregate-preflight] see every constraint that applies to this diff: pnpm gate:context\n` +
+      `[pregate-preflight] full constraint set: pnpm gate:context  ·  one-command landing: pnpm land\n` +
       `[pregate-preflight] emergency skip (recorded honesty, CI still enforces): set ${PREFLIGHT_SKIP_ENV}="<why>"\n`,
     );
     process.exitCode = 1;
@@ -182,12 +275,23 @@ export async function main() {
     runnerFailed.length > 0 ? `${runnerFailed.length} host-could-not-run` : null,
   ].filter(Boolean);
   process.stdout.write(
-    `[pregate-preflight] OK — ${result.entries.length} guards clean in ${elapsed}s` +
+    `[pregate-preflight] ${fullyVerified ? "OK" : "INCONCLUSIVE"} — ${result.entries.filter(entry => entry.status === "passed").length}/${result.entries.length} guards verified in ${elapsed}s` +
       (caveats.length > 0 ? ` (${caveats.join(", ")}, see warnings)` : "") +
       "\n",
   );
 }
 
-if (isEntryModule(import.meta.url)) {
-  await main();
+export async function runPreflightEntrypoint(run = main, report = text => process.stderr.write(text)) {
+  try {
+    await run();
+    return process.exitCode ?? 0;
+  } catch (error) {
+    // An orchestration/receipt exception supplies no guard verdict. Parser
+    // excerpts and arbitrary exception text can carry private source material.
+    const code = /^[A-Z0-9_]{1,64}$/.test(error?.code ?? "") ? error.code : "execution-exception";
+    report(`[pregate-preflight] execution inconclusive (${code}); no passing verification was recorded. Inspect the host receipt and restore its execution/recording prerequisites before retry.\n`);
+    return 88;
+  }
 }
+
+if (isEntryModule(import.meta.url)) process.exitCode = await runPreflightEntrypoint();

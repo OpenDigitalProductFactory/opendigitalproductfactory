@@ -2,12 +2,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ agent: vi.fn(), token: vi.fn(), room: vi.fn(),
   human: vi.fn(), currentConsent: vi.fn(), access: vi.fn(), item: vi.fn(), recovery: vi.fn(),
-  task: vi.fn(), authorityKey: vi.fn(), outcome: vi.fn() }));
+  task: vi.fn(), authorityKey: vi.fn(), outcome: vi.fn(), itemRow: vi.fn(), alias: vi.fn(), buildStudioRoutes: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: {
   agent: { findUnique: mocks.agent }, mcpApiToken: { findUnique: mocks.token },
   workroom: { findFirst: mocks.room },
   taskRun: { findFirst: mocks.task },
+  backlogItem: { findUnique: mocks.itemRow },
+  principalAlias: { findFirst: mocks.alias },
 } }));
+vi.mock("@/lib/backlog/initiative-readiness/build-studio-owed-routes", () => ({
+  BUILD_STUDIO_ASSISTANT_AGENT_ID: "AGT-WS-BUILD", buildStudioOwedRoutes: mocks.buildStudioRoutes }));
 vi.mock("@/lib/auth/oauth-task-authority", () => ({ resolveMcpTaskAuthorityKey: mocks.authorityKey }));
 vi.mock("@/lib/mcp-task-review-outcome", () => ({ loadTaskInitiativeReviewOutcome: mocks.outcome }));
 vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: mocks.human }));
@@ -15,11 +19,18 @@ vi.mock("@/lib/auth/oauth-tokens", () => ({ OAUTH_EXECUTION_AUTHORITY_SELECT: {}
 vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({ resolveAgentWorkroomAccess: mocks.access }));
 vi.mock("./packs/backlog-pack-read-tools", () => ({ getBacklogItem: mocks.item }));
 vi.mock("@/lib/backlog/initiative-readiness/terminal-recovery", () => ({ resolveTerminalInitiativeRecovery: mocks.recovery }));
+// This suite isolates authorization and exact issuance. The companion document
+// suite exercises the real parser and preflight after these checks succeed.
+vi.mock("@/lib/mcp-task-review-document", () => ({ validateReviewDocument: async () => null }));
 
 import { authorizeCoworkerRequest } from "./independent-review-request";
-import type { ToolExecutionContext } from "@/lib/mcp-tools";
-import { remoteTaskRequestDigest } from "@/lib/mcp-task-capacity-contract";
+import type { ToolExecutionContext } from "@/lib/mcp-tool-types";
+import { deterministicExternalTaskRunId, remoteTaskRequestDigest } from "@/lib/mcp-task-capacity-contract";
 import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
+import { resolveInitiativeReviewerRecovery } from "@/lib/tak/initiative-readiness-tool-grants";
+import { createExhaustedPlanReviewPredicate } from "@/lib/backlog/initiative-readiness/exhausted-plan-review";
+import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
+import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness/types";
 
 const binding: InitiativeReviewBinding = { writerToolName: "record_initiative_post_implementation_review", itemId: "BI-TEST", gate: "post-implementation-review",
   expectedCurrentBaselineId: null,
@@ -37,7 +48,9 @@ beforeEach(() => {
   mocks.token.mockResolvedValue({ userId: "human", agentId: "AGT-AUTHOR", authorityBindingId: "consent", oauthClient: { registrationKind: "dynamic" } });
   mocks.currentConsent.mockResolvedValue(true);
   mocks.human.mockResolvedValue({ isSuperuser: true, platformRole: null });
-  mocks.room.mockResolvedValue({ id: "room-row" });
+  mocks.room.mockResolvedValue({ id: "room-row", backlogItemId: "BI-TEST", executorKind: "claude-desktop", requestedByPrincipalId: "prn-human" });
+  mocks.itemRow.mockResolvedValue({ id: "cuid-item" });
+  mocks.alias.mockResolvedValue({ principalId: "prn-human" });
   mocks.access.mockResolvedValue({ decision: { level: "action" } });
   mocks.item.mockResolvedValue({ success: true, data: { readiness: { decisions: { completion: {
     verdict: "input-required", subject: { id: "BI-TEST" }, unmet: [], blockers: [],
@@ -48,6 +61,96 @@ beforeEach(() => {
 });
 
 describe("consent-bound independent review request", () => {
+  it("authorizes the same alternate exact plan packet as the issuer after owned exhaustion", async () => {
+    const implementation: InitiativeReadinessDecision = {
+      decisionId: "IRD-PLAN", policyVersion: "initiative-readiness.v3", subject: { kind: "backlog-item", id: "BI-TEST" },
+      transitionObject: { kind: "work-capsule", id: "WC-TEST", expectedVersion: "claim.v1", targetState: "implementation" },
+      profile: "fix", target: "implementation", verdict: "input-required", satisfied: [], blockers: [],
+      unmet: [readinessRequirement({ code: "PLAN_REVIEW_REQUIRED", state: "missing", accountableRole: "plan-reviewer" })],
+      evaluatedAt: "2026-10-12T20:00:00Z",
+    };
+    const input = { decision: implementation, currentAgentId: "AGT-AUTHOR", expectedCurrentBaselineId: "BASE-1",
+      dispatchContext: { workroomId: "WC-TEST", repositoryFullName: "org/repo", branchName: "fix/test", headSha: "a".repeat(40) },
+      planArtifact: { resolved: true as const, path: "docs/superpowers/plans/recovery.md", commitSha: "b".repeat(40), providerBlobId: "c".repeat(40) },
+      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue(["AGT-FIRST", "AGT-NEXT"].flatMap(agentId => ["initiative_design_review", "file_read"].map(grantKey => ({
+        grantKey, agent: { agentId, displayName: agentId, status: "active", archived: false, lifecycleStage: "production" },
+      })))) } },
+    };
+    const old = (await resolveInitiativeReviewerRecovery(input)).reviewerRoutes[0]!.requestCoworker;
+    const scope = ["initiative_evidence_write", "backlog-item:BI-TEST", ...old.requiredToolNames!.map(name => `tool:${name}`)];
+    const authority = { userId: "human", taskAuthorityKey: "oauth-family:consent-family" };
+    const taskRunId = deterministicExternalTaskRunId(authority.taskAuthorityKey, old.requestKey);
+    mocks.task.mockImplementation(async ({ where }) => where.taskRunId === taskRunId ? {
+      taskRunId, userId: "human", currentAgentId: "AGT-FIRST", status: "input-required", authorityScope: scope,
+      a2aMetadata: { taskAuthorityKey: authority.taskAuthorityKey, idempotencyKey: old.requestKey, requestedAgentId: "AGT-FIRST",
+        requestDigestVersion: 2, requestDigest: remoteTaskRequestDigest({ agentId: old.targetAgent, routeContext: "/build",
+          title: old.questionPacketSummary, objective: old.objective, prompt: old.objective, idempotencyKey: old.requestKey,
+          riskClass: "bounded-write", authorityScope: scope, collaborationKind: "handoff", initiativeReviewBinding: old.initiativeReviewBinding }) },
+      progressPayload: { terminalWriterWait: { schemaVersion: 1, kind: "missing-terminal-writer", writerToolName: "record_initiative_design_review",
+        resumeMode: "same-taskrun", attempt: 3, observedAt: "2026-10-12T20:00:00Z" } },
+    } : null);
+    const issue = (taskAuthority: typeof authority) => resolveInitiativeReviewerRecovery({ ...input,
+      isPlanReviewExhausted: createExhaustedPlanReviewPredicate(taskAuthority, { taskRun: { findFirst: mocks.task } }) });
+    const alternate = (await issue(authority)).reviewerRoutes[0]!.requestCoworker;
+    expect(alternate.targetAgent).toBe("AGT-NEXT");
+    mocks.item.mockResolvedValue({ success: true, data: { readiness: { decisions: { implementation } } } });
+    mocks.recovery.mockImplementation(({ taskAuthority }) => issue(taskAuthority));
+    expect(await authorizeCoworkerRequest(alternate, "human", context)).toEqual({ bounded: true });
+    expect((await authorizeCoworkerRequest(old, "human", context)).refusal).toBeDefined();
+    expect((await authorizeCoworkerRequest({ ...alternate, requestKey: old.requestKey }, "human", context)).refusal).toBeDefined();
+  });
+
+  it("accepts the real claim issuer's baseline-before-coverage packet without widening authority", async () => {
+    const implementation: InitiativeReadinessDecision = {
+      decisionId: "IRD-BASELINE-PREREQUISITE", policyVersion: "initiative-readiness.v3",
+      subject: { kind: "backlog-item", id: "BI-TEST" },
+      transitionObject: { kind: "work-capsule", id: "WC-TEST", expectedVersion: "claim.v1", targetState: "implementation" },
+      profile: "fix", target: "implementation", verdict: "input-required", satisfied: [], blockers: [],
+      unmet: [readinessRequirement({ code: "PLAN_REQUIRED", state: "missing", accountableRole: "implementation-planner" })],
+      evaluatedAt: "2026-10-03T02:07:21.794Z",
+    };
+    const completion: InitiativeReadinessDecision = { ...implementation, target: "completion", unmet: [
+      ...implementation.unmet,
+      readinessRequirement({ code: "OBJECTIVE_BASELINE_REQUIRED", state: "missing", accountableRole: "design-checklist-reviewer" }),
+      readinessRequirement({ code: "ACCEPTANCE_EVIDENCE_REQUIRED", state: "missing", accountableRole: "acceptance-reviewer" }),
+    ] };
+    const issue = (decision: InitiativeReadinessDecision) => resolveInitiativeReviewerRecovery({
+      decision, currentAgentId: "AGT-AUTHOR", expectedCurrentBaselineId: null,
+      dispatchContext: { workroomId: "WC-TEST", repositoryFullName: "org/repo", branchName: "fix/test", headSha: "a".repeat(40) },
+      canonicalArtifact: { resolved: true, path: "docs/superpowers/specs/recovery.md", providerBlobId: "b".repeat(40) },
+      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue(["initiative_design_review", "file_read"].map((grantKey) => ({
+        grantKey, agent: { agentId: "AGT-REVIEWER", displayName: "Independent Reviewer", status: "active", archived: false, lifecycleStage: "production" },
+      }))) } },
+    });
+    const issued = await issue(implementation);
+    expect(issued.reviewerRoutes).toHaveLength(1);
+    const request = issued.reviewerRoutes[0]!.requestCoworker;
+    expect(request.initiativeReviewBinding?.gate).toBe("spec-approval");
+    mocks.item.mockResolvedValue({ success: true, data: { readiness: { decisions: { implementation, completion } } } });
+    mocks.recovery.mockImplementation(({ decision }) => issue(decision));
+    expect(await authorizeCoworkerRequest(request, "human", context)).toEqual({ bounded: true });
+    expect((await authorizeCoworkerRequest({ ...request, objective: "altered" }, "human", context)).refusal).toBeDefined();
+    expect((await authorizeCoworkerRequest({ ...request, targetAgent: "AGT-AUTHOR" }, "human", context)).refusal).toBeDefined();
+    mocks.item.mockResolvedValue({ success: true, data: { readiness: { decisions: {
+      implementation: { ...implementation, unmet: [] }, completion,
+    } } } });
+    expect((await authorizeCoworkerRequest(request, "human", context)).refusal).toBeDefined();
+  });
+  it("source-only proof requires platform scope and exact issuance even with general delegation", async () => {
+    const design = { ...packet, initiativeReviewBinding: { ...binding, writerToolName: "record_initiative_design_review", gate: "design-spec" },
+      requiredToolNames: ["read_source_at_version", "record_initiative_design_review"] };
+    const implementation = { target: "implementation", verdict: "input-required", subject: { id: "BI-TEST" }, blockers: [],
+      unmet: [{ code: "CANONICAL_DESIGN_REQUIRED", accountableRole: "design-checklist-reviewer" }] };
+    mocks.item.mockResolvedValue({ success: true, data: { scopeKind: "platform", readiness: { decisions: { implementation } } } });
+    mocks.recovery.mockResolvedValue({ reviewerRoutes: [{ independent: true, requestCoworker: design }] });
+    mocks.agent.mockResolvedValue({ status: "active", archived: false, toolGrants: [{ grantKey: "thread_write" }, { grantKey: "initiative_evidence_write" }] });
+    const ctx = { ...context, tokenGrantScopes: ["thread_write", "initiative_evidence_write"] };
+    expect(await authorizeCoworkerRequest(design, "human", ctx, { sourceOnly: true })).toEqual({ bounded: true });
+    expect((await authorizeCoworkerRequest({ ...design, objective: "customer evidence" }, "human", ctx, { sourceOnly: true })).refusal).toBeDefined();
+    mocks.item.mockResolvedValue({ success: true, data: { scopeKind: "organization", readiness: { decisions: { implementation } } } });
+    expect((await authorizeCoworkerRequest(design, "human", ctx, { sourceOnly: true })).refusal).toBeDefined();
+    expect((await authorizeCoworkerRequest(packet, "human", ctx, { sourceOnly: true })).refusal).toBeDefined();
+  });
   it("accepts only a regenerated packet after current human, consent, grants and exact room checks", async () => {
     expect(await authorizeCoworkerRequest(packet, "human", context)).toEqual({ bounded: true });
     expect(mocks.access).toHaveBeenCalledWith({ userId: "human", agentId: "AGT-AUTHOR", workroomId: "room-row", requested: "action" });
@@ -81,17 +184,17 @@ describe("consent-bound independent review request", () => {
     if (condition === "closed-gate") mocks.item.mockResolvedValue({ success: true, data: { readiness: { decisions: { completion: { verdict: "allowed" } } } } });
     expect((await authorizeCoworkerRequest(packet, "human", ctx)).refusal?.success).toBe(false);
   });
-  // BI-817556D8: design-phase packets (plan-review, spec-approval,
-  // architecture-review) are already issued through the completion recovery;
-  // pin that an exact one is accepted and an altered or unissued one is not.
+  // Pin exact equality for the implementation decision, independently of the
+  // later completion obligations (BI-817556D8, BI-CF118B6D).
   it("accepts an exact design-phase packet issued by the implementation or plan decision", async () => {
     const planBinding = { ...binding, writerToolName: "record_initiative_design_review", gate: "plan-review" };
     const planPacket = { ...packet, requestKey: "plan-review:immutable", initiativeReviewBinding: planBinding,
       requiredToolNames: ["record_initiative_design_review", "read_source_at_version"] };
-    const pending = { verdict: "input-required", subject: { id: "BI-TEST" }, unmet: [], blockers: [] };
+    const pending = { target: "implementation", verdict: "input-required", subject: { id: "BI-TEST" },
+      unmet: [{ code: "PLAN_REVIEW_REQUIRED", accountableRole: "plan-reviewer" }], blockers: [] };
     mocks.item.mockResolvedValue({ success: true, data: { readiness: { decisions: {
       plan: { verdict: "allowed" }, implementation: pending, completion: pending } } } });
-    mocks.recovery.mockImplementation(async ({ decision }) => ({ reviewerRoutes: decision === pending
+    mocks.recovery.mockImplementation(async ({ decision }) => ({ reviewerRoutes: decision.target === "implementation"
       ? [{ independent: true, requestCoworker: planPacket }] : [] }));
     expect(await authorizeCoworkerRequest(planPacket, "human", context)).toEqual({ bounded: true });
     expect((await authorizeCoworkerRequest({ ...planPacket, objective: "altered" }, "human", context)).refusal?.success).toBe(false);
@@ -102,6 +205,31 @@ describe("consent-bound independent review request", () => {
     const refusal = (await authorizeCoworkerRequest(packet, "human", { ...context, agentId: undefined, authSource: "pat" })).refusal;
     expect(refusal?.message).toMatch(/OAuth/);
     expect(refusal?.message).toMatch(/coworker/);
+  });
+  it.each([
+    ["design-spec", "record_initiative_design_review", "CANONICAL_DESIGN_REQUIRED"],
+    ["spec-approval", "record_initiative_design_review", "SPEC_APPROVAL_REQUIRED"],
+    ["architecture-review", "record_initiative_architecture_review", "REVIEW_REQUIRED"],
+    ["plan-review", "record_initiative_design_review", "PLAN_REVIEW_REQUIRED"],
+  ])("routes %s without unrelated completion/research prerequisites swallowing its packet", async (gate, writerToolName, code) => {
+    const reviewPacket = { ...packet, initiativeReviewBinding: { ...binding, gate, writerToolName },
+      requiredToolNames: [writerToolName, "read_source_at_version"] };
+    const implementation = { target: "implementation", verdict: "input-required", subject: { id: "BI-TEST" },
+      blockers: [], unmet: [{ code, accountableRole: "design-checklist-reviewer" },
+        { code: "RESEARCH_REQUIRED", accountableRole: "design-author" }] };
+    const completion = { ...implementation, target: "completion", unmet: [...implementation.unmet,
+      { code: "ACCEPTANCE_EVIDENCE_REQUIRED", accountableRole: "acceptance-reviewer" }] };
+    mocks.item.mockResolvedValue({ success: true, data: { readiness: { decisions: { implementation, completion } } } });
+    // Model the real recovery precedence: unresolved research blocks terminal
+    // recovery before it ever reaches the independent design-review lanes.
+    mocks.recovery.mockImplementation(async ({ decision }) => ({ reviewerRoutes:
+      decision.unmet.some((entry: { code: string }) => entry.code === "RESEARCH_REQUIRED")
+        ? [] : [{ independent: true, requestCoworker: reviewPacket }] }));
+    expect(await authorizeCoworkerRequest(reviewPacket, "human", context)).toEqual({ bounded: true });
+    expect(mocks.recovery).toHaveBeenCalledWith(expect.objectContaining({
+      decision: expect.objectContaining({ target: "implementation", unmet: [{ code, accountableRole: "design-checklist-reviewer" }] }),
+    }));
+    expect((await authorizeCoworkerRequest({ ...reviewPacket, objective: "forged" }, "human", context)).refusal?.success).toBe(false);
   });
   it("does not permit author-owned evidence through the independent-review lane", async () => {
     expect((await authorizeCoworkerRequest({ ...packet, initiativeReviewBinding: { ...binding,
@@ -133,5 +261,39 @@ describe("consent-bound independent review request", () => {
     expect((await authorizeCoworkerRequest(packet, "human", context)).refusal?.success).toBe(false);
     mocks.outcome.mockResolvedValue({ kind: "receipt" });
     expect((await authorizeCoworkerRequest({ ...packet, objective: "altered" }, "human", context)).refusal?.success).toBe(false);
+  });
+});
+
+describe("Build Studio rooms (BI-926A7E90)", () => {
+  const revisionBinding: InitiativeReviewBinding = { writerToolName: "record_initiative_design_review", itemId: "BI-TEST", gate: "spec-approval",
+    expectedCurrentBaselineId: null,
+    workroomRef: { kind: "workroom-head", workroomId: "WC-BS", repositoryFullName: "org/repo", branchName: "build/FB-1", headSha: "sha256:design" },
+    artifactRef: { kind: "feature-build-revision", repositoryFullName: "org/repo", revisionId: "rev_1", valueDigest: "sha256:design" } };
+  const revisionPacket = { targetAgent: "AGT-REVIEWER", objective: "Review the design revision", questionPacketSummary: "spec-approval for BI-TEST",
+    requestKey: "initiative-readiness:BI-TEST:spec-approval:sha256:design", tier: 2, enteredVia: "handoff",
+    requiredToolNames: ["record_initiative_design_review", "read_build_artifact_revision"], initiativeReviewBinding: revisionBinding };
+  const implementation = { target: "implementation", verdict: "input-required", subject: { id: "BI-TEST" }, blockers: [],
+    unmet: [{ code: "SPEC_APPROVAL_REQUIRED", accountableRole: "design-checklist-reviewer" }] };
+
+  beforeEach(() => {
+    mocks.room.mockResolvedValue({ id: "room-bs", backlogItemId: "cuid-item", executorKind: "build-studio", requestedByPrincipalId: null, featureBuild: { createdById: "human" } });
+    mocks.item.mockResolvedValue({ success: true, data: { readiness: { decisions: { implementation } } } });
+    mocks.buildStudioRoutes.mockResolvedValue({ routed: true, routes: [{ workroomId: "WC-BS", requestCoworker: revisionPacket }] });
+  });
+
+  it("accepts the dispatcher's own packet on a connection of the person who requested the build, keyed by the item's row id", async () => {
+    expect(await authorizeCoworkerRequest(revisionPacket, "human", context)).toEqual({ bounded: true });
+    expect(mocks.buildStudioRoutes).toHaveBeenCalledWith({ itemId: "BI-TEST", capsuleId: "WC-BS", authorAgentId: "AGT-WS-BUILD" });
+    expect(mocks.access).not.toHaveBeenCalled();
+    expect(mocks.recovery).not.toHaveBeenCalled();
+  });
+
+  it("refuses a connection that is not the requesting person's, and a packet the resolver did not issue", async () => {
+    mocks.room.mockResolvedValue({ id: "room-bs", backlogItemId: "cuid-item", executorKind: "build-studio", requestedByPrincipalId: "prn-human", featureBuild: { createdById: "someone-else" } });
+    mocks.alias.mockResolvedValue({ principalId: "prn-other" });
+    expect((await authorizeCoworkerRequest(revisionPacket, "human", context)).refusal?.message).toContain("person who requested this Build Studio build");
+    mocks.alias.mockResolvedValue({ principalId: "prn-human" });
+    mocks.buildStudioRoutes.mockResolvedValue({ routed: true, routes: [] });
+    expect((await authorizeCoworkerRequest(revisionPacket, "human", context)).refusal?.message).toContain("changed or is no longer eligible");
   });
 });

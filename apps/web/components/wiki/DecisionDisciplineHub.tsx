@@ -13,37 +13,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-export type DisciplineKey = "wwmd" | "wwwd" | "wsid";
-
-export type DisciplineChipTone = "neutral" | "warning" | "success";
-
-export type DisciplineChip = {
-  label: string;
-  tone?: DisciplineChipTone;
-};
-
-export type DisciplineAction = {
-  label: string;
-  href: string;
-  /** Accent the action (used for the discipline's primary "Adjust"/owner action). */
-  emphasis?: boolean;
-};
-
-export type DisciplineCardModel = {
-  key: DisciplineKey;
-  /** Short code shown as the card title, e.g. "WWMD". */
-  code: string;
-  /** What the acronym expands to, e.g. "What would Mark do". */
-  expansion: string;
-  /** One-line, plain-language subtitle of what this discipline governs. */
-  blurb: string;
-  /** Derived health chips (counts, coverage, open gaps). */
-  chips: DisciplineChip[];
-  /** See / Adjust / Review action links. */
-  actions: DisciplineAction[];
-  /** Accent this card (WWWD — the discipline the business most owns). */
-  featured?: boolean;
-};
+import type { DisciplineCardModel, DisciplineChipTone } from "@/lib/wiki/decision-governance-hub";
 
 function chipClasses(tone: DisciplineChipTone | undefined): string {
   switch (tone) {

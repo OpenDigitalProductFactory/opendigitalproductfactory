@@ -10,10 +10,13 @@ import { loadEscalationItems } from "./sources/escalation";
 import { loadAiDecisionItems } from "./sources/ai-decision";
 import { loadPausedAiItems } from "./sources/paused-ai";
 import { loadWorkroomStallItems } from "./sources/workroom-stall";
+import { loadWorkroomRebindItems } from "./sources/workroom-rebind";
 import { loadScheduledTaskItems } from "./sources/scheduled-task";
+import { loadScheduledJobAttentionItems, type ScheduledJobAttentionDb } from "./sources/scheduled-job";
 import { loadAgentProposalItems } from "./sources/agent-proposal";
 import { loadSkillProposalItems } from "./sources/skill-proposal";
 import { loadCoworkerEnvelopeItems } from "./sources/coworker-envelope";
+import { loadOrphanedApprovalItems } from "./sources/orphaned-approval";
 import { loadPlatformHealthItems } from "./sources/platform-health";
 import {
   loadCoworkerMemoryItems,
@@ -26,11 +29,13 @@ import { loadReservationExceptionItems } from "./sources/reservation-exception";
 import { loadHospitalityCapacityAttentionItems } from "./sources/hospitality-capacity";
 import { loadStorefrontInquiryItems } from "./sources/storefront-inquiry";
 import { loadMailroomItemAttentionItems } from "./sources/mailroom-item";
+import { loadContributionSetupItems } from "./sources/contribution-setup";
 import { loadBusinessJourneyItems } from "./sources/business-journey";
 import {
   loadOutboundItems,
   loadBillItems,
   loadExpenseItems,
+  loadLeaveApprovalItems,
   loadRegulatoryItems,
   loadResearchItems,
 } from "./sources/business-approvals";
@@ -96,6 +101,10 @@ export type AttentionLoadOptions = {
    *  all, so an unidentified reader can never see another user's envelope
    *  (BI-7CB2CCDE). */
   delegatingUserId?: string;
+  /** The reader is a superuser. Only then is the orphaned-approval source
+   *  registered: it names other people's accounts, so it is an administrator's
+   *  finding, never a worker's (BI-61DE8177). */
+  readerIsSuperuser?: boolean;
 };
 
 /** The real source loaders for a reading user. Exported so the wiring — which
@@ -109,12 +118,16 @@ export function attentionSourceLoaders(
     { source: "ai-decision", load: () => loadAiDecisionItems(db) },
     { source: "paused-ai", load: () => loadPausedAiItems(db) },
     { source: "workroom-stall", load: () => loadWorkroomStallItems(db) },
+    { source: "workroom-rebind", load: () => loadWorkroomRebindItems(db) },
     { source: "scheduled-task", load: () => loadScheduledTaskItems(db) },
+    // Cron-backed ScheduledJob failures and an uncommissioned issue intake (BI-FD40397B).
+    { source: "scheduled-task", load: () => loadScheduledJobAttentionItems(db as unknown as ScheduledJobAttentionDb) },
     { source: "agent-proposal", load: () => loadAgentProposalItems(db) },
     { source: "skill-proposal", load: () => loadSkillProposalItems(db) },
     { source: "approval-outbound", load: () => loadOutboundItems(db) },
     { source: "approval-bill", load: () => loadBillItems(db) },
     { source: "approval-expense", load: () => loadExpenseItems(db) },
+    { source: "approval-leave", load: () => loadLeaveApprovalItems(db) },
     { source: "compliance-submission", load: () => loadRegulatoryItems(db) },
     { source: "research-proposal", load: () => loadResearchItems(db) },
     { source: "coworker-memory", load: () => loadCoworkerMemoryItems(db as unknown as CoworkerMemoryAttentionDb) },
@@ -127,6 +140,7 @@ export function attentionSourceLoaders(
     },
     { source: "storefront-inquiry", load: () => loadStorefrontInquiryItems(db) },
     { source: "mailroom-item", load: () => loadMailroomItemAttentionItems(db) },
+    { source: "contribution-setup", load: () => loadContributionSetupItems(db) },
     {
       // Pure registry arithmetic — no query, so it costs nothing per load. The
       // clock is the measurement clock: real time in production, the pinned
@@ -157,6 +171,9 @@ export function attentionSourceLoaders(
       source: "coworker-envelope",
       load: () => loadCoworkerEnvelopeItems(db, opts.delegatingUserId),
     });
+  }
+  if (opts.readerIsSuperuser) {
+    loaders.push({ source: "orphaned-approval", load: () => loadOrphanedApprovalItems(db) });
   }
   return loaders;
 }

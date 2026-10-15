@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
-import { decideHostMatch, enforceCanonicalHost, isCanonicalRedirectExempt } from "./canonical-host";
+import {
+  arrivedViaPublicHost,
+  decideHostMatch,
+  enforceCanonicalHost,
+  isCanonicalRedirectExempt,
+} from "./canonical-host";
 
 const path = "/foo";
 const search = "?bar=1";
@@ -366,5 +371,28 @@ describe("enforceCanonicalHost (Next.js wrapper)", () => {
     expect(res!.headers.get("location")).toBe(
       "https://portal.example.com/platform/federation-links",
     );
+  });
+});
+
+describe("arrivedViaPublicHost", () => {
+  const canonicalUrl = "https://dpf.example.com";
+
+  it("is true when the Host header is the public hostname, in any case", () => {
+    expect(arrivedViaPublicHost({ host: "DPF.example.com", forwardedHost: null, canonicalUrl })).toBe(true);
+  });
+
+  it("is true when a proxy rewrote Host but forwarded the public name", () => {
+    expect(arrivedViaPublicHost({ host: "portal:3000", forwardedHost: "dpf.example.com", canonicalUrl })).toBe(true);
+  });
+
+  it("is false for internal and LAN callers", () => {
+    expect(arrivedViaPublicHost({ host: "portal:3000", forwardedHost: null, canonicalUrl })).toBe(false);
+    expect(arrivedViaPublicHost({ host: "localhost:3000", forwardedHost: null, canonicalUrl })).toBe(false);
+    expect(arrivedViaPublicHost({ host: "192.168.1.20:3000", forwardedHost: null, canonicalUrl })).toBe(false);
+  });
+
+  it("is false when no public URL is configured or it is malformed", () => {
+    expect(arrivedViaPublicHost({ host: "dpf.example.com", forwardedHost: null, canonicalUrl: undefined })).toBe(false);
+    expect(arrivedViaPublicHost({ host: "dpf.example.com", forwardedHost: null, canonicalUrl: "not a url" })).toBe(false);
   });
 });

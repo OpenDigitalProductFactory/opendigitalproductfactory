@@ -1,10 +1,13 @@
 import { prisma } from "@dpf/db";
+import { namespaceMessages } from "@dpf/i18n";
 import { notFound, redirect } from "next/navigation";
 
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { RoomWorkforcePanel } from "@/components/workspace/workroom/RoomWorkforcePanel";
 import { WorkCaseDetailView } from "@/components/workspace/WorkCaseDetailView";
 import { auth } from "@/lib/auth";
-import { getGrantedCapabilities } from "@/lib/permissions";
+import { can, getGrantedCapabilities } from "@/lib/permissions";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import { loadEffectiveAuthContext } from "@/lib/identity/load-effective-auth-context";
 import { loadPrismaWorkroomParticipants } from "@/lib/work-management/room-participation-prisma.server";
 import { loadWorkroomPostureContext } from "@/lib/work-management/room-posture.server";
@@ -12,8 +15,14 @@ import { resolveWorkroomStructureForCase } from "@/lib/work-management/room-stru
 import { decodeWorkCaseKey } from "@/lib/work-management/case-key";
 import { canonicalWorkCaseHref, resolveCanonicalWorkCaseKey } from "@/lib/work-management/canonical-case-key";
 import { loadRoomWorkforce } from "@/lib/work-management/room-workforce.server";
+import { loadNestedRoomCoordination } from "@/lib/work-management/nested-room-coordination.server";
+import { resolveHumanWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
 import { loadWorkspaceWorkCaseDetail } from "@/lib/work-management/workspace-case-loader";
 import { loadWorkroomOnlyCaseDetail } from "@/lib/work-management/workroom-only-case-projection";
+import { loadWorkroomStageDecisionView } from "@/lib/work-management/workroom-stage-decision.server";
+import { loadWorkroomShapeRebindView } from "@/lib/work-management/workroom-shape-rebind.server";
+import { currentUserContext } from "@/lib/govern/current-user-context";
+import { loadWorkroomFlowMap } from "@/lib/work-management/workroom-flow-map.server";
 
 type Props = {
   params: Promise<{ caseKey: string }>;
@@ -73,19 +82,59 @@ export default async function WorkspaceCaseDetailPage({ params, searchParams }: 
   const workforce = detailOrRoom.workroomRowId
     ? await loadRoomWorkforce(prisma as never, { workroomId: detailOrRoom.workroomRowId })
     : null;
+  const coordination = detailOrRoom.workroomRowId ? await loadNestedRoomCoordination(prisma as never, {
+    roomId: detailOrRoom.workroomRowId,
+    canReadRoom: async workroomId => (await resolveHumanWorkroomAccess({
+      userId: session.user.id, workroomId, requested: "content",
+    })).decision.level === "content",
+  }).catch(() => ({ delegations: [], escalation: {
+    state: "setup-required" as const, reason: "coordination-read-unavailable", steps: [],
+  } })) : null;
+  // The governed decision this room waits on, if a person records it here. A
+  // failed read hides the control (the room still says it is waiting) rather
+  // than taking the page down.
+  const stageDecision = detailOrRoom.workroomRowId
+    ? await loadWorkroomStageDecisionView(prisma as never, {
+      caseKey, roomRowId: detailOrRoom.workroomRowId, userId: session.user.id,
+    }).catch(() => null)
+    : null;
+  // A newer version of the room's work shape, when the room is behind (BI-CB5C0DCE).
+  const human = await currentUserContext(session.user.id).catch(() => null);
+  const shapeRebind = detailOrRoom.workroomRowId
+    ? await loadWorkroomShapeRebindView(prisma as never, {
+      caseKey, roomRowId: detailOrRoom.workroomRowId, userId: session.user.id,
+      callerHasManagePlatform: Boolean(human && can(human, "manage_platform")),
+    }).catch(() => null)
+    : null;
+  // EP-B70E718D F3: the room's flow map. A failed read hides the map rather
+  // than taking the page down; the step list below it still renders.
+  const flowMap = detailOrRoom.workroomRowId
+    ? await loadWorkroomFlowMap(prisma as never, { roomRowId: detailOrRoom.workroomRowId }).catch(() => null)
+    : null;
+  const locale = await getLocaleContext();
 
   return (
     <>
-      <WorkCaseDetailView detail={detailOrRoom} workforce={workforce} navigationContext={query} />
+      {stageDecision || shapeRebind || flowMap ? (
+        // The decision controls and the flow map translate with useT("workrooms"); provide it only when rendered.
+        <MessagesProvider locale={locale.language} messages={{ workrooms: namespaceMessages(locale.language, "workrooms") }}>
+          <WorkCaseDetailView detail={detailOrRoom} workforce={workforce} stageDecision={stageDecision} shapeRebind={shapeRebind} flowMap={flowMap} navigationContext={query} />
+        </MessagesProvider>
+      ) : (
+        <WorkCaseDetailView detail={detailOrRoom} workforce={workforce} navigationContext={query} />
+      )}
       {workforce ? (
         <div className="mt-4">
+          <MessagesProvider locale={locale.language} messages={{ workrooms: namespaceMessages(locale.language, "workrooms") }}>
           <RoomWorkforcePanel
             accountability={workforce.accountability}
             accountableDisplayName={workforce.accountableDisplayName}
             groups={workforce.groups}
             matched={workforce.matched}
             partial={workforce.partial}
+            coordination={coordination}
           />
+          </MessagesProvider>
         </div>
       ) : null}
     </>

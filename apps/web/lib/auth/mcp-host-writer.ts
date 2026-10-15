@@ -1,25 +1,68 @@
 import { lazyFs, lazyPath } from "@/lib/shared/lazy-node";
+import type { McpAuthMode } from "@dpf/integration-shared/mcp-client-credential-policy";
 
 import { buildSetupSnippets } from "./mcp-setup-snippets";
 
 /**
- * Writes .mcp.json and .vscode/mcp.json to the host-mounted install directory.
- * The files point at the stable DPF_MCP_BEARER_TOKEN env var so future token
- * rotation changes the secret, not the client config shape.
+ * Writes .mcp.json and .vscode/mcp.json to the host-mounted install directory
+ * when the client's only credential path is the bearer header: a plain-http
+ * install, or explicit legacy mode. The files point at the stable
+ * DPF_MCP_BEARER_TOKEN env var so future token rotation changes the secret,
+ * not the client config shape.
+ *
+ * In OAuth mode on https it writes nothing (BI-5201141C, design 12.4.4): the
+ * dpf-platform plugin's URL-only connector is the one Claude Code connector,
+ * and Claude Code de-duplicates plugin and project servers by endpoint, so a
+ * project file at another URL would load as a second `dpf` server.
+ *
+ * When the install folder enables the dpf-platform plugin (its
+ * `.claude/settings.json` or `.claude/settings.local.json`), the plugin's
+ * connector already covers that folder, so no `dpf` entry is written to
+ * `.mcp.json` either: it would load as a second `dpf` server, the duplicate
+ * the toolchain updater retires (BI-DE1E6485, design 2026-10-07 §5.3 step 5).
+ * The plugin connector reads its bearer from the DPF_MCP_BEARER_TOKEN
+ * environment variable, which the container cannot set, so no file carries
+ * the token in that case. The VS Code file is still written.
+ *
  * No-ops silently when the bind mount does not exist (dev / CI environments).
  */
-export function writeMcpJsonToHost(plaintext: string, baseUrl: string): void {
+const DPF_PLUGIN_ID = "dpf-platform@dpf-platform-local";
+
+/** True when a Claude settings file in `root` enables the dpf-platform plugin. */
+export function pluginConnectorCoversFolder(root: string): boolean {
+  const fs = lazyFs();
+  const p = lazyPath();
+  for (const name of ["settings.json", "settings.local.json"]) {
+    try {
+      const settings = JSON.parse(fs.readFileSync(p.posix.join(root, ".claude", name), "utf-8")) as {
+        enabledPlugins?: Record<string, unknown>;
+      };
+      if (settings.enabledPlugins?.[DPF_PLUGIN_ID] === true) return true;
+    } catch {
+      // Missing or unreadable settings: this file does not enable the plugin.
+    }
+  }
+  return false;
+}
+
+export function writeMcpJsonToHost(plaintext: string, baseUrl: string, authMode: McpAuthMode = "oauth"): void {
   const mountPath = "/host-dpf";
   const fs = lazyFs();
   const p = lazyPath();
   if (!fs.existsSync(mountPath)) return;
 
-  const snippets = buildSetupSnippets(plaintext, baseUrl, "oauth");
+  const snippets = buildSetupSnippets(plaintext, baseUrl, authMode);
+  // The snippet carries the header exactly when the shared credential policy
+  // says the client cannot authorize by OAuth; that is the only case a
+  // project connector is still needed.
+  if (!snippets.claudeCode.includes('"Authorization"')) return;
 
   // Use path.posix so paths always use forward slashes — this code runs inside
   // a Linux Docker container regardless of the OS running the build/tests.
   try {
-    fs.writeFileSync(p.posix.join(mountPath, ".mcp.json"), snippets.claudeCode, "utf-8");
+    if (!pluginConnectorCoversFolder(mountPath)) {
+      fs.writeFileSync(p.posix.join(mountPath, ".mcp.json"), snippets.claudeCode, "utf-8");
+    }
     const vsDir = p.posix.join(mountPath, ".vscode");
     if (!fs.existsSync(vsDir)) fs.mkdirSync(vsDir, { recursive: true });
     fs.writeFileSync(p.posix.join(vsDir, "mcp.json"), snippets.vscode, "utf-8");

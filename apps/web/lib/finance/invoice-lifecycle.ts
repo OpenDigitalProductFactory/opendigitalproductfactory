@@ -1,6 +1,6 @@
-import { INVOICE_STATUSES } from "@/lib/finance/finance-validation";
+import type { InvoiceStatus } from "@dpf/types";
 
-export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
+export type { InvoiceStatus };
 
 /**
  * The one declared source of truth for invoice status movement.

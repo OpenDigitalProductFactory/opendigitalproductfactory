@@ -6,6 +6,7 @@ export * from "./dynamic";
 export * from "./edge";
 export * from "./federation-discovery";
 export * from "./field-dispatch";
+export * from "./guards";
 export * from "./field-dispatch-notifications";
 export * from "./field-dispatch-warranty";
 export * from "./field-dispatch-assignment";
@@ -13,3 +14,10 @@ export * from "./field-dispatch-policy";
 export * from "./readability";
 export * from "./setup-ux";
 export * from "./storefront";
+export * from "./untrusted-text";
+
+export * from "./decision-scope";
+export * from "./outcome-disposition";
+export * from "./trusted-agent-contracts";
+export * from "./trusted-agent-reference-loop";
+export * from "./trusted-agent-examples";

@@ -24,11 +24,11 @@
  * `uxTestResults + uxVerificationStatus` (chunk 6 of the plan).
  */
 
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { buildPipelineConcurrency } from "../admission";
 import { shouldRunBrowserUxVerification } from "@/lib/build/ui-surface";
 
-export const buildReviewVerification = inngest.createFunction(
+export const buildReviewVerification = jobs.createFunction(
   {
     id: "build/review-verification",
     retries: 1,
@@ -148,7 +148,7 @@ export const buildReviewVerification = inngest.createFunction(
     // build's Workroom and head), records any gate decisions it needs and re-runs
     // it, records the scoped tests, and writes the failure analysis the semantic
     // review requires. Each stop is recorded on the build as a named status.
-    await step.run("finalize", async () => {
+    const finalize = await step.run("finalize", async () => {
       const { finalizeBuildForReview } = await import("@/lib/build/finalize-stage-wiring");
       return finalizeBuildForReview({
         id: build.id,
@@ -159,6 +159,71 @@ export const buildReviewVerification = inngest.createFunction(
         designDoc: (build as { designDoc?: unknown }).designDoc,
       });
     });
+
+    // BI-FBA2FDBE: the semantic review needs the failure analysis only a
+    // finished finalize writes. Running it after any other outcome produced a
+    // "repair" verdict nothing consumed, on the same tree, every few minutes.
+    // The finalize stop is already on the build's trail as a named status.
+    const { finalizeAllowsSemanticReview } = await import("@/lib/build/finalize-stage-runner");
+    if (!finalizeAllowsSemanticReview(finalize)) {
+      // BI-B2EEA6DE: guards that failed on this build's own change go back to
+      // its coding agent, bounded, then to the operator.
+      if (finalize.status === "gauntlet-failed") {
+        const routed = await step.run("route-gauntlet-failure-to-repair", async () => {
+          const { routeGauntletFailureToRepair } = await import("@/lib/build/gauntlet-repair");
+          return routeGauntletFailureToRepair(buildId, {
+            treeSha: finalize.treeSha ?? null,
+            recordId: finalize.recordId ?? null,
+            failedGuards: finalize.failedGuards,
+          });
+        });
+        return { status: "finalize-incomplete", finalize: finalize.status, repair: routed };
+      }
+      // BI-83E1ADF8: a failure analysis that names a risk the change does not
+      // mitigate goes back through the same bounded hand-back, then the owner.
+      if (finalize.status === "risk-blocked") {
+        const routed = await step.run("route-unmitigated-risk-to-repair", async () => {
+          const { routeGauntletFailureToRepair } = await import("@/lib/build/gauntlet-repair");
+          return routeGauntletFailureToRepair(buildId, {
+            treeSha: finalize.treeSha,
+            recordId: null,
+            failedGuards: ["Failure analysis"],
+            source: "risk",
+            findings: finalize.risks.map((risk) => ({
+              severity: risk.severity,
+              description: `${risk.key}: ${risk.trigger} → ${risk.effect}. Why it is not mitigated: ${risk.rationale}`,
+            })),
+          });
+        });
+        return { status: "finalize-incomplete", finalize: finalize.status, repair: routed };
+      }
+      // BI-AF072BE5: nothing was committed, so there is nothing to repair or
+      // review. Tell the owner once; escalation ends the build's sweep.
+      if (finalize.status === "no-change") {
+        const escalated = await step.run("escalate-empty-change", async () => {
+          const { prisma } = await import("@dpf/db");
+          const row = await prisma.featureBuild.findUnique({
+            where: { buildId },
+            select: { id: true, phase: true, title: true, originatingBacklogItemId: true },
+          });
+          if (!row || row.phase !== "review") return "not-in-review";
+          const { escalateBuildToHuman } = await import("@/lib/build/escalate-build-to-human");
+          await escalateBuildToHuman({
+            buildPk: row.id,
+            buildId,
+            featureTitle: row.title,
+            originatingBacklogItemId: row.originatingBacklogItemId,
+            phase: "review",
+            rounds: 0,
+            issues: [{ severity: "important", description: "The build reached review without any committed change, so there is nothing to verify or ship. Restart it with a clearer brief, or retire it." }],
+            log: (summary: string) => prisma.buildActivity.create({ data: { buildId, tool: "review-verification", summary: summary.slice(0, 1000) } }).then(() => undefined).catch(() => undefined),
+          });
+          return "escalated";
+        });
+        return { status: "finalize-incomplete", finalize: finalize.status, escalation: escalated };
+      }
+      return { status: "finalize-incomplete", finalize: finalize.status };
+    }
 
     // Phase 3 of the shared Change Reviewer control: task-level reviews remain
     // intact, then one surface-neutral review evaluates the assembled committed
@@ -217,6 +282,26 @@ export const buildReviewVerification = inngest.createFunction(
           },
         }).catch(() => {});
       });
+      // BI-50E8802C: a review that asks for repair goes back to the build's
+      // coding agent with its blocking findings, through the same bounded
+      // hand-back as guard failures (shared attempt bound, then escalation).
+      if (nextAction === "repair") {
+        const blocking = issues.filter((issue) => issue.severity !== "minor");
+        const findings = (blocking.length > 0 ? blocking : issues).map((issue) => ({
+          severity: issue.severity, description: issue.description, location: issue.location, suggestion: issue.suggestion,
+        }));
+        const routed = await step.run("route-review-findings-to-repair", async () => {
+          const { routeGauntletFailureToRepair } = await import("@/lib/build/gauntlet-repair");
+          return routeGauntletFailureToRepair(buildId, {
+            treeSha: semanticReview.outcome.receipt.headTreeHash ?? null,
+            recordId: null,
+            failedGuards: ["Semantic change review"],
+            source: "review",
+            findings,
+          });
+        });
+        return { status: "semantic-review-blocked", decision, nextAction, repair: routed };
+      }
       return { status: "semantic-review-blocked", decision, nextAction };
     }
 

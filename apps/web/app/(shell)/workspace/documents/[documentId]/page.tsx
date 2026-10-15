@@ -1,11 +1,15 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import ReactMarkdown from "react-markdown";
+import { MarkdownHtml } from "@/components/shared/MarkdownHtml";
+import { DOCUMENT_MARKDOWN_OPTIONS } from "@/components/shared/markdown-document-options";
 import { Archive, ArchiveRestore, ArrowLeft, CheckCircle2, FileText } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { listManagedDocumentReferences, loadManagedDocument } from "@/lib/documents/document-store";
 import { loadRenditionTextPreview, renditionFailureMessage } from "@/lib/documents/document-content";
 import { officeSourceExtension } from "@/lib/documents/conversion/formats";
+import { getConverterAvailability } from "@/lib/documents/conversion/availability";
+import { exportableFormats } from "@/lib/documents/document-office-export";
+import { DocumentExportMenu } from "./DocumentExportMenu";
 import { loadPreviewPages } from "@/lib/documents/document-previews";
 import { PRESENTATION_DOCUMENT_KIND } from "@/lib/documents/generation/create-presentation";
 import { DocumentFilePanel } from "./DocumentFilePanel";
@@ -46,6 +50,11 @@ export default async function DocumentDetailPage({ params }: Props) {
   const storedFile = document.currentVersion?.contentBlobId ? document.currentVersion : null;
   const isOfficeFile = storedFile ? officeSourceExtension(storedFile.contentFormat) !== null : false;
   const textPreview = storedFile && isOfficeFile ? await loadRenditionTextPreview(storedFile.id).catch(() => null) : null;
+  const currentVersion = document.currentVersion;
+  const exportFormats = currentVersion ? exportableFormats(currentVersion.contentFormat) : [];
+  const converterAvailable = exportFormats.length > 0
+    ? (await getConverterAvailability().catch(() => ({ available: false }))).available
+    : false;
   const previewPages = storedFile ? await loadPreviewPages(storedFile.id) : [];
 
   return (
@@ -85,9 +94,19 @@ export default async function DocumentDetailPage({ params }: Props) {
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <article className="min-w-0 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
-          <div className="mb-4 flex items-center gap-2 text-xs uppercase tracking-[0.14em] text-[var(--dpf-muted)]">
-            <FileText className="h-4 w-4" aria-hidden="true" />
-            Current Version
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.14em] text-[var(--dpf-muted)]">
+              <FileText className="h-4 w-4" aria-hidden="true" />
+              Current Version
+            </div>
+            {currentVersion && (
+              <DocumentExportMenu
+                documentId={document.documentId}
+                version={currentVersion.version}
+                formats={exportFormats}
+                converterAvailable={converterAvailable}
+              />
+            )}
           </div>
           {storedFile ? (
             <div className="space-y-6">
@@ -106,9 +125,7 @@ export default async function DocumentDetailPage({ params }: Props) {
               />
             </div>
           ) : document.contentFormat === "text/markdown" ? (
-            <div className="prose prose-sm max-w-none text-[var(--dpf-text)] prose-headings:text-[var(--dpf-text)] prose-p:text-[var(--dpf-text)] prose-strong:text-[var(--dpf-text)]">
-              <ReactMarkdown>{content}</ReactMarkdown>
-            </div>
+            <MarkdownHtml source={content} options={DOCUMENT_MARKDOWN_OPTIONS} />
           ) : (
             <pre className="whitespace-pre-wrap text-sm leading-6 text-[var(--dpf-text)]">{content || "Binary or external content is stored as a managed blob."}</pre>
           )}

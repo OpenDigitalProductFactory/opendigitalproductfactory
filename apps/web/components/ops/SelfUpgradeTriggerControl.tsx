@@ -17,7 +17,20 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { triggerSelfUpgrade, forceActiveRun, abortActiveRun } from "@/lib/actions/promotions";
+import { triggerSelfUpgrade } from "@/lib/actions/promotions";
+
+// BI-F9EE05E5 slice C: drain controls go through a route the proxy admits
+// during a drain; a server action posts to the page and is refused then.
+async function postDrainControl(runId: string, action: "keep-waiting" | "force" | "abort"): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch("/api/ops/self-upgrade/control", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ runId, action }),
+  });
+  if (res.ok) return ok();
+  const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+  return { ok: false, error: body?.error?.message ?? `Request failed (${res.status})` };
+}
 import { isExpectedDuringSwap } from "@/lib/self-upgrade/is-expected-during-swap";
 import {
   describeSelfUpgradeActionState,
@@ -25,11 +38,20 @@ import {
   type SelfUpgradeActionState,
 } from "@/lib/self-upgrade/action-state";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { ok } from "@/lib/shared/action-result";
+import { useT } from "@/lib/i18n/use-t";
 import type { LatestRun, QuiescenceActivity } from "@/lib/self-upgrade/run-types";
 import SelfUpgradeJobEngineHealthAlert, {
   type JobEngineHealth,
 } from "@/components/ops/SelfUpgradeJobEngineHealthAlert";
 import { useOptionalSelfUpgradeLive } from "@/components/ops/SelfUpgradeLiveProvider";
+
+// A run in one of these states has finished; its outcome is on the page and a
+// fresh trigger is legitimate again (a skipped or failed run is exactly when
+// the operator should be able to retry).
+const SETTLED_RUN_STATUSES: ReadonlySet<string> = new Set([
+  "succeeded", "failed", "cancelled", "skipped", "rolled_back",
+]);
 
 type Props = {
   enabled: boolean;
@@ -58,10 +80,12 @@ export default function SelfUpgradeTriggerControl({
   const quiescence = live?.snapshot.quiescence ?? initialQuiescence;
   const jobEngine = live?.snapshot.jobEngine ?? initialJobEngine;
   const [isPending, startTransition] = useTransition();
+  const t = useT("upgrade");
   const [override, setOverride] = useState(false);
   const [triggerResult, setTriggerResult] = useState<{
     queued: boolean;
     reason?: string;
+    message?: string;
     runId?: string;
     dispatchStatus?: string;
     uncertain?: boolean;
@@ -76,12 +100,26 @@ export default function SelfUpgradeTriggerControl({
   const [restarting, setRestarting] = useState(false);
   const restartBaselineRef = useRef<string | null>(null);
   const admissionBaselineRef = useRef<string | null>(null);
+  const triggerBaselineRunIdRef = useRef<string | null>(null);
 
   const draining = !!quiescence && quiescence.level !== "normal";
   const queuedRun = latestRun?.status === "queued" || latestRun?.status === "pending";
   const upgradeInFlight = queuedRun || latestRun?.status === "running" || draining;
   const triggerBusy = isPending || admissionUncertain;
   const updateAvailable = actionState === SELF_UPGRADE_ACTION_STATE.UPDATE_AVAILABLE;
+  // BI-CE244260: from admission until the admitted run is visible and settled
+  // there is nothing to press. The button used to come back here, guarded only
+  // by the sentence "do not click again"; a warning is not a control. (The
+  // server refuses a second trigger anyway — this stops the page inviting one.)
+  // Without a run id, the admitted run is whichever run replaces the one that
+  // was latest when the operator clicked.
+  const admitted = triggerResult?.queued === true;
+  const admittedRunId = admitted ? triggerResult?.runId ?? null : null;
+  const admittedRunVisible = latestRun != null && (admittedRunId !== null
+    ? latestRun.runId === admittedRunId
+    : latestRun.runId !== triggerBaselineRunIdRef.current);
+  const awaitingAdmittedRun = admitted
+    && !(admittedRunVisible && SETTLED_RUN_STATUSES.has(latestRun!.status));
 
   // A compact fingerprint of the server-derived state. When it changes after
   // a swap-induced disconnect, the new container has answered and the
@@ -136,6 +174,7 @@ export default function SelfUpgradeTriggerControl({
     setInFlightError(null);
     const force = override;
     admissionBaselineRef.current = serverSignature();
+    triggerBaselineRunIdRef.current = latestRun?.runId ?? null;
     startTransition(async () => {
       try {
         const result = await triggerSelfUpgrade({
@@ -181,7 +220,7 @@ export default function SelfUpgradeTriggerControl({
     setInFlightError(null);
     startTransition(async () => {
       try {
-        const r = await forceActiveRun(runId);
+        const r = await postDrainControl(runId, "force");
         setForceConfirm(false);
         if (!r.ok) setInFlightError(r.error ?? "Force failed");
         refreshStatus();
@@ -204,7 +243,7 @@ export default function SelfUpgradeTriggerControl({
     setInFlightError(null);
     startTransition(async () => {
       try {
-        const r = await abortActiveRun(runId);
+        const r = await postDrainControl(runId, "abort");
         setAbortConfirm(false);
         if (!r.ok) setInFlightError(r.error ?? "Abort failed");
         refreshStatus();
@@ -218,6 +257,36 @@ export default function SelfUpgradeTriggerControl({
       }
     });
   }
+
+  // At the bound the upgrade pauses for the operator; Keep waiting extends it.
+  function handleKeepWaiting() {
+    const runId = quiescence?.run?.runId;
+    if (!runId) return;
+    setInFlightError(null);
+    startTransition(async () => {
+      try {
+        const r = await postDrainControl(runId, "keep-waiting");
+        if (!r.ok) setInFlightError(r.error ?? t("drain.keepWaitingFailed"));
+        refreshStatus();
+      } catch (err) {
+        setInFlightError(getErrorMessage(err) || t("drain.keepWaitingFailed"));
+      }
+    });
+  }
+
+  const drainRun = quiescence?.run ?? null;
+  const awaitingOperator = drainRun?.status === "awaiting-operator";
+  const waitedMinutes = drainRun?.drainStartedAt
+    ? Math.max(0, Math.round((Date.now() - Date.parse(drainRun.drainStartedAt)) / 60_000))
+    : null;
+  const limitMinutes = drainRun?.budgetMs ? Math.round(drainRun.budgetMs / 60_000) : null;
+  const waitingLine = drainRun && waitedMinutes !== null
+    ? awaitingOperator
+      ? t("drain.awaitingOperator", { waited: String(waitedMinutes) })
+      : limitMinutes
+        ? t("drain.waiting", { waited: String(waitedMinutes), limit: String(limitMinutes) })
+        : t("drain.waitingNoLimit", { waited: String(waitedMinutes) })
+    : null;
 
   if (!enabled) {
     return (
@@ -268,12 +337,17 @@ export default function SelfUpgradeTriggerControl({
         </div>
 
         <div className="flex items-center gap-3">
-          {upgradeInFlight ? (
+          {upgradeInFlight || awaitingAdmittedRun ? (
             // BI-4F3B2FA9: a run is in flight. Never a dead-end disabled
             // button — when the portal is draining, surface Force Now / Abort
             // so the operator's emergency lever actually works mid-flight.
             draining && quiescence?.run?.runId ? (
-              <div className="flex items-center gap-2" role="group" aria-label="In-flight upgrade controls">
+              <div className="flex flex-wrap items-center gap-2" role="group" aria-label="In-flight upgrade controls">
+                {waitingLine && (
+                  <span className="text-xs text-[var(--dpf-muted)]" role="status" aria-live="polite" data-drain-waiting={awaitingOperator ? "awaiting-operator" : "draining"}>
+                    {waitingLine}
+                  </span>
+                )}
                 {inFlightError && (
                   <span className="text-xs text-[var(--dpf-warning)]" role="status" aria-live="polite">
                     {inFlightError}
@@ -323,6 +397,17 @@ export default function SelfUpgradeTriggerControl({
                   </div>
                 ) : (
                   <>
+                    {awaitingOperator && (
+                      <button
+                        type="button"
+                        onClick={handleKeepWaiting}
+                        disabled={isPending}
+                        aria-label={t("drain.keepWaitingLabel", { runId: drainRun?.runId ?? "" })}
+                        className="px-3 py-1.5 text-xs rounded-lg border border-[var(--dpf-accent)] text-[var(--dpf-accent)] hover:bg-[var(--dpf-surface-2)] transition-colors disabled:opacity-50"
+                      >
+                        {t("drain.keepWaiting")}
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => { setAbortConfirm(false); setForceConfirm(true); }}
@@ -356,7 +441,9 @@ export default function SelfUpgradeTriggerControl({
                       : latestRun?.dispatchStatus === "admission_pending"
                         ? `Upgrade ${latestRun.runId} admitted — waiting for dispatch…`
                         : "Upgrade queued — waiting for the worker…"
-                  : "Upgrade in progress…"}
+                  : awaitingAdmittedRun && !admittedRunVisible
+                    ? `Upgrade${admittedRunId ? ` ${admittedRunId}` : ""} admitted — waiting for dispatch…`
+                    : "Upgrade in progress…"}
               </span>
             )
           ) : (
@@ -412,26 +499,23 @@ export default function SelfUpgradeTriggerControl({
           data-upgrade-starting="true"
           aria-live="polite"
         >
-          Recording this upgrade before dispatch. Keep this page open; the durable
-          run will appear below as soon as admission commits.
+          Recording this upgrade. It continues if you leave this page.
         </div>
       )}
 
-      {updateAvailable && triggerResult && (
+      {updateAvailable && triggerResult && !triggerResult.queued && (
         <div
           className={`p-3 rounded-lg text-sm ${
-            triggerResult.uncertain
+            triggerResult.uncertain || triggerResult.reason === "deferred-to-window"
               ? "bg-[var(--dpf-info)]/10 text-[var(--dpf-text)] border border-[var(--dpf-info)]/30"
-              : triggerResult.queued
-              ? "bg-[var(--dpf-success)]/10 text-[var(--dpf-success)] border border-[var(--dpf-success)]/30"
               : "bg-[var(--dpf-destructive)]/10 text-[var(--dpf-destructive)] border border-[var(--dpf-destructive)]/30"
           }`}
         >
           {triggerResult.uncertain
-            ? `Admission response interrupted: ${triggerResult.reason} The server record is being checked; do not click again.`
-            : triggerResult.queued
-            ? `Upgrade admitted${triggerResult.runId ? ` as ${triggerResult.runId}` : ""}. Dispatch is tracked by this run; do not click again.`
-            : `Not admitted: ${triggerResult.reason}`}
+            ? `Admission response interrupted: ${triggerResult.reason} Checking the server record…`
+            : triggerResult.reason === "deferred-to-window"
+              ? `Queued for the maintenance window: ${triggerResult.message ?? ""}`
+              : `Not admitted: ${triggerResult.reason}`}
         </div>
       )}
     </div>

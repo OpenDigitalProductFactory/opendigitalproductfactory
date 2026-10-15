@@ -6,7 +6,9 @@ vi.mock("@dpf/db", () => ({
     modelProvider: {
       findFirst: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
+    aiProviderConnection: { findUnique: vi.fn() },
     modelProfile: {
       count: vi.fn().mockResolvedValue(1),
     },
@@ -51,7 +53,7 @@ import {
 const mockRecordCapacity = vi.mocked(recordProviderCapacityStatus);
 const mockClearCapacity = vi.mocked(clearProviderCapacityStatus);
 const mockFindFirst = vi.mocked(prisma.modelProvider.findFirst);
-const mockUpdate = vi.mocked(prisma.modelProvider.update);
+const mockUpdate = vi.mocked(prisma.modelProvider.updateMany);
 const mockDiscoveredAggregate = vi.mocked(prisma.discoveredModel.aggregate);
 const mockAutoDiscover = vi.mocked(autoDiscoverAndProfile);
 const mockQueueEvals = vi.mocked(queueUncalibratedModelEvals);
@@ -60,7 +62,7 @@ const mockSyncInfraCI = vi.mocked(syncInfraCI);
 describe("checkBundledProviders", () => {
   beforeEach(() => {
     mockFindFirst.mockReset();
-    mockUpdate.mockReset();
+    mockUpdate.mockReset().mockResolvedValue({ count: 1 });
     mockFetch.mockReset();
     // Default: local model set was just seen, so the steady-state throttle does
     // NOT re-enumerate (BI-86CC0266). Stale-case tests override this.
@@ -71,6 +73,31 @@ describe("checkBundledProviders", () => {
     mockRecordCapacity.mockReset().mockResolvedValue(undefined);
     mockClearCapacity.mockReset().mockResolvedValue(undefined);
     resetLocalProviderProbeState();
+    vi.mocked(prisma.aiProviderConnection.findUnique).mockResolvedValue({ status: "active" } as any);
+  });
+
+  it("preserves an operator-disabled connection across repeated reachable health checks", async () => {
+    mockFindFirst.mockResolvedValue({ providerId: "local", status: "inactive", baseUrl: "http://localhost:11434/v1", endpoint: null } as any);
+    vi.mocked(prisma.aiProviderConnection.findUnique).mockResolvedValue({ status: "inactive" } as any);
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ data: [{ id: "qwen" }] }) });
+    await checkBundledProviders();
+    await checkBundledProviders();
+    expect(mockUpdate).not.toHaveBeenCalled();
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(mockAutoDiscover).not.toHaveBeenCalled();
+    expect(mockQueueEvals).not.toHaveBeenCalled();
+  });
+
+  it("does not activate or queue evaluations when an operator changes state during the probe", async () => {
+    const observedAt = new Date("2026-10-11T21:00:00Z");
+    mockFindFirst.mockResolvedValue({ providerId: "local", status: "inactive", baseUrl: "http://localhost:11434/v1", endpoint: null, updatedAt: observedAt } as any);
+    mockFetch.mockResolvedValue({ ok: true });
+    mockUpdate.mockResolvedValue({ count: 0 });
+    await checkBundledProviders();
+    expect(mockUpdate).toHaveBeenCalledWith({ where: { providerId: "local", status: "inactive", updatedAt: observedAt }, data: { status: "active" } });
+    expect(mockAutoDiscover).not.toHaveBeenCalled();
+    expect(mockQueueEvals).not.toHaveBeenCalled();
+    expect(mockClearCapacity).not.toHaveBeenCalled();
   });
 
   it("activates the provider and runs auto-discover+profile when reachable and unconfigured", async () => {
@@ -94,7 +121,7 @@ describe("checkBundledProviders", () => {
     await checkBundledProviders();
 
     expect(mockUpdate).toHaveBeenCalledWith({
-      where: { providerId: "local" },
+      where: { providerId: "local", status: "unconfigured", updatedAt: undefined },
       data: { status: "active" },
     });
     // autoDiscoverAndProfile handles discovery + profiling + queues the eval that
@@ -136,7 +163,7 @@ describe("checkBundledProviders", () => {
 
     expect(mockUpdate).toHaveBeenCalledTimes(1);
     expect(mockUpdate).toHaveBeenCalledWith({
-      where: { providerId: "local" },
+      where: { providerId: "local", status: "active", updatedAt: undefined },
       data: { status: "inactive" },
     });
     expect(mockRecordCapacity).toHaveBeenCalledWith(expect.objectContaining({
@@ -164,7 +191,7 @@ describe("checkBundledProviders", () => {
     await checkBundledProviders();
 
     expect(mockUpdate).toHaveBeenCalledWith({
-      where: { providerId: "local" },
+      where: { providerId: "local", status: "inactive", updatedAt: undefined },
       data: { status: "active" },
     });
     expect(mockClearCapacity).toHaveBeenCalledWith({ providerId: "local", source: "api" });

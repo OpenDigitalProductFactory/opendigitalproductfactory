@@ -1,0 +1,58 @@
+{
+  "drain": {
+    "waiting": "Waiting for running work to finish before installing: {$waited} of {$limit} min. New work is paused.",
+    "waitingNoLimit": "Waiting for running work to finish before installing: {$waited} min. New work is paused.",
+    "awaitingOperator": "Work is still running after {$waited} min. New work stays paused. Keep waiting, force the upgrade now, or abort it.",
+    "keepWaiting": "Keep waiting",
+    "keepWaitingLabel": "Keep waiting for upgrade run {$runId}",
+    "keepWaitingFailed": "Keep waiting failed"
+  },
+  "agentClients": {
+    "title": "Connected agent clients",
+    "intro": "AI coding tools such as Claude Code, Codex and Grok that connect to this install.",
+    "introRelease": "This update ships version {$version} of the DPF agent tools. Each client is checked when it connects. A client that is behind is told and asked to update itself.",
+    "fingerprintHint": "The fingerprint identifies the exact files a client loaded.",
+    "unavailable": "The client list could not be read right now.",
+    "unavailableHint": "It refreshes each time this page loads.",
+    "noPack": "This version of the portal does not include the DPF agent tools, so there is nothing to compare.",
+    "empty": "No agent client has connected yet.",
+    "emptyHint": "A client appears here after its first connection to this install.",
+    "summary": "{$current} of {$total} up to date",
+    "unidentified": "Unidentified client",
+    "probably": "{$name} (probably)",
+    "toolsVersion": "Tools version {$version}",
+    "toolsVersionUnknown": "Tools version not reported",
+    "fingerprint": "fingerprint {$value}",
+    "lastSeenRecent": "Last seen within the last hour",
+    "lastSeenHours": ".input {$count :number}\n.match $count\none {{Last seen 1 hour ago}}\n* {{Last seen {$count} hours ago}}",
+    "lastSeenDays": ".input {$count :number}\n.match $count\none {{Last seen 1 day ago}}\n* {{Last seen {$count} days ago}}",
+    "truncated": "Showing the {$count} most recently seen clients.",
+    "signIn": {
+      "oauth": "Signed in",
+      "bearer": "Stored token",
+      "session": "Portal session"
+    },
+    "standing": {
+      "current": {
+        "label": "Up to date",
+        "explanation": "It loaded the agent tools this update ships."
+      },
+      "stale": {
+        "label": "Behind",
+        "explanation": "It loaded an older copy of the agent tools. It is told on its next connection and asked to update."
+      },
+      "below-floor": {
+        "label": "Too old",
+        "explanation": "Its copy is older than this install accepts. It can still read, but changes will be refused once the grace period ends."
+      },
+      "undeclared": {
+        "label": "Version unknown",
+        "explanation": "It did not say which agent tools it loaded. That usually means a copy installed before this check existed."
+      },
+      "silent": {
+        "label": "Not seen this week",
+        "explanation": "It has not connected in the last 7 days, so its current copy is unknown."
+      }
+    }
+  }
+}

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  createRetryableRelease,
+  admittedLeaseTtlMs,
   authoritySafetyMarginMs,
   heartbeatIntervalMs,
   isAuthoritativeRefusal,
@@ -441,3 +443,54 @@ test("a failed release is recorded and does not throw away the run's result", as
   assert.ok(events.some((event) => event.type === "release-failed" && event.reason === "release refused"));
 });
 
+
+test("the cadence TTL is the authority the server granted, not the one requested (BI-E226C954)", () => {
+  const now = Date.parse("2026-10-01T14:34:00.000Z");
+  const granted = new Date(now + 120_000).toISOString();
+  assert.equal(admittedLeaseTtlMs(granted, 10 * 60_000, now), 120_000);
+  assert.equal(admittedLeaseTtlMs(undefined, 10 * 60_000, now), 10 * 60_000);
+  assert.equal(admittedLeaseTtlMs("not-a-date", 10 * 60_000, now), 10 * 60_000);
+  assert.equal(admittedLeaseTtlMs(new Date(now - 1_000).toISOString(), 10 * 60_000, now), 1);
+});
+
+test("a 2-minute grant heartbeats before its own authority deadline (BI-E226C954)", async () => {
+  const now = Date.parse("2026-10-01T14:34:00.000Z");
+  const expiresAt = new Date(now + 120_000).toISOString();
+  let intervalMs;
+  let deadlineMs;
+  const result = await superviseLeaseRun({
+    ttlMs: admittedLeaseTtlMs(expiresAt, 10 * 60_000, now),
+    expiresAt,
+    now: () => now,
+    run: async () => 0,
+    renew: async () => ({ success: true }),
+    terminate: async () => {},
+    release: async () => {},
+    schedule: (_callback, ms) => { intervalMs = ms; return "timer"; },
+    cancelSchedule: () => {},
+    scheduleDeadline: (_callback, ms) => { deadlineMs = ms; return "deadline"; },
+    cancelDeadline: () => {},
+  });
+  assert.equal(result.status, "completed");
+  assert.ok(intervalMs < deadlineMs, `heartbeat every ${intervalMs} ms must land before the ${deadlineMs} ms deadline`);
+});
+
+
+test("failed release can retry while concurrent and completed calls are idempotent", async () => {
+  let calls = 0;
+  const pending = deferred();
+  const release = createRetryableRelease(async () => {
+    calls += 1;
+    if (calls === 1) throw new Error("network unavailable");
+    await pending.promise;
+  });
+  await assert.rejects(release(), /network unavailable/);
+  const first = release();
+  const second = release();
+  await Promise.resolve();
+  assert.equal(calls, 2);
+  pending.resolve();
+  await Promise.all([first, second]);
+  await release();
+  assert.equal(calls, 2);
+});

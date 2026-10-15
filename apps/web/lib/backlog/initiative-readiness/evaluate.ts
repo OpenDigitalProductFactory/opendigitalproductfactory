@@ -1,5 +1,5 @@
 import { requirementEvidenceLane, requirementNextAction } from "./readiness-guidance";
-import { effectiveShape, shapeRequirements, type ShapeRequirement } from "./shape-requirements";
+import { effectiveShape, shapeRaise, shapeRequirements, type ShapeRequirement } from "./shape-requirements";
 import type {
   InitiativeReadinessDecision,
   InitiativeReadinessFacts,
@@ -149,7 +149,7 @@ function result(
   // small raised to medium owes medium's item-body baseline, and saying
   // "spec-approval" there sends the author to a lane its shape never uses
   // (BI-BD60DC91).
-  const appliedShape = facts.shape ? effectiveShape(facts.shape, facts.sensitivity, facts.profile) : null;
+  const appliedShape = facts.shape ? effectiveShape(facts.shape, facts.sensitivity, facts.profile, facts.workType) : null;
   const unreadEvidenceRefs = state === "pass" ? [] : facts.unreadEvidenceRefs?.[code] ?? [];
   return {
     code,
@@ -179,12 +179,24 @@ function result(
  * raise legible to the operator and to the recovery packet.
  */
 function shapeDecisionOf(facts: InitiativeReadinessFacts): NonNullable<InitiativeReadinessDecision["shapeDecision"]> {
-  const effective = effectiveShape(facts.shape!, facts.sensitivity, facts.profile);
+  const { effective, refused } = shapeRaise(facts.shape!, facts.sensitivity, facts.profile, facts.workType);
+  const subject = facts.workType === "refactor" ? "a refactor" : `a ${facts.profile} item`;
   return {
     declared: facts.shape!,
     effective,
     sensitivity: facts.sensitivity ?? null,
     raised: effective !== facts.shape,
+    // BI-243BC956: name what raised it, so an author can tell a changed schema
+    // from a word in a sentence.
+    trigger: facts.sensitivityTrigger ?? null,
+    ...(refused
+      ? {
+        refusedRaise: {
+          shape: refused,
+          reason: `Sensitivity asked for ${refused}, but ${subject} at ${refused} would owe gates with no reachable route; capped at ${effective}.`,
+        },
+      }
+      : {}),
   };
 }
 

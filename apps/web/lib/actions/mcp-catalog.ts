@@ -4,7 +4,7 @@ import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { requireCapability } from "@/lib/actions/shared/guards";
-import { inngest } from "@/lib/queue/inngest-client";
+import { jobs } from "@/lib/jobs";
 import { computeNextRunAt, type ScheduleValue } from "@/lib/ai-provider-types";
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────────
@@ -36,7 +36,7 @@ export async function triggerMcpCatalogSync(): Promise<{ ok: boolean; message: s
   }).catch(() => {});
 
   // Dispatch to Inngest for durable execution with retry
-  void inngest.send({
+  void jobs.send({
     name: "ops/mcp-catalog.sync",
     data: { syncId: sync.id },
   }).catch((error) => {
@@ -116,7 +116,7 @@ export async function runMcpCatalogSyncIfDue(): Promise<void> {
     where: { jobId: "mcp-catalog-sync" },
     data: { lastRunAt: new Date(), lastStatus: "running" },
   });
-  void inngest.send({
+  void jobs.send({
     name: "ops/mcp-catalog.sync",
     data: { syncId: sync.id },
   }).catch((error) => {

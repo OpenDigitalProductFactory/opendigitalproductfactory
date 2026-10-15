@@ -11,7 +11,7 @@
 // note for itself cannot exceed its authority or affect anyone else. A non-agent
 // caller (no context.agentId, e.g. a REST/operator call) is rejected.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { COWORKER_NOTE_KINDS } from "@/lib/tak/coworker-memory";
 

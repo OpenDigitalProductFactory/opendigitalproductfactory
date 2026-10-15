@@ -1,5 +1,25 @@
 # Durable Long-Running Agentic Processes — architecture assessment
 
+**Operator provider pauses:** optional expiry runs through the existing jobs
+facade, with `ScheduledJob` holding the operation identity and resume time.
+A five-minute reconciliation job repairs overdue timers after restart or event
+delivery failure. A matching timer checks health and the current operation
+inside the serialized resume path; it cannot lift a newer or indefinite pause.
+See the [provider control guide](../user-guide/ai-workforce/provider-ollama.md).
+
+**Current authority implementation:** durable process reconnects read tool grants
+from the canonical coworker Agent row on each request, with revocation tombstones
+taking precedence. Known alias rows are not an alternate authority source.
+Administrator reconciliation of legacy differences requires explicit approval.
+
+**Review execution recovery:** an incomplete design or plan reviewer panel keeps
+the saved artifact and last completed semantic round. Missing or inconclusive
+reviewers do not approve work, create document findings, consume revision rounds,
+or trigger document regeneration. The review panel and readiness strip show the
+execution wait separately from completed individual verdicts. Retry only after
+reviewer execution recovers; original execution records remain intact. See the
+[MCP recovery contract](mcp-tool-authorization-runbook.md).
+
 **Date:** 2026-06-09
 **Status:** Assessment / direction-setting. Not a build spec. The phased recommendations in §8 become backlog items, each promoted through Build Studio in the normal way.
 **Audience:** Operator (Mark), platform architects, the Build Studio sub-agents, and any coworker that owns a process which runs longer than a single request.
@@ -30,7 +50,7 @@ This assessment respects [`verify-substrate-before-proposing-new`](../founder-ke
 
 ## 1. The problem, stated precisely
 
-Build Studio is a five-phase agentic pipeline (`ideate → plan → build → review → ship`, plus terminal `complete`/`failed`) defined in [`apps/web/lib/explore/feature-build-types.ts:441`](../../apps/web/lib/explore/feature-build-types.ts) with the transition matrix at [`feature-build-types.ts:657`](../../apps/web/lib/explore/feature-build-types.ts). The build phase is driven by `runBuildOrchestrator()` at [`apps/web/lib/build/build-orchestrator.ts:951`](../../apps/web/lib/build/build-orchestrator.ts), entered fire-and-forget via `autoExecuteBuild()` (defined at [`apps/web/lib/actions/build.ts:735`](../../apps/web/lib/actions/build.ts), called at `:710`/`:876`/`:908`/`:1149`).
+Build Studio is a five-phase agentic pipeline (`ideate → plan → build → review → ship`, plus terminal `complete`/`failed`; a build rebased onto main at ship returns to `review` to re-earn its evidence on the new tree, BI-76BD65E6) defined in [`apps/web/lib/explore/feature-build-types.ts:441`](../../apps/web/lib/explore/feature-build-types.ts) with the transition matrix at [`feature-build-types.ts:657`](../../apps/web/lib/explore/feature-build-types.ts). The build phase is driven by `runBuildOrchestrator()` at [`apps/web/lib/build/build-orchestrator.ts:951`](../../apps/web/lib/build/build-orchestrator.ts), entered fire-and-forget via `autoExecuteBuild()` (defined at [`apps/web/lib/actions/build.ts:735`](../../apps/web/lib/actions/build.ts), called at `:710`/`:876`/`:908`/`:1149`).
 
 We have spent months hardening it and it remains fragile. The concrete, observed failure modes:
 
@@ -101,7 +121,7 @@ The good news, and the reframe: **DPF already implements most of §2.4.** It is 
 
 | Industry primitive | DPF substrate that already exists | Where |
 |---|---|---|
-| Durable execution engine (journal + retry + cron) | **Inngest** — `step.run` journaling, per-function `retries`, `concurrency` limits, and the cron + event function registries in `queue/functions/index.ts` (59 scheduled and 35 event functions as of 2026-08-16). Counts drift with every new job, so treat `lib/operate/scheduled-jobs/catalog.ts` as the authority — a parity test fails the build if a scheduled function is missing from it | [`apps/web/lib/queue/inngest-client.ts`](../../apps/web/lib/queue/inngest-client.ts), [`apps/web/lib/queue/functions/index.ts`](../../apps/web/lib/queue/functions/index.ts) |
+| Durable execution engine (journal + retry + cron) | **Inngest** — `step.run` journaling, per-function `retries`, `concurrency` limits, and the cron + event function registries in `queue/functions/index.ts` (59 scheduled and 35 event functions as of 2026-08-16). Counts drift with every new job, so treat `lib/operate/scheduled-jobs/catalog.ts` as the authority — a parity test fails the build if a scheduled function is missing from it. Since 2026-09-26 every function and send site goes through the `@/lib/jobs` facade, which admits only the job features in use; the Inngest client is its adapter, and a CI guard (`scripts/check-no-direct-job-engine-import.mjs`) refuses engine imports anywhere else ([job engine spec](../superpowers/specs/2026-09-25-postgres-durable-job-engine-design.md) §6) | [`apps/web/lib/jobs/index.ts`](../../apps/web/lib/jobs/index.ts), [`apps/web/lib/jobs/inngest-adapter.ts`](../../apps/web/lib/jobs/inngest-adapter.ts), [`apps/web/lib/queue/functions/index.ts`](../../apps/web/lib/queue/functions/index.ts) |
 | Durable unit of work / session | **`TaskRun`** — universal task tracker with status enum (`submitted·working·input-required·auth-required·completed·failed·canceled·rejected·archived`), `source`, heartbeat | `schema.prisma` `TaskRun`; [`apps/web/lib/tak/autonomous-work-run.ts`](../../apps/web/lib/tak/autonomous-work-run.ts) |
 | Explicit multi-state state machine + checkpoints | **`QuiescenceRun`** — `pending → preparing → draining → ready-to-swap → swapping → completed`, `enteredStateAt` JSON timestamps, snapshots, heartbeat | [`apps/web/lib/queue/functions/quiescence-run.ts`](../../apps/web/lib/queue/functions/quiescence-run.ts) |
 | Liveness / staleness contract | **`StallEvent`** + `TaskRun.lastHeartbeatAt` + `taskrun-watchdog` cron (retry/abandon/escalate) | [`apps/web/lib/queue/functions/taskrun-watchdog.ts`](../../apps/web/lib/queue/functions/taskrun-watchdog.ts) |
@@ -292,6 +312,10 @@ A single pattern that every long-horizon process is an instance of. It is mostly
 6. **Experience layer** — the operator-facing surface that *renders* layers 1–5 and *feeds* the gate in layer 4: a `kind`-agnostic process graph, truth-source-honest progress, a cross-process inbox + notification transport for `awaiting-input` / terminal states, recovery affordances, and an editable plan. Generalized from the Build Studio components that already exist (§3.2), not built new. **Designed in depth — trust calibration, attention/notification policy, situational-awareness gates, progressive disclosure, the cross-process inbox, and UX acceptance metrics — in the companion [`2026-06-09-dap-experience-layer-design.md`](2026-06-09-dap-experience-layer-design.md).**
 
 **Implemented external Task slice (2026-08-31):** ordinary MCP `TaskRun` submissions now use the existing self-hosted Inngest substrate as a durable execution outbox. Submission commits the task and immutable request/authentication binding before enqueue; the worker claims it with the canonical heartbeat-aware compare-and-set transition, runs the unchanged governed executor, and emits status only after committed transitions. A scheduled two-minute reconciliation job re-enqueues bounded pending work after a portal restart or lost delivery. Streamable HTTP GET/SSE pushes MCP `notifications/tasks/status`; `tasks/get` and `tasks/list` remain the recovery and compatibility path. This realizes “notify, don't poll” as **push first, bounded polling second**—not push-only—and deliberately avoids caller-selected webhooks or a second task ledger.
+
+**Implemented upgrade drain that waits for work (2026-10-01, BI-F9EE05E5 slice A):** the `QuiescenceRun` coordinator (`queue/functions/quiescence-run.ts`) no longer stops in-flight work when a self-upgrade drains. Admission closes at drain start. TaskRuns are flipped to `quiescing` only once hard blockers clear (or on operator force), so live build phases run to completion and are never reaped while they still heartbeat. The wait checks once per tick and sleeps on an operator-control event between checks. It pauses in the non-terminal `awaiting-operator` status at a configurable bound (default 60 minutes), and an operator abort is recorded durably (`QuiescenceRun.abortRequestedAt/By`). The self-upgrade job runs as separate pre-drain, wait and swap steps (`self-upgrade-steps.ts`, `self-upgrade-swap.ts`) rather than one long request. The wait helpers live in `self-upgrade/drain-wait.ts`, admission re-assertion and the swap guard in `drain-admission.ts`, and the import-free status contract in `quiescence-contract.ts`. Reconcilers and the stuck-coordinator watchdog key on heartbeat and swap state, never on run age. Design: Activity Quiescence Protocol §11a.
+
+**Implemented guard-finding repair (2026-09-30, BI-B2EEA6DE):** when a Build Studio build's finalize gauntlet fails on its own change, the review job hands the build back to its build phase and sends `build/gauntlet.repair`. That event-only function, registered in `queue/functions/index.ts` with per-build concurrency 1, dispatches one repair task through the orchestrator's specialist dispatch (`runGauntletRepairTask`) and returns the build to review. The bound (two hand-backs, then one operator escalation) and the state (`verificationOut.gauntletRepair`, pointing at the evidence record) live in `lib/build/gauntlet-repair.ts`.
 
 **Implemented async delivery projection (2026-09-04):** the Delivery task hub reads authorized durable async-operation handles through their server-owned `TaskRun` or Workroom binding. One event-only function registered in `queue/functions/index.ts` consumes committed async transition locators, re-reads canonical state, writes a deterministic `status-changed` activity to the existing Workroom ledger, and wakes the bounded list stream. Recent terminal transitions may also create one deduplicated semantic notification. The event payload never supplies status, Workroom, recipient, result, or notification authority, and this projection adds neither a scheduler nor a second execution or task ledger.
 

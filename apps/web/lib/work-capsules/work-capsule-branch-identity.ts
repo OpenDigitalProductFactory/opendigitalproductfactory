@@ -36,6 +36,9 @@ type BranchCapsuleRecord = {
   baseBranch?: string | null;
   baseSha?: string | null;
   headSha?: string | null;
+  pullRequestNumber?: number | null;
+  pullRequestUrl?: string | null;
+  workspaceState?: unknown;
   headBranch?: string | null;
   epicId?: string | null;
   worktreePath?: string | null;
@@ -76,6 +79,28 @@ export function isReusableLiveCapsule(
   const existingSession = existing.executorRef ?? null;
   const incomingSession = input.executorRef ?? null;
   return existingSession == null || incomingSession == null || existingSession === incomingSession;
+}
+
+/** Independent missing bindings: a pre-bound backlog must not prevent session binding. */
+export function planLiveCapsuleBinding(existing: Pick<BranchCapsuleRecord, "backlogItemId" | "executorRef" | "epicId">, input: CapsuleAdoptionInput) {
+  const backlogBound = Boolean(input.backlogItemId) && existing.backlogItemId == null;
+  const sessionBound = Boolean(input.executorRef) && existing.executorRef == null;
+  return {
+    changed: backlogBound || sessionBound,
+    backlogBound,
+    // A concurrent session assignment must refuse rather than be overwritten.
+    where: sessionBound ? { executorRef: null } : {},
+    data: {
+      ...(backlogBound ? { backlogItemId: input.backlogItemId,
+        ...(input.epicId && existing.epicId == null ? { epicId: input.epicId } : {}),
+      } : {}),
+      ...(sessionBound ? { executorRef: input.executorRef } : {}),
+    },
+    evidence: {
+      ...(backlogBound ? { backlogItemId: input.backlogItemId, lateBind: true } : {}),
+      ...(sessionBound ? { executorRef: input.executorRef, sessionLateBind: true } : {}),
+    },
+  };
 }
 
 /**

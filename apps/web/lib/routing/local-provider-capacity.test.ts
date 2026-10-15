@@ -146,3 +146,4 @@ describe("the resident-model policy is untouched by the embedding exemption (BI-
     expect(status).toMatchObject({ available: false, reason: "local-ci-capacity-reservation-unavailable" });
   });
 });
+

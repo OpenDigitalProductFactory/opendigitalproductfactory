@@ -1,0 +1,111 @@
+{
+  "drc-doctrine-scope": {
+    "status": "ratified",
+    "proposed": {
+      "authority": "wwmd",
+      "mode": "enforced",
+      "blocking": true,
+      "resolution": "doctrine"
+    },
+    "basis": "Test-only: C-7 fixture.",
+    "decisionId": "DI-000000000000",
+    "ratifiedAt": "2026-10-02"
+  },
+  "drc-enforced-scope": {
+    "status": "ratified",
+    "proposed": {
+      "authority": "wwmd",
+      "mode": "enforced",
+      "blocking": true,
+      "resolution": "accountable-human"
+    },
+    "basis": "Test-only: D-5 fixture and passing documents.",
+    "decisionId": "DI-000000000000",
+    "ratifiedAt": "2026-10-02"
+  },
+  "drc-exact-checkpoint-scope": {
+    "status": "ratified",
+    "proposed": {
+      "authority": "wwmd",
+      "mode": "enforced",
+      "blocking": true,
+      "resolution": "accountable-human",
+      "checkpoint": {
+        "role": "role:shape-owner",
+        "exactAction": true
+      }
+    },
+    "basis": "Test-only: passing document.",
+    "decisionId": "DI-000000000000",
+    "ratifiedAt": "2026-10-02"
+  },
+  "drc-loose-checkpoint-scope": {
+    "status": "ratified",
+    "proposed": {
+      "authority": "wwmd",
+      "mode": "enforced",
+      "blocking": true,
+      "resolution": "accountable-human",
+      "checkpoint": {
+        "role": "role:shape-owner",
+        "exactAction": false
+      }
+    },
+    "basis": "Test-only: D-3 fixture.",
+    "decisionId": "DI-000000000000",
+    "ratifiedAt": "2026-10-02"
+  },
+  "drc-missing-resolver-scope": {
+    "status": "ratified",
+    "proposed": {
+      "authority": "wwmd",
+      "mode": "enforced",
+      "blocking": true,
+      "resolution": "doctrine",
+      "resolver": {
+        "module": "lib/gpp/binding-enforcement",
+        "exportName": "noSuchResolver"
+      }
+    },
+    "basis": "Test-only: D-7 fixture.",
+    "decisionId": "DI-000000000000",
+    "ratifiedAt": "2026-10-02"
+  },
+  "drc-non-blocking-scope": {
+    "status": "ratified",
+    "proposed": {
+      "authority": "wwmd",
+      "mode": "enforced",
+      "blocking": false,
+      "resolution": "accountable-human"
+    },
+    "basis": "Test-only: D-6 fixture.",
+    "decisionId": "DI-000000000000",
+    "ratifiedAt": "2026-10-02"
+  },
+  "drc-refuse-scope": {
+    "status": "ratified",
+    "proposed": {
+      "authority": "wwmd",
+      "mode": "enforced",
+      "blocking": true,
+      "resolution": "accountable-human",
+      "onRefuse": "failure"
+    },
+    "basis": "Test-only: refuse-edge fixture.",
+    "decisionId": "DI-000000000000",
+    "ratifiedAt": "2026-10-02"
+  },
+  "drc-shadow-scope": {
+    "status": "ratified",
+    "proposed": {
+      "authority": "wwmd",
+      "mode": "shadow",
+      "blocking": true,
+      "resolution": "accountable-human"
+    },
+    "basis": "Test-only: D-2 fixture.",
+    "decisionId": "DI-000000000000",
+    "ratifiedAt": "2026-10-02"
+  }
+}

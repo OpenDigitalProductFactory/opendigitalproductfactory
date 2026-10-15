@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
+import { gitTextOrNull } from "./lib/git.mjs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -13,12 +13,7 @@ import {
 } from "./lib/local-ci-stage-receipt.mjs";
 
 function resolveGit(ref) {
-  const result = spawnSync("git", ["rev-parse", "--verify", ref], {
-    encoding: "utf8",
-    shell: false,
-    windowsHide: true,
-  });
-  return result.status === 0 ? result.stdout.trim() : null;
+  return gitTextOrNull(["rev-parse", "--verify", ref], { cwd: process.cwd() });
 }
 
 function processAlive(pid) {

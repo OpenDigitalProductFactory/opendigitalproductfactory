@@ -18,7 +18,7 @@ import {
   sandboxExec,
   writeSandboxFile,
 } from "./sandbox/agent-cli-runtime";
-import type { ChatMessage } from "@/lib/inference/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 import { providerSetupLocation } from "@/lib/ai-provider-routes";
 const IDEATE_TIMEOUT_MS = 600_000; // 10 minutes — complex features need time for codebase research
 

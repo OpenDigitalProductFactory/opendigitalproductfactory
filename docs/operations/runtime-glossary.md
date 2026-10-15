@@ -4,7 +4,7 @@ Canonical definitions for the three local runtime roles on a DPF install. This i
 
 ## Live portal
 
-The production-served Next.js bundle on `http://localhost:3000`. Backed by the `portal` compose service, the live install databases (`postgres`, `neo4j`, `qdrant`), and the install's bundled image. The **only** runtime that satisfies customer-zero verification. Self-upgrade, MCP config writes, promotion, backups, and sandbox orchestration all live here.
+The production-served Next.js bundle on `http://localhost:3000`. Backed by the `portal` compose service, the live install database (`postgres`), and the install's bundled image. The **only** runtime that satisfies customer-zero verification. Self-upgrade, MCP config writes, promotion, backups, and sandbox orchestration all live here.
 
 - Compose service: `portal`
 - `RuntimeTarget.kind`: `root-portal`

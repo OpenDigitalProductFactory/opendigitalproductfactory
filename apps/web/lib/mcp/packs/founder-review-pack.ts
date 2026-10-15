@@ -17,7 +17,7 @@
 // `registry_read` (a coworker-read baseline), so every coworker inherits it — the
 // pack mirrors agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
 const DISCIPLINES = ["all", "wwmd", "wwwd", "wsid"] as const;

@@ -17,6 +17,12 @@ vi.mock("@/lib/coworker-self-assessment/assessment-service", () => assessmentSer
 const reviewService = vi.hoisted(() => ({ getCoworkerCapabilityNeedReview: vi.fn() }));
 vi.mock("@/lib/coworker-self-assessment/review-service", () => reviewService);
 
+const installation = vi.hoisted(() => ({ host: vi.fn(), stance: vi.fn() }));
+vi.mock("@/lib/install/host-profile", () => ({ readInstallHostProfile: installation.host }));
+vi.mock("@/lib/install/instance-stance", () => ({
+  loadInstanceStance: installation.stance, prismaInstanceStanceStore: () => ({}),
+}));
+
 import { coworkerCapabilityPack } from "./coworker-capability-pack";
 import { TOOL_TO_GRANTS, isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 
@@ -43,12 +49,20 @@ const AGENT_ROW = {
   escalatesTo: null,
   delegatesTo: [],
   toolGrants: [{ grantKey: "registry_read" }],
+  toolGrantRevocations: [],
   skills: [{ label: "Draft", description: "d", capability: null, taskType: "conversation", sortOrder: 0 }],
   coworkerAssessments: [],
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  installation.host.mockResolvedValue({ kind: "consumer", installMode: "consumer", sourceCapable: false,
+    releaseImage: true, reason: "consumer-release-install" });
+  installation.stance.mockResolvedValue({ schemaVersion: 1, environmentClass: "development", primaryPurpose: "evolve-dpf",
+    holdsIrreplaceableWork: true, credentials: "local-permitted", teardown: "capture-required", sourceAuthority: "none",
+    peerWrite: "read-only", workSync: "none", pairedProductionInstallationRef: "production-peer",
+    rationale: { credentials: "local test credentials", teardown: "capture first", sourceAuthority: "separate checkout",
+      peerWrite: "read only", workSync: "not established" } });
 });
 
 describe("coworker-capability pack — registration", () => {
@@ -112,12 +126,49 @@ describe("coworker-capability pack — handler behavior", () => {
       const res = await coworkerCapabilityPack.handlers[tool]({}, "u1", {});
       expect(res.success).toBe(true);
       expect(res.message).toBe(NOT_BOUND.message);
-      expect(res.data).toEqual(NOT_BOUND);
+      expect(res.data).toMatchObject(NOT_BOUND);
+      if (tool === "get_my_coworker_profile") {
+        expect(res.data).toMatchObject({ installationContext: { stance: { environmentClass: "development" } } });
+      }
       expect(db.prisma.agent.findFirst).not.toHaveBeenCalled();
       expect(marketplace.getToolMarketplaceReadiness).not.toHaveBeenCalled();
       expect(assessmentService.listCoworkerCapabilityNeeds).not.toHaveBeenCalled();
     },
   );
+
+  it("reports declared DEV separately from a production-stage coworker and preserves its brakes", async () => {
+    db.prisma.agent.findFirst.mockResolvedValue({ ...AGENT_ROW, toolGrants: [{ grantKey: "sandbox_execute" }] });
+    const result = await coworkerCapabilityPack.handlers.get_my_coworker_profile({}, "u1", {
+      agentId: "agent-1", tokenScope: "write", tokenGrantScopes: ["sandbox_execute"],
+    });
+    expect(result.data).toMatchObject({ profile: { lifecycleStage: "production" }, installationContext: {
+      stanceStatus: "resolved", hostProfile: { kind: "consumer", sourceCapable: false },
+      stance: { environmentClass: "development", credentials: "local-permitted", teardown: "capture-required", peerWrite: "read-only" },
+      instructions: expect.stringContaining("issue_ux_verification_sign_in"),
+    } });
+  });
+
+  it("does not infer write authority from DEV or a missing token scope", async () => {
+    db.prisma.agent.findFirst.mockResolvedValue({ ...AGENT_ROW, toolGrants: [{ grantKey: "admin_write" }] });
+    const result = await coworkerCapabilityPack.handlers.get_my_coworker_profile({}, "u1", { agentId: "agent-1" });
+    expect(result.data).toMatchObject({ installationContext: { instructions: expect.stringContaining("Read and report only") } });
+  });
+
+  it("retains the profile when installation context is unavailable", async () => {
+    db.prisma.agent.findFirst.mockResolvedValue(AGENT_ROW);
+    installation.stance.mockRejectedValue(new Error("DB unavailable"));
+    const result = await coworkerCapabilityPack.handlers.get_my_coworker_profile({}, "u1", { agentId: "agent-1" });
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({ profile: { name: "Marketing Coworker" }, installationContext: { stance: null, stanceStatus: "unknown" } });
+  });
+
+  it("intersects token and coworker grants before describing development authority", async () => {
+    db.prisma.agent.findFirst.mockResolvedValue(AGENT_ROW);
+    const result = await coworkerCapabilityPack.handlers.get_my_coworker_profile({}, "u1", {
+      agentId: "agent-1", tokenScope: "write", tokenGrantScopes: ["registry_read", "admin_write", "sandbox_execute"],
+    });
+    expect(result.data).toMatchObject({ installationContext: { instructions: expect.stringContaining("effective authority: employee") } });
+  });
 
   it("submit_coworker_capability_need refuses an agentless connection without writing or throwing", async () => {
     const res = await coworkerCapabilityPack.handlers.submit_coworker_capability_need(

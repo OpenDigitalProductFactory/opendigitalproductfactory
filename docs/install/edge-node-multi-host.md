@@ -25,7 +25,7 @@
 ## What you'll have at the end
 
 - **Host A** runs the full DPF Authority Core (portal, postgres,
-  neo4j, etc.) from a normal `bash install-dpf.sh` install.
+  inngest, etc.) from a normal `bash install-dpf.sh` install.
 - **Host B** runs a single Edge Node container against Host A. The
   container reports its hostname, NICs, ARP table, and (in later T
   threads) ARP / nmap / SNMP collector output back to Host A.

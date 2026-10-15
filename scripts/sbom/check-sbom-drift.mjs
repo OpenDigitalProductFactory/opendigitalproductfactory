@@ -10,25 +10,84 @@
 //                declaring a package at incompatible versions). Dependabot
 //                bumps one package at a time and is configured never to move
 //                majors for typescript/react/expo, so it will never flag this.
-//   REPORT     — change in total fan-out / multi-major counts vs the baseline,
-//                printed for visibility (never fails the build — transitive
-//                churn from routine Dependabot bumps is expected).
+//   HARD GATE  — a shape total above its budget in sbom/baseline.json
+//                (resolved components, duplicated names, excess instances,
+//                multi-major names). "The dependency surface only shrinks"
+//                (absorb-dont-adopt, commandment tier), so budgets are ceilings:
+//                --update-baseline only lowers them, and raising one takes a
+//                recorded reason that is reviewed in the PR diff
+//                (plan 2026-09-08 §7).
+//   REPORT     — every total vs the baseline, printed for visibility.
 //
 // Pure Node: no install, runs in seconds. Mirrors the repo's other
 // scripts/check-*.mjs CI guards.
 //
 // Usage:
-//   node scripts/sbom/check-sbom-drift.mjs                 # gate (CI / pre-PR)
-//   node scripts/sbom/check-sbom-drift.mjs --update-baseline  # accept current shape
+//   node scripts/sbom/check-sbom-drift.mjs                    # gate (CI / pre-PR)
+//   node scripts/sbom/check-sbom-drift.mjs --update-baseline  # accept current shape; budgets only go down
+//   node scripts/sbom/check-sbom-drift.mjs --raise-budget "<reason>"
+//       # move budgets to the current totals and record why in sbom/baseline.json
 
+import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "../lib/script-argv.mjs";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generatePlatformSbom } from "./generate-platform-sbom.mjs";
+import { LOCKFILE_ROOTS } from "./lockfile-roots.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const BASELINE_PATH = join(ROOT, "sbom", "baseline.json");
-const update = process.argv.includes("--update-baseline");
+
+/** Budgeted totals. Each is a count where lower is better. */
+export const BUDGETED_TOTALS = ["resolvedComponents", "duplicatedNames", "excessInstances", "multiMajorNames"];
+
+const BASELINE_NOTE =
+  "Drift anchor for scripts/check-sbom-drift.mjs. `firstPartyDivergent` lists the accepted set of packages whose own workspace declarations resolve to >1 version; the guard fails when a NEW name appears. `acceptedSpecifierDrift` maps each registry package that two or more workspaces declare other than through one shared `catalog:` specifier (pnpm-workspace.yaml `catalog`) to the reason; unlisted drift fails, and a listed name that no longer drifts fails as stale. `budgets` are ceilings on the dependency shape; the guard fails when a total exceeds its budget. --update-baseline only lowers budgets. Raising one needs --raise-budget \"<reason>\", which records the reason in `lastBudgetRaise` for review. Never raise a budget to absorb growth that `pnpm dedupe` or a removal would clear. See docs/architecture/dependency-reduction-routine.md.";
+
+/** Compare totals to budgets. A total with no numeric budget is not gated. */
+export function evaluateBudgets(totals, budgets = {}) {
+  const over = [];
+  const under = [];
+  for (const key of BUDGETED_TOTALS) {
+    const budget = budgets?.[key];
+    if (typeof budget !== "number") continue;
+    const current = totals[key];
+    if (current > budget) over.push({ key, current, budget });
+    else if (current < budget) under.push({ key, current, budget });
+  }
+  return { over, under };
+}
+
+/**
+ * Next budgets. Without `raise` a budget can only fall to the current total;
+ * with it, every budget moves to the current total. A total with no prior
+ * budget starts at its current value.
+ */
+export function nextBudgets(totals, budgets = {}, { raise = false } = {}) {
+  const out = {};
+  for (const key of BUDGETED_TOTALS) {
+    const prev = budgets?.[key];
+    const current = totals[key];
+    out[key] = typeof prev !== "number" || raise ? current : Math.min(prev, current);
+  }
+  return out;
+}
+
+/**
+ * Specifier drift against the accepted map (name -> reason). Drift is a
+ * registry name that two or more workspaces declare without one shared
+ * `catalog:` specifier (findSpecifierDrift). Unaccepted drift fails; an
+ * accepted name that no longer drifts is stale and fails too, so the map only
+ * shrinks (plan 2026-09-08 S11).
+ */
+export function evaluateSpecifierDrift(specifierDrift = [], accepted = {}) {
+  const current = new Set(specifierDrift.map((x) => x.name));
+  return {
+    unaccepted: specifierDrift.filter((x) => !Object.hasOwn(accepted, x.name)),
+    stale: Object.keys(accepted).filter((name) => !current.has(name)).sort(),
+  };
+}
 
 function loadBaseline() {
   try {
@@ -38,26 +97,69 @@ function loadBaseline() {
   }
 }
 
+/** Value after a flag: null when the flag is absent, "" when it has no value. */
+function flagValue(argv, flag) {
+  // strict: false keeps the old tolerance: flags this script does not read are ignored.
+  const { values } = utilParseArgs({ args: scriptArgv(argv), strict: false, allowPositionals: true, options: { "raise-budget": { type: "string" } } });
+  const v = values[flag.replace(/^--/, "")];
+  if (v === undefined) return null;
+  return typeof v === "string" && v && !v.startsWith("--") ? v.trim() : "";
+}
+
+/** Totals for every lockfile root other than the platform one. */
+function otherRootTotals(gitRef) {
+  return LOCKFILE_ROOTS.filter((root) => root.dir !== ".").map((root) => ({
+    root,
+    totals: generatePlatformSbom({ root: join(ROOT, root.dir), gitRef, generatedAt: new Date(0) }).analysis.totals,
+  }));
+}
+
 function main() {
+  const argv = process.argv.slice(2);
+  const update = argv.includes("--update-baseline");
+  const raiseReason = flagValue(argv, "--raise-budget");
+  if (raiseReason === "") {
+    process.stderr.write('::error::--raise-budget needs a reason: --raise-budget "<what the growth retires, or why nothing can>"\n');
+    process.exit(1);
+  }
+
   const gitRef = process.env.GITHUB_SHA ?? process.env.GIT_COMMIT ?? "unknown";
   // Fixed timestamp: the drift verdict must depend only on the lockfile,
   // never on wall-clock, so reruns of the same commit are identical.
   const { analysis } = generatePlatformSbom({ root: ROOT, gitRef, generatedAt: new Date(0) });
   const t = analysis.totals;
   const currentDivergent = analysis.firstPartyDivergent.map((d) => d.name).sort();
+  const baseline = loadBaseline();
 
-  if (update) {
-    const baseline = {
-      note: "Drift anchor for scripts/check-sbom-drift.mjs. `firstPartyDivergent` lists the accepted set of packages whose own workspace declarations resolve to >1 version; the guard fails when a NEW name appears. Update intentionally (align the versions, or accept here) — never to silence a real regression. Totals are informational. See docs/architecture/dependency-reduction-routine.md.",
+  if (update || raiseReason) {
+    const budgets = nextBudgets(t, baseline?.budgets, { raise: Boolean(raiseReason) });
+    const lastBudgetRaise = raiseReason ? { reason: raiseReason, budgets } : baseline?.lastBudgetRaise;
+    // Each separately resolved lockfile root keeps its own budgets, with the
+    // same only-down ratchet (scripts/sbom/lockfile-roots.mjs).
+    const roots = {};
+    for (const { root, totals } of otherRootTotals(gitRef)) {
+      roots[root.id] = {
+        lockfile: `${root.dir}/pnpm-lock.yaml`,
+        totals,
+        budgets: nextBudgets(totals, baseline?.roots?.[root.id]?.budgets, { raise: Boolean(raiseReason) }),
+      };
+    }
+    const next = {
+      note: BASELINE_NOTE,
       totals: t,
+      budgets,
+      ...(lastBudgetRaise ? { lastBudgetRaise } : {}),
       firstPartyDivergent: currentDivergent,
+      acceptedSpecifierDrift: baseline?.acceptedSpecifierDrift ?? {},
+      roots,
     };
-    writeFileSync(BASELINE_PATH, JSON.stringify(baseline, null, 2) + "\n");
-    process.stdout.write(`Baseline updated: ${BASELINE_PATH}\n  firstPartyDivergent=[${currentDivergent.join(", ")}] excessInstances=${t.excessInstances}\n`);
+    writeFileSync(BASELINE_PATH, JSON.stringify(next, null, 2) + "\n");
+    process.stdout.write(
+      `Baseline updated: ${BASELINE_PATH}\n  firstPartyDivergent=[${currentDivergent.join(", ")}]\n  budgets=${JSON.stringify(budgets)}\n`,
+    );
     return;
   }
 
-  const baseline = loadBaseline();
   if (!baseline) {
     process.stderr.write(`::error::No SBOM baseline at ${BASELINE_PATH}. Create one with: node scripts/sbom/check-sbom-drift.mjs --update-baseline\n`);
     process.exit(1);
@@ -67,16 +169,16 @@ function main() {
   const newDivergent = currentDivergent.filter((n) => !accepted.has(n));
   const resolved = [...accepted].filter((n) => !currentDivergent.includes(n));
 
-  // informational deltas
   const d = (key) => t[key] - (baseline.totals?.[key] ?? 0);
   const sign = (n) => (n > 0 ? `+${n}` : `${n}`);
+  const budgetOf = (key) => (typeof baseline.budgets?.[key] === "number" ? `, budget ${baseline.budgets[key]}` : "");
   process.stdout.write(
     [
       "SBOM dependency-shape report (vs baseline):",
-      `  resolved components : ${t.resolvedComponents} (${sign(d("resolvedComponents"))})`,
-      `  duplicated names    : ${t.duplicatedNames} (${sign(d("duplicatedNames"))})`,
-      `  excess instances    : ${t.excessInstances} (${sign(d("excessInstances"))})`,
-      `  multi-major names   : ${t.multiMajorNames} (${sign(d("multiMajorNames"))})`,
+      `  resolved components : ${t.resolvedComponents} (${sign(d("resolvedComponents"))}${budgetOf("resolvedComponents")})`,
+      `  duplicated names    : ${t.duplicatedNames} (${sign(d("duplicatedNames"))}${budgetOf("duplicatedNames")})`,
+      `  excess instances    : ${t.excessInstances} (${sign(d("excessInstances"))}${budgetOf("excessInstances")})`,
+      `  multi-major names   : ${t.multiMajorNames} (${sign(d("multiMajorNames"))}${budgetOf("multiMajorNames")})`,
       `  first-party splits  : ${t.firstPartyDivergentNames} (${sign(d("firstPartyDivergentNames"))})`,
       "",
     ].join("\n"),
@@ -85,6 +187,8 @@ function main() {
   if (resolved.length) {
     process.stdout.write(`Resolved first-party splits (consider ratcheting the baseline down): ${resolved.join(", ")}\n`);
   }
+
+  let failed = false;
 
   if (newDivergent.length) {
     const detail = analysis.firstPartyDivergent
@@ -103,10 +207,76 @@ function main() {
         "",
       ].join("\n"),
     );
-    process.exit(1);
+    failed = true;
   }
 
-  process.stdout.write("OK — no new first-party version splits.\n");
+  const drift = evaluateSpecifierDrift(analysis.specifierDrift, baseline.acceptedSpecifierDrift);
+  if (drift.unaccepted.length) {
+    process.stderr.write(
+      [
+        `::error::More than one workspace declares ${drift.unaccepted.map((x) => x.name).join(", ")} without the shared catalog: specifier:`,
+        ...drift.unaccepted.map((x) => `    - ${x.name}: ${Object.entries(x.specifiers).map(([s, ws]) => `${s} in ${ws.join(", ")}`).join("; ")}`),
+        "",
+        "  Put the range once under `catalog:` in pnpm-workspace.yaml (pick the highest",
+        '  floor), declare it as "catalog:" in every package.json, then run',
+        "  pnpm install --lockfile-only. If one workspace needs a different specifier on",
+        "  purpose, record why in sbom/baseline.json `acceptedSpecifierDrift`",
+        "  (name -> reason) in the same PR. See docs/architecture/dependency-reduction-routine.md.",
+        "",
+      ].join("\n"),
+    );
+    failed = true;
+  }
+  if (drift.stale.length) {
+    process.stderr.write(
+      `::error::sbom/baseline.json acceptedSpecifierDrift lists names that no longer drift: ${drift.stale.join(", ")}. Delete them.\n`,
+    );
+    failed = true;
+  }
+
+  const platform = evaluateBudgets(t, baseline.budgets);
+  const over = [...platform.over];
+  const under = [...platform.under];
+  for (const { root, totals } of otherRootTotals(gitRef)) {
+    const section = baseline.roots?.[root.id];
+    if (!section) {
+      process.stderr.write(`::error::sbom/baseline.json has no budgets for lockfile root "${root.id}" (${root.dir}). Add them with --update-baseline.\n`);
+      failed = true;
+      continue;
+    }
+    const r = evaluateBudgets(totals, section.budgets);
+    process.stdout.write(
+      `  ${root.id} lockfile: ${totals.resolvedComponents} components (budget ${section.budgets?.resolvedComponents}), ${totals.duplicatedNames} duplicated names (budget ${section.budgets?.duplicatedNames})\n`,
+    );
+    over.push(...r.over.map((o) => ({ ...o, key: `${root.id}.${o.key}` })));
+    under.push(...r.under.map((u) => ({ ...u, key: `${root.id}.${u.key}` })));
+  }
+  if (over.length) {
+    process.stderr.write(
+      [
+        `::error::Dependency shape over budget: ${over.map((o) => `${o.key} ${o.current} > ${o.budget}`).join(", ")}`,
+        "",
+        "  The dependency surface only shrinks (absorb-dont-adopt). Bring the totals back",
+        "  under budget with `pnpm dedupe`, by dropping the package, or by retiring what it",
+        "  replaces in the same PR. If the growth is deliberate, raise the budget with a",
+        "  reason that reviewers see in the diff:",
+        '    node scripts/sbom/check-sbom-drift.mjs --raise-budget "<what the growth retires, or why nothing can>"',
+        "",
+      ].join("\n"),
+    );
+    failed = true;
+  }
+
+  if (failed) process.exit(1);
+
+  if (under.length) {
+    process.stdout.write(
+      `Under budget (${under.map((u) => `${u.key} ${u.current} < ${u.budget}`).join(", ")}): lock the gain in with --update-baseline.\n`,
+    );
+  }
+  process.stdout.write("OK — no new first-party version splits; dependency shape within budget.\n");
 }
 
-main();
+if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
+  main();
+}

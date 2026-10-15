@@ -25,7 +25,10 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
-const localIntegration = vi.hoisted(() => ({ recordLocalIntegrationResult: vi.fn() }));
+const localIntegration = vi.hoisted(() => ({
+  recordLocalIntegrationResult: vi.fn(),
+  TEST_STUB_EVIDENCE_REFUSED: "test_stub_evidence_refused",
+}));
 vi.mock("@/lib/nonprod/local-integration", () => localIntegration);
 
 import { buildEvidencePack } from "./build-evidence-pack";
@@ -95,13 +98,14 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
     expect(db.backlogItemFindUnique).not.toHaveBeenCalled();
   });
 
-  it("record_execution_evidence validates a supplied ToolExecution reference", async () => {
+  it.each(["test_pass", "build_pass", "ux_verified", "migration_pass", "manual_check", "spec_review", "external_link", "source_verified"])("rejects failed ToolExecution linked as %s", async (kind) => {
     db.backlogItemFindUnique.mockResolvedValue({ id: "row-1" });
-    db.toolExecutionFindUnique.mockResolvedValue({ id: "te-1", success: false });
+    db.toolExecutionFindUnique.mockResolvedValue({ id: "te-1", success: false, userId: "u1" });
     const res = await buildEvidencePack.handlers.record_execution_evidence(
       {
         itemId: "BI-1",
-        kind: "test_pass",
+        kind,
+        url: "https://example.test/proof",
         summary: "green",
         toolExecutionId: "te-1",
       },
@@ -110,6 +114,35 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
     expect(res.success).toBe(false);
     expect(res.error).toBe("invalid_tool_execution");
     expect(db.activityCreate).not.toHaveBeenCalled();
+  });
+
+  describe.each(["test_fail", "build_fail", "ux_fail", "migration_fail"])("negative evidence %s", (kind) => {
+    it.each([false, true])("retains the owned source when execution success=%s", async (success) => {
+      db.backlogItemFindUnique.mockResolvedValue({ id: "row-1" });
+      db.toolExecutionFindUnique.mockResolvedValue({ id: "te-1", success, userId: "u1" });
+      db.activityCreate.mockResolvedValue({ id: "act-1", recordedAt: new Date("2026-10-12T12:00:00Z") });
+
+      const result = await buildEvidencePack.handlers.record_execution_evidence(
+        { itemId: "BI-1", kind, summary: "Observed failure", toolExecutionId: "te-1" }, "u1",
+      );
+
+      expect(result.success).toBe(true);
+      expect(db.activityCreate).toHaveBeenCalledWith({ data: expect.objectContaining({
+        toolExecutionId: "te-1",
+        recordedById: "u1",
+        payload: expect.objectContaining({ evidenceKind: kind, toolExecutionId: "te-1" }),
+      }) });
+    });
+
+    it.each([null, { id: "te-1", success: false, userId: "other" }, { id: "te-1", success: true, userId: "other" }])("refuses a missing or foreign source %j", async (execution) => {
+      db.backlogItemFindUnique.mockResolvedValue({ id: "row-1" });
+      db.toolExecutionFindUnique.mockResolvedValue(execution);
+      const result = await buildEvidencePack.handlers.record_execution_evidence(
+        { itemId: "BI-1", kind, summary: "Observed failure", toolExecutionId: "te-1" }, "u1",
+      );
+      expect(result).toMatchObject({ success: false, error: "invalid_tool_execution" });
+      expect(db.activityCreate).not.toHaveBeenCalled();
+    });
   });
 
   it("record_execution_evidence writes an evidence activity for a known item", async () => {
@@ -195,6 +228,51 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
         leaseId: "NPEL-GATE",
       }),
     );
+  });
+
+  // BI-F5344F65: a DPF_ALLOW_LOCAL_CI_STUB payload builds nothing. The writer
+  // refuses it with a stable code; the caller gets a named refusal, so the gate
+  // fails closed instead of holding a PASS.
+  it("record_local_integration_result turns the writer's test-stub refusal into a named error", async () => {
+    localIntegration.recordLocalIntegrationResult.mockRejectedValue(Object.assign(
+      new Error("This local-CI result came from the DPF_ALLOW_LOCAL_CI_STUB=1 test stub, which builds nothing."),
+      { code: "test_stub_evidence_refused" },
+    ));
+    const res = await buildEvidencePack.handlers.record_local_integration_result(
+      {
+        provider: "claude",
+        externalSessionId: "s1",
+        routeContext: "/build",
+        candidateBranch: "fix/admitted-owner-recovery",
+        mode: "single-branch",
+        status: "passed",
+        summary: "local-CI lease gate passed.",
+        gateKey: "a".repeat(64),
+        leaseId: "NPEL-GATE",
+        evidence: { testStub: true, gatePassed: true, buildCommand: "sandbox checkout/build stub" },
+      },
+      "u1",
+    );
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("test_stub_evidence_refused");
+    expect(res.message).toMatch(/DPF_ALLOW_LOCAL_CI_STUB/);
+  });
+
+  it("record_local_integration_result still propagates any other writer failure", async () => {
+    localIntegration.recordLocalIntegrationResult.mockRejectedValue(new Error("Local-CI lease does not match the immutable gate key"));
+    await expect(buildEvidencePack.handlers.record_local_integration_result(
+      {
+        provider: "claude",
+        externalSessionId: "s1",
+        routeContext: "/build",
+        candidateBranch: "feat/x",
+        mode: "single-branch",
+        status: "passed",
+        summary: "ok",
+        evidence: {},
+      },
+      "u1",
+    )).rejects.toThrow(/immutable gate key/);
   });
 
   it("record_local_integration_result rejects an unsupported mode without delegating", async () => {

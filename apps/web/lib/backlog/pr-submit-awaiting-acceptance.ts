@@ -7,6 +7,10 @@ export type CodingPoolStatus = (typeof CODING_POOL_STATUSES)[number];
 
 export const AWAITING_ACCEPTANCE_STATUS = "awaiting-acceptance" as const;
 
+/** The `actuator` this module stamps on every status row it writes. The merge
+ * signal reads those rows as the PR that delivered the item (BI-B04A0203). */
+export const PR_SUBMIT_ACTUATOR = "pr-submit-awaiting-acceptance" as const;
+
 const ITEM_ID_RE = /\bBI-[A-Z0-9]+(?:-[A-Z0-9]+)*\b/g;
 
 export type GitHubPullRequestEvent = {
@@ -35,6 +39,42 @@ function isCodingPoolStatus(status: string): status is CodingPoolStatus {
 export function extractBacklogItemIdsFromText(text: string): string[] {
   const found = text.match(ITEM_ID_RE) ?? [];
   return [...new Set(found)];
+}
+
+const ID_LIST = String.raw`BI-[A-Z0-9]+(?:-[A-Z0-9]+)*(?:\s*(?:,|&|\band\b)\s*BI-[A-Z0-9]+(?:-[A-Z0-9]+)*)*`;
+// GitHub's closing keywords plus the delivery verbs DPF PR bodies use, each
+// directly followed by the ids it names ("Resolves BI-X and BI-Y").
+const DELIVERY_KEYWORD_RE = new RegExp(
+  String.raw`\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|deliver(?:s|ed)?|complete[sd]?(?:\s+only)?)\s*:?\s+(${ID_LIST})`,
+  "gi",
+);
+// The declaration lines the dpf-pr-with-dco skill and PR bodies carry.
+const DELIVERY_LABEL_RE = /^\s*(?:[-*]\s*)?(?:\*\*)?(?:backlog(?:\s+items?)?|linked\s+bis?(?:\(s\))?)(?:\*\*)?\s*:/i;
+
+/**
+ * The items a PR delivers: every id in its title, plus body ids the PR
+ * declares — after a closing/delivery keyword or on a Backlog / Linked BI(s)
+ * line. A body that merely cites an item (history, a related defect, an
+ * umbrella) does not deliver it.
+ */
+export function extractDeliveredBacklogItemIds(title: string, body: string): string[] {
+  const ids = new Set(extractBacklogItemIdsFromText(title));
+  for (const line of body.split(/\r?\n/)) {
+    if (DELIVERY_LABEL_RE.test(line)) {
+      for (const id of extractBacklogItemIdsFromText(line)) ids.add(id);
+      continue;
+    }
+    for (const match of line.matchAll(DELIVERY_KEYWORD_RE)) {
+      for (const id of extractBacklogItemIdsFromText(match[1] ?? "")) ids.add(id);
+    }
+  }
+  return [...ids];
+}
+
+// A doc PR (conventional type doc/docs) writes a design, plan or reference. It
+// delivers a doc item; it does not deliver the feature or fix it describes.
+export function isDocPullRequest(title: string): boolean {
+  return /^docs?(?:\(|!|:)/i.test(title.trim());
 }
 
 export function parseGitHubPullRequestEvent(payload: unknown): GitHubPullRequestEvent | null {
@@ -97,6 +137,7 @@ async function loadLinkedItems(event: GitHubPullRequestEvent): Promise<{
   itemId: string;
   status: string;
   claimStatus: string | null;
+  workType: string | null;
 }[]> {
   const rooms = await prisma.workroom.findMany({
     where: {
@@ -111,13 +152,13 @@ async function loadLinkedItems(event: GitHubPullRequestEvent): Promise<{
   const fromRooms = rooms
     .map((room) => room.backlogItemId)
     .filter((id): id is string => typeof id === "string" && id.length > 0);
-  const fromText = extractBacklogItemIdsFromText(`${event.title}\n${event.body}`);
+  const fromText = extractDeliveredBacklogItemIds(event.title, event.body);
   const itemIds = [...new Set([...fromRooms, ...fromText])];
   if (itemIds.length === 0) return [];
 
   return prisma.backlogItem.findMany({
     where: { itemId: { in: itemIds } },
-    select: { id: true, itemId: true, status: true, claimStatus: true },
+    select: { id: true, itemId: true, status: true, claimStatus: true, workType: true },
   });
 }
 
@@ -152,7 +193,7 @@ async function transitionItem(args: {
           from: args.from,
           to: args.to,
           reason: args.reason,
-          actuator: "pr-submit-awaiting-acceptance",
+          actuator: PR_SUBMIT_ACTUATOR,
           pullRequestNumber: args.pullRequestNumber,
           pullRequestUrl: args.pullRequestUrl,
           ...(args.to === AWAITING_ACCEPTANCE_STATUS ? { claimAction: "released" } : {}),
@@ -176,11 +217,14 @@ export async function applyGitHubPullRequestToBacklog(payload: unknown): Promise
   const reopen = shouldReopenFromWithdrawnPr(event);
   if (!mark && !reopen) return { moved: [], skipped: items.length, reason: "no-status-action" };
 
+  const docPullRequest = isDocPullRequest(event.title);
   const moved: string[] = [];
   let skipped = 0;
   for (const item of items) {
     const to: BacklogStatus = mark ? AWAITING_ACCEPTANCE_STATUS : "open";
-    const eligible = mark ? isCodingPoolStatus(item.status) : item.status === AWAITING_ACCEPTANCE_STATUS;
+    const eligible = mark
+      ? isCodingPoolStatus(item.status) && (!docPullRequest || item.workType === "doc")
+      : item.status === AWAITING_ACCEPTANCE_STATUS;
     if (!eligible) {
       skipped += 1;
       continue;
@@ -295,7 +339,7 @@ export async function fileAcceptanceMiss(args: {
     select: { id: true, itemId: true, status: true, epicId: true, organizationId: true },
   });
   if (!original) return { action: "skipped", itemId: null, reason: "original-not-found" };
-  if (original.status !== AWAITING_ACCEPTANCE_STATUS) {
+  if (original.status !== AWAITING_ACCEPTANCE_STATUS && original.status !== "done") {
     return { action: "skipped", itemId: original.itemId, reason: "original-not-awaiting-acceptance" };
   }
 
@@ -327,15 +371,15 @@ export async function fileAcceptanceMiss(args: {
     data: {
       backlogItemId: original.id,
       kind: "status_change",
-      summary: `Acceptance miss filed as ${created.itemId}; ${original.itemId} stays awaiting-acceptance`,
+      summary: `Acceptance miss filed as ${created.itemId}; ${original.itemId} stays ${original.status}`,
       payload: {
-        from: AWAITING_ACCEPTANCE_STATUS,
-        to: AWAITING_ACCEPTANCE_STATUS,
+        from: original.status,
+        to: original.status,
         reason: "verification-fail",
         correctiveItemId: created.itemId,
         servedSha: args.servedSha,
         fingerprint: args.fingerprint,
-        actuator: "pr-submit-awaiting-acceptance",
+        actuator: PR_SUBMIT_ACTUATOR,
       },
     },
   });

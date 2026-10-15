@@ -310,8 +310,13 @@ export type SandboxTestResult = {
   typeCheckPassed: boolean;
   testOutput: string;
   typeCheckOutput: string;
-  /** "scoped" when we ran only the build's own feature tests, "full" otherwise. */
-  scope?: "scoped" | "full";
+  /**
+   * "scoped" when only the build's own feature tests ran; "none" when no suite
+   * ran, because no test file covers the changed files or the changed files are
+   * unknown. "full" is the retired whole-suite run (BI-F5D4FA50): it is no
+   * longer produced, and is kept only so records written before it still type.
+   */
+  scope?: "scoped" | "full" | "none";
   /** Number of feature test files run when scope === "scoped". */
   scopedTestsRun?: number;
 };
@@ -363,6 +368,76 @@ export function groupTestFilesByPackage(files: string[]): Map<string, string[]> 
  * matches. (Found running scoped tests against the live install — the raw-ANSI
  * path silently passed a build whose feature tests were red.)
  */
+/**
+ * The workspace packages to type-check for a change: apps/web always (the prior
+ * behaviour), plus every other apps/<x> or packages/<x> a changed file lives in.
+ */
+export function typecheckPackagesFor(changedFiles: readonly string[]): string[] {
+  const packages = new Set<string>(["apps/web"]);
+  for (const file of changedFiles) {
+    const match = /^(apps|packages)\/([^/]+)\//.exec(file.replace(/^\.\//, ""));
+    if (match) packages.add(`${match[1]}/${match[2]}`);
+  }
+  return [...packages];
+}
+
+/**
+ * A package with its own lockfile (apps/mobile: its own pnpm workspace, excluded
+ * from the root one) is not installed by the sandbox's root install, so tsc and
+ * jest are "not found" there. Install it from its own lockfile, offline cache
+ * first, before checking it. Best-effort: a failed install surfaces as the
+ * check's own failure, with the install log tail in its output.
+ */
+async function installSeparatelyLockedPackages(containerId: string, workdir: string, packages: readonly string[]): Promise<Set<string>> {
+  const separatelyLocked = new Set<string>();
+  for (const pkg of packages) {
+    if (pkg === "apps/web") continue;
+    const ownLock = await execInSandbox(containerId, `test -f "${workdir}/${pkg}/pnpm-lock.yaml" && echo __yes__ || echo __no__`).catch(() => "");
+    if (!ownLock.includes("__yes__")) continue;
+    separatelyLocked.add(pkg);
+    await execInSandbox(
+      containerId,
+      `cd ${workdir}/${pkg} && { CI=true pnpm install --offline --frozen-lockfile >/tmp/dpf-pkg-install.log 2>&1 || CI=true pnpm install --frozen-lockfile >>/tmp/dpf-pkg-install.log 2>&1 || tail -20 /tmp/dpf-pkg-install.log; }`,
+    ).catch(() => "");
+  }
+  return separatelyLocked;
+}
+
+/**
+ * The type-check command for one package (BI-D2FE6931). A root-workspace
+ * package goes through scripts/run-tsc.mjs, the platform's one compiler entry
+ * point (TypeScript 7, pinned once at the root), so Build Studio grades with the
+ * compiler CI uses and follows its pin. A separately-locked package (apps/mobile:
+ * its own workspace and lockfile) keeps its own tsc, exactly as CI's mobile job.
+ */
+export function typecheckCommandFor(workdir: string, pkg: string, separatelyLocked: boolean): string {
+  const compiler = separatelyLocked ? "pnpm exec tsc" : `node ${workdir}/scripts/run-tsc.mjs`;
+  return `cd ${workdir}/${pkg} && ${compiler} --noEmit 2>&1 || true`;
+}
+
+const EXIT_MARKER = "__dpf_exit=";
+
+/** The scoped-test command for a package: Jest when its package.json says so, else Vitest. */
+export function scopedTestRunnerCommand(packageJson: string, fileArgs: string): string {
+  let usesJest = false;
+  try {
+    const pkg = JSON.parse(packageJson) as { scripts?: Record<string, string>; devDependencies?: Record<string, string>; dependencies?: Record<string, string> };
+    const testScript = pkg.scripts?.test ?? "";
+    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+    usesJest = /\bjest\b/.test(testScript) || (Boolean(deps.jest) && !deps.vitest && !/\bvitest\b/.test(testScript));
+  } catch {
+    usesJest = false;
+  }
+  return usesJest ? `pnpm exec jest --ci ${fileArgs}` : `pnpm exec vitest run ${fileArgs}`;
+}
+
+function splitExitMarker(raw: string): { output: string; exitCode: number | null } {
+  const index = raw.lastIndexOf(EXIT_MARKER);
+  if (index < 0) return { output: raw, exitCode: null };
+  const code = Number.parseInt(raw.slice(index + EXIT_MARKER.length).trim(), 10);
+  return { output: raw.slice(0, index).trimEnd(), exitCode: Number.isFinite(code) ? code : null };
+}
+
 export function outputIndicatesTestFailure(output: string): boolean {
   // eslint-disable-next-line no-control-regex -- ANSI color strip
   const clean = output.replace(/\x1b\[[0-9;]*m/g, "");
@@ -381,7 +456,16 @@ export async function runSandboxTests(
   let typeCheckOutput = "";
   let typeCheckPassed = false;
   try {
-    typeCheckOutput = await execInSandbox(containerId, `cd ${workdir}/apps/web && npx tsc --noEmit 2>&1 || true`);
+    // FB-0C05A927: tsc ran in apps/web only, so a mobile (or any other package)
+    // change was never type-checked and review could not pass it. Check every
+    // package the change touches, plus apps/web as before, through pnpm exec.
+    const separatelyLocked = await installSeparatelyLockedPackages(containerId, workdir, typecheckPackagesFor(opts?.changedFiles ?? []));
+    const sections: string[] = [];
+    for (const pkg of typecheckPackagesFor(opts?.changedFiles ?? [])) {
+      const out = await execInSandbox(containerId, typecheckCommandFor(workdir, pkg, separatelyLocked.has(pkg)));
+      sections.push(`# ${pkg}\n${out}`);
+    }
+    typeCheckOutput = sections.join("\n\n");
     // `tsc` typechecks the whole apps/web project graph (no cheap per-file mode),
     // so a pre-existing type error in an UNRELATED file would block a build whose
     // own changed files are clean. When we know the changed surface, gate only on
@@ -398,10 +482,11 @@ export async function runSandboxTests(
   // now run ONLY the feature's test files: (a) the feature's tests actually GATE
   // the build, and (b) the output stays small so a real failure is never
   // truncated behind hundreds of unrelated monorepo tests. With no changed-file
-  // hint we fall back to the legacy full-suite run, recorded but typecheck-gated.
+  // hint no suite runs (BI-F5D4FA50): the whole suite belongs to cloud CI and
+  // the merge queue, and in the sandbox it took most of the host.
   let testOutput = "";
   let testPassed = true;
-  let scope: "scoped" | "full" = "full";
+  let scope: "scoped" | "full" | "none" = "none";
   let scopedTestsRun = 0;
 
   const candidates = deriveScopedTestFiles(opts?.changedFiles ?? []);
@@ -427,31 +512,43 @@ export async function runSandboxTests(
     let anyFailed = false;
     for (const [pkg, rel] of groupTestFilesByPackage(scopedTestFiles)) {
       const fileArgs = rel.map((r) => `"${r}"`).join(" ");
-      const out = await execInSandbox(containerId, `cd ${workdir}/${pkg} && npx vitest run ${fileArgs} 2>&1 || true`);
+      // BI-6F67D5FA: each package runs the runner its package.json declares,
+      // through pnpm exec (pinned versions). apps/mobile is Jest/jest-expo; run
+      // under vitest its `@/` alias never resolved, so every mobile build failed.
+      const packageJson = await execInSandbox(containerId, `cat "${workdir}/${pkg}/package.json" 2>/dev/null || true`).catch(() => "");
+      const runner = scopedTestRunnerCommand(packageJson, fileArgs);
+      const raw = await execInSandbox(containerId, `cd ${workdir}/${pkg} && { ${runner} 2>&1; echo "${EXIT_MARKER}$?"; }`);
+      const { output: out, exitCode } = splitExitMarker(raw);
       sections.push(`# ${pkg}\n${out}`);
       // vitest omits the "failed" segment entirely when zero, so any "N failed"
       // with N>=1 (or a FAIL marker) means the feature's own tests are red.
       // outputIndicatesTestFailure strips ANSI first — a colored digit otherwise
-      // defeats the count regex.
-      if (outputIndicatesTestFailure(out)) {
+      // defeats the count regex. A non-zero exit also fails: a runner crash
+      // (config, resolution) prints neither marker.
+      if (outputIndicatesTestFailure(out) || (exitCode !== null && exitCode !== 0)) {
         anyFailed = true;
       }
     }
     testOutput = sections.join("\n\n");
     testPassed = !anyFailed;
+  } else if (opts?.changedFiles && opts.changedFiles.length > 0) {
+    // BI-CEE688D6: no test file covers the changed files. The whole-suite
+    // fallback cannot run in the sandbox (scripts/host-resource-runner.mjs needs
+    // DPF MCP admission it does not have, and the suite exhausts the heap), and
+    // its result was ignored anyway, so it only produced a crash log that the
+    // evidence then labelled as passing tests. Say plainly that none ran.
+    scope = "none";
+    testOutput = "No test file covers the changed files; no tests ran.";
   } else {
-    try {
-      testOutput = await execInSandbox(containerId, `cd ${workdir} && pnpm test 2>&1 || true`);
-      testPassed = testOutput.includes("Tests  ") && !testOutput.includes("FAIL");
-    } catch (e) {
-      testOutput = getErrorMessage(e);
-      testPassed = false;
-    }
+    // BI-F5D4FA50: the changed files are unknown, so nothing can be scoped. The
+    // old fallback ran `pnpm test` (the whole suite) here; it is never run in
+    // the sandbox now, and the result says plainly that no tests ran.
+    testOutput = "The build's changed files are unknown, so no tests ran. The whole suite runs in cloud CI and the merge queue.";
   }
 
   return {
     // Gate on typecheck AND — when feature tests were scoped and run — those
-    // tests. The legacy full-suite path stays typecheck-gated (informational).
+    // tests. When none ran, typecheck alone gates, and the record says so.
     passed: typeCheckPassed && (scope === "scoped" ? testPassed : true),
     typeCheckPassed,
     testOutput,

@@ -21,6 +21,7 @@ import {
   DECISION_ENGINE_REVIEW_TASK_KIND,
   DECISION_ENGINE_REVIEW_TASK_TITLE,
 } from "./decision-engine-review-config";
+import { findInstallWorkOwnerUserId } from "./install-work-owner";
 
 type ScheduledTaskSeedClient = Pick<PrismaClient, "user" | "scheduledAgentTask" | "scheduledJob">;
 
@@ -46,12 +47,8 @@ export async function ensureDecisionEngineReviewScheduledTask(
   prisma: ScheduledTaskSeedClient,
   now: Date = new Date(),
 ): Promise<{ created: boolean }> {
-  const owner = await prisma.user.findFirst({
-    where: { isSuperuser: true },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
-  if (!owner) {
+  const ownerId = await findInstallWorkOwnerUserId(prisma);
+  if (!ownerId) {
     throw new Error("seed: no superuser found - cannot seed decision-engine review scheduled task");
   }
 
@@ -63,6 +60,7 @@ export async function ensureDecisionEngineReviewScheduledTask(
     select: { taskId: true, nextRunAt: true },
   });
 
+  // An existing task keeps its owner: an account handover must survive re-seeding (BI-ED055D45).
   if (existing) {
     await prisma.scheduledAgentTask.update({
       where: { taskId: DECISION_ENGINE_REVIEW_TASK_ID },
@@ -74,7 +72,6 @@ export async function ensureDecisionEngineReviewScheduledTask(
         schedule: DECISION_ENGINE_REVIEW_SCHEDULE,
         timezone,
         taskKind: DECISION_ENGINE_REVIEW_TASK_KIND,
-        ownerUserId: owner.id,
         isActive: true,
         nextRunAt: existing.nextRunAt ?? nextRunAt,
       },
@@ -90,7 +87,7 @@ export async function ensureDecisionEngineReviewScheduledTask(
         schedule: DECISION_ENGINE_REVIEW_SCHEDULE,
         timezone,
         taskKind: DECISION_ENGINE_REVIEW_TASK_KIND,
-        ownerUserId: owner.id,
+        ownerUserId: ownerId,
         nextRunAt,
       },
     });

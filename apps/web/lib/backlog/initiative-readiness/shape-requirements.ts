@@ -46,15 +46,32 @@ export function effectiveShape(
   shape: ReadinessShape,
   sensitivity: ReadinessSensitivity | null | undefined,
   profile?: ReadinessProfile | null,
+  workType?: string | null,
 ): ReadinessShape {
-  if (shape === "break-fix" || shape === "xlarge") return shape;
-  const ceiling = raiseCeilingFor(profile);
+  return shapeRaise(shape, sensitivity, profile, workType).effective;
+}
+
+/**
+ * The raise, and the part of it the ceiling refused (BI-243BC956). A raise
+ * past the ceiling would owe a gate with no reachable route, so it is refused
+ * and said so, never recorded as owed.
+ */
+export function shapeRaise(
+  shape: ReadinessShape,
+  sensitivity: ReadinessSensitivity | null | undefined,
+  profile?: ReadinessProfile | null,
+  workType?: string | null,
+): { effective: ReadinessShape; refused: ReadinessShape | null } {
+  if (shape === "break-fix" || shape === "xlarge") return { effective: shape, refused: null };
+  const ceiling = raiseCeilingFor(profile, workType);
   const raised = sensitivity === "high"
     ? (RANK[shape] < RANK.large ? "large" : shape)
     : sensitivity === "elevated"
       ? BY_RANK[Math.min(RANK[shape] + 1, RANK.large)]!
       : shape;
-  return RANK[raised] > RANK[ceiling] && RANK[shape] <= RANK[ceiling] ? ceiling : raised;
+  return RANK[raised] > RANK[ceiling] && RANK[shape] <= RANK[ceiling]
+    ? { effective: ceiling, refused: raised }
+    : { effective: raised, refused: null };
 }
 
 /**
@@ -71,11 +88,16 @@ export function effectiveShape(
  * still bites — medium owes an independent acceptance receipt that small does
  * not — it simply stays satisfiable.
  *
+ * A `refactor` takes the same ceiling (BI-243BC956). Its work type maps to the
+ * feature profile, but it is behavior-preserving by definition, so it may not
+ * be raised past what a fix in the same files would get: BI-7DCA6159, a
+ * two-file import swap, went straight from small to large.
+ *
  * Every other profile keeps the full range: a feature raised to large owes the
  * spec approval it is already able to obtain.
  */
-function raiseCeilingFor(profile: ReadinessProfile | null | undefined): ReadinessShape {
-  return profile === "fix" ? "medium" : "large";
+function raiseCeilingFor(profile: ReadinessProfile | null | undefined, workType?: string | null): ReadinessShape {
+  return profile === "fix" || workType === "refactor" ? "medium" : "large";
 }
 
 function req(
@@ -161,7 +183,7 @@ export function shapeRequirements(
   target: ReadinessTarget,
   v2: (facts: InitiativeReadinessFacts, target: ReadinessTarget) => ShapeRequirement[],
 ): ShapeRequirement[] {
-  const shape = effectiveShape(facts.shape!, facts.sensitivity, facts.profile);
+  const shape = effectiveShape(facts.shape!, facts.sensitivity, facts.profile, facts.workType);
   if (shape === "break-fix") return breakFix(facts, target);
   if (shape === "small") return small(facts, target);
   if (shape === "medium") return medium(facts, target);

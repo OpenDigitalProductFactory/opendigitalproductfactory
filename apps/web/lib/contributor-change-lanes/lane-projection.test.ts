@@ -14,7 +14,6 @@ import type {
 
 const NOW = new Date("2026-05-26T22:00:00.000Z");
 const FRESH = new Date("2026-05-26T21:58:00.000Z");
-const STALE = new Date("2026-05-26T20:00:00.000Z");
 
 function emptyInput(overrides: Partial<LaneProjectionInput> = {}): LaneProjectionInput {
   return {

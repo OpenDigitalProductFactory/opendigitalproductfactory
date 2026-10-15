@@ -6,7 +6,7 @@
 // when the tool is called (all five take params + userId). Definitions moved
 // verbatim out of the inline PLATFORM_TOOLS array; grants mirror TOOL_TO_GRANTS.
 
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [

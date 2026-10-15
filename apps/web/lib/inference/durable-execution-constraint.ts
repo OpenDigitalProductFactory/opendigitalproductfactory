@@ -1,4 +1,4 @@
-import { canonicalJson } from "@/lib/shared/canonical-json";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import type { RouteDecision } from "@/lib/routing/types";
 
 import type { RouteAndCallOptions } from "./routed-inference-options";

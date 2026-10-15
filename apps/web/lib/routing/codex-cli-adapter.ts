@@ -16,8 +16,9 @@
  */
 
 import { excerptHeadAndTail } from "@/lib/shared/excerpt-head-and-tail";
-import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler, ToolCallEntry } from "./adapter-types";
-import { InferenceError } from "@/lib/ai-inference";
+import type { ToolCallEntry } from "./chat-message-types";
+import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./adapter-types";
+import { InferenceError } from "./inference-error";
 import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
@@ -43,6 +44,11 @@ const CLI_AUTH_FAILURE_PATTERNS: RegExp[] = [
   /\b401\b/,
   /re-?authenticat/i,
   /please log ?in/i,
+  // BI-07EC0FB4: a revoked ChatGPT sign-in reports only "Your access token could
+  // not be refreshed ... Please sign in again." on its ERROR: line.
+  /\bsign ?in again\b/i,
+  /please sign ?in/i,
+  /access token could not be refreshed/i,
   /session (?:has )?expired/i,
   /token (?:has )?expired/i,
   /not authenticated/i,
@@ -290,6 +296,9 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
     const slug = `codex-conv-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const promptFile = `/tmp/${slug}-prompt.txt`;
     const runnerScript = `/tmp/${slug}-run.sh`;
+    // Inference consumes the supplied packet, not the unrelated shared build tree.
+    // Match the Claude adapter: never discover project rules from /workspace.
+    const cliWorkingDir = `/tmp/codex-cwd-${slug}`;
     // Records the in-container codex PID so a timeout can reap the actual
     // process inside the sandbox (BI-F36E7510). proc.kill() below only reaches
     // the local `docker exec` client, not the containerized process.
@@ -321,7 +330,8 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
       // inherited by the background child, so capture is unchanged.
       const script = [
         "#!/bin/sh",
-        "cd /workspace",
+        `mkdir -p ${cliWorkingDir} || exit 1`,
+        `cd ${cliWorkingDir} || exit 1`,
         authExportLine,
         `codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < ${promptFile} &`,
         `CLIPID=$!`,
@@ -516,7 +526,7 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
     } finally {
       // Clean up temp files (fire-and-forget)
       execAsync(
-        `docker exec ${SANDBOX_CONTAINER} sh -c "rm -f ${promptFile} ${runnerScript} ${pidFile}"`,
+        `docker exec ${SANDBOX_CONTAINER} sh -c "rm -f ${promptFile} ${runnerScript} ${pidFile}; rmdir ${cliWorkingDir} 2>/dev/null"`,
         { timeout: 5_000 },
       ).catch(() => {});
     }

@@ -1,7 +1,7 @@
 /**
  * Unit tests for the shared managed-backup engine (EP-8DC217EB BET-11,
- * BI-B72328D5), parametrized across every engine spec (postgres-only after
- * BET-5 retired neo4j + qdrant; the table stays so a future engine slots in). Mirrors the
+ * BI-B72328D5), parametrized across every engine spec (postgres-only since
+ * BET-5; the table stays so a future engine slots in). Mirrors the
  * mocking idiom of postgres-restore-runner.test.ts: mock prisma, the
  * metrics module and the managed-script chokepoint; use the real fs against
  * a temp directory.

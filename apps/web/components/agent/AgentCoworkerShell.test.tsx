@@ -203,13 +203,14 @@ describe("AgentCoworkerShell support entry", () => {
     });
     expect(dialog).toHaveAttribute("data-panel-layout", "mobile-viewport");
     expect(dialog).toHaveAttribute("aria-modal", "true");
-    expect(dialog).toHaveStyle({
-      width: "100vw",
-      maxWidth: "100vw",
-      minWidth: "0",
-      height: "100dvh",
-      overflow: "hidden",
-    });
+    // Assert the declared inline frame, not jsdom's computed style: jsdom 30
+    // resolves viewport units against its own 1024px layout viewport and drops
+    // min/max-width from getComputedStyle, so toHaveStyle cannot see `100vw`.
+    expect(dialog.style.width).toBe("100vw");
+    expect(dialog.style.maxWidth).toBe("100vw");
+    expect(dialog.style.minWidth).toBe("0px");
+    expect(dialog.style.height).toBe("100dvh");
+    expect(dialog.style.overflow).toBe("hidden");
     expect(agentCoworkerPanelMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ isDocked: true }),
     );

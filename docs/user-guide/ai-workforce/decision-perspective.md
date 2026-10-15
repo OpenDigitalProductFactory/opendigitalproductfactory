@@ -63,6 +63,10 @@ For a consequential tool call, Decision Perspective is a pre-execution control r
 
 Only effects that leave the **business** are checked this way. A tool whose outward effect is platform development or operations (opening a pull request, contributing to the hive, running a discovery sweep, a sign-in handshake) declares `consequenceScope: "platform"` and is governed by the founder kernel (WWMD) instead: it is still receipted and outward-reviewed, but the business owner is never asked "what should the business do?" about a pull request (BI-63B14D4B). When a business-outward tool carries no descriptive fields, the gate states the parameters it was given rather than escalating a bare tool name.
 
+Which decision admits which tools, for which stage of the work, is modelled by the
+[Gated Permissions Process](../../architecture/gated-permissions-process.md#73-the-pairing-at-a-glance).
+The gate described here is the decision side of that pairing.
+
 Product and GTM checks may use a qualified WSID specialist, but qualification never grants permission. The ordinary TAK intersection still requires the actor's authority, tool grants, workflow policy, data constraints, and preconditions. Owners and employees pass through the same control as coworkers.
 
 There is no alignment bypass flag. To permit an action that the current stance rejects, an owner deliberately amends and publishes the WWWD stance, producing a new policy version, and submits the action for a fresh decision. Every consequential verdict is recorded as a GAID-bound receipt showing the actor, decision interaction, policy version, delegation and qualification evidence, cited sources, and amendment lineage. For an approved action, the receipt channel is reserved before the side effect; if it cannot be reserved, the action does not run.
@@ -74,6 +78,18 @@ The gate's confidence is a governed runtime state, not a model-self-reported num
 > Confidence is earned in drops and lost in buckets.
 
 Confidence rises slowly through repeated evidence-backed alignment — a recommendation made, observed in practice, and confirmed by an employee, increases the profile's confidence for that question domain. Confidence drops fast after misses: a contradicted rationale, a stale source, or an overconfident recommendation that turned out wrong pulls the profile back. The point is to make autonomy something the platform earns, not something it claims.
+
+### Measuring How Often a Coworker Agrees With You
+
+Every six hours the platform counts, for each coworker and each kind of decision, how often the coworker's recommendation matched what a person then chose. The decision trust report is the `report_decision_trust_state` tool, available to coworkers and external agents that can read the decision registry.
+
+Read it with three things in mind:
+
+- **Small numbers are hidden on purpose.** A coworker needs at least 10 decisions resolved by a person before the report shows a rate. Below that it says "insufficient samples" and shows the count instead.
+- **Agreement is not correctness.** A high rate means the coworker's recommendation matched what a person chose. It does not mean either choice was right, and a person who approves everything produces a high rate that tells you nothing.
+- **Nothing changes automatically.** Every coworker stays at the most supervised level, *shadow*. The report measures; deciding whether a coworker has earned more autonomy is a separate decision you make.
+
+A coworker's decisions that nobody has resolved yet are shown as unresolved, so a coworker with no resolved decisions still appears in the report.
 
 ### The Inheritance Chain
 
@@ -245,10 +261,10 @@ Voice profiles are managed in the platform's wiki area at the persona admin page
 1. Upload audio or video samples on the profile admin page
 2. The platform extracts audio from video (FFmpeg, server-side)
 3. Optional vocal isolation removes background noise, music, and other speakers
-4. **Consent capture** — for any `persona-real` profile, a structured consent record must be created and confirmed before training runs. This is a non-negotiable gate
-5. The provider training API is called with the processed audio
-6. A `VoiceTrainingJob` row tracks status: `pending` → `processing` → `ready` → `failed`
-7. On `ready`, `VoiceProfile.providerVoiceId` is set and `voiceEnabled` can be turned on
+4. **Consent capture** — for any `persona-real` profile, a structured consent record must be created and confirmed before the voice is registered. This is a non-negotiable gate
+5. The default self-hosted Chatterbox path is zero-shot: the processed audio is registered as the profile's reference audio, with no training step
+6. On the opt-in Cartesia path, the clone API is called with the processed audio and the profile's own `status` and `providerVoiceId` record the result; there is no separate training-job record
+7. Once the profile holds a usable voice, `voiceEnabled` can be turned on
 
 Re-training is allowed when sample quality improves or the existing voice degrades. Each training run creates a new `VoiceProfile` version; the profile points at the current active version.
 
@@ -322,6 +338,8 @@ Tracked under EP-WWMD, EP-VOICE-LAYER, and EP-WSID:
 - MCP — the `decisionPerspective.invoke` tool exposes the gate to external clients under the same grant model
 
 ## Related Specs
+
+- [Gated Permissions Process (GPP)](../../architecture/gated-permissions-process.md) — the standard that pairs these decision scopes with tool permissions
 
 - `docs/superpowers/specs/2026-05-17-wwmd-decision-perspective-kernel-design.md` — the kernel design (V1 WWMD)
 - `docs/superpowers/specs/2026-05-19-wwmd-mcp-exposure-design.md` — the MCP tool surface

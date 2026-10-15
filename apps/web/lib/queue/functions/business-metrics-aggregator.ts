@@ -1,6 +1,6 @@
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 /**
@@ -8,7 +8,7 @@ import { gateAtEntry } from "../quiescence-gates";
  * current and prior local-business day makes the job idempotent and lets a
  * missed run self-heal without deleting the last valid snapshot.
  */
-export const businessMetricsAggregator = inngest.createFunction(
+export const businessMetricsAggregator = jobs.createFunction(
   {
     id: "business/metrics-aggregator",
     retries: 2,

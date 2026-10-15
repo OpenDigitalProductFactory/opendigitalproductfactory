@@ -1,0 +1,90 @@
+{
+  "format": "gpp-shape/0.1",
+  "key": "drc-pass-gated-irreversible-stage",
+  "version": "1.0.0",
+  "title": "DRC fixture drc-pass-gated-irreversible-stage",
+  "description": "Passing: an agent read stage, a ratified enforced gate with an exact-action checkpoint, then a stage holding an irreversible tool.",
+  "triggers": [
+    "claim"
+  ],
+  "stages": [
+    {
+      "key": "read",
+      "title": "Stage read",
+      "accountablePrincipalRef": "agent:customer-advisor",
+      "advance": {
+        "kind": "status-change",
+        "condition": "Stage read recorded its evidence."
+      },
+      "evidence": [
+        "manual-check"
+      ],
+      "tools": [
+        "list_customer_accounts"
+      ]
+    },
+    {
+      "key": "decide",
+      "title": "Stage decide",
+      "accountablePrincipalRef": "role:shape-owner",
+      "advance": {
+        "kind": "governed-decision",
+        "condition": "The accountable owner decides stage decide.",
+        "decisionScope": "drc-exact-checkpoint-scope",
+        "gate": {
+          "authority": "wwmd",
+          "mode": "enforced",
+          "blocking": true,
+          "resolution": "accountable-human",
+          "checkpoint": {
+            "role": "role:shape-owner",
+            "exactAction": true
+          }
+        }
+      },
+      "evidence": [
+        "decision-record"
+      ]
+    },
+    {
+      "key": "act",
+      "title": "Stage act",
+      "accountablePrincipalRef": "role:shape-owner",
+      "advance": {
+        "kind": "status-change",
+        "condition": "Stage act recorded its evidence."
+      },
+      "evidence": [
+        "manual-check"
+      ],
+      "tools": [
+        "merge_backlog_items"
+      ]
+    }
+  ],
+  "stopConditions": [
+    {
+      "kind": "success",
+      "condition": "Every stage recorded its evidence.",
+      "disposition": "proceed"
+    },
+    {
+      "kind": "failure",
+      "condition": "A stage cannot produce its evidence.",
+      "disposition": "refused"
+    },
+    {
+      "kind": "budget",
+      "condition": "The cycle budget is spent.",
+      "disposition": "inconclusive"
+    }
+  ],
+  "grants": [],
+  "measures": [],
+  "budgets": [],
+  "reviewPoint": {
+    "everyDays": 7,
+    "description": "Weekly review."
+  },
+  "collaborationShape": null
+}

@@ -1,9 +1,9 @@
 "use client";
 
 // Admin graph explorer (BI-89A149A9) — the visual exploration surface for the
-// unified `graph_node` / `graph_edge` mirror that replaced Neo4j in BET-5.
+// unified `graph_node` / `graph_edge` mirror (BET-5).
 //
-// Interaction model is query-first, deliberately the Neo4j-Browser shape: the
+// Interaction model is query-first, deliberately the graph-browser shape: the
 // corpus is ~24.6k nodes, so nothing is drawn until the operator names a starting
 // point. Search seeds the canvas, a click focuses, "Expand" walks one more hop.
 //

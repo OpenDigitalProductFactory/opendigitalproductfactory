@@ -1,5 +1,5 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 // BI-96EFB042 — the automated half of submission. Escalation already had every
@@ -10,7 +10,7 @@ import { gateAtEntry } from "../quiescence-gates";
 //
 // Daily rather than weekly: a defect should not wait a week to be heard, and
 // the sweep is cheap when there is nothing to send.
-export const ecosystemSubmissionSweep = inngest.createFunction(
+export const ecosystemSubmissionSweep = jobs.createFunction(
   { id: "ecosystem/issue-submission-sweep", retries: 2, triggers: [cron("41 5 * * *")] },
   async ({ step }) => {
     const gate = await gateAtEntry(step, "ecosystem/issue-submission-sweep");

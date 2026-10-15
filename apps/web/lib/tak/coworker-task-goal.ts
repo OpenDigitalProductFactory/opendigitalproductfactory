@@ -16,7 +16,7 @@
 import { prisma } from "@dpf/db";
 
 import type { RouteSensitivity } from "@/lib/agent-sensitivity";
-import type { ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 import { routeAndCall } from "@/lib/inference/routed-inference";
 
 /** Closed status vocabulary for a goal's lifecycle. */

@@ -1,10 +1,11 @@
 import {
   existsSync,
+  mkdirSync,
   readFileSync,
   writeFileSync,
 } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import type { RoutePolicyManifestRow } from "../lib/ux-budget/route-policy";
 
@@ -83,14 +84,37 @@ export function writeOrCheckGeneratedJson(options: {
   label: string;
   buildCommand: string;
 }): void {
+  writeOrCheckGeneratedText({
+    root: options.root,
+    relativePath: options.relativePath,
+    text: serializeStableJson(options.value),
+    check: options.check,
+    label: options.label,
+    buildCommand: options.buildCommand,
+  });
+}
+
+/**
+ * Write a generated text file, or with `check` throw STALE when the committed
+ * bytes differ from `text` (a missing file is stale). The one compare for
+ * every generator here; writeOrCheckGeneratedJson serializes and calls it.
+ * Writing creates the parent directory.
+ */
+export function writeOrCheckGeneratedText(options: {
+  root: string;
+  relativePath: string;
+  text: string;
+  check: boolean;
+  label: string;
+  buildCommand: string;
+}): void {
   const outputPath = join(options.root, options.relativePath);
-  const serialized = serializeStableJson(options.value);
 
   if (options.check) {
     const current = existsSync(outputPath)
       ? readFileSync(outputPath, "utf8")
       : "";
-    if (current !== serialized) {
+    if (current !== options.text) {
       throw new Error(
         `[${options.label}] STALE - ${options.relativePath} is out of date. Run: ${options.buildCommand}`,
       );
@@ -98,5 +122,6 @@ export function writeOrCheckGeneratedJson(options: {
     return;
   }
 
-  writeFileSync(outputPath, serialized, "utf8");
+  mkdirSync(dirname(outputPath), { recursive: true });
+  writeFileSync(outputPath, options.text, "utf8");
 }

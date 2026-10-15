@@ -2,7 +2,12 @@
 // alongside BI-B5011ACE so the plan contract actually gates in the bare-runner
 // CI test job).
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
+import { EXIT_CANDIDATE_MERGE_CONFLICT } from "./sandbox-freshness.mjs";
 import {
   createLocalIntegrationPlan,
   createProductionArtifactIdentity,
@@ -13,6 +18,10 @@ import {
   resolveCommandInvocation,
   isHostProcessLaunchFailure,
   EXIT_STAGE_INCONCLUSIVE,
+  DELEGATED_BUILD_STRATEGY,
+  buildIsDelegated,
+  defaultBuildStrategy,
+  localBuildStrategy,
 } from "./local-integration-ci.mjs";
 
 describe("createLocalIntegrationPlan", () => {
@@ -87,6 +96,8 @@ describe("createLocalIntegrationPlan", () => {
       mode: "single-branch",
       siblingBranches: [],
       hostPlatform: "linux",
+      // These assert the LOCAL build path, now an explicit opt-in (BI-3A14308C).
+      env: { DPF_LOCAL_CI_BUILD_STRATEGY: "local" },
     });
 
     assert.deepEqual(plan.commands.map((command) => command.join(" ")), [
@@ -124,6 +135,8 @@ describe("createLocalIntegrationPlan", () => {
       mode: "single-branch",
       siblingBranches: [],
       hostPlatform: "win32",
+      // These assert the LOCAL build path, now an explicit opt-in (BI-3A14308C).
+      env: { DPF_LOCAL_CI_BUILD_STRATEGY: "local" },
       slotKey: "slot-0",
     });
     assert.equal(plan.commands.at(-1).join(" "),
@@ -288,6 +301,8 @@ describe("createLocalIntegrationPlan", () => {
       mode: "single-branch",
       siblingBranches: [],
       hostPlatform: "linux",
+      // These assert the LOCAL build path, now an explicit opt-in (BI-3A14308C).
+      env: { DPF_LOCAL_CI_BUILD_STRATEGY: "local" },
     });
     const commands = plan.commands.map((command) => command.join(" "));
     const typecheckIndex = commands.indexOf(
@@ -325,6 +340,8 @@ describe("createLocalIntegrationPlan", () => {
       mode: "single-branch",
       siblingBranches: [],
       hostPlatform: "win32",
+      // These assert the LOCAL build path, now an explicit opt-in (BI-3A14308C).
+      env: { DPF_LOCAL_CI_BUILD_STRATEGY: "local" },
     });
 
     assert.ok(plan.commands.map((command) => command.join(" ")).includes(
@@ -631,5 +648,159 @@ describe("a stage reporting itself inconclusive is not a verdict (BI-27D3DCCD)",
     const result = runOne(EXIT_STAGE_INCONCLUSIVE);
     assert.deepEqual(result.failedCommand, ["node", "scripts/local-ci-typecheck-runner.mjs"]);
     assert.equal(result.completedCommandCount, 0);
+  });
+});
+
+describe("production build delegated to the merge queue (BI-3A14308C)", () => {
+  const base = {
+    candidateBranch: "fix/example",
+    siblingBranches: [],
+    mode: "single-branch",
+  };
+
+  it("is the default on every host: the plan ends at vitest and builds nothing", () => {
+    for (const hostPlatform of ["win32", "linux", "darwin"]) {
+      const plan = createLocalIntegrationPlan({ ...base, hostPlatform, env: {} });
+      assert.equal(plan.buildStrategy, DELEGATED_BUILD_STRATEGY);
+      const flat = plan.commands.map((command) => command.join(" "));
+      assert.ok(flat.some((command) => command.includes("local-ci-vitest-runner.mjs")));
+      assert.ok(!flat.some((command) => command.includes("local-ci-bounded-build.mjs")), hostPlatform);
+      assert.ok(!flat.some((command) => / next build$/.test(command)), hostPlatform);
+      assert.match(plan.commands.at(-1).join(" "), /local-ci-vitest-runner\.mjs/);
+    }
+  });
+
+  it("builds locally only when the operator asks", () => {
+    assert.equal(defaultBuildStrategy("win32", { DPF_LOCAL_CI_BUILD_STRATEGY: "local" }), "docker-build");
+    assert.equal(defaultBuildStrategy("linux", { DPF_LOCAL_CI_BUILD_STRATEGY: "local" }), "host-next");
+    assert.equal(defaultBuildStrategy("linux", { DPF_LOCAL_CI_BUILD_STRATEGY: "docker-build" }), "docker-build");
+    assert.equal(defaultBuildStrategy("win32", { DPF_LOCAL_CI_BUILD_STRATEGY: "nonsense" }), DELEGATED_BUILD_STRATEGY);
+    assert.equal(localBuildStrategy("win32"), "docker-build");
+  });
+
+  it("names the merge queue as the build owner instead of inventing an artifact", () => {
+    const artifact = createProductionArtifactIdentity({ buildStrategy: DELEGATED_BUILD_STRATEGY, integrationTreeSha: "abc" });
+    assert.equal(artifact.kind, "delegated");
+    assert.equal(artifact.identity, DELEGATED_BUILD_STRATEGY);
+    assert.ok(buildIsDelegated(DELEGATED_BUILD_STRATEGY));
+    assert.ok(!buildIsDelegated("docker-build"));
+  });
+
+  it("never reuses a verdict across delegated and local runs", () => {
+    const delegated = createToolchainFingerprint({ buildStrategy: DELEGATED_BUILD_STRATEGY });
+    const local = createToolchainFingerprint({ buildStrategy: "docker-build" });
+    assert.notEqual(delegated.toolchainFingerprint, local.toolchainFingerprint);
+  });
+});
+
+// BI-FCC1DCB2. A candidate that does not merge cleanly onto origin/main used to
+// leave this runner with git's raw exit 1. The wrapper read that as a product
+// failure, demanded a completion checkpoint the stopped run could not have, and
+// rewrote it to `blocked_control_plane_starvation`, so authors retried for
+// hours a gate that only needed them to merge main. These cases use a REAL git
+// repository, because the contract is what git does on a conflict.
+describe("a candidate that conflicts with the base is a typed merge-conflict verdict (BI-FCC1DCB2)", () => {
+  const GIT_ISOLATION = [
+    "-c", "core.hooksPath=/dev/null",
+    "-c", "user.email=gate@test.invalid",
+    "-c", "user.name=gate-test",
+    "-c", "commit.gpgsign=false",
+  ];
+
+  function git(cwd, ...args) {
+    const result = spawnSync("git", [...GIT_ISOLATION, ...args], { cwd, encoding: "utf8" });
+    if (result.status !== 0) throw new Error(`git ${args.join(" ")} failed: ${result.stderr}`);
+    return result.stdout.trim();
+  }
+
+  /** main and topic both edit f.txt and g.json; topic also adds clean.txt. */
+  function conflictingRepo() {
+    const dir = mkdtempSync(join(tmpdir(), "dpf-merge-conflict-"));
+    git(dir, "init", "-q", "-b", "main");
+    writeFileSync(join(dir, "f.txt"), "a\n");
+    writeFileSync(join(dir, "g.json"), "{\"v\":0}\n");
+    git(dir, "add", ".");
+    git(dir, "commit", "-qm", "base");
+    git(dir, "checkout", "-qb", "topic");
+    writeFileSync(join(dir, "f.txt"), "topic\n");
+    writeFileSync(join(dir, "g.json"), "{\"v\":1}\n");
+    writeFileSync(join(dir, "clean.txt"), "clean\n");
+    git(dir, "add", ".");
+    git(dir, "commit", "-qm", "topic");
+    const topicSha = git(dir, "rev-parse", "HEAD");
+    git(dir, "checkout", "-q", "main");
+    writeFileSync(join(dir, "f.txt"), "main\n");
+    writeFileSync(join(dir, "g.json"), "{\"v\":2}\n");
+    git(dir, "commit", "-qam", "main moved");
+    git(dir, "checkout", "-qB", "local-integration/slot-0/topic", "main");
+    return { dir, topicSha };
+  }
+
+  function runIn(dir, plan) {
+    const errors = [];
+    const outcome = executeLocalIntegrationPlan(plan, {
+      baseEnv: process.env,
+      platform: process.platform,
+      now: () => 0,
+      log: () => {},
+      error: (line) => errors.push(line),
+      spawnSyncImpl: (command, args, options) => spawnSync(
+        command,
+        command === "git" ? [...GIT_ISOLATION, ...args] : args,
+        { ...options, cwd: dir, stdio: options?.stdio === "inherit" ? "ignore" : options?.stdio },
+      ),
+    });
+    return { outcome, errors };
+  }
+
+  it("exits the merge-conflict code and names every conflicting path", () => {
+    const { dir, topicSha } = conflictingRepo();
+    try {
+      const { outcome, errors } = runIn(dir, {
+        baseRef: "origin/main",
+        commands: [
+          ["git", "merge", "--no-ff", "--no-edit", "--signoff", topicSha],
+          ["node", "-e", "process.exit(0)"],
+        ],
+      });
+
+      assert.equal(outcome.status, EXIT_CANDIDATE_MERGE_CONFLICT);
+      assert.deepEqual(outcome.mergeConflict, {
+        mergedRef: topicSha,
+        baseRef: "origin/main",
+        paths: ["f.txt", "g.json"],
+      });
+      assert.equal(outcome.completedCommandCount, 0, "nothing after the merge runs");
+      assert.match(errors.join("\n"), /merge-conflict/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves the scratch workspace out of the half-merged state", () => {
+    const { dir, topicSha } = conflictingRepo();
+    try {
+      runIn(dir, { baseRef: "origin/main", commands: [["git", "merge", "--no-ff", "--no-edit", "--signoff", topicSha]] });
+      const mergeHead = spawnSync("git", ["rev-parse", "-q", "--verify", "MERGE_HEAD"], { cwd: dir, encoding: "utf8" });
+      assert.notEqual(mergeHead.status, 0, "MERGE_HEAD must not survive the conflict");
+      assert.equal(git(dir, "status", "--porcelain"), "");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("a git merge that fails WITHOUT unmerged paths keeps git's own status", () => {
+    const { dir } = conflictingRepo();
+    try {
+      const { outcome } = runIn(dir, {
+        baseRef: "origin/main",
+        commands: [["git", "merge", "--no-ff", "--no-edit", "--signoff", "no-such-ref"]],
+      });
+      assert.notEqual(outcome.status, 0);
+      assert.notEqual(outcome.status, EXIT_CANDIDATE_MERGE_CONFLICT);
+      assert.equal(outcome.mergeConflict ?? null, null);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

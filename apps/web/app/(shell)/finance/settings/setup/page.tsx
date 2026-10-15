@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { prisma } from "@dpf/db";
+import { setupCurrencyPrefill } from "@/lib/org-locale/org-locale";
 import { FinanceSetupClient } from "@/components/finance/FinanceSetupClient";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 import { resolveFinanceSetupProfile } from "@/lib/finance/setup-profile";
 import { getSetupContext } from "@/lib/actions/setup-progress";
 
 export default async function FinanceSetupPage() {
-  const [storefrontConfig, setupContext] = await Promise.all([
+  const [storefrontConfig, setupContext, currencySettings] = await Promise.all([
     prisma.storefrontConfig.findFirst({
       include: {
         archetype: {
@@ -18,6 +19,7 @@ export default async function FinanceSetupPage() {
       },
     }),
     getSetupContext(),
+    prisma.orgSettings.findFirst({ select: { baseCurrency: true, countryCode: true } }),
   ]);
 
   const financeProfile = resolveFinanceSetupProfile({
@@ -59,7 +61,7 @@ export default async function FinanceSetupPage() {
           <FinanceSetupClient
             archetypeSlug={financeProfile.slug}
             archetypeName={financeProfile.archetypeName}
-            suggestedCurrency={setupContext?.suggestedCurrency ?? null}
+            suggestedCurrency={setupCurrencyPrefill(currencySettings, setupContext?.suggestedCurrency)}
           />
         </section>
 

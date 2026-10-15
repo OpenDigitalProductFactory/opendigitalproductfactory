@@ -112,6 +112,10 @@ export async function resolveBuildEngineSelection(
       .filter((entry) => entry[1].length > 0),
   );
   const structuralProviders = providers.filter((provider) => {
+    // Automatic mode ranks all qualified alternatives. A saved preference is
+    // not a hard provider pin: retaining only that provider can discard the
+    // healthy local fallback when the preferred account is unavailable.
+    if (opts.policy.mode === "auto") return true;
     if (provider.cliEngine === "claude" || provider.cliEngine === "codex" || provider.cliEngine === "grok" || provider.cliEngine === "opencode") {
       const preferred = preferredProviderIds.get(provider.cliEngine);
       return !preferred || preferred === provider.providerId;
@@ -121,7 +125,7 @@ export async function resolveBuildEngineSelection(
   const providerIds = structuralProviders.map((provider) => provider.providerId);
   const credentialIds = [...new Set(providerIds.map(resolveCredentialProviderId))];
 
-  const [credentials, engines, capacities, cliPools, healthByProvider, localOnlySetting] = await Promise.all([
+  const [credentials, engines, capacities, cliPools, healthByProvider, localOnlySetting, localConnections] = await Promise.all([
     prisma.credentialEntry.findMany({
       where: { providerId: { in: credentialIds } },
       select: {
@@ -146,12 +150,17 @@ export async function resolveBuildEngineSelection(
     }),
     loadProviderHealthBatch(providerIds, { now: nowMs }),
     getLocalOnlyInference(),
+    prisma.aiProviderConnection.findMany({
+      where: { connectionId: { in: ["provider-default-local", "provider-default-ollama"] } },
+      select: { providerId: true, status: true },
+    }),
   ]);
 
   const credentialById = new Map(credentials.map((row) => [row.providerId, row]));
   const engineById = new Map(engines.map((row) => [row.engineId, row]));
   const capacityByProvider = new Map(capacities.map((row) => [row.providerId, row]));
   const cliRetryByAdapter = new Map(cliPools.map((row) => [row.adapterType, row.resetAt?.getTime() ?? null]));
+  const localConnectionByProvider = new Map(localConnections.map(row => [row.providerId, row.status]));
 
   const candidates: BuildEngineCandidate[] = structuralProviders.flatMap((provider) => {
     const engine: BuildEngineId =
@@ -178,11 +187,14 @@ export async function resolveBuildEngineSelection(
     return [{
       engine,
       providerId: provider.providerId,
-      modelId: configuredModelForEngine(engine, config),
+      modelId: engine === "agentic" || preferredProviderIds.get(engine) === provider.providerId
+        ? configuredModelForEngine(engine, config)
+        : null,
       local: providerIsLocal(provider),
       registered: engine === "agentic" || engineRow !== undefined,
       present: engine === "agentic" || engineRow?.state?.present === true,
       providerStatus: provider.status,
+      providerConnectionStatus: localConnectionByProvider.get(provider.providerId),
       authMethod: provider.authMethod,
       credentialStatus: hasCredentialMaterial ? credential?.status ?? null : null,
       credentialExpiresAt: credential?.tokenExpiresAt?.getTime() ?? null,

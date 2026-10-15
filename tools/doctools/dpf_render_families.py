@@ -426,6 +426,8 @@ def build_drawing(engine, doc, request, warnings):
                 shape = doc.createInstance("com.sun.star.drawing.CustomShape")
                 page.add(shape)
                 shape.CustomShapeGeometry = (prop("Type", CUSTOM_SHAPE_TYPE[shape_spec["kind"]]),)
+                # Keep the spec's box: Draw otherwise shrinks a labelled shape to its text.
+                shape.TextAutoGrowHeight = False
             # Spec coordinates are millimetres; the API speaks 1/100 mm.
             shape.setPosition(Point(int(shape_spec["x"] * 100), int(shape_spec["y"] * 100)))
             shape.setSize(Size(int(shape_spec["width"] * 100), int(shape_spec["height"] * 100)))
@@ -441,6 +443,10 @@ def build_drawing(engine, doc, request, warnings):
                 shape.LineColor = colour(stroke)
             if shape_spec.get("label"):
                 shape.String = shape_spec["label"]
+                if boxed:
+                    # A box's label sits in its middle, as diagram tools draw it.
+                    shape.TextVerticalAdjust = uno.Enum("com.sun.star.drawing.TextVerticalAdjust", "CENTER")
+                    shape.ParaAdjust = uno.Enum("com.sun.star.style.ParagraphAdjust", "CENTER")
             if ink:
                 shape.CharColor = colour(ink)
             placed[shape_spec["id"]] = shape

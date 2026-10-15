@@ -15,6 +15,7 @@
 // revealing anything about the real user or organization.
 
 import { execInSandbox, isSandboxRunning } from "./sandbox";
+import { ensureGlobalSafeDirectoryCommand } from "@/lib/shared/git-safe-directory";
 import { prisma } from "@dpf/db";
 import { buildBuildStudioSandboxTargetInput } from "@/lib/runtime-coordination/build-studio-runtime";
 import {
@@ -29,13 +30,43 @@ import {
   shouldPreserveBuildBranchWork,
   type SandboxSourceCurrencySnapshot,
 } from "./sandbox-source-currency";
+import { isRecord } from "@/lib/shared/coerce";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const SANDBOX_PORT = Number(process.env.SANDBOX_PORT ?? "3035");
+import {
+  buildSandboxBuildCloneCommand,
+  buildSandboxBuildCloneRebaseCommand,
+  buildSandboxBuildCloneRemoveCommand,
+  buildSandboxBuildCloneSyncCommand,
+  buildWorkspaceMode,
+  parseBuildCloneRebaseOutput,
+} from "./build-clone";
+
 const WORKSPACE = "/workspace";
-const GIT_INDEX_LOCK = `${WORKSPACE}/.git/index.lock`;
+/**
+ * A git lock older than this is left over, never live: no sandbox git
+ * operation holds one for 15 minutes (an unshallow of the full history takes
+ * under a minute). BI-E4AD091E: a shallow.lock left at 2026-09-25 13:53 failed
+ * every history fetch for four days; the old guard only knew index.lock, and
+ * only cleared it when no git process ran anywhere — never, under load.
+ */
+const STALE_GIT_LOCK_MINUTES = 15;
+
+/** Remove stale lock files in a git dir and its per-worktree admin dirs. */
+export function buildSandboxStaleGitLockCleanupCommand(gitDir: string): string {
+  return [
+    `find ${gitDir} -maxdepth 1 -name '*.lock' -mmin +${STALE_GIT_LOCK_MINUTES} -exec rm -f {} + 2>/dev/null || true`,
+    `find ${gitDir}/worktrees -mindepth 2 -maxdepth 2 -name '*.lock' -mmin +${STALE_GIT_LOCK_MINUTES} -exec rm -f {} + 2>/dev/null || true`,
+  ].join("; ");
+}
+// `**/node_modules` (the entry itself) as well as its contents: a build
+// worktree shares each package's node_modules by SYMLINK, and git sees a
+// symlink as a file, so `**/node_modules/**` never matched it and the WIP
+// commit tracked packages/dpf-skill-pack/node_modules (FB-D671B016, 2026-09-25).
 const SANDBOX_GIT_STAGE_EXCLUDES = [
   ":!node_modules",
+  ":!**/node_modules",
   ":!**/node_modules/**",
   ":!.next",
   ":!**/.next/**",
@@ -52,6 +83,7 @@ const SANDBOX_GIT_STAGE_EXCLUDES = [
 ] as const;
 const SANDBOX_GIT_CLEAN_EXCLUDES = [
   ":!node_modules",
+  ":!**/node_modules",
   ":!**/node_modules/**",
   ":!.pnpm-store",
   ":!**/.pnpm-store/**",
@@ -72,6 +104,9 @@ function quoteGitPathspec(pathspec: string): string {
 export function buildSandboxGitAddCommand(): string {
   const excludes = SANDBOX_GIT_STAGE_EXCLUDES.map(quoteGitPathspec).join(" ");
   return [
+    // Untrack a node_modules symlink an earlier commit already captured, so
+    // `git add -u` cannot keep carrying it and the next commit removes it.
+    "git ls-files -z -- ':(glob)**/node_modules' | xargs -0 -r git rm -q --cached --",
     "git add -u",
     `git ls-files -z --others --exclude-standard -- . ${excludes} | xargs -0 -r git add --`,
   ].join(" && ");
@@ -119,10 +154,17 @@ export function buildSandboxCommitInFlightWorkCommand(workspace: string = WORKSP
 // cause of the data loss — the WWMD kernel chose this over a serial-rebuild
 // shortcut on Architecture-Over-Shortcuts grounds).
 //
-// node_modules is NOT reinstalled per worktree — it is shared from the canonical
-// /workspace install by symlink. Verified live in dpf-sandbox-1 (2026-06-19):
-// with the symlinks below, `tsc`, `react`, and `next` all resolve from the
-// worktree, so a per-build worktree needs no `pnpm install` of its own.
+// node_modules is installed PER WORKTREE, offline from the sandbox's pnpm store
+// (~1 min, no network). The 2026-06-19 design shared the canonical /workspace
+// install by symlink instead; two later facts retired it (2026-09-25,
+// FB-D671B016):
+//  - a shared install resolves the build's @dpf/* workspace packages into
+//    /workspace's source, not the build's own, and the in-platform gauntlet's
+//    stale-root guard (BI-A900EA3F) rightly refuses that whenever /workspace's
+//    baseline lags origin/main, which is always;
+//  - `ln -sfn` into a real directory (an agent's own `pnpm install`) nests a
+//    second node_modules inside it, and the tests load two copies of React.
+// Symlinks left by the old design are removed; a real install is kept.
 //
 // These are the lifecycle PRIMITIVES (slice 1). Wiring them into
 // startBuildBranch + threading the per-build workdir through the dispatchers is
@@ -164,10 +206,9 @@ export function resolveBuildWorkdir(buildId: string, workspace: string = WORKSPA
     : workspace;
 }
 
-// node_modules trees shared from the canonical install into each worktree by
-// symlink: the repo root plus the web app and the workspace packages whose
-// node_modules the build/typecheck toolchain resolves through. Adding a new
-// package that a build must compile against means adding its node_modules here.
+// node_modules paths the retired shared-install design symlinked into each
+// worktree. Any that are still symlinks are removed before the worktree's own
+// install, so nothing resolves into /workspace.
 const WORKTREE_SHARED_NODE_MODULES = [
   "node_modules",
   "apps/web/node_modules",
@@ -178,24 +219,38 @@ const WORKTREE_SHARED_NODE_MODULES = [
 
 /**
  * Create a build's isolated worktree at buildWorktreePath(buildId), checked out
- * to `branchRef` (its `build/<buildId>` branch), with node_modules shared from
- * the canonical /workspace install via symlink — no per-worktree `pnpm install`.
+ * to `branchRef` (its `build/<buildId>` branch), with its own node_modules
+ * installed offline from the sandbox's pnpm store.
  * Idempotent: force-removes any stale worktree at the path and prunes the
  * registry first, so a re-dispatch never trips on a leftover worktree. The
  * `--force` on `worktree add` lets the same branch be (re)attached after a prior
  * crash left the registry pointing at a now-gone path.
  */
+/** Offline-first dependency install for a build tree, skipped once it has one. */
+function buildTreeInstallStep(buildId: string, path: string): string {
+  return `{ [ -d ${path}/node_modules/.pnpm ] || (cd ${path} && { CI=true pnpm install --offline --frozen-lockfile >/tmp/dpf-worktree-install-${buildId}.log 2>&1 || CI=true pnpm install --frozen-lockfile >>/tmp/dpf-worktree-install-${buildId}.log 2>&1; }); }`;
+}
+
 export function buildSandboxWorktreeAddCommand(
   buildId: string,
   branchRef: string,
   workspace: string = WORKSPACE,
 ): string {
   const path = buildWorktreePath(buildId, workspace);
-  // `ln -sfn` so re-linking an already-provisioned worktree is a no-op rather
-  // than an error — the reuse branch below relies on it.
-  const symlinks = WORKTREE_SHARED_NODE_MODULES.map(
-    (rel) => `ln -sfn ${workspace}/${rel} ${path}/${rel}`,
-  ).join(" && ");
+  // Idempotent, so the reuse branch below can re-assert it on every ensure:
+  // drop links left by the shared-install design, then install only when the
+  // worktree has no real install yet. Offline first (the sandbox store already
+  // holds every locked package); online only if the branch changed the lockfile.
+  // `node_modules` also goes in the repository's shared info/exclude, so a
+  // branch cut before .gitignore ignored links never shows one as untracked.
+  const excludeFile = `"$(git rev-parse --git-common-dir)/info/exclude"`;
+  const install = `(cd ${path} && { CI=true pnpm install --offline --frozen-lockfile >/tmp/dpf-worktree-install-${buildId}.log 2>&1 || CI=true pnpm install --frozen-lockfile >>/tmp/dpf-worktree-install-${buildId}.log 2>&1; })`;
+  const symlinks = [
+    `mkdir -p "$(git rev-parse --git-common-dir)/info"`,
+    `{ grep -qx node_modules ${excludeFile} 2>/dev/null || echo node_modules >> ${excludeFile}; }`,
+    ...WORKTREE_SHARED_NODE_MODULES.map((rel) => `{ [ ! -L ${path}/${rel} ] || rm -f ${path}/${rel}; }`),
+    `{ [ -d ${path}/node_modules/.pnpm ] || ${install}; }`,
+  ].join(" && ");
   // An orphaned directory — present on disk but unknown to git because the
   // registry under .git/worktrees is gone — defeats both halves of the
   // recreate: `worktree remove` refuses it ("is not a working tree") and
@@ -379,23 +434,52 @@ function sandboxGitPrelude(): string {
     // harmless no-op, and gets applied on the very next prelude call once the
     // repo exists — well before any checkout/worktree-add/commit runs.
     `git -C ${WORKSPACE} config --local core.hooksPath /dev/null >/dev/null 2>&1 || true`,
-    `if [ -f "${GIT_INDEX_LOCK}" ]; then for _dpf_git_wait in 1 2 3 4 5; do if ! pgrep -x git >/dev/null 2>&1; then break; fi; sleep 1; done; if [ -f "${GIT_INDEX_LOCK}" ] && ! pgrep -x git >/dev/null 2>&1; then rm -f "${GIT_INDEX_LOCK}"; fi; fi`,
-    `git config --global --add safe.directory "${WORKSPACE}" >/dev/null 2>&1 || true`,
+    buildSandboxStaleGitLockCleanupCommand(`${WORKSPACE}/.git`),
+    // Build clones (M1) have their own git dir under .builds/<id>/.git.
+    `for _dpf_g in ${WORKSPACE}/${BUILD_WORKTREE_ROOT_SEGMENT}/*/.git; do [ -d "$_dpf_g" ] && { ${buildSandboxStaleGitLockCleanupCommand('"$_dpf_g"')}; }; done; true`,
+    ensureGlobalSafeDirectoryCommand(`"${WORKSPACE}"`),
     // BI-518B5F69: git's ownership check is per worktree path (and the shared
     // .git/worktrees/<id>), so the single /workspace exception does not cover
     // the isolated build worktrees under /workspace/.builds — every second
     // build failed plan→build with "dubious ownership". The sandbox is a
     // single-tenant root container, so the wildcard is the honest allowance.
     // Guarded so repeated preludes do not grow the config.
-    `git config --global --get-all safe.directory 2>/dev/null | grep -qx '\\*' || git config --global --add safe.directory '*' >/dev/null 2>&1 || true`,
+    ensureGlobalSafeDirectoryCommand("'*'"),
   ].join(" && ");
 }
 
+/**
+ * Held by every sandbox git command (BI-3D7569C7). Every build runs git
+ * against the one shared /workspace index, and after a portal swap the resume
+ * sweep starts about ten builds at once. On the sandbox image 9/10 concurrent
+ * root commits failed on index.lock; 0/10 under this lock. Kernel-held, so a
+ * dead holder releases it: nothing is ever stale. In /tmp because every exec
+ * runs in the one sandbox container, and /workspace is scrubbed by git clean.
+ */
+export const SANDBOX_GIT_LOCK_FILE = "/tmp/dpf-sandbox-git.lock";
+const SANDBOX_GIT_LOCK_WAIT_SECONDS = 300;
+
+function withSandboxGitLock(command: string): string {
+  // BusyBox flock has no -w, so the wait is a bounded -n retry. An image
+  // without flock keeps the old unserialized behaviour rather than failing.
+  const acquire = [
+    `if command -v flock >/dev/null 2>&1; then`,
+    `_dpf_lock_wait=0;`,
+    `until flock -n 9; do`,
+    `_dpf_lock_wait=$((_dpf_lock_wait + 1));`,
+    `if [ "$_dpf_lock_wait" -ge ${SANDBOX_GIT_LOCK_WAIT_SECONDS} ]; then echo "sandbox git lock busy for ${SANDBOX_GIT_LOCK_WAIT_SECONDS}s" >&2; exit 75; fi;`,
+    `sleep 1;`,
+    `done;`,
+    `fi`,
+  ].join(" ");
+  return `{ ${acquire}; ${command}; } 9>${SANDBOX_GIT_LOCK_FILE}`;
+}
+
 export function wrapSandboxGitCommand(command: string): string {
-  return [
+  return withSandboxGitLock([
     sandboxGitPrelude(),
     command,
-  ].join(" && ");
+  ].join(" && "));
 }
 
 async function execSandboxGit(command: string): Promise<string> {
@@ -516,10 +600,6 @@ async function refreshCurrentBranchFromTarget(args: {
   return before;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
 // ─── Client Identity ─────────────────────────────────────────────────────────
 
 type ClientIdentity = {
@@ -605,6 +685,28 @@ export async function isSandboxAvailable(): Promise<boolean> {
  *
  * Safe to call multiple times — skips if a baseline already exists.
  */
+export type SandboxRepoState = "has-commits" | "empty-repo" | "no-repo";
+
+/**
+ * One probe, one unambiguous word on its last line (BI-3D7569C7). The old
+ * probe echoed "yes" after `rev-parse --is-inside-work-tree`, which itself
+ * prints "true", so the output was never "yes" and every build start rebuilt
+ * the shared baseline.
+ */
+export function buildSandboxRepoStateProbeCommand(workspace: string = WORKSPACE): string {
+  return [
+    `if git -C ${workspace} rev-parse --is-inside-work-tree >/dev/null 2>&1; then`,
+    `if git -C ${workspace} rev-parse --verify --quiet HEAD >/dev/null 2>&1; then echo has-commits; else echo empty-repo; fi;`,
+    `else echo no-repo; fi`,
+  ].join(" ");
+}
+
+export function parseSandboxRepoState(output: string): SandboxRepoState {
+  const last = output.trim().split("\n").pop()?.trim();
+  if (last === "has-commits" || last === "empty-repo" || last === "no-repo") return last;
+  throw new Error(`Unrecognised sandbox repo probe output: ${JSON.stringify(output.slice(-200))}`);
+}
+
 async function ensureGitBaseline(identity: ClientIdentity): Promise<void> {
   // Configure identity first (idempotent)
   await execSandboxGit(
@@ -614,23 +716,18 @@ async function ensureGitBaseline(identity: ClientIdentity): Promise<void> {
     ].join(" && "),
   ).catch(() => {});
 
-  const isRepo = await execSandboxGit(
-    `git -C ${WORKSPACE} rev-parse --is-inside-work-tree 2>/dev/null && echo yes || echo no`,
-  ).catch(() => "no");
-
-  if (isRepo.trim() === "yes") {
-    // Repo already exists — ensure at least one commit, then return.
-    const commitCount = await execSandboxGit(
-      `git -C ${WORKSPACE} rev-list --count HEAD 2>/dev/null || echo 0`,
-    ).catch(() => "0");
-
-    if (commitCount.trim() !== "0") return; // Already has a baseline commit.
-  }
+  // BI-3D7569C7: no .catch fallback. A probe that cannot answer must stop the
+  // build start, never be read as "fresh" — the fresh path hard-resets the
+  // shared /workspace under every concurrent build.
+  const repoState = parseSandboxRepoState(
+    await execSandboxGit(buildSandboxRepoStateProbeCommand()),
+  );
+  if (repoState === "has-commits") return;
 
   // --- Fresh baseline ---
 
   // Step 1: git init if not already a repo
-  if (isRepo.trim() !== "yes") {
+  if (repoState === "no-repo") {
     await execSandboxGit(
       [
         `cd ${WORKSPACE}`,
@@ -713,7 +810,16 @@ async function provisionBuildWorktree(args: {
   await execSandboxGit(
     `git -C ${WORKSPACE} branch --list "${branchName}" | grep -q . || git -C ${WORKSPACE} branch "${branchName}" "${clientBranch}"`,
   );
-  await execSandboxGit(buildSandboxWorktreeAddCommand(buildId, branchName));
+  const path = buildWorktreePath(buildId);
+  await execSandboxGit(buildWorkspaceMode() === "clone"
+    ? buildSandboxBuildCloneCommand({
+      path,
+      branchRef: branchName,
+      workspace: WORKSPACE,
+      install: buildTreeInstallStep(buildId, path),
+      commitInFlight: buildSandboxCommitInFlightWorkCommand(path),
+    })
+    : buildSandboxWorktreeAddCommand(buildId, branchName));
   console.log(
     `[build-branch] Provisioned isolated worktree for ${JSON.stringify(branchName)} at ${JSON.stringify(buildWorktreePath(buildId))}`,
   );
@@ -741,6 +847,64 @@ export async function ensureBuildWorktree(buildId: string): Promise<{ materializ
   return { materialized: true, workdir };
 }
 
+export type BuildBranchRefreshOutcome =
+  | { status: "refreshed"; headSha: string; clientSha: string | null }
+  | { status: "conflict"; files: string[] }
+  | { status: "unsupported" | "client-not-refreshable" | "unknown"; reason: string };
+
+/**
+ * Bring a build's branch back onto upstream main (BI-76BD65E6). A build that
+ * waited at ship while main moved on is classed diverged, and publication is
+ * rightly refused: the PR lays the clone's touched files over current main.
+ *
+ * Uses the same steps a build start does. It fetches upstream, fast-forwards
+ * the shared client branch when it is purely behind, re-ensures the clone (so
+ * its view of client/* and origin/* is the fresh one), then rebases the build
+ * branch onto the client branch and records it back in the shared repo. It
+ * never resolves a conflict: the rebase is aborted and the files are reported.
+ *
+ * Clone mode only: in the shared-worktree modes a rebase would move /workspace
+ * under every other build.
+ */
+export async function refreshBuildBranchOntoUpstream(buildId: string): Promise<BuildBranchRefreshOutcome> {
+  if (!isBuildWorktreeIsolationEnabled() || buildWorkspaceMode() !== "clone") {
+    return { status: "unsupported", reason: "Refresh needs isolated build clones (DPF_BUILD_WORKSPACE_MODE=clone)." };
+  }
+  const identity = await getClientIdentity();
+  const checkedOut = (await execSandboxGit(`git -C ${WORKSPACE} rev-parse --abbrev-ref HEAD`)).trim();
+  if (checkedOut !== identity.clientBranch) {
+    return { status: "client-not-refreshable", reason: `${WORKSPACE} is on ${checkedOut || "no branch"}, not ${identity.clientBranch}.` };
+  }
+  if (!(await configureAndFetchUpstream(identity))) {
+    return { status: "client-not-refreshable", reason: "No upstream remote is configured to refresh from." };
+  }
+  let client: SandboxSourceCurrencySnapshot;
+  try {
+    client = await refreshCurrentBranchFromTarget({
+      buildId,
+      branchName: identity.clientBranch,
+      targetRef: "origin/main",
+      blockUnknown: true,
+    });
+  } catch (err) {
+    return { status: "client-not-refreshable", reason: (err as Error).message.slice(0, 300) };
+  }
+  if (client.recommendedAction !== "allow") {
+    return { status: "client-not-refreshable", reason: formatSandboxSourceCurrencySummary(client) };
+  }
+
+  const { workdir } = await ensureBuildWorktree(buildId);
+  const branchName = `build/${buildId}`;
+  await execSandboxGit(buildSandboxCommitInFlightWorkCommand(workdir)).catch(() => {});
+  const rebase = parseBuildCloneRebaseOutput(
+    await execSandboxGit(buildSandboxBuildCloneRebaseCommand(workdir, identity.clientBranch)),
+  );
+  if (rebase.status === "conflict") return rebase;
+  if (rebase.status === "unknown") return { status: "unknown", reason: rebase.output };
+  await execSandboxGit(buildSandboxBuildCloneSyncCommand(workdir, branchName));
+  return { status: "refreshed", headSha: rebase.headSha, clientSha: client.headSha };
+}
+
 /**
  * Tear down a build's worktree (isolation-ON cleanup on promote/abandon/terminal).
  * Best-effort — the symlinked node_modules are not real files so removal never
@@ -749,7 +913,12 @@ export async function ensureBuildWorktree(buildId: string): Promise<{ materializ
  */
 export async function teardownBuildWorktree(buildId: string): Promise<void> {
   if (!isBuildWorktreeIsolationEnabled()) return;
-  await execSandboxGit(buildSandboxWorktreeRemoveCommand(buildId)).catch((err) => {
+  // Clone mode records the branch in the shared repo before deleting the tree,
+  // so "keep the branch for audit/recovery" still holds (W1, M1).
+  const remove = buildWorkspaceMode() === "clone"
+    ? buildSandboxBuildCloneRemoveCommand(buildWorktreePath(buildId), `build/${buildId}`, WORKSPACE)
+    : buildSandboxWorktreeRemoveCommand(buildId);
+  await execSandboxGit(remove).catch((err) => {
     console.warn(
       `[build-branch] worktree teardown skipped (non-fatal): ${(err as Error).message?.slice(0, 200)}`,
     );
@@ -957,6 +1126,8 @@ export async function promoteBuildBranch(buildId: string): Promise<void> {
 
   await execSandboxGit(
     [
+      // A build clone holds its branch until synced; merge what it committed.
+      buildSandboxBuildCloneSyncCommand(buildWorktreePath(buildId), branchName),
       `cd ${WORKSPACE}`,
       `git checkout "${identity.clientBranch}"`,
       `git merge --no-ff "${branchName}" -m "feat: promote ${branchName}"`,

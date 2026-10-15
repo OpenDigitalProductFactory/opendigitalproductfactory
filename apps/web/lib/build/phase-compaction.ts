@@ -8,7 +8,7 @@
 //
 // The summary call uses taskType "analysis" (routes to a routine-tier model).
 
-import type { ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 
 export type PhaseName = "ideate" | "design" | "implement" | "review" | "ship" | string;
 

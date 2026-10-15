@@ -115,6 +115,7 @@ S0 and S1 run in parallel. After S2, three lines run independently: ingest (S3 â
 - The existing fixtures pass through the engine. After that, all ingestion paths use the engine.
 - Remove `mammoth`, `read-excel-file` and `pdf-parse`, add them to the sbom deny list, and ratchet down `sbom/baseline.json`.
 - Gate: `pnpm why` returns nothing for all three, and the image size delta is recorded.
+- Delivered 2026-09-26 (BI-D1B40D43). The precondition was met by BI-4E18BC28, BI-B470264D and BI-698B7F9A, and is proven against the real registry by `apps/web/lib/self-upgrade/doctools-source-lineage.network.test.ts`. One change from the BI's wording: Word-family files convert to `.odt` and sheets to `.ods`, and DPF reads that one format itself (`apps/web/lib/shared/odf-content.ts`, on the XML parser the S8 flat-ODG import already uses), instead of HTML and CSV. ODF keeps headings, typed cells (numbers, booleans, dates) and every sheet the Workbooks import needs, and those targets are already in the published image, so a portal paired with an older `dpf-doctools` still reads every format. PDF text uses a new `dpf-convert` mode, `--to txt --from pdf`, which runs `pdftotext` directly under the same containment; an older image still yields text, through LibreOffice. The dev-time reference-data generators read `.xlsx` with an in-house reader on fflate (`packages/db/scripts/lib/excel-sheet-reader.ts`), verified by regenerating both committed JSON files byte for byte.
 
 ## Out of scope
 

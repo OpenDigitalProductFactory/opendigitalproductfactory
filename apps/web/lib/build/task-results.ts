@@ -1,4 +1,5 @@
 import type { TruthNumericSnapshot } from "./progress-visibility-types";
+import { isRecord } from "../shared/coerce";
 
 export type NormalizedTaskResult = {
   taskIndex: number | null;
@@ -16,8 +17,6 @@ export type NormalizedTaskResults = {
   tasks: NormalizedTaskResult[];
   source: TruthNumericSnapshot;
 };
-
-type JsonRecord = Record<string, unknown>;
 
 const EMPTY_RESULTS: NormalizedTaskResults = {
   completedTasks: 0,
@@ -142,10 +141,6 @@ function normalizeFiles(value: unknown): string[] {
 
 function countCompleted(tasks: NormalizedTaskResult[]): number {
   return tasks.filter((task) => task.outcome === "DONE" || task.outcome === "DONE_WITH_CONCERNS").length;
-}
-
-function isRecord(value: unknown): value is JsonRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function stringOrNull(value: unknown): string | null {

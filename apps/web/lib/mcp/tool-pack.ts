@@ -12,7 +12,7 @@
 // still resolves through agent-grants.ts `TOOL_TO_GRANTS`; the pack mirrors it so
 // a test can assert the two never drift (the R3 authority-control safeguard).
 
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 
 /**
  * A tool handler, with the context fields the dispatch site (executeTool) passes

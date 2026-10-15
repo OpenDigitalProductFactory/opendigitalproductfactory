@@ -6,6 +6,12 @@
 // existed nothing read either, so a room could refuse hundreds of consecutive
 // wakes in silence. Reading state that is already written is the whole slice —
 // no new table, no new writer, no new tick.
+//
+// GPP Phase 3c PR-3c-4 (BI-8875C9DF): the same source also lists a graph room
+// with a stage past its deadline (a raised `marking.deadlines` notice whose
+// token is still on that stage), with the reason "Stage <title> is past its
+// deadline". A deadline never moves the work, so such a room is not stalled;
+// it is one item per room either way.
 
 import type { prisma } from "@dpf/db";
 
@@ -14,6 +20,9 @@ import { WORKROOM_DRIVE_STALL_TICKS } from "@/lib/work-management/workroom-drive
 import { resolveRoomOwner, type RoomOwner } from "@/lib/work-management/room-owner-ladder";
 import { STANDING_SHAPES } from "@/lib/work-management/standing-operations-shapes";
 import { readDeclaredWorkShapeKey } from "@/lib/work-management/work-shapes";
+import { openDeadlines } from "@/lib/work-management/drive-deadlines";
+import { readStoredDriveMarking } from "@/lib/work-management/drive-marking";
+import { resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 
 import type { AttentionItem, AttentionPortfolio } from "../types";
 
@@ -53,7 +62,28 @@ export type RoomStallRow = {
    *  item addressed to a derived owner would make the room look owned to the very
    *  surface reporting that it is not. */
   ladderOwner?: RoomOwner | null;
+  /** The latest blocked stage evidence's own words, when the room recorded one
+   *  (BI-A9998FBB): the coworker usually says exactly what it could not reach. */
+  blockedCause?: string | null;
+  /** Graph rooms only (GPP Phase 3c PR-3c-4): stages still marked whose deadline
+   *  notice was raised, in document order (drive-deadlines.ts openDeadlines). */
+  overdueStages?: Array<{ stageKey: string; stageTitle: string; description: string; raisedAt: string }>;
 };
+
+/** Refusals an appointment can actually clear. Anything else — above all a stage
+ *  whose coworker ran and left no result — is NOT fixed by naming an owner, and
+ *  telling the operator to appoint one sends them to do something that cannot
+ *  help (BI-A9998FBB: ten of 23 "Needs you" cards on 2026-10-01). */
+const APPOINTMENT_FIXES: ReadonlySet<string> = new Set([
+  "missing_explicit_coordinator",
+  "coordinator_authority_binding_ineligible",
+  "coordinator_jsi_ineligible",
+  "coordinator_lacks_authority",
+  "coordinator_ineligible",
+  "unknown_principal",
+]);
+
+const WRITEBACK_UNAVAILABLE = "executor_writeback_unavailable";
 
 /** Portfolio role as stored on the Workroom → the cockpit's portfolio key. */
 const PORTFOLIO_BY_ROLE: Record<string, AttentionPortfolio> = {
@@ -92,14 +122,19 @@ function readOverseerPrincipalRef(drive: Record<string, unknown>): string | unde
 export function projectRoomStall(row: RoomStallRow): AttentionItem | null {
   const drive = asRecord(row.drive);
   if (!drive) return null;
-  if (!STUCK_ACTIONS.has(drive.action as string)) return null;
-  if (row.consecutivePauses < STALL_TICK_THRESHOLD) return null;
+  const overdue = row.overdueStages ?? [];
+  const stuck = STUCK_ACTIONS.has(drive.action as string) && row.consecutivePauses >= STALL_TICK_THRESHOLD;
+  if (!stuck) return overdue.length > 0 ? projectRoomDeadline(row, drive, overdue) : null;
 
   const codes = readDeviationCodes(drive);
   const reason = typeof drive.reason === "string" ? drive.reason : "unknown";
   // The named deviations are the actionable part; the drive's own reason code is
   // the fallback when conformance recorded none (a budget or stop-condition halt).
-  const why = codes.length > 0 ? codes.join(", ") : reason;
+  const writeback = reason === WRITEBACK_UNAVAILABLE;
+  const why = writeback
+    ? `its coworker could not finish the current stage — ${row.blockedCause ? `it reported: "${row.blockedCause}"` : "the run left no result"}`
+    : codes.length > 0 ? codes.join(", ") : reason;
+  const appointmentHelps = [reason, ...codes].some((code) => APPOINTMENT_FIXES.has(code));
 
   // An unowned room must NOT be assigned to a principal — the missing principal
   // is the finding. It goes to the operator, who can appoint one.
@@ -113,8 +148,9 @@ export function projectRoomStall(row: RoomStallRow): AttentionItem | null {
   })}`;
 
   // Naming who should drive turns a diagnosis into a one-step instruction.
-  const suggestion =
-    row.ladderOwner === undefined
+  const suggestion = writeback
+    ? " Appointing an owner will not change this. It retries on the next cycle; what unblocks it is the cause above, usually a missing tool or an unavailable AI provider."
+    : !appointmentHelps || row.ladderOwner === undefined
       ? ""
       : row.ladderOwner
         ? ` Its work shape says ${row.ladderOwner.principalRef} should drive it (resolved from the ${row.ladderOwner.source}) — appoint them to unblock it.`
@@ -126,7 +162,7 @@ export function projectRoomStall(row: RoomStallRow): AttentionItem | null {
     title: `${row.title} — stalled`,
     context:
       `${row.title} (${row.capsuleId}) has refused ${row.consecutivePauses} consecutive wakes: ` +
-      `${why}. It will keep refusing until this is resolved.${suggestion}`,
+      `${why}.${writeback ? "" : " It will keep refusing until this is resolved."}${suggestion}${overdueSentence(overdue)}`,
     decisionClass: { scorability: "unscorable" },
     riskClass: "read",
     triage: {
@@ -153,6 +189,60 @@ export function projectRoomStall(row: RoomStallRow): AttentionItem | null {
 }
 
 
+/** "Stage <title> is past its deadline", once per overdue stage (PR-3c-4). Empty when none is. */
+function overdueSentence(overdue: NonNullable<RoomStallRow["overdueStages"]>): string {
+  return overdue.map((stage) => ` Stage ${stage.stageTitle} is past its deadline (${stage.description}).`).join("");
+}
+
+/**
+ * A room that is moving but has a stage past its deadline (GPP Phase 3c
+ * PR-3c-4, design §8). The deadline never moves the work, so the room is not
+ * stalled: it is listed so its owner sees which stage is overdue. One item per
+ * room, under the same id as a stall, so a room that is both is listed once.
+ */
+function projectRoomDeadline(
+  row: RoomStallRow,
+  drive: Record<string, unknown>,
+  overdue: NonNullable<RoomStallRow["overdueStages"]>,
+): AttentionItem {
+  const overseer = readOverseerPrincipalRef(drive);
+  const roomHref = `/workspace/cases/${encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: row.capsuleId })}`;
+  return {
+    id: `workroom-stall:${row.capsuleId}`,
+    source: "workroom-stall",
+    title: `${row.title} — past its deadline`,
+    context:
+      `${row.title} (${row.capsuleId}):${overdueSentence(overdue)} ` +
+      "The work has not been moved; it stays at that stage until the stage is done or someone decides on it.",
+    decisionClass: { scorability: "unscorable" },
+    riskClass: "read",
+    triage: {
+      timeToAct: "none",
+      residueReason: "room-stalled",
+      blastRadius: overseer
+        ? "this room's outcome, and anything nested under it"
+        : "this room's outcome — and it has no owner to escalate to",
+      decideEffort: "judgment",
+      irreversible: false,
+    },
+    createdAtIso: overdue.map((stage) => stage.raisedAt).sort()[0] ?? row.updatedAt.toISOString(),
+    actions: [{ kind: "open-in-context", label: "Open room", href: roomHref }],
+    deepLink: roomHref,
+    audience: { operator: true, ...(overseer ? { assigneePrincipalId: overseer } : {}) },
+    ...(row.portfolioRole && PORTFOLIO_BY_ROLE[row.portfolioRole]
+      ? { portfolio: PORTFOLIO_BY_ROLE[row.portfolioRole] }
+      : {}),
+  };
+}
+
+/** The still-marked stages whose deadline notice was raised, from the room's stored drive marking (PR-3c-4). */
+function readOverdueStages(drive: unknown, scopeClaims: unknown): NonNullable<RoomStallRow["overdueStages"]> {
+  const shape = resolveWorkShapeClaim(scopeClaims);
+  if (!shape || !asRecord(asRecord(drive)?.marking)) return [];
+  const read = readStoredDriveMarking({ workroomDrive: drive }, shape, null);
+  return read.ok ? openDeadlines(shape, read.data.marking).map(({ stageKey, stageTitle, description, raisedAt }) => ({ stageKey, stageTitle, description, raisedAt })) : [];
+}
+
 /** What the ladder resolves for a room, from its shape. Explicit appointments are
  *  not consulted here: a room that HAS an explicit coordinator is not refusing on
  *  missing_explicit_coordinator, so it never reaches this projection unowned. */
@@ -177,6 +267,7 @@ type StallScanRow = {
   stuckSince: string | null;
   /** scopeClaims, from which the room's workShape ref is read. */
   scopeClaims: unknown;
+  id: string;
 };
 
 /**
@@ -201,15 +292,28 @@ export async function loadRoomStallRows(db: Db): Promise<RoomStallRow[]> {
       w."workspaceState" -> 'workroomDrive' AS "drive",
       w."scopeClaims"    AS "scopeClaims",
       COALESCE((w."workspaceState" #>> '{workroomDrive,hold,stuckTicks}')::int, 0) AS "consecutivePauses",
-      w."workspaceState" #>> '{workroomDrive,hold,stuckSince}' AS "stuckSince"
+      w."workspaceState" #>> '{workroomDrive,hold,stuckSince}' AS "stuckSince",
+      w."id"             AS "id"
     FROM "WorkCapsule" w
     WHERE w."archivedAt" IS NULL
       AND w."status" NOT IN ('abandoned', 'archived', 'complete')
-      AND w."workspaceState" #>> '{workroomDrive,action}' IN ('pause', 'escalate')
-      AND COALESCE((w."workspaceState" #>> '{workroomDrive,hold,stuckTicks}')::int, 0) >= ${STALL_TICK_THRESHOLD}
+      AND (
+        (
+          w."workspaceState" #>> '{workroomDrive,action}' IN ('pause', 'escalate')
+          AND COALESCE((w."workspaceState" #>> '{workroomDrive,hold,stuckTicks}')::int, 0) >= ${STALL_TICK_THRESHOLD}
+        )
+        -- GPP Phase 3c PR-3c-4: a graph room with a raised stage-deadline notice.
+        OR (
+          jsonb_typeof(w."workspaceState" #> '{workroomDrive,marking,deadlines}') = 'object'
+          AND w."workspaceState" #> '{workroomDrive,marking,deadlines}' <> '{}'::jsonb
+        )
+      )
     ORDER BY "consecutivePauses" DESC, w."updatedAt" ASC
     LIMIT ${ROOM_STALL_SCAN_LIMIT}
   `;
+  const causes = await loadBlockedCauses(db, rows
+    .filter((r) => asRecord(r.drive)?.reason === WRITEBACK_UNAVAILABLE)
+    .map((r) => r.id));
   return rows.map((r) => ({
     capsuleId: r.capsuleId,
     title: r.title,
@@ -219,7 +323,27 @@ export async function loadRoomStallRows(db: Db): Promise<RoomStallRow[]> {
     consecutivePauses: Number(r.consecutivePauses),
     stuckSince: r.stuckSince,
     ladderOwner: resolveLadderOwner(r.scopeClaims),
+    blockedCause: causes.get(r.id) ?? null,
+    overdueStages: readOverdueStages(r.drive, r.scopeClaims),
   }));
+}
+
+/**
+ * The latest blocked stage evidence for the writeback-stalled rooms only — a
+ * separate, bounded read on the (workCapsuleId, kind, recordedAt) index, so the
+ * stall scan itself stays a single read of room rows (BI-70B2ED84).
+ */
+async function loadBlockedCauses(db: Db, roomIds: string[]): Promise<Map<string, string>> {
+  if (roomIds.length === 0) return new Map();
+  const rows = await db.$queryRaw<Array<{ id: string; summary: string }>>`
+    SELECT DISTINCT ON (a."workCapsuleId") a."workCapsuleId" AS "id", a."summary" AS "summary"
+    FROM "WorkCapsuleActivity" a
+    WHERE a."workCapsuleId" = ANY(${roomIds})
+      AND a."kind" = 'evidence-recorded'
+      AND a."payload" ->> 'outcome' = 'blocked'
+    ORDER BY a."workCapsuleId", a."recordedAt" DESC
+  `;
+  return new Map(rows.map((row) => [row.id, row.summary.slice(0, 280)]));
 }
 
 export async function loadWorkroomStallItems(db: Db): Promise<AttentionItem[]> {

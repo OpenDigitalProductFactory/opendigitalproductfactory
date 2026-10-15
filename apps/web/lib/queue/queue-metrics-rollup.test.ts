@@ -105,3 +105,103 @@ describe("aggregateQueueMetrics", () => {
     expect(call[1].toISOString()).toBe("2026-07-07T00:00:00.000Z");
   });
 });
+
+// BI-927FF076: the history read must stay scoped to Workroom stage items. An
+// unscoped read pulled 90 days of every item with events today (8.6M
+// federation-demand rows on the live install) and exhausted the portal heap.
+describe("aggregateQueueMetrics history scope (BI-927FF076)", () => {
+  const stageEv = (itemId: string, transition: string, iso: string, outcome: string | null = null): QueueTelemetryRow => ({
+    queueKey: "wr:delivery:build",
+    itemKind: "workroom-stage",
+    itemId,
+    transition,
+    outcome,
+    occurredAt: at(iso),
+  });
+  const demandEv = (itemId: string, iso: string): QueueTelemetryRow => ({
+    queueKey: "cwq:federation-delivery",
+    itemKind: "federation-demand",
+    itemId,
+    transition: "enqueued",
+    outcome: null,
+    occurredAt: at(iso),
+  });
+
+  it("asks history only for workroom-stage items, never for other queues' items", async () => {
+    const events: QueueTelemetryRow[] = [
+      demandEv("D1", "2026-07-06T01:00:00Z"),
+      demandEv("D2", "2026-07-06T01:01:00Z"),
+      ev("A", "enqueued", "2026-07-06T01:00:00Z"),
+      stageEv("cap1:build", "finished", "2026-07-06T03:00:00Z", "success"),
+    ];
+    const fetchItemHistory = vi.fn(async (_items: readonly { itemKind: string; itemId: string }[], _before: Date) => [
+      stageEv("cap1:build", "enqueued", "2026-07-05T20:00:00Z"),
+      stageEv("cap1:build", "started", "2026-07-05T21:00:00Z"),
+    ]);
+    const upserts: QueueSnapshotRow[] = [];
+    await aggregateQueueMetrics(
+      {
+        fetchEvents: async () => events,
+        fetchItemHistory,
+        fetchLiveCounts: async () => new Map(),
+        upsertSnapshot: async (row) => {
+          upserts.push(row);
+        },
+      },
+      { at: at("2026-07-06T12:00:00Z") },
+    );
+
+    expect(fetchItemHistory).toHaveBeenCalledTimes(1);
+    expect(fetchItemHistory.mock.calls[0]![0]).toEqual([{ itemKind: "workroom-stage", itemId: "cap1:build" }]);
+    // History still completes the stage item's duration across the day boundary.
+    const stage = upserts.find((u) => u.queueKey === "wr:delivery:build")!;
+    expect(stage.throughput).toBe(1);
+    expect(stage.cycleP50Ms).toBe(7 * 60 * 60 * 1000);
+    // Other queues are measured from the window alone, as before.
+    const demand = upserts.find((u) => u.queueKey === "cwq:federation-delivery")!;
+    expect(demand.arrivals).toBe(2);
+  });
+
+  it("makes no history read when no workroom-stage item moved in the window", async () => {
+    const fetchItemHistory = vi.fn(async () => [] as QueueTelemetryRow[]);
+    await aggregateQueueMetrics(
+      {
+        fetchEvents: async () => [demandEv("D1", "2026-07-06T01:00:00Z"), ev("A", "enqueued", "2026-07-06T01:00:00Z")],
+        fetchItemHistory,
+        fetchLiveCounts: async () => new Map(),
+        upsertSnapshot: async () => {},
+      },
+      { at: at("2026-07-06T12:00:00Z") },
+    );
+    expect(fetchItemHistory).not.toHaveBeenCalled();
+  });
+});
+
+describe("defaultRollupDeps.fetchItemHistory (BI-927FF076)", () => {
+  it("scopes the history query to workroom-stage items in the WHERE clause", async () => {
+    vi.resetModules();
+    const findMany = vi.fn(async (_args: unknown) => [] as unknown[]);
+    vi.doMock("@dpf/db", () => ({ prisma: { queueTelemetryEvent: { findMany } } }));
+    try {
+      const { defaultRollupDeps } = await import("./queue-metrics-rollup");
+      const deps = await defaultRollupDeps();
+      await deps.fetchItemHistory!(
+        [
+          { itemKind: "federation-demand", itemId: "D1" },
+          { itemKind: "workroom-stage", itemId: "cap1:build" },
+        ],
+        at("2026-07-06T00:00:00Z"),
+      );
+      expect(findMany).toHaveBeenCalled();
+      for (const call of findMany.mock.calls) {
+        const where = (call[0] as { where: Record<string, unknown> }).where;
+        expect(where.itemKind).toBe("workroom-stage");
+        expect(where.queueKey).toEqual({ startsWith: "wr:" });
+        expect((where.itemId as { in: string[] }).in).toEqual(["cap1:build"]);
+      }
+    } finally {
+      vi.doUnmock("@dpf/db");
+      vi.resetModules();
+    }
+  });
+});

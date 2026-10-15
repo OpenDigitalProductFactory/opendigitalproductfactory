@@ -5,17 +5,45 @@ enum PrincipalSensitivity {
   restricted
 }
 
+enum AutomationPersonaProfile {
+  platform_manager
+  developer
+  backlog_manager
+  employee
+  developer_backlog_manager
+}
+
 model User {
   id                               String                              @id @default(cuid())
   email                            String                              @unique
   passwordHash                     String
   isActive                         Boolean                             @default(true)
   isSuperuser                      Boolean                             @default(false)
+  automationVerificationId         String?
+  automationProfile                AutomationPersonaProfile?
+  automationSlot                   Int?
+  automationExpiresAt              DateTime?
+  automationVerification           RuntimeVerification? @relation(fields: [automationVerificationId], references: [id], onDelete: Restrict)
   createdAt                        DateTime                            @default(now())
+  /// Last time this person used the workforce portal: stamped at sign-in and,
+  /// at most hourly, on shell renders. Null = not seen since tracking began.
+  /// Tells an operator that approvals routed to this account have no reader
+  /// (BI-61DE8177). Not a security signal; sessions outlive it.
+  lastSeenAt                       DateTime?
+  /// When this account's live work was handed over (BI-F25A5FC7) and who
+  /// approved it. Null = never. Rules that name an owner for NEW work (the
+  /// workroom drive's task owner, the scheduled-task seeds, the install-owner
+  /// fallback) skip a handed-over account; historical requester/creator fields
+  /// keep naming it (BI-858FDE5A).
+  workHandedOverAt                 DateTime?
+  workHandedOverById               String?
+  workHandedOverBy                 User?                               @relation("UserWorkHandedOverBy", fields: [workHandedOverById], references: [id], onDelete: SetNull)
+  workHandoversApproved            User[]                              @relation("UserWorkHandedOverBy")
   approvedProposals                AgentActionProposal[]               @relation("ProposalDecisions")
   agentThreads                     AgentThread[]
   apiTokens                        ApiToken[]
   mcpApiTokens                     McpApiToken[]
+  portfolioAccountableSets         Portfolio[]                         @relation("PortfolioAccountableSetBy")
   ownedOAuthClients                OAuthClient[]                       @relation("OAuthClientOwner")
   oauthAuthorizationCodes          OAuthAuthorizationCode[]
   oauthAuthorityBindings           AuthorityBinding[]
@@ -40,6 +68,9 @@ model User {
   policyRulesCreated               PolicyRule[]                        @relation("PolicyRuleCreator")
   pushDevices                      PushDeviceRegistration[]
   taskRequirementsApproved         TaskRequirement[]                   @relation("TaskRequirementApprover")
+  epicPortfoliosConfirmed          EpicPortfolio[]                     @relation("EpicPortfolioConfirmedBy")
+  portfolioBudgetsSet              PortfolioBudgetPeriod[]             @relation("PortfolioBudgetSetBy")
+  budgetReservations               BudgetReservation[]                 @relation("BudgetReservationActor")
   taskRequirementsCreated          TaskRequirement[]                   @relation("TaskRequirementCreator")
   teamMemberships                  TeamMembership[]
   groups                           UserGroup[]
@@ -87,6 +118,10 @@ model User {
   workbookRowsCreated              WorkbookRow[]                       @relation("WorkbookRowCreatedBy")
   workbookViewsCreated             WorkbookView[]                      @relation("WorkbookViewCreatedBy")
   payrollTaxRulesRatified          PayrollTaxRule[]                    @relation("PayrollTaxRuleRatifiedBy")
+
+  @@unique([automationVerificationId, automationProfile, automationSlot], map: "User_automation_fixture_key")
+  @@index([automationExpiresAt, id])
+  @@index([workHandedOverById])
 }
 
 model UserGroup {
@@ -189,10 +224,15 @@ model Principal {
   sponsorPrincipalId                  String?
   authorityMode                       String?
   sensitivityClearance                PrincipalSensitivity[]              @default([public])
+  /// BCP-47 UI language the person chose (EP-6B33A840 L0.1). Null = follow the org default / browser.
+  preferredLanguage                   String?
+  /// IANA timezone the person chose. Null = the org's timezone.
+  timeZone                            String?
   aliases                             PrincipalAlias[]
   deferredBacklogItems                BacklogItem[]                       @relation("BacklogDeferralOwner")
   sponsorPrincipal                    Principal?                          @relation("PrincipalSponsor", fields: [sponsorPrincipalId], references: [id])
   accountableForOrganizations         Organization[]                      @relation("OrganizationTopAccountable")
+  accountableForPortfolios            Portfolio[]                         @relation("PortfolioAccountable")
   sponsoredPrincipals                 Principal[]                         @relation("PrincipalSponsor")
   communicationChannelBindings        CommunicationChannelBinding[]
   mailboxAccountsCreated              MailboxAccount[]                    @relation("MailboxAccountCreatedBy")
@@ -203,6 +243,7 @@ model Principal {
   // host-attributes side table keyed by `principalId`. 1:1 cardinality.
   edgeNode                            EdgeNode?                           @relation("EdgeNodeIdentity")
   edgeNodesApproved                   EdgeNode[]                          @relation("EdgeNodeApprover")
+  mcpServerToolsApproved              McpServerTool[]                     @relation("McpServerToolApprover")
   // EP-MSP-FEDERATION · B1 — a federated peer (another DPF deployment) is a
   // Principal(kind="federated-peer") with FederationLink as its side table,
   // exactly as EdgeNode is for an edge agent. No parallel identity table.
@@ -255,6 +296,16 @@ model Principal {
   createdWorkrooms                    Workroom[]                          @relation("WorkroomCreator")
   requestedWorkrooms                  Workroom[]                          @relation("WorkroomRequester")
   workroomParticipations              WorkroomParticipant[]               @relation("WorkroomParticipantPrincipal")
+
+  controlledSubstanceHandlerGrants         ControlledSubstanceHandlerAuthorization[] @relation("ControlledSubstanceHandler")
+  controlledSubstanceHandlerGrantsIssued   ControlledSubstanceHandlerAuthorization[] @relation("ControlledSubstanceHandlerGrantor")
+  controlledSubstanceHandlerGrantsRevoked  ControlledSubstanceHandlerAuthorization[] @relation("ControlledSubstanceHandlerRevoker")
+  controlledSubstanceMovementsActed        ControlledSubstanceMovement[]             @relation("ControlledSubstanceMovementActor")
+  controlledSubstanceMovementsWitnessed    ControlledSubstanceMovement[]             @relation("ControlledSubstanceMovementWitness")
+  controlledSubstanceCountsTaken           ControlledSubstanceCount[]                @relation("ControlledSubstanceCountTaker")
+  controlledSubstanceCountsWitnessed       ControlledSubstanceCount[]                @relation("ControlledSubstanceCountWitness")
+  controlledSubstanceDiscrepanciesOpened   ControlledSubstanceDiscrepancy[]          @relation("ControlledSubstanceDiscrepancyOpener")
+  controlledSubstanceDiscrepanciesResolved ControlledSubstanceDiscrepancy[]          @relation("ControlledSubstanceDiscrepancyResolver")
 
   @@index([sponsorPrincipalId])
   @@index([kind, authorityMode])
@@ -572,6 +623,14 @@ model Organization {
 
   // FK-leading: resolve the accountable principal's organizations, and detect
   // orphaned bindings when a principal is retired.
+  controlledSubstanceProducts              ControlledSubstanceProduct[]
+  controlledSubstanceRegisters             ControlledSubstanceRegister[]
+  controlledSubstanceHandlerAuthorizations ControlledSubstanceHandlerAuthorization[]
+  controlledSubstanceMovements             ControlledSubstanceMovement[]
+  controlledSubstanceCounts                ControlledSubstanceCount[]
+  controlledSubstanceCountLines            ControlledSubstanceCountLine[]
+  controlledSubstanceDiscrepancies         ControlledSubstanceDiscrepancy[]
+
   @@index([topAccountablePrincipalId])
 }
 
@@ -720,6 +779,12 @@ model McpApiToken {
   // same DB but the FK semantics here are loose-coupled (we don't want a
   // build delete to cascade-delete the audit trail).
   buildId       String?
+  // BI-05715F4C: when kind = "workroom_session", the Workroom (capsuleId, WC-*)
+  // and run whose agent-CLI session this token authorizes. Loose references like
+  // buildId: the room issues and revokes the token, and a room delete must not
+  // erase the audit trail. The token is refused for any other room.
+  workroomRef   String?
+  runRef        String?
   name          String
   tokenHash     String    @unique
   prefix        String
@@ -765,6 +830,9 @@ model McpApiToken {
   // Lookup: "all active ephemeral tokens for build X" — used by the
   // ship-exit hook to find rows to revoke.
   @@index([buildId, revokedAt])
+  // Lookup: "every live session credential of room X" — revoked when the room's
+  // session stops, its executor changes, or it reaches a terminal status.
+  @@index([workroomRef, revokedAt])
   // Lookup: "revoke everything issued to this client" — the per-client revoke
   // control in Admin > Platform Development.
   @@index([oauthClientId, revokedAt])

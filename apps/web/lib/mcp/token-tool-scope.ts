@@ -5,7 +5,7 @@
 // run. Two private copies of this rule would drift, and the second one is the
 // one a later scope change would miss.
 import type { McpTokenScope } from "@/lib/auth/mcp-api-token";
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import { expandGrants } from "@/lib/tak/agent-grants";
 
 export function normalizeTokenScope(token: { scope: string; capability: string }): McpTokenScope {

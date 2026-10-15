@@ -11,7 +11,7 @@
 //   element      prisma:model:<ModelName>
 //   relationship prisma:relation:<FromModel>:<fieldName>:<ToModel>
 //
-// The core diff (`planMirror`) is pure and fully unit-tested; DB/Neo4j writes
+// The core diff (`planMirror`) is pure and fully unit-tested; DB/graph writes
 // are a thin applier layered on top.
 
 import type {

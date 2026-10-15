@@ -100,7 +100,7 @@ describe("AskCoworkerButton", () => {
     });
   });
 
-  it("previews context and requires confirmation before dispatch", () => {
+  it.each([undefined, false])("previews context and requires confirmation before dispatch (primary=%s)", primaryAction => {
     const events: CustomEvent[] = [];
     const handler = (e: Event) => events.push(e as CustomEvent);
     document.addEventListener("open-agent-panel", handler);
@@ -115,10 +115,13 @@ describe("AskCoworkerButton", () => {
           expectedNextStep: "A short answer and one next action.",
           confirmLabel: "Send to my COO",
         }}
+        primaryAction={primaryAction}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Ask coworker" }));
+    const trigger = screen.getByRole("button", { name: "Ask coworker" });
+    expect(trigger.hasAttribute("data-dpf-primary-action")).toBe(primaryAction !== false);
+    fireEvent.click(trigger);
     expect(events).toHaveLength(0);
     expect(screen.getByRole("region", { name: "Review what your COO will receive" })).toBeTruthy();
     expect(screen.getByText("Provider recommendation and safeguard evidence.")).toBeTruthy();

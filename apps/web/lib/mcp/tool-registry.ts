@@ -6,7 +6,7 @@
 // Composition fails fast on a duplicate tool name across packs so two packs can
 // never silently claim the same tool.
 
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "./tool-pack";
 
 export type ToolRegistry = {

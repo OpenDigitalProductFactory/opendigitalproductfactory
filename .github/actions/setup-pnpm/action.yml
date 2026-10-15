@@ -20,9 +20,31 @@ runs:
       shell: bash
       run: corepack enable
 
+    # Corepack downloads the pinned pnpm on first use. That download has died
+    # mid-transfer on GitHub runners (Node's bundled undici asserting
+    # `!this.paused` in Parser.finish), which left PNPM_STORE_PATH empty and
+    # failed the cache step with "Input required and not supplied: path".
+    # Fetch pnpm explicitly with retries, then refuse an empty store path.
+    - name: Fetch pinned pnpm (retried)
+      shell: bash
+      run: |
+        for attempt in 1 2 3; do
+          if corepack install; then exit 0; fi
+          echo "::warning::corepack install failed (attempt ${attempt}/3); retrying"
+          sleep $((attempt * 5))
+        done
+        echo "::error::corepack could not fetch the pinned pnpm after 3 attempts"
+        exit 1
+
     - name: Resolve pnpm store path
       shell: bash
-      run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+      run: |
+        store_path="$(pnpm store path --silent)"
+        if [ -z "$store_path" ]; then
+          echo "::error::pnpm store path is empty; pnpm is not usable on this runner"
+          exit 1
+        fi
+        echo "PNPM_STORE_PATH=$store_path" >> "$GITHUB_ENV"
 
     - name: Cache pnpm store
       uses: actions/cache@v6

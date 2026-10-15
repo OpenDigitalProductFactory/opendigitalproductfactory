@@ -4,7 +4,11 @@
 # Runs INSIDE the image: smoke.sh passes this file as `bash -c` and the macro
 # fixture on stdin, so no host path is mounted.
 #
-#   macro-probe.sh <profile: permissive|hardened> <MacroExecutionMode: 0-9>
+#   macro-probe.sh <profile: permissive|hardened|render> <MacroExecutionMode: 0-9>
+#
+# `render` is dpf-render's per-run profile: the hardened one with only
+# DisableActiveContent lifted (dpf_render_uno.render_profile, BI-BFF142A1), so
+# the probe proves macros stay off on the trusted rendering path as well.
 #
 # It loads the fixture through UNO as a VISIBLE document. That matters: headless
 # `--convert-to` loads documents hidden and fires no document events at all,
@@ -12,10 +16,11 @@
 # A visible load does fire them, which makes this a real control:
 #   permissive profile + USE_CONFIG (3)          -> the marker MUST appear
 #   hardened profile + ALWAYS_EXECUTE_NO_WARN (4) -> the marker must NOT appear
+#   render profile + ALWAYS_EXECUTE_NO_WARN (4)   -> the marker must NOT appear
 # Prints exactly one line: MARKER=present or MARKER=absent.
 set -euo pipefail
 
-PROFILE="${1:?profile: permissive|hardened}"
+PROFILE="${1:?profile: permissive|hardened|render}"
 MODE="${2:?MacroExecutionMode}"
 export HOME=/tmp/probe-home
 mkdir -p "$HOME" /tmp/probe/profile/user /tmp/probe/out
@@ -24,6 +29,11 @@ cat > /tmp/probe/macro.fodt
 case "$PROFILE" in
   hardened)
     cp /opt/dpf-doctools/profile/user/registrymodifications.xcu /tmp/probe/profile/user/ ;;
+  render)
+    sed 's#\(oor:name="DisableActiveContent" oor:op="fuse"><value>\)true#\1false#' \
+      /opt/dpf-doctools/profile/user/registrymodifications.xcu > /tmp/probe/profile/user/registrymodifications.xcu
+    grep -q 'oor:name="DisableActiveContent" oor:op="fuse"><value>false' /tmp/probe/profile/user/registrymodifications.xcu \
+      || { echo "render profile: DisableActiveContent was not lifted" >&2; exit 2; } ;;
   permissive)
     cat > /tmp/probe/profile/user/registrymodifications.xcu <<'XCU'
 <?xml version="1.0" encoding="UTF-8"?>

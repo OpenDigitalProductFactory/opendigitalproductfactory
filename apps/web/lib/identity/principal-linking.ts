@@ -653,3 +653,81 @@ export async function resolvePrincipalIdForAgent(
 
   return alias?.principal?.principalId ?? null;
 }
+
+/**
+ * The narrow read surface the human-principal helpers need. Method syntax keeps
+ * the Prisma client (and a caller's transaction or test double) assignable.
+ */
+export type HumanPrincipalLookupDb = {
+  principal: { findFirst(args: unknown): Promise<{ id: string } | null> };
+};
+
+/**
+ * Resolve a User id to the relational `Principal.id` of its ACTIVE HUMAN
+ * principal — the value a foreign key such as
+ * `Organization.topAccountablePrincipalId` or a Workroom owner references.
+ *
+ * Distinct from `resolvePrincipalIdForUser` (which returns the public
+ * `Principal.principalId`) and from `resolvePrincipalRecordIdForSessionIdentity`
+ * (which ignores kind and status). An inactive or non-human principal carrying
+ * the same `user` alias resolves to null: nobody is accountable through it.
+ */
+export async function resolveActiveHumanPrincipalRecordIdForUser(
+  userId: string,
+  db: HumanPrincipalLookupDb = prisma as unknown as HumanPrincipalLookupDb,
+): Promise<string | null> {
+  const aliasValue = userId.trim();
+  if (!aliasValue) return null;
+  const principal = await db.principal.findFirst({
+    where: {
+      kind: "human",
+      status: "active",
+      aliases: { some: { aliasType: "user", issuer: INTERNAL_ISSUER, aliasValue } },
+    },
+    select: { id: true },
+  });
+  return principal?.id ?? null;
+}
+
+export type ActiveHumanPrincipalOption = {
+  /** Relational Principal.id — the FK target. */
+  id: string;
+  displayName: string;
+  email: string;
+};
+
+/**
+ * Active human principals linked to an active User, for a person picker
+ * (e.g. choosing the organization's accountable owner). Sorted by name.
+ */
+export async function listActiveHumanPrincipalsForUsers(
+  db: Pick<typeof prisma, "principal" | "user"> = prisma,
+): Promise<ActiveHumanPrincipalOption[]> {
+  const principals = await db.principal.findMany({
+    where: {
+      kind: "human",
+      status: "active",
+      aliases: { some: { aliasType: "user", issuer: INTERNAL_ISSUER } },
+    },
+    select: {
+      id: true,
+      displayName: true,
+      aliases: { where: { aliasType: "user", issuer: INTERNAL_ISSUER }, select: { aliasValue: true } },
+    },
+  });
+  if (principals.length === 0) return [];
+
+  const userIds = principals.flatMap((principal) => principal.aliases.map((alias) => alias.aliasValue));
+  const users = await db.user.findMany({
+    where: { id: { in: userIds }, isActive: true },
+    select: { id: true, email: true },
+  });
+  const emailByUserId = new Map(users.map((user) => [user.id, user.email]));
+
+  return principals
+    .flatMap((principal) => {
+      const email = principal.aliases.map((alias) => emailByUserId.get(alias.aliasValue)).find(Boolean);
+      return email ? [{ id: principal.id, displayName: principal.displayName, email }] : [];
+    })
+    .sort((a, b) => a.displayName.localeCompare(b.displayName));
+}

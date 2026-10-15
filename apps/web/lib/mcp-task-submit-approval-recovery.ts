@@ -6,16 +6,16 @@ import { executeAutonomousWorkTool } from "@/lib/tak/autonomous-work-run";
 
 import { recoverStaleApprovedRemoteTask } from "./mcp-task-approval-recovery";
 import {
+  classifyApprovalCallAgainst,
+  type ClassifyApprovalCall,
+} from "@/lib/coworker/approval-classification";
+import {
   describeExternalApprovalLocation,
   withExternalApprovalLocation,
 } from "./mcp/external-approval-location";
 import { isStaleApprovalRecoveryRun } from "./mcp-task-approval-recovery-contract";
-import type {
-  ExistingRemoteTask,
-  RemoteTaskSubmitAuth,
-  RemoteTaskSubmitOutcome,
-  RemoteTaskSubmitParams,
-} from "./mcp-task-submit";
+import type { ExistingRemoteTask, RemoteTaskSubmitAuth, RemoteTaskSubmitOutcome } from "./mcp-task-submit-types";
+import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 
 /**
  * Resuming an approved writer and recovering an expired one are the same
@@ -40,6 +40,7 @@ const GOVERNED_AUDIT_PARAMETER_KEYS = new Set([
   "_surface",
   "_takAlignment",
   "_takPrecondition",
+  "_approvalResume",
 ]);
 
 function originalToolParameters(value: unknown): Record<string, unknown> | null {
@@ -211,6 +212,20 @@ export async function resumeApprovedTask(input: ApprovedTaskResume): Promise<Rem
  * unexpired envelopes. `failed` is accepted only by the transaction's narrower
  * exact-Workroom-head prerequisite check.
  */
+/**
+ * The replacement envelope's lifetime follows the stored writer call's current
+ * classification (BI-0012E6CA). The registry is bound here, at a module already
+ * inside the web import cycle, so the recovery transaction stays out of it.
+ */
+const classifyAgainstToolRegistry: ClassifyApprovalCall = async (call) => {
+  try {
+    const { PLATFORM_TOOLS } = await import("./mcp-tools");
+    return classifyApprovalCallAgainst(PLATFORM_TOOLS, call);
+  } catch {
+    return "unclassified";
+  }
+};
+
 const RECOVERABLE_STATUSES = new Set(["working", "stalled", "input-required", "failed"]);
 
 /**
@@ -243,7 +258,7 @@ export async function recoverStaleApprovalOnReplay(input: {
     userId: input.token.userId,
     agentId: resolveCanonicalAgentId(input.parsed.agentId),
     writerToolName: input.writerToolName,
-  });
+  }, undefined, classifyAgainstToolRegistry);
 
   if (recovery?.kind === "fresh-approval-required") {
     return {

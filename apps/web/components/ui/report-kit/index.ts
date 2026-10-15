@@ -91,4 +91,4 @@ export {
   STATUS_INTENT,
   type Intent,
   type IntentStyle,
-} from "./statusColors";
+} from "@/lib/ui-model/statusColors";

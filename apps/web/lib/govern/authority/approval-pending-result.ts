@@ -6,7 +6,10 @@
 // let grow further.
 
 // Type-only, so this does not create a runtime cycle with the execute seam.
-import type { GovernedExecuteResult } from "@/lib/mcp-governed-execute";
+import type { GovernedExecuteResult } from "@/lib/mcp-governed-execute-types";
+import { envelopeInboxRoute } from "@/lib/coworker/envelope-routes";
+import { GOVERNED_REJECTION_DISPOSITION } from "./governed-rejection-disposition";
+import { isRecord } from "@/lib/shared/coerce";
 
 /**
  * A call parked on a human decision, worded so the model can tell it apart from
@@ -39,10 +42,15 @@ export function approvalPendingResult(
   const message = [
     `${toolName} is waiting for a person to approve it.`,
     envelopeId ? `Approval request ${envelopeId}${expiresAt ? `, which expires ${expiresAt}` : ""}.` : null,
+    envelopeId ? `Open ${envelopeInboxRoute(envelopeId)}. Check its outcome with get_my_approval_status after the person decides.` : null,
     detail,
     `${toolName} is available to you — this is not a missing tool or a denied grant,`,
     "and calling it again will not advance it. Report that the work is awaiting approval.",
-    "Once a person approves, the same call runs once; calling it again afterwards returns that recorded outcome.",
+    // BI-0012E6CA: the person may be away for hours. A pending approval must
+    // never stall unrelated work, and a lapse is visible to them, not silent.
+    "Do not wait on it: carry on with any other work that does not depend on this call.",
+    "If nobody answers before it expires, the person sees it as expired unanswered and can ask again; you may also send a fresh request later.",
+    "Once a person approves, the same call runs once; calling it again afterwards returns that recorded outcome, whether it succeeded or failed.",
   ].filter(Boolean).join(" ");
   return {
     success: false,
@@ -55,6 +63,7 @@ export function approvalPendingResult(
     // string, and each did it differently.
     disposition: "awaiting-person",
     governance: { rejected: "approval_required" },
+    ...(envelopeId ? { data: { envelopeId, expiresAt, inboxHref: envelopeInboxRoute(envelopeId), statusTool: "get_my_approval_status" } } : {}),
   };
 }
 
@@ -63,20 +72,50 @@ export function approvalPendingResult(
  * BI-12E5DD91 — the identical call already ran once on a person's approval
  * (the platform ran it, or an earlier retry did). Return that recorded outcome
  * so a retry neither runs the action twice nor puts a second card in front of
- * the person.
+ * the person. A failed run is returned as the failure it was (BI-F4EB23C1):
+ * asking again cannot change a refusal, so it must not mint another card.
  */
 export function settledApprovalResult(
   toolName: string,
-  settled: { envelopeId: string; result: unknown },
+  settled: { envelopeId: string; status: "executed" | "failed"; result: unknown },
 ): GovernedExecuteResult {
   const recorded = settled.result && typeof settled.result === "object"
     ? settled.result as Record<string, unknown>
     : {};
+  const recordedMessage = typeof recorded["message"] === "string" ? ` ${recorded["message"]}` : "";
+  const recordedData = recorded["data"];
+  // Older admin command results marked a captured nonzero exit successful.
+  // This exact producer marker proves failure; other tools' prose proves none.
+  const legacyCommandFailure = toolName === "admin_run_command"
+    && recorded["message"] === "Command exited with error.";
+  if (settled.status === "failed" || recorded["success"] === false || legacyCommandFailure) {
+    const recordedError = typeof recorded["error"] === "string" ? recorded["error"] : null;
+    // BI-5B34D277: a governed refusal settles the approval before the tool
+    // runs, so "already ran" would misreport a call that never ran.
+    const refusedBeforeRun = recordedError !== null && recordedError in GOVERNED_REJECTION_DISPOSITION;
+    const happened = recordedError === "approval_execution_unknown" || Object.keys(recorded).length === 0
+      ? `was approved by a person (approval request ${settled.envelopeId}) but its execution outcome could not be confirmed`
+      : refusedBeforeRun
+      ? `was approved by a person (approval request ${settled.envelopeId}) but refused before it ran`
+      : `already ran once after a person approved it (approval request ${settled.envelopeId}) and did not complete`;
+    return {
+      success: false,
+      error: "approval_outcome_failed",
+      message: `${toolName} ${happened}`
+        + (recordedError ? ` (${recordedError}).` : ".") + recordedMessage
+        + " Calling it again returns this same outcome and does not ask the person again."
+        + " Fix the cause first; once the approval window has closed, a new request can be made.",
+      data: {
+        ...(isRecord(recordedData) ? recordedData : recordedData !== undefined ? { recordedData } : {}),
+        envelopeId: settled.envelopeId, recordedError, inboxHref: envelopeInboxRoute(settled.envelopeId),
+      },
+      governance: { approvalReplayOf: settled.envelopeId },
+    } as GovernedExecuteResult;
+  }
   return {
     success: true,
     message: `${toolName} already ran once after a person approved it (approval request ${settled.envelopeId}). `
-      + `This is its recorded outcome; it was not run again.`
-      + (typeof recorded["message"] === "string" ? ` ${recorded["message"]}` : ""),
+      + `This is its recorded outcome; it was not run again.` + recordedMessage,
     ...(recorded["data"] !== undefined ? { data: recorded["data"] as GovernedExecuteResult["data"] } : {}),
     ...(typeof recorded["entityId"] === "string" ? { entityId: recorded["entityId"] } : {}),
     governance: { approvalReplayOf: settled.envelopeId },

@@ -86,6 +86,7 @@ describe("completeBacklogItemTransition", () => {
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({
           kind: "evaluated",
           item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "refactor" },
@@ -107,6 +108,8 @@ describe("completeBacklogItemTransition", () => {
           evidenceRefs: [],
           requiredStatementIds: [],
         }),
+        // Never let a unit test reach the real clone or the network.
+        resolveMergeDelivery: async () => "signal-unavailable",
       },
     });
 
@@ -125,6 +128,7 @@ describe("completeBacklogItemTransition", () => {
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({ kind: "evaluated", item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "feature" }, verdict: { allowed: true, noOp: false, normalizedManifest: null, blockers: [], nextAction: null } }),
         reconcileObjectives: () => ({ state: "missing", baselineId: "BASE-1", evidenceRefs: [], requiredStatementIds: ["OBJ-1"] }),
         resolveMergeDelivery: async () => "not-merged" as const,
@@ -148,6 +152,7 @@ describe("completeBacklogItemTransition", () => {
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({
           kind: "evaluated",
           item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "doc" },
@@ -191,6 +196,7 @@ describe("completeBacklogItemTransition", () => {
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({
           kind: "evaluated",
           item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "feature" },
@@ -232,6 +238,7 @@ describe("completeBacklogItemTransition", () => {
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({
           kind: "evaluated",
           item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "bug" },
@@ -275,6 +282,7 @@ describe("completeBacklogItemTransition", () => {
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({
           kind: "evaluated",
           item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "bug" },
@@ -306,6 +314,7 @@ describe("completeBacklogItemTransition", () => {
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({ kind: "evaluated", item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "feature" }, verdict: { allowed: true, noOp: false, normalizedManifest: { workClass: "implementation", evidenceActivityIds: ["E-1"], useActiveBuildEvidence: false }, blockers: [], nextAction: null } }),
         reconcileObjectives: () => ({ state: "pass", baselineId: "BASE-1", evidenceRefs: ["E-1"], requiredStatementIds: ["OBJ-1"] }),
         resolveMergeDelivery: async () => "not-merged" as const,
@@ -335,6 +344,7 @@ describe("completeBacklogItemTransition", () => {
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({ kind: "evaluated", item: { id: "row-1", itemId: "BI-1", status: "done", workType: "feature" }, verdict: { allowed: true, noOp: false, normalizedManifest: { workClass: "implementation", evidenceActivityIds: ["E-1"], useActiveBuildEvidence: false }, blockers: [], nextAction: null } }),
         reconcileObjectives: () => ({ state: "pass", baselineId: "BASE-1", evidenceRefs: ["E-1"], requiredStatementIds: ["OBJ-1"] }),
         resolveMergeDelivery: async () => "not-merged" as const,
@@ -364,6 +374,7 @@ describe("completeBacklogItemTransition", () => {
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         // No hand-built manifest — delivery would otherwise read `missing`.
         resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
         reconcileObjectives: () => ({ state: "pass", baselineId: "BASE-1", evidenceRefs: ["E-1"], requiredStatementIds: ["OBJ-1"] }),
@@ -374,6 +385,30 @@ describe("completeBacklogItemTransition", () => {
     expect(seen[0]?.deliveryEvidence).toBe("pass");
     // The stale "missing production-build" reason is cleared, not carried.
     expect(seen[0]?.requirementReasons?.DELIVERY_EVIDENCE_REQUIRED ?? []).toEqual([]);
+  });
+
+  it("BI-B04A0203: the merge signal is asked with the item's work type, so an attested doc PR closes only a doc item", async () => {
+    const fake = fakeDb();
+    const asked: Array<{ itemRowId: string; itemId: string; workType?: string | null }> = [];
+    await completeBacklogItemTransition({
+      db: fake.db,
+      itemId: "BI-1",
+      expectedStatus: "in-progress",
+      resolution: "Landed through the merge queue.",
+      completionEvidence: {},
+      actor,
+      authority,
+      dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
+        resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
+        reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
+        resolveMergeDelivery: async (args) => { asked.push(args); return "merged" as const; },
+        projectReadiness: (() => projected("allowed")) as never,
+      },
+    });
+    expect(asked).toHaveLength(1);
+    expect(asked[0]?.workType).toBe("feature");
+    expect(asked[0]?.itemId).toBe("BI-1");
   });
 
   it("BI-B04A0203: an UNMERGED branch falls back to the recorded delivery manifest", async () => {
@@ -388,6 +423,7 @@ describe("completeBacklogItemTransition", () => {
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
         reconcileObjectives: () => ({ state: "missing", baselineId: "BASE-1", evidenceRefs: [], requiredStatementIds: ["OBJ-1"] }),
         resolveMergeDelivery: async () => "not-merged" as const,
@@ -410,6 +446,7 @@ describe("completeBacklogItemTransition", () => {
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
         // No objective baseline to reconcile (the whole point — merged platform work).
         reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
@@ -436,6 +473,7 @@ describe("completeBacklogItemTransition", () => {
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
         reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
         resolveMergeDelivery: async () => "merged" as const,
@@ -468,6 +506,7 @@ describe("merge signal unavailability is reported, never disguised as a negative
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
         reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
         resolveMergeDelivery: async () => "signal-unavailable" as const,
@@ -504,6 +543,7 @@ describe("merge signal unavailability is reported, never disguised as a negative
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
         reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
         resolveMergeDelivery: async () => "signal-unavailable" as const,
@@ -528,6 +568,7 @@ describe("merge signal unavailability is reported, never disguised as a negative
       actor,
       authority,
       dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
         resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
         reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
         resolveMergeDelivery: async () => "not-merged" as const,
@@ -537,6 +578,79 @@ describe("merge signal unavailability is reported, never disguised as a negative
     });
     const reasons = seen[0]?.completion.requirementReasons;
     expect((reasons?.DELIVERY_EVIDENCE_REQUIRED ?? []).join(" ")).not.toContain("could not run");
+  });
+});
+
+describe("a failed completion manifest names itself, and is never disguised as a missing reviewer (BI-9D327C32)", () => {
+  // Measured on BI-1F69D3F8: the manifest declared `ux: verified` but cited no
+  // `ux_verified` row, so `validateApplicability` failed it. Because the change
+  // had merged through branch protection the DELIVERY dimension passed anyway,
+  // the manifest's blockers were dropped, and the author was told to dispatch an
+  // independent acceptance reviewer — with `reviewerRoutes: []`. Two refusals,
+  // cleared by adding one evidence row and changing nothing else.
+  const failedManifest = {
+    kind: "evaluated" as const,
+    item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "feature" },
+    verdict: {
+      allowed: false,
+      noOp: false,
+      normalizedManifest: { workClass: "implementation" as const, evidenceActivityIds: ["act-1"] },
+      acceptanceEvidenceRefs: [],
+      blockers: [{ code: "missing-dimension", message: "Completion evidence is missing ux", dimension: "ux" }],
+      nextAction: "Record fresh evidence for ux with record_execution_evidence, then retry with those activity IDs.",
+    },
+  };
+
+  it("carries the manifest's own blockers onto acceptance when a merge has already excused delivery", async () => {
+    const fake = fakeDb(1, "feature", { scopeKind: "platform", digitalProductId: null, activeBuild: null, productObjectiveWork: [] });
+    const seen: Array<{ completion: { requirementReasons?: Partial<Record<string, string[]>> } }> = [];
+    await completeBacklogItemTransition({
+      db: fake.db,
+      itemId: "BI-1",
+      expectedStatus: "in-progress",
+      resolution: "Merged through the queue; the manifest promises a ux row it never cites.",
+      completionEvidence: { workClass: "implementation", evidenceActivityIds: ["act-1"], ux: { disposition: "verified" }, migration: { disposition: "not-applicable", reason: "no schema change" } },
+      actor,
+      authority,
+      dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
+        resolveCompletionEvidence: async () => failedManifest as never,
+        reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
+        resolveMergeDelivery: async () => "merged" as const,
+        resolveHasDesignSpec: async () => true,
+        projectReadiness: ((input: { completion: { requirementReasons?: Partial<Record<string, string[]>> } }) => { seen.push(input); return projected("input-required"); }) as never,
+      },
+    });
+
+    const acceptance = (seen[0]?.completion.requirementReasons?.ACCEPTANCE_EVIDENCE_REQUIRED ?? []).join(" ");
+    expect(acceptance, "acceptance must say the manifest is what failed").toContain("completion manifest did not pass");
+    expect(acceptance, "acceptance must name the missing dimension").toContain("missing ux");
+    expect(acceptance, "acceptance must point at the author, not a reviewer").toContain("author's to correct");
+  });
+
+  it("says nothing extra once the manifest passes", async () => {
+    const fake = fakeDb(1, "feature", { scopeKind: "platform", digitalProductId: null, activeBuild: null, productObjectiveWork: [] });
+    const seen: Array<{ completion: { requirementReasons?: Partial<Record<string, string[]>> } }> = [];
+    await completeBacklogItemTransition({
+      db: fake.db,
+      itemId: "BI-1",
+      expectedStatus: "in-progress",
+      resolution: "Merged through the queue with a manifest that cites every promised dimension.",
+      completionEvidence: { workClass: "implementation", evidenceActivityIds: ["act-1"] },
+      actor,
+      authority,
+      dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
+        resolveCompletionEvidence: async () => ({ ...failedManifest, verdict: { ...failedManifest.verdict, allowed: true, blockers: [], nextAction: null } }) as never,
+        reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
+        resolveMergeDelivery: async () => "merged" as const,
+        resolveHasDesignSpec: async () => true,
+        projectReadiness: ((input: { completion: { requirementReasons?: Partial<Record<string, string[]>> } }) => { seen.push(input); return projected("input-required"); }) as never,
+      },
+    });
+
+    const acceptance = (seen[0]?.completion.requirementReasons?.ACCEPTANCE_EVIDENCE_REQUIRED ?? []).join(" ");
+    expect(acceptance).not.toContain("completion manifest did not pass");
   });
 });
 
@@ -551,5 +665,38 @@ describe("pullRequestNumbersFromActivities (BI-AFE8BB73)", () => {
       { kind: "initiative_gate_receipt", payload: { url: "https://github.com/o/r/pull/7" } },
       { kind: "evidence", payload: null },
     ])).toEqual([5119, 5124]);
+  });
+});
+
+describe("deployment closure without acceptance fabrication", () => {
+  const proof = { kind: "deployed" as const, runId: "SUR-1", repositoryFullName: "owner/repo", pullRequestNumber: 42,
+    headSha: "a".repeat(40), mergeCommitSha: "b".repeat(40), targetSha: "c".repeat(40), servedSha: "d".repeat(40), completedAt: "2026-10-03T20:00:00.000Z" };
+  it("closes delivery while preserving missing acceptance in the durable activity", async () => {
+    const fake = fakeDb(1, "feature", { body: "## Acceptance\n- Shipped behavior" }, [{ workShape: "delivery-medium@1.0.0" }]);
+    const result = await completeBacklogItemTransition({ db: fake.db, itemId: "BI-1", expectedStatus: "in-progress",
+      resolution: "Deployed", completionEvidence: {}, actor, authority,
+      dependencies: {
+        resolveDeploymentClosure: async () => proof,
+        resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
+        reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
+        resolveMergeDelivery: async () => "signal-unavailable",
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(result.decision.satisfied).toContainEqual(expect.objectContaining({ code: "ACCEPTANCE_EVIDENCE_REQUIRED", state: "not-applicable" }));
+    expect(fake.creates).toContainEqual(expect.objectContaining({ data: expect.objectContaining({ kind: "status_change",
+      payload: expect.objectContaining({ closureBasis: "canonical-deployment", deployment: proof, acceptanceState: "missing" }) }) }));
+  });
+  it.each([{ digitalProductId: "DP-1" }, { scopeKind: "archetype-leaf" }])("retains the acceptance contract for %j", async (overrides) => {
+    const fake = fakeDb(1, "feature", overrides);
+    const result = await completeBacklogItemTransition({ db: fake.db, itemId: "BI-1", expectedStatus: "in-progress",
+      resolution: "Deployed", completionEvidence: {}, actor, authority, dependencies: {
+        resolveDeploymentClosure: async () => proof,
+        resolveCompletionEvidence: async () => ({ kind: "not-found", itemId: "BI-1" }),
+        reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
+        resolveMergeDelivery: async () => "signal-unavailable", projectReadiness: () => projected("input-required"),
+      } });
+    expect(result.ok).toBe(false);
+    expect(fake.updateMany).not.toHaveBeenCalled();
   });
 });

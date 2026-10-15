@@ -24,7 +24,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 
 import {
   CONTRIBUTOR_INVENTORY_JOB_ID,
@@ -32,7 +32,7 @@ import {
   CONTRIBUTOR_INVENTORY_SCHEDULE,
 } from "@dpf/db";
 
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 // Re-exported for callers and tests; mirrors the canonical seed-side constant
@@ -731,7 +731,7 @@ export async function syncAndBind(step: Pick<Parameters<typeof gateAtEntry>[0], 
   return { ...sync, workroomBindings: bindings };
 }
 
-export const contributorInventorySyncCron = inngest.createFunction(
+export const contributorInventorySyncCron = jobs.createFunction(
   {
     id: "ops/contributor-inventory-sync-cron",
     retries: 2,
@@ -746,7 +746,7 @@ export const contributorInventorySyncCron = inngest.createFunction(
   },
 );
 
-export const contributorInventorySyncOnDemand = inngest.createFunction(
+export const contributorInventorySyncOnDemand = jobs.createFunction(
   {
     id: "ops/contributor-inventory-sync-on-demand",
     retries: 2,

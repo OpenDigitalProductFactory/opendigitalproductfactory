@@ -48,3 +48,20 @@ the principal, effective caller context and filters; a cursor grants no access.
 Cursor signing shares the existing delivery-hub primitive, while each domain
 keeps its own payload and key policy. Recovery and liveness projection remain
 owned by their existing shared modules.
+
+## Executor and invocation
+
+The roster pairs the recorded executor with an invocation summary. External
+sessions show their reference; linked TaskRuns show the agents and parent run;
+scheduled dispatches show the task, stage and recorded target. A2A requires
+distinct recorded initiating and current agents. A schedule alone is not A2A.
+Native governance and corpus maintenance identify their execution on each run.
+Historical records with missing attribution say what was not recorded; a draft
+without execution evidence says no invocation is recorded. These labels do not
+claim that an agent ran when the platform has no evidence of it.
+
+A later pause or attention state does not erase the last successful scheduled
+invocation. The roster reads retained successful dispatch activity and its recorded
+agent from its original dispatch ledger. Lease-held and
+missing-owner observations are not dispatch evidence. A task's later reassignment
+does not change the historical agent shown.

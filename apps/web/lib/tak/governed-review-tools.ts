@@ -36,6 +36,7 @@
  */
 const GOVERNED_REVIEW_TOOLS = new Set([
   "read_source_at_version",
+  "read_build_artifact_revision",
   "record_initiative_evidence",
   "record_initiative_design_review",
   "record_initiative_architecture_review",

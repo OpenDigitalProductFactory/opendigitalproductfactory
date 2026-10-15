@@ -34,7 +34,7 @@
 // converts a wrong invocation into a stuck session.
 //
 // Structurally identical to compose-guard.mjs (the established pattern in this
-// directory, five guards over): pure `decide()` for tests, dual-envelope deny so
+// directory, five guards over): pure `decide()` for tests, surface-aware deny so
 // Claude/Codex/Grok all honor it, DPF-workspace scoped, and FAIL OPEN on any
 // parse/IO error — a guard must never wedge a session.
 

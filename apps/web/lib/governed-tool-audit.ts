@@ -1,11 +1,12 @@
-import { prisma } from "@dpf/db";
+import { prisma, type GppPermitVerdict } from "@dpf/db";
 
 import type { AlignmentGateDecision } from "./tak/alignment-tool-gate";
-import type { PreconditionOrderingDecision } from "./tak/precondition-ordering-gate";
+import type { PreconditionOrderingDecision } from "./tak/precondition-ordering-types";
 import { deriveAuditClassForTool, deriveCapabilityId } from "./tool-audit-helpers";
 import { boundLargeStrings } from "./evidence/bounded-evidence-output";
-import type { GovernedExecuteContext, GovernedExecuteSource } from "./mcp-governed-execute";
-import type { ToolDefinition, ToolResult } from "./mcp-tools";
+import { APPROVAL_RESUME_MARKER_KEY, buildApprovalResumeMarker } from "./coworker/approval-resume-marker";
+import type { GovernedExecuteContext, GovernedExecuteSource } from "./mcp-governed-execute-types";
+import type { ToolDefinition, ToolResult } from "./mcp-tool-types";
 
 let createOverride: ((data: Record<string, unknown>) => Promise<unknown>) | null = null;
 let updateOverride: ((id: string, data: Record<string, unknown>) => Promise<unknown>) | null = null;
@@ -34,6 +35,15 @@ function redactWriteOnlyParameters(
   }));
 }
 
+/** The result as the audit row keeps it: declared secret keys never persist. */
+function auditableResult(result: ToolResult, tool: ToolDefinition | undefined): ToolResult {
+  const keys = tool?.secretResultKeys ?? [];
+  if (keys.length === 0 || !result.data) return result;
+  const data = { ...result.data };
+  for (const key of keys) if (key in data) data[key] = "[REDACTED]";
+  return { ...result, data };
+}
+
 export async function writeGovernedToolAudit(data: {
   toolName: string;
   tool?: ToolDefinition;
@@ -42,11 +52,17 @@ export async function writeGovernedToolAudit(data: {
   userId: string;
   source: GovernedExecuteSource;
   context?: GovernedExecuteContext;
-  durationMs: number;
+  /** Elapsed execution time, or null when the tool never ran (a pre-execution
+   *  refusal, or a consequential reservation not yet finalized). A literal 0
+   *  used to carry both meanings, which made "refused" and "ran in under a
+   *  millisecond" indistinguishable to every reader of this column. */
+  durationMs: number | null;
   alignmentDecision?: AlignmentGateDecision | null;
   preconditionDecision?: PreconditionOrderingDecision | null;
   /** The approval this run spent, or the one it is parked on (BI-12E5DD91). */
   envelopeId?: string | null;
+  /** GPP Phase 2 PR-C: the shadow permit verdict for an O/A/I call. Omitted for R/W calls. */
+  gppPermit?: { permitId: string | null; verdict: GppPermitVerdict } | null;
 }): Promise<{ id: string } | null> {
   const auditClass = deriveAuditClassForTool(data.toolName);
   const isMetricsOnly = auditClass === "metrics_only";
@@ -71,17 +87,36 @@ export async function writeGovernedToolAudit(data: {
         checks: data.alignmentDecision.alignment.checks,
       } } : {}),
       ...(data.preconditionDecision ? { _takPrecondition: data.preconditionDecision } : {}),
+      // BI-C8EC05C9 (spec D3): what the platform runner replays once a person
+      // approves. Server-written, and only for a call the platform completes.
+      ...(data.context?.approvalCompletion === "platform" && data.result.error === "approval_required"
+        ? { [APPROVAL_RESUME_MARKER_KEY]: buildApprovalResumeMarker(data.source, data.context) }
+        : {}),
     } : {},
-    result: isMetricsOnly ? {} : data.result as unknown as object,
+    // Metrics-only rows drop payloads, but a failure with no error code is
+    // indistinguishable from a crash. Keep the code alone so the efficiency
+    // scan can tell a governed refusal from a fault (BI-MCP-EFF query_detections,
+    // surface_open, and the other read tools whose results were `{}`).
+    result: isMetricsOnly ? metricsOnlyResult(data.result) : auditableResult(data.result, data.tool) as unknown as object,
     success: data.result.success, executionMode: data.source,
     routeContext: data.context?.routeContext ?? null, durationMs: data.durationMs,
     auditClass, capabilityId: deriveCapabilityId(data.toolName),
+    // The elapsed time is the `durationMs` column above. It is deliberately NOT
+    // folded into `summary`: the summary is read as a stable identity for the row
+    // (the pattern observer substring-matches it, the operations map and evidence
+    // search display it), and embedding wall-clock gave two otherwise identical
+    // calls two different summaries — which flaked AC-ENFORCE's deep-equal on
+    // 0ms vs 1ms. One fact, one column.
     summary: isMetricsOnly
-      ? `${data.toolName}: ${data.result.success ? "ok" : "failed"}${data.durationMs ? ` (${data.durationMs}ms)` : ""}`
+      ? `${data.toolName}: ${data.result.success ? "ok" : "failed"}`
       : null,
     apiTokenId: data.context?.apiTokenId ?? null, skillId: data.context?.skillId ?? null,
     delegationChainId: data.context?.delegationChainId ?? null,
     envelopeId: data.envelopeId ?? pendingEnvelopeId(data.result),
+    ...(data.gppPermit ? {
+      gppPermitVerdict: data.gppPermit.verdict,
+      ...(data.gppPermit.permitId ? { gppPermitRef: data.gppPermit.permitId } : {}),
+    } : {}),
   };
   try {
     const created = createOverride
@@ -99,8 +134,10 @@ export async function writeGovernedToolAudit(data: {
   }
 }
 
-export async function updateGovernedToolAudit(id: string, result: ToolResult, durationMs: number): Promise<void> {
-  const data = { result: result as unknown as object, success: result.success, durationMs };
+export async function updateGovernedToolAudit(
+  id: string, result: ToolResult, durationMs: number, tool?: ToolDefinition,
+): Promise<void> {
+  const data = { result: auditableResult(result, tool) as unknown as object, success: result.success, durationMs };
   try {
     if (updateOverride) await updateOverride(id, data);
     else await prisma.toolExecution.update({ where: { id }, data });
@@ -114,6 +151,13 @@ export async function updateGovernedToolAudit(id: string, result: ToolResult, du
 
 /** A parked call's audit row names the envelope it waits on, so the approval
  *  card and the approved-request runner join on a column, not JSON. */
+function metricsOnlyResult(result: ToolResult): { error: string } | Record<string, never> {
+  if (result.success) return {};
+  return typeof result.error === "string" && result.error.length > 0
+    ? { error: result.error }
+    : {};
+}
+
 function pendingEnvelopeId(result: ToolResult): string | null {
   if (result.error !== "approval_required") return null;
   const data = result.data as Record<string, unknown> | undefined;

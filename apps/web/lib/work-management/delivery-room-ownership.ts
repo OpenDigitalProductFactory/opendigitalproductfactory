@@ -12,6 +12,7 @@
 
 import { isDeliveryShapeKey } from "./delivery-shapes";
 import { resolveWorkShapeClaim } from "./workroom-shape-claim";
+import { resolveActiveHumanPrincipalRecordIdForUser } from "@/lib/identity/principal-linking";
 import {
   describeRoomOwnership,
   establishRoomOwnership,
@@ -55,6 +56,7 @@ type RepairDb = RoomOwnershipDb & {
   workroom: { findMany(args: unknown): Promise<Array<Record<string, any>>> };
   workroomActivity: { create(args: unknown): Promise<unknown> };
   principal: { findFirst(args: unknown): Promise<{ id: string } | null> };
+  $queryRaw<T = unknown>(query: TemplateStringsArray, ...values: unknown[]): Promise<T>;
   $transaction<T>(fn: (tx: RepairDb) => Promise<T>): Promise<T>;
 };
 
@@ -89,19 +91,16 @@ export async function repairUnownedDeliveryRooms(db: RepairDb, roomIds: readonly
       leaseHolderPrincipal: row.leaseHolderPrincipal ?? null,
       firstRecordedByUserId: row.activities?.[0]?.recordedById ?? null,
     };
-    const userPrincipal = room.firstRecordedByUserId
-      ? await db.principal.findFirst({
-        where: {
-          kind: "human",
-          status: "active",
-          aliases: { some: { aliasType: "user", issuer: "", aliasValue: room.firstRecordedByUserId } },
-        },
-        select: { id: true },
-      })
+    const userPrincipalId = room.firstRecordedByUserId
+      ? await resolveActiveHumanPrincipalRecordIdForUser(room.firstRecordedByUserId, db)
       : null;
-    const principals = resolveExistingRoomOwnership(room, userPrincipal?.id ?? null);
+    const principals = resolveExistingRoomOwnership(room, userPrincipalId);
     if (!principals.ownerPrincipalId) continue;
     const appointed = await db.$transaction(async (tx) => {
+      // Match executor reassignment's room-before-participant order. Activity
+      // ingestion also locks this parent; taking it after a roster write would
+      // invert the order and allow concurrent repair/reassignment to deadlock.
+      await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "id" = ${room.id} FOR UPDATE`;
       const outcome = await establishRoomOwnership(tx, { workroomId: room.id, ...principals });
       const summary = describeRoomOwnership(outcome);
       if (summary && (outcome.ownerAppointed || outcome.assistantAdmitted)) {
@@ -133,7 +132,28 @@ type AliasHolder = { aliases: Array<{ aliasValue: string }> } | null | undefined
  * The user a drive-dispatched task runs for. An OAuth room was created by the
  * assistant but requested by its human, so the requester wins; reading only the
  * creator left every OAuth room unable to dispatch (missing_task_owner).
+ *
+ * Requester and creator are history, never rewritten. An account whose work was
+ * handed over (User.workHandedOverAt, BI-858FDE5A) is skipped, so a room it
+ * once requested returns null here and the drive names the room's accountable
+ * person (resolveDriveTaskOwner) instead of birthing a task under the absent
+ * account.
  */
-export function roomOwnerUserId(row: { requestedByPrincipal?: AliasHolder; createdByPrincipal?: AliasHolder }): string | null {
-  return row.requestedByPrincipal?.aliases[0]?.aliasValue ?? row.createdByPrincipal?.aliases[0]?.aliasValue ?? null;
+export function roomOwnerUserId(
+  row: { requestedByPrincipal?: AliasHolder; createdByPrincipal?: AliasHolder },
+  handedOverUserIds: ReadonlySet<string> = new Set(),
+): string | null {
+  for (const holder of [row.requestedByPrincipal, row.createdByPrincipal]) {
+    const userId = holder?.aliases[0]?.aliasValue;
+    if (userId && !handedOverUserIds.has(userId)) return userId;
+  }
+  return null;
+}
+
+/** Accounts whose work was handed over; read once per drive tick. */
+export async function loadHandedOverUserIds(db: {
+  user: { findMany(args: unknown): Promise<Array<{ id: string }>> };
+}): Promise<Set<string>> {
+  const rows = await db.user.findMany({ where: { workHandedOverAt: { not: null } }, select: { id: true } });
+  return new Set(rows.map((row) => row.id));
 }

@@ -53,6 +53,7 @@ import {
   assertNoCycle,
   assertNoRecursiveDecomposition,
 } from "./epic-decomposition-invariants";
+import { closeOpenBuildPhaseRunsForTerminalBuild } from "@/lib/build/close-terminal-phase-runs";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -688,6 +689,7 @@ export async function approveDecomposition(
         abandonReason: `decomposed-into-epic:${createdEpic.epicId}`,
       },
     });
+    await closeOpenBuildPhaseRunsForTerminalBuild(build.buildId, { db: tx, now: now() });
 
     // Swap the backlog item's active link from build → epic (if any).
     if (build.originatingBacklogItemId) {

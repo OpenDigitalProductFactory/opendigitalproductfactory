@@ -1,7 +1,7 @@
 import pg from "pg";
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import type { CreatePlatformIssueReportInput } from "@/lib/quality/platform-issue-reports";
 import {
@@ -71,7 +71,7 @@ export async function runIndexIntegritySweep(injected?: SweepDeps) {
   }
 }
 
-export const indexIntegritySweep = inngest.createFunction(
+export const indexIntegritySweep = jobs.createFunction(
   {
     id: "ops/index-integrity-sweep",
     retries: 1,

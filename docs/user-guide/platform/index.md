@@ -12,7 +12,7 @@ Use the Platform area to supervise AI operations, Edge Nodes, integrations, iden
 
 - `/platform/ai/*` for workforce operations, routing, assignments, history, and authority
 - `/platform/edge-nodes` for host-resident trust, discovery intake, and Edge Node freshness
-- `/platform/federation-links` for nearby-installation discovery and approved peer connections
+- `/platform/federation-links` for nearby-installation discovery, approved peer connections, and [sharing this installation's country](deployment-country-sharing.md)
 - `/platform/identity/*` for directory, principals, groups, and authorization posture
 - `/platform/audit/*` for operational audit flows and traceability
 - `/platform/tools/*`, `/platform/services/*`, and `/platform/integrations/*` for tool servers, discovery, and connector operations

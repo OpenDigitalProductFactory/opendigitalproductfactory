@@ -14,6 +14,14 @@ Build Studio is the platform's guided way to turn a plain-language outcome into 
 
 Build Studio is not a separate code universe. It works from the install's shared development workspace. In customizable installs, that means Build Studio and VS Code operate on the same source tree while the portal continues to own review, evidence, and governed promotion.
 
+You do not need separate Claude or Codex apps to use embedded Build Studio for
+supported changes. It needs a configured AI provider and development workspace.
+Builds, tests, previews, and local coding models still consume resources wherever
+they execute, so size enabled build work separately from everyday business
+operations. The [hardware guide](../../install/hardware.md) distinguishes those
+workloads; a 32 GB operations configuration is not a guarantee for a full
+development workload.
+
 ### Development Workrooms
 
 Open `/build/work` when you need the engineering context behind Build Studio. The **Delivery task hub** groups recent Workrooms as Ready, Working, Waiting, Needs attention, or Complete and keeps the outcome, owner, current stage, age, progress, branch, and next action together. A card may also show the authorized durable async-operation status and platform handle; provider handles, prompts, raw results, and private failure detail stay out of this view.
@@ -97,6 +105,8 @@ If a task stops before it finishes, Build Studio distinguishes *why*. When the c
 ### Review
 
 Quality gates verify the feature is ready: documentation evidence is present, all tests pass, typecheck is clean, acceptance criteria are met, and accessibility checks pass. The AI Coworker presents a plain-language summary of the results.
+
+If the repository's automated checks, the independent code review, or the build's own risk analysis find problems in the build's own change, such as a missing data-impact note, out-of-date generated files, a bug the reviewer spotted, or a risk the change does not guard against, Build Studio hands the build back to the AI Coworker with the findings to fix, then reviews it again. This happens at most twice. If the checks still fail, the build is escalated to you with the remaining findings instead of retrying forever.
 
 ### Ship
 

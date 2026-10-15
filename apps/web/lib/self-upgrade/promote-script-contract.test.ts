@@ -110,11 +110,12 @@ const BASE_ENV: Record<string, string> = {
  * Child wall-clock for a single promote.sh invocation under contract tests.
  * BI-72AEDE8B: must stay below the Vitest per-test timeout so a hung bash is
  * reported as a timed-out child (signal/error), not a silent suite stall.
- * Not a global vitest.config timeout change.
+ * Not a global vitest.config timeout change. One promote.sh run costs 11-25 s on a
+ * Windows host and more under a parallel gate run, so 25 s timed out (BI-1D5E2644).
  */
-const CONTRACT_CHILD_TIMEOUT_MS = 25_000;
+const CONTRACT_CHILD_TIMEOUT_MS = 100_000;
 /** Vitest per-test budget: child bound + fixture overhead on loaded Windows hosts. */
-const CONTRACT_TEST_TIMEOUT_MS = 40_000;
+const CONTRACT_TEST_TIMEOUT_MS = 120_000;
 /** @deprecated alias kept for readiness describe block readability */
 const READINESS_SCRIPT_TIMEOUT_MS = CONTRACT_TEST_TIMEOUT_MS;
 
@@ -138,6 +139,7 @@ function runScript(
       copyFileSync(join(REPO_ROOT, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), join(source, "scripts", "lib", "resolve-capability-compose-profiles.mjs"));
     }
     copyFileSync(join(REPO_ROOT, "scripts", "lib", "govern-capability-compose-args.mjs"), join(source, "scripts", "lib", "govern-capability-compose-args.mjs"));
+    copyFileSync(join(REPO_ROOT, "scripts", "lib", "script-argv.mjs"), join(source, "scripts", "lib", "script-argv.mjs"));
     copyFileSync(join(REPO_ROOT, "scripts", "lib", "capability-state-hash.mjs"), join(source, "scripts", "lib", "capability-state-hash.mjs"));
     copyFileSync(join(REPO_ROOT, "scripts", "capability-service-catalog.generated.json"), join(source, "scripts", "capability-service-catalog.generated.json"));
     const catalog = JSON.parse(readFileSync(join(REPO_ROOT, "scripts", "capability-service-catalog.generated.json"), "utf8")) as { catalogHash: string; capabilities: Array<{ capabilityId: string }> };

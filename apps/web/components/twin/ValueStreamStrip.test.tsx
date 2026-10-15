@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 
 import { ValueStreamStrip } from "./ValueStreamStrip";
-import type { TwinStageFlow } from "./snapshot";
+import type { TwinStageFlow } from "@/lib/twin/twin-snapshot";
 
 // Running the pet-rescue operating day found sixteen correctly named stages,
 // every one reading 0, every one carrying a chevron, none of them clickable

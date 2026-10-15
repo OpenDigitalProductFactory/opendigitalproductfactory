@@ -13,7 +13,7 @@
 
 import { randomUUID } from "node:crypto";
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import { employeeScopeVisibleIds, type EmployeeVisibilityScope } from "@/lib/govern/manager-scope";
 import { resolveManagerScope } from "@/lib/identity/load-effective-auth-context";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";

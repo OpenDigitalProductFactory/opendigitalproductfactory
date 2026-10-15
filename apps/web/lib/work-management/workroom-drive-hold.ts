@@ -44,10 +44,17 @@ export function driveDeviationCodes(conformance: unknown): string[] {
     .sort();
 }
 
+/**
+ * `markedKeys` is given only for a graph room (GPP Phase 3c, BI-8875C9DF): the
+ * sorted `stageKey#iteration` of every marked stage replaces `stageKey`, so a
+ * branch moving or a rework starting is a change of hold. A sequential room
+ * never passes it, so its key is exactly what it was.
+ */
 export function driveHoldKey(input: {
-  action: string; reason: string; stageKey: string | null; conformance: unknown;
+  action: string; reason: string; stageKey: string | null; conformance: unknown; markedKeys?: readonly string[];
 }): string {
-  return [input.action, input.reason, input.stageKey ?? "", ...driveDeviationCodes(input.conformance)].join("|");
+  const where = input.markedKeys ? [...input.markedKeys].sort().join(",") : input.stageKey ?? "";
+  return [input.action, input.reason, where, ...driveDeviationCodes(input.conformance)].join("|");
 }
 
 export function readDriveHold(workspaceState: unknown): WorkroomDriveHold | null {
@@ -68,7 +75,7 @@ export function readDriveHold(workspaceState: unknown): WorkroomDriveHold | null
 /** The hold after this tick. Pure: the drive stores it in the snapshot it already writes. */
 export function nextDriveHold(
   prior: WorkroomDriveHold | null,
-  tick: { action: string; reason: string; stageKey: string | null; conformance: unknown },
+  tick: { action: string; reason: string; stageKey: string | null; conformance: unknown; markedKeys?: readonly string[] },
   now: Date,
 ): WorkroomDriveHold {
   const key = driveHoldKey(tick);
@@ -86,9 +93,19 @@ export function nextDriveHold(
   };
 }
 
-/** Whether this tick earns a row on the room's trail: a change of hold, or any dispatch. */
-export function driveTickIsNews(prior: WorkroomDriveHold | null, next: WorkroomDriveHold, action: string): boolean {
-  return action === "dispatch_agent" || prior?.key !== next.key;
+/**
+ * Whether this tick earns a row on the room's trail: a change of hold, or any
+ * dispatch. On a graph room, `iterationChanged` (any token's
+ * `stageKey#iteration` changed) is also news, so a rework always leaves a trail
+ * row, which is also the new iteration's attention anchor (Phase 3c).
+ */
+export function driveTickIsNews(
+  prior: WorkroomDriveHold | null,
+  next: WorkroomDriveHold,
+  action: string,
+  iterationChanged?: boolean,
+): boolean {
+  return action === "dispatch_agent" || prior?.key !== next.key || iterationChanged === true;
 }
 
 /** A stuck spell that has lasted an hour and nobody has been told about yet. */

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ── Mock Prisma ──────────────────────────────────────────────────────────────
 vi.mock("@dpf/db", () => {
@@ -49,6 +49,7 @@ import {
 } from "./cli-pool-status";
 import type { WeeklyQuotaSnapshot } from "./weekly-quota";
 import { prisma } from "@dpf/db";
+import { applyCapacitySoftExclusion, capacityRoutingExclusionReason } from "./capacity-routing-exclude";
 
 function snap(overrides: Partial<WeeklyQuotaSnapshot> = {}): WeeklyQuotaSnapshot {
   return {
@@ -103,6 +104,49 @@ describe("recordCliRateLimit", () => {
   beforeEach(() => {
     clearMockRows();
     vi.clearAllMocks();
+  });
+
+  it("records a bounded unavailable observation without inventing the missing reset date", async () => {
+    const banner = "You've hit your weekly limit · resets 4pm (UTC)";
+    await recordCliRateLimit("claude-cli", "anthropic-sub", banner);
+    expect(prisma.providerCapacityStatus.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { providerId: "anthropic-sub" },
+      create: expect.objectContaining({
+        state: "rate_limited", action: "retry_with_backoff", confidence: "heuristic",
+        retryAt: expect.any(Date), source: "cli",
+      }),
+    }));
+    expect(parseRetryAfterSeconds(banner)).toBeNull();
+    const state = await getCliPoolStatus("claude-cli");
+    expect(state?.isExhausted).toBe(true);
+    expect(state?.retryAfterSeconds).toBeNull();
+    const row = vi.mocked(prisma.providerCapacityStatus.upsert).mock.calls[0]![0].create;
+    const snapshot = { state: String(row.state), retryAtMs: new Date(row.retryAt!).getTime() };
+    const routes = [{ providerId: "anthropic-sub" }, { providerId: "local" }];
+    expect(applyCapacitySoftExclusion({ endpoints: routes,
+      capacityByProvider: new Map([["anthropic-sub", snapshot]]), nowMs: Date.now(),
+    }).eligible).toEqual([{ providerId: "local" }]);
+    expect(capacityRoutingExclusionReason(snapshot, snapshot.retryAtMs)).toBeNull();
+  });
+
+  it("waits for the provider observation before completing the quota record", async () => {
+    let release!: () => void;
+    vi.mocked(prisma.providerCapacityStatus.upsert).mockImplementationOnce(() =>
+      new Promise(resolve => { release = () => resolve({} as never); }) as never);
+    let complete = false;
+    const pending = recordCliRateLimit("claude-cli", "anthropic-sub", "Retry-After: 7200")
+      .then(() => { complete = true; });
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    expect(complete).toBe(false);
+    release();
+    await pending;
+    expect(complete).toBe(true);
+  });
+
+  it("still records the dispatch cooldown if provider capacity persistence fails", async () => {
+    vi.mocked(prisma.providerCapacityStatus.upsert).mockRejectedValueOnce(new Error("capacity store unavailable"));
+    await expect(recordCliRateLimit("claude-cli", "anthropic-sub", "429")).resolves.toBeUndefined();
+    expect((await getCliPoolStatus("claude-cli"))?.isExhausted).toBe(true);
   });
 
   it("writes a CliPoolStatus row on first call", async () => {
@@ -349,6 +393,17 @@ describe("formatWeeklyAllocationHint", () => {
 });
 
 describe("dated subscription cap (BI-38064739)", () => {
+  // BI-FC1B925E: the fixture's absolute reset (2026-09-26 08:57Z) must stay in
+  // the future, or recordCliRateLimit correctly records no cap and this block
+  // fails on every run after that date. Freeze only Date; vi.waitFor keeps real timers.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-25T20:00:00Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   const CAP_TEXT = "banner\nERROR: You’ve hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Sep 26th, 2026 8:57 AM.";
 
   it("parses an absolute 'try again at <date time>' phrase", () => {
@@ -372,8 +427,7 @@ describe("dated subscription cap (BI-38064739)", () => {
       upsert.mock.calls.filter((c) => ((c[0] as { create: { rawSnippet?: string | null } }).create.rawSnippet ?? "").includes("Sep 26th")).length,
     ).toBeGreaterThanOrEqual(2));
     type CapUpsert = { where: { providerId: string }; create: { state: string; retryAt: Date; rawSnippet: string | null } };
-    // An earlier test's "try again in 2h" also crosses the pool cap and its
-    // fire-and-forget write can land after mockClear; select this cap's calls.
+    // Select this cap's calls so the assertions remain tied to this fixture.
     const capCalls = upsert.mock.calls
       .map((c) => c[0] as CapUpsert)
       .filter((c) => c.create.state === "quota_resets_at" && (c.create.rawSnippet ?? "").includes("Sep 26th"));

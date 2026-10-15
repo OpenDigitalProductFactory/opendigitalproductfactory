@@ -7,6 +7,9 @@ import type {
   SectionNavLink,
   SectionNavTab,
 } from "@/lib/navigation/section-nav-model";
+import { isDiagnosticHref } from "@/lib/navigation/route-audience";
+
+import { MoreTools } from "./MoreTools";
 
 // One renderer for every portal section nav (BI-ARCH-SECTIONNAV). It is pure and
 // presentational: callers resolve active state with their own `usePathname` rules
@@ -54,11 +57,12 @@ function FamiliesNav({ config }: { config: FamiliesSectionNavConfig }) {
           <div className="rounded-b-xl border border-t-0 border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-4 py-3">
             {description ? <p className="text-xs text-[var(--dpf-muted)]">{description}</p> : null}
             <div className="mt-3 flex flex-wrap gap-2">
-              {subItems.map((item) => (
+              {splitDiagnostic(subItems).primary.map((item) => (
                 <Link key={item.href} href={item.href} className={subItemClass("tab", item.active)}>
                   {item.label}
                 </Link>
               ))}
+              <MoreTools items={splitDiagnostic(subItems).more} linkClass={subItemClass("tab", false)} />
             </div>
           </div>
         )}
@@ -73,11 +77,12 @@ function FamiliesNav({ config }: { config: FamiliesSectionNavConfig }) {
       <div className={dense ? "space-y-1" : "space-y-2"}>
         <p className={dense ? "sr-only" : "text-sm text-[var(--dpf-muted)]"}>{description}</p>
         <div className="flex flex-wrap gap-2">
-          {subItems.map((item) => (
+          {splitDiagnostic(subItems).primary.map((item) => (
             <Link key={item.href} href={item.href} className={subItemClass("pill", item.active)}>
               {item.label}
             </Link>
           ))}
+          <MoreTools items={splitDiagnostic(subItems).more} linkClass={subItemClass("pill", false)} />
         </div>
       </div>
     </div>
@@ -96,11 +101,12 @@ function GroupedNav({ config }: { config: GroupedSectionNavConfig }) {
             {group.label}
           </span>
           <div className="flex flex-wrap gap-1">
-            {group.tabs.map((tab) => (
+            {splitDiagnostic(group.tabs).primary.map((tab) => (
               <Link key={tab.href} href={tab.href} className={tabLinkClass(tab.active)}>
                 {tab.label}
               </Link>
             ))}
+            <MoreTools items={splitDiagnostic(group.tabs).more} linkClass={tabLinkClass(false)} />
           </div>
         </div>
       ))}
@@ -127,7 +133,7 @@ function FlatNav({ config }: { config: FlatSectionNavConfig }) {
 
   return (
     <Root className={containerClass} data-component={dataComponent}>
-      {tabs.map((tab) => {
+      {tabs.filter((tab) => !isTuckedTab(tab)).map((tab) => {
         const className = flatTabClass(tone, tab.active);
         if (tab.href !== undefined) {
           return (
@@ -142,9 +148,31 @@ function FlatNav({ config }: { config: FlatSectionNavConfig }) {
           </button>
         );
       })}
+      <MoreTools
+        items={tabs.filter(isTuckedTab).map((tab) => ({ href: tab.href!, label: tab.label, active: false }))}
+        linkClass={flatTabClass(tone, false)}
+      />
     </Root>
   );
 }
+
+// BI-E8D91AF6 (disclose-before-you-add-a-surface): diagnostic surfaces named in
+// the route-audience registry sit behind one "More tools" disclosure instead of at
+// the same weight as daily tabs. The open page always stays visible. Simple mode
+// hides the disclosure entirely (globals.css, [data-advanced-tools]).
+type NavItem = { href: string; label: string; active: boolean };
+
+function splitDiagnostic<T extends NavItem>(items: readonly T[]): { primary: T[]; more: T[] } {
+  const primary: T[] = [];
+  const more: T[] = [];
+  for (const item of items) (item.active || !isDiagnosticHref(item.href) ? primary : more).push(item);
+  return { primary, more };
+}
+
+function isTuckedTab(tab: SectionNavTab): boolean {
+  return tab.href !== undefined && !tab.active && isDiagnosticHref(tab.href);
+}
+
 
 function flatTabClass(tone: "underline" | "pill" | "emphasis", active: boolean): string {
   if (tone === "pill") {

@@ -66,9 +66,23 @@ export function capsuleRepositoryFullName(
   source: string,
   provided: string | null | undefined,
   platformDefault: () => string,
+  idempotencyKey?: string,
 ): string | null {
-  return provided?.trim() || (BUSINESS_WORK_CAPSULE_SOURCES.has(source) ? null : platformDefault());
+  if (provided?.trim()) return provided.trim();
+  if (BUSINESS_WORK_CAPSULE_SOURCES.has(source)) return null;
+  return idempotencyKey?.startsWith(SUB_SHAPE_ROOM_KEY_PREFIX) ? null : platformDefault();
 }
+
+/**
+ * The idempotency-key namespace of a sub-shape child room (GPP Phase 3c
+ * PR-3c-5, design §9.2): `sub-shape:<parent>:<cycle>:<stage>:<iteration>`. The
+ * work-shape drive creates such a room to run a stage's child shape. It
+ * coordinates process work, not a change to this repository, so it records
+ * no repository: with one, the publication boundary
+ * (assertWorkroomPublishable) would refuse to complete it for want of a
+ * reviewed head it can never have.
+ */
+export const SUB_SHAPE_ROOM_KEY_PREFIX = "sub-shape:";
 
 export type WorkCapsuleSource = (typeof WORK_CAPSULE_SOURCES)[number];
 
@@ -135,6 +149,8 @@ export const WORK_CAPSULE_ACTIVITY_KINDS = [
   "executor-changed",
   "scope-claimed",
   "scope-released",
+  // BI-CB5C0DCE: a governed move of the room's work-shape pin to a newer version.
+  "workshape-rebound",
   "work-intent-declared",
   "change-impact-planned",
   "evidence-recorded",
@@ -303,7 +319,7 @@ const EXECUTOR_SET = new Set<string>(WORK_CAPSULE_EXECUTOR_KINDS);
 const ACTIVITY_SET = new Set<string>(WORK_CAPSULE_ACTIVITY_KINDS);
 const TAXONOMY_SET = new Set<string>(WORK_CAPSULE_BRANCH_TAXONOMIES);
 const EVIDENCE_KIND_SET = new Set<string>(WORK_CAPSULE_EVIDENCE_KINDS);
-const SCOPE_KIND_SET = new Set<ScopeClaim["kind"]>([
+export const SCOPE_KIND_SET: ReadonlySet<ScopeClaim["kind"]> = new Set<ScopeClaim["kind"]>([
   "path",
   "module",
   "package",

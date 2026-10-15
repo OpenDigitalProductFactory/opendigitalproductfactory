@@ -47,13 +47,14 @@ The DR-hardening epic (BIs shipped 2026-05-24) put recovery artifacts in **speci
 | Branches + commits after install-dir rm | GitHub `origin` IS the source of truth; clone fresh | `git clone https://github.com/OpenDigitalProductFactory/opendigitalproductfactory $DPF_DIR` |
 | Docker images | Pull-on-demand from registries | `docker compose pull` or `install-dpf.{ps1,sh}` |
 | Docker volumes (any) | NOT recoverable from Docker layer — the daily backup IS the durable copy | See dump-restore rows above |
+| Map region packs (`map_data` volume, `/var/lib/dpf/maps`) | Not backed up: packs are public OpenStreetMap-derived files, re-obtainable from their source | Re-copy each `<pack-id>.pmtiles` and `<pack-id>.manifest.json` into the volume; maps draw without a street layer until then |
 | Tool config / installer state | `install-state.json` in install dir | If lost: re-run `install-dpf.{ps1,sh}`; it's idempotent |
 | Failed platform upgrade / bad seed apply / migration damage | Governed upgrade recovery point: linked `BackupRun` rows under `$DPF_BACKUPS_HOST_PATH/postgres/<ts>/` plus previous runtime identity under `$DPF_BACKUPS_HOST_PATH/self-upgrade/<runId>/` | Upgrade Center rollback/restore flow; if unavailable, restore the Postgres member directly |
 
 > **BET-5 changed this table.** Neo4j and Qdrant were retired onto PostgreSQL
-> (BI-A1E864A5). Their nightly backup jobs are **deactivated** and
-> `scripts/{backup,restore}-{neo4j,qdrant}.sh` only apply to pre-BET-5 archives
-> you may still hold — do not reach for them during a current-day incident. One
+> (BI-A1E864A5). Their nightly backup jobs are **deactivated** and their backup
+> and restore scripts were deleted (BI-B1977CEE); a pre-BET-5 archive you may
+> still hold needs a pre-BET-5 release to restore it. One
 > Postgres dump now carries relational state, graph topology and vectors
 > together, which also removes the old hazard of restoring three members to
 > three different points in time.
@@ -73,8 +74,8 @@ not a backup of record. Use it to prove that a recovery point can restore and
 boot before production state is touched. The Postgres trial-restore path is
 shipped end-to-end, and since BET-5 that single path also rehearses graph and
 vector recovery — they are tables in the same dump, and `sandbox-postgres` is
-isolated, so the old caveat about the sandbox pointing at shared Neo4j/Qdrant no
-longer applies. Never use the dev-against-live-DB compose overlay for recovery
+isolated, so the old caveat about the sandbox pointing at shared graph and vector
+stores no longer applies. Never use the dev-against-live-DB compose overlay for recovery
 rehearsal because it can write to live data.
 
 **Key principle:** if you can't find your loss in this table, that means there's no automatic recovery for it. Stop and ask for help BEFORE doing anything destructive — the action you take next may be the difference between a 1-hour and 6-hour recovery.

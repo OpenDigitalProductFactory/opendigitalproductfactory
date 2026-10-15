@@ -6,7 +6,8 @@ import { sendMcpTaskRunExecutionEvent } from "@/lib/queue/mcp-task-run-events";
 import { recordWorkCapsuleEvidence } from "@/lib/work-capsules/work-capsule-store";
 import { publishRecordedWorkCapsuleActivity } from "@/lib/work-capsules/activity-events";
 import { revalidatePortalContext } from "@/lib/portal-context/invalidation";
-import { parseSemanticReviewRequest, type SemanticReviewRequest } from "./semantic-review-request";
+import { createSemanticReviewRequest, parseSemanticReviewRequest, type SemanticReviewRequest } from "./semantic-review-request";
+import { createPrismaSemanticReviewSingleFlightStore, deterministicTaskRunId } from "./semantic-review-single-flight";
 import { verifySemanticReviewAuthority } from "./semantic-review-authority";
 import { dispatchRoutedSemanticReview } from "./routed-semantic-review";
 import { runSemanticChangeReview } from "./semantic-change-review-operation";
@@ -14,9 +15,11 @@ import { restoreSemanticReviewCheckpoint, type SemanticReviewResult } from "./se
 import { resolveFailureAnalysisEvidence } from "./failure-analysis-evidence";
 import { validateFailureAnalysis } from "./failure-analysis";
 import { withInferenceOrigin } from "@/lib/inference/inference-admission";
+import { withGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
 
 import { SEMANTIC_REVIEW_HEARTBEAT_STALE_MS as STALE_MS } from "./semantic-review-request";
 import { SEMANTIC_REVIEW_MAX_ATTEMPTS as MAX_DISPATCH_ATTEMPTS, semanticReviewRecoveryBudget, isSemanticReviewRecoveryWait } from "./semantic-review-recovery-policy";
+import { readSemanticReviewRemediation } from "./semantic-review-remediation";
 const json = (value: unknown) => value as Prisma.InputJsonValue;
 function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -85,8 +88,8 @@ type BranchPhase = "checkpoint-read" | "provider-call" | "checkpoint-write";
 function safeBranchFailure(error: unknown, agentId: string, phase: BranchPhase) {
   const record = object(error);
   const name = error instanceof Error ? error.name : null;
-  const knownKinds = ["Error", "TypeError", "RangeError", "PrismaClientKnownRequestError", "PrismaClientUnknownRequestError", "PrismaClientValidationError"];
-  const knownCodes = ["P2002", "P2024", "P2028", "P2034", "ETIMEDOUT", "ECONNRESET"];
+  const knownKinds = ["Error", "TypeError", "RangeError", "PrismaClientKnownRequestError", "PrismaClientUnknownRequestError", "PrismaClientValidationError", "GovernedInferenceDeadlineError"];
+  const knownCodes = ["P2002", "P2024", "P2028", "P2034", "ETIMEDOUT", "ECONNRESET", "INFERENCE_PARENT_STOPPED"];
   return { agentId, phase, errorKind: name && knownKinds.includes(name) ? name : "unclassified",
     errorCode: typeof record.code === "string" && knownCodes.includes(record.code) ? record.code : null };
 }
@@ -118,6 +121,29 @@ async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generat
       if (attempt === recoveryAttempt || node.status === "completed") throw new Error("semantic-review-provider-outcome-uncertain");
       if (node.status !== "superseded") superseded.push({ taskNodeId: node.taskNodeId, output, providerOutcome: "unknown" });
     }
+    const predecessorId = state(row).predecessorTaskRunId;
+    if (typeof predecessorId === "string") {
+      const predecessor = await tx.taskRun.findUnique({ where: { taskRunId: predecessorId }, select });
+      const predecessorPacket = predecessor ? await requestFor(predecessor) : null;
+      if (!predecessor || predecessor.status !== "canceled" || state(predecessor).successorTaskRunId !== row.taskRunId
+        || !predecessorPacket || predecessorPacket.gateKey !== packet.gateKey
+        || JSON.stringify(predecessorPacket.input) !== JSON.stringify(packet.input)) throw new Error("semantic-review-predecessor-binding-mismatch");
+      for (let attempt = MAX_DISPATCH_ATTEMPTS; attempt >= 0; attempt -= 1) {
+        const id = `semantic-review:${predecessorId}:${agentId}${attempt ? `:recovery-${attempt}` : ""}`;
+        const checkpoint = await tx.taskNode.findUnique({ where: { taskNodeId: id } });
+        const output = object(checkpoint?.outputSnapshot);
+        if (checkpoint?.status !== "completed" || output.requestDigest !== predecessorPacket.digest) continue;
+        const restored = restoreSemanticReviewCheckpoint(output.result, agentId);
+        if (restored.decision !== "pass") continue;
+        await tx.taskNode.create({ data: { taskNodeId, taskRunId: row.id, nodeType: "review", workerRole: "reviewer",
+          title: `Semantic review: ${agentId}`, objective: packet.input.title, status: "completed", completedAt: new Date(),
+          requestContract: { requestDigest: packet.digest, generation, agentId },
+          outputSnapshot: json({ requestDigest: packet.digest, result: restored, reusedFromNodeId: checkpoint.taskNodeId,
+            predecessorRequestDigest: predecessorPacket.digest }),
+        } });
+        return restored;
+      }
+    }
     if (Date.now() >= Date.parse(packet.deadlineAt)) throw new Error("semantic-review-deadline-exhausted");
     const created = await tx.taskNode.create({ data: { taskNodeId, taskRunId: row.id, nodeType: "review", workerRole: "reviewer",
       title: `Semantic review: ${agentId}`, objective: packet.input.title, status: "running", startedAt: new Date(),
@@ -133,7 +159,33 @@ async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generat
   // A running node is durable before the provider call. If the process dies,
   // reconciliation exposes uncertainty instead of silently repeating the call.
   onPhase("provider-call");
-  const result = await execute();
+  let result: SemanticReviewResult;
+  try {
+    result = await withGovernedInferenceDeadline({
+      deadlineAt: packet.deadlineAt,
+      verifyAuthority: async () => {
+        const current = await prisma.taskRun.findUnique({ where: { taskRunId: row.taskRunId }, select });
+        return current?.status === "working" && state(current).generation === generation
+          && await verifySemanticReviewAuthority(packet, row.taskRunId);
+      },
+    }, execute);
+  }
+  catch (error) {
+    // Only a direct typed pre-dispatch refusal proves no provider work began.
+    // A wrapped capacity error may also contain a failed paid remote attempt.
+    if (error instanceof Error && error.name === "LocalProviderCapacityDeferredError") {
+      result = { decision: "inconclusive", issues: [], summary: "Review deferred before provider dispatch because capacity was unavailable.",
+        inconclusiveReason: "review-capacity-deferred" };
+    } else {
+      await prisma.$transaction(async (tx) => {
+        await assertFence(tx, row.taskRunId, generation);
+        await tx.taskNode.update({ where: { taskNodeId }, data: { status: "failed", completedAt: new Date(),
+          outputSnapshot: json({ requestDigest: packet.digest, providerOutcome: "unknown",
+            failure: safeBranchFailure(error, agentId, "provider-call") }) } });
+      });
+      throw error;
+    }
+  }
   onPhase("checkpoint-write");
   await checkpointTransaction(packet.deadlineAt, async (tx) => {
     await assertFence(tx, row.taskRunId, generation);
@@ -160,16 +212,27 @@ async function checkpointTransaction<T>(deadlineAt: string, operation: (tx: Pris
 }
 
 /** Existing operator Retry adapter; never replays a tool or resets the request budget. */
-export async function retryPersistedSemanticReview(taskRunId: string, operatorUserId: string, confirmed: boolean) {
+export async function retryPersistedSemanticReview(taskRunId: string, operatorUserId: string, confirmed: boolean,
+  successor?: { remediationVerificationId: string; expectedRequestDigest: string }) {
   const row = await prisma.taskRun.findUnique({ where: { taskRunId }, select });
   if (!row || !native(row)) return null;
   if (row.userId !== operatorUserId) throw new Error("semantic-review-recovery-authority-denied");
   if (!confirmed) throw new Error("semantic-review-recovery-confirmation-required: replacing uncertain inference can incur another provider charge");
-  if (!isSemanticReviewRecoveryWait(row.status)) throw new Error("semantic-review-not-awaiting-recovery");
+  if (successor && typeof state(row).successorTaskRunId === "string") {
+    const packet = await requestFor(row);
+    if (!packet || packet.digest !== successor.expectedRequestDigest
+      || !(await verifySemanticReviewAuthority(packet, taskRunId))) throw new Error("semantic-review-recovery-authority-denied");
+    return { newTaskRunId: String(state(row).successorTaskRunId), predecessorTaskRunId: taskRunId,
+      strategy: "bounded-review-successor", reused: true };
+  }
+  const expiredBeforeDispatch = row.status === "failed" && state(row).reason === "review-deadline-exhausted";
+  if (!isSemanticReviewRecoveryWait(row.status) && !(successor && expiredBeforeDispatch)) throw new Error("semantic-review-not-awaiting-recovery");
   const packet = await requestFor(row);
   if (!packet) throw new Error("semantic-review-request-unavailable");
   const previousAttempt = state(row).recoveryAttempt ?? 0;
   const budget = semanticReviewRecoveryBudget(packet.deadlineAt, previousAttempt);
+  if (budget === "expired" && successor) return admitReviewSuccessor(row, packet, operatorUserId, successor);
+  if (successor) throw new Error("semantic-review-successor-requires-expired-request");
   if (budget === "expired") throw new Error("semantic-review-deadline-exhausted");
   if (budget !== "available" || typeof previousAttempt !== "number") throw new Error("semantic-review-recovery-exhausted");
   const attempt = previousAttempt + 1;
@@ -194,6 +257,80 @@ export async function retryPersistedSemanticReview(taskRunId: string, operatorUs
   await enqueueSemanticReview(taskRunId);
   revalidatePortalContext();
   return { newTaskRunId: taskRunId, strategy: "resume-review-checkpoints" };
+}
+
+/** One successor per lineage, admitted by fresh scoped runtime evidence, never by a replay. */
+async function admitReviewSuccessor(row: Run, packet: SemanticReviewRequest, operatorUserId: string,
+  recovery: { remediationVerificationId: string; expectedRequestDigest: string }) {
+  if (object(row.progressPayload).resultClass === "fail") throw new Error("semantic-review-failed-verdict-requires-repair");
+  if (recovery.expectedRequestDigest !== packet.digest) throw new Error("semantic-review-recovery-digest-mismatch");
+  if (state(row).successorAttempt !== undefined || state(row).predecessorTaskRunId !== undefined) {
+    throw new Error("semantic-review-successor-budget-exhausted");
+  }
+  if (!(await verifySemanticReviewAuthority(packet, row.taskRunId))) throw new Error("semantic-review-recovery-authority-denied");
+  const { getQuiescenceLevel } = await import("@/lib/self-upgrade/quiescence");
+  if (await getQuiescenceLevel() !== "normal") throw new Error("semantic-review-recovery-quiescing");
+  const capsule = await prisma.workroom.findUnique({ where: { capsuleId: packet.input.identity.capsuleId }, select: { id: true } });
+  if (!capsule) throw new Error("semantic-review-workroom-missing");
+  const evidence = await resolveFailureAnalysisEvidence(packet.input.failureAnalysis, capsule.id);
+  const analysis = validateFailureAnalysis(packet.input.failureAnalysis, packet.input.identity, evidence);
+  if (!analysis.valid || analysis.digest !== packet.input.identity.failureAnalysisDigest) throw new Error("semantic-review-failure-evidence-changed");
+  const replacement = createSemanticReviewRequest(packet.input, packet.actor);
+  if (replacement.gateKey !== packet.gateKey || replacement.repository !== packet.repository
+    || JSON.stringify(replacement.input) !== JSON.stringify(packet.input)) throw new Error("semantic-review-successor-identity-changed");
+  const priorRecovery = state(row).recoveryAttempt ?? 0;
+  if (typeof priorRecovery !== "number" || !Number.isSafeInteger(priorRecovery) || priorRecovery < 0 || priorRecovery > MAX_DISPATCH_ATTEMPTS) {
+    throw new Error("semantic-review-recovery-counter-invalid");
+  }
+  const attempt = object(row.a2aMetadata).attempt;
+  if (typeof attempt !== "number" || !Number.isSafeInteger(attempt) || attempt < 1 || attempt >= Number.MAX_SAFE_INTEGER) throw new Error("semantic-review-attempt-invalid");
+  const newTaskRunId = deterministicTaskRunId(packet.gateKey, attempt + 1);
+  const publication = await prisma.$transaction(async tx => {
+    const verification = await tx.runtimeVerification.findUnique({ where: { verificationId: recovery.remediationVerificationId } });
+    const proof = readSemanticReviewRemediation(verification, { capsuleId: capsule.id,
+      taskRunId: row.taskRunId, requestDigest: packet.digest, updatedAt: row.updatedAt });
+    if (!proof) {
+      throw new Error("semantic-review-remediation-evidence-required");
+    }
+    // CAS fences every old writer before inspecting checkpoints in this transaction.
+    const changed = await tx.taskRun.updateMany({ where: { taskRunId: row.taskRunId, status: row.status, updatedAt: row.updatedAt },
+      data: { status: "canceled", completedAt: new Date(), progressPayload: progress(row, {
+        state: "superseded", successorTaskRunId: newTaskRunId, remediationVerificationId: recovery.remediationVerificationId,
+        recoveryAuthorizedBy: operatorUserId, recoveryAuthorizedAt: new Date().toISOString(),
+      }) } });
+    if (changed.count !== 1) throw new Error("semantic-review-recovery-state-changed");
+    const nodes = await tx.taskNode.findMany({ where: { taskRunId: row.id }, take: 101 });
+    if (nodes.length > 100) throw new Error("semantic-review-checkpoint-limit-exceeded");
+    for (const node of nodes) {
+      const output = object(node.outputSnapshot);
+      if (node.status === "completed") {
+        if (output.requestDigest !== packet.digest) throw new Error("semantic-review-checkpoint-binding-mismatch");
+        const restored = restoreSemanticReviewCheckpoint(output.result, String(object(node.requestContract).agentId ?? "change-reviewer"));
+        if (restored.decision === "fail" || object(output.result).decision === "fail") throw new Error("semantic-review-failed-verdict-requires-repair");
+      } else if (node.status !== "superseded") {
+        if (!proof.settledNodeIds.includes(node.taskNodeId)) throw new Error("semantic-review-execution-unresolved");
+        await tx.taskNode.update({ where: { taskNodeId: node.taskNodeId }, data: { status: "failed", completedAt: new Date(),
+          outputSnapshot: json({ ...output, requestDigest: packet.digest, providerOutcome: "unknown",
+            remediationVerificationId: recovery.remediationVerificationId }) } });
+      }
+    }
+    await createPrismaSemanticReviewSingleFlightStore(tx, { packet: replacement, predecessorTaskRunId: row.taskRunId,
+      remediationVerificationId: recovery.remediationVerificationId }).create({
+      taskRunId: newTaskRunId, repeatedPatternKey: `gate:${packet.gateKey}`, gateKey: packet.gateKey,
+      userId: operatorUserId, capsuleId: packet.input.identity.capsuleId, attempt: attempt + 1,
+      title: packet.input.title, objective: packet.input.title,
+    });
+    const activity = await recordWorkCapsuleEvidence({ db: tx, capsuleId: packet.input.identity.capsuleId,
+      evidence: { kind: "note", summary: "Authorized one bounded review successor after runtime reconciliation; no verdict inferred.",
+        targetId: newTaskRunId, result: { predecessorTaskRunId: row.taskRunId, requestDigest: packet.digest,
+          successorRequestDigest: replacement.digest, remediationVerificationId: recovery.remediationVerificationId,
+          deadlineAt: replacement.deadlineAt } }, actor: { userId: operatorUserId, agentId: null, principalId: null }, deferPublication: true });
+    return activity;
+  });
+  publishRecordedWorkCapsuleActivity(capsule.id, publication.id);
+  await enqueueSemanticReview(newTaskRunId);
+  revalidatePortalContext();
+  return { newTaskRunId, predecessorTaskRunId: row.taskRunId, strategy: "bounded-review-successor" };
 }
 
 /** Returns null only for a different TaskRun family, allowing the shared worker to route it. */
@@ -227,7 +364,9 @@ export async function executePersistedSemanticReview(taskRunId: string) {
   if (!owned) return { taskRunId, status: "duplicate" };
   return withHeartbeatTicker(taskRunId, async () => {
     let branchFailure: ReturnType<typeof safeBranchFailure> | undefined;
-    const outcome = await withInferenceOrigin("autonomous", () => runSemanticChangeReview(packet.input, { dispatch: (prompt, context) =>
+    const outcome = await withInferenceOrigin("autonomous", () => runSemanticChangeReview(packet.input, {
+      legacyContract: packet.schemaVersion === 1,
+      dispatch: (prompt, context) =>
       dispatchRoutedSemanticReview(prompt, context, async (agentId, execute) => {
         let phase: BranchPhase = "checkpoint-read";
         try { return await checkpointBranch(row, packet, generation, agentId, execute, value => { phase = value; }); }
@@ -238,11 +377,38 @@ export async function executePersistedSemanticReview(taskRunId: string) {
       }) })).finally(async () => {
         // The dispatcher settles every branch first. Parking inside a branch
         // would revoke siblings' write fences and lose already-paid-for results.
-        if (branchFailure) await prisma.taskRun.updateMany({ where: fence(taskRunId, generation),
-          data: { status: "input-required", progressPayload: progress(row, { state: "input-required", generation,
-            reason: "provider-outcome-uncertain", branchFailure,
-            action: "Reconcile the recorded branch before authorizing recovery." }) } });
+        if (branchFailure) {
+          const authorityValid = await verifySemanticReviewAuthority(packet, taskRunId).catch(() => null);
+          await prisma.$transaction(async tx => {
+            const changed = await tx.taskRun.updateMany({ where: fence(taskRunId, generation),
+              data: { status: authorityValid === false ? "auth-required" : "input-required",
+                progressPayload: progress(row, { state: authorityValid === false ? "auth-required" : "input-required", generation,
+                reason: authorityValid === null ? "review-authority-unavailable"
+                  : authorityValid ? "provider-outcome-uncertain" : "submitting-authority-no-longer-valid", branchFailure,
+                action: authorityValid !== false ? "Reconcile recorded execution and authority availability before recovery."
+                  : "Restore the submitting authority and reconcile recorded execution before recovery." }) } });
+            if (changed.count !== 1) return;
+            const nodes = await tx.taskNode.findMany({ where: { taskRunId: row.id, status: "running" }, take: 101 });
+            if (nodes.length > 100) throw new Error("semantic-review-checkpoint-limit-exceeded");
+            for (const node of nodes) await tx.taskNode.update({ where: { taskNodeId: node.taskNodeId }, data: {
+              status: "failed", completedAt: new Date(), outputSnapshot: json({ ...object(node.outputSnapshot),
+                requestDigest: packet.digest, providerOutcome: "unknown", failure: branchFailure }),
+            } });
+          });
+        }
       });
+    // Keep completed branch evidence, but do not publish under revoked authority.
+    const currentAuthority = await verifySemanticReviewAuthority(packet, taskRunId).catch(() => null);
+    if (currentAuthority !== true) {
+      const status = currentAuthority === false ? "auth-required" : "input-required";
+      await prisma.taskRun.updateMany({ where: fence(taskRunId, generation), data: {
+        status, progressPayload: progress(row, { state: status, generation,
+          reason: currentAuthority === false ? "submitting-authority-no-longer-valid" : "review-authority-unavailable",
+          action: "Re-establish current authority before resuming completed review checkpoints." }),
+      } });
+      const current = await prisma.taskRun.findUnique({ where: { taskRunId }, select: { status: true } });
+      return { taskRunId, status: current?.status ?? "unknown", finalized: false };
+    }
     const persisted = await prisma.$transaction(async (tx) => {
       if (Date.now() >= Date.parse(packet.deadlineAt)) {
         await tx.taskRun.updateMany({ where: fence(taskRunId, generation), data: {
@@ -303,6 +469,21 @@ export async function executePersistedSemanticReview(taskRunId: string) {
   });
 }
 
+async function parkLostReview(row: Run, reason: string) {
+  return prisma.$transaction(async tx => {
+    const changed = await tx.taskRun.updateMany({ where: { taskRunId: row.taskRunId, status: row.status, updatedAt: row.updatedAt },
+      data: { status: "input-required", progressPayload: progress(row, { state: "input-required", reason, executionOutcome: "unknown" }) } });
+    if (changed.count !== 1) return { changed: false };
+    const nodes = await tx.taskNode.findMany({ where: { taskRunId: row.id, status: "running" }, take: 101 });
+    if (nodes.length > 100) throw new Error("semantic-review-checkpoint-limit-exceeded");
+    for (const node of nodes) await tx.taskNode.update({ where: { taskNodeId: node.taskNodeId }, data: {
+      status: "failed", completedAt: new Date(), outputSnapshot: json({ ...object(node.outputSnapshot),
+        requestDigest: state(row).requestDigest, providerOutcome: "unknown", failure: { phase: "executor-loss", reason } }),
+    } });
+    return { changed: true };
+  });
+}
+
 /** Reconcile only persisted native requests. Legacy inline requests cannot be reconstructed. */
 export async function reconcileSemanticReviews(now = new Date()) {
   const rows = await prisma.taskRun.findMany({ where: {
@@ -321,14 +502,15 @@ export async function reconcileSemanticReviews(now = new Date()) {
       continue;
     }
     if (now.getTime() >= deadline) {
-      if ((await settle(row, row.status === "submitted" ? "failed" : "input-required", "review-deadline-exhausted")).changed) waiting += 1;
+      if ((await (row.status === "submitted" ? settle(row, "failed", "review-deadline-exhausted")
+        : parkLostReview(row, "review-deadline-exhausted"))).changed) waiting += 1;
       continue;
     }
     if (row.status !== "submitted") {
       if (row.lastHeartbeatAt && now.getTime() - row.lastHeartbeatAt.getTime() < STALE_MS) continue;
       const unfinished = await prisma.taskNode.findFirst({ where: { taskRunId: row.id, status: { notIn: ["completed", "superseded"] } }, select: { id: true } });
       if (unfinished) {
-        if ((await settle(row, "input-required", "provider-outcome-uncertain-after-restart")).changed) waiting += 1;
+        if ((await parkLostReview(row, "provider-outcome-uncertain-after-restart")).changed) waiting += 1;
         continue;
       }
       const priorRecovery = state(row).recoveryAttempt ?? 0;

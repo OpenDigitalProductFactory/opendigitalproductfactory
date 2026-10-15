@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
+import { gitText } from "./lib/git.mjs";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -140,7 +141,7 @@ function loadManifest(path = DEFAULT_MANIFEST) {
 
 function inferRepository() {
   if (process.env.GITHUB_REPOSITORY) return process.env.GITHUB_REPOSITORY;
-  const remote = execFileSync("git", ["remote", "get-url", "origin"], { cwd: ROOT, encoding: "utf8" }).trim();
+  const remote = gitText(["remote", "get-url", "origin"], { cwd: ROOT });
   const match = remote.match(/github\.com[/:]([^/]+)\/([^/.]+)(?:\.git)?$/);
   if (!match) throw new Error(`cannot infer GitHub repository from ${remote}`);
   return `${match[1]}/${match[2]}`;

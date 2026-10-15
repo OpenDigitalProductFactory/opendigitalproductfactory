@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
+  persisted: {} as Record<string, unknown>,
   findFirst: vi.fn(),
   findUnique: vi.fn(),
   findModelConfig: vi.fn(),
@@ -23,15 +24,10 @@ const autonomous = vi.hoisted(() => ({
 }));
 const records = vi.hoisted(() => ({ create: vi.fn() }));
 
-vi.mock("@dpf/db", () => ({
+vi.mock("@dpf/db", async () => ({
   prisma: {
     authorityBinding: { findUnique: (...args: unknown[]) => db.findConsent(...args) },
-    taskRun: {
-      findFirst: (...args: unknown[]) => db.findFirst(...args),
-      findUnique: (...args: unknown[]) => db.findUnique(...args),
-      update: (...args: unknown[]) => db.update(...args),
-      updateMany: (...args: unknown[]) => db.updateMany(...args),
-    },
+    taskRun: (await import("./test-support/task-run-state")).taskRunState(db),
     coworkerActionEnvelope: { findFirst: (...args: unknown[]) => db.findEnvelope(...args) },
     toolExecution: { findFirst: (...args: unknown[]) => db.findToolExecution(...args) },
     agentThread: { upsert: (...args: unknown[]) => db.upsertThread(...args) },
@@ -78,6 +74,7 @@ function submit(tokenId: string, params: Record<string, unknown> = immutablePara
 
 beforeEach(() => {
   vi.clearAllMocks();
+  db.persisted = {};
   vi.stubEnv("DPF_EXTERNAL_MCP_TASK_ASYNC", "0");
   db.findFirst.mockResolvedValue(null);
   db.findUnique.mockResolvedValue({ status: "working" });
@@ -130,8 +127,8 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
         riskClass: "bounded-write",
       });
 
-      expect(db.update).toHaveBeenLastCalledWith({
-        where: { taskRunId: expect.stringMatching(/^TR-MCP-/) },
+      expect(db.updateMany).toHaveBeenLastCalledWith({
+        where: expect.objectContaining({ taskRunId: expect.stringMatching(/^TR-MCP-/), status: "working" }),
         data: {
           status: "submitted",
           completedAt: null,
@@ -266,6 +263,7 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
     }).metadata;
 
     vi.clearAllMocks();
+    db.persisted = {};
     const waiting = {
       id: "task-internal",
       taskRunId: "TR-MCP-SAME-RUN",
@@ -472,8 +470,8 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
         riskClass: "bounded-write",
       });
 
-      expect(db.update).toHaveBeenLastCalledWith({
-        where: { taskRunId: expect.stringMatching(/^TR-MCP-/) },
+      expect(db.updateMany).toHaveBeenLastCalledWith({
+        where: expect.objectContaining({ taskRunId: expect.stringMatching(/^TR-MCP-/), status: "working" }),
         data: {
           status: "failed",
           completedAt: expect.any(Date),

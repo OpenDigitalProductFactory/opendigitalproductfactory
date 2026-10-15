@@ -18,9 +18,9 @@
 // new-autonomous-job rollout pattern).
 
 import { createHash } from "crypto";
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 import {
@@ -208,7 +208,7 @@ export async function runEdgeIncidentCorrelation(opts?: {
   return correlateAndPersistIncidents(prisma as unknown as EdgeCorrelationDb, opts);
 }
 
-export const edgeIncidentCorrelation = inngest.createFunction(
+export const edgeIncidentCorrelation = jobs.createFunction(
   { id: "ops/edge-incident-correlation", retries: 2, triggers: [cron("4,14,24,34,44,54 * * * *")] },
   async ({ step }) => {
     if (!envFlagEnabled(process.env, "DPF_EDGE_INCIDENT_CORRELATION_ENABLED")) {

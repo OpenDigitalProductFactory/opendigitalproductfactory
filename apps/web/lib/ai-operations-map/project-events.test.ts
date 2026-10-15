@@ -262,7 +262,7 @@ describe("AI operations map projection", () => {
     expect(projection.location.stationId).toBe("release");
     expect(projection.label).toBe("github ci-check");
     expect(projection.refs.externalEvidenceRecordId).toBe("external-1");
-    expect(projection.links.historyHref).toBe("/platform/ai/history?externalEvidenceRecordId=external-1");
+    expect(projection.links.historyHref).toBe("/platform/audit/ledger?externalEvidenceRecordId=external-1");
   });
 
   it("filters projections by selected source and severity without mutating the event stream", () => {

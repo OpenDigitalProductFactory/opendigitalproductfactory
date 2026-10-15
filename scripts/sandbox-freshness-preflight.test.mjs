@@ -20,6 +20,8 @@ const PACKAGES = [
   { name: "react", importer: "apps/web", version: "19.2.7" },
   { name: "react-dom", importer: "apps/web", version: "19.2.7" },
   { name: "typescript", importer: ".", version: "5.9.3" },
+  // npm alias, recorded in the lockfile as "typescript@<version>" (BI-D2FE6931).
+  { name: "typescript7", importer: ".", version: "7.0.2", aliasOf: "typescript" },
   { name: "prisma", importer: "packages/db", version: "6.19.1" },
   { name: "vitest", importer: "apps/web", version: "4.1.10" },
 ];
@@ -29,7 +31,9 @@ function lockfileText(versions) {
   for (const pkg of PACKAGES) {
     const version = versions[pkg.name] ?? pkg.version;
     const block = importerBlocks.get(pkg.importer) ?? [];
-    block.push(`      ${pkg.name}:\n        specifier: ^${version}\n        version: ${version}`);
+    block.push(pkg.aliasOf
+      ? `      ${pkg.name}:\n        specifier: npm:${pkg.aliasOf}@${version}\n        version: ${pkg.aliasOf}@${version}`
+      : `      ${pkg.name}:\n        specifier: ^${version}\n        version: ${version}`);
     importerBlocks.set(pkg.importer, block);
   }
   let text = "lockfileVersion: '9.0'\n\nimporters:\n\n";
@@ -57,7 +61,7 @@ function scaffold({ installedVersions = {}, lockedVersions = {}, installedLockVe
     const version = installedVersions[pkg.name] ?? pkg.version;
     const storeDir = join(root, "node_modules", ".pnpm", `${pkg.name}@${version}_fakehash`, "node_modules", pkg.name);
     mkdirSync(storeDir, { recursive: true });
-    writeFileSync(join(storeDir, "package.json"), JSON.stringify({ name: pkg.name, version }));
+    writeFileSync(join(storeDir, "package.json"), JSON.stringify({ name: pkg.aliasOf ?? pkg.name, version }));
     if (pkg.name === "vitest") {
       mkdirSync(join(storeDir, "dist", "chunks"), { recursive: true });
       writeFileSync(join(storeDir, "dist", "cli.js"), "import './chunks/cac.ok.js';\n");
@@ -72,7 +76,8 @@ function scaffold({ installedVersions = {}, lockedVersions = {}, installedLockVe
 
 function runPreflight(root, extraArgs = [], options = {}) {
   const reportPath = join(root, "freshness-report.json");
-  const result = spawnSync("node", [cli, "--dir", root, "--report", reportPath, "--skip-install-scan", ...extraArgs], {
+  const scanArgs = options.scanInstalls ? [] : ["--skip-install-scan"];
+  const result = spawnSync("node", [cli, "--dir", root, "--report", reportPath, ...scanArgs, ...extraArgs], {
     encoding: "utf8",
     env: options.env ? { ...process.env, ...options.env } : process.env,
   });
@@ -126,6 +131,7 @@ const packages = [
   ["react", "apps/web", "19.2.7"],
   ["react-dom", "apps/web", "19.2.7"],
   ["typescript", ".", "5.9.3"],
+  ["typescript7", ".", "7.0.2"],
   ["prisma", "packages/db", "6.19.1"],
   ["vitest", "apps/web", "4.1.10"],
 ];
@@ -175,6 +181,7 @@ const packages = [
   ["react", "apps/web", "19.2.7"],
   ["react-dom", "apps/web", "19.2.7"],
   ["typescript", ".", "5.9.3"],
+  ["typescript7", ".", "7.0.2"],
   ["prisma", "packages/db", "6.19.1"],
   ["vitest", "apps/web", "4.1.10"],
 ];
@@ -489,5 +496,154 @@ test("--converge falls back to a scratch-local pnpm store when the shared store 
   assert.match(readFileSync(join(root, "pnpm-invocations.log"), "utf8"), /--store-dir/);
   const vitest = report.packages.find((p) => p.name === "vitest");
   assert.equal(vitest.resolvedVersion, "4.1.10");
+  rmSync(root, { recursive: true, force: true });
+});
+
+// --- BI-8DC6F267: the install scan is scoped to the sandbox ------------------
+// Fake `ps` and `lsof` on PATH stand in for the host: no real processes. The
+// pid is above Linux's pid_max, so /proc/<pid>/cwd never exists and the Linux
+// reader falls back to the (fake) lsof, exactly as on macOS.
+const FAKE_INSTALL_PID = 99999999;
+
+function writeFakeProcessTools(binDir) {
+  mkdirSync(binDir, { recursive: true });
+  const ps = join(binDir, "fake-ps.mjs");
+  writeFileSync(ps, `#!/usr/bin/env node
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+// Only the install scan is faked; any other ps call (e.g. the convergence
+// lock's process-identity probe) goes to the real ps.
+const args = process.argv.slice(2);
+if (args.join(" ") !== "-axo pid=,etime=,command=") {
+  const real = spawnSync("/bin/ps", args, { stdio: "inherit" });
+  process.exit(real.status ?? 1);
+}
+// FAKE_PS_INSTALL_SCANS: how many scans report the install (-1 = always).
+const limit = Number(process.env.FAKE_PS_INSTALL_SCANS ?? "-1");
+const counter = process.env.FAKE_PS_COUNTER_FILE;
+let scans = 0;
+if (counter && existsSync(counter)) scans = Number(readFileSync(counter, "utf8")) || 0;
+scans += 1;
+if (counter) writeFileSync(counter, String(scans));
+const lines = ["    1 10-00:00:00 /sbin/launchd"];
+if (limit < 0 || scans <= limit) lines.push("  ${FAKE_INSTALL_PID} 01:46 node /usr/local/bin/pnpm install --frozen-lockfile");
+process.stdout.write(lines.join("\\n") + "\\n");
+`);
+  const lsof = join(binDir, "fake-lsof.mjs");
+  writeFileSync(lsof, `#!/usr/bin/env node
+// FAKE_LSOF_CWD empty/unset = cwd unreadable (exit 1, like lsof on a foreign process).
+const cwd = process.env.FAKE_LSOF_CWD;
+if (!cwd) process.exit(1);
+const pid = process.argv[process.argv.indexOf("-p") + 1];
+process.stdout.write("p" + pid + "\\nfcwd\\nn" + cwd + "\\n");
+`);
+  for (const [name, script] of [["ps", ps], ["lsof", lsof]]) {
+    chmodSync(script, 0o755);
+    writeFileSync(join(binDir, name), `#!/bin/sh\nexec node "${script}" "$@"\n`);
+    chmodSync(join(binDir, name), 0o755);
+  }
+}
+
+function runWithFakeInstall(root, { cwd, installScans = -1, waitMs = "200", pollMs = "20" } = {}) {
+  const binDir = join(root, "fake-proc-bin");
+  writeFakeProcessTools(binDir);
+  const counterFile = join(root, "ps-scans.count");
+  const run = runPreflight(root, [], {
+    scanInstalls: true,
+    env: {
+      PATH: prependPathEnv(binDir),
+      FAKE_LSOF_CWD: cwd ?? "",
+      FAKE_PS_INSTALL_SCANS: String(installScans),
+      FAKE_PS_COUNTER_FILE: counterFile,
+      DPF_LOCAL_CI_FRESHNESS_INSTALL_WAIT_MS: waitMs,
+      DPF_LOCAL_CI_FRESHNESS_INSTALL_POLL_MS: pollMs,
+    },
+  });
+  const scans = existsSync(counterFile) ? Number(readFileSync(counterFile, "utf8")) : 0;
+  return { ...run, scans };
+}
+
+// A sandbox whose vitest link is stale, plus a fake pnpm that repairs it — so
+// --converge has a real reason to start its own install.
+function scaffoldNeedingConvergence() {
+  const root = scaffold({
+    installedVersions: { vitest: "4.1.9" },
+    lockedVersions: { vitest: "4.1.10" },
+    installedLockVersions: { vitest: "4.1.10" },
+  });
+  const pnpmBin = join(root, "fake-bin");
+  writeFakePnpmThatRepairsOnlyWithFreshStore(pnpmBin);
+  const procBin = join(root, "fake-proc-bin");
+  writeFakeProcessTools(procBin);
+  return { root, path: prependPathEnv(`${procBin}:${pnpmBin}`) };
+}
+
+const posixOnly = { skip: process.platform === "win32" };
+
+test("AC-1: a pnpm install running in another worktree does not block the gate", posixOnly, () => {
+  const root = scaffold();
+  const { result, report } = runWithFakeInstall(root, { cwd: join(tmpdir(), "some-other-worktree") });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.equal(report.verdict, "green");
+  assert.deepEqual(report.installProcesses, []);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("AC-1: --converge runs its own install while another worktree is installing", posixOnly, () => {
+  const { root, path } = scaffoldNeedingConvergence();
+  const { result, report } = runPreflight(root, ["--converge"], {
+    scanInstalls: true,
+    env: {
+      PATH: path,
+      FAKE_LSOF_CWD: join(tmpdir(), "some-other-worktree"),
+      DPF_ALLOW_SANDBOX_NODE_MODULES_RESET: "1",
+    },
+  });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.equal(report.verdict, "green");
+  assert.notEqual(report.convergence.reason, "install_already_running");
+  assert.ok(existsSync(join(root, "pnpm-invocations.log")), "the sandbox's own convergence install must run");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("AC-2: an install running in the sandbox itself still prevents a duplicate install", posixOnly, () => {
+  const { root, path } = scaffoldNeedingConvergence();
+  const { result, report } = runPreflight(root, ["--converge"], {
+    scanInstalls: true,
+    env: {
+      PATH: path,
+      FAKE_LSOF_CWD: join(root, "apps", "web"),
+      DPF_LOCAL_CI_FRESHNESS_INSTALL_WAIT_MS: "200",
+      DPF_LOCAL_CI_FRESHNESS_INSTALL_POLL_MS: "20",
+    },
+  });
+  assert.equal(result.status, 4, `${result.stdout}\n${result.stderr}`);
+  assert.equal(report.verdict, "sandbox_not_ready");
+  assert.equal(report.convergence.reason, "install_already_running");
+  assert.equal(report.installWait.timedOut, true);
+  assert.ok(report.failures.some((f) => f.kind === "install_in_progress"));
+  assert.equal(existsSync(join(root, "pnpm-invocations.log")), false, "no duplicate install may start");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("AC-3: the gate waits for a same-sandbox install that finishes within the bound, then proceeds", posixOnly, () => {
+  const root = scaffold();
+  const { result, report, scans } = runWithFakeInstall(root, { cwd: root, installScans: 3, waitMs: "10000", pollMs: "20" });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.equal(report.verdict, "green");
+  assert.equal(report.installWait.waited, true);
+  assert.equal(report.installWait.timedOut, false);
+  assert.deepEqual(report.installWait.observedPids, [FAKE_INSTALL_PID]);
+  assert.ok(scans > 3, `expected re-scans until the install finished, saw ${scans}`);
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("AC-4: an install whose cwd cannot be read blocks (never a duplicate install)", posixOnly, () => {
+  const root = scaffold();
+  const { result, report } = runWithFakeInstall(root, { cwd: "", waitMs: "100", pollMs: "20" });
+  assert.equal(result.status, 4, `${result.stdout}\n${result.stderr}`);
+  assert.equal(report.verdict, "sandbox_not_ready");
+  assert.equal(report.installProcesses[0].pid, FAKE_INSTALL_PID);
+  assert.equal(report.installProcesses[0].cwdUnknown, true);
   rmSync(root, { recursive: true, force: true });
 });

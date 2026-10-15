@@ -6,7 +6,7 @@
 // existing registration and its legacy baseline; this module registers only the
 // new model.
 
-import type { DataAssetDefinition } from "./assets";
+import type { DataAssetDefinition } from "./asset-types";
 import type { ClassificationProvenance } from "./taxonomy";
 
 const PROVENANCE: ClassificationProvenance = {

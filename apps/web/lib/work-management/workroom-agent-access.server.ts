@@ -1,13 +1,15 @@
 import { prisma, type Prisma } from "@dpf/db";
 import { currentUserContext } from "@/lib/govern/current-user-context";
 import { authorizeWorkroomAccess, type WorkroomAccessDecision, type WorkroomAccessLevel } from "./room-participation";
-import { readWorkroomBoundaryClaim } from "./workroom-boundary-claim";
+import { resolveRoomSensitivityCeiling } from "./room-sensitivity-ceiling.server";
 import { readWorkspaceRoomPolicy } from "./workspace-room-access";
 
 const principalSelect = { id: true, principalId: true, kind: true, status: true, sensitivityClearance: true } as const;
+/** Why an owner-requested handover was refused, for a person admitted to the room. */
+export type HandoverRefusal = "not-owner" | "assistant-in-room";
 const denied: WorkroomAccessDecision = { level: "none", reason: "not-admitted" };
 type Principal = { id: string; principalId: string; sensitivityClearance: string[] };
-type Membership = { principalId: string; lifecycle: string; roles: string[] };
+type Membership = { principalId: string; lifecycle: string; roles: string[]; principal?: { kind: string } | null };
 
 /** Persisted narrowing/removal wins over historical creation and lease fields. */
 function admitted(principal: Principal, participants: Membership[], holders: (string | null)[], action: boolean) {
@@ -21,13 +23,15 @@ const OWNER_ROLES = ["coordinator", "accountable"];
 const owns = (row: Membership) => row.lifecycle === "active" && row.roles.some((role) => OWNER_ROLES.includes(role));
 
 /**
- * Whether a person owns a room: they oversee it, or (for a room nobody
- * oversees yet) they created, requested, or hold it.
+ * Whether a person owns a room: they oversee it, or (for a room no other
+ * person oversees) they created, requested, or hold it. An AI coworker
+ * appointed to coordinate acts for people and never displaces them
+ * (BI-A27B903D).
  */
-function ownsRoom(principal: Principal, participants: Membership[], holders: (string | null)[]) {
+export function ownsRoom(principal: Principal, participants: Membership[], holders: (string | null)[]) {
   const row = participants.find((entry) => entry.principalId === principal.id);
   if (row) return owns(row);
-  return !participants.some(owns) && holders.includes(principal.id);
+  return !participants.some((entry) => owns(entry) && entry.principal?.kind !== "agent") && holders.includes(principal.id);
 }
 
 /**
@@ -42,42 +46,64 @@ export async function resolveAgentWorkroomAccess(input: {
   requested: Exclude<WorkroomAccessLevel, "none">;
   handover?: boolean;
 }, db: Prisma.TransactionClient = prisma) {
+  if (!input.agentId?.trim()) return { agentPrincipalId: null, decision: denied };
+  return resolveActingWorkroomAccess(input, db);
+}
+
+/** Browser reads use the same admission and clearance policy, for the actual person. */
+export async function resolveHumanWorkroomAccess(input: {
+  userId: string; workroomId: string; requested: Exclude<WorkroomAccessLevel, "none">;
+}, db: Prisma.TransactionClient = prisma) {
+  return resolveActingWorkroomAccess(input, db);
+}
+
+async function resolveActingWorkroomAccess(input: {
+  userId: string; agentId?: string; workroomId: string;
+  requested: Exclude<WorkroomAccessLevel, "none">; handover?: boolean;
+}, db: Prisma.TransactionClient) {
   const fail = (agentPrincipalId: string | null = null, decision = denied) => ({ decision, agentPrincipalId });
   if (!await currentUserContext(input.userId, db)) return fail();
   const [humanAlias, agentAlias, agent, room] = await Promise.all([
     db.principalAlias.findFirst({ where: { aliasType: "user", aliasValue: input.userId, issuer: "" }, select: { principal: { select: principalSelect } } }),
-    db.principalAlias.findFirst({ where: { aliasType: "agent", aliasValue: input.agentId, issuer: "" }, select: { principal: { select: principalSelect } } }),
-    db.agent.findUnique({ where: { agentId: input.agentId }, select: { status: true, archived: true } }),
+    input.agentId ? db.principalAlias.findFirst({ where: { aliasType: "agent", aliasValue: input.agentId, issuer: "" }, select: { principal: { select: principalSelect } } }) : Promise.resolve(null),
+    input.agentId ? db.agent.findUnique({ where: { agentId: input.agentId }, select: { status: true, archived: true } }) : Promise.resolve(null),
     db.workroom.findUnique({ where: { id: input.workroomId }, select: {
-      createdByPrincipalId: true, requestedByPrincipalId: true, leaseHolderPrincipalId: true, scopeClaims: true,
-      participants: { select: { principalId: true, lifecycle: true, roles: true } },
+      createdByPrincipalId: true, requestedByPrincipalId: true, leaseHolderPrincipalId: true, scopeClaims: true, backlogItemId: true,
+      participants: { select: { principalId: true, lifecycle: true, roles: true, principal: { select: { kind: true } } } },
       workItem: { select: { evidence: true } },
     } }),
   ]);
   const human = humanAlias?.principal;
   const assistant = agentAlias?.principal;
   if (!room || !human || human.kind !== "human" || human.status !== "active"
-    || !assistant || assistant.kind !== "agent" || assistant.status !== "active"
-    || !agent || agent.status !== "active" || agent.archived) return fail();
+    || (input.agentId && (!assistant || assistant.kind !== "agent" || assistant.status !== "active"
+      || !agent || agent.status !== "active" || agent.archived))) return fail();
   const holders = [room.createdByPrincipalId, room.requestedByPrincipalId, room.leaseHolderPrincipalId];
   const policy = readWorkspaceRoomPolicy(room.workItem?.evidence);
-  const ceiling = readWorkroomBoundaryClaim(room.scopeClaims)?.sensitivityCeiling ?? "internal";
-  const handover = input.handover === true && input.requested === "action"
-    && !room.participants.some((row) => row.principalId === assistant.id) && ownsRoom(human, room.participants, holders);
-  for (const principal of [human, assistant]) {
+  const ceiling = await resolveRoomSensitivityCeiling(room, db);
+  const askedHandover = Boolean(assistant) && input.handover === true && input.requested === "action";
+  const assistantInRoom = assistant ? room.participants.some((row) => row.principalId === assistant.id) : false;
+  const handover = askedHandover && !assistantInRoom && ownsRoom(human, room.participants, holders);
+  // Why a handover cannot happen is told only to a person already admitted to
+  // the room, so the reason reveals nothing they could not already see (BI-F4EB23C1).
+  const handoverRefusal: HandoverRefusal | null = askedHandover && !handover && admitted(human, room.participants, holders, false)
+    ? (assistantInRoom ? "assistant-in-room" : "not-owner") : null;
+  for (const principal of assistant ? [human, assistant] : [human]) {
     const handedOver = handover && principal === assistant;
-    if (!handedOver && !admitted(principal, room.participants, holders, input.requested === "action")) return fail(assistant.principalId);
+    if (!handedOver && !admitted(principal, room.participants, holders, input.requested === "action")) {
+      return handoverRefusal ? { ...fail(assistant?.principalId ?? null), handoverRefusal } : fail(assistant?.principalId ?? null);
+    }
     // An explicit case policy restricts admission; it never supplies a room invitation.
     const policyRefs = input.requested === "action" ? policy.actionPrincipalRefs ?? policy.admittedPrincipalRefs
       : policy.admittedPrincipalRefs || policy.actionPrincipalRefs
         ? [...(policy.admittedPrincipalRefs ?? []), ...(policy.actionPrincipalRefs ?? [])] : undefined;
-    if (policyRefs && !policyRefs.includes(principal.principalId)) return fail(assistant.principalId);
+    if (policyRefs && !policyRefs.includes(principal.principalId)) return fail(assistant?.principalId ?? null);
     for (const sensitivityCeiling of [ceiling, ...(policy.sensitivityCeiling ? [policy.sensitivityCeiling] : [])]) {
       const decision = authorizeWorkroomAccess({ requested: input.requested, principalRef: principal.principalId,
         assignedPrincipalRefs: [principal.principalId], sensitivityCeiling,
         sensitivityClearance: principal.sensitivityClearance, isSuperuser: false, principalKind: principal.kind === "human" ? "human" : "agent" });
-      if (decision.level !== input.requested) return fail(assistant.principalId, decision);
+      if (decision.level !== input.requested) return fail(assistant?.principalId ?? null, decision);
     }
   }
-  return { agentPrincipalId: assistant.principalId, decision: { level: input.requested, reason: "authorized" } as WorkroomAccessDecision, handover };
+  return { agentPrincipalId: assistant?.principalId ?? null, decision: { level: input.requested, reason: "authorized" } as WorkroomAccessDecision, handover };
 }

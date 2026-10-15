@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ensureGitWebhookSecret, installReleaseAssets, updateEnv } from "./install-release-assets.mjs";
+import { ensureDedicatedSigningKeys, ensureGitWebhookSecret, ensureGppPermitSecret, ensureInngestKeys, installReleaseAssets, updateEnv } from "./install-release-assets.mjs";
 
 const digest = bytes => createHash("sha256").update(bytes).digest("hex");
 
@@ -148,4 +148,83 @@ test("updateEnv carries the webhook secret into the committed install env", () =
   } finally {
     if (previous === undefined) delete process.env.DPF_GIT_WEBHOOK_SECRET; else process.env.DPF_GIT_WEBHOOK_SECRET = previous;
   }
+});
+
+// BI-8541D491: the GPP permit signing key reaches every install the same way.
+test("an upgrade persists the permit key promote.sh started the portal with, and never replaces a real one", () => {
+  const exported = "f".repeat(64);
+  const added = ensureGppPermitSecret("DPF_IMAGE_TAG=v1\n", "\n", exported);
+  assert.match(added, new RegExp(`^DPF_GPP_PERMIT_SECRET=${exported}$`, "m"));
+  const placeholder = ensureGppPermitSecret('DPF_GPP_PERMIT_SECRET="<generate a distinct value>"\n', "\n", exported);
+  assert.match(placeholder, new RegExp(`^DPF_GPP_PERMIT_SECRET=${exported}$`, "m"));
+  const kept = ensureGppPermitSecret(`DPF_GPP_PERMIT_SECRET="${"1".repeat(64)}"\n`, "\n", exported);
+  assert.equal(kept, `DPF_GPP_PERMIT_SECRET="${"1".repeat(64)}"\n`);
+  const generated = ensureGppPermitSecret("", "\n", "");
+  assert.match(generated, /^DPF_GPP_PERMIT_SECRET=[0-9a-f]{64}$/m);
+  const crlf = ensureGppPermitSecret("DPF_IMAGE_TAG=v1\r\n", "\r\n", exported);
+  assert.ok(crlf.endsWith(`DPF_GPP_PERMIT_SECRET=${exported}\r\n`));
+});
+
+test("updateEnv carries the permit key into the committed install env without touching the webhook secret", () => {
+  const previous = { permit: process.env.DPF_GPP_PERMIT_SECRET, webhook: process.env.DPF_GIT_WEBHOOK_SECRET };
+  process.env.DPF_GPP_PERMIT_SECRET = "2".repeat(64);
+  process.env.DPF_GIT_WEBHOOK_SECRET = "3".repeat(64);
+  try {
+    const text = updateEnv(Buffer.from("DPF_IMAGE_TAG=v1.0.0\n"), "v2.0.0", "opendigitalproductfactory").toString("utf8");
+    assert.match(text, new RegExp(`^DPF_GPP_PERMIT_SECRET=${"2".repeat(64)}$`, "m"));
+    assert.match(text, new RegExp(`^DPF_GIT_WEBHOOK_SECRET=${"3".repeat(64)}$`, "m"));
+    const kept = updateEnv(Buffer.from(`DPF_GPP_PERMIT_SECRET=${"4".repeat(64)}\n`), "v2.0.0", "o").toString("utf8");
+    assert.match(kept, new RegExp(`^DPF_GPP_PERMIT_SECRET=${"4".repeat(64)}$`, "m"));
+  } finally {
+    if (previous.permit === undefined) delete process.env.DPF_GPP_PERMIT_SECRET; else process.env.DPF_GPP_PERMIT_SECRET = previous.permit;
+    if (previous.webhook === undefined) delete process.env.DPF_GIT_WEBHOOK_SECRET; else process.env.DPF_GIT_WEBHOOK_SECRET = previous.webhook;
+  }
+});
+
+// BI-F6929F50: the reach-link and delegation-receipt signing keys reach every install the same way.
+test("an upgrade persists the reach and receipt keys promote.sh exported, and never replaces a real one", () => {
+  const exported = { DPF_ATTENTION_REACH_SECRET: "a".repeat(64), DPF_DELEGATION_RECEIPT_SECRET: "b".repeat(64) };
+  const added = ensureDedicatedSigningKeys("DPF_IMAGE_TAG=v1\n", "\n", exported);
+  assert.match(added, new RegExp(`^DPF_ATTENTION_REACH_SECRET=${"a".repeat(64)}$`, "m"));
+  assert.match(added, new RegExp(`^DPF_DELEGATION_RECEIPT_SECRET=${"b".repeat(64)}$`, "m"));
+  const placeholder = ensureDedicatedSigningKeys('DPF_ATTENTION_REACH_SECRET="<generate a distinct value>"\n', "\n", exported);
+  assert.match(placeholder, new RegExp(`^DPF_ATTENTION_REACH_SECRET=${"a".repeat(64)}$`, "m"));
+  // BI-231A4BC7: the list also carries the target-binding and delivery-cursor keys.
+  const real = `DPF_ATTENTION_REACH_SECRET="${"1".repeat(64)}"\nDPF_DELEGATION_RECEIPT_SECRET='${"2".repeat(64)}'\n`
+    + `DPF_SELF_UPGRADE_TARGET_BINDING_SECRET=${"3".repeat(64)}\nDPF_DELIVERY_TASK_CURSOR_SECRET="${"4".repeat(64)}"\n`;
+  assert.equal(ensureDedicatedSigningKeys(real, "\n", exported), real);
+  const generated = ensureDedicatedSigningKeys("", "\n", {});
+  assert.match(generated, /^DPF_ATTENTION_REACH_SECRET=[0-9a-f]{64}$/m);
+  assert.match(generated, /^DPF_DELEGATION_RECEIPT_SECRET=[0-9a-f]{64}$/m);
+  assert.notEqual(generated.match(/^DPF_ATTENTION_REACH_SECRET=(.*)$/m)[1], generated.match(/^DPF_DELEGATION_RECEIPT_SECRET=(.*)$/m)[1]);
+  const crlf = ensureDedicatedSigningKeys("DPF_IMAGE_TAG=v1\r\n", "\r\n", exported);
+  assert.ok(crlf.includes(`\r\nDPF_DELEGATION_RECEIPT_SECRET=${"b".repeat(64)}\r\n`));
+  assert.ok(!crlf.replaceAll("\r\n", "").includes("\n"), "every appended line uses the file's CRLF newline");
+});
+
+// BI-3267763F: no install keeps running Inngest on the keys published in the repo.
+test("an upgrade persists the Inngest keys promote.sh exported and replaces the public defaults", () => {
+  const exported = { INNGEST_SIGNING_KEY: "d".repeat(64), INNGEST_EVENT_KEY: "e".repeat(64) };
+  const fromDefaults = ensureInngestKeys("INNGEST_SIGNING_KEY=abcdef0123456789\nINNGEST_EVENT_KEY=deadbeefcafebabe\n", "\n", exported); // gitleaks:allow — the old public compose default this test refuses, not a credential (BI-3267763F)
+  assert.equal(fromDefaults, `INNGEST_SIGNING_KEY=${"d".repeat(64)}\nINNGEST_EVENT_KEY=${"e".repeat(64)}\n`);
+  const missing = ensureInngestKeys("DPF_IMAGE_TAG=v1", "\n", exported);
+  assert.match(missing, new RegExp(`^INNGEST_SIGNING_KEY=${"d".repeat(64)}$`, "m"));
+  assert.match(missing, new RegExp(`^INNGEST_EVENT_KEY=${"e".repeat(64)}$`, "m"));
+  const placeholder = ensureInngestKeys('INNGEST_SIGNING_KEY="<generate with: openssl rand -hex 32>"\n', "\n", exported);
+  assert.match(placeholder, new RegExp(`^INNGEST_SIGNING_KEY=${"d".repeat(64)}$`, "m"));
+  const real = `INNGEST_SIGNING_KEY=${"1".repeat(64)}\nINNGEST_EVENT_KEY=${"2".repeat(64)}\n`;
+  assert.equal(ensureInngestKeys(real, "\n", exported), real, "a real key is never rotated");
+});
+
+test("an exported public default is never persisted; a random key is generated instead", () => {
+  const text = ensureInngestKeys("", "\n", { INNGEST_SIGNING_KEY: "abcdef0123456789", INNGEST_EVENT_KEY: "deadbeefcafebabe" }); // gitleaks:allow — the old public compose default this test refuses, not a credential (BI-3267763F)
+  assert.match(text, /^INNGEST_SIGNING_KEY=[0-9a-f]{64}$/m);
+  assert.match(text, /^INNGEST_EVENT_KEY=[0-9a-f]{64}$/m);
+  assert.doesNotMatch(text, /abcdef0123456789|deadbeefcafebabe/);
+});
+
+test("updateEnv carries the Inngest keys into the committed install env", () => {
+  const text = updateEnv(Buffer.from("DPF_IMAGE_TAG=v1.0.0\r\nINNGEST_SIGNING_KEY=abcdef0123456789\r\n"), "v2.0.0", "opendigitalproductfactory").toString("utf8"); // gitleaks:allow — the old public compose default this test refuses, not a credential (BI-3267763F)
+  assert.match(text, /^INNGEST_SIGNING_KEY=[0-9a-f]{64}\r$/m);
+  assert.match(text, /^INNGEST_EVENT_KEY=[0-9a-f]{64}\r$/m);
 });

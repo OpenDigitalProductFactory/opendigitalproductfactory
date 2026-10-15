@@ -1,18 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import ReactMarkdown from "react-markdown";
 import { FileText, PlugZap } from "lucide-react";
 import type { AgentMessageProvider, AgentMessageRow } from "@/lib/agent-coworker-types";
 import { AI_PROVIDER_CONNECTIONS_ROUTE } from "@/lib/ai-provider-routes";
 import type { ReactNode } from "react";
 import { AgentAttachmentCard } from "./AgentAttachmentCard";
+import { MarkdownHtml } from "@/components/shared/MarkdownHtml";
+import type { RenderMarkdownOptions } from "@/lib/shared/markdown";
 import { providerModelLabel } from "@/lib/agent/provider-model-label";
 import {
   parseDecisionFromContent,
   type CoworkerDecision,
   type CoworkerDecisionOption,
 } from "@/lib/tak/decision-block";
+import { LEAVE_DECISION_ACTION } from "@/lib/workforce/leave/leave-decision-proposal-contract";
+import { LeaveDecisionProposalCard } from "./LeaveDecisionProposalCard";
+import { ProposalNoLongerRunnable } from "./ProposalNoLongerRunnable";
+import { InlineEnvelopeApprovals } from "./InlineEnvelopeApprovals";
 
 /**
  * Format the per-turn provider/model attribution badge shown on assistant
@@ -72,6 +77,8 @@ type Props = {
   showAgentLabel: boolean;
   agentName: string | null;
   onApprove?: (proposalId: string) => void;
+  /** An inline approval request was authorized and ran (BI-7BCC87BB); the panel sends the follow-up. */
+  onApprovalAuthorized?: (run: { toolName: string; entityId?: string }) => void;
   onReject?: (proposalId: string) => void;
   /**
    * Present only when this message is the latest turn and the panel is idle:
@@ -205,58 +212,29 @@ function formatProposalParams(
   });
 }
 
-type C = { children?: ReactNode };
-
-const MARKDOWN_COMPONENTS = {
-  p: ({ children }: C) => <p style={{ margin: "0 0 8px 0" }}>{children}</p>,
-  ul: ({ children }: C) => <ul style={{ margin: "0 0 8px 18px", padding: 0 }}>{children}</ul>,
-  ol: ({ children }: C) => <ol style={{ margin: "0 0 8px 18px", padding: 0 }}>{children}</ol>,
-  li: ({ children }: C) => <li style={{ marginBottom: 4 }}>{children}</li>,
-  strong: ({ children }: C) => <strong style={{ fontWeight: 700, color: "var(--dpf-text)" }}>{children}</strong>,
-  em: ({ children }: C) => <em style={{ fontStyle: "italic" }}>{children}</em>,
-  h1: ({ children }: C) => (
-    <h1 style={{ margin: "0 0 8px 0", fontSize: 16, fontWeight: 700, lineHeight: 1.3 }}>{children}</h1>
-  ),
-  h2: ({ children }: C) => (
-    <h2 style={{ margin: "0 0 8px 0", fontSize: 15, fontWeight: 700, lineHeight: 1.3 }}>{children}</h2>
-  ),
-  h3: ({ children }: C) => (
-    <h3 style={{ margin: "0 0 6px 0", fontSize: 14, fontWeight: 700, lineHeight: 1.3 }}>{children}</h3>
-  ),
-  code: ({ children, className }: C & { className?: string }) => {
-    const inline = !className;
-    return inline ? (
-      <code
-        style={{
-          background: "color-mix(in srgb, var(--dpf-text) 8%, transparent)",
-          borderRadius: 4,
-          padding: "1px 4px",
-          fontSize: 12,
-          fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-        }}
-      >
-        {children}
-      </code>
-    ) : (
-      <code className={className}>{children}</code>
-    );
+// Coworker replies are model output: raw HTML in them renders as text
+// (renderMarkdown runs with HTML off). Spacing matches the chat bubble.
+const MARKDOWN_OPTIONS: RenderMarkdownOptions = {
+  classes: {
+    p: "mb-2",
+    ul: "mb-2 ms-4 list-disc p-0",
+    ol: "mb-2 ms-4 list-decimal p-0",
+    li: "mb-1",
+    strong: "font-bold text-[var(--dpf-text)]",
+    em: "italic",
+    h1: "mb-2 text-dpf-body-lg font-bold",
+    h2: "mb-2 text-dpf-body-lg font-bold",
+    h3: "mb-1.5 text-dpf-body font-bold",
+    a: "text-[var(--dpf-accent)] underline",
+    code: "rounded px-1 py-px text-xs font-mono bg-[color-mix(in_srgb,var(--dpf-text)_8%,transparent)]",
+    pre: "mb-2 overflow-x-auto rounded-lg px-2.5 py-2 text-xs leading-normal font-mono bg-[color-mix(in_srgb,var(--dpf-bg)_22%,transparent)]",
+    blockquote: "mb-2 border-s-2 border-[var(--dpf-border)] ps-2 text-[var(--dpf-muted)]",
+    table: "text-xs border-collapse",
+    th: "border border-[var(--dpf-border)] px-2 py-1 text-start font-semibold",
+    td: "border border-[var(--dpf-border)] px-2 py-1",
   },
-  pre: ({ children }: C) => (
-    <pre
-      style={{
-        margin: "0 0 8px 0",
-        padding: "8px 10px",
-        background: "color-mix(in srgb, var(--dpf-bg) 22%, transparent)",
-        borderRadius: 8,
-        overflowX: "auto",
-        fontSize: 12,
-        lineHeight: 1.45,
-        fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-      }}
-    >
-      {children}
-    </pre>
-  ),
+  tableWrapperClass: "mb-2 overflow-x-auto",
+  externalLinksInNewTab: true,
 };
 
 // Detect assistant messages that surface an error/failure state so we can
@@ -396,6 +374,7 @@ export function AgentMessageBubble({
   agentName,
   onApprove,
   onReject,
+  onApprovalAuthorized,
   onDecision,
   deliveryState,
   onRetry,
@@ -491,13 +470,16 @@ export function AgentMessageBubble({
                 })}
               </pre>
             )}
+            {isPending && p.noLongerRunnable && <ProposalNoLongerRunnable reason={p.noLongerRunnable} />}
             {isPending && (
               <div style={{ display: "flex", gap: 6 }}>
+                {!p.noLongerRunnable && (
                 <button type="button" onClick={() => onApprove?.(p.proposalId)} style={{ flex: 1, background: "color-mix(in srgb, var(--dpf-success) 20%, transparent)", border: "1px solid color-mix(in srgb, var(--dpf-success) 40%, transparent)", borderRadius: 6, padding: "5px 10px", fontSize: 11, color: "var(--dpf-success)", cursor: "pointer" }}>
                   Approve &amp; Apply
                 </button>
+                )}
                 <button type="button" onClick={() => onReject?.(p.proposalId)} style={{ flex: 1, background: "color-mix(in srgb, var(--dpf-error) 15%, transparent)", border: "1px solid color-mix(in srgb, var(--dpf-error) 30%, transparent)", borderRadius: 6, padding: "5px 10px", fontSize: 11, color: "var(--dpf-error)", cursor: "pointer" }}>
-                  Reject
+                  {p.noLongerRunnable ? "Decline" : "Reject"}
                 </button>
               </div>
             )}
@@ -560,14 +542,22 @@ export function AgentMessageBubble({
               fontSize: 12,
             }}
           >
+            {p.actionType === LEAVE_DECISION_ACTION ? (
+              // BI-4E192035: the leave outcome is asked for explicitly; the
+              // generic Approve / Reject verbs below never render for leave.
+              <LeaveDecisionProposalCard status={p.status} parameters={p.parameters} />
+            ) : (
+            <>
             <div style={{ fontWeight: 600, color: "var(--dpf-text)", marginBottom: 6 }}>
               {actionLabel}
             </div>
             <div style={{ color: "var(--dpf-muted)", fontSize: 11, marginBottom: 8, lineHeight: 1.5 }}>
               {formatProposalParams(p.actionType, p.parameters)}
             </div>
+            {isPending && p.noLongerRunnable && <ProposalNoLongerRunnable reason={p.noLongerRunnable} />}
             {isPending && (
               <div style={{ display: "flex", gap: 6 }}>
+                {!p.noLongerRunnable && (
                 <button
                   type="button"
                   onClick={() => onApprove?.(p.proposalId)}
@@ -584,6 +574,7 @@ export function AgentMessageBubble({
                 >
                   Approve
                 </button>
+                )}
                 <button
                   type="button"
                   onClick={() => onReject?.(p.proposalId)}
@@ -598,7 +589,7 @@ export function AgentMessageBubble({
                     cursor: "pointer",
                   }}
                 >
-                  Reject
+                  {p.noLongerRunnable ? "Decline" : "Reject"}
                 </button>
               </div>
             )}
@@ -614,6 +605,8 @@ export function AgentMessageBubble({
               <div style={{ color: "var(--dpf-error)", fontSize: 11 }}>
                 Failed: {p.resultError}
               </div>
+            )}
+            </>
             )}
           </div>
         </div>
@@ -695,11 +688,11 @@ export function AgentMessageBubble({
                 <span>Issue</span>
               </div>
             )}
-            <ReactMarkdown components={MARKDOWN_COMPONENTS}>
-              {message.role === "assistant"
-                ? stripSystemPromptPrefix(cleanedContent)
-                : cleanedContent}
-            </ReactMarkdown>
+            <MarkdownHtml
+              source={message.role === "assistant" ? stripSystemPromptPrefix(cleanedContent) : cleanedContent}
+              options={MARKDOWN_OPTIONS}
+              memoize
+            />
             {managedDocumentIds.length > 0 && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
                 {managedDocumentIds.map((documentId) => (
@@ -738,6 +731,9 @@ export function AgentMessageBubble({
       </div>
       {!isUser && decision && onDecision && (
         <DecisionButtons decision={decision} onDecision={onDecision} />
+      )}
+      {!isUser && message.approvalRequests && message.approvalRequests.length > 0 && (
+        <InlineEnvelopeApprovals requests={message.approvalRequests} {...(onApprovalAuthorized ? { onAuthorized: onApprovalAuthorized } : {})} />
       )}
       {isUser && deliveryState && deliveryState !== "sent" && (
         <div

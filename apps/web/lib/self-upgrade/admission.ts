@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { after } from "next/server";
-import { inngest } from "@/lib/queue/inngest-client";
+import { jobs } from "@/lib/jobs";
 import { getJobEngineHealth } from "@/lib/queue/job-engine-health";
 import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { readCurrentContainerConfigDigest } from "@/lib/self-upgrade/runtime-image-identity";
@@ -386,7 +386,7 @@ export async function resolveCurrentSelfUpgradeTarget(): Promise<SelfUpgradeTarg
 function productionService(schedule: (task: () => Promise<void>) => void) {
   return createSelfUpgradeAdmissionService({
     repository: selfUpgradeAdmissionRepository,
-    send: (event) => inngest.send(event),
+    send: (event) => jobs.send(event),
     resolveTarget: resolveCurrentSelfUpgradeTarget,
     readJobEngineHealth: async () => ({ status: (await getJobEngineHealth()).status }),
     schedule,

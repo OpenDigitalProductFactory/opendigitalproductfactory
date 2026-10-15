@@ -50,6 +50,7 @@ export const COWORKER_STANDING_SHAPES_CRAFT: Record<string, WorkShapeDefinition>
             + "nobody can point at is not reviewable.",
         },
         evidence: ["screen-capture-set"],
+        tools: ["surface_open", "surface_snapshot"],
       },
       {
         key: "ground",
@@ -63,6 +64,7 @@ export const COWORKER_STANDING_SHAPES_CRAFT: Record<string, WorkShapeDefinition>
             + "was scoped around.",
         },
         evidence: ["cited-finding-list"],
+        tools: ["search_ux_critique_corpus"],
       },
       {
         key: "adjudicate",
@@ -217,6 +219,7 @@ export const COWORKER_STANDING_SHAPES_CRAFT: Record<string, WorkShapeDefinition>
             + "from documentation. Documentation drift is itself a finding.",
         },
         evidence: ["surface-inventory"],
+        tools: ["search_integrations", "read_codebase_manifest"],
       },
       {
         key: "assess",
@@ -230,6 +233,7 @@ export const COWORKER_STANDING_SHAPES_CRAFT: Record<string, WorkShapeDefinition>
             + "reported, not quietly retired.",
         },
         evidence: ["drift-report"],
+        tools: ["read_project_file", "search_project_files"],
       },
       {
         key: "authorize",

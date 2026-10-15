@@ -115,7 +115,6 @@ apps/web/app/api/storefront/bookings/[id]/confirm/route.ts
 apps/web/app/api/storefront/nearby/route.ts
 apps/web/app/api/storefront/orders/[id]/status/route.ts
 apps/web/app/api/storefront/sign-up/route.ts
-apps/web/app/api/test/codex-responses/route.ts
 apps/web/app/api/transcribe/route.ts
 apps/web/app/api/upload/route.ts
 apps/web/app/api/v1/admin/operating-hours/route.ts

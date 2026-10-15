@@ -9,6 +9,8 @@ export const GOVERNED_AUDIT_PARAMETER_KEYS = new Set([
   "_surface",
   "_takAlignment",
   "_takPrecondition",
+  // The platform approval-resume marker (approval-resume-marker.ts, BI-C8EC05C9).
+  "_approvalResume",
 ]);
 
 const KNOWN_DECISIONS = ["pass", "fail", "not-applicable"] as const;
@@ -33,8 +35,11 @@ export type EnvelopeDecisionSummary = {
    * exact   - no tool-specific summary, but the exact proposed content is shown.
    * unknown - the proposed content could not be loaded; the effect is
    *           UNRESOLVED and the card says so rather than inviting a click.
+   * handover - a room handed to a new assistant, in plain words (BI-F4EB23C1).
    */
-  kind: "known" | "exact" | "unknown";
+  kind: "known" | "exact" | "unknown" | "handover";
+  /** What a handover changes and keeps; present only for kind "handover". */
+  handover?: { changes: string[]; keeps: string[]; nextStep?: string };
   headline: string;
   recommendation: string;
   authorization: string;
@@ -54,8 +59,10 @@ export type EnvelopeDecisionSummary = {
   action: string;
   /** Where it lands: the record or surface the change is written to. */
   target: string;
-  /** The exact proposed content, bounded for display. Empty when unresolved. */
+  /** A bounded preview of the proposed content. Empty when unresolved. */
   proposed: EnvelopeProposedField[];
+  /** Complete original input for review; absent on older projections, null when unresolved. */
+  completeProposedContent?: string | null;
   /** The declared consequence of the action, or a plain statement that none is declared. */
   consequence: string;
   /** Why a person is asked: the governing reason recorded on the envelope. */
@@ -150,8 +157,10 @@ const ACTION_LABELS: Record<string, string> = {
   update_backlog_item_status: "Change the status of a backlog item",
   create_workroom: "Open a new Workroom",
   update_workroom_status: "Change the status of a Workroom",
+  rebind_workroom_shape: "Move a Workroom to a newer version of its work shape",
   invite_room_participant: "Give a participant access to a room",
   manage_coworker_tool_grant: "Change the tool permissions of a coworker",
+  reassign_workroom_executor: "Hand a Workroom to a new assistant",
   claim_backlog_item_for_work: "Claim a backlog item for work",
   claim_nonprod_environment_lease: "Reserve a shared test environment",
   record_initiative_evidence: "Record a readiness receipt",
@@ -172,16 +181,16 @@ function humanizeKey(key: string): string {
 }
 
 function displayValue(value: unknown): string {
-  const text = typeof value === "string" ? value : JSON.stringify(value) ?? String(value);
+  const text = typeof value === "string" && value !== "" ? value : JSON.stringify(value) ?? String(value);
   return text.length > MAX_VALUE_CHARS
     ? `${text.slice(0, MAX_VALUE_CHARS)}… (${text.length - MAX_VALUE_CHARS} more characters)`
     : text;
 }
 
-/** The exact proposed arguments as label/value pairs, in the order sent. */
+/** A bounded preview; completeProposedContent retains the full input. */
 export function proposedFields(params: Record<string, unknown>): EnvelopeProposedField[] {
   const entries = Object.entries(params).filter(
-    ([, value]) => value !== undefined && value !== null && value !== "",
+    ([, value]) => value !== undefined,
   );
   const shown = entries.slice(0, MAX_FIELDS).map(([key, value]) => ({
     label: humanizeKey(key),
@@ -218,7 +227,7 @@ function actionLabel(toolName: string): string {
 function consequenceText(consequence: string | null | undefined): string {
   return consequence && CONSEQUENCE_WORDS[consequence]
     ? CONSEQUENCE_WORDS[consequence]
-    : "None declared. It adds or changes a platform record that can be corrected afterwards.";
+    : "None declared. The consequences and reversibility of this action are not established.";
 }
 
 const SCOPE_TEXT =
@@ -239,6 +248,7 @@ function sharedFacts(input: SummaryContext) {
       ? envelopeTarget(input.toolName, input.params)
       : "Unknown: the proposal could not be loaded",
     proposed: input.params ? proposedFields(input.params) : [],
+    completeProposedContent: input.params ? JSON.stringify(input.params, null, 2) : null,
     consequence: consequenceText(input.consequence),
     whyAPerson: input.rationale?.trim() || "No reason was recorded for asking a person.",
     scope: SCOPE_TEXT,
@@ -278,6 +288,59 @@ function unknownSummary(input: SummaryContext): EnvelopeDecisionSummary {
     recommenderLabel: "Your coworker",
     authorizerLabel: "You",
     toolName: input.toolName,
+    ...sharedFacts(input),
+  };
+}
+
+const ASSISTANT_NAMES: Record<string, { name: string; match: string }> = {
+  "codex-desktop": { name: "Codex", match: "codex" },
+  "claude-desktop": { name: "Claude", match: "claude" },
+  "grok-desktop": { name: "Grok", match: "grok" },
+};
+
+/**
+ * reassign_workroom_executor changes the room's executor, moves its lease to
+ * the asking assistant, and admits that assistant to this one room as a
+ * contributor (reassign-executor-handler.ts). Say exactly that, and nothing
+ * the handler does not do.
+ */
+function handoverSummary(
+  input: SummaryContext, params: Record<string, unknown>, recommenderAgentId: string,
+): EnvelopeDecisionSummary | null {
+  const room = stringParam(params, "capsuleId");
+  const known = ASSISTANT_NAMES[stringParam(params, "toExecutorKind") ?? ""];
+  // The handler admits the external assistant that asked, so plain words are
+  // only true when the room goes to that same assistant. Anything else keeps
+  // the exact-content card (the same name test as providerToExecutorKind).
+  const agent = recommenderAgentId.trim().toLowerCase();
+  if (!room || !known || !agent.startsWith("agt-ext-") || !agent.includes(known.match)) return null;
+  const assistant = known.name;
+  const manifest = objectRecord(params.handoffManifest);
+  const nextStep = typeof manifest?.nextAction === "string" && manifest.nextAction.trim() ? manifest.nextAction.trim() : undefined;
+  return {
+    kind: "handover",
+    headline: `Let ${assistant} take over Workroom ${room}?`,
+    recommendation: `${assistant} asks to continue the work in Workroom ${room} for you`,
+    authorization: `let ${assistant} continue the work in Workroom ${room} for you`,
+    recordedIfAuthorized: `${assistant} becomes the assistant working in Workroom ${room}.`,
+    authorizeDoes: `${assistant} takes over this room's work for you.`,
+    declineDoes: `Nothing changes. ${assistant} cannot work in this room.`,
+    ifYouDoNothing: "the window closes and nothing changes.",
+    findings: [],
+    recommenderLabel: "Your coworker",
+    authorizerLabel: "You",
+    toolName: input.toolName,
+    handover: {
+      changes: [
+        `${assistant} can work in this one room as a contributor: read it, record evidence, and continue on its branch and worktree.`,
+        `${assistant} becomes this room's assistant in place of the one that worked here before, and the room's lease is renewed under your account.`,
+      ],
+      keeps: [
+        "The room's history, branch, worktree and evidence stay as they are.",
+        `${assistant} gets no access to other rooms and no new permissions beyond this room.`,
+      ],
+      ...(nextStep ? { nextStep } : {}),
+    },
     ...sharedFacts(input),
   };
 }
@@ -322,6 +385,10 @@ export function summarizeCoworkerEnvelopeDecision(input: {
     ? params.reason.trim()
     : undefined;
 
+  if (toolName === "reassign_workroom_executor" && resolvedParams) {
+    const handover = handoverSummary(context, resolvedParams, input.recommenderAgentId);
+    if (handover) return handover;
+  }
   if (toolName !== "record_initiative_evidence" || !decision || !gate) {
     return unknownSummary(context);
   }

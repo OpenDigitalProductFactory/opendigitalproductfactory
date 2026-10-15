@@ -151,9 +151,6 @@ export async function runSanitizationScan(diff: string): Promise<SanitizationRep
   const org = await prisma.organization.findFirst({
     select: { name: true, slug: true, email: true, phone: true, website: true },
   });
-  const bc = await prisma.businessContext.findFirst({
-    select: { description: true, targetMarket: true },
-  }).catch(() => null);
   const sf = await prisma.storefrontConfig.findFirst({
     select: { tagline: true },
   }).catch(() => null);
@@ -410,7 +407,6 @@ export function generateReviewReport(
   const sections: string[] = [];
 
   // Header
-  const readinessEmoji = mergeReadiness === "ready" ? "+" : mergeReadiness === "needs-work" ? "~" : "!";
   sections.push("## Contribution Review Report");
   sections.push("");
   sections.push(`### Merge Readiness: ${mergeReadiness.toUpperCase()}`);

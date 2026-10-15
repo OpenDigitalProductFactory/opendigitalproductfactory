@@ -160,7 +160,7 @@ export async function executeChangeItems(
 
         if (!healthResult.healthy) {
           // Health check failed — rollback completed items in reverse order
-          const rollbackResults = await rollbackCompletedItems(
+          await rollbackCompletedItems(
             completedItemIds,
             healthResult.message
           );

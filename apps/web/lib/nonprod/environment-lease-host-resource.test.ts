@@ -84,6 +84,31 @@ function db() {
 }
 
 describe("host resource durable admission", () => {
+  it("hands off only the same pinned queued lease to a new process without resetting queue age", async () => {
+    const mockDb = db();
+    const queued = lease();
+    mockDb.nonProductionEnvironmentLease.findUnique.mockResolvedValue(queued);
+    mockDb.nonProductionEnvironmentLease.update.mockImplementation(async ({ data }) => ({ ...queued, ...data }));
+    const result = await claimNonprodEnvironmentLease({
+      db: mockDb as never, environmentKey: "host-heavy-resource",
+      ownerProvider: "codex", ownerSessionId: "s1", claimKey: queued.claimKey,
+      resumeLeaseId: queued.leaseId, purpose: queued.purpose, url: queued.url, ports: [],
+      expiresAt: queued.expiresAt,
+      resourceClass: "vitest", expectedMemoryBytes: 8 * GiB,
+      ownerProcessId: 99, ownerProcessIdentity: "process-99",
+      hostResource: { totalMemoryBytes: 64 * GiB, availableMemoryBytes: 1 * GiB, inferenceResident: false }, now: NOW,
+    });
+    expect(result.status).toBe("queued");
+    expect(result.lease.leaseId).toBe(queued.leaseId);
+    expect(mockDb.nonProductionEnvironmentLease.create).not.toHaveBeenCalled();
+    expect(mockDb.nonProductionEnvironmentLease.update).toHaveBeenCalledWith({
+      where: { id: queued.id }, data: expect.objectContaining({ ownerPid: 99, ownerProcessIdentity: "process-99" }),
+    });
+    for (const [call] of mockDb.nonProductionEnvironmentLease.update.mock.calls) {
+      expect(call.data).not.toHaveProperty("queuedAt");
+    }
+  });
+
   it("admits a typed claim through the existing lease transaction", async () => {
     const mockDb = db();
     const queued = lease();

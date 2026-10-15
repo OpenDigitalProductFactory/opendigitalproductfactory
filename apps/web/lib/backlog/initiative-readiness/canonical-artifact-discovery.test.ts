@@ -59,6 +59,43 @@ describe("canonical design artifact discovery", () => {
       .toMatchObject({ resolved: false, code: "ambiguous-repair-artifact" });
   });
 
+  // BI-09399355: a break-fix that bumps the plugin manifests alongside its one
+  // code change (#5660) was unroutable — four one-line version bumps counted as
+  // competing implementation artifacts.
+  const versionBump = (filename: string) => ({
+    filename, sha: OTHER_BLOB_SHA, status: "modified",
+    patch: '@@ -1,6 +1,6 @@\n {\n   "name": "dpf-platform",\n-  "version": "0.2.5",\n+  "version": "0.2.6",\n   "author": {}',
+  });
+
+  it("binds the code change when the other files only bump a manifest version", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(compareResponse([
+      versionBump("packages/dpf-skill-pack/.claude-plugin/plugin.json"),
+      versionBump("packages/dpf-skill-pack/.codex-plugin/plugin.json"),
+      { filename: "packages/dpf-skill-pack/hooks/uncommitted-work-guard.mjs", sha: BLOB_SHA, status: "modified", patch: "@@ -1 +1 @@\n-a\n+b" },
+      { filename: "packages/dpf-skill-pack/hooks/uncommitted-work-guard.test.mjs", sha: BLOB_SHA, status: "modified" },
+    ]));
+    expect(await discoverCanonicalReviewArtifact({ ...args(fetchImpl as unknown as typeof fetch), purpose: "post-implementation-review" }))
+      .toEqual({ resolved: true, artifact: { path: "packages/dpf-skill-pack/hooks/uncommitted-work-guard.mjs", providerBlobId: BLOB_SHA } });
+  });
+
+  it.each([
+    ["changes more than the version", '@@ -1,3 +1,3 @@\n-  "version": "0.2.5",\n+  "version": "0.2.6",\n-  "hooks": "a"\n+  "hooks": "b"'],
+    ["arrives without a patch", undefined],
+  ])("keeps a manifest as a competing artifact when it %s", async (_label, patch) => {
+    const fetchImpl = vi.fn().mockResolvedValue(compareResponse([
+      { filename: "packages/dpf-skill-pack/.claude-plugin/plugin.json", sha: OTHER_BLOB_SHA, status: "modified", ...(patch ? { patch } : {}) },
+      { filename: "apps/web/lib/a.ts", sha: BLOB_SHA, status: "modified" },
+    ]));
+    expect(await discoverCanonicalReviewArtifact({ ...args(fetchImpl as unknown as typeof fetch), purpose: "post-implementation-review" }))
+      .toMatchObject({ resolved: false, code: "ambiguous-repair-artifact" });
+  });
+
+  it("binds a version bump that is the whole repair", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(compareResponse([versionBump("packages/dpf-skill-pack/.claude-plugin/plugin.json")]));
+    expect(await discoverCanonicalReviewArtifact({ ...args(fetchImpl as unknown as typeof fetch), purpose: "post-implementation-review" }))
+      .toEqual({ resolved: true, artifact: { path: "packages/dpf-skill-pack/.claude-plugin/plugin.json", providerBlobId: OTHER_BLOB_SHA } });
+  });
+
   it("does not hide a second implementation artifact because it was deleted", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(compareResponse([
       { filename: "apps/web/lib/a.ts", sha: BLOB_SHA, status: "modified" },

@@ -1,4 +1,4 @@
-import { inngest } from "@/lib/queue/inngest-client";
+import { jobs } from "@/lib/jobs";
 
 import type { AsyncOperationTransitionEvent } from "@/lib/inference/async-operation-outbox";
 import type { AsyncOperationWake } from "@/lib/inference/async-operation-queue";
@@ -9,7 +9,7 @@ import type { AsyncOperationWake } from "@/lib/inference/async-operation-queue";
  * machines from depending on queue implementation details.
  */
 export async function enqueueAsyncOperationWake(wake: AsyncOperationWake): Promise<void> {
-  await inngest.send({
+  await jobs.send({
     name: "inference/async-operation.run",
     data: {
       operationId: wake.operationId,
@@ -21,7 +21,7 @@ export async function enqueueAsyncOperationWake(wake: AsyncOperationWake): Promi
 export async function publishAsyncOperationTransitionEvent(
   event: AsyncOperationTransitionEvent,
 ): Promise<void> {
-  await inngest.send({
+  await jobs.send({
     id: event.eventId,
     name: event.name,
     data: event.data,

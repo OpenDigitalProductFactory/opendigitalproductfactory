@@ -24,7 +24,7 @@ import { prisma } from "@dpf/db";
 
 import { currentUserContext } from "@/lib/govern/current-user-context";
 import { normalizeTokenScope } from "@/lib/mcp/token-tool-scope";
-import type { ExistingRemoteTask } from "@/lib/mcp-task-submit";
+import type { ExistingRemoteTask } from "@/lib/mcp-task-submit-types";
 import { resumeApprovedTask } from "@/lib/mcp-task-submit-approval-recovery";
 
 import {

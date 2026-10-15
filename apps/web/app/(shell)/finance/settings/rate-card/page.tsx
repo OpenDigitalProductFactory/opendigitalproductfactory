@@ -3,6 +3,7 @@
 // financial profiles (billableTimeEnabled) bill time, so other business types
 // see an honest explanation instead of an empty admin surface.
 import Link from "next/link";
+import { orgCurrencyFromSettings } from "@/lib/org-locale/org-locale";
 import { prisma } from "@dpf/db";
 import { getFinancialProfile } from "@dpf/finance-templates";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
@@ -10,7 +11,7 @@ import { RateCardManager } from "@/components/finance/RateCardManager";
 
 export default async function RateCardPage() {
   const [orgSettings, org] = await Promise.all([
-    prisma.orgSettings.findFirst({ select: { appliedProfileSlug: true, baseCurrency: true } }),
+    prisma.orgSettings.findFirst({ select: { appliedProfileSlug: true, baseCurrency: true, countryCode: true } }),
     prisma.organization.findFirst({ select: { id: true } }),
   ]);
   const billableTimeEnabled =
@@ -60,7 +61,7 @@ export default async function RateCardPage() {
             billRate: Number(r.billRate),
             isActive: r.isActive,
           }))}
-          currency={orgSettings?.baseCurrency ?? "GBP"}
+          currency={orgCurrencyFromSettings(orgSettings)}
         />
       ) : (
         <div className="rounded-lg border border-dashed border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">

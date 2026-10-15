@@ -1,7 +1,9 @@
 import { SOURCE_READ_DEFAULT_MAX_CHARS, SOURCE_READ_DEFAULT_MAX_LINES } from "./source-page-lines";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readerBootstrapHistory, readerBootstrapTask } from "./test-support/terminal-reader-bootstrap";
 
 const db = vi.hoisted(() => ({
+  persisted: {} as Record<string, unknown>,
   findFirst: vi.fn(),
   findUnique: vi.fn(),
   findModelConfig: vi.fn(),
@@ -20,14 +22,9 @@ const autonomous = vi.hoisted(() => ({
   resolveTools: vi.fn(),
 }));
 
-vi.mock("@dpf/db", () => ({
+vi.mock("@dpf/db", async () => ({
   prisma: {
-    taskRun: {
-      findFirst: (...args: unknown[]) => db.findFirst(...args),
-      findUnique: (...args: unknown[]) => db.findUnique(...args),
-      update: (...args: unknown[]) => db.update(...args),
-      updateMany: (...args: unknown[]) => db.updateMany(...args),
-    },
+    taskRun: (await import("./test-support/task-run-state")).taskRunState(db),
     coworkerActionEnvelope: { findFirst: (...args: unknown[]) => db.findEnvelope(...args) },
     toolExecution: {
       findFirst: (...args: unknown[]) => db.findToolExecution(...args),
@@ -108,6 +105,7 @@ function submit(tokenId: string, request = params) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  db.persisted = {};
   db.findFirst.mockResolvedValue(null);
   db.findUnique.mockResolvedValue({ status: "working" });
   db.findEnvelope.mockResolvedValue(null);
@@ -329,7 +327,7 @@ describe("terminal writer resumption", () => {
     });
     expect(db.updateMany).toHaveBeenCalledWith(expect.objectContaining({ // guarded working transition (BI-D208E70C)
       where: expect.objectContaining({ taskRunId: "TR-MCP-SAME-WRITER-RUN" }),
-      data: { status: "working", lastHeartbeatAt: expect.any(Date) },
+      data: expect.objectContaining({ status: "working", lastHeartbeatAt: expect.any(Date) }),
     }));
     expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({
       taskRunId: "TR-MCP-SAME-WRITER-RUN",
@@ -348,34 +346,22 @@ describe("terminal writer resumption", () => {
     });
   });
 
-  it("bootstraps persisted immutable reader evidence when the resumable TaskRun has no reader rows", async () => {
+  it.each([
+    "none", "invalid-cursors", "denied", "other-failure", "conflicting-binding",
+    "unauthorized-tool", "malformed-result", "conflicting-result", "duplicate-id",
+    "reversed-order", "continuation", "success-conflict", "malformed-data-array",
+    "malformed-data-primitive", "malformed-data-null",
+  ])("resumes only safe initial-reader failures (%s)", async (historyKind) => {
     const metadata = await persistedMetadata("PAT-WRITER-ZERO-READER");
     vi.clearAllMocks();
     const updatedAt = new Date("2026-08-31T03:00:00.000Z");
-    db.findFirst.mockResolvedValue({
-      id: "task-internal",
-      taskRunId: "TR-MCP-ZERO-READER",
-      threadId: "thread-external",
-      contextId: "thread-external",
-      status: "input-required",
-      updatedAt,
-      progressPayload: {
-        summary: "The required governed writer could not be dispatched.",
-        terminalWriterWait: {
-          schemaVersion: 1,
-          kind: "missing-terminal-writer",
-          writerToolName: "record_initiative_evidence",
-          resumeMode: "same-taskrun",
-          attempt: 1,
-          observedAt: "2026-08-31T02:59:00.000Z",
-        },
-      },
-      a2aMetadata: metadata,
-    });
+    db.findFirst.mockResolvedValue(readerBootstrapTask(metadata, updatedAt));
     db.findEnvelope.mockResolvedValue(null);
+    const rejectedReaders = readerBootstrapHistory(historyKind, persistedReaderExecution);
     db.findToolExecutions
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([persistedReaderExecution]);
+      .mockReset()
+      .mockResolvedValueOnce(rejectedReaders)
+      .mockResolvedValueOnce([...rejectedReaders, persistedReaderExecution]);
     db.findToolExecution.mockResolvedValue(null);
     db.updateMany.mockResolvedValue({ count: 1 });
     db.update.mockResolvedValue({});
@@ -386,6 +372,18 @@ describe("terminal writer resumption", () => {
     });
 
     const outcome = await submit("PAT-WRITER-ZERO-READER");
+
+    if (historyKind !== "none" && historyKind !== "invalid-cursors") {
+      expect(autonomous.executeTool).not.toHaveBeenCalled();
+      expect(autonomous.execute).not.toHaveBeenCalled();
+      expect(autonomous.create).not.toHaveBeenCalled();
+      expect(db.findToolExecutions).toHaveBeenCalledTimes(1);
+      expect(outcome).toMatchObject({ kind: "result", result: {
+        taskRunId: "TR-MCP-ZERO-READER", status: "input-required",
+        waitReason: "terminal-writer-context-unavailable", isError: true,
+      } });
+      return;
+    }
 
     expect(db.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { taskRunId: "TR-MCP-ZERO-READER", status: "input-required", updatedAt },
@@ -459,8 +457,8 @@ describe("terminal writer resumption", () => {
     expect(autonomous.executeTool).toHaveBeenCalledTimes(1);
     expect(db.findToolExecutions).toHaveBeenCalledTimes(1);
     expect(autonomous.execute).not.toHaveBeenCalled();
-    expect(db.update).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-MCP-ZERO-READER-FAIL" },
+    expect(db.updateMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({ taskRunId: "TR-MCP-ZERO-READER-FAIL", status: "working" }),
       data: expect.objectContaining({
         status: "input-required",
         completedAt: null,
@@ -613,8 +611,8 @@ describe("terminal writer resumption", () => {
         },
       },
     });
-    expect(db.update).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-MCP-WRITER-EXHAUSTED" },
+    expect(db.updateMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({ taskRunId: "TR-MCP-WRITER-EXHAUSTED", status: "working" }),
       data: expect.objectContaining({
         status: "input-required",
         progressPayload: expect.objectContaining({
@@ -634,7 +632,7 @@ describe("terminal writer resumption", () => {
       }),
     });
     if (truncated) {
-      const projection = db.update.mock.calls.map(([call]) => call.data.progressPayload)
+      const projection = db.updateMany.mock.calls.map(([call]) => call.data.progressPayload)
         .find(progress => progress?.summary === failureMessage);
       expect(projection.terminalWriterWait).not.toHaveProperty("noncompliance");
     }

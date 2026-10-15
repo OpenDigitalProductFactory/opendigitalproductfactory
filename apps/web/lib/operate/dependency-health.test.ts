@@ -12,7 +12,7 @@ vi.mock("@/lib/documents/conversion/availability", () => ({
   probeDoctools: async () => doctools.up,
 }))
 const inngestSend = vi.hoisted(() => vi.fn(async () => undefined))
-vi.mock("@/lib/queue/inngest-client", () => ({ inngest: { send: inngestSend } }))
+vi.mock("@/lib/jobs", () => ({ jobs: { send: inngestSend } }))
 
 async function gaugeValue(service: string): Promise<number | undefined> {
   const m = await dependencyUp.get()

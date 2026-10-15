@@ -114,17 +114,31 @@ describe("this contract is not a second completeness model", () => {
       "corpus",
       "evidence",
       "governance",
-      "identity",
       "shape",
       "toolsAndSkills",
     ]);
+    // `identity` is deliberately absent: `purpose` used to map onto it, which
+    // meant "why does this role exist?" was answered by a registry status flag
+    // (DI-4560387876E1). The measure still grades identity as a plane; the
+    // CONTRACT no longer borrows it to answer a different question.
+    expect(Object.values(AXIS_TO_CAPABILITY_PLANE)).not.toContain("identity");
   });
 
-  it("leaves exactly supervision and tailoring unmapped, on purpose", () => {
+  it("leaves exactly purpose, supervision and tailoring unmapped, on purpose", () => {
     const unmapped = JOB_DEFINITION_AXES.filter((a) => !AXIS_TO_CAPABILITY_PLANE[a]);
-    // The measure grades a coworker's CAPABILITY. These two are facts about its
-    // PLACE — who it answers to, and which install it is on.
-    expect(unmapped).toEqual(["supervision", "tailoring"]);
+    // The measure grades a coworker's CAPABILITY. These three are facts about
+    // its DEFINITION and PLACE — why it exists, who it answers to, and which
+    // install it is on. Each is graded from the registry entry that holds it:
+    // capability_domain, escalates_to, value_stream.
+    expect(unmapped).toEqual(["purpose", "supervision", "tailoring"]);
+  });
+
+  it("does not let a status flag answer why a role exists", () => {
+    // The regression this guards: `purpose: "identity"` made the axis pass on
+    // "registry status is active" and ignore capability_domain entirely, so a
+    // role with a written purpose graded open and a promoted role with none
+    // graded answered.
+    expect(AXIS_TO_CAPABILITY_PLANE.purpose).toBeUndefined();
   });
 
   it("keeps cadence pointed at the room-owned ruling, not a per-coworker toggle", () => {

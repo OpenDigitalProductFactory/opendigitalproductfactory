@@ -14,7 +14,7 @@
 // Sits beside the PAT manager on Admin > Platform Development (decision
 // DI-03DA64D1850B) and composes the shared primitives only.
 
-import { Copy, KeyRound, Plus, RefreshCw, X } from "lucide-react";
+import { Copy, KeyRound, Plus, RefreshCw, Users, X } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/Button";
@@ -31,15 +31,12 @@ import {
   type CreatedCredentialsClient,
   type OAuthClientSummary,
 } from "@/lib/actions/oauth-clients";
+import { OAuthClientPeople } from "@/components/admin/OAuthClientPeople";
 import { buildCredentialsClientSnippets } from "@/lib/auth/mcp-setup-snippets";
 import { PUBLIC_SCOPES, PUBLIC_SCOPE_COPY, type PublicScope } from "@/lib/auth/oauth-public-scopes";
+import { formatTimestamp } from "@/lib/datetime";
 
 type View = { kind: "idle" } | { kind: "form" } | { kind: "issued"; created: CreatedCredentialsClient };
-
-function formatDate(value: string | null): string {
-  if (!value) return "never";
-  return new Date(value).toLocaleString();
-}
 
 const KIND_LABEL: Record<string, string> = {
   credentials: "Automated tool",
@@ -87,6 +84,7 @@ export function McpOAuthClientManager() {
   const [formScopes, setFormScopes] = useState<Set<PublicScope>>(() => new Set<PublicScope>(["dpf.read"]));
   const [formError, setFormError] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
+  const [peopleFor, setPeopleFor] = useState<OAuthClientSummary | null>(null);
 
   function refresh() {
     startTransition(async () => {
@@ -163,7 +161,7 @@ export function McpOAuthClientManager() {
     { key: "id", header: "Client id", mono: true, cell: (row) => row.clientId },
     { key: "kind", header: "Kind", cell: (row) => KIND_LABEL[row.registrationKind] ?? row.registrationKind },
     { key: "scopes", header: "Scopes", cell: (row) => (row.allowedScopes.length ? row.allowedScopes.join(", ") : "consent-time") },
-    { key: "lastUsed", header: "Last used", cell: (row) => formatDate(row.lastUsedAt), sortAccessor: (row) => row.lastUsedAt ?? "" },
+    { key: "lastUsed", header: "Last used", cell: (row) => formatTimestamp(row.lastUsedAt, "never"), sortAccessor: (row) => row.lastUsedAt ?? "" },
     { key: "live", header: "Live tokens", align: "right", cell: (row) => row.liveTokenCount },
     {
       key: "status",
@@ -180,10 +178,25 @@ export function McpOAuthClientManager() {
       align: "right",
       cell: (row) => (
         row.revokedAt ? null : (
-          <Button variant="danger" size="sm" type="button" onClick={() => revoke(row)} aria-label={`Revoke ${row.clientName}`}>
-            <X className="h-3.5 w-3.5" aria-hidden="true" />
-            Revoke
-          </Button>
+          <span className="inline-flex gap-2">
+            {row.registrationKind === "credentials" ? null : (
+              <Button
+                variant="secondary"
+                size="sm"
+                type="button"
+                onClick={() => setPeopleFor(peopleFor?.clientId === row.clientId ? null : row)}
+                aria-expanded={peopleFor?.clientId === row.clientId}
+                aria-label={`People connected to ${row.clientName} (${row.clientId})`}
+              >
+                <Users className="h-3.5 w-3.5" aria-hidden="true" />
+                People
+              </Button>
+            )}
+            <Button variant="danger" size="sm" type="button" onClick={() => revoke(row)} aria-label={`Revoke ${row.clientName}`}>
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+              Revoke
+            </Button>
+          </span>
         )
       ),
     },
@@ -330,9 +343,18 @@ export function McpOAuthClientManager() {
             loading={loading}
             dense
             ariaLabel="Keys for automated tools"
+            className="overflow-x-auto"
             initialSort={{ key: "lastUsed", dir: "desc" }}
             empty={<span>No keys yet.</span>}
           />
+          {peopleFor ? (
+            <OAuthClientPeople
+              clientId={peopleFor.clientId}
+              clientName={peopleFor.clientName}
+              registeredAt={peopleFor.createdAt}
+              onChanged={refresh}
+            />
+          ) : null}
         </div>
       </details>
     </Surface>

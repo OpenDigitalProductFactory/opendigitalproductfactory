@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import type { AgentMessageRow, AgentInfo } from "@/lib/agent-coworker-types";
 import type { UserContext } from "@/lib/permissions";
 import { resolveAgentForRouteSync, AGENT_NAME_MAP } from "@/lib/agent-routing";
-import { clearConversation, getOrCreateThreadSnapshot, getThreadSnapshotById, getMarketingSkillRules } from "@/lib/actions/agent-coworker";
+import { clearConversation, getThreadSnapshotById, getMarketingSkillRules } from "@/lib/actions/agent-coworker";
 import { signOutAction } from "@/lib/actions";
 import { useResilientEventSource } from "@/lib/hooks/useResilientEventSource";
 import { isTurnStalled } from "@/lib/agent/turn-watchdog";
@@ -13,7 +13,9 @@ import { approveProposal, rejectProposal } from "@/lib/actions/proposals";
 import { AgentPanelHeader } from "./AgentPanelHeader";
 import { ThreadSensitivityNotice } from "./ThreadSensitivityNotice";
 import { AgentSkillAttributionChip } from "./AgentSkillAttributionChip";
+import { approvalFollowUpMessage } from "@/lib/tak/approval-follow-up";
 import { AgentMessageBubble } from "./AgentMessageBubble";
+import { proposalAfterApproval } from "./ProposalNoLongerRunnable";
 import { AgentMessageInput } from "./AgentMessageInput";
 import { CoworkerProfilePanel } from "./CoworkerProfilePanel";
 import { CollaborationActivityPanel } from "./CollaborationActivityPanel";
@@ -44,6 +46,7 @@ import {
 import { useVoiceSynth } from "./hooks/useVoiceSynth";
 import { deriveComposerState, isClearDisabled, type ThreadLoadState } from "./composer-state";
 import { resolvePanelRouteContextLabel } from "@/lib/agent/panel-route-context";
+import { beginJourney, completeJourney } from "@/lib/telemetry/journeys";
 
 type Props = {
   threadId: string | null;
@@ -661,10 +664,9 @@ export function AgentCoworkerPanel({
 
     setIsBusy(true);
     setSendsInFlight((count) => count + 1);
-    // BI-2750EB6F: start the turn watchdog's clock — the server has "just been
-    // heard from" (we're about to POST). If nothing (data or heartbeat) arrives
-    // before the deadline, the watchdog effect surfaces a failure.
+    // BI-2750EB6F: start the turn watchdog's clock; no data/heartbeat by the deadline = failure.
     lastServerActivityRef.current = Date.now();
+    beginJourney("message-ack"); // BI-BD0B0DCC
 
     const runtimeMode = resolveCoworkerRuntimeMode({
       pathname,
@@ -700,8 +702,8 @@ export function AgentCoworkerPanel({
         );
         setIsBusy(false);
       } else {
-        // Server accepted — mark as sent so user sees delivery confirmation
-        // instead of "Sending..." for the entire duration of agent execution.
+        // Stored and accepted (BI-DEFA25EE): show "sent", not "Sending..." for the whole turn.
+        completeJourney("message-ack", { serverTiming: res.headers.get("server-timing") }); // BI-BD0B0DCC
         setMessages((prev) =>
           prev.map((message) =>
             message.id === optimisticMessage.id ? { ...message, deliveryState: "sent" as const } : message,
@@ -766,26 +768,14 @@ export function AgentCoworkerPanel({
       setMessages((prev) =>
         prev.map((m) =>
           m.proposal?.proposalId === proposalId
-            ? {
-                ...m,
-                proposal: {
-                  ...m.proposal,
-                  status: result.success ? "executed" : "failed",
-                  ...(result.resultEntityId !== undefined ? { resultEntityId: result.resultEntityId } : {}),
-                  ...(result.error !== undefined ? { resultError: result.error } : {}),
-                },
-              }
+            // A monitor refusal ran nothing: the card stays pending, with why (spec D5).
+            ? { ...m, proposal: proposalAfterApproval(m.proposal, result) }
             : m,
         ),
       );
 
       // Auto-send a follow-up so the agent reacts to the result
-      if (result.success) {
-        const followUp = result.resultEntityId
-          ? `I approved ${actionType.replace(/_/g, " ")}. Result: ${result.resultEntityId}. What's next?`
-          : `I approved ${actionType.replace(/_/g, " ")}. What's next?`;
-        submitMessage(followUp);
-      }
+      if (result.success) submitMessage(approvalFollowUpMessage(actionType, result.resultEntityId));
     } catch (e) {
       console.error("[handleApprove]", e);
       setMessages((prev) =>
@@ -964,6 +954,7 @@ export function AgentCoworkerPanel({
               }) : null}
               onApprove={handleApprove}
               onReject={handleReject}
+              onApprovalAuthorized={(run) => submitMessage(approvalFollowUpMessage(run.toolName, run.entityId))}
               {...(decisionActive ? { onDecision: (value: string) => handleSend(value) } : {})}
               {...(msg.deliveryState ? { deliveryState: msg.deliveryState } : {})}
               {...(msg.deliveryState === "failed" ? { onRetry: () => handleRetry(msg.id) } : {})}

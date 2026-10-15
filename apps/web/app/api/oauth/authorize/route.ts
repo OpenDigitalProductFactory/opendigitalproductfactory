@@ -87,7 +87,7 @@ export async function GET(request: Request) {
     url.searchParams, origin, { after: url.searchParams.get("assistant_after") ?? undefined });
 }
 
-const CONSENT_FORM_FIELDS = new Set(["granted_scope", "decision", "acting_coworker", "default_coworker", "assistant_after"]);
+const CONSENT_FORM_FIELDS = new Set(["granted_scope", "decision", "acting_coworker", "default_coworker", "assistant_after", "confirm_account"]);
 
 /**
  * Build and render the consent screen for a validated request. Shared by the
@@ -101,7 +101,7 @@ async function renderConsentFor(
   request: AuthorizeRequest,
   params: URLSearchParams,
   origin: string,
-  options: { after?: string; driftNotice?: boolean; choiceNotice?: boolean } = {},
+  options: { after?: string; driftNotice?: boolean; choiceNotice?: boolean; accountNotice?: boolean } = {},
 ): Promise<Response> {
   const org = await prisma.organization.findFirst({ select: { name: true } });
   const { client, scopes, redirectUri, resource } = request;
@@ -111,6 +111,10 @@ async function renderConsentFor(
       "Ask your administrator to approve an assistant role for this connection, then reconnect."), 403);
   }
   const page = coworkers.slice(0, 50);
+  // The request itself, without the consent form's own fields, so signing in
+  // as someone else comes back to the same authorization request.
+  const requestParams = [...params.entries()].filter(([k]) => !CONSENT_FORM_FIELDS.has(k));
+  const back = `${OAUTH_AUTHORIZE_PATH}?${new URLSearchParams(requestParams).toString()}`;
   const resolution = await resolveDefaultOAuthCoworker({ userId: human.userId, resource, eligible: page,
     client: { rowId: client.rowId, clientName: client.clientName, redirectUris: client.redirectUris } }, prisma);
 
@@ -120,6 +124,9 @@ async function renderConsentFor(
       selfAsserted: client.selfAsserted,
       installationName: org?.name ?? "this installation",
       actingUser: human.email ?? human.userId,
+      actingUserId: human.userId,
+      switchAccountUrl: `/login?callbackUrl=${encodeURIComponent(back)}`,
+      accountNotice: options.accountNotice,
       scopes,
       assistant: { kind: resolution.kind, selected: resolution.selected, candidates: resolution.candidates },
       driftNotice: options.driftNotice,
@@ -132,7 +139,7 @@ async function renderConsentFor(
       resource: resource || canonicalResourceUri(origin),
       redirectUri,
       // Echoed verbatim so the POST re-derives the same request from scratch.
-      hiddenParams: [...params.entries()].filter(([k]) => !CONSENT_FORM_FIELDS.has(k)),
+      hiddenParams: requestParams,
     }),
   );
 }
@@ -192,6 +199,15 @@ export async function POST(request: Request) {
     );
   }
 
+  // The account is the person's decision, not the browser's (BI-07D21B4A).
+  // The page carries the session user id it showed; a Connect without it, or
+  // with another account's id because the session changed underneath the
+  // page, binds nothing and shows the screen again for the current account.
+  if (form.get("confirm_account") !== session.user.id) {
+    return renderConsentFor({ userId: session.user.id, email: session.user.email ?? null }, parsed.request,
+      params, origin, { accountNotice: true });
+  }
+
   // The human may narrow the request on the consent screen. Their selection is
   // intersected with what was requested — a checkbox can only ever REMOVE
   // authority, never add it, even if the form is tampered with.
@@ -227,15 +243,22 @@ export async function POST(request: Request) {
   if (!agentId || !eligible.some((agent) => agent.agentId === agentId)) {
     return directError("access_denied", OAUTH_SETUP_REQUIRED, 403);
   }
-  if (shownDefault && agentId === shownDefault) {
-    const page: EligibleCoworker[] = eligible.slice(0, 50);
-    const resolution = await resolveDefaultOAuthCoworker({ userId: session.user.id, resource, eligible: page,
-      client: { rowId: client.rowId, clientName: client.clientName, redirectUris: client.redirectUris } }, prisma);
-    if (resolution.selected.agentId !== agentId) {
-      return renderConsentFor({ userId: session.user.id, email: session.user.email ?? null }, parsed.request,
-        params, origin, { driftNotice: true });
-    }
+  // Re-derive the server's answer in every case: it is the drift check when
+  // the default was left in place, and it is what the audit row needs to say
+  // whether this consent was one click (AC-OC-7 is measured from these rows).
+  const page: EligibleCoworker[] = eligible.slice(0, 50);
+  const resolution = await resolveDefaultOAuthCoworker({ userId: session.user.id, resource, eligible: page,
+    client: { rowId: client.rowId, clientName: client.clientName, redirectUris: client.redirectUris } }, prisma);
+  if (shownDefault && agentId === shownDefault && resolution.selected.agentId !== agentId) {
+    return renderConsentFor({ userId: session.user.id, email: session.user.email ?? null }, parsed.request,
+      params, origin, { driftNotice: true });
   }
+  const resolutionAudit = {
+    kind: resolution.kind,
+    reason: resolution.kind === "resolved" ? resolution.reason : null,
+    defaultAgentId: resolution.selected.agentId,
+    changedByHuman: agentId !== resolution.selected.agentId,
+  };
   const code = await prisma.$transaction(async (db) => {
     const binding = await createOAuthConsentBinding({ userId: session.user.id,
       clientId: client.rowId, resource, agentId, scopes: approved }, db);
@@ -251,6 +274,9 @@ export async function POST(request: Request) {
       decision: "allow", rationale: { bindingId: binding.bindingId,
         clientId: client.clientId, registrationKind: client.registrationKind,
         requestedScopes: parsed.request.scopes, approvedScopes: approved,
+        // Which assistant the server offered, how it chose, and whether the
+        // human overrode it: the per-consent record of the one-click outcome.
+        resolution: resolutionAudit,
         // How the decision arrived, for a later question about intent.
         submittedFrom: { fetchSite, fetchUser: request.headers.get("sec-fetch-user") } },
       endpointUsed: "/api/oauth/authorize", routeContext: "oauth-consent",

@@ -1,5 +1,4 @@
-import type { ChatMessage } from "../ai-inference";
-import type { ToolCallEntry } from "./adapter-types";
+import type { ChatMessage, ToolCallEntry } from "./chat-message-types";
 
 type GeminiContent = { role: "user" | "model"; parts: Record<string, unknown>[] };
 

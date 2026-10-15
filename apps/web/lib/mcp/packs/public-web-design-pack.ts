@@ -14,7 +14,7 @@
 
 import { prisma } from "@dpf/db";
 import * as crypto from "crypto";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { CapabilityKey } from "@/lib/permissions";
 import {
   analyzePublicWebsiteBranding,
@@ -336,8 +336,8 @@ async function extractBrandDesignSystemHandler(
     },
   });
 
-  const { inngest } = await import("@/lib/queue/inngest-client");
-  await inngest.send({
+  const { jobs } = await import("@/lib/jobs");
+  await jobs.send({
     name: "brand/extract.run",
     data: {
       organizationId: org.id,

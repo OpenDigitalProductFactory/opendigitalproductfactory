@@ -189,14 +189,32 @@ export function isJobDefinitionComplete(
 export const AXIS_TO_CAPABILITY_PLANE: Readonly<
   Partial<Record<JobDefinitionAxis, string>>
 > = {
-  purpose: "identity",
+  // `purpose` IS NOT HERE, and that is the correction (DI-4560387876E1).
+  //
+  // It was pinned to `identity`, whose level-3 criterion is "bridged AND
+  // registry status is active". So the axis that asks "why does this role
+  // exist?" was answered by a STATUS FLAG and never read `capability_domain`,
+  // the field §3 of the design names as its home.
+  //
+  // Measured when this was found: eight coworkers each carried a written
+  // capability_domain of 85-620 characters and all eight graded purpose=open,
+  // so the eight identity gaps and the eight purpose gaps were ONE fact
+  // double-counted. The inverse was latent: promote a coworker to active with an
+  // empty capability_domain and purpose graded "answered" — it only ever read
+  // right because all forty answered agents happened to have one.
+  //
+  // Purpose now joins `supervision` and `tailoring` as registry-graded. That is
+  // not a second completeness model, which is what the comment below guards
+  // against: the measure grades CAPABILITY, and whether a role has stated why it
+  // exists is a fact about the role's definition, exactly as who it escalates to
+  // and which stream it serves already are.
   accountabilities: "shape",
   authority: "governance",
   cadence: "cadence",
   qualifications: "toolsAndSkills",
   context: "corpus",
   measures: "evidence",
-  // supervision and tailoring have no plane: the measure grades a coworker's
-  // capability, and these two are facts about its PLACE — who it answers to and
-  // which install it is on.
+  // purpose, supervision and tailoring have no plane: the measure grades a
+  // coworker's capability, and these three are facts about its DEFINITION and
+  // PLACE — why it exists, who it answers to, and which install it is on.
 };

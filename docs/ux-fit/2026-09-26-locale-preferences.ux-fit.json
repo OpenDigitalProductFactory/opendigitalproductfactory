@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "settings-panel-two-selects-defaulting-to-org",
+  "decisionInteractionId": "DI-8AC377281C57",
+  "scope": {
+    "files": [
+      "apps/web/components/admin/LocalePreferencesPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "settings-panel-two-selects-defaulting-to-org",
+      "global-header-language-switcher",
+      "browser-only-no-control"
+    ]
+  }
+}

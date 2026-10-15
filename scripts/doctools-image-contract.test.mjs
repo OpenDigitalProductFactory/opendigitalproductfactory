@@ -94,3 +94,32 @@ test("dpf-convert keeps its fixed exit codes and size cap", () => {
   assert.match(smoke, /--network none --read-only/);
   assert.match(smoke, /MARKER=absent/);
 });
+
+test("render timeout smoke exercises real deadline and cleanup instead of render speed", () => {
+  const smoke = read("tools/doctools/smoke.sh");
+  assert.match(smoke, /--entrypoint python3 .*timeout-probe\.py/);
+  assert.match(smoke, /timeout_rc.*124/);
+  assert.match(smoke, /child kill and workspace cleanup verified/);
+  assert.doesNotMatch(smoke, /render .*render-deck\.json.*DPF_RENDER_TIMEOUT_SECONDS=1/);
+  const probe = read("tools/doctools/timeout-probe.py");
+  assert.match(probe, /runpy\.run_path\(renderer/);
+  assert.match(probe, /runtime\["ENGINES"\]\.append\(child\)/);
+  assert.match(probe, /child\.wait\(timeout=2\).*signal\.SIGKILL/);
+  assert.match(probe, /os\.path\.exists\(work\)/);
+});
+
+test("only dpf-render lifts DisableActiveContent, and the smoke test proves both paths (BI-BFF142A1)", () => {
+  // dpf-convert, the path for customer files, never touches the profile switch.
+  assert.doesNotMatch(read("tools/doctools/dpf-convert"), /DisableActiveContent/);
+  // dpf-render lifts it in its per-run copy and screens every document it opens.
+  const uno = read("tools/doctools/dpf_render_uno.py");
+  assert.match(uno, /def render_profile\(path\):/);
+  const render = read("tools/doctools/dpf-render");
+  assert.match(render, /TEMPLATE_FORBIDDEN = re\.compile\(/);
+  assert.match(render, /def screen_document\(xml, mimetype\):/);
+  assert.match(render, /CHART_MIMETYPE = 'office:mimetype="application\/vnd\.oasis\.opendocument\.chart"'/);
+  const smoke = read("tools/doctools/smoke.sh");
+  assert.match(smoke, /expect_exit "dpf-convert refuses a flat ODS with an embedded chart \(DisableActiveContent on\)" 3/);
+  assert.match(smoke, /probe render 4/, "the macro probe must run under the render profile too");
+  assert.match(read("tools/doctools/macro-probe.sh"), /render\)\n/);
+});

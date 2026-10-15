@@ -9,6 +9,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const authMock = vi.fn();
 const approveEnvelopeMock = vi.fn();
 const runApprovedMock = vi.fn();
+const recordOutcomeMock = vi.fn();
+
+vi.mock("@/lib/coworker/approval-outcome-store", () => ({
+  recordApprovalOutcome: (...args: unknown[]) => recordOutcomeMock(...args),
+}));
 
 vi.mock("@/lib/auth", () => ({
   auth: () => authMock(),
@@ -20,12 +25,17 @@ vi.mock("@/lib/coworker/envelope-actions", () => ({
 
 vi.mock("@/lib/coworker/approved-request-run", () => ({
   runApprovedExternalRequest: (...args: unknown[]) => runApprovedMock(...args),
+  // BI-C8EC05C9: no existing envelope carries the platform marker, so the
+  // platform runner always falls through to the external path here.
+  runApprovedPlatformRequest: async () => null,
 }));
 
 beforeEach(() => {
   authMock.mockReset();
   approveEnvelopeMock.mockReset();
   runApprovedMock.mockReset();
+  recordOutcomeMock.mockReset();
+  recordOutcomeMock.mockResolvedValue(undefined);
   runApprovedMock.mockResolvedValue({ status: "not-run", reason: "task-bound", message: "resumes with its task" });
 });
 
@@ -40,6 +50,32 @@ function makeRequest() {
 }
 
 describe("POST /api/agent/envelope/:envelopeId/approve", () => {
+  it("does not invite another approval when only receipt persistence fails", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    approveEnvelopeMock.mockResolvedValue({ ok: true, envelope: { id: "env-1", status: "approved" } });
+    runApprovedMock.mockResolvedValue({ status: "executed", message: "Done." });
+    recordOutcomeMock.mockRejectedValue(new Error("database unavailable"));
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest(), makeContext("env-1"));
+    const body = await response.json();
+    expect(body.ok).toBe(true);
+    expect(body.execution.status).toBe("executed");
+    expect(body.outcomeWarning).toContain("Do not approve again");
+    expect(runApprovedMock).toHaveBeenCalledOnce();
+  });
+  it.each([
+    { status: "executed", message: "Done." },
+    { status: "failed", message: "The action failed." },
+    { status: "not-run", reason: "credential-unavailable", message: "Connection inactive." },
+  ])("persists $status before refresh can discard the response", async (execution) => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    approveEnvelopeMock.mockResolvedValue({ ok: true, envelope: { id: "env-1", status: "approved" } });
+    runApprovedMock.mockResolvedValue(execution);
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest(), makeContext("env-1"));
+    expect(response.status).toBe(200);
+    expect(recordOutcomeMock).toHaveBeenCalledWith("env-1", "u1", execution);
+  });
   it("returns 401 when there is no session", async () => {
     authMock.mockResolvedValue(null);
     const { POST } = await import("./route");

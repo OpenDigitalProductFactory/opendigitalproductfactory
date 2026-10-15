@@ -2,12 +2,12 @@
 // Universal Work Formula conformance guard (BI-BC6099FE).
 // New carrier/projector code must adapt into WorkUnit instead of forking lifecycle.
 
-import { execFileSync } from "node:child_process";
 
 import { exitUnresolvable, listChangedFiles } from "./lib/git-changed-files.mjs";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runGit } from "./lib/git.mjs";
 
 const CANONICAL = "apps/web/lib/work-management/status-projection.ts";
 const THIN_BUILD_ADAPTER = "apps/web/lib/build/customer-status-projection.ts";
@@ -35,13 +35,8 @@ export function auditWorkUnitConformance(files, workUnitSource) {
   return findings;
 }
 
-function git(...args) {
-  try {
-    return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-  } catch (error) {
-    return error.stdout?.toString() ?? "";
-  }
-}
+// Fail-open as before: partial stdout (or "") when git fails.
+const git = (...args) => runGit(args, { cwd: process.cwd() }).stdout;
 
 function main() {
   git("fetch", "--no-tags", "origin", "main");

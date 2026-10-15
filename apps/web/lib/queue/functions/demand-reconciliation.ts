@@ -1,10 +1,10 @@
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 /** Automatic same-organization demand sync plus durable retry safety-net. */
-export const demandReconciliationScheduled = inngest.createFunction(
+export const demandReconciliationScheduled = jobs.createFunction(
   {
     id: "federation/demand-reconciliation",
     retries: 1,

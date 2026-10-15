@@ -1,4 +1,4 @@
-import type { ChatMessage } from "./ai-inference";
+import type { ChatMessage } from "../routing/chat-message-types";
 import type { RouteDecision } from "@/lib/routing/types";
 import type { RouteAndCallOptions } from "./routed-inference-options";
 import { admitPrismaDurableAsyncOperation } from "./async-operation-runtime";

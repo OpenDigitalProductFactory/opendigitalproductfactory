@@ -20,6 +20,7 @@
  *   /api/v1/edge/*          (edge-node heartbeats)
  *   /api/internal/quiescence-state   (we'd recurse otherwise)
  *   /api/mcp/v1             (route enforces read/write tool policy)
+ *   /api/ops/self-upgrade/control  (operator Keep waiting / Force / Abort)
  *
  * Fail-open / fail-closed (§12 Q6 decision):
  *
@@ -62,6 +63,10 @@ const ALLOW_LISTED_PREFIXES = [
   // and flips the level back to normal, wedging the portal in "quiescing"
   // forever. It has its own request-signature auth, so it's safe to bypass.
   "/api/inngest",
+  // BI-F9EE05E5 slice C: Keep waiting / Force now / Abort while an upgrade
+  // waits. The operator's only lever must not be refused by the drain it
+  // controls. The route checks view_operations itself.
+  "/api/ops/self-upgrade/control",
 ];
 
 export function isAllowListed(pathname: string): boolean {
@@ -221,6 +226,10 @@ function getAllowListedPassState(): ProxyQuiescenceState {
   };
 }
 
+function isOAuthTokenPost(req: NextRequest): boolean {
+  return req.nextUrl.pathname === "/api/oauth/token" && req.method.toUpperCase() === "POST";
+}
+
 // ─── Gating decision ──────────────────────────────────────────────────────
 
 /**
@@ -251,13 +260,18 @@ export function evaluateGate(
     return { kind: "pass", state };
   }
 
-  if (state.level === "swapping") {
+  const tokenPost = isOAuthTokenPost(req);
+  if (state.level === "swapping" || (tokenPost && state.level === "unknown")) {
     return {
       kind: "block",
-      response: build503(state, /* swapping= */ true),
+      response: build503(state, state.level === "swapping", tokenPost),
       state,
     };
   }
+
+  // The Node token route classifies the grant and keeps ordinary client,
+  // resource, consent, rotation and revocation checks. This is not an allow-list.
+  if (tokenPost && state.level === "draining") return { kind: "pass", state };
 
   if (state.level === "draining" && isMutationRequest(req)) {
     return {
@@ -274,7 +288,7 @@ export function evaluateGate(
  * Construct the 503 Upgrade response. Includes Retry-After + version
  * headers (so the client can detect stale-bundle on retry).
  */
-function build503(state: ProxyQuiescenceState, swapping: boolean): NextResponse {
+function build503(state: ProxyQuiescenceState, swapping: boolean, oauthToken = false): NextResponse {
   const headers = new Headers({
     "Retry-After": "30",
     "Cache-Control": "no-store, max-age=0",
@@ -284,7 +298,10 @@ function build503(state: ProxyQuiescenceState, swapping: boolean): NextResponse 
   });
   if (state.runId) headers.set("X-Quiescence-Run-Id", state.runId);
   headers.set("Connection", "close");
-  const body = JSON.stringify({
+  const body = JSON.stringify(oauthToken ? {
+    error: "temporarily_unavailable",
+    error_description: "Platform upgrade in progress. Try again shortly.",
+  } : {
     error: "portal_quiescing",
     message: swapping
       ? "Platform upgrade in progress — please retry shortly"
@@ -341,6 +358,7 @@ export async function checkQuiescenceForRequest(
 
   const state = await fetchQuiescenceState(origin);
   if (state.level === "unknown") {
+    if (isOAuthTokenPost(req)) return evaluateGate(req, state);
     // Fail policy: preserve last known non-normal for mutations; fail open
     // when there is no evidence this Edge process has observed a drain.
     if (isMutationRequest(req)) {

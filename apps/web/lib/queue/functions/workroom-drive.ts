@@ -7,32 +7,46 @@
 // Mirrors obligation-assurance-watch.ts: pure exported job + thin Inngest
 // wrappers behind gateAtEntry.
 
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 import {
   driveOutcomeNeedsOwner,
   resolveDriveConclusion,
+  type DriveReasonFor,
 } from "@/lib/work-management/drive-conclusion";
 import type { EffectiveHumanAccountability } from "@/lib/work-management/human-accountability";
+
+import { NOT_ASKED_ACCOUNTABILITY, resolveAccountabilityForConclusion } from "./workroom-drive-accountability";
+import { activeUserIdForHumanPrincipal, MISSING_TASK_OWNER_REASON, settleTickTaskOwner } from "./workroom-drive-task-owner";
 import type { PrismaClient } from "@dpf/db";
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import {
-  COORDINATION_RESOURCE_TYPE,
-  COORDINATION_SCOPE_TYPE,
   jsiSchemePresent,
   resolveCoordinatorEligibility,
 } from "@/lib/work-management/coordinator-eligibility";
 import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-nesting";
-import { buildStageBrief, stageEvidenceKinds } from "@/lib/work-management/stage-briefing";
+import { buildStageBrief, stageBriefInputFromDefinition, stageEvidenceKinds } from "@/lib/work-management/stage-briefing";
+import { type WorkroomStageTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
 import { driveTickIsNews, nextDriveHold, readDriveHold, stallNoticeDue, type WorkroomDriveHold } from "@/lib/work-management/workroom-drive-hold";
+import { readWorkroomQueueHold } from "@/lib/work-capsules/workroom-queue-hold";
 
 import {
   loadCoordinationBindings,
   loadRecordedEvidence,
   loadStageDispatchTimes,
+  loadStageDispatchTimesByStage,
+  loadStandingRoomIds,
   reconcileCoordinationBindings,
   reconcileStandingRoomNesting,
 } from "./workroom-drive-data";
+export { loadStandingRoomIds, STANDING_ROOM_SCAN_LIMIT } from "./workroom-drive-data";
+import { earnGraphReceipts, graphSnapshotFields, hasStoredDriveMarking, withLatchedBlockedReceipts } from "@/lib/work-management/drive-graph-tick";
+import { applyGraphDrivePlan } from "./workroom-drive-graph";
+import type { DeadlineNoticeInput } from "./workroom-drive-deadlines";
+import { createSubShapeChildEffects, withSubShapeChildren, type SubShapeChildEffects } from "./workroom-drive-children";
+import type { SubShapeChildObservation } from "@/lib/work-management/drive-child-rooms";
+import { applyReviewerDispatch, liveReviewerDispatch, reviewStageResolver, withReviewReceiptEvidence, type ReviewerDispatchEffect, type ReviewStageDeps, type ReviewStageOverlay } from "./workroom-drive-review-stages";
 import { earnEvidenceReceipts, type RecordedEvidence } from "@/lib/work-management/stage-evidence-receipts";
+import { sequentialRunFor } from "@/lib/work-management/drive-sequential-run";
 
 import { gateAtEntry } from "../quiescence-gates";
 import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
@@ -51,7 +65,8 @@ import {
 } from "@/lib/work-management/room-participant-assignment";
 import { readWorkroomPostureClaim } from "@/lib/work-management/workroom-posture-claim";
 import { readWorkShapeDefinitionContract } from "@/lib/work-management/work-shapes";
-import { resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
+import { readWorkShapeRoleBindings, resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
+import { loadAuthorStageAutonomy, NO_AUTHOR_STAGE_AUTONOMY, type AuthorStageAutonomyFor } from "@/lib/work-management/author-stage-autonomy-live";
 import {
   EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
   resolveDrivePlan,
@@ -63,12 +78,17 @@ import {
   priorDriveFromStored,
   readStoredWorkroomDriveState,
 } from "@/lib/work-management/workroom-drive-state";
-import { appendCompletingWorkroomDriveReceipt, WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workroom-drive-receipts";
-import { repairUnownedDeliveryRooms, ROOM_OWNER_USER_INCLUDE, roomOwnerUserId } from "@/lib/work-management/delivery-room-ownership";
+import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workroom-drive-receipts";
+import { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
+import { scheduleWorkroomAgentTask } from "./workroom-drive-scheduling";
+export { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
+import { loadHandedOverUserIds, repairUnownedDeliveryRooms, ROOM_OWNER_USER_INCLUDE, roomOwnerUserId } from "@/lib/work-management/delivery-room-ownership";
 
 export type WorkroomDriveRoom = {
   id: string;
   capsuleId: string;
+  /** BI-8A32EBFF: the item the room delivers, for the author-stage budget check. */
+  backlogItemId?: string | null;
   scopeClaims: unknown;
   workspaceState: unknown;
   leaseExpiresAt: Date | null;
@@ -76,7 +96,7 @@ export type WorkroomDriveRoom = {
   ownerUserId: string | null;
   participants: ProjectableWorkroomParticipantAssignment[];
   currentStageKey: string | null;
-  receipts: { stageKey: string; kind: string }[];
+  receipts: { stageKey: string; kind: string; iteration?: number }[];
   /** The room's own objective, sent to the coworker in its stage brief. */
   objective?: string | null;
   /** Stage-scoped evidence recorded through record_workroom_evidence — the only
@@ -84,6 +104,10 @@ export type WorkroomDriveRoom = {
   recordedEvidence?: RecordedEvidence[];
   /** When the current stage was most recently dispatched. */
   stageDispatchedAt?: Date | null;
+  /** Graph rooms only (Phase 3c): when each marked stage most recently started. */
+  stageDispatchedAtByStage?: ReadonlyMap<string, Date> | null;
+  /** Graph rooms only (PR-3c-5): each live sub-shape child's status and drive action/reason, by capsule id. */
+  subShapeChildren?: Readonly<Record<string, SubShapeChildObservation>>;
   budgetUsage: { kind: string; used: number }[];
   stopConditionHits: string[];
   reviewDue: boolean;
@@ -93,7 +117,7 @@ export type WorkroomDriveRoom = {
   coordinatorEligibility?: WorkroomCoordinatorEligibility | null;
 };
 
-export type WorkroomDriveEffects = {
+export type WorkroomDriveEffects = SubShapeChildEffects & {
   /**
    * BI-12A083B4: who answers for this room, asked ONLY when a tick ends in a
    * blockage. Resolving it walks the room's containment lineage, so the drive
@@ -104,6 +128,8 @@ export type WorkroomDriveEffects = {
    * answer: nobody was asked, so nobody is named.
    */
   resolveAccountability?: (roomId: string) => Promise<EffectiveHumanAccountability>;
+  /** BI-D13FA12A: the active user an accountable human principal maps to, for a room that records no owner user. */
+  resolvePrincipalUserId?: (principalId: string) => Promise<string | null>;
   persist: (input: {
     roomId: string;
     snapshot: Record<string, unknown>;
@@ -113,6 +139,8 @@ export type WorkroomDriveEffects = {
     observationOnly?: boolean;
     /** Update the snapshot but add no trail row: the hold did not change (BI-E8C78E80). */
     quiet?: boolean;
+    /** The snapshot is for a graph-path shape: the merge keeps the row's marking (Phase 3c). */
+    graphShape?: boolean;
     lease?: { expiresAt: Date; holderPrincipalId: string | null };
   }) => Promise<void>;
   /** Tell a stuck room's owner once per stuck spell (BI-E8C78E80). Optional; tests may omit it. */
@@ -129,12 +157,20 @@ export type WorkroomDriveEffects = {
     taskId: string;
     agentId: string;
     ownerUserId: string;
+    dispatchScope?: import("@/lib/work-management/workroom-drive-checkpoint").DispatchScope;
     title: string;
     prompt: string;
+    /** Stage + declared tools, written to taskConfig.workroomStage for the scheduler's pin (BI-43C3E914). */
+    stage: WorkroomStageTaskConfig;
     now: Date;
     lease: { roomId: string; expiresAt: Date; holderPrincipalId: string | null };
   }) => Promise<boolean>;
   deactivateAgentTask: (taskId: string) => Promise<void>;
+  dispatchReviewer?: ReviewerDispatchEffect;
+  /** Revoke the permits of the stages a rework left (GPP Phase 3c PR-3c-3). Optional; graph rooms only. */
+  revokeStagePermits?: (input: { workroomId: string; stageKeys: readonly string[]; now: Date }) => Promise<number>;
+  /** Tell the escalation target a stage passed its deadline (PR-3c-4). True only when sent; anything else retries next tick. */
+  notifyDeadline?: (input: DeadlineNoticeInput) => Promise<boolean>;
 };
 
 export type WorkroomDriveResult = {
@@ -154,9 +190,6 @@ export type WorkroomDriveResult = {
 // One terminal rule for the drive and the nesting it walks (BI-CFB3FDB7).
 const TERMINAL = TERMINAL_WORKROOM_STATUSES;
 
-/** Max rooms one drive tick will consider. Bounds CANDIDATES, not all rooms. */
-export const STANDING_ROOM_SCAN_LIMIT = 200;
-
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -169,61 +202,34 @@ function postureLevelOf(scopeClaims: unknown): ProactivityLevel | null {
   return "balanced";
 }
 
-/**
- * The answer when nobody was asked, because the tick did not need an owner.
- * Never reaches a recorded blockage: driveOutcomeNeedsOwner gates the call.
- */
-const NOT_ASKED_ACCOUNTABILITY: EffectiveHumanAccountability = {
-  state: "setup-required",
-  reason: "no-organization-owner-recorded",
-  message: "Accountability was not resolved because this tick needed no owner.",
-  atWorkroomId: null,
-};
-
-async function resolveAccountabilityForConclusion(
-  roomId: string,
-  effects: WorkroomDriveEffects,
-): Promise<EffectiveHumanAccountability> {
-  if (!effects.resolveAccountability) {
-    return {
-      state: "setup-required",
-      reason: "no-organization-owner-recorded",
-      message:
-        "This drive was composed without an accountability resolver, so no owner could be named. "
-        + "Wire resolveAccountability into the drive's effects.",
-      atWorkroomId: roomId,
-    };
-  }
-  try {
-    return await effects.resolveAccountability(roomId);
-  } catch (error) {
-    // A failed lookup must not swallow the blockage. Record that the owner is
-    // unknown and why, which is still louder than stopping silently.
-    return {
-      state: "setup-required",
-      reason: "no-organization-owner-recorded",
-      message: `Accountability could not be read: ${error instanceof Error ? error.message : String(error)}`,
-      atWorkroomId: roomId,
-    };
-  }
-}
-
 export async function applyDrivePlan(input: {
   room: WorkroomDriveRoom;
   plan: DrivePlan;
   now: Date;
   effects: WorkroomDriveEffects;
+  /** Sequential rooms only (BI-853120EE): the run this tick belongs to. Stamped on the snapshot and on a new blocked receipt. */
+  runKey?: string;
+  review?: ReviewStageOverlay | null; // set when the stage was rebound to its readiness reviewer
 }): Promise<"dispatched" | "attention" | "stopped" | "skipped"> {
-  const { room, plan, now, effects } = input;
-  const receipts = [...room.receipts];
+  const { now, effects, runKey } = input;
+  // Graph shapes only (Phase 3c): marking carry-forward and the marked keys. Null for every sequential room.
+  const graph = graphSnapshotFields(input.plan, input.room.workspaceState);
+  // BI-D13FA12A: settle who the task runs for before anything is recorded; an ownerless dispatch becomes a pause.
+  const reviewerBound = Boolean(input.review?.binding.requestCoworker && input.review.binding.stageKey === input.plan.stageKey);
+  const owner = await settleTickTaskOwner({ room: input.room, plan: input.plan, effects, dispatches: graph
+    ? graph.dispatching : input.plan.action === "dispatch_agent" && Boolean(input.plan.taskId && input.plan.agentId) && !reviewerBound });
+  const plan = owner.plan;
+  const room = { ...input.room, ownerUserId: owner.ownerUserId };
+  const receipts = graph ? withLatchedBlockedReceipts(plan, room.receipts) : [...room.receipts];
   if (
-    plan.reason === EXECUTOR_WRITEBACK_UNAVAILABLE_REASON
+    !graph
+    && plan.reason === EXECUTOR_WRITEBACK_UNAVAILABLE_REASON
     && plan.stageKey
     && !receipts.some((receipt) =>
       receipt.stageKey === plan.stageKey && receipt.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND
     )
   ) {
-    receipts.push({ stageKey: plan.stageKey, kind: WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND });
+    receipts.push({ stageKey: plan.stageKey, kind: WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND, ...(runKey !== undefined ? { runKey } : {}) });
   }
   // BI-12A083B4 — no work stops without a conclusion. Every tick records which
   // of the three legitimate states it reached: the outcome is met, work
@@ -236,7 +242,7 @@ export async function applyDrivePlan(input: {
     attentionPrincipalRef: plan.attentionPrincipalRef,
   });
   const accountability: EffectiveHumanAccountability = needsOwner
-    ? await resolveAccountabilityForConclusion(room.id, effects)
+    ? owner.accountability ?? await resolveAccountabilityForConclusion(room.id, effects.resolveAccountability)
     : NOT_ASKED_ACCOUNTABILITY;
   const conclusion = resolveDriveConclusion({
     action: plan.action,
@@ -246,13 +252,16 @@ export async function applyDrivePlan(input: {
   });
 
   const priorHold = readDriveHold(room.workspaceState);
-  const hold = nextDriveHold(priorHold, { action: plan.action, reason: plan.reason, stageKey: plan.stageKey, conformance: plan.conformance }, now);
+  const hold = nextDriveHold(priorHold, { action: plan.action, reason: plan.reason, stageKey: plan.stageKey, conformance: plan.conformance,
+    ...(graph?.markedKeys ? { markedKeys: graph.markedKeys } : {}) }, now);
   if (stallNoticeDue(hold) && effects.notifyStall) {
     await effects.notifyStall({ room, hold, reason: plan.reason, conformance: plan.conformance })
       .then(() => { hold.notifiedAt = now.toISOString(); }, () => undefined);
   }
-  const quiet = !driveTickIsNews(priorHold, hold, plan.action);
-  const persist: WorkroomDriveEffects["persist"] = (args) => effects.persist({ ...args, quiet: quiet && !args.observationOnly });
+  const quiet = !driveTickIsNews(priorHold, hold, plan.action,
+    graph ? graph.iterationChanged || (graph.dispatching && room.ownerUserId !== null) : undefined);
+  const persist: WorkroomDriveEffects["persist"] = (args) =>
+    effects.persist({ ...args, quiet: quiet && !args.observationOnly, ...(graph ? { graphShape: true } : {}) });
 
   const snapshot = {
     kind: "workroom-drive",
@@ -264,6 +273,7 @@ export async function applyDrivePlan(input: {
     taskId: plan.taskId,
     lastRunAt: now.toISOString(),
     lastCycleKey: plan.cycle?.cycleKey ?? null,
+    ...(runKey !== undefined && !graph ? { runKey } : {}),
     receipts,
     budgetUsage: room.budgetUsage,
     stopConditionHits: room.stopConditionHits,
@@ -278,7 +288,11 @@ export async function applyDrivePlan(input: {
     conformance: plan.conformance,
     ledger: plan.ledger,
     hold,
+    ...(owner.taskOwner ? { taskOwner: owner.taskOwner } : {}),
+    ...graph?.fields,
   };
+  // A graph room dispatches one task per branch (PR-3c-2); a sequential room never takes this branch.
+  if (graph) return applyGraphDrivePlan({ room, plan, now, effects, snapshot, persist });
 
   if (plan.action === "do_not_wake") {
     if (plan.shapeKey) {
@@ -307,6 +321,13 @@ export async function applyDrivePlan(input: {
 
   if (plan.action === "dispatch_agent") {
     if (!plan.taskId || !plan.agentId) return "skipped";
+    if (readWorkroomQueueHold(room.workspaceState)) {
+      // BI-2B6A8A74: no provider answered the last stage; dispatching again would retry the outage.
+      const held = { ...snapshot, reason: "provider_held" satisfies DriveReasonFor<"dispatch_agent"> };
+      await persist({ roomId: room.id, snapshot: held, activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
+        summary: "Queue held after a provider failure; resume_workroom_queue releases it.", payload: held });
+      return "skipped";
+    }
     const expiresAt = new Date(now.getTime() + WORKROOM_DRIVE_LEASE_MS);
     const lease = await effects.acquireLease({
       roomId: room.id,
@@ -319,24 +340,22 @@ export async function applyDrivePlan(input: {
     if (lease === "held") {
       await persist({
         roomId: room.id,
-        snapshot: { ...snapshot, reason: "lease_held" },
+        snapshot: { ...snapshot, reason: "lease_held" satisfies DriveReasonFor<"dispatch_agent"> },
         activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
         summary: "Drive lease held by another worker; stage remains eligible when it expires.",
-        payload: { ...snapshot, reason: "lease_held" },
+        payload: { ...snapshot, reason: "lease_held" satisfies DriveReasonFor<"dispatch_agent"> },
         observationOnly: true,
       });
       return "skipped";
     }
-    if (!room.ownerUserId) {
-      await persist({
-        roomId: room.id,
-        snapshot: { ...snapshot, reason: "missing_task_owner" },
-        activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
-        summary: "Agent stage is eligible but no owner user is bound for ScheduledAgentTask.",
-        payload: { ...snapshot, reason: "missing_task_owner" },
-      });
-      return "skipped";
-    }
+    if (input.review?.binding.requestCoworker && input.review.binding.stageKey === plan.stageKey) return applyReviewerDispatch({
+      room, plan, overlay: input.review, snapshot, now, persist, lease: { expiresAt, holderPrincipalId: room.leaseHolderPrincipalId }, dispatch: effects.dispatchReviewer });
+    // Unreachable: settleTickTaskOwner rewrote an ownerless dispatch to a pause above.
+    if (!room.ownerUserId) return "skipped";
+    // GPP element 2 "Attachment" + element 5 "Capability set": the brief and the
+    // task carry the stage's declared tools; the scheduler pins them (BI-43C3E914).
+    const brief = stageBriefInputFromDefinition({ capsuleId: room.capsuleId, roomObjective: room.objective ?? null,
+      shapeKey: plan.shapeKey ?? "", shapeVersion: plan.shapeVersion ?? "", definition: plan.definition ?? null, stageKey: plan.stageKey ?? "" });
     const scheduled = await effects.upsertAgentTask({
       taskId: plan.taskId,
       agentId: plan.agentId,
@@ -346,20 +365,9 @@ export async function applyDrivePlan(input: {
       // answered it with prose and zero tool calls (BI-4A394B21). The shape
       // already carries the objective, the definition of done and the evidence
       // to leave; send it.
-      prompt: buildStageBrief({
-        capsuleId: room.capsuleId,
-        roomObjective: room.objective ?? null,
-        shapeKey: plan.shapeKey ?? "",
-        shapeVersion: plan.shapeVersion ?? "",
-        shapeTitle: plan.definition?.title ?? null,
-        shapeDescription: plan.definition?.description ?? null,
-        stageKey: plan.stageKey ?? "",
-        stageTitle: plan.definition?.stages.find((stage) => stage.key === plan.stageKey)?.title ?? null,
-        doneWhen:
-          plan.definition?.stages.find((stage) => stage.key === plan.stageKey)?.advance.condition ?? null,
-        evidenceKinds: stageEvidenceKinds(plan.definition ?? null, plan.stageKey),
-        stopConditions: (plan.definition?.stopConditions ?? []).map((entry) => entry.condition),
-      }),
+      prompt: buildStageBrief(brief),
+      stage: { shapeKey: brief.shapeKey, shapeVersion: brief.shapeVersion, stageKey: brief.stageKey, tools: [...(brief.stageTools ?? [])] },
+      ...(plan.cycle ? { dispatchScope: { runKey: runKey ?? plan.cycle.cycleKey, cycleKey: plan.cycle.cycleKey, iteration: 0 } } : {}),
       now,
       lease: { roomId: room.id, expiresAt, holderPrincipalId: room.leaseHolderPrincipalId },
     });
@@ -368,7 +376,7 @@ export async function applyDrivePlan(input: {
       roomId: room.id,
       snapshot,
       activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
-      summary: `Dispatched ${plan.taskId} for stage ${plan.stageKey}`,
+      summary: `Dispatched ${plan.taskId} for stage ${plan.stageKey}${owner.taskOwner ? ` for the accountable person (${String(owner.taskOwner.source)})` : ""}`,
       payload: snapshot,
       lease: { expiresAt, holderPrincipalId: room.leaseHolderPrincipalId },
     });
@@ -379,7 +387,9 @@ export async function applyDrivePlan(input: {
     roomId: room.id,
     snapshot,
     activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
-    summary: `Drive ${plan.action}: ${plan.reason}`,
+    summary: plan.reason === MISSING_TASK_OWNER_REASON
+      ? `Stage ${plan.stageKey ?? "unknown"} not dispatched: ${String(owner.taskOwner?.missing ?? "no task owner")}`
+      : `Drive ${plan.action}: ${plan.reason}`,
     payload: snapshot,
   });
   if (plan.shapeKey) {
@@ -395,6 +405,8 @@ export async function runWorkroomDriveJob(
     effects?: WorkroomDriveEffects;
     reconcileNotifications?: () => Promise<void>;
     reconcileNesting?: () => Promise<number>;
+    authorStageAutonomy?: (rooms: WorkroomDriveRoom[], now: Date) => Promise<AuthorStageAutonomyFor>;
+    reviewStages?: ReviewStageDeps | null;
   },
 ): Promise<WorkroomDriveResult> {
   // Materialize the declared nesting before driving. The tree is declared in
@@ -420,17 +432,23 @@ export async function runWorkroomDriveJob(
       jsiSchemePresent(prisma as unknown as Record<string, unknown>),
     ];
     rooms = await loadStandingRooms(bindings, schemePresent);
-    // Stage-scoped evidence is the ONLY thing a completing receipt is earned
-    // from, so a room that arrives without it can never advance.
+    // Stage-scoped evidence (a review stage's: its readiness receipts, BI-80738C08) is
+    // the ONLY thing a completing receipt is earned from; without it a room never advances.
     const evidenceByRoom = await loadRecordedEvidence(rooms.map((room) => room.capsuleId));
     const dispatchByRoom = await loadStageDispatchTimes(rooms.map((room) => room.capsuleId));
-    rooms = rooms.map((room) => ({
+    const dispatchByStage = await loadStageDispatchTimesByStage(
+      rooms.filter((room) => hasStoredDriveMarking(room.workspaceState)).map((room) => room.capsuleId));
+    rooms = await withSubShapeChildren(await withReviewReceiptEvidence(rooms.map((room) => ({
       ...room,
       recordedEvidence: evidenceByRoom.get(room.capsuleId) ?? [],
       stageDispatchedAt: dispatchByRoom.get(room.capsuleId) ?? null,
-    }));
+      ...(dispatchByStage.has(room.capsuleId) ? { stageDispatchedAtByStage: dispatchByStage.get(room.capsuleId) } : {}),
+    }))));
   }
   const effects = deps?.effects ?? createWorkroomDriveEffects();
+  // BI-8A32EBFF: an agent runs role:author delivery stages only under the operator pre-authorisation, within budget.
+  const authorStage = await (deps?.authorStageAutonomy ?? (deps?.listRooms ? async () => NO_AUTHOR_STAGE_AUTONOMY : loadAuthorStageAutonomy))(rooms, now);
+  const resolveWithReview = reviewStageResolver(deps); // bounded readiness reads per tick (BI-2C8750FC)
   const plans: WorkroomDriveResult["plans"] = [];
   let dispatched = 0;
   let attention = 0;
@@ -439,15 +457,22 @@ export async function runWorkroomDriveJob(
 
   for (const room of rooms) {
     const shape = resolveWorkShapeClaim(room.scopeClaims);
+    const author = authorStage(room, shape?.key ?? null);
     const stored = readStoredWorkroomDriveState(room.workspaceState);
-    const receipts = earnEvidenceReceipts({
+    const existing = room.receipts.length > 0 ? room.receipts : stored.receipts;
+    // BI-853120EE: a sequential room's receipts belong to its run; a new run starts with none.
+    const run = sequentialRunFor({ shape, workspaceState: room.workspaceState, now, prior: priorDriveFromStored(stored), receipts: existing });
+    const receipts = (earnGraphReceipts({ definition: shape ? readWorkShapeDefinitionContract(shape) : null, workspaceState: room.workspaceState,
+      evidence: room.recordedEvidence ?? [], dispatchedAtByStage: room.stageDispatchedAtByStage, existing,
+    }) ?? earnEvidenceReceipts({
       stageKey: room.currentStageKey ?? stored.currentStageKey,
       declaredKinds: stageEvidenceKinds(shape ? readWorkShapeDefinitionContract(shape) : null, room.currentStageKey ?? stored.currentStageKey),
       evidence: room.recordedEvidence ?? [],
       dispatchedAt: room.stageDispatchedAt ?? null,
-      existing: room.receipts.length > 0 ? room.receipts : stored.receipts,
-    }) as { stageKey: string; kind: string }[];
-    const plan = resolveDrivePlan({
+      existing: run?.receipts ?? existing,
+      ...(run ? { runKey: run.runKey } : {}),
+    })) as { stageKey: string; kind: string; iteration?: number; runKey?: string }[];
+    const driveInput: Parameters<typeof resolveDrivePlan>[0] = {
       roomId: room.capsuleId,
       definition: shape ? readWorkShapeDefinitionContract(shape) : null,
       collaborationShape: shape?.collaborationShape ?? null,
@@ -468,14 +493,20 @@ export async function runWorkroomDriveJob(
       coordinatorEligibility: room.coordinatorEligibility,
       now,
       priorDrive: priorDriveFromStored(stored),
-    });
+      workspaceState: room.workspaceState,
+      recordedEvidence: room.recordedEvidence ?? [],
+      ...(room.subShapeChildren ? { subShapeChildren: room.subShapeChildren } : {}),
+      roleBindings: { ...author.roleBindings, ...readWorkShapeRoleBindings(room.scopeClaims) },
+      authorStageWithheldBecause: author.withheldBecause,
+    };
+    const { plan, review } = await resolveWithReview(room, driveInput);
     plans.push({
       roomId: room.capsuleId,
       action: plan.action,
       reason: plan.reason,
       taskId: plan.taskId,
     });
-    const outcome = await applyDrivePlan({ room: { ...room, receipts }, plan, now, effects });
+    const outcome = await applyDrivePlan({ room: { ...room, receipts }, plan, now, effects, review, ...(run ? { runKey: run.runKey } : {}) });
     if (outcome === "dispatched") dispatched += 1;
     else if (outcome === "attention") attention += 1;
     else if (outcome === "stopped") stopped += 1;
@@ -505,48 +536,6 @@ export async function runWorkroomDriveJob(
     plans,
   };
 }
-
-/**
- * Ids of the rooms the drive could possibly act on: non-terminal, not archived,
- * and actually carrying a work-shape claim.
- *
- * The claim lives inside the `scopeClaims` JSON, which Prisma cannot filter on
- * for an array of objects — so this is raw SQL rather than a `findMany` where
- * clause. That matters more than it looks: the previous implementation capped
- * `findMany` at 200 rows and only then filtered for the claim in JavaScript, so
- * the cap applied to ALL rooms rather than to candidates. On the reference
- * install that meant 276 non-terminal rooms, exactly one of them shaped, and a
- * drive that reported `scanned: 0` forever because the one shaped room fell
- * outside an unordered 200-row window. Filtering in SQL means the cap now
- * bounds work the drive can actually do, and `ORDER BY` makes which rooms it
- * takes deterministic instead of whatever the planner returned.
- */
-export async function loadStandingRoomIds(db: {
-  $queryRaw: (q: TemplateStringsArray, ...v: unknown[]) => Promise<Array<{ id: string }>>;
-}): Promise<string[]> {
-  const rows = await db.$queryRaw`
-    SELECT "id"
-    FROM "WorkCapsule"
-    WHERE "archivedAt" IS NULL
-      AND "status" NOT IN ('abandoned', 'archived', 'complete')
-      AND EXISTS (
-        SELECT 1 FROM jsonb_array_elements(
-          CASE jsonb_typeof("scopeClaims")
-            WHEN 'array' THEN "scopeClaims"
-            WHEN 'object' THEN jsonb_build_array("scopeClaims")
-            ELSE '[]'::jsonb
-          END
-        ) AS claim
-        WHERE claim ? 'workShape'
-      )
-    ORDER BY "updatedAt" ASC, "id" ASC
-    LIMIT ${STANDING_ROOM_SCAN_LIMIT}
-  `;
-  return rows.map((row) => row.id);
-}
-
-
-
 
 async function loadStandingRooms(
   coordinationBindings?: Map<
@@ -584,6 +573,8 @@ async function loadStandingRooms(
       ...ROOM_OWNER_USER_INCLUDE,
     },
   });
+  // BI-858FDE5A: a handed-over requester/creator no longer names a new task's owner.
+  const handedOverUserIds = await loadHandedOverUserIds(prisma as never);
 
   return rows.flatMap((row) => {
     const shapeRef = resolveWorkShapeClaim(row.scopeClaims);
@@ -593,6 +584,7 @@ async function loadStandingRooms(
     return [{
       id: row.id,
       capsuleId: row.capsuleId,
+      backlogItemId: row.backlogItemId,
       coordinatorEligibility: resolveCoordinatorEligibility({
         shapeKey,
         bindings: (shapeKey ? coordinationBindings?.get(shapeKey) : undefined) ?? [],
@@ -602,7 +594,7 @@ async function loadStandingRooms(
       workspaceState: row.workspaceState,
       leaseExpiresAt: row.leaseExpiresAt,
       leaseHolderPrincipalId: row.leaseHolderPrincipalId,
-      ownerUserId: roomOwnerUserId(row),
+      ownerUserId: roomOwnerUserId(row, handedOverUserIds),
       participants: row.participants.map((participant) => {
         const kind = participant.principal.kind === "agent"
           ? "agent" as const
@@ -638,6 +630,7 @@ export function createWorkroomDriveEffects(
   clock: () => Date = () => new Date(),
 ): WorkroomDriveEffects {
   return {
+    ...createSubShapeChildEffects(loadDb as never),
     // BI-12A083B4: the drive asks this only when a tick ends stuck, so a
     // blockage can name who clears it instead of waiting on nobody. Composed
     // from the same lineage walk the room workforce read uses, so the two
@@ -652,27 +645,25 @@ export function createWorkroomDriveEffects(
         { workroomId: roomId },
       );
     },
+    async resolvePrincipalUserId(principalId) {
+      return activeUserIdForHumanPrincipal((await loadDb()) as never, principalId);
+    },
     notifyStall: async (input) => (await import("@/lib/work-management/workroom-stall-notice")).notifyWorkroomStall(input),
+    revokeStagePermits: async (input) => (await import("@/lib/gpp/stage-permit-revocation")).revokeStagePermits(input),
+    notifyDeadline: async (input) => (await import("@/lib/work-management/workroom-deadline-notice")).notifyWorkroomDeadline(input),
+    dispatchReviewer: liveReviewerDispatch,
     async persist(input) {
       const prisma = await loadDb();
+      const prior: { state: { workspaceState: unknown; capsuleId: string; scopeClaims: unknown } | null } = { state: null }; // set in the transaction
       const activity = await prisma.$transaction(async (tx) => {
         if (!input.observationOnly) {
           const current = await tx.workroom.findUnique({
             where: { id: input.roomId },
-            select: { workspaceState: true, updatedAt: true },
+            select: { workspaceState: true, updatedAt: true, capsuleId: true, scopeClaims: true },
           });
           if (!current) return null;
-          const currentDrive = asRecord(asRecord(current.workspaceState)?.workroomDrive);
-          let snapshot = input.snapshot;
-          if (currentDrive && currentDrive.lastCycleKey === input.snapshot.lastCycleKey) {
-            let receipts = readStoredWorkroomDriveState({ workroomDrive: snapshot }).receipts;
-            for (const receipt of readStoredWorkroomDriveState(current.workspaceState).receipts) {
-              if (receipt.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND) continue;
-              const merged = appendCompletingWorkroomDriveReceipt(receipts, receipt);
-              if (merged.ok) receipts = merged.data;
-            }
-            snapshot = { ...snapshot, receipts };
-          }
+          prior.state = current;
+          const snapshot = mergeWorkroomDriveSnapshot(current.workspaceState, input.snapshot, { graphShape: input.graphShape });
           const updated = await tx.workroom.updateMany({
             where: {
               id: input.roomId, updatedAt: current.updatedAt, archivedAt: null, status: { notIn: [...TERMINAL] },
@@ -698,6 +689,11 @@ export function createWorkroomDriveEffects(
       if (!activity) return;
       const { publishRecordedWorkCapsuleActivity } = await import("@/lib/work-capsules/activity-events");
       publishRecordedWorkCapsuleActivity(input.roomId, activity.id);
+      // EP-B70E718D F2: the trail row just written is a state change, so the stage's queue moves with it.
+      if (prior.state) {
+        const { emitStageTelemetryForDriveWrite } = await import("@/lib/work-management/workroom-stage-telemetry");
+        void emitStageTelemetryForDriveWrite({ room: prior.state, snapshot: input.snapshot, graphShape: input.graphShape, at: clock() });
+      }
     },
     async acquireLease(input) {
       if (input.currentExpiresAt && input.currentExpiresAt.getTime() > input.now.getTime()) {
@@ -721,43 +717,7 @@ export function createWorkroomDriveEffects(
     },
     async upsertAgentTask(input) {
       const prisma = await loadDb();
-      return prisma.$transaction(async (tx) => {
-        // Lock the room through the scheduling write. An expired or superseded
-        // driver cannot reactivate a task after another owner takes over.
-        const owned = await tx.workroom.updateMany({
-          where: {
-            id: input.lease.roomId, archivedAt: null, status: { notIn: [...TERMINAL] },
-            leaseExpiresAt: input.lease.expiresAt,
-            leaseHolderPrincipalId: input.lease.holderPrincipalId,
-            AND: [{ leaseExpiresAt: { gt: clock() } }],
-          },
-          data: { leaseExpiresAt: input.lease.expiresAt },
-        });
-        if (owned.count !== 1) return false;
-        await tx.scheduledAgentTask.upsert({
-          where: { taskId: input.taskId },
-          create: {
-            taskId: input.taskId,
-            agentId: input.agentId,
-            title: input.title,
-            prompt: input.prompt,
-            routeContext: "/ops/workrooms",
-            schedule: WORKROOM_DRIVE_CRON,
-            timezone: "UTC",
-            ownerUserId: input.ownerUserId,
-            nextRunAt: input.now,
-            isActive: true,
-          },
-          update: {
-            agentId: input.agentId,
-            title: input.title,
-            prompt: input.prompt,
-            nextRunAt: input.now,
-            isActive: true,
-          },
-        });
-        return true;
-      });
+      return scheduleWorkroomAgentTask(prisma, input, clock);
     },
     async deactivateAgentTask(taskId) {
       const prisma = await loadDb();
@@ -769,7 +729,7 @@ export function createWorkroomDriveEffects(
   };
 }
 
-export const workroomDriveScheduled = inngest.createFunction(
+export const workroomDriveScheduled = jobs.createFunction(
   {
     id: WORKROOM_DRIVE_INNGEST_ID,
     retries: 1,
@@ -783,7 +743,7 @@ export const workroomDriveScheduled = inngest.createFunction(
   },
 );
 
-export const workroomDriveRunNow = inngest.createFunction(
+export const workroomDriveRunNow = jobs.createFunction(
   {
     id: WORKROOM_DRIVE_RUN_NOW_INNGEST_ID,
     retries: 0,

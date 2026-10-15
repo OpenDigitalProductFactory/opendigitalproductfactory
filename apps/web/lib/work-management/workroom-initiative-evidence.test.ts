@@ -57,6 +57,10 @@ describe("governed initiative evidence in a Workroom", () => {
     expect(result.receipts[0].processEvidence).toBeUndefined();
     expect(result.receipts[0].status).toBe("observed");
   });
+  it("shows a failing review's findings in the room", async () => {
+    const result = await loadWorkroomExecutionEvidence(setup({ decision: "fail", findingRefs: ["F-1", "F-2"] }), [room], now);
+    expect(result.receipts[0].summary).toContain("post-implementation-review: fail, 2 findings");
+  });
   it("reports unavailable initiative evidence instead of a complete empty result", async () => {
     const db = setup(); db.$queryRaw.mockRejectedValue(new Error("unavailable"));
     const result = await loadWorkroomExecutionEvidence(db, [room], now);

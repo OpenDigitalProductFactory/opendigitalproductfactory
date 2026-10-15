@@ -89,6 +89,12 @@ describe("saveManagedDocument requests renditions (BI-9D43CBEF)", () => {
     expect(requestDocumentRenditions).toHaveBeenCalledWith("ver-1");
   });
 
+  it("asks for renditions when the saved version is a PDF blob, so its text is indexed (BI-26CD1D1E)", async () => {
+    const db = fakeDb(savedRow("application/pdf", "blob-1"));
+    await saveManagedDocument({ title: "Fee policy", documentKind: "report", contentFormat: "application/pdf", contentBlobId: "blob-1" }, db as never);
+    expect(requestDocumentRenditions).toHaveBeenCalledWith("ver-1");
+  });
+
   it("does not ask for renditions of a markdown document", async () => {
     const db = fakeDb(savedRow("text/markdown", null));
     await saveManagedDocument({ title: "Notes", documentKind: "brief", contentFormat: "text/markdown", contentText: "hello" }, db as never);

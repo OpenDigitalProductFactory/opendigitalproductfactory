@@ -11,7 +11,10 @@
 // scripts/local-ci-runner.sh is a compatibility entry point that delegates
 // here so the lease/resource contract has one implementation source.
 
+import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { spawnSync } from "node:child_process";
+import { runGit } from "./lib/git.mjs";
 import { X_OK } from "node:constants";
 import { accessSync, chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
@@ -28,21 +31,31 @@ import {
   resolveBaseFreshnessPolicy,
 } from "./lib/local-ci-base-freshness.mjs";
 import { ensureFullHistory } from "./lib/git-shallow-preflight.mjs";
-import { EXIT_CHILD_SIGNAL_DEATH } from "./lib/sandbox-freshness.mjs";
+import { EXIT_CHILD_SIGNAL_DEATH, EXIT_RUNNER_PREREQUISITE_UNAVAILABLE } from "./lib/sandbox-freshness.mjs";
 import { parseRepositoryPnpmVersion, resolvePinnedPnpmInvocation } from "./lib/pinned-pnpm.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
 
-function die(message) {
+function die(message, code = 1) {
   // BI-8304AB09: write BOTH streams so gate-worktree log capture cannot drop the cause.
   const line = `local-ci-runner: ${message}\n`;
   process.stdout.write(line);
   process.stderr.write(line);
-  process.exit(1);
+  process.exit(code);
+}
+
+/**
+ * A prerequisite the runner sets up before grading was unavailable — network,
+ * Docker or disk. Exit 1 would be recorded as a reasonless `failed` against a
+ * SHA nothing graded; this code is recorded as infrastructure and retried.
+ * Not for conditions a retry cannot clear (a foreign port owner, bad input).
+ */
+function dieUnavailable(message) {
+  die(message, EXIT_RUNNER_PREREQUISITE_UNAVAILABLE);
 }
 
 function git(args, cwd) {
-  return spawnSync("git", args, { cwd, encoding: "utf8" });
+  return runGit(args, { cwd: cwd ?? process.cwd() });
 }
 
 function gitOrEmpty(args, cwd) {
@@ -226,6 +239,34 @@ export function planPostgresOwnership({
 }
 
 /**
+ * The slot Postgres is gate substrate every worktree on the machine depends on,
+ * so it carries the same restart policy as the primary stack (BI-277ECBDB): a
+ * host or Docker Desktop restart must not silently remove it. `unless-stopped`
+ * still honours a deliberate stop.
+ */
+export const SLOT_POSTGRES_RESTART_POLICY = "unless-stopped";
+
+export function slotPostgresProvisionArgs(postgres) {
+  return [
+    "run", "-d", "--name", postgres.container,
+    "--restart", SLOT_POSTGRES_RESTART_POLICY,
+    "-p", `${postgres.hostPort}:5432`,
+    "-v", `${postgres.volume}:/var/lib/postgresql/data`,
+    "-e", "POSTGRES_USER=dpf", "-e", "POSTGRES_PASSWORD=dpf_dev",
+    "-e", `POSTGRES_DB=${postgres.database}`,
+    "pgvector/pgvector:pg16",
+  ];
+}
+
+/** Reuse brings a container provisioned before the policy existed up to it, then starts it. */
+export function slotPostgresReuseCommands(container) {
+  return [
+    ["update", "--restart", SLOT_POSTGRES_RESTART_POLICY, container],
+    ["start", container],
+  ];
+}
+
+/**
  * Recreate the admitted slot's disposable database before each exact candidate.
  * The container and database identities are derived from the slot manifest; the
  * strict shape check keeps this recovery path away from developer/production DBs.
@@ -289,21 +330,19 @@ async function resolveDatabaseUrl(env, manifest) {
     );
   }
   if (ownershipPlan === "provision") {
-    const run = spawnSync("docker", [
-      "run", "-d", "--name", manifest.postgres.container,
-      "-p", `${manifest.postgres.hostPort}:5432`,
-      "-v", `${manifest.postgres.volume}:/var/lib/postgresql/data`,
-      "-e", "POSTGRES_USER=dpf", "-e", "POSTGRES_PASSWORD=dpf_dev",
-      "-e", `POSTGRES_DB=${manifest.postgres.database}`,
-      "pgvector/pgvector:pg16",
-    ], { encoding: "utf8" });
+    const run = spawnSync("docker", slotPostgresProvisionArgs(manifest.postgres), { encoding: "utf8" });
     if (run.status !== 0) {
-      die(`could not provision ${manifest.postgres.container}: ${(run.stderr || run.stdout || "").trim()}`);
+      dieUnavailable(`could not provision ${manifest.postgres.container}: ${(run.stderr || run.stdout || "").trim()}`);
     }
   } else {
-    const start = spawnSync("docker", ["start", manifest.postgres.container], { encoding: "utf8" });
+    const [updatePolicy, startContainer] = slotPostgresReuseCommands(manifest.postgres.container);
+    const update = spawnSync("docker", updatePolicy, { encoding: "utf8" });
+    if (update.status !== 0) {
+      dieUnavailable(`could not set the restart policy of ${manifest.postgres.container}: ${(update.stderr || update.stdout || "").trim()}`);
+    }
+    const start = spawnSync("docker", startContainer, { encoding: "utf8" });
     if (start.status !== 0) {
-      die(`could not start ${manifest.postgres.container}: ${(start.stderr || start.stdout || "").trim()}`);
+      dieUnavailable(`could not start ${manifest.postgres.container}: ${(start.stderr || start.stdout || "").trim()}`);
     }
   }
 
@@ -318,7 +357,10 @@ async function resolveDatabaseUrl(env, manifest) {
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
-  return "";
+  // BI-277ECBDB: a container that runs but never accepts connections is
+  // substrate failure. Returning "" here let the gate continue against the
+  // port-1 placeholder and fail later as if the diff were at fault.
+  dieUnavailable(`slot PostgreSQL ${manifest.postgres.container} never became ready (pg_isready failed for 30s)`);
 }
 
 export const LOCAL_CI_MISSING_DATABASE_URL = "postgresql://dpf:dpf_dev@127.0.0.1:1/dpf_local_ci_missing_database";
@@ -439,25 +481,32 @@ export function createLocalIntegrationChildInvocation({
 function ensureScratchWorkspace(root, workspace) {
   if (existsSync(join(workspace, ".git"))) return;
   mkdirSync(dirname(workspace), { recursive: true });
-  const add = spawnSync("git", ["-C", root, "worktree", "add", "--detach", workspace], { encoding: "utf8" });
-  if (add.status !== 0) {
-    const forced = spawnSync("git", ["-C", root, "worktree", "add", "--force", "--detach", workspace], { encoding: "utf8" });
-    if (forced.status !== 0) die(`could not create scratch workspace ${workspace}: ${forced.stderr}`);
+  const add = git(["-C", root, "worktree", "add", "--detach", workspace]);
+  if (!add.ok) {
+    const forced = git(["-C", root, "worktree", "add", "--force", "--detach", workspace]);
+    if (!forced.ok) dieUnavailable(`could not create scratch workspace ${workspace}: ${forced.stderr}`);
   }
 }
 
 function cleanScratchWorkspace(workspace, manifest) {
   assertLocalCiCleanupTarget(manifest, workspace);
-  spawnSync("git", ["-C", workspace, "merge", "--abort"], { encoding: "utf8" });
-  spawnSync("git", ["-C", workspace, "reset", "--hard", "--quiet"], { encoding: "utf8" });
-  spawnSync("git", ["-C", workspace, "clean", "-fd", "--quiet", "-e", "node_modules", "-e", ".env"], { encoding: "utf8" });
+  git(["-C", workspace, "merge", "--abort"]);
+  git(["-C", workspace, "reset", "--hard", "--quiet"]);
+  git(["-C", workspace, "clean", "-fd", "--quiet", "-e", "node_modules", "-e", ".env"]);
 }
 
 async function main() {
-  const argv = process.argv.slice(2);
+  const argv = scriptArgv();
+  // strict: false keeps the old tolerance: flags this script does not read are ignored.
+  const { values } = utilParseArgs({
+    args: argv,
+    strict: false,
+    allowPositionals: true,
+    options: Object.fromEntries(["candidate", "base-ref", "slot-key", "workspace"].map((name) => [name, { type: "string" }])),
+  });
   const valueAfter = (flag) => {
-    const index = argv.indexOf(flag);
-    return index >= 0 ? argv[index + 1] : "";
+    const value = values[flag.replace(/^--/, "")];
+    return value === undefined ? "" : typeof value === "string" ? value : undefined;
   };
 
   if (argv.includes("--help") || argv.includes("-h")) {
@@ -573,7 +622,7 @@ async function main() {
       baseFreshness,
       completedAt: new Date().toISOString(),
     }, null, 2)}\n`);
-    die(`required origin/main refresh failed: ${baseFreshness.error}`);
+    dieUnavailable(`required origin/main refresh failed: ${baseFreshness.error}`);
   }
   if (!baseSha) die(`accepted base ref not found locally: ${baseRef} (fetch or set DPF_LOCAL_CI_BASE_REF to a local ref)`);
 

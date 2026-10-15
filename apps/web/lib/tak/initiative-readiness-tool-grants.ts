@@ -1,15 +1,16 @@
 import { createHash } from "node:crypto";
-import { canonicalJson } from "@/lib/shared/canonical-json";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { ARTIFACT_AUTHOR_RECOVERY, readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
+import type { InitiativeGateKey } from "@/lib/backlog/initiative-readiness/receipt-schema";
 import type {
-  InitiativeGateKey,
   InitiativeReadinessDecision,
   ReadinessCode,
   ReadinessRequirementResult,
-} from "@/lib/backlog/initiative-readiness";
-import type { ToolDefinition } from "@/lib/mcp-tools";
+} from "@/lib/backlog/initiative-readiness/types";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import { createObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
 import { formatInitiativeReviewObjective, IMMUTABLE_REVIEW_READER_TOOL as IMMUTABLE_READER_TOOL } from "./initiative-review-objective";
+import { BUILD_ARTIFACT_REVISION_READER_TOOL } from "./terminal-tool-policy";
 
 export type InitiativeReadinessLane = {
   capability: NonNullable<ToolDefinition["requiredCapability"]>;
@@ -54,6 +55,8 @@ export const INITIATIVE_READINESS_TOOL_GRANTS: Record<string, string[]> = {
 };
 
 export function readinessLaneForRole(role: string): { toolName: string; lane: InitiativeReadinessLane } | null {
+  if (role === "acceptance-reviewer") return { toolName: "record_initiative_evidence",
+    lane: { ...INITIATIVE_READINESS_LANES.record_initiative_evidence!, independent: true } };
   for (const [toolName, lane] of Object.entries(INITIATIVE_READINESS_LANES)) {
     if (lane.accountableRoles.includes(role)) return { toolName, lane };
   }
@@ -78,13 +81,21 @@ export type InitiativeReviewBindingPacket = {
     branchName: string;
     headSha: string;
   };
-  artifactRef: {
-    kind: "repo-blob-at-commit";
-    repositoryFullName: string;
-    commitSha: string;
-    path: string;
-    providerBlobId: string;
-  };
+  artifactRef:
+    | { kind: "document-version"; repositoryFullName: string; versionId: string; valueDigest: string }
+    | {
+      kind: "repo-blob-at-commit";
+      repositoryFullName: string;
+      commitSha: string;
+      path: string;
+      providerBlobId: string;
+    }
+    | {
+      kind: "feature-build-revision";
+      repositoryFullName: string;
+      revisionId: string;
+      valueDigest: string;
+    };
 };
 
 export type InitiativeReviewerRecovery = {
@@ -173,25 +184,59 @@ export type InitiativeRecoveryDispatchContext = {
  * a pure routing decision over evidence it is handed.
  */
 export type InitiativeRecoveryCanonicalArtifact =
+  | { resolved: true; kind: "document-version"; versionId: string; valueDigest: string }
   // A retained baseline already owns its immutable commit. Newly discovered
   // branch artifacts omit it and inherit the Workroom head below.
-  | { resolved: true; path: string; providerBlobId: string; commitSha?: string }
+  | { resolved: true; kind?: "repo-blob-at-commit"; path: string; providerBlobId: string; commitSha?: string }
+  // BI-926A7E90: a Build Studio design is an accepted `BuildArtifactRevision`,
+  // bound by revision id and value digest and read with
+  // `read_build_artifact_revision`. No repository artifact exists for it.
+  | { resolved: true; kind: "feature-build-revision"; revisionId: string; valueDigest: string; buildId: string }
   | { resolved: false; nextAction: string };
 
-type ReviewerRouteDb = {
-  agentToolGrant?: {
-    findMany(args: unknown): Promise<Array<{
-      grantKey: string;
-      agent: {
-        agentId: string;
-        displayName: string;
-        status: string;
-        archived: boolean;
-        lifecycleStage: string;
-      };
-    }>>;
+type ResolvedRecoveryArtifact = Extract<InitiativeRecoveryCanonicalArtifact, { resolved: true }>;
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+type RecoveryArtifactInput = DistributiveOmit<ResolvedRecoveryArtifact, "resolved">;
+
+export type GrantHolderRow = {
+  grantKey: string;
+  agent: {
+    agentId: string;
+    displayName: string;
+    status: string;
+    archived: boolean;
+    lifecycleStage: string;
   };
 };
+
+export type ReviewerRouteDb = {
+  agentToolGrant?: { findMany(args: unknown): Promise<GrantHolderRow[]> };
+};
+
+/**
+ * The active, production, unarchived holders of any of `grants`, one row per
+ * (agent, grant), in deterministic order (agent id, then grant key). The one
+ * eligibility rule every lane owner is picked by: the reviewer routes below
+ * and the acceptance sweep's execution-evidence lane (BI-7C7E8CAC).
+ */
+export async function loadEligibleGrantHolders(db: ReviewerRouteDb, grants: readonly string[]): Promise<GrantHolderRow[]> {
+  if (!db.agentToolGrant || grants.length === 0) return [];
+  const rows = await db.agentToolGrant.findMany({
+    where: {
+      grantKey: { in: [...grants] },
+      agent: { status: "active", archived: false, lifecycleStage: "production" },
+    },
+    select: {
+      grantKey: true,
+      agent: { select: { agentId: true, displayName: true, status: true, archived: true, lifecycleStage: true } },
+    },
+  });
+  return rows
+    .filter((row) => row.agent.status === "active" && !row.agent.archived && row.agent.lifecycleStage === "production")
+    .sort((left, right) =>
+      left.agent.agentId.localeCompare(right.agent.agentId)
+      || left.grantKey.localeCompare(right.grantKey));
+}
 
 const IMMUTABLE_READER_GRANT = "file_read";
 
@@ -217,6 +262,26 @@ function isAuthorResearchLane(decision: InitiativeReadinessDecision, entry: Read
 const AUTHOR_RESEARCH_NEXT_ACTION =
   "Research for this delivery shape is the reproduction, and its author records it: call record_initiative_evidence with gate \"research\", citing the defect or gap on a named ref (commit or branch + file + line) and the failing-to-passing proof. No canonical design is required — the shape does not owe one — so do not commit a spec to obtain a reviewer route.";
 
+// BI-6EB2DBBB: a small fix needs no separately granted writer. Its reproduction,
+// recorded as execution evidence, satisfies research at claim — the path an
+// external session can actually reach.
+const SMALL_FIX_RESEARCH_NEXT_ACTION =
+  "Research for a small fix is its reproduction, recorded as execution evidence: call record_execution_evidence on this item with kind \"source_verified\" (the defect on a named ref, with its URL) and kind \"test_pass\" (the failing-to-passing test), then claim again. record_initiative_evidence(gate: \"research\") also satisfies it where that grant is held. No canonical design is required, so do not commit a spec to obtain a reviewer route.";
+
+// BI-77C600B2: the research receipt cites a commit on a LIVE workroom, and an
+// implementation claim refused here binds none. Without this step the receipt is
+// refused ("claim or adopt the branch first") and the claim it points back to is
+// refused again at this gate. A design claim owes no research, so it binds the
+// room the receipt needs.
+const RESEARCH_RECEIPT_ORDER =
+  " The receipt cites a commit on a live workroom, and this refused claim bound none: first claim with workIntent \"design\" (it does not owe research), then record the receipt, then claim with workIntent \"implementation\" again.";
+
+function authorResearchNextAction(decision: InitiativeReadinessDecision): string {
+  return (decision.shapeDecision?.effective === "small" && decision.profile === "fix"
+    ? SMALL_FIX_RESEARCH_NEXT_ACTION
+    : AUTHOR_RESEARCH_NEXT_ACTION) + RESEARCH_RECEIPT_ORDER;
+}
+
 /** Resolve actionable, exact-grant reviewer routes without changing readiness. */
 export async function resolveInitiativeReviewerRecovery(input: {
   decision: InitiativeReadinessDecision;
@@ -228,6 +293,9 @@ export async function resolveInitiativeReviewerRecovery(input: {
   planArtifact?: InitiativeRecoveryCanonicalArtifact | null;
   expectedCurrentBaselineId?: string | null;
   eligibleEvidenceActivityIds?: readonly string[];
+  /** Server-owned history predicate; never a caller-supplied exclusion list. */
+  isPlanReviewExhausted?: (packet: ReturnType<typeof requestCoworkerPacket>) => Promise<boolean>;
+  isReviewerEligible?: (agentId: string) => Promise<boolean>;
 }): Promise<InitiativeReviewerRecovery> {
   const requirements = [...input.decision.blockers, ...input.decision.unmet];
   const requested: Array<{
@@ -267,31 +335,13 @@ export async function resolveInitiativeReviewerRecovery(input: {
       ? [IMMUTABLE_READER_GRANT]
       : []),
   ])];
-  const rows = input.db.agentToolGrant
-    ? await input.db.agentToolGrant.findMany({
-        where: {
-          grantKey: { in: grants },
-          agent: { status: "active", archived: false, lifecycleStage: "production" },
-        },
-        select: {
-          grantKey: true,
-          agent: { select: { agentId: true, displayName: true, status: true, archived: true, lifecycleStage: true } },
-        },
-      })
-    : [];
-  const activeProductionRows = rows.filter((row) =>
-    row.agent.status === "active"
-    && !row.agent.archived
-    && row.agent.lifecycleStage === "production");
+  const deterministicRows = await loadEligibleGrantHolders(input.db, grants);
   const grantsByAgent = new Map<string, Set<string>>();
-  for (const row of activeProductionRows) {
+  for (const row of deterministicRows) {
     const held = grantsByAgent.get(row.agent.agentId) ?? new Set<string>();
     held.add(row.grantKey);
     grantsByAgent.set(row.agent.agentId, held);
   }
-  const deterministicRows = [...activeProductionRows].sort((left, right) =>
-    left.agent.agentId.localeCompare(right.agent.agentId)
-    || left.grantKey.localeCompare(right.grantKey));
 
   const reviewerRoutes: InitiativeReviewerRecovery["reviewerRoutes"] = [];
   const escalations: InitiativeReviewerRecovery["escalations"] = [];
@@ -302,7 +352,7 @@ export async function resolveInitiativeReviewerRecovery(input: {
         toolName: entry.route.toolName,
         grant: entry.route.lane.grant,
         reason: "research-evidence-required",
-        nextAction: AUTHOR_RESEARCH_NEXT_ACTION,
+        nextAction: authorResearchNextAction(input.decision),
       });
       continue;
     }
@@ -310,10 +360,15 @@ export async function resolveInitiativeReviewerRecovery(input: {
     const requiredGrants = bindable
       ? [entry.route.lane.grant, IMMUTABLE_READER_GRANT]
       : [entry.route.lane.grant];
-    const candidate = deterministicRows.find((row) =>
+    let candidates = deterministicRows.filter((row) =>
       row.grantKey === entry.route.lane.grant
       && requiredGrants.every((grant) => grantsByAgent.get(row.agent.agentId)?.has(grant))
       && (!entry.route.lane.independent || row.agent.agentId !== input.currentAgentId));
+    if (input.isReviewerEligible) {
+      const eligibility = await Promise.all(candidates.map(async (row) => ({ row, allowed: await input.isReviewerEligible!(row.agent.agentId) })));
+      candidates = eligibility.filter((entry) => entry.allowed).map((entry) => entry.row);
+    }
+    let candidate: GrantHolderRow | undefined = candidates[0];
     if (candidate) {
       if (!input.dispatchContext) {
         escalations.push({
@@ -363,17 +418,34 @@ export async function resolveInitiativeReviewerRecovery(input: {
         });
         continue;
       }
-      const packet = requestCoworkerPacket({
+      const dispatch = input.dispatchContext;
+      const preparePacket = (targetAgentId: string) => requestCoworkerPacket({
         decision: input.decision,
         gate: entry.gate,
         toolName: entry.route.toolName,
-        targetAgentId: candidate.agent.agentId,
-        dispatch: input.dispatchContext,
+        targetAgentId,
+        dispatch,
         independent: entry.route.lane.independent,
         artifact: bindable && artifact?.resolved ? artifact : null,
         expectedCurrentBaselineId: input.expectedCurrentBaselineId ?? null,
         eligibleEvidenceActivityIds,
       });
+      let packet = preparePacket(candidate.agent.agentId);
+      if (entry.gate === "plan-review" && input.isPlanReviewExhausted) {
+        for (const next of candidates) {
+          const nextPacket = preparePacket(next.agent.agentId);
+          if (await input.isPlanReviewExhausted(nextPacket)) { candidate = undefined; continue; }
+          candidate = next;
+          packet = nextPacket;
+          break;
+        }
+        if (!candidate) {
+          escalations.push({ accountableRole: entry.role, toolName: entry.route.toolName,
+            grant: entry.route.lane.grant, reason: "no-eligible-reviewer",
+            nextAction: "All currently eligible independent plan reviewers exhausted this exact packet. Select another eligible reviewer/provider through recorded authority; do not replay exhausted tasks or reset their attempts." });
+          continue;
+        }
+      }
       reviewerRoutes.push({
         accountableRole: entry.role,
         toolName: entry.route.toolName,
@@ -555,11 +627,13 @@ function requestCoworkerPacket(args: {
   dispatch: InitiativeRecoveryDispatchContext;
   independent: boolean;
   /** Null for a lane whose writer the binding contract does not cover. */
-  artifact: { path: string; providerBlobId: string; commitSha?: string } | null;
+  artifact: RecoveryArtifactInput | null;
   expectedCurrentBaselineId: string | null;
   eligibleEvidenceActivityIds: string[] | null;
 }) {
-  const reviewSha = args.artifact?.commitSha ?? args.dispatch.headSha;
+  const repoArtifact = args.artifact && args.artifact.kind !== "feature-build-revision" && args.artifact.kind !== "document-version" ? args.artifact : null;
+  const reviewSha = repoArtifact?.commitSha ?? args.dispatch.headSha;
+  const readerTool = args.artifact?.kind === "feature-build-revision" ? BUILD_ARTIFACT_REVISION_READER_TOOL : IMMUTABLE_READER_TOOL;
   const objective = formatInitiativeReviewObjective({ ...args.dispatch,
     itemId: args.decision.subject.id, gate: args.gate, toolName: args.toolName,
     independent: args.independent, artifact: args.artifact,
@@ -593,20 +667,30 @@ function requestCoworkerPacket(args: {
         eligibleEvidenceActivityIds: args.eligibleEvidenceActivityIds,
       }
       : {}),
-    artifactRef: {
-      kind: "repo-blob-at-commit" as const,
-      repositoryFullName: args.dispatch.repositoryFullName,
-      commitSha: reviewSha,
-      path: args.artifact.path,
-      providerBlobId: args.artifact.providerBlobId,
-    },
+    artifactRef: args.artifact.kind === "document-version"
+      ? { kind: "document-version" as const, repositoryFullName: args.dispatch.repositoryFullName,
+        versionId: args.artifact.versionId, valueDigest: args.artifact.valueDigest }
+      : args.artifact.kind === "feature-build-revision"
+      ? {
+        kind: "feature-build-revision" as const,
+        repositoryFullName: args.dispatch.repositoryFullName,
+        revisionId: args.artifact.revisionId,
+        valueDigest: args.artifact.valueDigest,
+      }
+      : {
+        kind: "repo-blob-at-commit" as const,
+        repositoryFullName: args.dispatch.repositoryFullName,
+        commitSha: reviewSha,
+        path: args.artifact.path,
+        providerBlobId: args.artifact.providerBlobId,
+      },
   };
   const requestKey = args.gate === "objective-mapping" && args.eligibleEvidenceActivityIds
     ? createObjectiveMappingRequestKey({
       targetAgent: args.targetAgentId,
       objective,
       questionPacketSummary,
-      requiredToolNames: [args.toolName, IMMUTABLE_READER_TOOL],
+      requiredToolNames: [args.toolName, readerTool],
       binding: {
         ...binding,
         gate: "objective-mapping",
@@ -618,11 +702,19 @@ function requestCoworkerPacket(args: {
       ? `${base.requestKey}:plan:${createHash("sha256").update(canonicalJson({
         binding, targetAgent: args.targetAgentId, objective,
       })).digest("hex")}`
-      : base.requestKey;
+      // BI-D3E1F6D9: an independent review issued once the baseline exists binds
+      // it, so it must not share a key with the same head's pre-baseline packet. The
+      // TaskRun id derives from the key, so a shared key made the refreshed packet
+      // an idempotency conflict and the review unobtainable at that head.
+      : args.independent && args.expectedCurrentBaselineId
+        ? `${base.requestKey}:baseline:${createHash("sha256").update(canonicalJson({
+          binding, targetAgent: args.targetAgentId, objective,
+        })).digest("hex")}`
+        : base.requestKey;
   return {
     ...base,
     requestKey,
-    requiredToolNames: [args.toolName, IMMUTABLE_READER_TOOL],
+    requiredToolNames: [args.toolName, readerTool],
     initiativeReviewBinding: binding,
   };
 }

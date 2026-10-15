@@ -2,9 +2,10 @@ import { prisma, type Prisma } from "@dpf/db";
 import { reserveTaskRunGenerationWorking } from "./observability/heartbeat";
 import { INITIATIVE_CORRECTABLE_ERRORS } from "./backlog/initiative-readiness/disposition-contract";
 import { remoteTaskRequestMatches } from "./mcp-task-capacity-contract";
-import type { ExistingRemoteTask, RemoteTaskSubmitParams } from "./mcp-task-submit";
-import type { createInitiativeReviewTerminalToolPolicy } from "./tak/terminal-tool-policy";
-import type { PersistedTerminalReaderExecution } from "./mcp-task-terminal-writer-context";
+import type { ExistingRemoteTask } from "./mcp-task-submit-types";
+import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
+import { IMMUTABLE_PAGE_READER_TOOLS, type createInitiativeReviewTerminalToolPolicy } from "./tak/terminal-tool-policy";
+import { needsTerminalReaderBootstrap, type PersistedTerminalReaderExecution } from "./mcp-task-terminal-writer-context";
 import { recoverTerminalWriterEscalation } from "./mcp-task-terminal-writer-escalation";
 import { parseTerminalWriterWait, type TerminalWriterWait } from "./mcp-task-replay-projection";
 function optionalString(value: unknown): string | null { return typeof value === "string" && value.trim() ? value.trim() : null; }
@@ -25,7 +26,7 @@ export async function persistedTerminalReaderExecutions(
   return prisma.toolExecution.findMany({
     where: {
       taskRunId,
-      toolName: "read_source_at_version",
+      toolName: { in: [...IMMUTABLE_PAGE_READER_TOOLS] },
     },
     orderBy: { createdAt: "asc" },
     select: {
@@ -86,7 +87,7 @@ export async function reserveTerminalWriterReplay(input: {
     }),
   ]);
   if (successfulWriter) return null;
-  const bootstrapReaderEvidence = readerExecutions.length === 0;
+  const bootstrapReaderEvidence = needsTerminalReaderBootstrap(input.terminalToolPolicy, readerExecutions);
   if (bootstrapReaderEvidence && !isProjectedWait) return null;
 
   if (writerAttempt) {

@@ -20,13 +20,106 @@ describe("candidate signed install-state handoff", () => {
     };
     const artifact = { digest: `sha256:${"d".repeat(64)}`, contractSchema: 1, contractDigest: "c".repeat(64) } as never;
     const runtime = { buildCandidatePromoterImage: vi.fn(), resolvePromoterArtifact: vi.fn(async () => artifact), runPromoterReadiness: vi.fn(async () => ({ exitCode: 0, stdout: JSON.stringify({ sourceHash: "a".repeat(64), projectionHash: "b".repeat(64), fromSchemaVersion: 2, toSchemaVersion: 2 }), stderr: "" })) };
-    const result = await runCandidatePreflight({ candidatePromoterReference: "ghcr.io/owner/dpf-promoter:v2.0.0", release, sourcePath: "/source-free-install", hostInstallPath: "/host", canonicalInstallPath: "/host", targetSha: "b".repeat(40), runId: "SUR-release", composeFiles: [], healthUrl: "http://health", hostIdentity: { platform: "linux", arch: "amd64", provenance: "install-state" }, runtimeTransitionSecret: secret, runtime: async () => runtime as never, recordReadiness: vi.fn(), failRun: vi.fn(), emitFailure: vi.fn() });
+    const result = await runCandidatePreflight({ candidatePromoterReference: "ghcr.io/owner/dpf-promoter:v2.0.0", release, sourcePath: "/source-free-install", hostInstallPath: "/host", canonicalInstallPath: "/host", targetSha: "b".repeat(40), runId: "SUR-release", composeFiles: [], healthUrl: "http://health", hostIdentity: { platform: "linux", arch: "amd64", provenance: "install-state" }, runtimeTransitionSecret: secret, runtime: async () => runtime as never, recordReadiness: vi.fn(), failRun: vi.fn(), emitFailure: vi.fn(), prePullDoctools: vi.fn(async () => ({ outcome: "present" as const, image: "ghcr.io/owner/dpf-doctools@sha256:" + "e".repeat(64) })) });
     expect(result.ok).toBe(true);
     expect(runtime.buildCandidatePromoterImage).not.toHaveBeenCalled();
     expect(runtime.resolvePromoterArtifact).toHaveBeenCalledWith(expect.objectContaining({ promoterImage: "ghcr.io/owner/dpf-promoter:v2.0.0", candidateReference: "ghcr.io/owner/dpf-promoter:v2.0.0", targetSha: "b".repeat(40) }));
     expect(runtime.runPromoterReadiness).toHaveBeenCalledWith(
       expect.objectContaining({ release }),
     );
+  });
+
+  describe("pre-pulls the target release's dpf-doctools before the swap (BI-698B7F9A)", () => {
+    const release = {
+      tag: "v2026.09.25-office.1", ghcrOwner: "owner",
+      channelDigest: `sha256:${"a".repeat(64)}`, platformManifestDigest: `sha256:${"b".repeat(64)}`,
+      configDigest: `sha256:${"c".repeat(64)}`, platformOs: "linux" as const, platformArchitecture: "amd64",
+    };
+    const artifact = { digest: `sha256:${"d".repeat(64)}`, contractSchema: 1, contractDigest: "c".repeat(64) } as never;
+    const readyRuntime = () => ({
+      buildCandidatePromoterImage: vi.fn(),
+      resolvePromoterArtifact: vi.fn(async () => artifact),
+      runPromoterReadiness: vi.fn(async () => ({ exitCode: 0, stdout: JSON.stringify({ sourceHash: "a".repeat(64), projectionHash: "b".repeat(64), fromSchemaVersion: 2, toSchemaVersion: 2 }), stderr: "" })),
+    });
+    const params = (overrides: Record<string, unknown>) => ({
+      candidatePromoterReference: "ghcr.io/owner/dpf-promoter:v2026.09.25-office.1", release, sourcePath: "/s", hostInstallPath: "/host",
+      canonicalInstallPath: "/host", targetSha: "b".repeat(40), runId: "SUR-doctools", composeFiles: [], healthUrl: "http://health",
+      hostIdentity: { platform: "linux" as const, arch: "amd64" as const, provenance: "install-state" as const }, runtimeTransitionSecret: "s".repeat(32),
+      recordReadiness: vi.fn(), failRun: vi.fn(), emitFailure: vi.fn(), ...overrides,
+    });
+
+    it("pulls it FIRST, before the promoter and readiness, so a long pull cannot expire the signed handoff", async () => {
+      const order: string[] = [];
+      const runtime = readyRuntime();
+      runtime.resolvePromoterArtifact.mockImplementation(async () => { order.push("promoter"); return artifact; });
+      const prePullDoctools = vi.fn(async () => { order.push("doctools"); return { outcome: "pulled" as const, image: "x" }; });
+      const result = await runCandidatePreflight(params({ runtime: async () => runtime as never, prePullDoctools }) as never);
+      expect(result.ok).toBe(true);
+      expect(prePullDoctools).toHaveBeenCalledWith(release);
+      expect(order).toEqual(["doctools", "promoter"]);
+    });
+
+    it("lets a release that published no converter through (BI-E6EF0B2C: a missing optional image never blocks an upgrade)", async () => {
+      const runtime = readyRuntime();
+      const failRun = vi.fn();
+      const result = await runCandidatePreflight(params({ runtime: async () => runtime as never, failRun, prePullDoctools: vi.fn(async () => ({ outcome: "not-published" as const })) }) as never);
+      expect(result.ok).toBe(true);
+      expect(failRun).not.toHaveBeenCalled();
+    });
+
+    it("fails the run before the drain with a plain reason when the pull does not land (AC-3)", async () => {
+      const runtime = readyRuntime();
+      const failRun = vi.fn();
+      const emitFailure = vi.fn();
+      const recordReadiness = vi.fn();
+      const reason = "could not download the v2026.09.25-office.1 document converter: toomanyrequests";
+      const result = await runCandidatePreflight(params({ runtime: async () => runtime as never, failRun, emitFailure, recordReadiness, prePullDoctools: vi.fn(async () => ({ outcome: "failed" as const, reason })) }) as never);
+      expect(result).toEqual({ ok: false, reason: "doctools-prepull-failed" });
+      expect(failRun).toHaveBeenCalledWith("SUR-doctools", `doctools-prepull-failed: ${reason}`, `doctools-prepull-failed: ${reason}`);
+      expect(emitFailure).toHaveBeenCalledWith("SUR-doctools");
+      expect(recordReadiness).toHaveBeenCalledWith("SUR-doctools", expect.objectContaining({ result: "failed", quiescenceBegan: false, failures: [{ code: "doctools_prepull_failed", message: reason }] }));
+      expect(runtime.resolvePromoterArtifact).not.toHaveBeenCalled();
+      expect(runtime.runPromoterReadiness).not.toHaveBeenCalled();
+    });
+
+    it("does not pre-pull on a source upgrade, which has no release to name", async () => {
+      const runtime = { ...readyRuntime(), buildCandidatePromoterImage: vi.fn(async () => "candidate") };
+      const prePullDoctools = vi.fn();
+      const result = await runCandidatePreflight(params({ candidatePromoterReference: undefined, release: undefined, runtime: async () => runtime as never, prePullDoctools }) as never);
+      expect(result.ok).toBe(true);
+      expect(prePullDoctools).not.toHaveBeenCalled();
+    });
+
+    it("on a customizable install's source upgrade, pre-pulls the release the TARGET descends from, first (BI-4E18BC28)", async () => {
+      const order: string[] = [];
+      const runtime = { ...readyRuntime(), buildCandidatePromoterImage: vi.fn(async () => { order.push("promoter"); return "candidate"; }) };
+      const sourceLineage = vi.fn(async () => ({ imageTag: "v2026.09.25-shape-raise.1", ghcrOwner: "owner" }));
+      const prePullDoctools = vi.fn(async () => { order.push("doctools"); return { outcome: "pulled" as const, image: "x" }; });
+      const result = await runCandidatePreflight(params({ candidatePromoterReference: undefined, release: undefined, runtime: async () => runtime as never, sourceLineage, prePullDoctools }) as never);
+      expect(result.ok).toBe(true);
+      expect(prePullDoctools).toHaveBeenCalledWith({ tag: "v2026.09.25-shape-raise.1", ghcrOwner: "owner" });
+      expect(order).toEqual(["doctools", "promoter"]);
+    });
+
+    it("never fails a source upgrade over the converter: the install can still build it locally after the swap", async () => {
+      const runtime = { ...readyRuntime(), buildCandidatePromoterImage: vi.fn(async () => "candidate") };
+      const failRun = vi.fn();
+      const result = await runCandidatePreflight(params({
+        candidatePromoterReference: undefined, release: undefined, runtime: async () => runtime as never, failRun,
+        sourceLineage: vi.fn(async () => ({ imageTag: "v2026.09.25-shape-raise.1", ghcrOwner: "owner" })),
+        prePullDoctools: vi.fn(async () => ({ outcome: "failed" as const, reason: "offline" })),
+      }) as never);
+      expect(result.ok).toBe(true);
+      expect(failRun).not.toHaveBeenCalled();
+    });
+
+    it("a source upgrade whose target has no release lineage pulls nothing", async () => {
+      const runtime = { ...readyRuntime(), buildCandidatePromoterImage: vi.fn(async () => "candidate") };
+      const prePullDoctools = vi.fn();
+      const result = await runCandidatePreflight(params({ candidatePromoterReference: undefined, release: undefined, runtime: async () => runtime as never, sourceLineage: vi.fn(async () => null), prePullDoctools }) as never);
+      expect(result.ok).toBe(true);
+      expect(prePullDoctools).not.toHaveBeenCalled();
+    });
   });
 
   it("returns a digest-bound signed envelope from candidate readiness", async () => {

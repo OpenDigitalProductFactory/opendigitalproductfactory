@@ -16,35 +16,41 @@ dpf_root_fingerprint() {
 
 # Usage: dpf_install_root_trust ROOT_CERT
 # Prints one of: already-trusted, trusted, declined.
+# Test seams (a fake store adapter per OS): DPF_TRUST_PLATFORM overrides
+# uname -s; DPF_TRUST_SECURITY names the macOS security command;
+# DPF_TRUST_SUDO names the Linux privilege command (an injected one needs no
+# terminal); DPF_TRUST_LINUX_ANCHOR_DIRS lists the candidate system CA dirs.
 dpf_install_root_trust() {
-  local root="$1" platform fingerprint target
+  local root="$1" platform fingerprint target dir security_cmd sudo_cmd keychain
   [ -f "$root" ] || { echo "root_certificate_missing" >&2; return 66; }
   platform="${DPF_TRUST_PLATFORM:-$(uname -s)}"
   fingerprint="$(dpf_root_fingerprint "$root")"
   case "$platform" in
     Darwin)
-      if security find-certificate -a -Z "$HOME/Library/Keychains/login.keychain-db" 2>/dev/null \
+      security_cmd="${DPF_TRUST_SECURITY:-security}"
+      keychain="$HOME/Library/Keychains/login.keychain-db"
+      if "$security_cmd" find-certificate -a -Z "$keychain" 2>/dev/null \
         | grep -qi "SHA-256 hash: $fingerprint"; then
         echo "already-trusted"; return 0
       fi
-      if security add-trusted-cert -r trustRoot -k "$HOME/Library/Keychains/login.keychain-db" "$root" 2>/dev/null; then
+      if "$security_cmd" add-trusted-cert -r trustRoot -k "$keychain" "$root" 2>/dev/null; then
         echo "trusted"
       else
         echo "declined"
       fi
       ;;
     Linux)
+      sudo_cmd="${DPF_TRUST_SUDO:-sudo}"
       target=""
-      if [ -d /usr/local/share/ca-certificates ]; then
-        target="/usr/local/share/ca-certificates/dpf-organization-root.crt"
-      elif [ -d /etc/pki/ca-trust/source/anchors ]; then
-        target="/etc/pki/ca-trust/source/anchors/dpf-organization-root.crt"
-      fi
+      for dir in ${DPF_TRUST_LINUX_ANCHOR_DIRS:-/usr/local/share/ca-certificates /etc/pki/ca-trust/source/anchors}; do
+        if [ -d "$dir" ]; then target="$dir/dpf-organization-root.crt"; break; fi
+      done
       if [ -n "$target" ] && [ -f "$target" ] && [ "$(dpf_root_fingerprint "$target")" = "$fingerprint" ]; then
         echo "already-trusted"; return 0
       fi
-      if [ -z "$target" ] || ! [ -t 0 ]; then echo "declined"; return 0; fi
-      if sudo cp "$root" "$target" && { sudo update-ca-certificates >/dev/null 2>&1 || sudo update-ca-trust >/dev/null 2>&1; }; then
+      if [ -z "$target" ]; then echo "declined"; return 0; fi
+      if [ -z "${DPF_TRUST_SUDO:-}" ] && ! [ -t 0 ]; then echo "declined"; return 0; fi
+      if "$sudo_cmd" cp "$root" "$target" && { "$sudo_cmd" update-ca-certificates >/dev/null 2>&1 || "$sudo_cmd" update-ca-trust >/dev/null 2>&1; }; then
         echo "trusted"
       else
         echo "declined"

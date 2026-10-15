@@ -80,6 +80,13 @@ to use DPF**:
 Your choice is saved to `%USERPROFILE%\.dpf\.install-mode` and reused on
 re-runs without re-prompting.
 
+Office document conversion works in both modes with no extra step. A
+Customizable install does not build the converter image: the portal pins
+the `dpf-doctools` image published for the release your clone descends
+from, by digest, and pins it again after every upgrade. Only when no
+published image can be reached (offline or air-gapped) does it build
+`Dockerfile.doctools` from your clone instead.
+
 ### What the installer does
 
 1. **Preflight** — verifies Docker Desktop / WSL2, and (Customizable mode)
@@ -89,7 +96,21 @@ re-runs without re-prompting.
 3. **Compose chain** — assembles `docker-compose.yml` (+
    `docker-compose.release.yml` in consumer mode) and the Edge Node overlay.
 4. **`.env` generation** — only on first install; an existing `.env` is
-   preserved.
+   preserved. A re-run only adds generated secrets the file is missing:
+   `DPF_GIT_WEBHOOK_SECRET`, the GPP permit signing key
+   `DPF_GPP_PERMIT_SECRET`, the reach-link and delegation-receipt signing keys
+   `DPF_ATTENTION_REACH_SECRET` and `DPF_DELEGATION_RECEIPT_SECRET`, the
+   self-upgrade target-binding and delivery-task cursor signing keys
+   `DPF_SELF_UPGRADE_TARGET_BINDING_SECRET` and
+   `DPF_DELIVERY_TASK_CURSOR_SECRET` (so `AUTH_SECRET` no longer signs any of
+   them; anything signed with `AUTH_SECRET` before the upgrade keeps verifying
+   until 9 November 2026), and
+   the Inngest `INNGEST_SIGNING_KEY` and
+   `INNGEST_EVENT_KEY`. A real value already set is never rotated. The
+   installer also replaces an Inngest key that still
+   holds the old public default (`abcdef0123456789` / `deadbeefcafebabe`),
+   because anyone who knows the signing key can start background jobs. A
+   self-upgrade does the same for an install that is never re-installed.
 5. **Images** —
    - *Ready to go:* `docker compose pull` of the CI-stamped GHCR images.
    - *Customizable:* a [Docker-memory preflight](#docker-memory), then
@@ -103,7 +124,10 @@ re-runs without re-prompting.
    DNS name when the network resolves it here. It writes `PUBLIC_URL` and
    adds the certificate to your user's trusted roots, so Windows asks you to
    confirm once. AI clients such as Claude Code sign in with OAuth only over
-   https. If this step fails, the portal stays at `http://localhost:3000` and
+   https. It also saves the AI client address (`DPF_MCP_URL`) and the
+   certificate bundle (`NODE_EXTRA_CA_CERTS`) in your user environment on
+   every run, so clients you open afterwards find the install. If this step
+   fails, the portal stays at `http://localhost:3000` and
    the installer says so.
 7. **`docker compose up -d`** — brings up postgres, portal-init
    (migrations + seed), and the portal.
@@ -344,6 +368,16 @@ benign — WSL2 sizes dynamically and `autoMemoryReclaim` returns freed pages �
 an explicit `memory=` in `%USERPROFILE%\.wslconfig` pins it. Remove or lower it,
 then `wsl --shutdown`. (On macOS the VM is fixed-size and never returns memory to
 the host, so over-allocation there ratchets until builds fail.)
+
+**Containers cannot be stopped, or the platform reports the Docker VM is wedged.**
+Processes stuck in uninterruptible I/O (for example a `sync` against a dead file
+share) survive `docker kill`; only a Docker VM restart clears them. Do not run
+`wsl --shutdown` by hand while DPF is running. The platform raises a "Docker VM is
+wedged" condition, and the portal's Health tab offers **Restart Docker VM**. It
+drains the platform, then the native Edge agent on this machine stops Docker
+Desktop, shuts the VM down, clears Docker's stale socket folders, and starts
+Docker and DPF again. It never reboots Windows. Every install runs that agent
+for host upkeep; `-WithEdge` only adds network discovery (BI-28EFE18A).
 
 **`/api/health` returns 500.**
 The database migrations may not have completed. Tail the portal-init

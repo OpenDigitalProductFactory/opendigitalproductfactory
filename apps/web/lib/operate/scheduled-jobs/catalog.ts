@@ -44,6 +44,7 @@ import { WATCH_JOB_CATALOG_ENTRIES } from "./catalog-watches";
 import { COMMONS_JOB_CATALOG_ENTRIES } from "./catalog-commons";
 import { HYGIENE_JOB_CATALOG_ENTRIES } from "./catalog-hygiene";
 import { ECOSYSTEM_JOB_CATALOG_ENTRIES } from "./catalog-ecosystem";
+import { PROVIDER_PAUSE_JOB_CATALOG_ENTRY } from "./catalog-provider-pause";
 
 // Re-exported so existing importers of the catalog keep working; the types are
 // owned by ./catalog-types (BI-ED117C82).
@@ -51,6 +52,7 @@ export type { JobCategory, ScheduledJobCatalogEntry };
 
 // Ordered roughly by operational prominence. core-locked jobs first.
 export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
+  PROVIDER_PAUSE_JOB_CATALOG_ENTRY,
   ...ECOSYSTEM_JOB_CATALOG_ENTRIES,
   ...DECISION_GOVERNANCE_JOBS,
   ...FLOW_JOB_CATALOG_ENTRIES,
@@ -356,7 +358,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     cron: "23 * * * *",
     cadence: "Hourly at :23",
     category: "editable",
-    tracksRunData: false,
+    tracksRunData: true,
     runNowEvent: null,
   },
   {
@@ -500,6 +502,19 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "budget-reservation-settle",
+    inngestId: "portfolio/budget-reservation-settle",
+    honorsEnabledGate: true,
+    name: "Budget reservation settlement",
+    purpose:
+      "BI-EF265C9A: settles open portfolio budget reservations against their items' status (done consumes, retired or deferred releases, a re-size adjusts and records the change), covering status writers that do not settle at once.",
+    cron: "11,26,41,56 * * * *",
+    cadence: "Every 15 minutes, offset by 11 minutes",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "a2a-collaboration-health-scan",
     inngestId: "ops/a2a-collaboration-health-scan",
     honorsEnabledGate: true,
@@ -521,6 +536,19 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
       "Rolls up the QueueTelemetryEvent stream into per-queue QueueMetricSnapshot rows (wait/process/cycle time, throughput, first-pass yield). Without it, queue flow metrics never materialise for tiles or the coworker surface.",
     cron: "7 * * * *",
     cadence: "Hourly at :07",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
+    jobId: "workroom-flow-review",
+    inngestId: "workroom/flow-review",
+    honorsEnabledGate: true,
+    name: "Workroom flow review",
+    purpose:
+      "Once a day, turns every place where Workrooms pile up (three or more held at one step) into an improvement signal. A pile that persists across reviews is filed once as a backlog item through the improvement facility; one that clears on its own never reaches the backlog (EP-B70E718D F8).",
+    cron: "23 6 * * *",
+    cadence: "Daily at 06:23",
     category: "editable",
     tracksRunData: false,
     runNowEvent: null,

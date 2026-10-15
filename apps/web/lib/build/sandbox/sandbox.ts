@@ -4,6 +4,7 @@
 
 import { lazyChildProcess, lazyExec, lazyFs } from "@/lib/shared/lazy-node";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { ensureGlobalSafeDirectoryCommand } from "@/lib/shared/git-safe-directory";
 
 const exec = lazyExec();
 
@@ -35,6 +36,9 @@ const SANDBOX_STAGE_EXCLUDES = [
   // generated type stubs that conflict with main if the sandbox base is stale.
   ":!**/generated/client/**",
   ":!packages/db/generated/**",
+  // The sandbox's own Auth.js secret (scripts/sandbox-entrypoint.sh,
+  // BI-F1C680C7). Gitignored too; the pathspec keeps it out even if forced.
+  ":!.dpf-sandbox-auth-secret*",
 ] as const;
 const SANDBOX_DIFF_EXCLUDES = [
   ":(exclude)**/node_modules/**",
@@ -48,6 +52,7 @@ const SANDBOX_DIFF_EXCLUDES = [
   // Generated Prisma client — see SANDBOX_STAGE_EXCLUDES comment above.
   ":(exclude)**/generated/client/**",
   ":(exclude)packages/db/generated/**",
+  ":(exclude).dpf-sandbox-auth-secret*",
 ] as const;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -65,7 +70,7 @@ export function buildSandboxCreateArgs(
   },
 ): string[] {
   // No --network=none: sandbox needs npm registry access for pnpm install.
-  // Internal services (postgres, neo4j) are protected by not mounting .env
+  // Internal services (postgres) are protected by not mounting .env
   // or any credentials. For production, use a custom network with port filtering.
   const args: string[] = [
     "create",
@@ -100,14 +105,14 @@ export function parseSandboxPort(output: string): number | null {
 
 export function prefixSafeWorkspaceCommand(command: string): string {
   return [
-    `git config --global --add safe.directory "${SANDBOX_WORKSPACE}" >/dev/null 2>&1 || true`,
+    ensureGlobalSafeDirectoryCommand(`"${SANDBOX_WORKSPACE}"`),
     // Git's ownership check is per worktree path, so the /workspace allowance
     // does not reach the isolated build worktrees under /workspace/.builds —
     // every plain exec that reads a build tree (the guard gauntlet's tree sha,
     // the diff projection) saw "dubious ownership" and reported nothing. The
     // sandbox is a single-tenant root container; the wildcard is the honest
     // allowance, and the guard keeps repeated prefixes from growing the config.
-    `git config --global --get-all safe.directory 2>/dev/null | grep -qx '\\*' || git config --global --add safe.directory '*' >/dev/null 2>&1 || true`,
+    ensureGlobalSafeDirectoryCommand("'*'"),
     command,
   ].join(" && ");
 }
@@ -157,8 +162,23 @@ export function buildSandboxListReleasableFilesCommand(
   // forked. Passing `baseRef` (typically the client branch tip) compares the
   // post-stage index against the merge base so committed + uncommitted work
   // both appear.
-  const base = baseRef ? ` ${quotePosixArg(baseRef)}` : "";
-  return `cd ${workspace} && git diff --cached${base} --name-only -- . ${joinQuotedArgs(SANDBOX_DIFF_EXCLUDES)}`;
+  return `cd ${workspace} && git diff --cached${diffBase(baseRef)} --name-only -- . ${joinQuotedArgs(SANDBOX_DIFF_EXCLUDES)}`;
+}
+
+/**
+ * The base a build's diff is taken against: the MERGE BASE of HEAD and
+ * `baseRef`, never `baseRef`'s tip. `git diff --cached <ref>` compares the
+ * index with the ref's current tree, so once the client branch moves on (a
+ * sandbox baseline refresh after an upgrade), every change the branch gained
+ * appears in the build's diff, reversed. FB-D671B016 (2026-09-26): a 10-file
+ * change captured as a 1.6 MB diff over hundreds of files, too large for any
+ * reviewer and full of unrelated contact details, so the semantic review
+ * could not route. Falls back to the tip only when no merge base exists.
+ */
+function diffBase(baseRef?: string): string {
+  if (!baseRef) return "";
+  const ref = quotePosixArg(baseRef);
+  return ` "$(git merge-base HEAD ${ref} 2>/dev/null || echo ${ref})"`;
 }
 
 export function buildSandboxDiffForFilesCommand(
@@ -166,8 +186,7 @@ export function buildSandboxDiffForFilesCommand(
   workspace: string = SANDBOX_WORKSPACE,
   baseRef?: string,
 ): string {
-  const base = baseRef ? ` ${quotePosixArg(baseRef)}` : "";
-  return `cd ${workspace} && git diff --cached${base} -- ${files.map((file) => quotePosixArg(file)).join(" ")}`;
+  return `cd ${workspace} && git diff --cached${diffBase(baseRef)} -- ${files.map((file) => quotePosixArg(file)).join(" ")}`;
 }
 
 export function buildSandboxNextDevReadinessCommand(workspace: string = SANDBOX_WORKSPACE): string {
@@ -212,9 +231,14 @@ export function buildSandboxRootScriptsCopyCommand(
  */
 export function buildSandboxDevServerStopCommand(): string {
   return [
-    "pkill -f 'next dev' 2>/dev/null || true",
-    "pkill -f next-server 2>/dev/null || true",
-    "pkill -f 'filter web dev' 2>/dev/null || true",
+    // Bracket patterns: `pkill -f` matches full command lines, and the `sh -c`
+    // running this command contains each pattern literally. A plain pattern
+    // kills that shell (SIGTERM, exit 143) before the cleanup that follows it
+    // runs (FB-2F24555E, 2026-10-07). `[n]ext dev` still matches `next dev`
+    // but not its own text.
+    "pkill -f '[n]ext dev' 2>/dev/null || true",
+    "pkill -f '[n]ext-server' 2>/dev/null || true",
+    "pkill -f '[f]ilter web dev' 2>/dev/null || true",
     "sleep 1",
     "true",
   ].join("; ");
@@ -260,17 +284,20 @@ async function stageSandboxWorkspaceChanges(containerId: string, workspace: stri
 
 export async function listReleasableSandboxFiles(
   containerId: string,
-  opts?: { baseRef?: string },
+  opts?: { baseRef?: string; workspace?: string },
 ): Promise<string[]> {
-  await stageSandboxWorkspaceChanges(containerId);
+  // BI-5C4933EB: callers pass the build's workdir (resolveBuildWorkdir) so the
+  // check reads its own worktree; defaults to /workspace (byte-identical).
+  const workspace = opts?.workspace ?? SANDBOX_WORKSPACE;
+  await stageSandboxWorkspaceChanges(containerId, workspace);
   try {
     const output = await execInSandbox(
       containerId,
-      buildSandboxListReleasableFilesCommand(SANDBOX_WORKSPACE, opts?.baseRef),
+      buildSandboxListReleasableFilesCommand(workspace, opts?.baseRef),
     );
     return parseSandboxChangedFiles(output);
   } finally {
-    await resetSandboxGitIndex(containerId);
+    await resetSandboxGitIndex(containerId, workspace);
   }
 }
 
@@ -282,17 +309,52 @@ export async function listReleasableSandboxFiles(
  * Returns [] if HEAD == baseRef or if the rev-list command errors (e.g. the
  * base ref does not exist yet in the sandbox).
  */
+/**
+ * Subjects of the platform's own housekeeping commits on a build branch. They
+ * are not the build's work (BI-37A1349E): "sandbox baseline" (ensureGitBaseline)
+ * and "chore: untrack sandbox generated artifacts…" (branch-start pruning).
+ * The in-flight WIP commit is kept: it carries the coding agent's output.
+ */
+const HOUSEKEEPING_SUBJECTS = [/^sandbox baseline$/, /^chore: untrack sandbox generated artifacts\b/];
+
+/**
+ * BI-37A1349E: from `git log --format=%H%x09%s` lines, the hashes of the
+ * build's own commits — housekeeping commits removed. Upstream commits are
+ * excluded by the range itself (`^origin/main`).
+ */
+export function ownBuildCommitHashes(logOutput: string): string[] {
+  return logOutput
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const tab = line.indexOf("\t");
+      return tab < 0 ? { hash: line, subject: "" } : { hash: line.slice(0, tab), subject: line.slice(tab + 1) };
+    })
+    .filter(({ hash, subject }) => /^[0-9a-f]{7,64}$/.test(hash) && !HOUSEKEEPING_SUBJECTS.some((re) => re.test(subject)))
+    .map(({ hash }) => hash);
+}
+
+/** The git log behind listSandboxCommitsAheadOfBase; exported for a real-git test. */
+export function buildOwnCommitsLogCommand(workspace: string, baseRef: string): string {
+  return `cd ${workspace} && _dpf_up=""; git rev-parse --verify --quiet origin/main >/dev/null && _dpf_up="^origin/main"; git log --no-merges --format='%H%x09%s' ${quotePosixArg(baseRef)}..HEAD $_dpf_up`;
+}
+
+/**
+ * The build's own commits ahead of its base. BI-37A1349E: `base..HEAD` alone
+ * counted every upstream main commit a build branch merged in (18–50 per build,
+ * live 2026-09-29) as the build's work, so "builds with commits" overstated
+ * Build Studio output. Commits already on upstream main are excluded when that
+ * ref resolves, and the platform's housekeeping commits are filtered out.
+ */
 export async function listSandboxCommitsAheadOfBase(
   containerId: string,
   baseRef: string,
   workspace: string = SANDBOX_WORKSPACE,
 ): Promise<string[]> {
   try {
-    const output = await execInSandbox(
-      containerId,
-      `cd ${workspace} && git rev-list --no-merges ${quotePosixArg(baseRef)}..HEAD`,
-    );
-    return output.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const output = await execInSandbox(containerId, buildOwnCommitsLogCommand(workspace, baseRef));
+    return ownBuildCommitHashes(output);
   } catch {
     return [];
   }
@@ -378,7 +440,7 @@ export async function initializeSandboxWorkspace(containerId: string): Promise<v
   // This can take 3-5 minutes on a cold cache. Use generous timeout.
   console.log("[sandbox-init] starting pnpm install...");
   await exec(
-    `docker exec ${containerId} sh -c "cd /workspace && pnpm install --frozen-lockfile 2>&1 || pnpm install 2>&1"`,
+    `docker exec ${containerId} sh -c "cd /workspace && { CI=true pnpm install --frozen-lockfile 2>&1 || CI=true pnpm install 2>&1; }"`,
     { timeout: 300_000 },
   );
   console.log("[sandbox-init] pnpm install complete");
@@ -602,16 +664,12 @@ export async function destroyFullSandboxStack(
   state: {
     containerId?: string;
     dbContainerId?: string;
-    neo4jContainerId?: string;
-    qdrantContainerId?: string;
     networkId?: string;
   },
 ): Promise<void> {
   const ids = [
     state.containerId,
     state.dbContainerId,
-    state.neo4jContainerId,
-    state.qdrantContainerId,
   ].filter(Boolean);
   await Promise.all(ids.map((id) => exec(`docker rm -f ${id}`).catch(() => {})));
   if (state.networkId) await destroySandboxNetwork(state.networkId);

@@ -17,6 +17,7 @@ import {
   BOOKKEEPING_CYCLE_TASK_KIND,
   BOOKKEEPING_CYCLE_TASK_TITLE,
 } from "./bookkeeping-cycle-config";
+import { findInstallWorkOwnerUserId } from "./install-work-owner";
 
 type ScheduledTaskSeedClient = Pick<PrismaClient, "user" | "scheduledAgentTask" | "scheduledJob">;
 
@@ -42,12 +43,8 @@ export async function ensureBookkeepingCycleScheduledTask(
   prisma: ScheduledTaskSeedClient,
   now: Date = new Date(),
 ): Promise<{ created: boolean }> {
-  const owner = await prisma.user.findFirst({
-    where: { isSuperuser: true },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
-  if (!owner) {
+  const ownerId = await findInstallWorkOwnerUserId(prisma);
+  if (!ownerId) {
     throw new Error("seed: no superuser found - cannot seed bookkeeping cycle scheduled task");
   }
 
@@ -59,6 +56,7 @@ export async function ensureBookkeepingCycleScheduledTask(
     select: { taskId: true, nextRunAt: true },
   });
 
+  // An existing task keeps its owner: an account handover must survive re-seeding (BI-ED055D45).
   if (existing) {
     await prisma.scheduledAgentTask.update({
       where: { taskId: BOOKKEEPING_CYCLE_TASK_ID },
@@ -70,7 +68,6 @@ export async function ensureBookkeepingCycleScheduledTask(
         schedule: BOOKKEEPING_CYCLE_SCHEDULE,
         timezone,
         taskKind: BOOKKEEPING_CYCLE_TASK_KIND,
-        ownerUserId: owner.id,
         isActive: true,
         nextRunAt: existing.nextRunAt ?? nextRunAt,
       },
@@ -86,7 +83,7 @@ export async function ensureBookkeepingCycleScheduledTask(
         schedule: BOOKKEEPING_CYCLE_SCHEDULE,
         timezone,
         taskKind: BOOKKEEPING_CYCLE_TASK_KIND,
-        ownerUserId: owner.id,
+        ownerUserId: ownerId,
         nextRunAt,
       },
     });

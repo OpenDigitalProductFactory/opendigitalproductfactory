@@ -8,8 +8,8 @@ import {
   projectToolAccessDomain,
   summarizeAiReadinessState,
   type AiReadinessProviderInput,
-  type AiReadinessDomain,
 } from "./readiness-summary";
+import type { AiReadinessDomain } from "./readiness-summary-types";
 import type { ContributorMcpReadiness } from "@/lib/mcp/contributor-readiness";
 import type { RoutingEligibilityState } from "@/lib/routing/provider-routing-eligibility";
 

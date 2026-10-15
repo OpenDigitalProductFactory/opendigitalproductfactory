@@ -188,7 +188,7 @@ export type RecallWikiContextWithPrinciplesInput = RecallWikiContextInput & {
   /**
    * Population whose principles should apply. Drives the principle recall
    * branch — commandments are always injected for in-scope rows; relevant
-   * core and contextual principles are pulled from Qdrant.
+   * core and contextual principles are pulled from the vector store.
    */
   callingPopulation: PrincipleAppliesToPopulation;
 };

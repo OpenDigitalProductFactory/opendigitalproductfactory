@@ -164,7 +164,7 @@ describe("persistBootstrapDiscoveryRun customer-scope isolation", () => {
   });
 
   it("falls back to organization-internal scope when no customer ids are supplied", async () => {
-    const { db, entityFindMany, upsertedEntities } = buildStubDb();
+    const { db, upsertedEntities } = buildStubDb();
 
     await persistBootstrapDiscoveryRun(
       db,

@@ -1,11 +1,14 @@
 #!/usr/bin/env node
+import { parseArgs as utilParseArgs } from "node:util";
 import { randomBytes } from "node:crypto";
 import { chmod, copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const args = process.argv.slice(2);
-const valueAfter = (flag) => { const index = args.indexOf(flag); return index < 0 ? undefined : args[index + 1]; };
+// strict: false keeps the old tolerance: flags this script does not read are ignored.
+const { values: flags } = utilParseArgs({ args, strict: false, allowPositionals: true, options: { "state-dir": { type: "string" } } });
+const valueAfter = (flag) => { const value = flags[flag.replace(/^--/, "")]; return typeof value === "string" ? value : undefined; };
 const stateDir = resolve(valueAfter("--state-dir") ?? process.env.DPF_PROMOTER_STATE_DIR ?? join(process.env.HOME ?? process.env.USERPROFILE ?? ".", ".dpf"));
 const initialize = args.includes("--initialize");
 const rotate = args.includes("--rotate");
@@ -42,10 +45,9 @@ try {
   } catch (error) { if (error.code !== "ENOENT") throw error; }
   try {
     await stat(applyLockPath);
-    let expiresAt;
-    try { expiresAt = Date.parse((await readFile(join(applyLockPath, "expires-at"), "utf8")).trim()); } catch {}
-    if (!Number.isFinite(expiresAt) || expiresAt >= Date.now()) { const error = new Error("transition_in_progress"); error.code = "DPF_TRANSITION_IN_PROGRESS"; throw error; }
-    await rm(applyLockPath, { recursive: true, force: true });
+    // Do not rotate a receipt key while an unmeasured executor may use it.
+    // Legacy apply-lock expiry does not establish executor settlement.
+    const error = new Error("transition_in_progress"); error.code = "DPF_TRANSITION_IN_PROGRESS"; throw error;
   } catch (error) { if (error.code !== "ENOENT") throw error; }
   try {
     const existing = (await readFile(secretPath, "utf8")).trim();

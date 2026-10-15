@@ -78,5 +78,8 @@ describe("renditionFailureMessage", () => {
     expect(renditionFailureMessage(events, 3)).toMatch(/not available on this install/);
     expect(renditionFailureMessage(events, 2)).toBeNull();
     expect(renditionFailureMessage([{ reason: "rendition something-new: pdf of v1. x" }], 1)).toMatch(/could not be converted/);
+    expect(renditionFailureMessage([{ reason: "rendition embedded-objects: pdf of v4. This file contains embedded objects" }], 4)).toContain(
+      "contains embedded objects (such as charts) that DPF does not open",
+    );
   });
 });

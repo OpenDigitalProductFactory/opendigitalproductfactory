@@ -2,23 +2,43 @@
   "note": "Accepted vulnerability advisories for scripts/sbom/scan-dependencies.mjs (the local Dependabot-equivalent). Each entry needs a real `reason`; `expires` (YYYY-MM-DD) forces re-review — past expiry the finding re-surfaces and the gate can fail again. This is the local mirror of Dependabot/CodeQL dismiss-with-justification. See docs/architecture/dependency-reduction-routine.md.",
   "accepted": [
     {
+      "id": "GHSA-vfj7-8cjw-p6xm",
+      "aliases": ["CVE-2026-93687"],
+      "package": "braces@3.0.3",
+      "severity": "high",
+      "reason": "Trusted-pattern-only mobile build tooling (BI-0AE77798). The platform lockfile contains no braces. In apps/mobile/pnpm-lock.yaml the only direct consumers are micromatch@4.0.8 and chokidar@3.6.0, reached through Metro file-map and Tailwind/fast-glob build-time file discovery. apps/mobile/tailwind.config.ts supplies three repository-controlled globs; metro.config.js uses Expo defaults and a fixed ./global.css NativeWind input. No mobile app/src/dynamic source imports braces, micromatch, chokidar or fast-glob. The advisory requires an attacker-controlled deeply nested brace PATTERN; matching a filename against these fixed patterns does not grant pattern control. No patched release is listed by the GitHub advisory as of 2026-10-03. Re-evaluate on a patch release, a Metro/Tailwind upgrade, or before accepting external glob patterns or exposing the development server to untrusted callers.",
+      "expires": "2026-11-02"
+    },
+    {
       "id": "GHSA-h67p-54hq-rp68",
       "aliases": [
         "CVE-2026-53550"
       ],
-      "package": "js-yaml@3.14.2",
+      "package": "js-yaml@3.15.2",
       "severity": "moderate",
-      "reason": "Trusted-input-only. js-yaml 3.14.2 is a transitive dep of gray-matter, used for build-time frontmatter parsing of our own repo-controlled .md files — never attacker-supplied YAML, so the quadratic-complexity DoS is not reachable. The fix is in js-yaml 4.x, a breaking major gray-matter does not support (consistent with the prior tolerable_risk dismissal, Dependabot #74). Re-evaluate if gray-matter adopts js-yaml 4 or a 3.x patch ships.",
+      "reason": "Trusted-input-only on the remaining copy. Platform gray-matter was removed in BI-99D7C104, so the platform lockfile no longer parses docs with js-yaml 3. apps/mobile still resolves js-yaml 3.15.2 through @istanbuljs/load-nyc-config 1.1.0, which loads coverage config and is already the latest release. It does not parse request input. The unused js-yaml 3 CLI edge to argparse, and with it sprintf-js, was removed in BI-5454A9E6; this acceptance is the js-yaml 3 parser only. js-yaml 4 fixes the quadratic-complexity DoS, and this loader does not support that major. Re-evaluate when a patched 3.x ships or the coverage loader moves to js-yaml 4.",
       "expires": "2026-12-31"
     },
     {
-      "id": "GHSA-qxc2-j82w-r537",
+      "id": "GHSA-86w9-cpqp-85rv",
       "aliases": [
-        "CVE-2026-73231"
+        "CVE-2026-85393",
+        "GHSA-ppp5-5v6c-4jwp",
+        "CVE-2026-33894"
       ],
-      "package": "@faker-js/faker@5.5.3",
+      "package": "node-forge@1.4.0",
       "severity": "high",
-      "reason": "Dev/mock-server tooling only, trusted input. faker 5.5.3 is pulled by postman-collection via @stoplight/prism (the API mock server used in development), never by the apps/web production runtime. The advisory is code execution through helpers.fake() templates; Prism only feeds it its own dynamic-variable names, never attacker-supplied templates. The fix is faker 10.x, a breaking major that postman-collection (^5.5.3) does not accept, so a floor would break the mock server. Re-evaluate when postman-collection or prism moves off faker 5 (BI-6B317EFA).",
+      "reason": "Not reachable. node-forge 1.4.0 enters only apps/mobile/pnpm-lock.yaml, as a dependency of @expo/cli and @expo/code-signing-certificates (Expo's command-line build tooling); it is not bundled into the shipped app and never runs on a server. The flaw is RSA PKCS#1 v1.5 signature-verification forgery with low-exponent keys, used by Expo only for expo-updates code signing, which DPF's mobile app does not use (no expo-updates dependency and no codeSigning config in app.json, eas.json or package.json, checked 2026-10-02). No fixed version exists (affected through 1.4.0). Re-evaluate when node-forge publishes a fix, when Expo drops or patches it, or before enabling expo-updates code signing.",
+      "expires": "2026-12-31"
+    },
+    {
+      "id": "GHSA-vfj7-8cjw-p6xm",
+      "aliases": [
+        "CVE-2026-93687"
+      ],
+      "package": "braces@3.0.3",
+      "severity": "high",
+      "reason": "Not reachable from a shipped runtime. braces 3.0.3 is only in apps/mobile/pnpm-lock.yaml. tailwindcss 3.4.19 (a mobile devDependency) pulls it through chokidar and micromatch, and Metro's Node bundler pulls it through metro-file-map and micromatch. The mobile app source does not import braces, micromatch, or chokidar. The flaw is a stack overflow when a caller supplies a deeply nested brace pattern. Those callers expand this repo's own Tailwind and Metro globs, not request input. No patched npm release exists (3.0.3 is the latest; micromatch/braces#72 is unreleased). Re-evaluate when braces publishes a depth guard, or when Expo or Tailwind stop depending on 3.0.3. Checked 2026-10-03.",
       "expires": "2026-12-31"
     }
   ]

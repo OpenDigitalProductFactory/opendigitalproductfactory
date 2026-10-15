@@ -3,7 +3,7 @@
 // never see them: the local model runner (DMR) and STT (Speaches). Sets the
 // dpf_dependency_up{service} gauge, refreshed on each /api/metrics scrape.
 // Mirrors the TTS probe in lib/voice-synthesis/service-status.ts
-// (BI-B2E777EB). [BI-963DBB05] (neo4j retired by BET-5.)
+// (BI-B2E777EB). [BI-963DBB05]
 
 import { dependencyUp } from "@/lib/metrics"
 import { getOllamaBaseUrl } from "@/lib/inference/ollama-url"

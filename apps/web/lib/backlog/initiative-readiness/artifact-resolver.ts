@@ -8,6 +8,8 @@ import { readDocumentBlob } from "@/lib/documents/blob-storage";
 import { resolveRepositoryArtifact } from "./repository-artifact";
 import type { InitiativeArtifactRef, ResolvedInitiativeArtifact } from "./receipt-schema";
 import type { InitiativeSubject } from "./types";
+import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
+import type { CanonicalPlanSourceProof } from "./canonical-plan-source";
 
 type BuildRevisionRecord = {
   id: string;
@@ -83,7 +85,7 @@ function subjectOwnsBuild(subject: InitiativeSubject, build: BuildRevisionRecord
   return false;
 }
 
-function initiativeTextFromBuildValue(value: unknown): string | null {
+export function initiativeTextFromBuildValue(value: unknown): string | null {
   if (typeof value === "string" && value.trim()) return value;
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const markdown = (value as Record<string, unknown>).initiativeScopeMarkdown;
@@ -115,10 +117,14 @@ function authorRequired(error: string): InitiativeArtifactResolution {
 export async function resolveInitiativeArtifact(args: {
   locator: InitiativeArtifactRef;
   subject: InitiativeSubject;
+  workroomRef?: InitiativeReviewBinding["workroomRef"];
+  canonicalPlanProof?: CanonicalPlanSourceProof;
   db?: InitiativeArtifactResolverDb;
   resolveDocumentAuthorAgent?: (versionId: string, principalId: string) => Promise<string | null>;
   documentBelongsToSubject?: (versionId: string, subject: InitiativeSubject) => Promise<boolean>;
   organizationId?: string | null;
+  /** Server-only non-independent research lane; unknown agent stays unknown. */
+  allowHumanResearchAuthor?: boolean;
   resolveRepositoryBlob?: (locator: Extract<InitiativeArtifactRef, { kind: "repo-blob-at-commit" }>) => Promise<ProviderResolvedBlob | null>;
 }): Promise<InitiativeArtifactResolution> {
   const db = args.db ?? (prisma as unknown as InitiativeArtifactResolverDb);
@@ -160,7 +166,7 @@ export async function resolveInitiativeArtifact(args: {
       take: 2,
     });
     const authorPrincipalId = aliases.length === 1 ? aliases[0]?.principal?.principalId : null;
-    if (!authorPrincipalId || !revision.savedByAgentId) {
+    if (!authorPrincipalId || (!revision.savedByAgentId && !args.allowHumanResearchAuthor)) {
       return authorRequired("Build artifact author provenance is incomplete or ambiguous.");
     }
     if (!subjectOwnsBuild(args.subject, revision.build)) {
@@ -261,7 +267,8 @@ export async function resolveInitiativeArtifact(args: {
     if (args.resolveRepositoryBlob) {
       providerBlob = await args.resolveRepositoryBlob(args.locator);
     } else {
-      const resolved = await resolveRepositoryArtifact({ locator: args.locator, subject: args.subject, db: db as never });
+      const resolved = await resolveRepositoryArtifact({ locator: args.locator, subject: args.subject,
+        workroomRef: args.workroomRef, canonicalPlanProof: args.canonicalPlanProof, db: db as never });
       if (!resolved.ok) return resolved;
       providerBlob = resolved.artifact;
     }

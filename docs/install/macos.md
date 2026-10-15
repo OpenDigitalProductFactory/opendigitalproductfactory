@@ -53,7 +53,52 @@ models or serve as both the DPF host and a development workstation.
 See [Choosing Hardware for DPF](hardware.md) for current Mac and Windows machine
 examples, NVIDIA speed tradeoffs, model sizing, and purchase checks.
 
+For a compact business host, consider a **Mac mini with M6, 32 GB unified memory
+and a 1 TB SSD** for provider-assisted operations, or a **Mac mini with M5 Pro,
+64 GB unified memory and a 2 TB SSD** for local-first operations. These are
+planning configurations, not exact-model certifications; validate the actual
+business workload and any enabled build workload before purchase. Embedded
+Build Studio supports governed changes on customizable installs without separate
+Claude or Codex apps, but builds, tests, previews, and local coding models need
+additional capacity wherever they execute.
+
+For larger local models or document-heavy professional work, including law-firm
+workloads, evaluate a **Mac Studio with M5 Max, 128 GB unified memory and a
+2–4 TB SSD**. Apple offers 128 GB with the 40-core GPU configuration. Choose an
+M5 Ultra only when measured model capacity or throughput needs justify it. See
+the [hardware guide](hardware.md#local-ai-for-professional-firms) for sizing and
+data-handling checks.
+
 ## Prerequisites
+
+### Docker memory during installation
+
+The installer sizes local Docker Desktop memory before dependency and image
+work: one quarter of physical RAM rounded down to a GiB, with an 8 GiB floor
+and 32 GiB cap. For example, a 64 GiB Mac gets a 16 GiB upper allocation and
+a 128 GiB Mac gets 32 GiB. A saved allocation already between 8 GiB and that
+upper allocation is preserved. Hosts below 16 GiB are refused. Native AI
+models share the Mac's memory and need their own capacity allowance.
+
+Changing the allocation requires a Docker Desktop restart, which interrupts
+all Docker containers and host model runner work. The installer asks permission
+when containers are running or Docker AI is enabled. Unattended installation
+requires `--allow-docker-restart` for that interruption; `--headless` alone
+uses the default answer of no. Empty setup with Docker AI disabled converges
+automatically. Previously running containers are restored, including containers
+whose restart policy is `no`.
+
+The installer checks both the saved limit and the running VM, so a saved change
+that has not taken effect also requires restart. It backs up Docker's settings
+before replacing the allocation and reports the backup path. Malformed,
+symlinked, missing or administrator-managed settings stop setup before shutdown.
+Remote engines and non-Desktop runtimes are untouched; dry-run only describes
+the plan. The [Docker settings documentation](https://docs.docker.com/desktop/settings-and-maintenance/settings/)
+describes the settings file and VM memory limit.
+
+This applies to new installations and explicit installer re-runs using the
+updated source. It does not silently resize existing installations during normal
+portal upgrades. Restarting Docker normally keeps its saved allocation.
 
 The installer auto-installs Docker Desktop. You bring:
 
@@ -85,6 +130,13 @@ DPF**:
 - **`[2] Customizable` (contributor)** — builds the full stack from your local
   source, enables the in-repo git hooks, and runs the agent-toolchain
   bootstrap so Claude Code / Codex are wired up.
+
+Office document conversion works in both modes with no extra step. A
+Customizable install does not build the converter image: the portal pins
+the `dpf-doctools` image published for the release your clone descends
+from, by digest, and pins it again after every upgrade. Only when no
+published image can be reached (offline or air-gapped) does it build
+`Dockerfile.doctools` from your clone instead.
 
 Your choice is saved to `~/.dpf/install-state.json` (`installMode`) and reused
 on re-runs without re-prompting. To skip the prompt, pass `--customer` or
@@ -166,7 +218,21 @@ single-tree mode persists — current behavior, full back-compat.
    selects the curated `ai/qwen3-coder` tier; fresh installs do not
    auto-provision mutable third-party model references.
 9. **`.env` generation** — only on first install; existing `.env` is
-   preserved.
+   preserved. A re-run only adds generated secrets the file is missing:
+   `DPF_GIT_WEBHOOK_SECRET`, the GPP permit signing key
+   `DPF_GPP_PERMIT_SECRET`, the reach-link and delegation-receipt signing keys
+   `DPF_ATTENTION_REACH_SECRET` and `DPF_DELEGATION_RECEIPT_SECRET`, the
+   self-upgrade target-binding and delivery-task cursor signing keys
+   `DPF_SELF_UPGRADE_TARGET_BINDING_SECRET` and
+   `DPF_DELIVERY_TASK_CURSOR_SECRET` (so `AUTH_SECRET` no longer signs any of
+   them; anything signed with `AUTH_SECRET` before the upgrade keeps verifying
+   until 9 November 2026), and
+   the Inngest `INNGEST_SIGNING_KEY` and
+   `INNGEST_EVENT_KEY`. A real value already set is never rotated. The
+   installer also replaces an Inngest key that still
+   holds the old public default, because anyone who knows the signing key can
+   start background jobs. A self-upgrade does the same for an install that is
+   never re-installed.
 10. **Release image availability** (customer mode only) — probes the GHCR
     portal image and, if it's gated behind early-access auth, points you at
     `docker login ghcr.io` before bring-up.
@@ -175,7 +241,11 @@ single-tree mode persists — current behavior, full back-compat.
     `https://localhost` when it serves only this machine, or the machine's
     DNS name when the network resolves it here. It writes `PUBLIC_URL` and
     trusts the certificate for your user (macOS asks for your keychain password once). AI clients such as
-    Claude Code sign in with OAuth only over https. If this step fails, the
+    Claude Code sign in with OAuth only over https. It also saves the AI
+    client address (`DPF_MCP_URL`) and the certificate bundle
+    (`NODE_EXTRA_CA_CERTS`) in `~/.dpf/agent-toolchain.env`, loaded by your
+    shell profile, on every run; apps opened from the Dock see the same
+    values until the Mac restarts. If this step fails, the
     portal stays at `http://localhost:3000` and the installer says so.
 12. **`docker compose up -d`** on the macOS overlay.
 13. **Health check** — polls `http://localhost:3000/api/health` for up

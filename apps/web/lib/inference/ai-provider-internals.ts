@@ -1,14 +1,11 @@
 // apps/web/lib/ai-provider-internals.ts
 // Internal discovery/profiling logic and shared private helpers.
 // NOT a server action file — must never have "use server" directive.
-// Called by checkBundledProviders() (page-load health check) and
-// by the server actions in ai-providers.ts (which add auth guards).
+// Used by page-load health checks and guarded provider server actions.
 
 import { prisma, type Prisma } from "@dpf/db";
 import { decryptSecret, encryptSecret } from "@/lib/credential-crypto";
 import {
-  computeTokenCost,
-  computeComputeCost,
   getTestUrl,
   parseModelsResponse,
 } from "@/lib/ai-provider-types";
@@ -22,6 +19,12 @@ import {
 import { seedKnownModels } from "@/lib/inference/known-model-seeding";
 import { recordDiscoveredAuthEligibility } from "@/lib/routing/model-auth-eligibility";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { persistDiscoveredInventory } from "./discovered-model-inventory";
+import { findProviderCredential, resolveCredentialProviderId } from "./provider-account-credentials";
+export { resolveCredentialProviderId } from "./provider-account-credentials";
+import { supportsTextGeneration } from "@/lib/routing/model-classifier";
+import { providerWorkspaceHeaders } from "./provider-workspace";
+import { modelOutputCapacityFields, refreshModelOutputCapacity } from "./model-output-capacity";
 
 /**
  * Resolve the `supportsToolUse` value a metadata-sync should persist for a model,
@@ -84,20 +87,11 @@ export function resolveSyncedToolUse(input: {
 
 // ─── Shared helpers (exported for use by ai-providers.ts server actions) ─────
 
-const CREDENTIAL_PARENT_BY_PROVIDER_ID: Record<string, string> = {
-  "zai-coding": "zai",
-};
-
-export function resolveCredentialProviderId(providerId: string): string {
-  return CREDENTIAL_PARENT_BY_PROVIDER_ID[providerId] ?? providerId;
-}
-
 /** Decrypt the API key / client secret for a provider (server-only).
  *  Returns null when the credential row is missing OR when decryption fails
  *  (e.g. the encryption key was rotated after these credentials were stored). */
-export async function getDecryptedCredential(providerId: string) {
-  const credentialProviderId = resolveCredentialProviderId(providerId);
-  const cred = await prisma.credentialEntry.findUnique({ where: { providerId: credentialProviderId } });
+export async function getDecryptedCredential(providerId: string, connectionId?: string) {
+  const cred = await findProviderCredential(providerId, connectionId);
   if (!cred) {
     // CodeQL js/log-injection: providerId is user-influenced. JSON.stringify
     // is a CodeQL-recognised sanitiser — escapes CR/LF, quotes the value.
@@ -127,7 +121,7 @@ export async function getDecryptedCredential(providerId: string) {
     // PROVIDER-ACTIVATION-AUDIT.md F-16.
     if (cred.status !== "key_rotated") {
       prisma.credentialEntry
-        .update({ where: { providerId }, data: { status: "key_rotated" } })
+        .update({ where: { id: cred.id }, data: { status: "key_rotated" } })
         // CodeQL #47 (js/tainted-format-string) + js/log-injection:
         // providerId is user-influenced. JSON.stringify is the recognised
         // sanitiser; the format string is constant so %s can't be hijacked.
@@ -233,10 +227,10 @@ export function extractTokenUsage(data: Record<string, unknown>): TokenUsage {
 
 export function buildAutoDiscoveryEvalEvents(
   providerId: string,
-  models: Array<{ id?: string; modelId: string }>,
+  models: Array<{ id?: string; modelId: string; modelClass?: string | null; outputModalities?: unknown }>,
   userId = "system",
 ) {
-  return models.map((model) => ({
+  return models.filter(supportsTextGeneration).map((model) => ({
     name: "ai/eval.run" as const,
     data: {
       endpointId: providerId,
@@ -250,13 +244,15 @@ export function buildAutoDiscoveryEvalEvents(
  *  Dispatches by authMethod: oauth2_authorization_code uses refreshOAuthToken,
  *  oauth2_client_credentials uses the client_credentials grant.
  */
-export async function getProviderBearerToken(providerId: string): Promise<{ token: string } | { error: string }> {
+export async function getProviderBearerToken(providerId: string, connectionId?: string): Promise<{ token: string } | { error: string }> {
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) return { error: "Provider not found" };
 
-  if (provider.authMethod === "oauth2_authorization_code") {
+  const connection = connectionId ? await prisma.aiProviderConnection.findUnique({ where: { connectionId } }) : null;
+  if (connectionId && (!connection || connection.providerId !== providerId)) return { error: "Provider connection not found" };
+  if (["oauth", "oauth2_authorization_code"].includes(connection?.authMethod ?? provider.authMethod)) {
     const { refreshOAuthToken } = await import("@/lib/provider-oauth");
-    const credential = await getDecryptedCredential(providerId);
+    const credential = await getDecryptedCredential(providerId, connectionId);
     if (!credential) return { error: "No credential configured" };
 
     if (credential.cachedToken && credential.tokenExpiresAt) {
@@ -266,12 +262,12 @@ export async function getProviderBearerToken(providerId: string): Promise<{ toke
       }
     }
     // chatgpt shares Codex OAuth — refresh via codex provider (has tokenUrl/clientId)
-    const refreshProviderId = providerId === "chatgpt" ? "codex" : providerId;
-    return refreshOAuthToken(refreshProviderId);
+    const refreshProviderId = !connectionId && providerId === "chatgpt" ? "codex" : providerId;
+    return refreshOAuthToken(refreshProviderId, connectionId);
   }
 
   // Existing client_credentials flow
-  const credential = await getDecryptedCredential(providerId);
+  const credential = await getDecryptedCredential(providerId, connectionId);
   if (!credential) return { error: "No credential configured" };
   if (!credential.clientId || !credential.clientSecret || !credential.tokenEndpoint) {
     return { error: "OAuth credentials incomplete — need client ID, secret, and token endpoint" };
@@ -306,7 +302,7 @@ export async function getProviderBearerToken(providerId: string): Promise<{ toke
     const expiresAt = new Date(Date.now() + body.expires_in * 1000);
 
     await prisma.credentialEntry.update({
-      where: { providerId },
+      where: { id: credential.id },
       data: {
         cachedToken: encryptSecret(body.access_token),
         tokenExpiresAt: expiresAt,
@@ -341,11 +337,6 @@ interface ChatGptModelEntry {
 
 interface ChatGptModelsResponse {
   models?: ChatGptModelEntry[];
-  categories?: Array<{
-    category?: string;
-    human_category_name?: string;
-    default_model?: string;
-  }>;
 }
 
 export async function discoverChatGptBackendModels(
@@ -367,6 +358,9 @@ export async function discoverChatGptBackendModels(
 
     const json = await res.json() as ChatGptModelsResponse;
     const entries = json.models ?? [];
+    if (!Array.isArray(entries) || entries.some((m) => !m || typeof m.slug !== "string" || !m.slug.trim())) {
+      return { models: [], error: "Malformed ChatGPT model inventory; previous inventory retained" };
+    }
 
     const models = entries
       .filter((m) => typeof m.slug === "string" && m.slug.length > 0)
@@ -451,10 +445,11 @@ export async function upsertDiscoveredModels(
 
   const newRows = [...newRowByModelId.values()];
   if (newRows.length > 0) {
-    await prisma.discoveredModel.createMany({ data: newRows, skipDuplicates: true });
+    const inserted = await prisma.discoveredModel.createMany({ data: newRows, skipDuplicates: true });
+    return inserted.count;
   }
 
-  return newRows.length;
+  return 0;
 }
 
 // BI-7F2FBDA3: what a provider lists under THIS account is the truth about what
@@ -474,8 +469,8 @@ export const PROVIDER_CATALOG_REFRESH_EVENT = "inference/provider-catalog-refres
  */
 export async function requestProviderCatalogRefresh(request: { providerId: string; reason: string }): Promise<void> {
   try {
-    const { inngest } = await import("@/lib/queue/inngest-client");
-    await inngest.send({ name: PROVIDER_CATALOG_REFRESH_EVENT, data: request });
+    const { jobs } = await import("@/lib/jobs");
+    await jobs.send({ name: PROVIDER_CATALOG_REFRESH_EVENT, data: request });
   } catch (err) {
     console.warn(`[provider-catalog-refresh] could not enqueue refresh for ${JSON.stringify(request.providerId)}: ${getErrorMessage(err)}`);
   }
@@ -489,12 +484,9 @@ export async function discoverModelsInternal(
 
   if (providerId === "codex" && provider.cliEngine === "codex") {
     try {
-      const { discoverCodexCliModels } = await import("@/lib/routing/codex-cli-model-catalog");
+      const { discoverCodexCliModels } = await import("./codex-cli-catalog-auth");
       const models = await discoverCodexCliModels(providerId);
-      const newCount = await upsertDiscoveredModels(providerId, models);
-      await reconcileDiscoveredModelPresence(providerId, new Set(models.map((model) => model.modelId)));
-      await readmitListedModels(providerId, provider.authMethod, models.map((model) => model.modelId));
-      return { discovered: models.length, newCount, modelIds: models.map((model) => model.modelId) };
+      return await persistDiscoveredInventory(providerId, provider.authMethod, models);
     } catch (err) {
       return { discovered: 0, newCount: 0, error: err instanceof Error ? err.message : "Codex CLI discovery failed" };
     }
@@ -518,7 +510,6 @@ export async function discoverModelsInternal(
   const testUrl = getTestUrl(providerRow);
   if (!testUrl) return { discovered: 0, newCount: 0, error: "No base URL configured" };
 
-  // Build auth headers (same logic as testProviderAuth)
   const headers: Record<string, string> = {
     ...getProviderExtraHeaders(providerId),
   };
@@ -527,6 +518,7 @@ export async function discoverModelsInternal(
     if (cred?.secretRef && provider.authHeader) {
       headers[provider.authHeader] = provider.authHeader === "Authorization"
         ? `Bearer ${cred.secretRef}` : cred.secretRef;
+      Object.assign(headers, providerWorkspaceHeaders(providerId, cred.providerWorkspaceId));
     }
   } else if (provider.authMethod === "oauth2_client_credentials") {
     const tokenResult = await getProviderBearerToken(providerId);
@@ -552,13 +544,7 @@ export async function discoverModelsInternal(
 
   const models = parseModelsResponse(providerId, json);
 
-  const freshModelIds = new Set(models.map((m) => m.modelId));
-
-  const newCount = await upsertDiscoveredModels(providerId, models);
-
-  await reconcileDiscoveredModelPresence(providerId, freshModelIds);
-
-  return { discovered: models.length, newCount };
+  return persistDiscoveredInventory(providerId, provider.authMethod, models);
 }
 
 // Provider-confirmed retirement survives cloud relisting; local serving lists heal it.
@@ -575,7 +561,7 @@ export async function reconcileDiscoveredModelPresence(
   const isLocalProvider = providerId === "local" || providerId === "ollama";
   const allKnown = await prisma.discoveredModel.findMany({
     where: { providerId },
-    select: { id: true, modelId: true, missedDiscoveryCount: true },
+    select: { id: true, modelId: true, missedDiscoveryCount: true, lastSeenAt: true },
   });
 
   const present = allKnown.filter((known) => freshModelIds.has(known.modelId));
@@ -613,12 +599,14 @@ export async function reconcileDiscoveredModelPresence(
     const newMissedCount = known.missedDiscoveryCount + 1;
     await prisma.discoveredModel.update({
       where: { id: known.id },
-      data: { missedDiscoveryCount: newMissedCount },
+      data: { missedDiscoveryCount: newMissedCount, lastSeenAt: known.lastSeenAt },
     });
 
     if (newMissedCount >= 2) {
       await prisma.modelProfile.updateMany({
-        where: { providerId, modelId: known.modelId },
+        where: { providerId, modelId: known.modelId, OR: [
+          { retiredReason: null }, { retiredReason: { notIn: PERMANENT_RETIRE_REASONS } },
+        ] },
         data: {
           modelStatus: "retired",
           retiredAt: new Date(),
@@ -678,6 +666,11 @@ export async function profileModelsInternal(
     // If the model doesn't match provider restrictions, retire it
     if (!modelMatchesRestrictions(m.modelId)) {
       const card = extractModelCardWithFallback(providerId, m.modelId, m.rawMetadata);
+      const existingProfile = await prisma.modelProfile.findUnique({
+        where: { providerId_modelId: { providerId, modelId: m.modelId } },
+        select: { profileSource: true, capabilityOverrides: true },
+      });
+      await refreshModelOutputCapacity({ providerId, modelId: m.modelId }, card.maxOutputTokens, existingProfile);
       const metadataFields = {
         modelFamily: card.modelFamily,
         modelClass: card.modelClass,
@@ -722,6 +715,7 @@ export async function profileModelsInternal(
           retiredReason: "Model not accessible with provider credential type",
           generatedBy: "system:metadata-sync",
           ...metadataFields,
+          ...modelOutputCapacityFields(card.maxOutputTokens),
           reasoning: 50, codegen: 50, toolFidelity: 50,
           instructionFollowingScore: 50, structuredOutputScore: 50,
           conversational: 50, contextRetention: 50,
@@ -826,29 +820,22 @@ export async function profileModelsInternal(
       where: { providerId_modelId: { providerId, modelId: m.modelId } },
       select: { rawMetadataHash: true, profileSource: true, supportsToolUse: true, capabilityOverrides: true },
     });
+    await refreshModelOutputCapacity({ providerId, modelId: m.modelId }, card.maxOutputTokens, existingProfile);
     const driftDetected = existingProfile?.rawMetadataHash != null
       && existingProfile.rawMetadataHash !== card.rawMetadataHash;
     if (driftDetected) {
       console.log(
         `[drift] Provider metadata changed for ${JSON.stringify(providerId)}/${JSON.stringify(m.modelId)} — hash ${existingProfile.rawMetadataHash!.slice(0, 8)}→${card.rawMetadataHash.slice(0, 8)}`
       );
-      // For seed-level profiles, allow scores to be re-derived on this sync.
-      // For evaluated/admin profiles, flag for admin review via driftDetectedAt.
-      if (existingProfile.profileSource === "seed") {
-        await prisma.modelProfile.update({
-          where: { providerId_modelId: { providerId, modelId: m.modelId } },
-          data: { driftDetectedAt: new Date() },
-        });
-      } else {
-        await prisma.modelProfile.update({
-          where: { providerId_modelId: { providerId, modelId: m.modelId } },
-          data: { driftDetectedAt: new Date() },
-        });
+      await prisma.modelProfile.update({
+        where: { providerId_modelId: { providerId, modelId: m.modelId } },
+        data: { driftDetectedAt: new Date() },
+      });
+      if (existingProfile.profileSource !== "seed") {
         console.log(`[drift] ${JSON.stringify(providerId)}/${JSON.stringify(m.modelId)} has evaluated/admin profile — flagged for review`);
       }
     }
 
-    // EP-INF-003: ModelCard metadata fields — always safe to overwrite on re-sync.
     // supportsToolUse precedence lives in the pure resolveSyncedToolUse helper so the
     // "sticky false" trap (BI-B6DEBFFE) is unit-tested and can never silently re-pin a
     // healed model. A deliberate non-tool pin lives in capabilityOverrides, not the raw
@@ -930,6 +917,7 @@ export async function profileModelsInternal(
     // Don't overwrite admin-set tier on re-sync
     const shouldWriteTier = !existingFull?.qualityTierSource || existingFull.qualityTierSource !== "admin";
 
+    // Source is creation-only: an intervening admin row must retain ownership.
     const scoreFields = shouldWriteScores ? {
       reasoning: ds.reasoning,
       codegen: ds.codegen,
@@ -938,7 +926,6 @@ export async function profileModelsInternal(
       structuredOutputScore: ds.structuredOutput,
       conversational: ds.conversational,
       contextRetention: ds.contextRetention,
-      profileSource: "seed" as const,
       profileConfidence: card.metadataConfidence,
     } : {
       // Only update confidence from metadata, don't touch scores or source
@@ -975,6 +962,7 @@ export async function profileModelsInternal(
         retiredAt:     createStatus === "retired" ? new Date() : null,
         retiredReason: createStatus === "retired" ? "Deprecated by provider at discovery time" : null,
         ...metadataFields,
+        ...modelOutputCapacityFields(card.maxOutputTokens),
         qualityTier,
         qualityTierSource: "auto",
         // EP-INF-012b: Use card dimension scores (family baseline or known catalog)
@@ -1009,12 +997,13 @@ export async function profileModelsInternal(
 export { backfillModelCards, seedAllRecipes } from "./model-card-maintenance";
 
 /** Discover and profile after activation; failures never break activation. */
-export async function autoDiscoverAndProfile(providerId: string): Promise<{
+export async function autoDiscoverAndProfile(providerId: string, allowKnownFallback = true): Promise<{
   discovered: number;
+  newCount?: number;
   profiled: number;
   error?: string;
 }> {
-  let result: { discovered: number; profiled: number; error?: string };
+  let result: { discovered: number; newCount?: number; profiled: number; error?: string };
 
   try {
     // 1. Try dynamic discovery (works for all providers including codex/chatgpt)
@@ -1022,17 +1011,21 @@ export async function autoDiscoverAndProfile(providerId: string): Promise<{
 
     if (discovery.discovered > 0) {
       // Dynamic discovery succeeded — profile the discovered models
-      const profiling = await profileModelsInternal(providerId);
+      const profiling = await profileModelsInternal(providerId, discovery.modelIds);
+      if (profiling.profiled > 0 && discovery.modelIds?.length) {
+        const provider = await prisma.modelProvider.findUnique({ where: { providerId }, select: { authMethod: true } });
+        if (provider) await readmitListedModels(providerId, provider.authMethod, discovery.modelIds);
+      }
       if (providerId === "codex") await clearStaleCodexPins(discovery.modelIds ?? []);
       result = {
         discovered: discovery.discovered,
+        newCount: discovery.newCount,
         profiled: profiling.profiled,
         error: profiling.error,
       };
     } else {
-      // Codex inventory is account-specific; a static catalog must never impersonate success.
       // Codex inventory is account-specific (chatgpt rides the same account): never impersonate success.
-      const knownModels = providerId === "codex" || providerId === "chatgpt" ? undefined : KNOWN_PROVIDER_MODELS[providerId];
+      const knownModels = !allowKnownFallback || providerId === "codex" || providerId === "chatgpt" ? undefined : KNOWN_PROVIDER_MODELS[providerId];
       if (knownModels) {
         console.log(
           `[auto-discover] Dynamic discovery returned 0 for ${JSON.stringify(providerId)}` +
@@ -1073,15 +1066,16 @@ export async function autoDiscoverAndProfile(providerId: string): Promise<{
         );
         return result;
       }
-      const { inngest } = await import("@/lib/queue/inngest-client");
+      const { jobs } = await import("@/lib/jobs");
       const models = await prisma.modelProfile.findMany({
         where: { providerId, modelStatus: "active" },
-        select: { modelId: true, id: true },
+        select: { modelId: true, id: true, modelClass: true, outputModalities: true },
       });
-      for (const event of buildAutoDiscoveryEvalEvents(providerId, models)) {
-        await inngest.send(event);
+      const events = buildAutoDiscoveryEvalEvents(providerId, models);
+      for (const event of events) {
+        await jobs.send(event);
       }
-      console.log(`[auto-discover] Queued background evals for ${models.length} model(s) on ${JSON.stringify(providerId)}`);
+      if (events.length) console.log(`[auto-discover] Queued background evals for ${events.length} compatible model(s) on ${JSON.stringify(providerId)}`);
     } catch (err) {
       // Non-fatal — catalog scores are usable even without live eval.
       // CodeQL #48 (js/tainted-format-string) + js/log-injection: constant
@@ -1130,21 +1124,21 @@ export async function queueUncalibratedModelEvals(providerId: string): Promise<n
 
   const models = await prisma.modelProfile.findMany({
     where: { providerId, modelStatus: "active", profileSource: "seed", evalCount: 0 },
-    select: { modelId: true, id: true },
+    select: { modelId: true, id: true, modelClass: true, outputModalities: true },
   });
-  if (models.length === 0) return 0;
-
+  const eligible = models.filter(supportsTextGeneration);
+  if (!eligible.length) return 0;
   try {
-    const { inngest } = await import("@/lib/queue/inngest-client");
-    for (const event of buildAutoDiscoveryEvalEvents(providerId, models)) {
-      await inngest.send(event);
+    const { jobs } = await import("@/lib/jobs");
+    for (const event of buildAutoDiscoveryEvalEvents(providerId, eligible)) {
+      await jobs.send(event);
     }
-    console.log(`[auto-eval] Queued calibration evals for ${models.length} un-calibrated model(s) on ${JSON.stringify(providerId)}`);
+    console.log(`[auto-eval] Queued calibration evals for ${eligible.length} un-calibrated model(s) on ${JSON.stringify(providerId)}`);
   } catch (err) {
     // Non-fatal — seed priors remain usable until the eval runs.
     console.warn("[auto-eval] Failed to queue calibration evals for %s: %s",
       JSON.stringify(providerId),
       err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)));
   }
-  return models.length;
+  return eligible.length;
 }

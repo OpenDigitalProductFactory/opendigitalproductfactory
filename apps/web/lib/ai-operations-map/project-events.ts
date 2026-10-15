@@ -285,7 +285,7 @@ export function projectToolExecutionReceipt(
       coworkerHref: row.toolExecution
         ? `/platform/ai/agent/${encodeURIComponent(row.toolExecution.agentId)}`
         : undefined,
-      historyHref: `/platform/ai/history?toolReceiptId=${encodeURIComponent(row.id)}`,
+      historyHref: `/platform/audit/ledger?toolReceiptId=${encodeURIComponent(row.id)}`,
     },
   };
 }
@@ -348,7 +348,7 @@ export function projectExternalEvidence(
       externalEvidenceRecordId: row.id,
     },
     links: {
-      historyHref: `/platform/ai/history?externalEvidenceRecordId=${encodeURIComponent(row.id)}`,
+      historyHref: `/platform/audit/ledger?externalEvidenceRecordId=${encodeURIComponent(row.id)}`,
     },
   };
 }

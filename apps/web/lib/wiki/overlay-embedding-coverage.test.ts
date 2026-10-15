@@ -4,7 +4,7 @@ const wikiPageFindMany = vi.fn();
 const scrollPoints = vi.fn();
 
 vi.mock("@dpf/db", () => ({
-  QDRANT_COLLECTIONS: { WIKI_PAGES: "wiki-pages" },
+  VECTOR_COLLECTIONS: { WIKI_PAGES: "wiki-pages" },
   scrollPoints: (...args: unknown[]) => scrollPoints(...args),
   prisma: { wikiPage: { findMany: (...args: unknown[]) => wikiPageFindMany(...args) } },
 }));

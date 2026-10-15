@@ -156,6 +156,16 @@ beforeEach(() => {
 });
 
 describe("persisted remote TaskRun worker", () => {
+  it("passes the acquired dispatch identity into execution", async () => {
+    db.findTask.mockResolvedValue(row());
+    await executePersistedRemoteTask({ taskRunId: "TR-MCP-ASYNC" });
+    const claimed = db.claim.mock.calls.at(-1)?.[0]?.data?.progressPayload?.dispatch;
+    expect(claimed.claimedAt).toEqual(expect.any(String));
+    expect(execution.run).toHaveBeenCalledWith(expect.objectContaining({
+      expectedReservation: null,
+      expectedDispatchClaim: claimed.claimedAt,
+    }));
+  });
   it.each(["active", "revoked-client", "missing-client", "wrong-kind", "revoked-consent", "missing-binding", "disabled-human"])("revalidates OAuth %s before dispatch", async state => {
     const original = row();
     if (state === "disabled-human") db.findHuman.mockResolvedValue({ isActive: false });

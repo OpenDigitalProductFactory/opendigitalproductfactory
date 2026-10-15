@@ -9,7 +9,7 @@
 
 import { prisma } from "@dpf/db";
 
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import { PROVIDER_CATALOG_REFRESH_EVENT } from "@/lib/inference/ai-provider-internals";
 
@@ -39,7 +39,7 @@ export async function providerCatalogRefreshDue(
   return now.getTime() - newest.lastSeenAt.getTime() >= debounceMs;
 }
 
-export const providerCatalogRefresh = inngest.createFunction(
+export const providerCatalogRefresh = jobs.createFunction(
   {
     id: "inference/provider-catalog-refresh",
     retries: 1,

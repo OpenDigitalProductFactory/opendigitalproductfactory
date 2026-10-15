@@ -170,6 +170,36 @@ export async function readSandboxFile(filePath: string): Promise<string | null> 
   }
 }
 
+/**
+ * BI-6B57D85F: read a file's COMMITTED content from a build's own tree inside
+ * the sandbox (`git show HEAD:<path>` in its workdir). That is exactly the
+ * tree the gates verified, whatever is on disk or on the shared mount. Null
+ * when the path is not in that commit (the caller then falls back to the diff
+ * for an added file, or skips).
+ */
+export function buildTreeFileReader(deps: {
+  containerId: string;
+  workdir: string;
+  exec: (containerId: string, command: string) => Promise<string>;
+}): (path: string) => Promise<string | null> {
+  const quote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
+  return async (path: string) => {
+    if (!path || path.startsWith("/") || path.split("/").includes("..")) return null;
+    try {
+      // cat-file -e fails (and exec throws) when the path is not in the commit,
+      // so an empty file still publishes as empty rather than being skipped.
+      const object = quote(`HEAD:${path}`);
+      const encoded = await deps.exec(
+        deps.containerId,
+        `git -C ${quote(deps.workdir)} cat-file -e ${object} && git -C ${quote(deps.workdir)} show ${object} | base64 | tr -d '\\n'`,
+      );
+      return Buffer.from(encoded.trim(), "base64").toString("utf-8");
+    } catch {
+      return null;
+    }
+  };
+}
+
 // ─── GitHub API Helpers ─────────────────────────────────────────────────────
 
 function getHeaders(token: string): Record<string, string> {
@@ -325,6 +355,13 @@ export async function publishBranchCommit(input: {
   commitMessage: string;
   diff: string;
   token: string;
+  /**
+   * BI-6B57D85F: where a changed file's published content comes from. The
+   * ship path passes the build's own committed tree (buildTreeFileReader). The
+   * default reads the shared sandbox mount, which sits on the client branch,
+   * so a modified file would carry the client-branch content, not the build's.
+   */
+  readFile?: (path: string) => Promise<string | null>;
 }): Promise<PublishedBranchCommit> {
   assertDcoSignedCommitMessage(input.commitMessage);
   const dcoIdentity = parseDcoSignedCommitIdentity(input.commitMessage);
@@ -385,7 +422,7 @@ export async function publishBranchCommit(input: {
     }
 
     // Try to read from sandbox workspace first, fall back to extracting from diff
-    let content = await readSandboxFile(op.path);
+    let content = await (input.readFile ?? readSandboxFile)(op.path);
     if (content === null && op.operation === "add") {
       content = extractNewFileContent(diff, op.path);
     }

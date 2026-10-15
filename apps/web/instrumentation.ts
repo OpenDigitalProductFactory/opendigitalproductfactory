@@ -104,11 +104,9 @@ export async function reconcileSelfUpgradeRunsOnBoot(
     const { getDeployedSha } = await import("@/lib/self-upgrade/completion");
     const { completeRun, failRun } = await import("@/lib/self-upgrade/run-store");
     const deployedSha = await getDeployedSha();
-    // staleAfterMs > 0 → PERIODIC mode (called in-process on an interval, not just
-    // on boot): only touch runs stuck "running" well past a normal upgrade (~7
-    // min), so an in-flight swap is never reconciled out from under itself.
-    // staleAfterMs = 0 (boot default) reconciles every "running" row, because a
-    // boot means the orchestrating process is already gone.
+    // staleAfterMs > 0 → PERIODIC mode: only runs stuck "running" well past a normal
+    // upgrade, so an in-flight swap is never reconciled out from under itself.
+    // staleAfterMs = 0 (boot) reconciles every "running" row: the orchestrator is gone.
     const staleAfterMs = opts.staleAfterMs ?? 0;
     const now = opts.now?.() ?? new Date();
     const running = await prisma.selfUpgradeRun.findMany({
@@ -122,7 +120,11 @@ export async function reconcileSelfUpgradeRunsOnBoot(
     });
     let succeeded = 0;
     let failed = 0;
+    // BI-F9EE05E5: a run whose drain still heartbeats is waiting for work (maybe an hour), not stuck.
+    const { selfUpgradeRunsWithLiveDrain } = await import("@/lib/self-upgrade/drain-wait");
+    const waiting = staleAfterMs > 0 ? await selfUpgradeRunsWithLiveDrain(running.map((r) => r.runId), now, staleAfterMs) : new Set();
     for (const run of running) {
+      if (waiting.has(run.runId)) continue;
       const expectedDeployedSha = run.deployedSha ?? run.targetSha ?? null;
       if (
         deployedSha &&
@@ -134,13 +136,11 @@ export async function reconcileSelfUpgradeRunsOnBoot(
         logger.log(`[self-upgrade-reconcile] ${run.runId} -> succeeded (deployed ${deployedSha})`);
         continue;
       }
-      // Swap PENDING, not orphaned. On boot (staleAfterMs===0) we may come up still on the
-      // run's PRE-upgrade SHA — e.g. the old portal restarted mid-swap before the promoter
-      // recreated it on the target. Failing here is a false negative: the promoter may still
-      // complete the swap (it did for SUR-F4209F75 — failed on a mid-swap boot although the
-      // portal then came up healthy on the target). Leave the run "running"; the staleness-
-      // guarded periodic watchdog (staleAfterMs>0) fails it only if the swap genuinely never
-      // lands. The watchdog path never takes this branch, so a truly stuck run is still reaped.
+      // BI-75ECED42: an engine restart under the run (Docker Desktop updating itself) is named as that.
+      if (await (await import("@/lib/self-upgrade/engine-restart")).failRunIfEngineRestarted(run, deployedSha, failRun, logger)) { failed++; continue; }
+      // Swap PENDING, not orphaned. On boot we may come up still on the run's PRE-upgrade SHA (the old
+      // portal restarted mid-swap); the promoter may still land it (SUR-F4209F75), so leave the run
+      // "running" and let the staleness-guarded watchdog fail it only if the swap never lands.
       if (
         staleAfterMs === 0 &&
         deployedSha &&
@@ -165,9 +165,8 @@ export async function reconcileSelfUpgradeRunsOnBoot(
     // In PERIODIC mode, also fail runs stuck "queued"/"pending" that never
     // started — the dispatch event was dropped (e.g. the job engine was down),
     // so they can never run, yet requestPortalSelfUpgradeAction silently no-ops
-    // on a queued/pending row and blocks every future upgrade. (SUR-B26DF3E4 had
-    // to be cleared by hand during the 2026-06-14 incident.) Boot mode leaves
-    // these alone — a freshly-queued run there may still be mid-dispatch.
+    // on a queued/pending row and blocks every future upgrade (SUR-B26DF3E4).
+    // Boot mode leaves these alone — a freshly-queued run may be mid-dispatch.
     if (staleAfterMs > 0) {
       const staleQueued = await prisma.selfUpgradeRun.findMany({
         where: {
@@ -234,12 +233,10 @@ export async function reconcileQuiescenceRunsOnBoot(
 }
 
 /**
- * Self-heal a stuck quiescence level on boot. A real upgrade flips the level to
- * "draining"/"swapping" and recreates the portal — killing both the
- * orchestrator and the coordinator before either can flip it back to "normal".
- * The new portal would then read the stuck level and refuse all gated requests
- * ("portal_quiescing" 503) forever. We just booted, so any prior quiescence is
- * over: reset to normal. Non-fatal.
+ * Self-heal a stuck quiescence level on boot: a swap recreates the portal before
+ * anything flips the level back, so the new portal would refuse gated requests
+ * ("portal_quiescing" 503) forever. Reset it to normal unless a live self-upgrade
+ * drain owns it. Non-fatal.
  */
 export async function resetStuckQuiescenceLevelOnBoot(
   logger: Pick<Console, "log" | "error"> = console,
@@ -247,13 +244,13 @@ export async function resetStuckQuiescenceLevelOnBoot(
   if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return false;
   try {
     const { prisma } = await import("@dpf/db");
-    const { QUIESCENCE_CONFIG_KEY, setQuiescenceLevel } = await import(
-      "@/lib/self-upgrade/quiescence"
-    );
-    const row = await prisma.platformConfig.findUnique({
-      where: { key: QUIESCENCE_CONFIG_KEY },
-    });
-    const level = (row?.value as { level?: string } | null)?.level ?? "normal";
+    const { QUIESCENCE_CONFIG_KEY, setQuiescenceLevel } = await import("@/lib/self-upgrade/quiescence");
+    const row = await prisma.platformConfig.findUnique({ where: { key: QUIESCENCE_CONFIG_KEY } });
+    const value = row?.value as { level?: string; runId?: string | null } | null;
+    const level = value?.level ?? "normal";
+    // BI-F9EE05E5: reset only an orphaned drain; a live one outlives the restart.
+    const { isLiveSelfUpgradeDrain } = await import("@/lib/self-upgrade/drain-wait");
+    if (level !== "normal" && (await isLiveSelfUpgradeDrain(value?.runId ?? null))) return false;
     if (level !== "normal") {
       await setQuiescenceLevel("normal", null);
       logger.log(
@@ -295,7 +292,7 @@ export async function recoverContradictoryBuildExecStatesOnBoot(
   if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return null;
   try {
     const { prisma, Prisma } = await import("@dpf/db");
-    const { planExecStateRecovery } = await import("@/lib/build/build-exec-types");
+    const { planExecStateRecovery, infrastructureRestartsExhausted } = await import("@/lib/build/build-exec-types");
     type ExecStateLike = import("@/lib/build/build-exec-types").ExecStateLike;
     // Scan only rows still in the build phase; filter the null/contradictory
     // discrimination in JS to avoid Prisma JSON-null filter subtleties.
@@ -313,7 +310,7 @@ export async function recoverContradictoryBuildExecStatesOnBoot(
         build.buildExecState as ExecStateLike | null,
         build.verificationOut,
       );
-      if (plan.action === "none") continue;
+      if (plan.action === "none" || (plan.reason === "infrastructure-failed" && await infrastructureRestartsExhausted(prisma, build.buildId, logger))) continue;
       if (plan.action === "clear") {
         await prisma.featureBuild.update({
           where: { buildId: build.buildId },
@@ -465,12 +462,12 @@ export async function reconcileDeployedShipBuilds(
       where: { phase: "ship" },
       select: { id: true, buildId: true },
     });
-    const { mayCompleteAutonomousBuild } =
-      await import("@/lib/build/autonomous-build-completion-gate");
+    const { mayCompleteAutonomousBuild } = await import("@/lib/build/autonomous-build-completion-gate");
     let completed = 0;
     for (const build of shipBuilds) {
       try {
         if (!(await isFeatureBuildDeployed(build.buildId))) {
+          if (await (await import("@/lib/build/ship-source-refresh")).refreshOrRetryShipBuildPr(build.buildId, logger)) continue; // BI-76BD65E6
           // A fully-local install treats ProductVersion registration as delivery.
           // Upstream builds no-op here and keep waiting for deployed evidence.
           if (!(await mayCompleteAutonomousBuild({ buildId: build.buildId, logger }))) continue;
@@ -597,8 +594,7 @@ export async function resumeStrandedBuildsOnBoot(
       "@/lib/build/build-exec-types"
     );
     type ExecStateLike = import("@/lib/build/build-exec-types").ExecStateLike;
-    // Age-out cap primitives (BI-A009313E). Lazy-imported to keep the boot module
-    // graph small, matching this file's convention.
+    // Age-out cap primitives (BI-A009313E), lazy-imported like the rest of this file.
     const { isStrandedPreBuildAbandonable, STRANDED_ABANDON_MS } = await import(
       "@/lib/build/resume-pre-build-phase"
     );
@@ -637,6 +633,7 @@ export async function resumeStrandedBuildsOnBoot(
         void (async () => {
           const { resumePreBuildPhase } = await import("@/lib/build/resume-pre-build-phase");
           const outcome = await resumePreBuildPhase(args);
+          if (outcome.kind === "skipped" && outcome.quiet) return; // BI-6F2872FC: unchanged refusal, nothing to record
           await prisma.buildActivity
             .create({
               data: {
@@ -693,13 +690,12 @@ export async function resumeStrandedBuildsOnBoot(
         return abandonStrandedPreBuild(args);
       });
 
-    let resumed = 0;
-    let flagged = 0;
-    let advanced = 0;
-    let abandoned = 0;
+    let resumed = 0, flagged = 0, advanced = 0, abandoned = 0;
     // BI-5BF650CB: updatedAt is not liveness; progress is recorded as BuildActivity.
     const { recentlyActiveBuildIds } = await import("@/lib/build/build-liveness");
     const live = await recentlyActiveBuildIds(prisma, candidates.map((build) => build.buildId), now);
+    const paused = (await (await import("@/lib/self-upgrade/quiescence")).getQuiescenceLevel()) !== "normal";
+    const { isBuildHeldByUpgradePause } = await import("@/lib/build/upgrade-pause-hold");
     for (const build of candidates) {
       if (live.has(build.buildId)) continue;
       // ── Pre-build phases (ideate/plan/review): no step-machine, but each
@@ -711,6 +707,7 @@ export async function resumeStrandedBuildsOnBoot(
       // and each underlying dispatcher carries its own idempotency guard. Fire-
       // and-forget so one slow re-review never blocks the boot reconcile loop.
       if (build.phase !== "build") {
+        if (paused) continue; // resumed on platform.quiescence-cleared (BI-E9DAA23F)
         // ── Age-out cap (BI-A009313E). A build created past the abandon
         // threshold while STILL in a pre-build phase has failed to progress for
         // a week — re-resuming it only re-churns the loop that a self-upgrade
@@ -720,7 +717,7 @@ export async function resumeStrandedBuildsOnBoot(
         // then closes its open BuildPhaseRun. Keyed on createdAt, so this is
         // immune to the resume churn re-heartbeating the row (the exact reason
         // the quiescence dead-phase reaper can't clear these). Re-promote the
-        // backlog item to retry — abandonment is reversible.
+        // backlog item to retry. Not while an upgrade pause holds it (BI-E9DAA23F).
         if (
           isStrandedPreBuildAbandonable({
             phase: build.phase,
@@ -728,7 +725,8 @@ export async function resumeStrandedBuildsOnBoot(
             parentEpicId: build.parentEpicId,
             now,
             thresholdMs: abandonAfterMs,
-          })
+          }) &&
+          !(await isBuildHeldByUpgradePause(prisma, build.buildId))
         ) {
           const ageMs = now.getTime() - build.createdAt.getTime();
           const didAbandon = await abandonStale({
@@ -751,15 +749,9 @@ export async function resumeStrandedBuildsOnBoot(
         logger.log(
           `[build-resume] ${build.buildId} stranded in ${build.phase} phase after restart/swap — auto-resuming (BI-9257CF19)`,
         );
-        await prisma.buildActivity
-          .create({
-            data: {
-              buildId: build.buildId,
-              tool: "resumeStrandedBuildsOnBoot",
-              summary: `Stranded in ${build.phase} phase after a restart/swap — auto-resuming the canonical ${build.phase} generator/reviewer (BI-9257CF19).`,
-            },
-          })
-          .catch(() => {});
+        // The resume's outcome row records this attempt; a pre-row here wrote one
+        // more line per build per tick even when the outcome was a quiet hold
+        // (BI-6F2872FC: 159k such rows on the live install).
         resumePreBuild({ buildId: build.buildId, phase: build.phase, userId: build.createdById });
         flagged++;
         continue;
@@ -1033,8 +1025,8 @@ export async function register() {
       // ("portal_quiescing") forever. Must run before reconciliation.
       void resetStuckQuiescenceLevelOnBoot();
 
-      void reconcileSelfUpgradeAdmissions().catch((error) => console.error("[self-upgrade] admission reconcile failed", error));
-      void reconcileSelfUpgradeRunsOnBoot(); void import("@/lib/federation/boot-reconcile").then((m) => m.reconcileFederationDurableStateOnBoot()).catch((error) => console.error("[federation] durable-state reconcile failed", error));
+      void reconcileSelfUpgradeAdmissions().catch((error) => console.error("[self-upgrade] admission reconcile failed", error)); void import("@/lib/jobs/postgres/start").then((m) => m.startPostgresJobWorker()).catch((error) => console.error("[jobs/postgres] worker failed to start", error)); // BI-85E6EF14: a no-op unless DPF_JOBS_ENGINE routes functions to the owned engine
+      void reconcileSelfUpgradeRunsOnBoot().then(() => import("@/lib/agent-toolchain/announce-release")).then((m) => m.announceToolchainReleaseOnBoot()).catch((error) => console.error("[agent-toolchain] release announcement failed", error)); /* BI-E7974C18: after the run reconcile */ void import("@/lib/federation/boot-reconcile").then((m) => m.reconcileFederationDurableStateOnBoot()).catch((error) => console.error("[federation] durable-state reconcile failed", error)); void import("@/lib/self-upgrade/service-reconcile-attach").then((m) => m.scheduleServiceReconcileAttach()).catch((error) => console.error("[self-upgrade] service-reconcile attach scheduling failed", error)); // BI-DB87D925
 
       // Periodic safety net — cron-independent (the boot reconcile above and the
       // Inngest cron can BOTH miss this). If a swap's orchestrator dies while the
@@ -1109,7 +1101,7 @@ export async function register() {
         await reconcileProviderConnectionState().catch(() => {});
         setInterval(() => void reconcileProviderConnectionState().catch(() => {}), 20 * 60 * 1000);
       })();
-      void import("@/lib/build/issue-bridge-sweep").then((m) => m.startUpstreamClosureSweep()); void import("@/lib/self-upgrade/doctools-release-image").then((m) => m.startDoctoolsReleaseImageReconciler()).catch((error) => console.error("[doctools-image] reconciler failed to start", error)); // BI-9A2EC54A: dpf-doctools release pin, boot + 20 min
+      void import("@/lib/build/issue-bridge-sweep").then((m) => m.startUpstreamClosureSweep()); void import("@/lib/documents/document-engine-boot").then((m) => m.startDocumentEngineOnBoot()).catch((error) => console.error("[doctools-image] document engine boot failed", error)); // BI-9A2EC54A/BI-903D22D0/BI-153EC72C: doctools pin at boot + 20 min, rendition backfill at start + on pin change
     }
 
     // Backfill the operational value stream (OVSM) EA view for any storefront

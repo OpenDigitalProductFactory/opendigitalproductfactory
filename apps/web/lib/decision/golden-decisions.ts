@@ -88,13 +88,13 @@ const TIER_DEFAULT_WEIGHT: Record<string, number> = {
  * mirroring the live `principle_decide` retrieval:
  *
  * - Only `commandment` tier is scored here. This USED to be a faithful mirror
- *   of live retrieval, because core/contextual loaded from Qdrant without their
+ *   of live retrieval, because core/contextual loaded from the vector store without their
  *   signed vector and fell to semantic alignment (0 in the structured sense).
  *   As of BI-E1267C6D that is no longer true: the live path rehydrates
  *   core/contextual from Postgres and they now score structurally.
  *
  *   This filter deliberately stays commandment-only anyway, because widening it
- *   would require Qdrant relevance retrieval — which a corpus-parsing unit test
+ *   would require vector relevance retrieval — which a corpus-parsing unit test
  *   cannot reproduce, and which is *retrieval-relevance* drift rather than the
  *   *aggregation* drift this gate is scoped to (see the boundary note in
  *   `2026-06-05-situational-aware-decision-weighting-design.md` §7). Closing

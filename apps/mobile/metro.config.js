@@ -3,18 +3,14 @@ const { withNativeWind } = require("nativewind/metro");
 const path = require("path");
 
 const projectRoot = __dirname;
-const monorepoRoot = path.resolve(projectRoot, "../..");
 
 const config = getDefaultConfig(projectRoot);
 
-// Watch all files in the monorepo
-config.watchFolders = [monorepoRoot];
-
-// Resolve packages from monorepo root
-config.resolver.nodeModulesPaths = [
-  path.resolve(projectRoot, "node_modules"),
-  path.resolve(monorepoRoot, "node_modules"),
-];
+// apps/mobile is its own pnpm workspace (plan 2026-09-08 M6). The shared
+// @dpf/* packages arrive as injected copies under this project's
+// node_modules, so Metro resolves from here only. Never add the repository
+// root: it holds the web app's dependency tree, including a different React.
+config.resolver.nodeModulesPaths = [path.resolve(projectRoot, "node_modules")];
 
 // Prefer the CJS `require` condition over `import` when a dependency ships
 // both via a package `exports` map. The workspace pins pretty-format to v30

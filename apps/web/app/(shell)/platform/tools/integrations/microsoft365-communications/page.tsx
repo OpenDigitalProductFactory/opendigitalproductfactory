@@ -9,6 +9,7 @@ import {
   Microsoft365CommunicationsConnectPanel,
   type Microsoft365CommunicationsConnectionState,
 } from "@/components/integrations/Microsoft365CommunicationsConnectPanel";
+import { formatDateTime } from "@/lib/datetime";
 
 export default async function Microsoft365CommunicationsPage() {
   const session = await auth();
@@ -288,18 +289,4 @@ function PreviewListCard({
       </div>
     </div>
   );
-}
-
-function formatDateTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
 }

@@ -1,0 +1,281 @@
+---
+status: active
+---
+
+# Durable jobs on Postgres: replace the Inngest server with an owned `@dpf/jobs` engine
+
+**Plan:** [dependency diet, move M3](../plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md) · **Epic:** `EP-8DC217EB` · **Backlog:** `BI-068BBA33` · **Sequenced behind:** BET-11 scheduling substrate (`BI-B72328D5`) · **Doctrine:** `absorb-dont-adopt` (commandment)
+**Decision:** `own_postgres_jobs`, founder, 2026-09-26 (plan §10.6.1), filed in the WWMD ledger as DI-E52E32AEA1E4 on 2026-09-29. §8 keeps the inputs. **Phase 2:** `BI-85E6EF14`, [plan](../plans/2026-09-29-m3-phase-2-postgres-job-engine-plan.md); §5.2–§5.5 were amended for it on 2026-09-29 (concurrency limit N, cron, engine selection). The §7 benchmarks gate turning the Postgres engine on (§6 step 2), not the facade (§6 step 1).
+
+## 1. Problem
+
+Every background workflow in the platform runs through a self-hosted Inngest server. The inventory below was taken from `main` on 2026-09-25; file references are to that tree.
+
+**What it costs to run:**
+
+- Two always-on containers with no profile gate: `inngest` (`inngest/inngest:v1.36.0`, 1 GB / 1 CPU limit, `docker-compose.yml:948-1000`) and `redis` (`redis:7-alpine`, `:913`). A third, `redis-exporter`, runs under `runtime-durable-automation`. Redis exists only for Inngest.
+- A second database, `inngest`, inside the platform Postgres, created by `scripts/init-inngest-db.sh` (baked into `docker/postgres/Dockerfile:36`).
+- Every step is an HTTP round trip: portal → `inngest:8288` → portal `/api/inngest` (`app/api/inngest/route.ts`).
+- The `INNGEST_*` env surface (`docker-compose.yml:309-323`), which falls back to fixed placeholder event and signing keys written into the compose file itself.
+- Boot-time self-registration: `instrumentation.ts:1214-1240` retries a PUT to `/api/inngest` up to six times, because self-hosted Inngest does not discover apps.
+
+**What we have built around it, which exists only because of it:**
+
+- `lib/operate/inngest-retention/` opens a raw `pg` connection to the `inngest` database every six hours. It reaps `function_runs` older than 24 hours whose Redis state has already expired, and trims `spans` and `history`.
+- `scripts/drain-inngest-poison-queue.sh` deletes Redis queue items with a nil environment ID.
+- `lib/queue/job-engine-health.ts` and `components/ops/SelfUpgradeJobEngineHealthAlert.tsx` record and surface registration and gateway health.
+- A Prometheus scrape job and a service-status tile.
+
+**Supply chain and licence:**
+
+- The `inngest` SDK is the largest production root in the portal. At 4.21.0 it declares 23 runtime dependencies, including the OpenTelemetry auto-instrumentation stack and `@traceloop/instrumentation-anthropic`. The plan measured about 380 packages in its production closure, and it is the source of the duplicate `typescript@5.9.3` and `@types/node@22` in the image. Re-measure with `scripts/sbom/runtime-surface.mjs` at implementation time.
+- The SDK released 70 stable versions in the last 12 months.
+- The server image is licensed **SSPL-1.0** with a delayed Apache-2.0 grant (`inngest/inngest` `LICENSE.md`). SSPL is not an OSI licence, and we ship that image to every customer install.
+
+## 2. What the platform actually uses
+
+125 functions are registered in `lib/queue/functions/index.ts`: 74 on cron, 51 on events. They are defined in 93 files. The plan's figure of "117 across 86 files" predates recent additions. The feature surface is narrow:
+
+| Inngest feature | Use | Notes |
+|---|---|---|
+| cron trigger | 74 | all gated by `DPF_SCHEDULED_INNGEST_FUNCTIONS_ENABLED` |
+| event trigger | 55 triggers | `deliberation-run.ts` listens to two events |
+| `step.run` (memoised step) | 228 calls in 92 files | the core semantic to preserve |
+| retries | 71×1, 41×2, 10×0, 5×3 | small counts; no custom backoff |
+| concurrency | 84 configs | 67 are "one at a time per function"; the rest are limit 1 keyed on `event.data.<id>` (`operationId`, `organizationId`, `buildId`, `providerId`, `parentTaskRunId`, `deliberationRunId`, `environmentKey`), plus the shared account-scope lane in `lib/queue/admission.ts:63` |
+| `step.sleep` / `sleepUntil` | 5 | `rate-recovery`, `quiescence-run`, `coworker-certification`, `async-inference-operation` |
+| `step.waitForEvent` | 2 direct + `gateBetweenSteps` | the gate (`lib/queue/quiescence-gates.ts:134`) waits for `platform.quiescence-cleared`, timeout 30 minutes, and is used by 4 functions |
+| `cancelOn` | 1 | `route-work-item` on `cwq/item.cancelled` |
+| `onFailure` | 1 | `build-execute` |
+| event `id` (send-side dedupe) | 4 send sites | no function-level `idempotency` |
+| `inngest.send` | 47 sites | 44 outside functions, 3 inside |
+| `step.invoke`, `step.sendEvent`, throttle, rateLimit, debounce, batchEvents, priority, singleton, function timeouts, fan-out | **0** | |
+
+Observability already lives in our own tables. `/ops` reports from `TaskRun`, and the stall detector (`lib/queue/functions/taskrun-watchdog.ts`) watches `TaskRun`, not Inngest. Nothing in the codebase reads the Inngest dashboard or its API.
+
+**Conclusion:** we use Inngest as a durable-step executor with cron, simple keyed mutexes, a handful of sleeps and waits, and one cancel. We use none of its flow-control features.
+
+## 3. Research & Benchmarking
+
+Four candidates, measured against what §2 needs. Package facts were taken from the npm registry on 2026-09-25.
+
+| | Inngest self-hosted (today) | pg-boss 12.35 | graphile-worker 0.18 | River |
+|---|---|---|---|---|
+| Runtime | Go server + Redis + Postgres, SDK in portal | library in the portal process | library in the portal process | Go library; the npm `riverqueue` package is an insert-only TypeScript client |
+| Licence | SDK Apache-2.0; **server SSPL-1.0** | MIT | MIT | core MPL-2.0; npm client LGPL-3.0 |
+| Runtime deps | 23 (SDK) | 4 (`pg`, `cron-parser`, `rrule-temporal`, `serialize-error`) | 8, including `yargs`, `cosmiconfig`, `graphile-config` (beta) | n/a for Node workers |
+| Stable releases, last 12 months | SDK 70 | 83 | 5 (pre-1.0) | — |
+| Queue claim | Redis | `SKIP LOCKED` | `SKIP LOCKED` + `LISTEN/NOTIFY` | `SKIP LOCKED` |
+| Cron | yes | yes | yes (crontab) | yes |
+| Retries/backoff | yes | yes | yes (exponential) | yes |
+| Keyed mutex | concurrency keys | `singletonKey` / policies | `job_key` + named queues (serial) | unique jobs |
+| **Memoised steps (`step.run` replay)** | yes | **no** | **no** | no |
+| **`waitForEvent` / `sleep` inside a run** | yes | no | no | no |
+| `cancelOn` | yes | no (cancel by id) | no (remove by key) | cancel by id |
+| Schema ownership | its own DB | own schema, migrates itself | own schema, migrates itself | own migrations |
+
+**What DPF adopts:**
+
+- **The `SKIP LOCKED` claim pattern**, as used by pg-boss, graphile-worker, River and Solid Queue. It is the proven way to run a queue on Postgres without a broker.
+- **graphile-worker's `LISTEN/NOTIFY` wake-up** with a polling fallback. Workers wake within milliseconds without busy polling, and a missed notification costs at most one poll interval. The platform already has a working `pg_notify`/`LISTEN` pair in `lib/work-capsules/activity-events.ts:81,111`.
+- **Inngest's programming model**: `createFunction` plus `step.run` memoisation, `sleep` and `waitForEvent`. 92 files are written against it, and it is the right model for long, resumable, side-effecting workflows.
+
+**What DPF rejects, and why:**
+
+- **Keeping Inngest.** It costs three containers, a second datastore (Redis), a per-step HTTP hop, an SSPL server in every customer install, the largest production dependency root, and a maintenance layer (retention reaper, poison-queue drain, registration retries). We use none of the flow-control features that would justify that cost.
+- **Renting pg-boss or graphile-worker as the engine.** Neither provides memoised steps, in-run sleep, `waitForEvent` or `cancelOn`. Those are exactly the semantics 92 files depend on, so we would still build the durable-step layer ourselves on top.
+  - A rented queue beneath it would add a second schema we do not own (both migrate themselves, outside Prisma and outside our "migration applies cleanly against any data state" rule).
+  - It would also add a dependency with its own cadence: pg-boss released 83 times in 12 months, and graphile-worker is pre-1.0 and depends on a beta config package.
+  - The queue part we would rent is the small part: a claim query, retry bookkeeping, a keyed mutex, and a cron tick that BET-11 already owns.
+- **River.** Workers must be written in Go, and the platform's workflows are TypeScript.
+
+## 4. Recommendation
+
+Own a small durable-job engine, `@dpf/jobs`, on the platform Postgres. Keep the Inngest programming model as its API, so the 125 functions and 47 send sites move by changing an import, not by rewriting.
+
+This is the plan's `own_postgres_jobs` option. The precedent is the same shape as M4: we used a narrow slice of a large rented system, and owning that slice was smaller and safer than renting either the system or a second one.
+
+## 5. Design
+
+### 5.1 API (facade)
+
+`@dpf/jobs` exports a `jobs` client that mirrors the subset in §2:
+
+- `jobs.createFunction({ id, concurrency, retries, cancelOn, onFailure }, trigger, handler)`
+- `step.run(id, fn)`, `step.sleep(id, duration)`, `step.sleepUntil(id, date)`, `step.waitForEvent(id, { event, timeout, if })`
+- `jobs.send(event | event[])`
+
+A type-level test pins the facade to the options in use. Anything outside §2 is a compile error, not a silent no-op.
+
+### 5.2 Tables (Prisma, one migration)
+
+| Table | Purpose | Key columns |
+|---|---|---|
+| `JobEvent` | the event log (replaces Inngest's event store) | `id` (sender-supplied or generated; unique, which gives today's send-side dedupe), `name`, `data jsonb`, `receivedAt` |
+| `JobRun` | one run of one function | `functionKey`, `eventId` (FK to `JobEvent`, restrict), `status` (`queued`, `running`, `sleeping`, `waiting`, `completed`, `failed`, `cancelled`), `attempt`, `runAfter`, `concurrencyKey`, `leaseOwner`, `leaseExpiresAt`, `error` |
+| `JobStep` | memoised step results | `(runId, stepKey)` unique; `output jsonb`; `completedAt` |
+| `JobWait` | a run parked on `waitForEvent` | `runId`, `stepKey`, `eventName`, `matchExpr`, `expiresAt` |
+| `JobConcurrencySlot` | one held concurrency slot (§5.3) | `(laneKey, slot)` unique; `runId`; `acquiredAt` |
+| `JobCronState` | next fire time per cron function (§5.4) | `functionKey` unique; `cron`; `nextFireAt` |
+
+Status is a Prisma enum (AGENTS.md §8). Run history reuses the existing `TaskRun` linkage for `/ops`; `JobRun` is the engine's state, not a second reporting model.
+
+### 5.3 Execution
+
+- **Claim.** `UPDATE "JobRun" SET status='running', leaseOwner=$1, leaseExpiresAt=now()+$2 WHERE id IN (SELECT id FROM "JobRun" WHERE status='queued' AND runAfter<=now() AND <concurrency admissible> ORDER BY runAfter FOR UPDATE SKIP LOCKED LIMIT $n) RETURNING *`.
+- **Concurrency (amended 2026-09-29, phase 2).** §2 counted every config as limit 1; phase 1 found otherwise. Five functions run at limit 2 (`assurance-bom`, `assurance-scan`, `build-review-verification`, `document-renditions`, `eval-background`), `mcp-task-run-execute` at limit 4, and the shared build-pipeline lane (`admission.ts`, `scope: "account"`) takes an operator-set limit. A partial unique index can only express limit 1, so the engine uses **slots**:
+  - A *lane* is one concurrency constraint evaluated for one run: `fn:<functionId>:<keyValue>` for a function-scoped constraint (`keyValue` is the evaluated `key` expression, or empty), `account:<keyValue>` for the shared lane. A run belongs to one lane per constraint it declares (at most two).
+  - `JobConcurrencySlot(laneKey, slot, runId)` is unique on `(laneKey, slot)`. A run holds one slot row per lane while it is `running`.
+  - The claim transaction takes `pg_advisory_xact_lock` on each of the run's lanes in sorted order (no deadlock between two claimers), counts the lane's held slots, and inserts the lowest free slot number below the lane's limit. If any lane is full, the run is skipped this round and stays `queued`. The unique index is the backstop: two claimers can never hold the same slot.
+  - Slots are deleted whenever a run leaves `running` (completed, failed, cancelled, sleeping, waiting) and by lease recovery, so a sleeping or waiting run does not hold capacity, as in Inngest.
+  - Limit 1 is the same mechanism with one slot, so the 78 limit-1 configs need no special case.
+- **Replay.** Each attempt re-invokes the handler from the top. `step.run` looks up `JobStep(runId, stepKey)`: on a hit it returns the stored output without running `fn`; on a miss it runs `fn`, stores the result and continues. Repeated step ids inside one run get Inngest's counter suffix, so replay order matches.
+- **Sleep.** `step.sleep` records the step, sets `runAfter=wakeAt`, sets status `sleeping` and ends the invocation. The claimer picks the run up again after `wakeAt`, and replay skips the steps already done.
+- **`waitForEvent`.** It inserts a `JobWait`, sets status `waiting` and ends the invocation. `jobs.send` inserts the `JobEvent` and, in the same transaction, matches open `JobWait` rows by name and match expression. Each match gets the event stored as that step's output, and its run is set back to `queued`. `pg_notify('dpf_jobs', …)` wakes a worker. On timeout, the wait's step output is `null`, as in Inngest.
+- **`cancelOn`.** A matching event moves the run to `cancelled`. A running handler sees this at its next step boundary.
+- **Retries.** A thrown error increments `attempt` and sets `runAfter=now()+backoff(attempt)` until `retries` is exhausted, then runs `onFailure` and marks the run `failed`.
+- **Lease recovery.** A run whose `leaseExpiresAt` has passed goes back to `queued`. That is the lease-expiry pattern `lib/operate/backups/reconcile-stuck-runs.ts` already uses for backup runs, which the BET-11 notes describe as engine-agnostic.
+- **Workers.** A worker loop in the portal process listens on `dpf_jobs` and polls every few seconds as a fallback. No new container.
+
+### 5.4 Cron
+
+The 74 cron functions register in the BET-11 `ScheduledJob` substrate: one `nextRunAt(schedule)` and one tick. The tick inserts a `JobEvent` per due schedule, so cron runs use the same execution path. This is why M3 is sequenced behind BET-11: the scheduler lands once.
+
+**Amended 2026-09-29, phase 2.** `ScheduledJob.schedule` holds named cadences (`"weekly"`), not cron expressions, and the owned evaluator `computeNextCronRun` (`lib/operate/cron-next-run.ts`) treats a `*` minute or hour as 0 and ignores steps. The cron functions use every-minute, `*/5`, `*/15`, `37 */6 * * *` and long minute lists. So:
+
+- `lib/operate/cron-next-run.ts` gains a full five-field evaluator (`*`, lists, ranges, steps, day-of-month/day-of-week OR as in Vixie cron), exported beside `computeNextCronRun`, whose behaviour for the agent-task scheduler does not change. One module, no second parser, no dependency.
+- A Postgres-routed cron function keeps its `nextFireAt` in `JobCronState`. The worker's tick claims due rows with `FOR UPDATE SKIP LOCKED`, inserts the `inngest/scheduled.timer` event and run in the same transaction, and advances `nextFireAt`. A tick that finds several missed fire times fires once (Inngest does not backfill either).
+- `DPF_SCHEDULED_INNGEST_FUNCTIONS_ENABLED` and the per-job `ScheduledJob.enabled` switch gate the Postgres tick exactly as they gate Inngest crons today.
+
+### 5.5 Engine selection (phase 2)
+
+`DPF_JOBS_ENGINE` selects the engine: `inngest` (default) or `postgres`. `DPF_JOBS_POSTGRES_FUNCTIONS` optionally narrows `postgres` to a comma-separated list of function ids, for the per-domain soak in §6 step 2. Unset, every function stays on Inngest and nothing about today's behaviour changes: the Postgres worker does not start and `jobs.send` goes only to Inngest. With a function routed to Postgres, `jobs.send` writes the `JobEvent` (which starts Postgres-routed runs and resolves waits) and also forwards to Inngest while any function remains there, so an event reaches every function that listens to it regardless of engine.
+
+## 6. Migration
+
+1. **Facade over Inngest.** Introduce `@dpf/jobs` with an Inngest adapter and move every import to it. There is no behaviour change, and CI proves the mechanical move.
+2. **Postgres engine behind a flag, one domain at a time.** A per-function `engine` setting routes a function to Postgres or Inngest. `TaskRun` outcomes and the `taskrun-watchdog` stall detector are the oracle: a domain moves on only after a clean soak.
+3. **Retire.** Remove:
+   - the `inngest` and `redis` services, `redis-exporter` and their image pins;
+   - the `INNGEST_*` env and `scripts/init-inngest-db.sh`;
+   - `lib/operate/inngest-retention/`, `drain-inngest-poison-queue.sh` and self-registration;
+   - the Prometheus job and the status tile;
+   - the `inngest` package, added to the allowlist's `retired` map so it cannot come back without a decision.
+
+**Existing installs.** Runs in flight in Inngest at upgrade time must finish before its container goes. One release carries both engines, with every function on Postgres and Inngest draining. `/ops/self-upgrade` quiescence already waits for in-flight work. The following release removes the containers, and the `inngest` database is dropped a release after that, once a guard confirms it has no unfinished runs. Existing installs converge on the next `/ops/self-upgrade` with no operator step.
+
+### 6.1 Governed scope manifest (phase 2, `BI-85E6EF14`)
+
+**OBJ-M3-PARITY:** With the engine flag unset, job execution is unchanged: every function runs on Inngest exactly as it does today.
+
+**OBJ-M3-SEMANTICS:** A function routed to Postgres gets the facade's durable semantics: memoised steps across replays, sleep, waitForEvent with match and timeout, cancelOn, retries then onFailure, and send-side dedupe.
+
+**OBJ-M3-CONCURRENCY:** Postgres-routed runs never exceed any declared concurrency limit, limit 1 or N, per function key or on the shared account lane.
+
+**OBJ-M3-RECOVERY:** A run interrupted by a process death resumes exactly once, without re-executing a memoised step.
+
+**OBJ-M3-SCHEMA:** The engine's tables arrive in one forward-only migration that applies against any existing data state.
+
+**OBJ-M3-EVIDENCE:** The §7 benchmarks run on real Postgres and their results are recorded in this spec before the flag is turned on anywhere.
+
+| Acceptance ID | Objective IDs | Acceptance statement |
+| --- | --- | --- |
+| AC-M3-FLAG-OFF | OBJ-M3-PARITY | With `DPF_JOBS_ENGINE` unset, the existing job test suites pass unchanged, the Postgres worker does not start, and `jobs.send` reaches only Inngest. |
+| AC-M3-REPLAY | OBJ-M3-SEMANTICS | A step completed in an earlier attempt returns its stored output on replay without calling its function again, including repeated step ids in one run. |
+| AC-M3-PARK | OBJ-M3-SEMANTICS | `sleep`/`sleepUntil` and `waitForEvent` park the run without holding a worker or a concurrency slot; a matching event resumes the wait with that event, and a timeout resumes it with `null`. |
+| AC-M3-FAIL | OBJ-M3-SEMANTICS | A throwing handler retries up to its `retries` count, then runs `onFailure` with the failure event and ends `failed`; a `cancelOn` event ends a queued or running run `cancelled`. |
+| AC-M3-DEDUPE | OBJ-M3-SEMANTICS | Two sends with the same event id start one run per triggered function. |
+| AC-M3-LIMIT | OBJ-M3-CONCURRENCY | Under concurrent claimers, runs holding a slot on a lane never exceed that lane's limit, for limit 1, limit 2, limit 4 and an account lane shared across functions. |
+| AC-M3-LEASE | OBJ-M3-RECOVERY | Killing the worker mid-step, mid-sleep and mid-wait leaves each run to resume once after lease expiry, with its completed steps not re-executed. |
+| AC-M3-MIGRATION | OBJ-M3-SCHEMA | The migration applies cleanly on a fresh schema and on a copy of the live schema, and creates no object that depends on existing rows. |
+| AC-M3-BENCH | OBJ-M3-EVIDENCE | §7 records p50/p99 event-to-first-step latency, claim throughput under an overlapping cron minute, extra WAL and connections, and the kill-drill results, with the verdict for the flag. |
+
+### 6.2 Phase 3 inventory, audited 2026-10-02 (`BI-742D569C`)
+
+Read from `main` after #5898. The facade held: only `apps/web/lib/jobs/{inngest-adapter,serve,types}.ts` import the `inngest` package, and every event, including `platform.quiescence-cleared`, is sent through `jobs.send`, which reaches both engines while any function is still on Inngest. Handlers have no `step.sendEvent`; they send inside a step. What phase 3 removes or repoints beyond step 3 above:
+
+| Area | Where | Phase 3 action |
+|---|---|---|
+| Engine adapter and serve route | `lib/jobs/inngest-adapter.ts`, `lib/jobs/serve.ts`, `app/api/inngest` | Delete; the facade keeps only the Postgres client. |
+| Boot self-registration and its watchdog | `instrumentation.ts` self-sync, `lib/queue/inngest-self-registration`, `lib/queue/job-engine-health.ts` (`INNGEST_REGISTRATION_CONFIG_KEY`, `INNGEST_WATCHDOG_CONFIG_KEY`), `lib/tak/self-upgrade-route-context.ts` | Delete the registration path. Repoint "job engine health" at the Postgres engine: runs past their lease, failure rate, missed cron fires (the checks `scripts/job-engine-soak-report.ts` makes). |
+| Retention of Inngest's own store | `lib/operate/inngest-retention/`, `ops/inngest-retention-sweep-scheduled`, `seed-platform-inngest-retention.ts`, `INNGEST_POSTGRES_URI` | Delete; the engine prunes its own tables (`pruneFinished`). |
+| Self-upgrade error classification | `lib/self-upgrade/admission.ts` matches `Inngest API Error` | Replace with the Postgres send path's errors. |
+| Status tile and monitoring | `components/monitoring/{health-summary,ServiceStatusGrid}`, `lib/observability/monitoring-jobs.ts`, `monitoring/prometheus/*.yml`, `monitoring/alloy/config.alloy` | Drop the Inngest job and target; the background-jobs tile reads the Postgres engine's health. |
+| Compose, installer, release | `docker-compose*.yml` (`inngest`, `redis`, `redis-exporter`, `INNGEST_*`, `INNGEST_SERVE_ORIGIN` in `lib/canonical-host.ts`), `scripts/installer/*`, `scripts/release/verify-compose-image-manifests.mjs`, `.github/workflows/{ci,publish-image,release-gates}.yml` | Remove the services, pins, env and image manifests in the same PR. |
+| Measurements and guards | `scripts/lib/platform-substrate-measurements.mjs`, `scripts/platform-substrate-baseline.json`, `scripts/check-no-direct-job-engine-import.mjs`, `sbom/` | Lower `defaultRequiredServiceCount`; retire the direct-import guard's Inngest case; `node scripts/sbom/check-sbom-drift.mjs --update-baseline`. |
+| Names only | `INNGEST_ID` constants (113 reads), `ScheduledJob` classification, the `inngest/scheduled.timer` cron event name | Keep: they are function ids and event names, not coupling. A rename is cosmetic and out of scope. |
+
+## 7. Benchmarks required before implementation
+
+None of these can be run in a sandbox without Postgres; they are acceptance criteria, not results.
+
+- **Throughput and latency:** event-to-first-step latency at p50 and p99 against today's Inngest on the same host, at 10× the busiest observed hour of `JobEvent`-equivalent traffic, taken from Inngest's `function_runs`.
+- **Lock contention:** claim throughput with 125 functions and 84 concurrency keys under an overlapping cron minute.
+- **Postgres load:** extra WAL and connections, against the portal's existing pool budget.
+- **Failure drills:** kill the portal mid-step, mid-sleep and mid-wait, and prove each run resumes exactly once with memoised steps not re-executed.
+
+If Postgres cannot sustain the load with headroom, that is the evidence for `keep_inngest`, and this spec says so rather than bending the design.
+
+### 7.1 Results, 2026-10-01 (BI-85E6EF14, AC-M3-BENCH)
+
+Measured with `apps/web/scripts/job-engine-bench.ts` against PostgreSQL 16.14 in a disposable database on the install's host (macOS, Docker, host load average about 12 at the time). The script recreates the engine tables from the committed migration. Raw output is in the PR.
+
+**Load target.** The busiest hour in Inngest's own `function_runs` (2026-09-24 to 2026-10-01) was 2026-09-29 19:00 UTC with 7,285 runs, almost all cron. Ten times that is 72,850 runs an hour, about 20.2 a second; the benchmark sends 21 a second.
+
+| Measure | Owned Postgres engine | Inngest today (same host) |
+|---|---|---|
+| Sustained throughput at 10x the busiest hour (120 s, 2,520 events) | 2,520 of 2,520 completed, 21.0 runs/s | not re-measured; it carried 7,285 runs in that hour |
+| Event to first step, p50 / p90 / p99 / max | 10.8 / 17.0 / 99.2 / 210.6 ms | 1.7 / 8.2 / 61.1 ms, from `events.received_at` to `function_runs.run_started_at`, 3,630 event-triggered runs |
+| Claim throughput, 125 functions and 84 concurrency configurations, all 74 crons in one minute plus 500 events, two workers | 574 of 574 runs in 1.2 s (470 runs/s); no slot left held | n/a |
+| WAL per run (one event, one step) | about 4.8 KB | n/a |
+| Connections | 6 at peak (pool plus LISTEN) | Inngest server plus Redis |
+| Kill drills: SIGKILL a worker process mid-step, mid-sleep, mid-wait | each run completed exactly once; the completed step before the kill ran once; only the interrupted step ran again | n/a |
+
+**Reading the latency row.** Inngest's figure stops at its own scheduler marking the run started. It excludes the HTTP round trip to the portal's `/api/inngest` that executes the step, so it understates Inngest's event-to-first-step time. The owned engine's figure ends inside the step. Even so, Inngest's p50 is lower; the owned engine's tail (p99 99 ms) is within the same order. Neither is near the scale of the work these functions do, which is measured in seconds.
+
+**Verdict.** The engine sustains the 10x load with headroom: throughput under contention is about 22 times the target, and every drill passes. That meets the bar in §7 for turning the flag on **per domain for a soak** (§6 step 2, `DPF_JOBS_POSTGRES_FUNCTIONS`), watched through `TaskRun` outcomes and the `taskrun-watchdog`. It does not by itself justify a fleet-wide flip: that needs the soak, and the latency gap above should be re-measured on a production-shaped install before Inngest retires (phase 3).
+
+### 7.2 Soak plan (phase 2 → phase 3 gate, `BI-66D2BB3F`)
+
+The flag moves functions in batches. Each batch runs for **72 hours** (three passes of every daily cron) before the next is added. The live install has carried the engine code and its migration since the 2026-10-02 self-upgrade, so a batch needs only the operator's `.env` change and a portal restart (§5.5).
+
+**How a batch is judged.** `pnpm --filter web exec tsx scripts/job-engine-soak-report.ts --hours 72` reads only the engine tables and exits non-zero on any breach:
+- a run `running` more than 10 minutes past its lease (lease recovery failed);
+- more than 2% of a function's finished runs failed;
+- a cron fire with no event within 5 minutes of its scheduled time;
+- no engine runs at all in the window, which proves nothing.
+
+Alongside it, the `taskrun-watchdog` must raise no stall for a moved function. A breach stops the soak until it is explained.
+
+| Batch | Functions | Why this order |
+|---|---|---|
+| 1 | `queue/metrics-aggregator`, `skills/metrics-aggregator`, `business/metrics-aggregator`, `ops/log-signature-scanner`, `ops/code-graph-reconcile-scheduled`, `wiki/lint-daily`, `ops/mcp-call-efficiency-scan` | Cron only; each re-derives its output on the next pass, so a missed or doubled run costs nothing lasting. Fires every 15 minutes to daily, so 72 hours gives hundreds of runs, and `code-graph-reconcile` exercises a concurrency lane. |
+| 2 | The remaining cron functions without `waitForEvent`, `sleep`, `cancelOn` or `invoke`, except those in batch 4 | Widens cron coverage to the 75-function set the 2026-10-02 catalog found. |
+| 3 | Event-driven functions, including those that park on `waitForEvent` or `sleep` and those with `cancelOn` | Exercises send routing to both engines and parked runs across a portal restart. |
+| 4 | `ops/self-upgrade-scheduled`, `ops/self-upgrade-manual`, `ops/quiescence-run`, `ops/taskrun-watchdog`, `ops/postgres-daily-backup-scheduled`, `ops/all-backups-daily-scheduled`, `ops/postgres-backup-requested` | Last, because they guard upgrades, stalls and backups. |
+
+After batch 4 the engine runs everything (`DPF_JOBS_ENGINE=postgres` with `DPF_JOBS_POSTGRES_FUNCTIONS` empty) for **7 days** with the report passing. That is the phase 3 gate. Re-measure event-to-first-step latency on the live install during that week.
+
+**Rollback.** Remove the ids from `DPF_JOBS_POSTGRES_FUNCTIONS`, or unset `DPF_JOBS_ENGINE`, and restart the portal. Boot self-registration hands the functions back to Inngest. A run still `queued` in `JobRun` for a returned function stays there and does not run; for a cron that is one skipped pass.
+
+
+## 8. Decision inputs (`principle_decide`)
+
+- **Options:** `own_postgres_jobs` (§4), `keep_inngest`, `rent_pg_boss`.
+- **Axes:** `operational_independence`, `vendor_lock_in`, `long_term_maintainability`, `blast_radius`, `operator_effort`.
+
+Magnitudes as this spec reads them, for the decision to test (on cost axes, higher is worse):
+
+| | own_postgres_jobs | keep_inngest | rent_pg_boss |
+|---|---|---|---|
+| operational_independence | high: no extra containers or datastores | low: 3 containers, Redis, SSPL server | high |
+| vendor_lock_in (cost) | low | high: SDK model plus server | medium: its schema and cadence; still needs our step layer |
+| long_term_maintainability | medium: we own about the §5.3 surface | medium: we already maintain a reaper, drain and registration layer | lower: two layers, one not ours |
+| blast_radius (cost) | high during migration; mitigated by §6 | none now | high, plus a second migration surface |
+| operator_effort (cost) | low after retirement | medium: poison queue, retention, registration | low |
+
+## 9. Out of scope
+
+- Flow-control features the platform does not use (§2).
+- Moving the event-to-workflow authoring model (BI-8E07CCA5 / BI-D80D16C4). The facade keeps today's model; a new authoring model can target `@dpf/jobs` later.
+- Neo4j/Qdrant retirement (BET-5), which has its own spec.

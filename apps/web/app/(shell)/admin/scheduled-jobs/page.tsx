@@ -1,4 +1,7 @@
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { namespaceMessages } from "@dpf/i18n";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 
 import { listScheduledJobsAction } from "@/lib/actions/scheduled-jobs";
 
@@ -19,6 +22,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function ScheduledJobsAdminPage() {
   const jobs = await listScheduledJobsAction();
+  const { language } = await getLocaleContext();
 
   return (
     <div>
@@ -31,7 +35,9 @@ export default async function ScheduledJobsAdminPage() {
 
       <AdminTabNav />
 
-      <ScheduledJobsClient initialJobs={jobs} />
+      <MessagesProvider locale={language} messages={{ admin: namespaceMessages(language, "admin") }}>
+        <ScheduledJobsClient initialJobs={jobs} />
+      </MessagesProvider>
     </div>
   );
 }

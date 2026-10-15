@@ -4,16 +4,34 @@ import {
   agentHasAnyGrant,
   governedExecuteTool,
   registerToolLifecycleHook,
-} from "./mcp-governed-execute";
-import type {
-  AuthorityApprovalEnvelopeCreate,
-  AuthorityApprovalEnvelopeFinalize,
-  AuthorityApprovalTaskResume,
+  type AuthorityApprovalEnvelopeCreate,
+  type AuthorityApprovalEnvelopeFinalize,
+  type AuthorityApprovalTaskResume,
 } from "./mcp-governed-execute";
 import type { CoworkerAuthorityInput } from "./govern/authority/coworker-authority-decision";
-import type { ToolResult } from "./mcp-tools";
+import type { ToolResult } from "./mcp-tool-types";
+import type { RoomParticipantInvitationPreflight } from "./work-management/room-participant-invitation-preflight.server";
 import { registerCoworkerAuthorityCases } from "./mcp-governed-execute-authority.cases";
 import { registerWorkroomAliasCases } from "./mcp-governed-execute-alias.cases";
+import { registerRefusalDurationCases } from "./mcp-governed-execute-refusal-duration.cases";
+
+const preflightMocks = vi.hoisted(() => {
+  const roomItem = {
+    id: "WI-1", itemId: "BI-1", sourceType: "backlog-item", sourceId: "BI-1",
+    title: "Room", evidence: null, assignedToAgentId: null, assignedToUserId: null,
+  };
+  return {
+    roomItem,
+    workroomTargetAccessRefusal: vi.fn(async () => null as ToolResult | null),
+    preflightRoomParticipantInvitation: vi.fn<() => Promise<RoomParticipantInvitationPreflight>>(async () => ({
+      verdict: "allow" as const, agentId: "AGT-100",
+      caseKey: "backlog-item:BI-1", item: roomItem,
+    })),
+  };
+});
+
+vi.mock("./work-capsules/oauth-workroom-ownership", () => ({ workroomTargetAccessRefusal: preflightMocks.workroomTargetAccessRefusal }));
+vi.mock("./work-management/room-participant-invitation-preflight.server", () => ({ preflightRoomParticipantInvitation: preflightMocks.preflightRoomParticipantInvitation }));
 type AuditRow = Record<string, unknown>;
 function captureAudit(rows: AuditRow[]) { return async (data: AuditRow) => { rows.push(data); }; }
 const NORMAL_USER = { platformRole: "ceo", isSuperuser: true };
@@ -28,9 +46,7 @@ type ExecuteFn = (
     taskRunId?: string;
   },
 ) => Promise<ToolResult>;
-let auditRows: AuditRow[];
-let receiptRows: AuditRow[];
-let authorityRows: AuditRow[];
+let auditRows: AuditRow[], receiptRows: AuditRow[], authorityRows: AuditRow[];
 let executeMock: ReturnType<typeof vi.fn> & ExecuteFn;
 let approvalEnvelopeCreate: AuthorityApprovalEnvelopeCreate;
 let approvalTaskResume: AuthorityApprovalTaskResume;
@@ -107,15 +123,19 @@ function applyAuthorityOverrides(
     authorityApprovalTaskResume: approvalTaskResume,
     authorityApprovalEnvelopeFinalize: approvalEnvelopeFinalize,
     policyAuthorityProjectionAttempt: async () => ({ outcome: "not-authorized" }),
-    policyAuthorityEnvelopeReserve: async () => true, authorityExecutedOutcome: async () => null,
+    policyAuthorityEnvelopeReserve: async () => true, authorityExecutedOutcome: async () => null, toolPreflight: async () => null,
     ...overrides,
   });
 }
 
 beforeEach(() => {
-  auditRows = [];
-  receiptRows = [];
-  authorityRows = [];
+  preflightMocks.workroomTargetAccessRefusal.mockReset(); preflightMocks.workroomTargetAccessRefusal.mockResolvedValue(null);
+  preflightMocks.preflightRoomParticipantInvitation.mockReset();
+  preflightMocks.preflightRoomParticipantInvitation.mockResolvedValue({
+    verdict: "allow", agentId: "AGT-100",
+    caseKey: "backlog-item:BI-1", item: preflightMocks.roomItem,
+  });
+  auditRows = []; receiptRows = []; authorityRows = [];
   executeMock = vi.fn(
     async (): Promise<ToolResult> => ({
       success: true,
@@ -142,7 +162,7 @@ beforeEach(() => {
     authorityApprovalTaskResume: approvalTaskResume,
     authorityApprovalEnvelopeFinalize: approvalEnvelopeFinalize,
     policyAuthorityProjectionAttempt: async () => ({ outcome: "not-authorized" }),
-    policyAuthorityEnvelopeReserve: async () => true, authorityExecutedOutcome: async () => null,
+    policyAuthorityEnvelopeReserve: async () => true, authorityExecutedOutcome: async () => null, toolPreflight: async () => null,
   });
 });
 
@@ -159,7 +179,7 @@ afterEach(() => {
     authorityApprovalTaskResume: null,
     authorityApprovalEnvelopeFinalize: null,
     policyAuthorityProjectionAttempt: null,
-    policyAuthorityEnvelopeReserve: null, authorityExecutedOutcome: null,
+    policyAuthorityEnvelopeReserve: null, authorityExecutedOutcome: null, toolPreflight: null,
   });
 });
 
@@ -324,11 +344,9 @@ describe("governedExecuteTool — happy path", () => {
   });
 
   it("forwards caller attribution and effective token scope into executeTool (BI-0EEBA669)", async () => {
-    // Regression: governedExecuteTool built the executeTool context from only
-    // {agentId, threadId, routeContext, taskRunId, featureBuildId} and dropped
-    // the three caller-attribution fields, so every principle_decide consult
-    // recorded an all-null caller and the decision ledger could not match a
-    // decision back to the client/thread that made it.
+    // Regression: the executeTool context dropped the caller-attribution fields, so
+    // every principle_decide consult recorded an all-null caller. BI-FAD98137: the
+    // turn's coworkerMode must also reach the handler, or a delegated child runs wider.
     await governedExecuteTool({
       toolName: "query_backlog",
       rawParams: { status: "open" },
@@ -341,6 +359,7 @@ describe("governedExecuteTool — happy path", () => {
         apiTokenId: "tok_xyz",
         authSource: "pat",
         tokenScope: "admin",
+        coworkerMode: "advise",
       },
       source: "external-jsonrpc",
     });
@@ -355,6 +374,7 @@ describe("governedExecuteTool — happy path", () => {
         authSource: "pat",
         tokenScope: "admin",
         threadId: "thread-9",
+        coworkerMode: "advise",
       }),
     );
   });
@@ -438,40 +458,20 @@ describe("governedExecuteTool — happy path", () => {
     );
   });
 });
-
+registerRefusalDurationCases({ auditRows: () => auditRows, applyOverrides: applyAuthorityOverrides, normalUser: NORMAL_USER, executionCalls: () => executeMock.mock.calls });
 describe("governedExecuteTool — rejection paths", () => {
-  registerWorkroomAliasCases({ executionCalls: () => executeMock.mock.calls, auditRows: () => auditRows });
-
-  it("returns unknown_tool without invoking executeTool", async () => {
-    const result = await governedExecuteTool({
-      toolName: "totally_made_up_tool",
-      rawParams: {},
-      userId: "u",
-      userContext: NORMAL_USER,
-      source: "rest",
-    });
-    expect(result.success).toBe(false);
-    expect(result.error).toBe("unknown_tool");
-    expect(executeMock).not.toHaveBeenCalled();
-    // unknown_tool is rejected before audit write
-    expect(auditRows).toHaveLength(0);
-  });
-
-  it("rejects on forbidden_capability and audits the failure", async () => {
-    const lowPrivilege = { platformRole: "viewer", isSuperuser: false };
-    const result = await governedExecuteTool({
-      toolName: "create_backlog_item",
-      rawParams: { title: "x", type: "product", source: "user-request" },
-      userId: "u",
-      userContext: lowPrivilege,
-      source: "rest",
-    });
-    // viewer doesn't have manage_backlog
-    expect(result.success).toBe(false);
-    expect(result.error).toBe("forbidden_capability");
-    expect(executeMock).not.toHaveBeenCalled();
-    expect(auditRows).toHaveLength(1);
-    expect(auditRows[0]?.success).toBe(false);
+  registerWorkroomAliasCases({
+    executionCalls: () => executeMock.mock.calls, auditRows: () => auditRows,
+    applyOverrides: applyAuthorityOverrides, authorityInput, normalUser: NORMAL_USER,
+    executeMock: () => executeMock, approvalEnvelopeCreate: () => approvalEnvelopeCreate,
+    authorityRows: () => authorityRows,
+    setOAuthRefusalResults: (results) => {
+      preflightMocks.workroomTargetAccessRefusal.mockReset();
+      for (const result of results) preflightMocks.workroomTargetAccessRefusal.mockResolvedValueOnce(result);
+    },
+    oauthRefusalCalls: () => preflightMocks.workroomTargetAccessRefusal.mock.calls,
+    setInvitationPreflightResult: (result) => preflightMocks.preflightRoomParticipantInvitation.mockResolvedValue(result),
+    invitationPreflightCalls: () => preflightMocks.preflightRoomParticipantInvitation.mock.calls,
   });
 });
 

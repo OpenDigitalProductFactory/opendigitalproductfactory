@@ -15,6 +15,34 @@ any success claim, and dpf-pr-with-dco for handoff.
 
 ## Sequence and delivery boundaries
 
+### Preserve the approved connector during toolchain convergence
+
+BI-B986A18B / BI-9369DEB5, workroom WC-EE471770. Existing-connection
+verification observed the saved Codex endpoint change from supported loopback
+HTTP to HTTPS localhost, where metadata discovery failed certificate validation.
+The invoking writer is not established. Source inspection found two paths that
+can overwrite the endpoint: the updater's implicit default and the installer
+resolver's preference for PUBLIC_URL over an explicit DPF_MCP_URL.
+
+1. First fail updater endpoint-preservation and PowerShell/Bash precedence tests.
+2. Refactor the existing Codex table writer to preserve its saved URL when no
+   CLI or environment endpoint is named; retain the HTTPS default for new setup.
+   Explicit CLI or environment endpoint selection still replaces the saved URL.
+3. Give the explicit process endpoint precedence in the shared installer twins.
+   Preserve install-origin and saved-user fallbacks, CA selection and credentials.
+   Bootstrap must also select the saved Codex endpoint before those defaults
+   when no process endpoint is named. Reuse the updater's read-only URL reader
+   so probes, persistence and the existing planner receive the same choice.
+   Verify both real adapter blocks in temporary homes, including fresh setup
+   and explicit replacement; unreadable saved configuration must fail safely.
+4. Verify isolated-home updater reruns and both real shell resolvers, document
+   recovery, then renew exact-source gate and independent review before release.
+5. Verify canonical delivery and the complete OAuth acceptance matrix. A config
+   repair or successful login alone does not establish acceptance.
+
+Convergence: operator-action — rerun the supported toolchain updater/bootstrap
+after the canonical source upgrade; existing user endpoint choices are preserved.
+
 ### Live acceptance follow-up: coworker data access
 
 Workroom WC-BDBAFFC7; decision DI-A8F0093A0CAF. On deployed 5c52f711,
@@ -190,3 +218,58 @@ These checks are silent authorization checks, not repeated OAuth approvals.
 The refreshed main branch supplies the POSIX-mode capability probe for PKI
 fixtures. This repair reuses that checked-in host correction. Windows skips
 remain distinct from Linux policy-guard evidence.
+
+### Queued OAuth expiry and recovery repair — BI-1E56D891
+
+Implementation admission IRD-656F1D546638 covers this bounded follow-up.
+Preserve the published isolated-persona design on its separate branch; this
+repair needs no fixture schema or grant change.
+
+1. Reproduce quiet-client expiry and terminal replay flags with failing tests.
+2. Extend the shared execution-authority resolver with exact refresh-family
+   continuity. Keep inbound bearer validity and every current consent check.
+3. Isolate a narrow historical-review recovery helper, reused from exact
+   request replay. Preserve task identity, failure evidence and retry counters;
+   reserve one recovery atomically. Consolidating authority/recovery checks is
+   the focused refactor portion (approximately 20% of effort).
+4. Verify revoked/expired refresh family, consent and human denial; wrong
+   family, canceled/completed tasks, recorded writes, prior recovery and races.
+5. Run affected source tests/typecheck, source preflight and the shared gate;
+   publish through the protected PR/release path. Retry the original review
+   only after upgrade, then prove quiet-client queued continuity on the live
+   install. Source tests are not completion of parent V6/V7/V9 acceptance.
+
+### Owned fixture origin recovery
+
+Live verification on October 12 found that an owned active lease for
+`http://127.0.0.1:3000` receives the generic lease refusal when the fixture
+tool's configured origin is `http://localhost:3000`. Reading installation
+settings through a broad command then required human approval unnecessarily.
+
+Separate the origin diagnostic after the existing ownership, branch and expiry
+checks. Tell the authorized caller which origin its verification lease must use
+and leave its MCP connection unchanged. Do not disclose that diagnostic for a
+foreign or expired lease, change origin matching, or widen fixture authority.
+First reproduce the opaque owned-lease refusal, then verify the recovery text
+and unchanged foreign-lease refusal with the related provisioning tests.
+
+### Persist the selected loopback endpoint
+
+BI-D4BB5AE3 and BI-9F258707 retain the toolchain convergence work. The
+current source at 53fd5e971901d993dc7ebe069943e0bff96fa08c rejects a
+selected HTTP endpoint in both persistence adapters, while an HTTPS install
+origin takes precedence over a saved user preference. This is a reproduced
+source defect, not proof of which writer changed the host at 19:57.
+
+1. Reproduce saved-preference displacement and missing loopback persistence
+   with temporary homes and mocked Windows User writes.
+2. Reuse the existing shared client-environment modules: explicit process
+   selection first, then saved user preference, then the HTTPS install default.
+   Keep the bootstrap's saved-client selection and explicit override semantics.
+3. Persist HTTPS and supported loopback HTTP selections without changing
+   credentials, certificate trust, or non-loopback HTTP policy. Preserve the
+   exact selected URL, unrelated CA settings and idempotence.
+4. Correct bootstrap transport reporting and the endpoint-precedence runbook.
+   Run the affected multi-platform adapter and updater tests, then normal
+   governed publication checks. Actual installed convergence and OAuth live
+   acceptance remain required after canonical deployment.

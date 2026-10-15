@@ -8,11 +8,36 @@
 // shared platform-dev-config server action that also backs the in-portal Apply
 // Update button, so both surfaces produce identical merge behavior.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import type { RuntimeReconciliationIntent } from "@/lib/platform-runtime/transition-protocol";
+import { PLATFORM_UPDATE_TOOL_GRANTS } from "@/lib/tak/platform-update-tool-grants";
 
 const definitions: ToolDefinition[] = [
+  {
+    name: "preview_runtime_capability_reconciliation",
+    description: "Read this install's validated host capability snapshot and complete saved capability settings. Reports disagreement without selecting desired settings, reserving authority or changing services. Use the returned baseline to prepare an explicit reconciliation request.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    requiredCapability: "manage_platform", executionMode: "immediate", sideEffect: false,
+  },
+  {
+    name: "reconcile_runtime_capabilities",
+    description: "Apply explicitly chosen runtime settings using the original preview's separate host and saved-state baselines. Supply complete desired saved states, desired host keys and the keys whose saved state may change. Untouched settings are preserved. Changed baselines, incompatible packaged code or attributed active work refuse the apply. Retain the transition id for recovery; never create another request to bypass uncertainty.",
+    inputSchema: { type: "object", additionalProperties: false, required: ["transitionId", "reconciliation"], properties: {
+      transitionId: { type: "string", pattern: "^RCT-[A-Za-z0-9-]+$" },
+      reconciliation: { type: "object", additionalProperties: false, required: ["observedHost", "observedDatabaseStates", "desiredHostEnabledKeys", "desiredDatabaseStates", "touchedKeys"], properties: {
+        observedHost: { type: "object", description: "The complete validated host snapshot returned by the preview; preserve every field." },
+        observedDatabaseStates: { type: "object", additionalProperties: { type: "string" } },
+        desiredHostEnabledKeys: { type: "array", uniqueItems: true, items: { type: "string", pattern: "^runtime:[a-z0-9-]+$" } },
+        desiredDatabaseStates: { type: "object", additionalProperties: { type: "string" } },
+        touchedKeys: { type: "array", uniqueItems: true, items: { type: "string", pattern: "^runtime:[a-z0-9-]+$" } },
+      } },
+    } },
+    // Changing executable host capabilities changes the install's authority.
+    requiredCapability: "manage_platform", executionMode: "immediate", sideEffect: true,
+    consequence: "authority", consequenceScope: "platform",
+  },
   {
     name: "apply_platform_update",
     description: "Merge the new platform version into your customised source. Returns a clean merge or a list of conflicts for the AI coworker to resolve with you.",
@@ -132,11 +157,22 @@ export const platformUpdatePack: ToolPack = {
   packId: "platform-update",
   definitions,
   handlers: {
+    preview_runtime_capability_reconciliation: async (_params, userId) => {
+      try {
+        const { previewRuntimeCapabilityReconciliationForActor } = await import("@/lib/platform-runtime/runtime-capability-commands");
+        return { success: true, message: "Runtime capability baselines observed; no settings changed.", data: await previewRuntimeCapabilityReconciliationForActor(userId) };
+      } catch (error) { return { success: false, message: "Runtime capability preview is unavailable.", error: getErrorMessage(error) }; }
+    },
+    reconcile_runtime_capabilities: async (params, userId) => {
+      try {
+        const { requestRuntimeCapabilityTransitionForActor } = await import("@/lib/platform-runtime/runtime-capability-commands");
+        const intent = structuredClone(params.reconciliation) as RuntimeReconciliationIntent;
+        const result = await requestRuntimeCapabilityTransitionForActor({ transitionId: params.transitionId as string, desiredKeys: [...intent.desiredHostEnabledKeys], mode: "reconciliation", reconciliation: intent }, userId);
+        return { success: result.status === "succeeded", message: result.status === "succeeded" ? "Runtime capability reconciliation completed." : "Runtime capability reconciliation is not complete; retain this request for recovery.", data: result };
+      } catch (error) { return { success: false, message: "Runtime capability reconciliation refused or requires recovery.", error: getErrorMessage(error) }; }
+    },
     apply_platform_update: applyPlatformUpdateTool,
     summarize_upgrade_impact: summarizeUpgradeImpactTool,
   },
-  grants: {
-    apply_platform_update: ["admin_write"],
-    summarize_upgrade_impact: ["admin_read"],
-  },
+  grants: PLATFORM_UPDATE_TOOL_GRANTS,
 };

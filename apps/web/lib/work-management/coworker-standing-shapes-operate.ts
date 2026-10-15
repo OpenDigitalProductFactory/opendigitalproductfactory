@@ -62,6 +62,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
             + "the missing ones are named. A period that cannot name what is missing does not advance.",
         },
         evidence: ["source-document-set"],
+        tools: ["list_bank_accounts", "get_bank_transactions"],
       },
       {
         key: "import",
@@ -86,6 +87,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
             + "a named exception. Silence is not a category.",
         },
         evidence: ["exception-list"],
+        tools: ["get_bank_transactions", "suggest_transaction_matches", "list_bank_rules"],
       },
       {
         key: "reconcile",
@@ -98,6 +100,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
             + "attributed to named exceptions.",
         },
         evidence: ["reconciliation"],
+        tools: ["get_reconciliation_summary", "get_bank_transactions"],
       },
       {
         key: "owner-close",
@@ -359,6 +362,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
             + "cited. An unsourced condition is dropped, not softened.",
         },
         evidence: ["assurance-run"],
+        tools: ["search_public_web", "fetch_public_website"],
       },
       {
         key: "file",
@@ -371,6 +375,7 @@ export const COWORKER_STANDING_SHAPES_OPERATE: Record<string, WorkShapeDefinitio
             + "Filing is the ceiling of this stage — nothing is scheduled or committed.",
         },
         evidence: ["backlog-items"],
+        tools: ["query_backlog", "find_duplicate_candidates"],
       },
       {
         key: "decide",

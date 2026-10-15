@@ -462,7 +462,6 @@ export async function orchestrateDeliberation(
   const adjudicatorRole = pattern.defaultRoles.find(
     (r) => r.roleId === "adjudicator",
   );
-  let adjudicatorNodeDbId: string | null = null;
   if (adjudicatorRole && adjudicatorRole.required) {
     const { nodeType, workerRole } = mapRoleToNode("adjudicator");
     const envelope = computeBranchAuthorityEnvelope(
@@ -484,7 +483,6 @@ export async function orchestrateDeliberation(
       },
       select: { id: true },
     });
-    adjudicatorNodeDbId = adjNode.id;
     branchRecords.push({
       branchNodeId: adjNode.id,
       role: "adjudicator",

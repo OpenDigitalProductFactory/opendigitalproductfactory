@@ -10,7 +10,7 @@ import {
   readSheetMatrix,
   type SheetCell,
 } from "./sheet-import";
-import { buildXlsx } from "@/components/workbooks/grid-xlsx";
+import { odsWithRows } from "../shared/__fixtures__/odf-package";
 
 describe("inferFieldType", () => {
   it("detects number, checkbox, date, and falls back to text", () => {
@@ -83,10 +83,11 @@ describe("unreadableSheetReason (BI-65D65EC0)", () => {
   });
 });
 
-describe("readSheetMatrix: converter-backed sheet import (BI-81524041)", () => {
+describe("readSheetMatrix: engine-backed sheet import (BI-81524041, BI-D1B40D43)", () => {
   const fixture = (name: string) => readFileSync(resolve(__dirname, "../shared/__fixtures__/office", name));
   const MATRIX = [["Name", "Breed"], ["Biscuit", "Beagle"]];
-  const readSheet = vi.fn(async (_input: ArrayBuffer): Promise<SheetCell[][]> => MATRIX);
+  const engine = () => vi.fn(async (_request: { from: string; to: string }) => ({ ok: true as const, data: { bytes: odsWithRows(MATRIX), mime: "x" } }));
+  const xlsxHead = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(26), Buffer.from("[Content_Types].xml xl/workbook.xml")]);
 
   function odsBytes(): Buffer {
     const name = Buffer.from("mimetype", "latin1");
@@ -97,52 +98,43 @@ describe("readSheetMatrix: converter-backed sheet import (BI-81524041)", () => {
     return Buffer.concat([header, name, body]);
   }
 
-  it("converts a legacy .xls to .xlsx, then reads it with the existing sheet reader", async () => {
-    const converted = Buffer.from("converted xlsx");
-    const convert = vi.fn(async () => ({ ok: true as const, data: { bytes: converted, mime: "x" } }));
-    const result = await readSheetMatrix(fixture("roster.xls"), "roster.xls", { convert, readSheet });
-    expect(result).toEqual({ ok: true, data: MATRIX });
-    expect(convert).toHaveBeenCalledWith(expect.objectContaining({ from: "xls", to: "xlsx" }));
-    expect(Buffer.from(readSheet.mock.calls.at(-1)![0]).toString()).toBe("converted xlsx");
+  it("converts .xlsx, a legacy .xls and an .ods to .ods, then reads the first sheet", async () => {
+    for (const [bytes, name, from] of [[xlsxHead, "roster.xlsx", "xlsx"], [fixture("roster.xls"), "roster.xls", "xls"], [odsBytes(), "roster.ods", "ods"]] as const) {
+      const convert = engine();
+      expect(await readSheetMatrix(bytes, name, { convert })).toEqual({ ok: true, data: MATRIX });
+      expect(convert).toHaveBeenCalledWith(expect.objectContaining({ from, to: "ods" }));
+    }
   });
 
-  it("converts an OpenDocument spreadsheet the same way", async () => {
-    const convert = vi.fn(async () => ({ ok: true as const, data: { bytes: Buffer.from("x"), mime: "x" } }));
-    const result = await readSheetMatrix(odsBytes(), "roster.ods", { convert, readSheet });
-    expect(result.ok).toBe(true);
-    expect(convert).toHaveBeenCalledWith(expect.objectContaining({ from: "ods", to: "xlsx" }));
+  it("keeps the typed cells of the engine's sheet", async () => {
+    const convert = vi.fn(async () => ({ ok: true as const, data: { bytes: odsWithRows([["Name", "Age"], ["Biscuit", 3]]), mime: "x" } }));
+    expect(await readSheetMatrix(xlsxHead, "roster.xlsx", { convert })).toEqual({ ok: true, data: [["Name", "Age"], ["Biscuit", 3]] });
   });
 
-  it("keeps S0's plain-language reason when the converter is unavailable", async () => {
+  it("sends a workbook the sniffer cannot place to the engine as .xlsx", async () => {
+    const convert = engine();
+    expect((await readSheetMatrix(Buffer.from("not a zip"), "roster.xlsx", { convert })).ok).toBe(true);
+    expect(convert).toHaveBeenCalledWith(expect.objectContaining({ from: "xlsx", to: "ods" }));
+  });
+
+  it("gives a plain-language reason when the converter is unavailable", async () => {
     const convert = vi.fn(async () => ({ ok: false as const, error: "not configured", reason: "converter-unavailable" as const }));
-    const result = await readSheetMatrix(fixture("roster.xls"), "roster.xls", { convert, readSheet });
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("expected a refusal");
-    expect(result.error).toMatch(/Excel 97-2003/);
+    const legacy = await readSheetMatrix(fixture("roster.xls"), "roster.xls", { convert });
+    expect(legacy).toMatchObject({ ok: false, error: expect.stringMatching(/Excel 97-2003/) });
+    const current = await readSheetMatrix(xlsxHead, "roster.xlsx", { convert });
+    expect(current).toMatchObject({ ok: false, error: expect.stringMatching(/Excel workbook \(\.xlsx\)/) });
   });
 
-  it("reads an .xlsx directly and refuses a Word file, without calling the converter", async () => {
+  it("refuses a Word file offered as a sheet without calling the converter", async () => {
     const convert = vi.fn();
-    const xlsxHead = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(26), Buffer.from("[Content_Types].xml xl/workbook.xml")]);
-    expect(await readSheetMatrix(xlsxHead, "roster.xlsx", { convert, readSheet })).toEqual({ ok: true, data: MATRIX });
-    const word = await readSheetMatrix(fixture("plan.docx"), "plan.docx", { convert, readSheet });
+    const word = await readSheetMatrix(fixture("plan.docx"), "plan.docx", { convert });
     expect(word).toMatchObject({ ok: false, error: expect.stringMatching(/not a spreadsheet/) });
+    expect((await readSheetMatrix(fixture("plan.doc"), "plan.doc", { convert })).ok).toBe(false);
     expect(convert).not.toHaveBeenCalled();
   });
 
-  it("does not hand a converted Word file to the sheet reader", async () => {
-    const convert = vi.fn();
-    const result = await readSheetMatrix(fixture("plan.doc"), "plan.doc", { convert, readSheet });
-    expect(result.ok).toBe(false);
-    expect(convert).not.toHaveBeenCalled();
-  });
-});
-
-describe("readSheetMatrix with the real .xlsx reader", () => {
-  // No reader is injected: this is the code path the import actions run on the
-  // server, where there is no DOMParser (read-excel-file/browser needs one).
-  it("reads a real .xlsx in Node", async () => {
-    const bytes = buildXlsx([["Name", "Breed"], ["Biscuit", "Beagle"]]);
-    expect(await readSheetMatrix(bytes, "roster.xlsx")).toEqual({ ok: true, data: [["Name", "Breed"], ["Biscuit", "Beagle"]] });
+  it("names a converted file it cannot read instead of throwing", async () => {
+    const convert = vi.fn(async () => ({ ok: true as const, data: { bytes: Buffer.from("not an ods"), mime: "x" } }));
+    expect(await readSheetMatrix(xlsxHead, "roster.xlsx", { convert })).toMatchObject({ ok: false, error: expect.stringMatching(/could not read this workbook/) });
   });
 });

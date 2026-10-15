@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 // Harness lives in promote-script-functional.test-support.ts; the cleanup
 // sweep suite lives in promote-script-cleanup.test.ts.
 
-import { BASH_OK, GIT_OK, PROMOTE_TEST_TIMEOUT_MS, makeScratch, runPromote, toBashPath } from "./promote-script-functional.test-support";
+import { BASH_OK, GIT_OK, PROMOTE_TEST_TIMEOUT_MS, makeScratch, promoteDiagnostics, runPromote, toBashPath } from "./promote-script-functional.test-support";
 
 describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run", () => {
   it.each([
@@ -43,6 +43,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
         "docker-compose.release.yml",
         "scripts/lib/resolve-capability-compose-profiles.mjs",
         "scripts/lib/govern-capability-compose-args.mjs",
+        "scripts/lib/script-argv.mjs",
         "scripts/lib/capability-state-hash.mjs",
         "scripts/capability-service-catalog.generated.json",
       ]) {
@@ -86,7 +87,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
         platformArchitecture, enginePlatformArchitecture, frozenStrata, repoImageId, registryConfigDigest, duplicatePlatform, candidateAssets, gitLog,
       };
       const r = runPromote({ source, installRoot, backup, targetSha, fakeBin, dockerLog, composeEnvFile: join(installRoot, ".env"), release });
-      expect(r.status, r.stderr).toBe(expectedStatus);
+      expect(r.status, promoteDiagnostics(r, { "docker.log": dockerLog, "candidate assets": candidateAssets, backup })).toBe(expectedStatus);
       if (expectedStatus !== 0) {
         expect(r.stderr).toMatch(/(?:missing required variables|not a pulled repository digest|could not resolve an immutable|resolved config digest .* does not match|does not match resolved (?:config\/platform\/channel identities|candidate linux\/amd64))/);
         return;
@@ -114,6 +115,41 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       rmSync(root, { recursive: true, force: true });
     }
   }, PROMOTE_TEST_TIMEOUT_MS);
+  // BI-F9EE05E5 plan item 0: the image is built before the drain, so the
+  // portal refuses new work only for the swap.
+  it("PROMOTE_PHASE=build builds the image and stops: no backup, migration, recreate or state write", () => {
+    const { root, source, backup, fakeBin, head } = makeScratch();
+    try {
+      const statePath = join(backup, "state", "install-state.json");
+      const stateBefore = readFileSync(statePath, "utf8");
+      const dockerLog = join(root, "docker.log");
+      const r = runPromote({ source, backup, targetSha: head, fakeBin, dockerLog, phase: "build" });
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain(`step=prebuild-docker-build target=${head}`);
+      expect(r.stdout).toContain(`step=prebuild-done target=${head}`);
+      expect(r.stdout).not.toMatch(/step=(?:prebuild-)?(?:migrate|docker-up|health|sha-verify)\b/);
+      const calls = readFileSync(dockerLog, "utf8");
+      expect(calls).toContain("build portal postgres");
+      expect(calls).not.toMatch(/\bup\b.*-d|recreate service=/);
+      expect(readFileSync(statePath, "utf8")).toBe(stateBefore);
+      expect(existsSync(join(backup, "previous-sha.txt"))).toBe(false);
+      expect(existsSync(join(backup, "install-state.json"))).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+
+  it("refuses an unknown PROMOTE_PHASE", () => {
+    const { root, source, backup, fakeBin, head } = makeScratch();
+    try {
+      const r = runPromote({ source, backup, targetSha: head, fakeBin, phase: "swap" as never });
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain("PROMOTE_PHASE must be all or build");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+
   it("stamps the source HEAD and sha-verify passes against a correctly-stamped portal", () => {
     const { root, source, backup, fakeBin, head } = makeScratch();
     try {
@@ -143,7 +179,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
   }, PROMOTE_TEST_TIMEOUT_MS);
 
   it("FAILS LOUD (does not deploy) when the build tree identity differs from the promote target", () => {
-    const { root, source, backup, fakeBin, head } = makeScratch();
+    const { root, source, backup, fakeBin } = makeScratch();
     try {
       // Orchestrator's intended target ≠ what's on disk → the bytes about to be
       // deployed are not the bytes that were resolved. Spec §4.3 / BI-5B6C1C35:
@@ -176,7 +212,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
   }, PROMOTE_TEST_TIMEOUT_MS);
 
   it("FAILS LOUD when the running portal reports an EMPTY /sha (DEPLOYED_SHA unpopulated)", () => {
-    const { root, source, backup, fakeBin, head } = makeScratch();
+    const { root, source, backup, head } = makeScratch();
     try {
       // Model the BI-5B6C1C35 symptom: DEPLOYED_SHA never made it into the
       // running container, so /sha returns blank. The verify step must treat an
@@ -233,7 +269,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       expect(log).toContain("build sandbox");
       expect(log).toContain("up -d --no-deps --force-recreate sandbox");
       const recreates = log.split(/\r?\n/).filter((line) => line.startsWith("recreate service="));
-      expect(recreates.map((line) => line.match(/^recreate service=(\S+)/)?.[1]).sort()).toEqual(["portal", "sandbox", "sandbox-postgres"]);
+      expect(recreates.map((line) => line.match(/^recreate service=(\S+)/)?.[1]).sort(), promoteDiagnostics(r, { "docker.log": dockerLog })).toEqual(["portal", "sandbox", "sandbox-postgres"]);
       for (const recreate of recreates) {
         expect(recreate).toContain("DPF_STATE_DIR=<unset>");
         expect(recreate).toContain(`DPF_PROMOTER_STATE_DIR=${toBashPath(join(backup, "state"))}`);
@@ -508,4 +544,27 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       rmSync(root, { recursive: true, force: true });
     }
   }, PROMOTE_TEST_TIMEOUT_MS);
+});
+
+// BI-683619D9: a CI-only failure must leave its evidence in the assertion message.
+describe("promoteDiagnostics", () => {
+  it("carries status, output tails, a log file and a directory listing, and survives a missing path", () => {
+    const { root } = makeScratch();
+    try {
+      const log = join(root, "docker.log");
+      writeFileSync(log, "recreate service=portal\n");
+      mkdirSync(join(root, "assets", "scripts"), { recursive: true });
+      writeFileSync(join(root, "assets", "SHA256SUMS"), "x\n");
+      const text = promoteDiagnostics({ status: 1, stdout: "step=done", stderr: "sha256sum: SHA256SUMS: No such file or directory" }, {
+        "docker.log": log, assets: join(root, "assets"), gone: join(root, "missing"),
+      });
+      expect(text).toContain("status=1");
+      expect(text).toContain("sha256sum: SHA256SUMS");
+      expect(text).toContain("recreate service=portal");
+      expect(text).toMatch(/SHA256SUMS\nscripts/);
+      expect(text).toMatch(/--- gone .*\n<unreadable: /);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

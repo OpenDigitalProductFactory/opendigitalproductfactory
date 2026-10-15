@@ -19,12 +19,12 @@
 //   node scripts/reconcile-workroom-bindings.mjs --apply    # bind the unbound
 //   node scripts/reconcile-workroom-bindings.mjs --json     # machine-readable
 
-import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { isClaimExemptBranch } from "../packages/dpf-skill-pack/hooks/lib/workroom-claim-lookup.mjs";
 import { bindWorktreeToWorkroom, resolveMcpAccess } from "./lib/workroom-bind.mjs";
+import { gitText } from "./lib/git.mjs";
 
 const DEFAULT_REPO = "OpenDigitalProductFactory/opendigitalproductfactory";
 
@@ -84,9 +84,7 @@ export function summarize({ claimable, exempt, bound, failed, applied }) {
 
 // ── effectful ────────────────────────────────────────────────────────────────
 
-function git(args, cwd = process.cwd()) {
-  return execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", timeout: 15_000 }).trim();
-}
+const git = (args, cwd = process.cwd()) => gitText(["-C", cwd, ...args], { cwd: process.cwd(), timeout: 15_000 });
 
 function gitDirFor(worktreePath) {
   try {

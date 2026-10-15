@@ -3,8 +3,13 @@ import { prisma, type Prisma } from "@dpf/db";
 import { can } from "@/lib/govern/permissions";
 import { currentUserContext } from "@/lib/govern/current-user-context";
 import type { PublicScope } from "./oauth-public-scopes";
+import { dualSeedMirrorSlugs } from "@/lib/coworker-record/selectable-coworker";
 
 type Db = Pick<Prisma.TransactionClient, "user" | "agent" | "authorityBinding">;
+/** The source-approved external development roles: the connection profile any
+ *  human with platform view may consent to, and the default an external AI
+ *  client lands on. One list, read by eligibility and by default resolution. */
+export const APPROVED_EXTERNAL_ROLES = ["AGT-EXT-CLAUDE", "AGT-EXT-CODEX", "AGT-EXT-GROK"] as const;
 export const OAUTH_SETUP_REQUIRED =
   "Reconnect to approve an assistant role before starting work.";
 
@@ -28,12 +33,15 @@ export async function eligibleOAuthCoworkers(
     resourceRef: resource, status: "active",
   } } };
   const approvedExternalRole: Prisma.AgentWhereInput[] = can(human, "view_platform")
-    ? [{ agentId: { in: ["AGT-EXT-CLAUDE", "AGT-EXT-CODEX", "AGT-EXT-GROK"] } }] : [];
+    ? [{ agentId: { in: [...APPROVED_EXTERNAL_ROLES] } }] : [];
   return db.agent.findMany({
     where: { status: "active", archived: false,
       ...(selection.agentId ? { agentId: selection.agentId } : selection.after ? { agentId: { gt: selection.after } } : {}),
       toolGrants: { some: { grantKey: "work_room_write" } },
       ...(!administrator ? { OR: [delegation, ...approvedExternalRole] } : {}),
+      // One choice per assistant: slug mirrors of a canonical AGT-* identity are
+      // never offered or bound, even when requested by id (BI-A771AF73).
+      AND: [{ agentId: { notIn: dualSeedMirrorSlugs() } }],
     },
     select: { id: true, agentId: true, displayName: true },
     orderBy: { agentId: "asc" },
@@ -44,7 +52,7 @@ export async function eligibleOAuthCoworkers(
 export async function createOAuthConsentBinding(input: {
   userId: string; clientId: string; resource: string; agentId: string;
   scopes: PublicScope[];
-}, db: Db) {
+}, db: Db): Promise<Prisma.AuthorityBindingModel> {
   const eligible = await eligibleOAuthCoworkers(input.userId, input.clientId, input.resource, db, { agentId: input.agentId });
   const agent = eligible.find((candidate) => candidate.agentId === input.agentId);
   if (!agent) throw new Error(OAUTH_SETUP_REQUIRED);
@@ -99,7 +107,7 @@ export type CoworkerCandidate = EligibleCoworker & { detail?: string };
 
 export type DefaultCoworkerResolution =
   | { kind: "single"; selected: EligibleCoworker; candidates: CoworkerCandidate[] }
-  | { kind: "resolved"; reason: "prior_consent" | "alias" | "first"; selected: EligibleCoworker; candidates: CoworkerCandidate[] }
+  | { kind: "resolved"; reason: "prior_consent" | "external_profile" | "alias" | "first"; selected: EligibleCoworker; candidates: CoworkerCandidate[] }
   | { kind: "choice"; selected: EligibleCoworker; candidates: CoworkerCandidate[] };
 
 type ResolutionDb = Pick<Prisma.TransactionClient, "agent" | "authorityBinding" | "principalAlias">;
@@ -112,7 +120,17 @@ export function sameRedirectFamily(a: readonly string[], b: readonly string[]): 
       const u = new URL(raw);
       const host = u.hostname.toLowerCase();
       const loopback = host === "127.0.0.1" || host === "localhost" || host === "[::1]" || host === "::1";
-      return `${u.protocol}//${host}${loopback ? "" : `:${u.port}`}${u.pathname}`;
+      // A loopback native app picks an ephemeral port AND, for some clients,
+      // a per-session path suffix (Codex: /callback/<nonce>; the nonce changed
+      // between 2026-09-23 and 2026-10-01 and defeated prior-consent reuse on
+      // the live install). Neither is identity. The family of a loopback
+      // redirect is its scheme, host and FIRST path segment; a non-loopback
+      // redirect keeps port and full path, matching the registration rule.
+      if (loopback) {
+        const first = u.pathname.split("/").filter(Boolean)[0] ?? "";
+        return `${u.protocol}//${host}/${first}`;
+      }
+      return `${u.protocol}//${host}:${u.port}${u.pathname}`;
     } catch {
       return null;
     }
@@ -212,6 +230,24 @@ export async function resolveDefaultOAuthCoworker(input: {
     if (!sameRedirectFamily(c.redirectUris, input.client.redirectUris)) continue;
     const match = eligible.find((e) => e.id === binding.appliedAgentId);
     if (match) return { kind: "resolved", reason: "prior_consent", selected: match, candidates: withDetail(eligible) };
+  }
+
+  // Rule 1b: an external AI client connecting lands on the source-approved
+  // external development profile, not on whichever coworker in an
+  // administrator's wider set has the fewest grants. Every builder already
+  // gets exactly this profile; an administrator's extra reach (room
+  // coordinators such as the Mailroom) is theirs to opt into under Change,
+  // never a question put to them on every connect. The name still only picks
+  // a label inside a class proven authority-equal, as in rule 2 (live
+  // finding 2026-09-25: an administrator's Claude desktop connect preselected
+  // the Mailroom coordinator).
+  const external = eligible.filter((e) => (APPROVED_EXTERNAL_ROLES as readonly string[]).includes(e.agentId));
+  if (external.length > 0 && external.length < eligible.length) {
+    const externalKeys = new Set(external.map((e) => signatures.get(e.id)?.key ?? `unreadable:${e.id}`));
+    if (externalKeys.size === 1) {
+      const byAlias = external.find((e) => nameMatchesAlias(input.client.clientName, registryAliases(e.agentId)));
+      return { kind: "resolved", reason: "external_profile", selected: byAlias ?? external[0], candidates: withDetail(eligible) };
+    }
   }
 
   const keys = new Set(eligible.map((e) => signatures.get(e.id)?.key ?? `unreadable:${e.id}`));

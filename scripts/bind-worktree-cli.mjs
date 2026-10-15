@@ -23,19 +23,13 @@
 // never fail because the coordination plane is unreachable. The claim guard is
 // what makes an unbound tree consequential, not this script.
 
-import { execFileSync } from "node:child_process";
 
 import { bindWorktreeToWorkroom } from "./lib/workroom-bind.mjs";
+import { gitTextOrNull } from "./lib/git.mjs";
 
 const DEFAULT_REPO = "OpenDigitalProductFactory/opendigitalproductfactory";
 
-function git(cwd, args) {
-  try {
-    return execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", timeout: 10_000 }).trim();
-  } catch {
-    return null;
-  }
-}
+const git = (cwd, args) => gitTextOrNull(["-C", cwd, ...args], { cwd: process.cwd(), timeout: 10_000 });
 
 function repoFullNameFrom(remoteUrl) {
   const m = String(remoteUrl ?? "").match(/[:/]([^/:]+\/[^/]+?)(?:\.git)?$/);

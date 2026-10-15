@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatMessagesForGemini } from "./gemini-messages";
-import type { ChatMessage } from "../ai-inference";
+import type { ChatMessage } from "./chat-message-types";
 
 describe("Gemini tool history", () => {
   it("preserves parallel call/result order and the signature on its original part", () => {

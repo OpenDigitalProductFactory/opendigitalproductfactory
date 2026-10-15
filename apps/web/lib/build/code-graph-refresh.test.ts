@@ -15,14 +15,14 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
-vi.mock("@/lib/queue/inngest-client", () => ({
-  inngest: {
+vi.mock("@/lib/jobs", () => ({
+  jobs: {
     send: vi.fn(),
   },
 }));
 
 import { prisma } from "@dpf/db";
-import { inngest } from "@/lib/queue/inngest-client";
+import { jobs } from "@/lib/jobs";
 import {
   CODE_GRAPH_EVENT_NAME,
   CODE_GRAPH_GRAPH_KEY,
@@ -59,7 +59,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(prisma.scheduledJob.upsert).mockResolvedValue({} as never);
   vi.mocked(prisma.codeGraphIndexState.findUnique).mockResolvedValue(null);
-  vi.mocked(inngest.send).mockResolvedValue({ ids: ["evt-1"] } as never);
+  vi.mocked(jobs.send).mockResolvedValue({ ids: ["evt-1"] } as never);
 });
 
 describe("planCodeGraphRefresh", () => {
@@ -187,7 +187,7 @@ describe("queueCodeGraphReconcile", () => {
       graphKey: CODE_GRAPH_GRAPH_KEY,
     });
 
-    expect(inngest.send).toHaveBeenCalledWith({
+    expect(jobs.send).toHaveBeenCalledWith({
       name: CODE_GRAPH_EVENT_NAME,
       data: {
         reason: "git-commit",

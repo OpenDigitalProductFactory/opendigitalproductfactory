@@ -11,7 +11,7 @@ import "server-only";
 import { resolveOAuthConsent } from "@/lib/auth/oauth-identity-binding";
 import { connectionDelegationFor } from "@/lib/mcp/connection-delegation";
 import { normalizeTokenScope, tokenAdmitsTool } from "@/lib/mcp/token-tool-scope";
-import type { GovernedExecuteArgs } from "@/lib/mcp-governed-execute";
+import type { GovernedExecuteArgs } from "@/lib/mcp-governed-execute-types";
 import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
 import { expandGrants, getToolGrantMapping } from "@/lib/tak/agent-grants";
 

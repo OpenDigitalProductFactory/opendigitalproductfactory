@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { SelfUpgradeHostIdentity } from "./config";
 import type { InstallStateMigrationHandoff } from "./preflight";
@@ -13,6 +14,8 @@ export {
   validateResolvedPromoterArtifact,
   type ResolvedPromoterArtifact,
 } from "./promoter-artifact";
+import { resolvePromoterTimeoutMs } from "./promoter-timeout";
+import { validateRuntimeCapabilityProtocolInfo, type RuntimeCapabilityProtocolIdentity, type RuntimeCapabilityProtocolInfo } from "@/lib/platform-runtime/transition-protocol";
 
 /**
  * The promoter runs as a SIBLING container, never inside the portal.
@@ -89,6 +92,40 @@ export async function runPromoterReadiness(
   });
 }
 
+/** Probe the verified packaged actuator without any host authority or mounts. */
+export function buildRuntimeCapabilityProtocolProbeCommand(
+  artifact: ResolvedPromoterArtifact,
+  containerName: string,
+  snapshotBase64?: string,
+): { command: string; args: string[] } {
+  if (!/^sha256:[a-f0-9]{64}$/.test(artifact.digest) || !/^[a-f0-9]{40}$/.test(artifact.sourceSha) || !/^dpf-runtime-protocol-[a-z0-9-]{1,64}$/.test(containerName)) {
+    throw new Error("runtime_protocol_probe_identity_invalid");
+  }
+  if (snapshotBase64 !== undefined && (!/^[A-Za-z0-9_-]+$/.test(snapshotBase64) || snapshotBase64.length > 64 * 1024)) throw new Error("runtime_protocol_snapshot_invalid");
+  return { command: "docker", args: ["run", "--rm", "--name", containerName, "--read-only", "--network", "none", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--memory", "128m", "--cpus", "1", "--pids-limit", "64", "--pull", "never",
+    ...(snapshotBase64 !== undefined ? ["-e", `DPF_RUNTIME_VALIDATE_SNAPSHOT=${snapshotBase64}`] : []), artifact.digest, "--runtime-capability-protocol-info"] };
+}
+
+/** Expected byte identities must come from the trusted server closure.
+ * This read-only operation neither reserves transition authority nor applies it. */
+export async function runRuntimeCapabilityProtocolProbe(
+  params: { artifact: ResolvedPromoterArtifact; expected: RuntimeCapabilityProtocolIdentity; containerName: string; observedHostSnapshot?: unknown },
+  execute: typeof runProcessWithBudget = runProcessWithBudget,
+): Promise<RuntimeCapabilityProtocolInfo> {
+  const expected = { ...params.expected };
+  const snapshotBytes = params.observedHostSnapshot === undefined ? undefined : Buffer.from(JSON.stringify(params.observedHostSnapshot));
+  const snapshotHash = snapshotBytes ? createHash("sha256").update(snapshotBytes).digest("hex") : undefined;
+  if (expected.sourceSha !== params.artifact.sourceSha) throw new Error("runtime_protocol_probe_identity_mismatch");
+  const { command, args } = buildRuntimeCapabilityProtocolProbeCommand(params.artifact, params.containerName, snapshotBytes?.toString("base64url"));
+  const result = await execute(command, args, { timeoutMs: 60_000, containerName: params.containerName, maxStdoutBytes: 4096 });
+  if (result.exitCode !== 0 || result.outputLimitExceeded) throw new Error("runtime_protocol_probe_execution_failed");
+  let value: unknown;
+  try { value = JSON.parse(result.stdout); } catch { throw new Error("runtime_protocol_probe_invalid_json"); }
+  const info = validateRuntimeCapabilityProtocolInfo(value, expected);
+  if (snapshotHash && info.validatedSnapshotSha256 !== snapshotHash) throw new Error("runtime_protocol_snapshot_mismatch");
+  return info;
+}
+
 export type VerifiedReleaseIdentity = {
   tag: string;
   ghcrOwner: string;
@@ -135,6 +172,13 @@ export type PromoterParams = {
    * targeted for cleanup (SUR-756751D1). Convention: `dpf-promoter-<runId>`.
    */
   containerName?: string;
+  /**
+   * BI-F9EE05E5 plan item 0: "build" runs promote.sh's prepare and image build
+   * only (PROMOTE_PHASE=build), before the drain, so admission is not closed
+   * while the image builds. It writes no install state and mounts .env
+   * read-only. Omitted, the promoter runs every step.
+   */
+  phase?: "build";
   /**
    * Hard wall-clock budget for the promoter subprocess, ms. On expiry runPromoter
    * kills the child, force-removes the container, and resolves nonzero with a
@@ -279,7 +323,10 @@ export function buildPromoterCommand(params: PromoterParams): { command: string;
   }
 
   if (params.composeEnvFileHostPath && params.composeEnvFileHostPath.length > 0) {
-    args.push("-v", `${params.composeEnvFileHostPath}:${PROMOTER_COMPOSE_ENV_FILE}:ro`);
+    // A real self-upgrade may write the Inngest keys it generated back to the
+    // install .env (BI-3267763F); every other launch only reads it.
+    const envWritable = !params.dryRun && !params.runtimeTransitionAuthorityOperation && !params.runtimeCapabilityTransitionId && params.phase !== "build";
+    args.push("-v", `${params.composeEnvFileHostPath}:${PROMOTER_COMPOSE_ENV_FILE}${envWritable ? "" : ":ro"}`);
   }
 
   // promote.sh resolves the install's governed capability projection before
@@ -295,6 +342,7 @@ export function buildPromoterCommand(params: PromoterParams): { command: string;
     `PROMOTE_SOURCE=${PROMOTER_CONTAINER_SOURCE}`,
     "-e",
     `PROMOTE_TARGET_SHA=${params.targetSha}`,
+    ...(params.phase === "build" ? ["-e", "PROMOTE_PHASE=build"] : []),
     "-e",
     `PROMOTE_BACKUP_PATH=${params.backupPath}`,
     "-e",
@@ -383,6 +431,8 @@ export function buildPromoterReadinessCommand(
   if (stateIndex >= 0) command.args[stateIndex] = `${command.args[stateIndex]}:ro`;
   const backupsIndex = command.args.findIndex((arg) => arg.endsWith(":/backups"));
   if (backupsIndex >= 0) command.args[backupsIndex] = `${command.args[backupsIndex]}:ro`;
+  const envIndex = command.args.findIndex((arg) => arg.endsWith(`:${PROMOTER_COMPOSE_ENV_FILE}`));
+  if (envIndex >= 0) command.args[envIndex] = `${command.args[envIndex]}:ro`;
   const imageIndex = command.args.indexOf(params.artifact.digest);
   if (imageIndex < 0) throw new Error("promoter_readiness_image_unavailable");
   command.args.splice(imageIndex, 0, "-e", "DPF_PROMOTER_DOCKER_PREFLIGHT=ready");
@@ -451,6 +501,11 @@ export const PROMOTER_JIT_BUILD_SCRIPT =
   "cp /promoter/scripts/salvage-sweep.mjs \"$BDIR/scripts/salvage-sweep.mjs\" && " +
   "cp /promoter/scripts/apply-runtime-capability-transition.mjs \"$BDIR/scripts/apply-runtime-capability-transition.mjs\" && " +
   "cp /promoter/scripts/runtime-transition-authority.mjs \"$BDIR/scripts/runtime-transition-authority.mjs\" && " +
+  "cp /promoter/scripts/installer/runtime-apply-lock.mjs \"$BDIR/scripts/installer/runtime-apply-lock.mjs\" && " +
+  "cp /promoter/scripts/installer/recovery-filesystem.mjs \"$BDIR/scripts/installer/recovery-filesystem.mjs\" && " +
+  "cp /promoter/scripts/lib/canonical-json.mjs \"$BDIR/scripts/lib/canonical-json.mjs\" && " +
+  "cp /promoter/scripts/lib/local-sandbox-fence.mjs \"$BDIR/scripts/lib/local-sandbox-fence.mjs\" && " +
+  "cp /promoter/scripts/lib/entry-module.mjs \"$BDIR/scripts/lib/entry-module.mjs\" && " +
   "cp /promoter/scripts/rotate-runtime-transition-secret.mjs \"$BDIR/scripts/rotate-runtime-transition-secret.mjs\" && " +
   "cp /promoter/scripts/lib/transition-signing.mjs \"$BDIR/scripts/lib/transition-signing.mjs\" && " +
   "cp /promoter/scripts/promoter-migration-envelope.mjs \"$BDIR/scripts/promoter-migration-envelope.mjs\" && " +
@@ -466,6 +521,8 @@ export const PROMOTER_JIT_BUILD_SCRIPT =
   "cp /promoter/scripts/installer/install-state.v2.schema.json \"$BDIR/scripts/installer/install-state.v2.schema.json\" && " +
   "cp /promoter/scripts/lib/resolve-capability-compose-profiles.mjs \"$BDIR/scripts/lib/resolve-capability-compose-profiles.mjs\" && " +
   "cp /promoter/scripts/lib/govern-capability-compose-args.mjs \"$BDIR/scripts/lib/govern-capability-compose-args.mjs\" && " +
+  "cp /promoter/scripts/lib/script-argv.mjs \"$BDIR/scripts/lib/script-argv.mjs\" && " +
+  "cp /promoter/scripts/lib/git.mjs \"$BDIR/scripts/lib/git.mjs\" && " +
   "cp /promoter/scripts/lib/capability-state-hash.mjs \"$BDIR/scripts/lib/capability-state-hash.mjs\" && " +
   "cp /promoter/scripts/capability-service-catalog.generated.json \"$BDIR/scripts/capability-service-catalog.generated.json\" && " +
   "tar -C \"$BDIR\" -c . | docker buildx build --load -t dpf-promoter -f Dockerfile.promoter -";
@@ -678,13 +735,7 @@ export async function inspectPromoterContainerState(
   });
 }
 
-/** Default hard budget for the promoter subprocess: 25 min (env-overridable). */
-export function resolvePromoterTimeoutMs(params: PromoterTimeoutParams): number {
-  if (typeof params.timeoutMs === "number" && params.timeoutMs > 0) return params.timeoutMs;
-  const env = Number(process.env.DPF_PROMOTER_TIMEOUT_MS);
-  if (Number.isFinite(env) && env > 0) return env;
-  return 25 * 60 * 1000;
-}
+export { resolvePromoterTimeoutMs } from "./promoter-timeout";
 
 /**
  * Force-remove a promoter container by name, and the budgeted spawn the

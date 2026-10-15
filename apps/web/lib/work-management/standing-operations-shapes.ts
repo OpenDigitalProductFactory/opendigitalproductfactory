@@ -7,9 +7,12 @@
 //
 // The import back to work-shapes.ts is TYPE-ONLY and therefore erased at
 // compile time: work-shapes.ts imports these values, this file imports only its
-// types, and no runtime cycle exists.
+// types, and no runtime cycle exists. The generated module a compiled shape
+// comes from (generated/*.shape.generated.ts) imports work-shapes.ts type-only
+// too, so referencing it here adds no cycle either.
 
 import type { WorkShapeDefinition } from "./work-shapes";
+import { INQUIRY_RESPONSE_WATCH_1_0_0 } from "./generated/inquiry-response-watch.shape.generated";
 
 // ── standing business-operations shapes (BI-7E7B93DF) ────────────────────────
 //
@@ -82,6 +85,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every advisory source in scope has been read and correlated to the recorded manifest.",
         },
         evidence: ["assurance-run"],
+        tools: ["read_codebase_manifest", "list_patch_posture"],
       },
       {
         key: "raise",
@@ -92,6 +96,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each advisory that reaches a recorded dependency has an open finding; each one that no longer does is reconciled.",
         },
         evidence: ["assurance-finding"],
+        tools: ["list_patch_posture", "query_backlog"],
       },
       {
         key: "decide",
@@ -227,7 +232,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
   // ── manufactureAndDeliver · Contribution Flow ──────────────────────────────
   [PULL_REQUEST_FLOW_WATCH_SHAPE_KEY]: {
     key: PULL_REQUEST_FLOW_WATCH_SHAPE_KEY,
-    version: "1.0.0",
+    version: "1.1.0",
     title: "Pull-request flow watch",
     description:
       "The change reviewer reads mechanical pull-request health, classifies each open change "
@@ -244,6 +249,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every open pull request in scope has a mechanically-read health state — never a visual scan of some checks.",
         },
         evidence: ["assurance-run"],
+        tools: ["list_pull_requests"],
       },
       {
         key: "classify",
@@ -254,6 +260,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each open change is classified stalled, conflicted, awaiting-review, or ready, with the blocking reason named.",
         },
         evidence: ["assurance-finding"],
+        tools: ["list_pull_requests"],
       },
       {
         key: "merge",
@@ -272,7 +279,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       { kind: "failure", condition: "The forge is unreachable or returns no pull requests where the repository is known to have them — the run stops and reports rather than declaring the queue clear.", disposition: "inconclusive" },
       { kind: "budget", condition: "More than 100 pull requests in one run — the run stops and escalates.", disposition: "awaiting-person" },
     ],
-    grants: ["tool:read", "tool:workroom_evidence_write"],
+    grants: ["tool:read", "tool:workroom_evidence_write", "tool:contributor_inventory_read"],
     measures: [
       { key: "changes-classified", description: "Open pull requests classified in one run." },
       { key: "stalled-changes", description: "Changes found stalled past their threshold." },
@@ -288,7 +295,13 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
     title: "Issue triage watch",
     description:
       "The portfolio advisor classifies inbound issues, checks each against the existing "
-      + "backlog for duplication, and proposes a backlog item. Admission to the backlog is a "
+      + "backlog for duplication, and proposes a backlog item. Inbound issues are backlog "
+      + "items in status triaging, read with query_backlog; there is no separate issue queue. "
+      + "Use the room's repository scope and verified submitter relationship to distinguish "
+      + "external/customer, internal and unknown origin; a GitHub author or bot is transport identity, "
+      + "not proof of a customer. Review external acknowledgements and overdue follow-through before "
+      + "routine internal suggestions, while urgent safety and service-blocking reports remain first. "
+      + "Admission to the backlog is a "
       + "human decision — an agent that could admit its own proposals would grow the backlog "
       + "without anyone choosing to.",
     triggers: ["cadence"],
@@ -299,9 +312,10 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         accountablePrincipalRef: "agent:portfolio-advisor",
         advance: {
           kind: "status-change",
-          condition: "Every untriaged issue in scope is classified by kind and severity.",
+          condition: "Every backlog item in status triaging is classified by kind, severity and evidenced external/customer, internal or unknown origin. Unknown relationships remain visible. External acknowledgement and triage precede routine internal suggestions; delivery still uses existing demand scoring and capacity. Revenue or reputation impact is recorded only with evidence.",
         },
         evidence: ["assurance-run"],
+        tools: ["list_backlog_items", "query_backlog"],
       },
       {
         key: "dedupe",
@@ -309,9 +323,10 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         accountablePrincipalRef: "agent:portfolio-advisor",
         advance: {
           kind: "status-change",
-          condition: "Each issue is matched to an existing backlog item or carries a proposed new one.",
+          condition: "Each triaging backlog item is matched to an existing backlog item (query_backlog, find_duplicate_candidates) or carries a proposed new one. Review unresolved external requests and due deferrals too: findings name the accountable owner, next action, due date, blocker and source link, and flag unanswered requests or stale updates. Distinguish delivered fixes from duplicate retirement and standing reports; retain links to delivery evidence. An unread source is incomplete coverage, never a quiet week.",
         },
         evidence: ["assurance-finding"],
+        tools: ["query_backlog", "find_duplicate_candidates"],
       },
       {
         key: "admit",
@@ -319,7 +334,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
         accountablePrincipalRef: "role:backlog-owner",
         advance: {
           kind: "governed-decision",
-          condition: "The accountable owner admits, merges into an existing item, or declines.",
+          condition: "The accountable owner admits, merges into an existing item, or declines, and assigns an accountable owner and due next action. Public status uses the existing sanitized, governed outbound path; this watch grants no send authority. An unavailable owner leaves a durable pending decision, never automatic consent.",
           decisionScope: "backlog-admission",
         },
         evidence: ["decision-record"],
@@ -359,6 +374,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every required gate has its evidence collected or is explicitly recorded as missing.",
         },
         evidence: ["assurance-run"],
+        tools: ["list_backlog_items", "get_backlog_item", "get_release_status"],
       },
       {
         key: "report",
@@ -369,6 +385,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each missing gate is named with what would satisfy it. An absent gate is never reported as passing.",
         },
         evidence: ["assurance-finding"],
+        tools: ["get_backlog_item", "get_release_status"],
       },
       {
         key: "cut",
@@ -398,53 +415,10 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
   },
 
   // ── productsAndServicesSold · Adopter and Inquiry Desk ─────────────────────
-  [INQUIRY_RESPONSE_WATCH_SHAPE_KEY]: {
-    key: INQUIRY_RESPONSE_WATCH_SHAPE_KEY,
-    version: "1.0.0",
-    title: "Inquiry response watch",
-    description:
-      "The customer advisor drafts a grounded reply to each waiting inquiry and attaches the "
-      + "evidence it rests on. Sending is a human stage by construction — anything leaving the "
-      + "business under its own name is never an unattended act.",
-    triggers: ["escalation", "cadence"],
-    stages: [
-      {
-        key: "draft",
-        title: "Draft a grounded reply",
-        accountablePrincipalRef: "agent:customer-advisor",
-        advance: {
-          kind: "status-change",
-          condition: "Every waiting inquiry has a draft reply whose every claim cites recorded evidence.",
-        },
-        evidence: ["draft-artifact"],
-      },
-      {
-        key: "send",
-        title: "Send the reply",
-        // Outbound. Never an agent, at any posture.
-        accountablePrincipalRef: "role:customer-owner",
-        advance: {
-          kind: "governed-decision",
-          condition: "The accountable owner sends the reply, edits it first, or declines to answer.",
-          decisionScope: "outbound-customer-communication",
-        },
-        evidence: ["decision-record"],
-      },
-    ],
-    stopConditions: [
-      { kind: "success", condition: "No waiting inquiry is without a draft reply.", disposition: "proceed" },
-      { kind: "failure", condition: "The inquiry store cannot be read — the run stops and reports, and never drafts a reply to an inquiry it could not read.", disposition: "inconclusive" },
-      { kind: "budget", condition: "More than 25 drafts in one run — the run stops and escalates rather than generating a queue nobody can review.", disposition: "awaiting-person" },
-    ],
-    grants: ["tool:read", "tool:workroom_evidence_write"],
-    measures: [
-      { key: "inquiries-drafted", description: "Waiting inquiries given a grounded draft reply." },
-      { key: "oldest-inquiry-age-days", description: "Age of the longest-waiting unanswered inquiry." },
-    ],
-    budgets: [{ kind: "findings-per-run", limit: 25, unit: "drafts" }],
-    reviewPoint: MONTHLY_REVIEW,
-    collaborationShape: "outward-review",
-  },
+  // Compiled from shape-documents/inquiry-response-watch.gpp.json (GPP Phase 3b
+  // proof migration, PR-3b-6). Edit the document, then run
+  // `pnpm --filter web build:gpp-shapes`; never edit the generated module.
+  [INQUIRY_RESPONSE_WATCH_SHAPE_KEY]: INQUIRY_RESPONSE_WATCH_1_0_0,
 
   [ADOPTER_HEALTH_WATCH_SHAPE_KEY]: {
     key: ADOPTER_HEALTH_WATCH_SHAPE_KEY,
@@ -465,6 +439,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every recorded adopter relationship has been read, with unknowns named as unknown.",
         },
         evidence: ["assurance-run"],
+        tools: ["list_customer_accounts"],
       },
       {
         key: "report",
@@ -475,6 +450,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each at-risk relationship is reported with the signal it rests on and what to record to make an unknown known.",
         },
         evidence: ["assurance-finding"],
+        tools: ["list_customer_accounts"],
       },
       {
         key: "act",
@@ -506,7 +482,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
   // ── foundational · Business Administration ────────────────────────────────
   [PAYABLES_WATCH_SHAPE_KEY]: {
     key: PAYABLES_WATCH_SHAPE_KEY,
-    version: "1.0.0",
+    version: "1.1.0",
     title: "Payables watch",
     description:
       "The finance controller reports what falls due and what is not recorded at all. Paying "
@@ -523,6 +499,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every recorded bill and recurring commitment inside the horizon has been read.",
         },
         evidence: ["assurance-run"],
+        tools: ["list_bills"],
       },
       {
         key: "report",
@@ -533,6 +510,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each obligation inside the horizon is reported, and gaps are named as unknown with what to record — never as zero.",
         },
         evidence: ["assurance-finding"],
+        tools: ["list_bills"],
       },
       {
         key: "pay",
@@ -552,7 +530,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       { kind: "failure", condition: "The finance substrate cannot be read — the run stops and reports, and NEVER presents an absent amount as zero.", disposition: "inconclusive" },
       { kind: "budget", condition: "More than 100 obligations reported in one run — the run stops and escalates.", disposition: "awaiting-person" },
     ],
-    grants: ["tool:read", "tool:workroom_evidence_write"],
+    grants: ["tool:read", "tool:workroom_evidence_write", "tool:payables_read"],
     measures: [
       { key: "obligations-reported", description: "Bills and commitments reported inside the horizon." },
       { key: "unrecorded-gaps", description: "Named gaps where an obligation is expected but not recorded." },
@@ -564,7 +542,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
 
   [VENDOR_RENEWAL_WATCH_SHAPE_KEY]: {
     key: VENDOR_RENEWAL_WATCH_SHAPE_KEY,
-    version: "1.0.0",
+    version: "1.1.0",
     title: "Vendor and subscription renewal watch",
     description:
       "The finance controller reports upcoming renewals and spend against recorded "
@@ -580,6 +558,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every recorded supplier agreement and its spend to date has been read.",
         },
         evidence: ["assurance-run"],
+        tools: ["list_supplier_contracts"],
       },
       {
         key: "report",
@@ -590,6 +569,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each renewal inside the horizon is reported with spend against its commitment, and unknowns are named.",
         },
         evidence: ["assurance-finding"],
+        tools: ["list_supplier_contracts", "list_bills"],
       },
       {
         key: "decide",
@@ -608,7 +588,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       { kind: "failure", condition: "Supplier records cannot be read — the run stops and reports, and never infers a renewal from an unread agreement.", disposition: "inconclusive" },
       { kind: "budget", condition: "More than 50 agreements assessed in one run — the run stops and escalates.", disposition: "awaiting-person" },
     ],
-    grants: ["tool:read", "tool:workroom_evidence_write"],
+    grants: ["tool:read", "tool:workroom_evidence_write", "tool:payables_read"],
     measures: [
       { key: "agreements-read", description: "Supplier agreements read in one run." },
       { key: "renewals-in-horizon", description: "Renewals falling inside the look-ahead window." },
@@ -621,7 +601,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
   // ── forEmployees · Contributor Relations ──────────────────────────────────
   [CONTRIBUTOR_INTAKE_WATCH_SHAPE_KEY]: {
     key: CONTRIBUTOR_INTAKE_WATCH_SHAPE_KEY,
-    version: "1.0.0",
+    version: "1.1.0",
     title: "Contributor intake watch",
     description:
       "The platform engineer keeps the contributor inventory current and flags missing "
@@ -638,6 +618,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "The recorded contributor inventory matches the observed contribution history.",
         },
         evidence: ["assurance-run"],
+        tools: ["read_contributor_inventory"],
       },
       {
         key: "flag",
@@ -648,6 +629,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every contributor missing a required sign-off or licence fact is flagged with what is missing.",
         },
         evidence: ["assurance-finding"],
+        tools: ["read_contributor_inventory"],
       },
       {
         key: "admit",
@@ -666,7 +648,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       { kind: "failure", condition: "The contribution history cannot be read — the run stops and reports, and never records a contributor it could not observe.", disposition: "inconclusive" },
       { kind: "budget", condition: "More than 200 contributors reconciled in one run — the run stops and escalates.", disposition: "awaiting-person" },
     ],
-    grants: ["tool:read", "tool:workroom_evidence_write"],
+    grants: ["tool:read", "tool:workroom_evidence_write", "tool:contributor_inventory_read"],
     measures: [
       { key: "contributors-reconciled", description: "Contributors reconciled against observed history." },
       { key: "missing-signoff", description: "Contributors flagged for a missing sign-off or licence fact." },
@@ -695,6 +677,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every registered coworker has a measured capability and qualification state.",
         },
         evidence: ["assurance-run"],
+        tools: ["get_capability_completeness"],
       },
       {
         key: "report",
@@ -705,6 +688,7 @@ export const STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each unresolved gap or stale qualification is reported with what would close it.",
         },
         evidence: ["assurance-finding"],
+        tools: ["get_capability_completeness", "list_all_capability_needs"],
       },
       {
         key: "grant",

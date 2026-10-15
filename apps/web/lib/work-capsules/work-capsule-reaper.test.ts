@@ -404,6 +404,31 @@ describe("annotateProviderDeliverySignals (BI-9FF39058)", () => {
     expect(fresh.pullRequestObservation?.state).toBe("open");
     expect(stale.pullRequestObservation).toBeUndefined();
   });
+
+  // BI-ED6EA694: 48 merged rooms on the dev install never recorded a head.
+  it("marks a headless room delivered when its own PR merged from its own branch", async () => {
+    const { createPullRequestObservation } = await import(
+      "../contributor-change-lanes/pull-request-observation"
+    );
+    const payload = createPullRequestObservation(merged as never);
+    const open = createPullRequestObservation({ ...merged, number: 5091, state: "open", mergeCommitSha: null, mergedAt: null } as never);
+    const room = (overrides: Record<string, unknown>) => capsule({
+      repositoryFullName: merged.repositoryFullName, pullRequestNumber: 5090, headBranch: merged.headBranch, headSha: null, ...overrides,
+    }) as any;
+    const rows = [
+      room({ capsuleId: "WC-HEADLESS" }),
+      room({ capsuleId: "WC-OTHER-BRANCH", headBranch: "fix/something-else" }),
+      room({ capsuleId: "WC-OPEN", pullRequestNumber: 5091 }),
+    ];
+
+    await annotateProviderDeliverySignals(rows, [payload, open], NOW);
+
+    expect(rows[0].deliveredSignal).toEqual({ merged: true });
+    expect(rows[1].deliveredSignal).toBeUndefined();
+    // Without a head, an open PR proves nothing about this room's liveness.
+    expect(rows[2].deliveredSignal).toBeUndefined();
+    expect(rows[2].pullRequestObservation).toBeUndefined();
+  });
 });
 
 function makeDb() {
@@ -521,6 +546,33 @@ describe("reapStaleWorkCapsules", () => {
         where: { capsuleId: "WC-MERGED" },
         data: expect.objectContaining({ status: "archived" }), // NOT abandoned
       }),
+    );
+  });
+
+  // BI-ED6EA694: observe-only guards abandoning UNMERGED work. Archiving a merged
+  // room is DB-only and reversible, so it runs while reaping is observe-only.
+  it("closes delivered rooms while abandoning stays observe-only", async () => {
+    db.workroom.findMany.mockResolvedValueOnce([
+      ...deadRows(),
+      capsule({
+        capsuleId: "WC-MERGED",
+        executorKind: "codex-desktop",
+        leaseExpiresAt: new Date("2026-08-01T00:00:00.000Z"),
+        deliveredSignal: { merged: true },
+      }),
+    ]);
+    db.featureBuild.findMany.mockResolvedValueOnce([]);
+    db.workroom.findUnique.mockResolvedValue({ id: "row-merged", capsuleId: "WC-MERGED", workspaceState: {} });
+    db.workroom.update.mockResolvedValue({ id: "row-merged", capsuleId: "WC-MERGED" });
+
+    const result = await reapStaleWorkCapsules({ db: db as unknown as CapsuleDb, now: NOW, closeDelivered: true });
+
+    expect(result.dryRun).toBe(true);
+    expect(result.reaped).toBe(1);
+    expect(result.candidates.map((c) => c.capsuleId).sort()).toEqual(["WC-LEASE-DEAD", "WC-MERGED"]);
+    expect(db.workroom.update).toHaveBeenCalledTimes(1);
+    expect(db.workroom.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { capsuleId: "WC-MERGED" }, data: expect.objectContaining({ status: "archived" }) }),
     );
   });
 

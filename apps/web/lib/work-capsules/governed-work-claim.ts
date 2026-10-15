@@ -13,7 +13,13 @@ import {
   type WorkIntent,
 } from "@/lib/work-capsules";
 import { type InheritanceDb, loadInheritedInitiativeScope } from "@/lib/backlog/initiative-readiness/parent-scope-inheritance";
-import { deriveDeliverableSensitivity } from "@/lib/explore/build-process-matrix";
+import { type BoundWorkShapeDb, readBoundEditPaths } from "@/lib/backlog/initiative-readiness/bound-work-shape";
+import { assessDeliverySensitivity } from "@/lib/backlog/initiative-readiness/delivery-sensitivity";
+import {
+  governingPrinciplesFor,
+  withGoverningRules,
+  type GoverningPrinciples,
+} from "@/lib/kernel/governing-principles";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import {
   resolveInitiativeReviewerRecovery,
@@ -114,6 +120,8 @@ type GovernedClaimFailure = {
   code: "initiative_not_ready" | "capsule_identity_mismatch" | "readiness_projection_failed";
   workIntent: WorkIntent;
   readiness: InitiativeReadinessDecision;
+  /** BI-DEDAC950: principle page per unmet code, beside the decision so replay stays deep-equal. */
+  governingPrinciples: GoverningPrinciples;
   recovery: InitiativeReviewerRecovery;
 };
 
@@ -164,6 +172,11 @@ async function resolveRecoveryOutsideTransaction(args: {
       nextAction: `The workroom lacks ${!pending.baseSha ? "baseSha" : "a valid reviewer dispatch identity (including headSha)"}, so no reviewer binding can be issued. Re-sync the branch with adopt_worktree(headBranch, baseSha, headSha), supplying full immutable commit SHAs for both fields and preserving any valid recorded identity, then retry.`,
     };
 
+  const needsPlanReview = [...pending.decision.blockers, ...pending.decision.unmet]
+    .some(entry => entry.code === "PLAN_REVIEW_REQUIRED");
+  const taskAuthorityKey = needsPlanReview && args.actor.taskAuthorityTokenId
+    ? await (await import("@/lib/auth/oauth-task-authority")).resolveMcpTaskAuthorityKey({
+      tokenId: args.actor.taskAuthorityTokenId, userId: args.actor.userId, source: "oauth" }) : null;
   const recovery = await resolveInitiativeReviewerRecovery({
     decision: pending.decision,
     currentAgentId: args.actor.agentId,
@@ -176,6 +189,10 @@ async function resolveRecoveryOutsideTransaction(args: {
         commitSha: pending.planArtifact.commitSha, providerBlobId: pending.planArtifact.providerBlobId }
       : { resolved: false, nextAction: "Record valid plan coverage for the current baseline and this Workroom repository, including the immutable plan commit and blob, then retry plan review." },
     expectedCurrentBaselineId: pending.baselineId,
+    ...(taskAuthorityKey ? { isPlanReviewExhausted:
+      (await import("@/lib/backlog/initiative-readiness/exhausted-plan-review")).createExhaustedPlanReviewPredicate(
+        { userId: args.actor.userId, taskAuthorityKey },
+        (await import("@dpf/db")).prisma) } : {}),
   });
   if (!pending.baseSha || !pending.dispatchContext?.headSha) {
     recovery.identityRepair = projectWorkroomIdentityRepair({
@@ -380,6 +397,23 @@ function exactReadback(args: {
   };
 }
 
+/**
+ * The activity kinds the claim's readiness projection reads.
+ *
+ * `evidence` is here because a small fix's research at claim is its recorded
+ * reproduction (BI-6EB2DBBB): `source_verified` plus `test_pass`, written by
+ * record_execution_evidence. The refusal advises exactly that remedy, so the
+ * claim must load what the remedy writes, or the advice can never be satisfied
+ * (BI-5C992261).
+ */
+export const CLAIM_READINESS_ACTIVITY_KINDS = [
+  "initiative_gate_receipt",
+  "initiative_scope_baseline",
+  "plan_backlog_coverage",
+  "break_fix_declared",
+  "evidence",
+] as const;
+
 export async function claimGovernedBacklogWorkspace(args: {
   db: CapsuleDb;
   input: ClaimInput;
@@ -424,7 +458,7 @@ export async function claimGovernedBacklogWorkspace(args: {
       if (!item) throw new Error(`BacklogItem ${args.input.backlogItemId} not found`);
       backlogItemRowId = item.id;
       const activities = await tx.backlogItemActivity.findMany({
-        where: { backlogItemId: item.id, kind: { in: ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage", "break_fix_declared"] } },
+        where: { backlogItemId: item.id, kind: { in: [...CLAIM_READINESS_ACTIVITY_KINDS] } },
         orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
         select: { id: true, kind: true, gateKey: true, recordedAt: true, payload: true },
       }) as InitiativeReadinessActivity[];
@@ -438,7 +472,12 @@ export async function claimGovernedBacklogWorkspace(args: {
           activeBuildKind: item.activeBuild?.kind ?? null,
           // v3: the shape resolved for this claim keys the gates; sensitivity raises them.
           workShape: args.input.workShape ?? null,
-          deliverySensitivity: deriveDeliverableSensitivity({ text: `${item.title ?? ""}\n${item.body ?? ""}`, workType: item.workType ?? null }),
+          // BI-243BC956: read from what the change touches — a re-claimed room's
+          // declared edit scope, else the paths the body cites — not its prose.
+          deliverySensitivity: assessDeliverySensitivity({
+            ...item,
+            declaredPaths: await readBoundEditPaths(tx as unknown as BoundWorkShapeDb, item.itemId).catch(() => []),
+          }),
         },
         activities,
         inheritedScope,
@@ -518,12 +557,17 @@ export async function claimGovernedBacklogWorkspace(args: {
           baseSha: recoveryWorkroom?.baseSha ?? null,
         };
         await recordDecision({ db: tx, backlogItemRowId: item.id, decision: evaluated, workIntent, actor: args.actor });
+        const governingPrinciples = governingPrinciplesFor(evaluated);
         return {
-          ...err(`Cannot start ${workIntent}: ${[...evaluated.blockers, ...evaluated.unmet].map((entry) => entry.code).join(", ")}.`),
+          ...err(withGoverningRules(
+            `Cannot start ${workIntent}: ${[...evaluated.blockers, ...evaluated.unmet].map((entry) => entry.code).join(", ")}.`,
+            governingPrinciples,
+          )),
           data: {
             code: "initiative_not_ready" as const,
             workIntent,
             readiness: evaluated,
+            governingPrinciples,
             recovery: EMPTY_RECOVERY,
           },
         };
@@ -600,12 +644,14 @@ export async function claimGovernedBacklogWorkspace(args: {
       })],
     };
     await recordDecision({ db: args.db, backlogItemRowId, decision: denied, workIntent, actor: args.actor });
+    const governingPrinciples = governingPrinciplesFor(denied);
     return {
-      ...err(error.message),
+      ...err(withGoverningRules(error.message, governingPrinciples)),
       data: {
         code: "capsule_identity_mismatch",
         workIntent,
         readiness: denied,
+        governingPrinciples,
         recovery: EMPTY_RECOVERY,
       },
     };

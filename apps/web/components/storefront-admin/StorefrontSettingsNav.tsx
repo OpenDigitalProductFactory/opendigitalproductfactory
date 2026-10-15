@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { STOREFRONT_SETTINGS_TABS } from "./storefront-nav";
+import { STOREFRONT_SETTINGS_TABS } from "@/lib/navigation/storefront-nav";
 
 function matchesPath(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);

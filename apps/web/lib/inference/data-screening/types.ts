@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@/lib/inference/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 import type { DataEffect, DestinationClass } from "@/lib/govern/data/taxonomy";
 import type { RequestContract } from "@/lib/routing/request-contract";
 import type { DataPolicyDecision } from "@/lib/govern/data/policy-decision";

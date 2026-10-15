@@ -23,9 +23,9 @@ boot-time fail-loud for desired-state drift.
 ## Scrape targets
 
 `monitoring/prometheus/prometheus.yml` scrapes: `portal`, `sandbox`, `postgres`
-(exporter), `redis` (exporter), `qdrant`, `inngest`, `loki`, `alloy`, `windows-host`
+(exporter), `redis` (exporter), `inngest`, `loki`, `alloy`, `windows-host`
 (windows_exporter), `prometheus`. **Not scrapeable** (no `/metrics`): `dpf-tts`,
-`neo4j`, the model runner (DMR) — covered by portal-side probes below.
+the model runner (DMR) — covered by portal-side probes below.
 Speech-to-text runs no DPF-shipped container at all; it is provider-managed
 and observed through the portal-side `dpf_voice_stt_*` counters.
 
@@ -34,8 +34,7 @@ and observed through the portal-side `dpf_voice_stt_*` counters.
 | Gauge | Source | Alert |
 | --- | --- | --- |
 | `dpf_voice_tts_up` / `dpf_voice_tts_enabled` | `lib/voice-synthesis/service-status.ts` | `VoiceServiceDown` (enabled && down) |
-| `dpf_dependency_up{service="neo4j"}` | `lib/operate/dependency-health.ts` | `Neo4jDown` |
-| `dpf_dependency_up{service="model-runner"}` | same | gauge only (see follow-ups) |
+| `dpf_dependency_up{service="model-runner"}` | `lib/operate/dependency-health.ts` | gauge only (see follow-ups) |
 | `dpf_dependency_up{service="stt"}` | same | gauge only (see follow-ups) |
 | `dpf_dependency_up{service="doctools"}` | same, via `lib/documents/conversion/availability.ts` | gauge only. Optional: unset (never 0) when the install has no docker socket or no configured `doctoolsImage` |
 | `dpf_http_unhandled_errors_total` | `instrumentation.ts` `onRequestError` | `UnhandledServerErrors` |
@@ -54,9 +53,11 @@ compose's `dpf-tts:8000` default (never running on macOS) and fires a phantom
 ### Coworker approval envelopes (BI-78D3CF1E)
 
 A `CoworkerActionEnvelope` is a coworker asking one named human to approve one
-side-effecting call. It expires 15 minutes after it is raised, and an envelope
-nobody answers transitions to nothing — no alert, no error, no row anywhere an
-operator looks. Seven lapsed unactioned on a live install before an approval
+side-effecting call. It expires after a lifetime set by the call's declared
+consequence (BI-0012E6CA, `apps/web/lib/coworker/approval-lifetime.ts`):
+15 minutes for an outward or unclassified call, seven days for everything else.
+Before BI-410ACCB8 and BI-0012E6CA, an envelope nobody answered transitioned to
+nothing — no alert, no error, no row anywhere an operator looked. Seven lapsed unactioned on a live install before an approval
 surface existed, and the only way to learn that was to read the table.
 
 `dpf_coworker_envelopes_expired_unactioned` is the one to watch, and it cannot be
@@ -89,7 +90,7 @@ keep the `node_*` rules; Windows installs get the `windows_*` rules.
   install that never runs a local model runner / STT never false-fires.
 - **Restart-loop detection (all platforms)** — DONE via `ServiceFlapping`
   (`changes(up[15m]) > 5`), which catches a crashing+recovering scraped service
-  (the qdrant loop `ContainerRestarting` missed) using the `up` series.
+  (the 2026-06-24 vector-store restart loop `ContainerRestarting` missed) using the `up` series.
 - **Per-container CPU/memory + restart_count on Windows** — NOT POSSIBLE, by
   platform constraint. cAdvisor/node-exporter require `/proc`, `/sys`,
   `/var/lib/docker` host mounts that Docker Desktop (WSL2/macOS) does not provide

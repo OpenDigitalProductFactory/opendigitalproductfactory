@@ -15,6 +15,7 @@ import {
   SYSML_PROJECTION_TASK_ID,
   SYSML_PROJECTION_TASK_TITLE,
 } from "./sysml-projection-config";
+import { findInstallWorkOwnerUserId } from "./install-work-owner";
 
 type ScheduledTaskSeedClient = Pick<PrismaClient, "user" | "scheduledAgentTask" | "scheduledJob">;
 
@@ -40,12 +41,8 @@ export async function ensureSysmlProjectionScheduledTask(
   prisma: ScheduledTaskSeedClient,
   now: Date = new Date(),
 ): Promise<{ created: boolean }> {
-  const owner = await prisma.user.findFirst({
-    where: { isSuperuser: true },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
-  if (!owner) {
+  const ownerId = await findInstallWorkOwnerUserId(prisma);
+  if (!ownerId) {
     throw new Error("seed: no superuser found - cannot seed SysML projection scheduled task");
   }
 
@@ -57,6 +54,7 @@ export async function ensureSysmlProjectionScheduledTask(
     select: { taskId: true, nextRunAt: true },
   });
 
+  // An existing task keeps its owner: an account handover must survive re-seeding (BI-ED055D45).
   if (existing) {
     await prisma.scheduledAgentTask.update({
       where: { taskId: SYSML_PROJECTION_TASK_ID },
@@ -67,7 +65,6 @@ export async function ensureSysmlProjectionScheduledTask(
         routeContext: SYSML_PROJECTION_ROUTE_CONTEXT,
         schedule: SYSML_PROJECTION_SCHEDULE,
         timezone,
-        ownerUserId: owner.id,
         isActive: true,
         nextRunAt: existing.nextRunAt ?? nextRunAt,
       },
@@ -82,7 +79,7 @@ export async function ensureSysmlProjectionScheduledTask(
         routeContext: SYSML_PROJECTION_ROUTE_CONTEXT,
         schedule: SYSML_PROJECTION_SCHEDULE,
         timezone,
-        ownerUserId: owner.id,
+        ownerUserId: ownerId,
         nextRunAt,
       },
     });

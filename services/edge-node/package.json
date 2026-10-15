@@ -8,20 +8,20 @@
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node ../../scripts/run-tsc.mjs --noEmit",
     "verify-lifecycle": "tsx scripts/verify-lifecycle.ts"
   },
   "dependencies": {
     "@dpf/validators": "workspace:*",
-    "net-snmp": "^3.14.0",
-    "undici": "^8.10.0",
-    "zod": "^4.4.3"
+    "net-snmp": "catalog:",
+    "undici": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/net-snmp": "^3.11.0",
-    "@types/node": "^26.2.0",
-    "tsx": "^4.23.13",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.11"
+    "@types/node": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

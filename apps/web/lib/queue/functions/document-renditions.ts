@@ -1,4 +1,4 @@
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 // BI-9D43CBEF (S4 of BI-815D40C6): the durable rendition job.
@@ -14,7 +14,7 @@ import { gateAtEntry } from "../quiescence-gates";
 // is idempotent on (documentVersionId, renditionKind): a retry or a duplicate
 // event only fills in what is still missing.
 
-export const documentRenditionGenerate = inngest.createFunction(
+export const documentRenditionGenerate = jobs.createFunction(
   {
     id: "documents/rendition-generate",
     retries: 2,
@@ -32,7 +32,7 @@ export const documentRenditionGenerate = inngest.createFunction(
   },
 );
 
-export const documentRenditionBackfill = inngest.createFunction(
+export const documentRenditionBackfill = jobs.createFunction(
   {
     id: "documents/rendition-backfill",
     retries: 1,
@@ -43,10 +43,17 @@ export const documentRenditionBackfill = inngest.createFunction(
     const gate = await gateAtEntry(step, "documents/rendition-backfill");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
-    return step.run("backfill-renditions", async () => {
-      const { backfillDocumentRenditions } = await import("@/lib/documents/renditions");
-      const limit = typeof event.data.limit === "number" ? event.data.limit : undefined;
-      return backfillDocumentRenditions({ limit });
+    // BI-153EC72C: drain the queue in bounded passes, one durable step each.
+    const { drainRenditionBackfill } = await import("@/lib/documents/rendition-backfill-drain");
+    const limit = typeof event.data.limit === "number" ? event.data.limit : undefined;
+    const reason = typeof event.data.reason === "string" ? event.data.reason : undefined;
+    return drainRenditionBackfill({
+      runPass: (pass, cursor) =>
+        step.run(`backfill-renditions-pass-${pass}`, async () => {
+          const { backfillDocumentRenditions } = await import("@/lib/documents/renditions");
+          const outcome = await backfillDocumentRenditions({ limit, cursor, reason });
+          return { processed: outcome.processed, nextCursor: outcome.nextCursor };
+        }),
     });
   },
 );

@@ -1,3 +1,4 @@
+import type { PermitAuthority } from "@/lib/gpp/permit-claims";
 import type { OutcomeDisposition } from "@/lib/shared/outcome-disposition";
 // apps/web/lib/work-management/work-shapes.ts
 //
@@ -23,12 +24,15 @@ import type { OutcomeDisposition } from "@/lib/shared/outcome-disposition";
 // admits a coworker anchor, so coworker-owned standing work fits as-is.
 
 import type { WorkroomShapeKey } from "./room-shapes";
+import { ACCEPTANCE_VERIFICATION_SHAPES } from "./acceptance-verification-shape";
 import { COWORKER_STANDING_SHAPES } from "./coworker-standing-shapes";
 import { COWORKER_STANDING_SHAPES_CRAFT } from "./coworker-standing-shapes-craft";
 import { COWORKER_STANDING_SHAPES_OPERATE } from "./coworker-standing-shapes-operate";
 import { DELIVERY_SHAPES } from "./delivery-shapes";
+import { GENERATED_WORK_SHAPES } from "./generated/index.generated";
 import { ORCHESTRATION_SHAPES } from "./orchestration-shapes";
 import { STANDING_SHAPES } from "./standing-operations-shapes";
+import { WORK_SHAPE_PRIOR_VERSIONS } from "./work-shape-prior-versions";
 import type { WorkShapeEvidenceKind } from "./work-shape-evidence-kinds";
 
 /** §8.11.1 trigger vocabulary, verbatim and closed. */
@@ -51,7 +55,54 @@ export type WorkShapeTriggerClass = (typeof WORK_SHAPE_TRIGGER_CLASSES)[number];
  */
 export type WorkShapeAdvance =
   | { kind: "status-change"; condition: string }
-  | { kind: "governed-decision"; condition: string; decisionScope: string };
+  | { kind: "governed-decision"; condition: string; decisionScope: string; gate?: WorkShapeGate };
+
+/**
+ * The typed gate on a governed advance — GPP
+ * (docs/architecture/gated-permissions-process.md) §7 elements 3, 4, 9 and
+ * 11. It mirrors the shape document's `gate`
+ * (apps/web/lib/gpp/shape-language/gpp-shape-schema.ts asserts the two agree
+ * at compile time). Spec: docs/superpowers/specs/
+ * 2026-10-02-gpp-shape-notation-and-compiler-design.md §4.4; plan PR-3b-4
+ * (BI-6DA17863).
+ *
+ * ADDITIVE AND OPTIONAL. It states, as data, what the drive already does for
+ * a governed advance; no runtime reader consumes it. Absent keeps exactly
+ * today's meaning. A shape carries one only once its `decisionScope` is
+ * ratified (gate-ratification.ts), and adding one is a making-explicit change
+ * that diffWorkShapeBinding classifies `unchanged`.
+ */
+export type WorkShapeGate = {
+  authority: PermitAuthority;
+  gateKey?: string;
+  mode: "shadow" | "enforced";
+  blocking: boolean;
+  resolution: "doctrine" | "accountable-human" | "doctrine-then-human";
+  resolver?: { module: string; exportName: string };
+  advisory?: readonly { authority: PermitAuthority; gateKey?: string; blocking?: false }[];
+  checkpoint?: { role: string; exactAction: boolean };
+  escalation?: { role: string; whileWaiting: "hold" };
+  /** Where a refuse verdict sends the token: a stop id or an earlier stage key. */
+  onRefuse?: string;
+};
+
+type WorkShapeBindingCommon = {
+  id: string;
+  /** The binding's own version, separate from the shape version (GPP §2.1.1). */
+  version: number;
+  subjectScope?: string;
+  validity?: { until: "stage-exit"; maxDuration?: string };
+};
+
+/**
+ * A stage's Gated Permission binding (GPP §7.1, spec §4.4). Mirrors the shape
+ * document's `binding`; `egress` is required for an environment boundary.
+ * ADDITIVE AND OPTIONAL, like WorkShapeGate: no runtime reader consumes it,
+ * and the compiler never writes GPP_BINDING_ENFORCEMENT or GPP_BINDINGS.
+ */
+export type WorkShapeBinding =
+  | (WorkShapeBindingCommon & { enforcement: "absent" | "shadow" | "enforced"; egress?: readonly string[] })
+  | (WorkShapeBindingCommon & { enforcement: "environment"; egress: readonly string[] });
 
 export type WorkShapeStage = {
   key: string;
@@ -63,6 +114,67 @@ export type WorkShapeStage = {
    *  against the vocabulary record_workroom_evidence accepts, so a stage cannot
    *  declare evidence it has no way to record. */
   evidence: readonly WorkShapeEvidenceKind[];
+  /**
+   * The platform tools this stage needs, by exact PLATFORM_TOOLS name.
+   *
+   * GPP (docs/architecture/gated-permissions-process.md, draft 0.1) binding
+   * element 2 "Attachment" — a binding attaches to a stage, not only to a whole
+   * shape — and element 5 "Capability set" (§7.1). This is the first stage-level
+   * realization of both: the shape's `grants` stays the coarse per-shape room
+   * ceiling, and this names the concrete tools inside it the stage reaches.
+   *
+   * Declaring a tool here never grants it. The dispatcher PINS the named tools
+   * into the run's attachment budget (they are otherwise ranked out by prompt
+   * relevance), and the agent ∩ user grant filter still decides whether each is
+   * reachable at all. stage-tool-parity.test.ts checks the declaration: C-2
+   * (every name resolves to a registered tool), C-4's necessary first condition
+   * (the accountable agent holds the grant), and pin capacity.
+   *
+   * Omitted means undeclared: the stage dispatches exactly as before.
+   */
+  tools?: readonly string[];
+  /** The stage's Gated Permission binding (spec §4.4). Optional and additive; see WorkShapeBinding. */
+  binding?: WorkShapeBinding;
+  /**
+   * A non-interrupting stage deadline (GPP construct 11, compile target
+   * `stage-deadline`). ADDITIVE AND OPTIONAL. Absent keeps today's meaning. A
+   * shape that declares one runs on the drive's graph path, which pauses it
+   * with `construct_not_executable` while the `stage-deadline` flag in
+   * executable-constructs.ts is off (Phase 3c, BI-8875C9DF).
+   */
+  deadline?: WorkShapeStageDeadline;
+  /**
+   * A sub-shape call: the exact `key@version` the stage runs as a contained
+   * child room (GPP construct 14). ADDITIVE AND OPTIONAL, gated like
+   * `deadline` by the `sub-shape` flag. Typed `string`, not a template
+   * literal, because the shape document schema validates it with a regex and
+   * the lowered document must stay assignable to WorkShapeDefinition
+   * (gpp-shape-schema.ts).
+   */
+  subShape?: string;
+  /**
+   * Side-effecting tools a drive-dispatched run of this stage may call without
+   * a person (BI-C1781121). The same recorded decision a coworker self-task's
+   * `mandatedTools` is: declaring the stage, and a room binding who answers
+   * for it, IS the decision, so a declared write on the stage's scheduled run
+   * is steered (escalation-gate `scheduled-mandate`) and not diverted to a
+   * proposal. Only for non-governed stages; resolved by room-stage-mandate.ts.
+   */
+  mandatedTools?: readonly string[];
+};
+
+/** A stage deadline: raises a notice after `afterDays`, never moves the token. */
+export type WorkShapeStageDeadline = { afterDays: number; description: string };
+
+/**
+ * An explicit flow graph (GPP constructs 12 and 13). ADDITIVE AND OPTIONAL:
+ * absent means the implied sequence every current shape has. A shape that
+ * declares one runs on the drive's graph path; a split, join or rework edge
+ * pauses it with `construct_not_executable` while its flag is off.
+ */
+export type WorkShapeFlow = {
+  nodes: readonly { id: string; type: "parallel-split" | "parallel-join"; pairs?: string }[];
+  edges: readonly { from: string; to: string; rework?: { maxIterations: number } }[];
 };
 
 export type WorkShapeStopCondition = {
@@ -130,6 +242,8 @@ export type WorkShapeDefinition = {
   reviewPoint: { everyDays: number; description: string };
   /** The room shape a consequential act inside this activity binds to. */
   collaborationShape: WorkroomShapeKey | null;
+  /** The explicit flow graph (Phase 3c). Optional and additive; see WorkShapeFlow. */
+  flow?: WorkShapeFlow;
 };
 
 /** The definition contract runtime consumers read. No dispatch, schedule, or roster. */
@@ -148,6 +262,9 @@ export type WorkShapeDefinitionContract = Pick<
   | "measures"
   | "budgets"
   | "reviewPoint"
+  // Present only when the shape declares a flow (Phase 3c), so a sequential
+  // contract keeps exactly its eleven own keys.
+  | "flow"
 >;
 
 export function readWorkShapeDefinitionContract(
@@ -165,6 +282,7 @@ export function readWorkShapeDefinitionContract(
     measures: shape.measures,
     budgets: shape.budgets,
     reviewPoint: shape.reviewPoint,
+    ...(shape.flow !== undefined ? { flow: shape.flow } : {}),
   };
 }
 
@@ -249,7 +367,8 @@ const SHAPES: Record<string, WorkShapeDefinition> = {
 
 /**
  * The full registry: the anchor compliance shape, the standing operations, the
- * five delivery shapes, and one orchestration cycle per IT4IT value stream.
+ * five delivery shapes, one orchestration cycle per IT4IT value stream, and the
+ * acceptance-verification steward activity.
  */
 const ALL_SHAPES: Record<string, WorkShapeDefinition> = {
   ...SHAPES,
@@ -259,7 +378,22 @@ const ALL_SHAPES: Record<string, WorkShapeDefinition> = {
   ...COWORKER_STANDING_SHAPES_CRAFT,
   ...DELIVERY_SHAPES,
   ...ORCHESTRATION_SHAPES,
+  ...ACCEPTANCE_VERIFICATION_SHAPES,
 };
+
+// A compiled shape (GPP Phase 3b, PR-3b-6) is registered by reference, in its
+// original position in its family file, so listWorkShapes() keeps its order.
+// The generated index is read only to prove that: every generated definition
+// is registered here under its key, as the very same object. Nothing generated
+// is spread into ALL_SHAPES.
+for (const generated of GENERATED_WORK_SHAPES) {
+  if (ALL_SHAPES[generated.key] !== generated) {
+    throw new Error(
+      `work-shapes: the generated definition ${generated.key}@${generated.version} is not the registered one; `
+        + "reference its generated constant in place of the hand-written literal.",
+    );
+  }
+}
 
 export function listWorkShapes(): WorkShapeDefinition[] {
   return Object.values(ALL_SHAPES);
@@ -267,6 +401,14 @@ export function listWorkShapes(): WorkShapeDefinition[] {
 
 export function getWorkShape(key: string): WorkShapeDefinition | null {
   return ALL_SHAPES[key] ?? null;
+}
+
+/** An exact `key@version`: the current definition, or a superseded one a live
+ *  room may still pin (work-shape-prior-versions.ts). Null when neither holds it. */
+export function getWorkShapeVersion(key: string, version: string): WorkShapeDefinition | null {
+  const current = getWorkShape(key);
+  if (current?.version === version) return current;
+  return WORK_SHAPE_PRIOR_VERSIONS.find((shape) => shape.key === key && shape.version === version) ?? null;
 }
 
 /** Does this shape describe work that RECURS rather than finishing?
@@ -294,8 +436,19 @@ export function readDeclaredWorkShapeKey(scopeClaims: unknown): string | null {
   return null;
 }
 
+/**
+ * Whether a shape recurs: it declares the `cadence` trigger class, so it is a
+ * standing activity that runs again every cycle. A shape without it (a
+ * claim-triggered delivery, for example) runs once: when its run succeeds that
+ * run is final (WWMD DI-8DCB9A4B566C, BI-853120EE).
+ */
+export function workShapeRecurs(shape: Pick<WorkShapeDefinition, "triggers">): boolean {
+  return shape.triggers.includes("cadence");
+}
+
 export function isStandingWorkShape(key: string): boolean {
-  return getWorkShape(key)?.triggers.includes("cadence") ?? false;
+  const shape = getWorkShape(key);
+  return shape ? workShapeRecurs(shape) : false;
 }
 
 /** Agent ids that a declared shape names as accountable for at least one stage. */

@@ -23,7 +23,7 @@ import {
   type LLMScanResponse,
 } from "@/lib/regulatory-monitor-types";
 import { routeAndCall } from "@/lib/routed-inference";
-import type { ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 
 export async function runRegulatoryMonitorScan(
   triggeredBy: "scheduled" | "manual",

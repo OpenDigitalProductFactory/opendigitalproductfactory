@@ -3,7 +3,7 @@
 // own operating data: no data subject beyond the organization itself, so the
 // subject locator is the organization and the projection stays local.
 
-import type { DataAssetDefinition } from "./assets";
+import type { DataAssetDefinition } from "./asset-types";
 import type { ClassificationProvenance } from "./taxonomy";
 
 const PROVENANCE: ClassificationProvenance = {

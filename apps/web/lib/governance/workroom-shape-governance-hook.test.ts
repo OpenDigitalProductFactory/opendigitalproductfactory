@@ -2,7 +2,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import type { ToolLifecycleEvent } from "@/lib/mcp-governed-execute";
+import type { ToolLifecycleEvent } from "@/lib/mcp-governed-execute-types";
 import { buildWorkroomShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 
 import {

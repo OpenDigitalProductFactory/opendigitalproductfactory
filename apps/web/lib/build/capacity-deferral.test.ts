@@ -23,4 +23,32 @@ describe("describeCapacityDeferral (BI-5098ECEC)", () => {
     expect(describeCapacityDeferral(new Error("Codex CLI exit code 1: boom"))).toBeNull();
     expect(describeCapacityDeferral("string")).toBeNull();
   });
+
+  it("names a busy host GPU without the local-CI sentence", () => {
+    const err = Object.assign(new Error("Local provider dispatch deferred: host-gpu-busy"), {
+      name: "LocalProviderCapacityDeferredError",
+      reason: "host-gpu-busy",
+    });
+    const message = describeCapacityDeferral(err)?.message ?? "";
+    expect(message).toMatch(/another program/);
+    expect(message).toMatch(/not a model verdict/);
+    expect(message).not.toMatch(/local-CI/);
+  });
+
+  it("names another local request that already holds the GPU", () => {
+    const err = Object.assign(new Error("Local provider dispatch deferred: local-runner-busy"), {
+      name: "LocalProviderCapacityDeferredError",
+      reason: "local-runner-busy",
+    });
+    expect(describeCapacityDeferral(err)?.message).toMatch(/already holds the GPU/);
+  });
+
+  it("unwraps a mixed fallback chain whose cause is the GPU deferral", () => {
+    const cause = Object.assign(new Error("Local provider dispatch deferred: host-gpu-busy"), {
+      name: "LocalProviderCapacityDeferredError",
+      reason: "host-gpu-busy",
+    });
+    const wrapped = new Error("All endpoints failed for code-gen. Attempts: []", { cause });
+    expect(describeCapacityDeferral(wrapped)?.message).toMatch(/another program/);
+  });
 });

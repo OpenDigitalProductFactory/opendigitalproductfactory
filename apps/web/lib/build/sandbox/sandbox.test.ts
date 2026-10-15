@@ -1,4 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
+
+const mockExec = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/shared/lazy-node", async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
+  lazyExec: () => mockExec,
+}));
+
 import {
   buildSandboxAppsWebCopyCommand,
   buildSandboxDevServerStopCommand,
@@ -12,6 +19,7 @@ import {
   buildSandboxRootScriptsCopyCommand,
   buildSandboxStageCommand,
   buildSandboxWorkspaceCleanupCommand,
+  listReleasableSandboxFiles,
   parseSandboxPort,
   parseSandboxChangedFiles,
   prefixSafeWorkspaceCommand,
@@ -74,12 +82,12 @@ describe("buildSandboxCreateArgs", () => {
     const args = buildSandboxCreateArgs("FB-X", 3002, {
       envVars: {
         DATABASE_URL: "postgresql://dpf:dpf_sandbox@db:5432/dpf",
-        NEO4J_URI: "bolt://neo4j:7687",
+        REDIS_URL: "redis://redis:6379",
       },
     });
     expect(args).toContain("-e");
     expect(args).toContain("DATABASE_URL=postgresql://dpf:dpf_sandbox@db:5432/dpf");
-    expect(args).toContain("NEO4J_URI=bolt://neo4j:7687");
+    expect(args).toContain("REDIS_URL=redis://redis:6379");
   });
 });
 
@@ -115,7 +123,7 @@ describe("prefixSafeWorkspaceCommand", () => {
     const command = prefixSafeWorkspaceCommand("git -C /workspace/.builds/FB-1 rev-parse HEAD^{tree}");
 
     expect(command).toContain("git config --global --add safe.directory '*'");
-    expect(command).toContain("git config --global --get-all safe.directory 2>/dev/null | grep -qx '\\*' ||");
+    expect(command).toContain("git config --global --get-all safe.directory 2>/dev/null | grep -qxF '*' ||");
     expect(command.indexOf("safe.directory '*'")).toBeLessThan(command.indexOf("git -C /workspace/.builds/FB-1"));
   });
 });
@@ -153,6 +161,11 @@ describe("buildSandboxStageCommand", () => {
     expect(command).toContain(":!**/*.tsbuildinfo");
     expect(command).toContain(":!pnpm-lock*");
     expect(command).toContain(":!packages/db/generated/**");
+  });
+
+  it("never stages or lists the sandbox's own auth secret (BI-F1C680C7)", () => {
+    expect(buildSandboxStageCommand()).toContain("':!.dpf-sandbox-auth-secret*'");
+    expect(buildSandboxListReleasableFilesCommand()).toContain("':(exclude).dpf-sandbox-auth-secret*'");
   });
 
   it("does not use git add -A which exits 1 when gitignored directories are present in the working tree", () => {
@@ -202,7 +215,7 @@ describe("buildSandboxListReleasableFilesCommand", () => {
     // both appear, which is what the PR #850 gate needs to recognize.
     const command = buildSandboxListReleasableFilesCommand("/workspace", "client/abc-123");
 
-    expect(command).toContain("git diff --cached 'client/abc-123' --name-only -- .");
+    expect(command).toContain(`git diff --cached "$(git merge-base HEAD 'client/abc-123' 2>/dev/null || echo 'client/abc-123')" --name-only -- .`);
     expect(command).toContain(":(exclude)**/.next/**");
     expect(command).toContain(":(exclude)apps/web/next-env.d.ts");
   });
@@ -227,7 +240,7 @@ describe("buildSandboxDiffForFilesCommand", () => {
       "client/abc-123",
     );
 
-    expect(command).toContain("git diff --cached 'client/abc-123' -- 'apps/web/lib/foo.ts'");
+    expect(command).toContain(`git diff --cached "$(git merge-base HEAD 'client/abc-123' 2>/dev/null || echo 'client/abc-123')" -- 'apps/web/lib/foo.ts'`);
   });
 });
 
@@ -284,13 +297,39 @@ describe("sandbox workspace initialization helpers", () => {
   it("builds a best-effort dev-server stop command that frees the turbopack process", () => {
     const command = buildSandboxDevServerStopCommand();
 
-    expect(command).toContain("pkill -f 'next dev'");
-    expect(command).toContain("pkill -f next-server");
+    expect(command).toContain("pkill -f '[n]ext dev'");
+    expect(command).toContain("pkill -f '[n]ext-server'");
     expect(command).toContain("sleep 1");
     // Every stanza tolerates "no such process" so a clean sandbox is a no-op.
     expect(command).toContain("|| true");
     // Must not hard-quote in a way that breaks the JSON.stringify exec sites.
     expect(command).not.toContain('"');
+  });
+
+  // FB-2F24555E (2026-10-07) died at sandbox_created: `pkill -f 'next dev'`
+  // matched the `sh -c` running the stop command (its own text contains the
+  // pattern), killed it with SIGTERM (exit 143) before the cleanup's rm ran,
+  // and the step reported "Command failed" with no stderr. Proven live in
+  // dpf-sandbox-1. A bracket pattern still matches the target process but not
+  // its own literal text.
+  it("never matches its own command line, so the stop cannot kill the shell running it", () => {
+    const command = buildSandboxDevServerStopCommand();
+    const patterns = [...command.matchAll(/pkill -f '([^']+)'/g)].map((match) => match[1]!);
+    expect(patterns.length).toBeGreaterThanOrEqual(3);
+    for (const pattern of patterns) {
+      expect(new RegExp(pattern).test(command)).toBe(false);
+    }
+    const targets = ["node .../next dev --port 3000", "next-server (v16)", "pnpm --filter web dev"];
+    for (const target of targets) {
+      expect(patterns.some((pattern) => new RegExp(pattern).test(target))).toBe(true);
+    }
+  });
+
+  it("survives when run in a real shell", { skip: process.platform === "win32" }, async () => {
+    const { spawnSync } = await import("node:child_process");
+    const result = spawnSync("sh", ["-c", `${buildSandboxDevServerStopCommand()}; echo SURVIVED`], { encoding: "utf8", timeout: 10_000 });
+    expect(result.stdout).toContain("SURVIVED");
+    expect(result.status).toBe(0);
   });
 
   it("copies root scripts so workspace postinstall hooks can run in the sandbox", () => {
@@ -313,5 +352,37 @@ describe("parseSandboxChangedFiles", () => {
       "apps/web/lib/a.ts",
       "apps/web/lib/b.ts",
     ]);
+  });
+});
+
+// BI-5C4933EB: the ship-path release check must read the build's own worktree.
+describe("listReleasableSandboxFiles", () => {
+  beforeEach(() => {
+    mockExec.mockReset();
+    mockExec.mockResolvedValue({ stdout: "apps/web/a.ts\n", stderr: "" });
+  });
+
+  it("stages, lists and resets in the given build workdir", async () => {
+    const files = await listReleasableSandboxFiles("sb-1", {
+      baseRef: "client/x",
+      workspace: "/workspace/.builds/FB-1",
+    });
+
+    expect(files).toEqual(["apps/web/a.ts"]);
+    const commands = mockExec.mock.calls.map((call) => call[0] as string);
+    expect(commands.length).toBeGreaterThan(0);
+    for (const command of commands) {
+      expect(command).toContain("cd /workspace/.builds/FB-1 &&");
+    }
+  });
+
+  it("defaults to the shared /workspace", async () => {
+    await listReleasableSandboxFiles("sb-1", { baseRef: "client/x" });
+
+    const commands = mockExec.mock.calls.map((call) => call[0] as string);
+    for (const command of commands) {
+      expect(command).toContain("cd /workspace &&");
+      expect(command).not.toContain(".builds");
+    }
   });
 });

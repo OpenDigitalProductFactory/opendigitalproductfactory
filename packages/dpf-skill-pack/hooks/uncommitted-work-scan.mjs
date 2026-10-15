@@ -204,14 +204,15 @@ export function subtractBaseline(hits, baseline) {
 }
 
 /**
- * Stable identity of a warning's content: the same paths in the same state
- * give the same signature, whatever order git listed them in.
+ * Identity of a dirty set for once-per-session warning: sorted paths with
+ * their porcelain status, ignoring size/mtime fingerprints. Rewriting a file
+ * in place (same path, same status) is the same set and stays silent.
  *
- * @param {Array<{ path: string, xy: string, fingerprint?: string }>} hits
+ * @param {Array<{ path: string, xy: string }>} hits
  */
-export function workSignature(hits) {
+export function warnedSetSignature(hits) {
   return hits
-    .map((hit) => `${hit.path}\u0000${hit.fingerprint ?? hit.xy}`)
+    .map((hit) => `${hit.path}\u0000${hit.xy}`)
     .sort()
     .join("\n");
 }

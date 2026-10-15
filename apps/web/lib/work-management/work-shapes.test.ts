@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { parseStoredWorkroomCycle } from "./room-cycle-adapter";
+import { WORK_SHAPE_PRIOR_VERSIONS } from "./work-shape-prior-versions";
 import {
   OBLIGATION_ASSURANCE_WATCH_SHAPE_KEY,
   WORK_SHAPE_TRIGGER_CLASSES,
@@ -131,5 +132,28 @@ describe("the definition-level trigger/grant/measure contract (BI-EFFD97B4)", ()
     expect(contract).not.toHaveProperty("dispatch");
     expect(contract).not.toHaveProperty("schedule");
     expect(contract).not.toHaveProperty("participants");
+  });
+});
+
+// GPP Phase 3c PR-3c-1 (BI-8875C9DF), design correction 4: the contract carries
+// `flow` only when the shape declares it, so every sequential contract keeps
+// exactly its eleven own keys.
+describe("readWorkShapeDefinitionContract and the Phase 3c flow field", () => {
+  const ELEVEN = ["budgets", "description", "grants", "key", "measures", "reviewPoint", "stages", "stopConditions", "title", "triggers", "version"];
+
+  it("every registry contract has exactly the eleven own keys, and no flow key", () => {
+    for (const shape of [...listWorkShapes(), ...WORK_SHAPE_PRIOR_VERSIONS]) {
+      const contract = readWorkShapeDefinitionContract(shape);
+      expect(Object.keys(contract).sort(), shape.key).toEqual(ELEVEN);
+      expect(Object.hasOwn(contract, "flow")).toBe(false);
+    }
+  });
+
+  it("a shape that declares a flow passes it through by reference", () => {
+    const base = listWorkShapes()[0]!;
+    const flow = { nodes: [], edges: base.stages.slice(1).map((stage, index) => ({ from: base.stages[index]!.key, to: stage.key })) };
+    const contract = readWorkShapeDefinitionContract({ ...base, flow });
+    expect(contract.flow).toBe(flow);
+    expect(Object.keys(contract).sort()).toEqual([...ELEVEN, "flow"].sort());
   });
 });

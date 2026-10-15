@@ -1,9 +1,11 @@
 import { describeReadinessRefusal } from "@/lib/build/readiness-refusal-message";
-import { type BoundWorkShapeDb, readBoundWorkShapeRef } from "@/lib/backlog/initiative-readiness/bound-work-shape";
+import { type BoundWorkShapeDb, readBoundEditPaths, readBoundWorkShapeRef } from "@/lib/backlog/initiative-readiness/bound-work-shape";
+import { assessDeliverySensitivity, buildPlanPaths } from "@/lib/backlog/initiative-readiness/delivery-sensitivity";
 import { type InheritanceDb, loadInheritedInitiativeScope } from "@/lib/backlog/initiative-readiness/parent-scope-inheritance";
 import { randomUUID } from "node:crypto";
 
 import { prisma } from "@dpf/db";
+import { CLAIM_READINESS_ACTIVITY_KINDS } from "@/lib/work-capsules/governed-work-claim";
 
 import {
   projectBacklogItemReadiness,
@@ -93,6 +95,59 @@ function codes(decision: InitiativeReadinessDecision) {
   return [...decision.blockers, ...decision.unmet].map((entry) => entry.code);
 }
 
+export type BuildReadinessFactsInput = {
+  kind: string;
+  designDoc: unknown;
+  designReview: unknown;
+  buildPlan: unknown;
+  originator: { id: string; itemId: string; title: string; body: string | null; workType: string | null };
+};
+
+/**
+ * The facts a Build Studio build's readiness is judged on, read once for every
+ * gate that judges a build (BI-1E8EAD10, BI-0E2E3BC5, and BI-3555F94E for the
+ * terminal transition).
+ *
+ * - The Workroom's bound delivery shape, and the parent's scope a
+ *   decomposition child inherits.
+ * - Sensitivity read from the change: the item, the room's declared paths and
+ *   the plan's files (operator direction 2026-10-07).
+ * - The build's own reviewed design. For small and medium shapes that design
+ *   is the recorded research and, absent body criteria, the baseline.
+ *
+ * A missing room or parent leaves the value null.
+ */
+export async function loadBuildReadinessFacts(db: BuildEntryGateDb, build: BuildReadinessFactsInput) {
+  const originator = build.originator;
+  const [workShape, inheritedScope, declaredPaths] = await Promise.all([
+    db.workroom
+      ? readBoundWorkShapeRef(db as BoundWorkShapeDb, originator.itemId).catch(() => null)
+      : Promise.resolve(null),
+    db.backlogItemActivity.findMany && db.backlogItem
+      ? loadInheritedInitiativeScope(db as InheritanceDb, { childItemId: originator.itemId, childRowId: originator.id })
+        .catch(() => null)
+      : Promise.resolve(null),
+    db.workroom
+      ? readBoundEditPaths(db as BoundWorkShapeDb, originator.itemId).catch(() => [] as string[])
+      : Promise.resolve([] as string[]),
+  ]);
+  return {
+    workShape,
+    inheritedScope,
+    deliverySensitivity: assessDeliverySensitivity({
+      title: originator.title,
+      body: originator.body,
+      workType: originator.workType,
+      declaredPaths,
+      planPaths: buildPlanPaths(build.buildPlan),
+    }),
+    buildDesign: {
+      reviewPassed: designReviewPassed(build.designReview),
+      acceptanceCriteriaCount: designAcceptanceCriteriaCount(build.designDoc),
+    },
+  };
+}
+
 export async function enforceBuildInitiativeReadiness(args: {
   buildId: string;
   target: ReadinessTarget;
@@ -113,15 +168,19 @@ export async function enforceBuildInitiativeReadiness(args: {
       originatingBacklogItemId: true,
       designDoc: true,
       designReview: true,
+      buildPlan: true,
       originator: {
         select: {
           id: true, itemId: true, title: true, type: true, source: true, workType: true, scopeKind: true,
           body: true,
           archetypeCategories: true, archetypeIds: true,
+          // BI-7027C26E: the same rows the claim reads. A small fix may leave
+          // ideate with no design review (FIX_SMALL_GATES), and then its research
+          // is its recorded reproduction — `evidence` rows (BI-6EB2DBBB). No cap:
+          // evidence rows must not crowd receipts out of the projection.
           activities: {
-            where: { kind: { in: ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage"] } },
+            where: { kind: { in: [...CLAIM_READINESS_ACTIVITY_KINDS] } },
             orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
-            take: 100,
             select: { id: true, kind: true, gateKey: true, recordedAt: true, payload: true },
           },
         },
@@ -139,44 +198,17 @@ export async function enforceBuildInitiativeReadiness(args: {
     return { allowed: false, error: "classification_required", message: "Build has no canonical originating backlog subject.", decision };
   }
 
-  // BI-1E8EAD10: the claim path, the terminal transition and the review-outcome
-  // path all key the gates on the Workroom's bound delivery shape and let a
-  // decomposition child inherit its parent's baseline, research and coverage.
-  // This gate did neither, so every Build Studio phase was judged as an
-  // unshaped, standalone feature and owed a plan document the automated lane
-  // never produces. Read both the way those paths do; a missing room or
-  // parent simply leaves the value null, exactly as before.
-  const [workShape, inheritedScope] = await Promise.all([
-    db.workroom
-      ? readBoundWorkShapeRef(db as BoundWorkShapeDb, build.originator.itemId).catch(() => null)
-      : Promise.resolve(null),
-    db.backlogItemActivity.findMany && db.backlogItem
-      ? loadInheritedInitiativeScope(db as InheritanceDb, { childItemId: build.originator.itemId, childRowId: build.originator.id })
-        .catch(() => null)
-      : Promise.resolve(null),
-  ]);
-  // BI-0E2E3BC5: sensitivity raises the shape here exactly as it does at the
-  // claim and at closure (item-text sensitivity), and the build's own reviewed
-  // design is handed to the projector: for small and medium it is the recorded
-  // research and, absent body criteria, the baseline.
-  const { deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
+  const facts = await loadBuildReadinessFacts(db, build);
   const projected = (args.dependencies?.projectReadiness ?? projectBacklogItemReadiness)({
     item: {
       ...build.originator,
       activeBuildKind: build.kind,
-      workShape,
-      deliverySensitivity: deriveDeliverableSensitivity({
-        text: `${build.originator.title ?? ""}
-${build.originator.body ?? ""}`,
-        workType: build.originator.workType ?? null,
-      }),
+      workShape: facts.workShape,
+      deliverySensitivity: facts.deliverySensitivity,
     },
-    buildDesign: {
-      reviewPassed: designReviewPassed(build.designReview),
-      acceptanceCriteriaCount: designAcceptanceCriteriaCount(build.designDoc),
-    },
+    buildDesign: facts.buildDesign,
     activities: build.originator.activities as InitiativeReadinessActivity[],
-    inheritedScope,
+    inheritedScope: facts.inheritedScope,
     target: args.target,
     transitionObject: {
       kind: "feature-build",

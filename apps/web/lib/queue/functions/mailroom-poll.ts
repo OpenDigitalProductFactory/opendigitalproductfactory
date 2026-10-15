@@ -10,16 +10,16 @@
 // The requested-event variant polls ONE mailbox now: the connect flow's first
 // read and the Mailroom page's "Check now".
 
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 export const MAILROOM_POLL_INNGEST_ID = "mailroom/mailbox-poll";
 export const MAILROOM_POLL_CRON = "9,24,39,54 * * * *";
 export const MAILROOM_POLL_REQUESTED_EVENT = "mailroom/mailbox-poll.requested";
 
-export const mailroomMailboxPoll = inngest.createFunction(
+export const mailroomMailboxPoll = jobs.createFunction(
   { id: MAILROOM_POLL_INNGEST_ID, retries: 1, triggers: [cron(MAILROOM_POLL_CRON)] },
   async ({ step }) => {
     const gate = await gateAtEntry(step, MAILROOM_POLL_INNGEST_ID);
@@ -38,7 +38,7 @@ export const mailroomMailboxPoll = inngest.createFunction(
   },
 );
 
-export const mailroomMailboxPollRequested = inngest.createFunction(
+export const mailroomMailboxPollRequested = jobs.createFunction(
   { id: "mailroom/mailbox-poll-requested", retries: 1, triggers: [{ event: MAILROOM_POLL_REQUESTED_EVENT }] },
   async ({ event, step }) => {
     const mailboxRef = typeof event.data?.mailboxRef === "string" ? event.data.mailboxRef : null;

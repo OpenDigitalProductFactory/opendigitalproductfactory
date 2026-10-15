@@ -334,3 +334,26 @@ This correction realizes AC-E2B-003 rather than weakening it: approval recovery
 continues to own live proposals, inference is not rerun, stored arguments are
 not synthesized, and the writer still passes through its ordinary authority and
 receipt validators.
+
+## Rejected initial cursor recovery (BI-CAP-EF2B04BB)
+
+The unchanged-source routing plan review was admitted after PR #6197, but its
+five first-page reads used invented cursors and failed `invalid_cursor`. Their
+presence prevented the existing zero-reader bootstrap, leaving no successful
+task-owned evidence for hydration.
+
+Extend the existing bootstrap only for an exact marked resumable wait whose
+validated history consists entirely of rejected initial cursors. Validate every
+historical tool, immutable binding, result, identity and order at the hydration
+owner before classifying eligibility. Denials, other errors, continuation
+failures, malformed or conflicting results remain closed. Failed rows remain
+audit history and never become hydration authority.
+
+After the existing compare-and-set reservation, the existing governed reader
+starts at line one without a cursor under the unchanged token and tool grants.
+Re-query task-owned rows and require fresh successful coherent evidence through
+the existing hydration validator. A failed bootstrap, missing persistence or
+invalid hydration creates no writer. Generic completed exits, completed writers,
+live proposals, request identity, attempt limits and fresh approval remain
+unchanged. This continuation implements OBJ-DE-001/003/004 and AC-DE-003/006;
+failed-only history itself still cannot authorize writer execution.

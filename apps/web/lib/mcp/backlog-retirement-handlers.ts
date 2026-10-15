@@ -3,7 +3,7 @@ import {
   normalizeDeferralInput,
 } from "@/lib/backlog/deferral-contract";
 import { resolveDuplicateBacklogRowId } from "@/lib/backlog/duplicate-resolution";
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 
 export async function triageBacklogItemTool(params: Record<string, unknown>): Promise<ToolResult> {
   const { prisma } = await import("@dpf/db");

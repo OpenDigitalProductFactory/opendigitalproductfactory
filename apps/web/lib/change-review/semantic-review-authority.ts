@@ -8,7 +8,7 @@ import type { SemanticReviewRequest } from "./semantic-review-request";
 
 /** Re-evaluate durable actor references against current authority before dispatch. */
 export async function verifySemanticReviewAuthority(packet: SemanticReviewRequest, taskRunId: string,
-  db: Pick<Prisma.TransactionClient, "user" | "mcpApiToken" | "taskRun" | "workroom" | "agent" | "authorityBinding"> = prisma,
+  db: Pick<Prisma.TransactionClient, "user" | "mcpApiToken" | "taskRun" | "workroom" | "agent" | "authorityBinding" | "oAuthRefreshToken"> = prisma,
 ): Promise<boolean> {
   const { actor } = packet;
   const user = await currentUserContext(actor.userId, db);

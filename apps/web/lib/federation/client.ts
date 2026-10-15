@@ -223,6 +223,31 @@ export async function sendOperationalPostureToPeer(
   });
 }
 
+/** Deliver one deployment country declaration (BI-06EA3167) to the organization
+ *  this install federates under. Same inbox and transport as a posture report. */
+export async function sendDeploymentDeclarationToPeer(
+  target: PeerLinkTarget,
+  activity: string,
+  record: unknown,
+  options: { eventId?: string; now?: Date } = {},
+): Promise<PeerPostResult> {
+  return postToPeer({
+    peerAuthorityUrl: target.peerAuthorityUrl,
+    linkToken: target.linkToken,
+    path: "/api/v1/federation/inbox",
+    cloudEvent: toCloudEvent({
+      id: options.eventId ?? `${target.linkId}:${activity}:${Date.now()}`,
+      source: "/dpf",
+      type: activity,
+      time: (options.now ?? new Date()).toISOString(),
+      linkId: target.linkId,
+      data: record,
+    }),
+    sameOrgLan: target.sameOrgLan ?? false,
+    ...(target.fetchImpl ? { fetchImpl: target.fetchImpl } : {}),
+  });
+}
+
 /** Compare bounded demand inventories so a lost send or acknowledgment self-heals. */
 export async function sendDemandDigestToPeer(
   target: PeerLinkTarget,

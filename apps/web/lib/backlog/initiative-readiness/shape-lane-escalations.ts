@@ -3,6 +3,7 @@
 // module-size ceiling; the routing that picks them stays there.
 
 import type { TerminalInitiativeRecovery } from "./terminal-recovery";
+import type { InitiativeReadinessDecision } from "./types";
 
 /**
  * BI-05F8860A: under readiness.v3 a small or break-fix item owes no objective
@@ -56,20 +57,37 @@ export function researchLaneEscalation(): TerminalInitiativeRecovery {
 
 /**
  * BI-0F8E39D5: a small or medium item's baseline is the acceptance criteria in
- * its body, and its shape owes no spec. Spec approval is the only writer of the
- * persisted baseline acceptance mapping reads, so "complete independent spec
- * approval" was advice the item could never follow. Say what is missing.
+ * its body, and its shape owes no spec, so "complete independent spec approval"
+ * was advice it could never follow. Two different gaps land here, and each gets
+ * its own next step (DI-FDAB20135537):
+ *
+ * - The body has no criteria the parser can read. That is the common case, and
+ *   the author fixes it by editing the body. The first version of this message
+ *   told BI-FA769D87's author the body "satisfies its baseline" and that the
+ *   item "cannot close"; adding a heading closed it minutes later.
+ * - The criteria are there but acceptance is still unmet. Platform work is
+ *   accepted when its merge through branch protection is recognized. Other
+ *   medium work needs an independent objective-mapping receipt. The authorized
+ *   completion mutation now retains body criteria when source and author
+ *   prerequisites are available; recovery names those prerequisites otherwise.
  */
-export function bodyBaselineUnpersistedEscalation(): TerminalInitiativeRecovery {
-  return {
-    reviewerRoutes: [],
-    unroutable: [],
-    escalations: [{
-      accountableRole: "acceptance-reviewer",
-      toolName: "record_initiative_evidence",
-      grant: "initiative_evidence_write",
-      reason: "body-baseline-unpersisted",
-      nextAction: "This item's acceptance criteria are in its body, which satisfies its baseline, but acceptance mapping needs a persisted baseline that no lane writes for body criteria yet (BI-0F8E39D5). It cannot close through an acceptance reviewer until that repair lands; do not seek spec approval, which this shape does not owe.",
-    }],
-  };
+export function bodyBaselineEscalation(decision: InitiativeReadinessDecision): TerminalInitiativeRecovery {
+  const criteriaMissing = [...decision.blockers, ...decision.unmet]
+    .some((entry) => entry.code === "OBJECTIVE_BASELINE_REQUIRED");
+  const escalation = criteriaMissing
+    ? {
+      accountableRole: "product-owner" as const,
+      toolName: "update_backlog_item" as const,
+      grant: "backlog_write" as const,
+      reason: "acceptance-criteria-missing" as const,
+      nextAction: "This item's baseline is the acceptance criteria in its body, and none could be read. With update_backlog_item, add a heading that contains \"Acceptance\" (for example \"## Acceptance criteria\") followed by one criterion per bullet, or bullets that start with \"AC-<id>:\". A bold line is not a heading. Then retry. No spec approval is needed.",
+    }
+    : {
+      accountableRole: "acceptance-reviewer" as const,
+      toolName: "update_backlog_item_status" as const,
+      grant: "backlog_write" as const,
+      reason: "body-baseline-unpersisted" as const,
+      nextAction: "The body has readable criteria but no retained criteria version. Retry completion with update_backlog_item_status and a valid completionEvidence manifest to capture it through the authorized transition. Capture requires one current Workroom with a full repository/head identity, author provenance and retained document storage. Then record fresh passing evidence after that version and request the exact independent acceptance reviewer route. Product-linked work still requires independent acceptance; no spec approval is needed.",
+    };
+  return { reviewerRoutes: [], unroutable: [], escalations: [escalation] };
 }

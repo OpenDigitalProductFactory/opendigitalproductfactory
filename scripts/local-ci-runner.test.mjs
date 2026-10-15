@@ -10,6 +10,9 @@ import {
   LOCAL_CI_MISSING_DATABASE_URL,
   createLocalIntegrationChildInvocation,
   planPostgresOwnership,
+  SLOT_POSTGRES_RESTART_POLICY,
+  slotPostgresProvisionArgs,
+  slotPostgresReuseCommands,
   preparePinnedPnpmEnvironment,
   executableOnPath,
   resolveLocalCiPnpmInvocation,
@@ -141,6 +144,27 @@ test("a foreign listener never satisfies manifest Postgres ownership", () => {
     }),
     "reuse",
   );
+});
+
+test("a provisioned slot Postgres survives a host or Docker restart (BI-277ECBDB)", () => {
+  const args = slotPostgresProvisionArgs({
+    container: "dpf-local-ci-postgres-0",
+    hostPort: 55432,
+    volume: "dpf-local-ci-postgres-0",
+    database: "dpf_local_ci_0",
+  });
+  const at = args.indexOf("--restart");
+  assert.notEqual(at, -1, "docker run must set a restart policy");
+  assert.equal(args[at + 1], SLOT_POSTGRES_RESTART_POLICY);
+  assert.equal(SLOT_POSTGRES_RESTART_POLICY, "unless-stopped");
+  assert.equal(args.at(-1), "pgvector/pgvector:pg16");
+});
+
+test("a reused slot Postgres is brought up to the restart policy before it is started", () => {
+  assert.deepEqual(slotPostgresReuseCommands("dpf-local-ci-postgres-1"), [
+    ["update", "--restart", "unless-stopped", "dpf-local-ci-postgres-1"],
+    ["start", "dpf-local-ci-postgres-1"],
+  ]);
 });
 
 test("an admitted runner resets only its manifest-owned disposable slot database", () => {
@@ -422,5 +446,25 @@ test("clearStaleStageReceipts actually deletes on disk", () => {
   assert.equal(existsSync(meta), false, "metadata record must not survive into the next run (BI-F22B4EEE)");
   for (const suffix of [".vitest.json", ".typecheck.json", ".build.json"]) {
     assert.equal(existsSync(`${meta}${suffix}`), false, `${suffix} must not survive into the next run`);
+  }
+});
+
+test("a prerequisite the runner could not set up exits as infrastructure, not 1", () => {
+  // Observed 2026-10-02: "required origin/main refresh failed: ... Could not
+  // resolve host" exited 1 and was recorded as a reasonless `failed`.
+  // classifyGateOutcome maps EXIT_RUNNER_PREREQUISITE_UNAVAILABLE to a
+  // blocked_* status; this keeps each network/Docker/disk setup failure on it.
+  const source = readFileSync(cli, "utf8");
+  assert.match(source, /function dieUnavailable\(message\) \{\s*die\(message, EXIT_RUNNER_PREREQUISITE_UNAVAILABLE\);/);
+  for (const prerequisite of [
+    "could not provision ${manifest.postgres.container}",
+    "could not start ${manifest.postgres.container}",
+    "slot PostgreSQL ${manifest.postgres.container} never became ready",
+    "could not create scratch workspace",
+    "required origin/main refresh failed",
+  ]) {
+    const at = source.indexOf(prerequisite);
+    assert.ok(at > 0, `expected the runner to name: ${prerequisite}`);
+    assert.match(source.slice(Math.max(0, at - 40), at), /dieUnavailable\(`$/, `${prerequisite} must exit as infrastructure`);
   }
 });

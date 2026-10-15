@@ -14,9 +14,50 @@ import {
   type CapabilityProbe,
   type TestScenario,
 } from "./endpoint-test-registry";
-import { callProvider, type ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
+import { callProvider } from "@/lib/ai-inference";
 import { LocalProviderCapacityDeferredError } from "@/lib/routing/local-provider-capacity";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { isModelRoutingProvider } from "@/lib/routing/provider-eligibility";
+import { supportsTextGeneration } from "@/lib/routing/model-classifier";
+import { resolveDefaultExecutionAdapter } from "@/lib/routing/execution-plan";
+import { InferenceError } from "@/lib/routing/inference-error";
+import { createRoutingTraceId } from "@/lib/routing/routing-trace";
+import { assertEndpointConcurrencySelection, runEndpointConcurrencyDiagnostic } from "./endpoint-concurrency-diagnostic";
+import { awaitInferenceCancellation, currentInferenceSignal, GovernedInferenceDeadlineError, withInferenceCancellation } from "@/lib/routing/governed-inference-deadline";
+
+class DiagnosticIncompleteError extends Error {}
+
+/** One allowance covers prompt assembly, generation, assertions and grading. */
+async function withDiagnosticObservation<T>(observe: () => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new DiagnosticIncompleteError("Diagnostic timed out after 30 seconds")), 30_000);
+  timer.unref?.();
+  try {
+    return await withInferenceCancellation(controller.signal, () => awaitInferenceCancellation(observe(), currentInferenceSignal()!));
+  } finally { clearTimeout(timer); }
+}
+
+async function callDiagnostic(
+  providerId: string, modelId: string, messages: ChatMessage[], systemPrompt: string,
+  tools: Array<Record<string, unknown>> | undefined, traceId: string, maxTokens: number,
+) {
+  const result = await callProvider(
+      providerId, modelId, messages, systemPrompt, tools,
+      { providerId, modelId, recipeId: null, contractFamily: "model-calibration.endpoint-diagnostic",
+        executionAdapter: resolveDefaultExecutionAdapter(providerId), maxTokens,
+        providerSettings: {}, toolPolicy: tools?.length ? { toolChoice: "auto" } : {}, responsePolicy: {} },
+      undefined, undefined, { traceId },
+    );
+  if (result.truncated) throw new DiagnosticIncompleteError("Diagnostic output was truncated; capability remains unverified");
+  return result;
+}
+
+function isUnobservedDiagnostic(err: unknown): boolean {
+  return isCapacityDeferral(err) || err instanceof DiagnosticIncompleteError
+    || err instanceof InferenceError || err instanceof GovernedInferenceDeadlineError
+    || currentInferenceSignal()?.aborted === true;
+}
 
 /** A capacity deferral is the host declining to schedule, not the model failing. */
 export function isCapacityDeferral(err: unknown): boolean {
@@ -35,6 +76,7 @@ export function isCapacityDeferral(err: unknown): boolean {
 export type ProbeOutcome = "passed" | "failed" | "deferred";
 
 export type ProbeRunResult = {
+  traceId?: string;
   probeId: string;
   category: string;
   name: string;
@@ -47,6 +89,7 @@ export type ProbeRunResult = {
 };
 
 export type ScenarioRunResult = {
+  traceId?: string;
   scenarioId: string;
   taskType: string;
   name: string;
@@ -66,10 +109,11 @@ export type ModelTestResult = {
   scenarios: ScenarioRunResult[];
   instructionFollowing: string | null;
   codingCapability: string | null;
+  concurrency?: Awaited<ReturnType<typeof runEndpointConcurrencyDiagnostic>>;
 };
 
 // Keep backward compat alias
-export type EndpointTestResult = ModelTestResult & { endpointId: string };
+export type EndpointTestResult = ModelTestResult & { endpointId: string; testRunId?: string };
 
 // ─── Evidence Mapping (exported for testing) ─────────────────────────────────
 
@@ -102,51 +146,55 @@ async function runProbe(
   providerId: string,
   modelId: string,
 ): Promise<ProbeRunResult> {
+  const traceId = createRoutingTraceId();
   try {
-    const promptInput: PromptInput = { ...TEST_PROMPT_DEFAULTS, ...probe.promptOverrides };
-    const systemPrompt = await assembleSystemPrompt(promptInput);
+    return await withDiagnosticObservation<ProbeRunResult>(async () => {
+      const promptInput: PromptInput = { ...TEST_PROMPT_DEFAULTS, ...probe.promptOverrides };
+      const systemPrompt = await assembleSystemPrompt(promptInput);
 
-    const messages: ChatMessage[] = [{ role: "user", content: probe.userMessage }];
+      const messages: ChatMessage[] = [{ role: "user", content: probe.userMessage }];
 
-    const probeToolsFormatted = probe.tools?.map((t) => ({ type: "function" as const, function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
+      const probeToolsFormatted = probe.tools?.map((t) => ({ type: "function" as const, function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
 
-    // Resolves BI-INST-007: probes used routeAndCall, which requires
-    // active endpoint manifests in EndpointTaskPerformance. Probes are
-    // SUPPOSED to be the thing that creates those manifests — a
-    // chicken-and-egg that broke every fresh-install probe with
-    // "No eligible endpoints for task 'conversation'" before any model
-    // had ever been profiled. Since the probe runner already knows both
-    // providerId AND modelId (it's testing a SPECIFIC model), there's no
-    // routing decision to make — call the model directly.
-    const result = await callProvider(
-      providerId,
-      modelId,
-      messages,
-      systemPrompt,
-      probeToolsFormatted,
-    );
+      // Resolves BI-INST-007: probes used routeAndCall, which requires
+      // active endpoint manifests in EndpointTaskPerformance. Probes are
+      // SUPPOSED to be the thing that creates those manifests — a
+      // chicken-and-egg that broke every fresh-install probe with
+      // "No eligible endpoints for task 'conversation'" before any model
+      // had ever been profiled. Since the probe runner already knows both
+      // providerId AND modelId (it's testing a SPECIFIC model), there's no
+      // routing decision to make — call the model directly.
+      const result = await callDiagnostic(
+        providerId,
+        modelId,
+        messages,
+        systemPrompt,
+        probeToolsFormatted,
+        traceId, 512,
+      );
 
-    // Extract tool calls from response
-    const toolCalls = result.toolCalls as unknown[] | undefined;
+      // Extract tool calls from response
+      const toolCalls = result.toolCalls as unknown[] | undefined;
 
-    const assertionResult = probe.assert(result.content, toolCalls);
-    return {
-      probeId: probe.id, category: probe.category, name: probe.name,
-      ...assertionResult,
-      passed: assertionResult.pass,
-      outcome: assertionResult.pass ? "passed" as const : "failed" as const,
-    };
+      const assertionResult = probe.assert(result.content, toolCalls);
+      return {
+        traceId, probeId: probe.id, category: probe.category, name: probe.name,
+        ...assertionResult,
+        passed: assertionResult.pass,
+        outcome: assertionResult.pass ? "passed" as const : "failed" as const,
+      };
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown";
-    if (isCapacityDeferral(err)) {
+    if (isUnobservedDiagnostic(err)) {
       return {
-        probeId: probe.id, category: probe.category, name: probe.name,
+        traceId, probeId: probe.id, category: probe.category, name: probe.name,
         pass: false, passed: null, outcome: "deferred",
         reason: `Deferred: ${message}`,
       };
     }
     return {
-      probeId: probe.id, category: probe.category, name: probe.name,
+      traceId, probeId: probe.id, category: probe.category, name: probe.name,
       pass: false, passed: false, outcome: "failed",
       reason: `Error: ${message}`,
     };
@@ -160,72 +208,77 @@ async function runScenario(
   providerId: string,
   modelId: string,
 ): Promise<ScenarioRunResult> {
+  const traceId = createRoutingTraceId();
   try {
-    const promptInput: PromptInput = { ...TEST_PROMPT_DEFAULTS, ...scenario.promptOverrides };
-    const systemPrompt = await assembleSystemPrompt(promptInput);
+    return await withDiagnosticObservation<ScenarioRunResult>(async () => {
+      const promptInput: PromptInput = { ...TEST_PROMPT_DEFAULTS, ...scenario.promptOverrides };
+      const systemPrompt = await assembleSystemPrompt(promptInput);
 
-    const messages: ChatMessage[] = [{ role: "user", content: scenario.userMessage }];
+      const messages: ChatMessage[] = [{ role: "user", content: scenario.userMessage }];
 
-    const scenarioToolsFormatted = scenario.tools?.map((t) => ({ type: "function" as const, function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
+      const scenarioToolsFormatted = scenario.tools?.map((t) => ({ type: "function" as const, function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
 
-    // BI-INST-007: same direct-call rationale as runProbe — scenario runner
-    // already targets a specific providerId+modelId, no routing needed.
-    const result = await callProvider(
-      providerId,
-      modelId,
-      messages,
-      systemPrompt,
-      scenarioToolsFormatted,
-    );
+      // BI-INST-007: same direct-call rationale as runProbe — scenario runner
+      // already targets a specific providerId+modelId, no routing needed.
+      const result = await callDiagnostic(
+        providerId,
+        modelId,
+        messages,
+        systemPrompt,
+        scenarioToolsFormatted,
+        traceId, 1024,
+      );
 
-    const toolCalls = (result as unknown as Record<string, unknown>).toolCalls as unknown[] | undefined;
+      const toolCalls = (result as unknown as Record<string, unknown>).toolCalls as unknown[] | undefined;
 
-    // Check programmatic assertions
-    const assertionResults = checkScenarioAssertions(result.content, toolCalls, scenario.assertions);
+      // Check programmatic assertions
+      const assertionResults = checkScenarioAssertions(result.content, toolCalls, scenario.assertions);
 
-    // Check orchestrator score if any assertion requires it
-    let orchestratorScore: number | null = null;
-    const scoreAssertions = scenario.assertions.filter((a) => a.type === "orchestrator_score_gte");
-    if (scoreAssertions.length > 0) {
-      const evalResult = await evaluateResponseForTest({
-        endpointId: providerId,
-        taskType: scenario.taskType,
-        userMessage: scenario.userMessage,
-        aiResponse: result.content,
-      });
-      if (evalResult) {
-        orchestratorScore = evalResult.score;
-        for (const sa of scoreAssertions) {
-          assertionResults.push({
-            assertion: sa,
-            passed: evalResult.score >= Number(sa.value),
-            detail: `Orchestrator score ${evalResult.score} >= ${sa.value}: ${evalResult.score >= Number(sa.value)}`,
-          });
+      // Check orchestrator score if any assertion requires it
+      let orchestratorScore: number | null = null;
+      const scoreAssertions = scenario.assertions.filter((a) => a.type === "orchestrator_score_gte");
+      if (scoreAssertions.length > 0) {
+        const evalResult = await evaluateResponseForTest({
+          endpointId: providerId,
+          taskType: scenario.taskType,
+          userMessage: scenario.userMessage,
+          aiResponse: result.content,
+        });
+        if (!evalResult) throw new DiagnosticIncompleteError("Required scenario grader produced no verified score");
+        if (evalResult) {
+          orchestratorScore = evalResult.score;
+          for (const sa of scoreAssertions) {
+            assertionResults.push({
+              assertion: sa,
+              passed: evalResult.score >= Number(sa.value),
+              detail: `Orchestrator score ${evalResult.score} >= ${sa.value}: ${evalResult.score >= Number(sa.value)}`,
+            });
+          }
         }
       }
-    }
 
-    const allPassed = assertionResults.every((r) => r.passed);
+      const allPassed = assertionResults.every((r) => r.passed);
 
-    return {
-      scenarioId: scenario.id, taskType: scenario.taskType, name: scenario.name,
-      passed: allPassed,
-      outcome: allPassed ? "passed" : "failed",
-      assertionResults: assertionResults.map((r) => ({ description: r.assertion.description, passed: r.passed, detail: r.detail })),
-      orchestratorScore, response: result.content,
-    };
+      return {
+        traceId, scenarioId: scenario.id, taskType: scenario.taskType, name: scenario.name,
+        passed: allPassed,
+        outcome: allPassed ? "passed" : "failed",
+        assertionResults: assertionResults.map((r) => ({ description: r.assertion.description, passed: r.passed, detail: r.detail })),
+        orchestratorScore, response: result.content,
+      };
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown";
-    if (isCapacityDeferral(err)) {
+    if (isUnobservedDiagnostic(err)) {
       return {
-        scenarioId: scenario.id, taskType: scenario.taskType, name: scenario.name,
+        traceId, scenarioId: scenario.id, taskType: scenario.taskType, name: scenario.name,
         passed: false, outcome: "deferred",
         assertionResults: [{ description: "Execution", passed: false, detail: `Deferred: ${message}` }],
         orchestratorScore: null, response: "",
       };
     }
     return {
-      scenarioId: scenario.id, taskType: scenario.taskType, name: scenario.name,
+      traceId, scenarioId: scenario.id, taskType: scenario.taskType, name: scenario.name,
       passed: false, outcome: "failed",
       assertionResults: [{ description: "Execution", passed: false, detail: `Error: ${message}` }],
       orchestratorScore: null, response: "",
@@ -240,18 +293,24 @@ export async function runEndpointTests(opts: {
   modelId?: string;
   taskType?: string;
   probesOnly?: boolean;
+  concurrencyOnly?: boolean;
   triggeredBy: string;
 }): Promise<EndpointTestResult[]> {
-  // Get active LLM provider IDs first (ModelProfile has no FK to ModelProvider)
-  const activeProviders = await prisma.modelProvider.findMany({
+  if (opts.concurrencyOnly) assertEndpointConcurrencySelection(opts);
+  // Reuse routing's structural predicate, including Responses transports.
+  // Provider/account lifecycle is also revalidated at callProvider dispatch.
+  const providers = await prisma.modelProvider.findMany({
     where: {
       status: "active",
-      endpointType: "llm",
       ...(opts.endpointId ? { providerId: opts.endpointId } : {}),
     },
-    select: { providerId: true },
+    select: { providerId: true, endpointType: true, category: true, serviceKind: true, cliEngine: true },
   });
+  const activeProviders = providers.filter(isModelRoutingProvider);
   const activeProviderIds = activeProviders.map((p) => p.providerId);
+  if (opts.endpointId && !activeProviderIds.includes(opts.endpointId)) {
+    throw new Error(`Diagnostic provider ${opts.endpointId} is not available: missing, inactive, or unsupported for model probes. No probe executed.`);
+  }
 
   // Resolve models to test — iterate over ModelProfile records (providerId + modelId pairs)
   const modelProfiles: Array<{ id: string; providerId: string; modelId: string; friendlyName: string }> = [];
@@ -261,15 +320,18 @@ export async function runEndpointTests(opts: {
         providerId: { in: activeProviderIds },
         ...(opts.modelId ? { modelId: opts.modelId } : {}),
       },
-      select: { id: true, providerId: true, modelId: true, friendlyName: true },
+      select: { id: true, providerId: true, modelId: true, friendlyName: true, modelClass: true, outputModalities: true, modelStatus: true },
       orderBy: [{ providerId: "asc" }, { modelId: "asc" }],
     });
-    modelProfiles.push(...profiles);
+    modelProfiles.push(...profiles.filter(p => supportsTextGeneration(p)
+      && p.modelStatus !== "retired" && p.modelStatus !== "disabled"));
   }
 
-  // If no model profiles found, fall back to provider-level (for providers without profiles)
-  if (modelProfiles.length === 0 && opts.endpointId && activeProviderIds.includes(opts.endpointId)) {
-    modelProfiles.push({ id: "", providerId: opts.endpointId, modelId: "default", friendlyName: opts.endpointId });
+  if (modelProfiles.length === 0 && (opts.modelId || opts.endpointId)) {
+    throw new Error(`Diagnostic model ${opts.modelId ?? "(no compatible discovered model)"} is not available for the selected provider. No probe executed.`);
+  }
+  if (opts.concurrencyOnly && modelProfiles.length !== 1) {
+    throw new Error("Concurrency diagnostics require exactly one available model profile. No call executed.");
   }
 
   const results: EndpointTestResult[] = [];
@@ -285,16 +347,32 @@ export async function runEndpointTests(opts: {
         endpointId: providerId,
         modelId,
         taskType: opts.taskType ?? null,
-        probesOnly: opts.probesOnly ?? false,
+        probesOnly: opts.concurrencyOnly ? false : opts.probesOnly ?? false,
         triggeredBy: opts.triggeredBy,
       },
     });
 
-    // Run probes against this model's provider via V2 routing with preferred provider bias.
+    if (opts.concurrencyOnly) {
+      const concurrency = await runEndpointConcurrencyDiagnostic(providerId, modelId);
+      await prisma.endpointTestRun.update({
+        where: { id: testRun.id },
+        data: {
+          status: concurrency.outcome === "deferred" ? "incomplete" : "completed",
+          completedAt: new Date(), avgScore: null,
+          results: { modelId, friendlyName, mode: "concurrency", concurrency } as unknown as import("@dpf/db").Prisma.InputJsonValue,
+        },
+      });
+      results.push({ testRunId: runId, endpointId: providerId, providerId, modelId, friendlyName,
+        probes: [], scenarios: [], instructionFollowing: null, codingCapability: null, concurrency });
+      continue;
+    }
+
+    // Probes stay on the selected model; dispatch still enforces shared admission.
     const probeResults: ProbeRunResult[] = [];
     for (const probe of CAPABILITY_PROBES) {
       const result = await runProbe(probe, providerId, modelId);
       probeResults.push(result);
+      if (result.outcome === "deferred") break;
     }
 
     const probePassMap: Record<string, boolean> = {};
@@ -304,7 +382,7 @@ export async function runEndpointTests(opts: {
 
     // Run scenarios (unless probesOnly)
     const scenarioResults: ScenarioRunResult[] = [];
-    if (!opts.probesOnly) {
+    if (!opts.probesOnly && !probeResults.some(p => p.outcome === "deferred")) {
       const eligibleScenarios = (opts.taskType
         ? TASK_SCENARIOS.filter((s) => s.taskType === opts.taskType)
         : TASK_SCENARIOS
@@ -313,25 +391,8 @@ export async function runEndpointTests(opts: {
       for (const scenario of eligibleScenarios) {
         const result = await runScenario(scenario, providerId, modelId);
         scenarioResults.push(result);
+        if (result.outcome === "deferred") break;
 
-        // Record TaskEvaluation for scenarios with orchestrator scores
-        if (result.orchestratorScore !== null) {
-          await prisma.taskEvaluation.create({
-            data: {
-              threadId: `test-${testRun.runId}`,
-              endpointId: providerId,
-              taskType: scenario.taskType,
-              qualityScore: result.orchestratorScore,
-              evaluationNotes: result.assertionResults.map((r) => `${r.passed ? "PASS" : "FAIL"}: ${r.description}`).join("; "),
-              taskContext: `TEST: ${scenario.name} [${friendlyName}]`,
-              routeContext: scenario.routeContext,
-              source: "test_harness",
-            },
-          });
-
-          // Update performance profile
-          await updatePerformanceProfile(providerId, scenario.taskType, result.orchestratorScore);
-        }
       }
     }
 
@@ -343,6 +404,19 @@ export async function runEndpointTests(opts: {
     const probesDeferred = probeResults.filter((p) => p.outcome === "deferred").length;
     const scenariosDeferred = scenarioResults.filter((s) => s.outcome === "deferred").length;
     const runIncomplete = probesDeferred > 0 || scenariosDeferred > 0;
+
+    // Publish quality evidence only after every selected observation completes.
+    if (!runIncomplete) for (const result of scenarioResults) {
+      const scenario = TASK_SCENARIOS.find(s => s.id === result.scenarioId);
+      if (!scenario || result.orchestratorScore === null) continue;
+      await prisma.taskEvaluation.create({ data: {
+        threadId: `test-${runId}`, endpointId: providerId, taskType: scenario.taskType,
+        qualityScore: result.orchestratorScore,
+        evaluationNotes: result.assertionResults.map(r => `${r.passed ? "PASS" : "FAIL"}: ${r.description}`).join("; "),
+        taskContext: `TEST: ${scenario.name} [${friendlyName}]`, routeContext: scenario.routeContext, source: "test_harness",
+      } });
+      await updatePerformanceProfile(providerId, scenario.taskType, result.orchestratorScore);
+    }
 
     const instructionFollowing = runIncomplete ? null : mapProbeResultsToInstructionFollowing(probePassMap);
     const codeScores = scenarioResults.filter((s) => s.taskType === "code-gen" && s.orchestratorScore !== null).map((s) => s.orchestratorScore!);
@@ -380,9 +454,9 @@ export async function runEndpointTests(opts: {
           friendlyName,
           probesDeferred,
           scenariosDeferred,
-          probes: probeResults.map((p) => ({ id: p.probeId, category: p.category, name: p.name, pass: p.pass, passed: p.passed, outcome: p.outcome, reason: p.reason })),
+          probes: probeResults.map((p) => ({ traceId: p.traceId, id: p.probeId, category: p.category, name: p.name, pass: p.pass, passed: p.passed, outcome: p.outcome, reason: p.reason })),
           scenarios: scenarioResults.map((s) => ({
-            id: s.scenarioId, taskType: s.taskType, name: s.name, passed: s.passed, outcome: s.outcome,
+            traceId: s.traceId, id: s.scenarioId, taskType: s.taskType, name: s.name, passed: s.passed, outcome: s.outcome,
             assertions: s.assertionResults, orchestratorScore: s.orchestratorScore,
           })),
         } as unknown as import("@dpf/db").Prisma.InputJsonValue,
@@ -390,6 +464,7 @@ export async function runEndpointTests(opts: {
     });
 
     results.push({
+      testRunId: runId,
       endpointId: providerId,
       providerId,
       modelId,

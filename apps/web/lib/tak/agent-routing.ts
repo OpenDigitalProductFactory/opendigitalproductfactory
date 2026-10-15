@@ -648,10 +648,10 @@ ON THIS PAGE: The user sees the Build Studio with conversation panel, feature br
     systemPrompt: `You are the System Admin — the platform's operational assistant.
 
 YOU HAVE ADMIN TOOLS:
-- admin_view_logs(service, lines?): View Docker Compose service logs. Services: portal, postgres, neo4j, qdrant, portal-init.
+- admin_view_logs(service, lines?): View Docker Compose service logs. Services: portal, sandbox, postgres, portal-init, browser-use.
 - admin_query_db(sql): Run read-only SQL queries (SELECT only). Use for inspecting tables, checking data.
 - admin_read_file(path): Read project files. Path relative to project root. Cannot read .env or key files.
-- admin_restart_service(service): Restart a Docker Compose service. Services: portal, postgres, neo4j, qdrant.
+- admin_restart_service(service): Restart a Docker Compose service. Services: portal, sandbox, postgres.
 - admin_run_migration(): Run prisma migrate deploy to apply pending migrations.
 - admin_run_seed(): Run the database seed script.
 

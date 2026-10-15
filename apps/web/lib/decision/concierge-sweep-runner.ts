@@ -77,6 +77,11 @@ async function loadCandidates(): Promise<TriageSubject[]> {
       riskTier: true,
       outcomeType: true,
       options: true,
+      evidenceBundle: true,
+      sources: true,
+      profileVersionId: true,
+      updatedAt: true,
+      deliberationRun: { select: { id: true, completedAt: true, metadata: true } },
     },
   });
 
@@ -89,6 +94,16 @@ async function loadCandidates(): Promise<TriageSubject[]> {
     gateKey: row.gateKey,
     riskTier: row.riskTier,
     outcomeType: row.outcomeType,
+    options: row.options,
+    evidenceBundle: row.evidenceBundle,
+    sources: row.sources,
+    profileVersionId: row.profileVersionId,
+    updatedAt: row.updatedAt,
+    previousPanel: row.deliberationRun ? {
+      id: row.deliberationRun.id,
+      completedAt: row.deliberationRun.completedAt,
+      brief: panelBriefOf(row.deliberationRun.metadata),
+    } : null,
     // The predicate already excludes answered rows; re-asserting it here would
     // be a second definition of "resolved" and is exactly the drift
     // owner-ruling-queue.ts exists to prevent.
@@ -98,6 +113,11 @@ async function loadCandidates(): Promise<TriageSubject[]> {
 
 function optionIdsOf(options: unknown): string[] {
   return Array.isArray(options) ? options.filter((o): o is string => typeof o === "string") : [];
+}
+
+function panelBriefOf(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== "object" || !("brief" in metadata)) return null;
+  return typeof metadata.brief === "string" ? metadata.brief : null;
 }
 
 /**
@@ -147,7 +167,7 @@ async function retireStaleProposals(): Promise<number> {
 async function recordPass(summary: SweepSummary): Promise<void> {
   const room = await prisma.workroom.upsert({
     where: { idempotencyKey: GOVERNANCE_ROOM_KEY },
-    update: { lastSyncedAt: new Date() },
+    update: { lastSyncedAt: new Date(), executorKind: "dpf-native", executorRef: "concierge-sweep" },
     create: {
       capsuleId: `WC-${GOVERNANCE_ROOM_KEY.slice(0, 8).toUpperCase()}`,
       idempotencyKey: GOVERNANCE_ROOM_KEY,
@@ -156,6 +176,8 @@ async function recordPass(summary: SweepSummary): Promise<void> {
         "Keep decisions that need a person moving: draft what the owner should do, and say what could not be drafted.",
       status: "working",
       source: "scheduled-steward",
+      executorKind: "dpf-native",
+      executorRef: "concierge-sweep",
       activityKind: "governance",
       decisionScope: "wwmd",
       portfolioRole: "foundational",
@@ -175,6 +197,7 @@ async function recordPass(summary: SweepSummary): Promise<void> {
         proposed: summary.proposed,
         deferredToNextPass: summary.deferredToNextPass,
         unproductive: summary.unproductive,
+        skipped: summary.skipped,
         retiredStaleProposals: summary.retiredStaleProposals,
       },
     },
@@ -199,10 +222,6 @@ export async function runConciergeSweepJob(input: {
       },
       report: recordPass,
       conduct: async (subject) => {
-        const row = await prisma.decisionInteraction.findUnique({
-          where: { id: subject.interactionRowId },
-          select: { options: true },
-        });
         return conductTriage(
           {
             db: prisma as unknown as ProposalClient,
@@ -217,7 +236,7 @@ export async function runConciergeSweepJob(input: {
                 plan,
                 staffedAgentIds,
                 userId: input.userId,
-                optionIds: optionIdsOf(row?.options),
+                optionIds: optionIdsOf(s.options),
               }),
           },
           subject,

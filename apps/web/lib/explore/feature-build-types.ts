@@ -7,6 +7,7 @@ import * as crypto from "crypto";
 import type { BuildExecutionState } from "@/lib/build-exec-types";
 import type { DecisionInteractionGateView } from "@/lib/decision-perspective/types";
 import type { SemanticReviewDecision, SemanticReviewResult } from "@/lib/change-review/semantic-change-review";
+import { isReviewExecutionIncomplete, type ReviewExecutionMetadata } from "@/lib/build/review-execution-state";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -137,7 +138,7 @@ export type TaxonomyAttributionView = {
 
 // ─── Build Disciplines Evidence Types ────────────────────────────────────────
 
-export type ReviewResult = SemanticReviewResult & {
+export type ReviewResult = SemanticReviewResult & ReviewExecutionMetadata & {
   /** Iteration tracking populated when this ReviewResult is the output of a
    *  re-review (e.g. reviewBuildPlan called against an existing planReview).
    *  Enables the operator-facing iteration progress chip and the reviewer's
@@ -166,10 +167,6 @@ export type ReviewResult = SemanticReviewResult & {
    *  docs/superpowers/specs/2026-05-24-build-studio-design-time-decomposition-design.md).
    *  Phase 3 renders the gate banner from it; Phase 4 gates the decomposition
    *  assistant. Absent on Plan-phase reviews and on pre-Phase-2 builds. */
-  /** True when NO reviewer returned a usable verdict, so this says nothing
-   *  about the work (BI-D33F968A). `fail` is the safe default, never "examined
-   *  and rejected" — a repair budget spent on it destroys the build. */
-  reviewIncomplete?: boolean;
   sizeAssessment?: SizeAssessmentSnapshot;
   /** Operator override recorded when the build's size assessment is
    *  `decompose-required` but the operator chose to proceed
@@ -662,6 +659,7 @@ export function isOscillating(
  *  iteration trajectory when present. Pure: extracted so checkPhaseGate stays
  *  simple and the format is unit-testable. */
 export function describePlanReviewFailure(planReview: ReviewResult): string {
+  if (isReviewExecutionIncomplete(planReview)) return "Plan review incomplete. Keep the saved plan; retry review after reviewer execution recovers.";
   const base = "Plan review failed. Revise the implementation plan and re-run plan review before advancing.";
   const iter = planReview.iteration;
   if (!iter) return base;
@@ -682,6 +680,7 @@ export function describePlanReviewFailure(planReview: ReviewResult): string {
  *  the design path (BI-CE49D82E). Same convergence/oscillation language so the
  *  operator's mental model is consistent across phase gates. */
 export function describeDesignReviewFailure(designReview: ReviewResult): string {
+  if (isReviewExecutionIncomplete(designReview)) return "Design review incomplete. Keep the saved document; retry review after reviewer execution recovers.";
   // BI-62442F75: operator vocabulary, not the raw camelCase tool name. Mirrors
   // the plan sibling's "re-run plan review" so the D33 banner never leaks
   // "reviewDesignDoc" into human-facing copy.
@@ -707,7 +706,9 @@ const ALLOWED_TRANSITIONS: Record<BuildPhase, BuildPhase[]> = {
   plan:     ["build", "failed"],
   build:    ["review", "failed"],
   review:   ["ship", "failed", "build"],
-  ship:     ["complete", "failed"],
+  // ship→review: a build rebased onto main at ship re-earns its review on the
+  // new tree before its PR opens (BI-76BD65E6).
+  ship:     ["complete", "failed", "review"],
   complete: [],
   failed:   [],
   // Terminal: an escalated build is handed to a human; the work resumes by
@@ -821,27 +822,6 @@ export function buildPhaseHandoffEvidence(build: PhaseHandoffEvidenceInput): Pha
   }
   return { evidenceFields, evidenceDigest };
 }
-
-const DEFAULT_HAPPY_PATH_STATE: HappyPathState = {
-  intake: {
-    status: "pending",
-    taxonomyNodeId: null,
-    backlogItemId: null,
-    epicId: null,
-    constrainedGoal: null,
-    failureReason: null,
-  },
-  execution: {
-    engine: null,
-    source: null,
-    status: "pending",
-    failureStage: null,
-  },
-  verification: {
-    status: "pending",
-    checks: [],
-  },
-};
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -980,20 +960,11 @@ export function isFixContextComplete(fc: FixContext | null | undefined): boolean
   return Boolean(fc.reproSteps?.trim() && fc.rootCause?.trim() && fc.fixApproach?.trim());
 }
 
-/**
- * Phase gate — re-exported from build-process-matrix.ts.
- *
- * The implementation moved to build-process-matrix.ts so the right-sizing
- * matrix module owns the gate logic and the LifecyclePolicy table together.
- * This re-export preserves every existing import site that reaches
- * checkPhaseGate via @/lib/feature-build-types.
- *
- * Back-compat invariant: when `evidence.kind` is absent (or "feature") and
- * `evidence.processSize` is absent (or "medium"), the resolved policy is
- * the default feature-standard cell — byte-identical to the pre-matrix
- * behavior. See docs/superpowers/specs/2026-05-30-build-studio-right-sizing-design.md.
- */
-export { checkPhaseGate } from "./build-process-matrix";
+// Phase gate: checkPhaseGate lives in build-process-matrix.ts, which owns the
+// gate logic and the LifecyclePolicy table together. It is NOT re-exported
+// here: the matrix imports this module's helpers, so a re-export closed a
+// module load-order cycle (spec 2026-09-30 §4.2). The `@/lib/feature-build-types`
+// shim re-exports it, so import sites on that path are unchanged.
 
 // ─── Validation ──────────────────────────────────────────────────────────────
 

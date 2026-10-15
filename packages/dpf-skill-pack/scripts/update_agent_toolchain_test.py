@@ -1,5 +1,7 @@
 import json
 import os
+import re
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -595,8 +597,6 @@ class UpdateAgentToolchainTest(unittest.TestCase):
                 "/fake/codex",
                 "plugin",
                 "list",
-                "--marketplace",
-                "personal",
                 "--json",
             ],
         )
@@ -846,6 +846,248 @@ class ClaudeInstallTest(unittest.TestCase):
         )
 
 
+class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
+    """BI-B9F359AC: project-scope records and project .mcp.json leftovers."""
+
+    class _Result:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    def _home(self, root: Path, entries: list[dict]) -> Path:
+        home = root / "home"
+        path = updater.claude_installed_plugins_path(home)
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({"version": 2, "plugins": {updater.CLAUDE_PLUGIN_ID: entries}}))
+        return home
+
+    def _project(self, root: Path, name: str) -> Path:
+        project = root / name
+        project.mkdir()
+        return project
+
+    def test_stale_project_records_are_updated_in_their_project(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stale = self._project(root, "stale")
+            current = self._project(root, "current")
+            home = self._home(root, [
+                {"scope": "local", "projectPath": str(root), "version": "0.2.5"},
+                {"scope": "project", "projectPath": str(stale), "version": "0.2.5"},
+                {"scope": "project", "projectPath": str(current), "version": "0.2.8"},
+            ])
+            with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+                "subprocess.run", return_value=self._Result()
+            ) as run:
+                result = updater.converge_claude_project_plugins(home, "0.2.8", dry_run=False)
+        self.assertEqual(result["updated"], [str(stale)])
+        self.assertEqual(result["current"], [str(current)])
+        self.assertEqual(run.call_count, 1)
+        self.assertEqual(
+            run.call_args[0][0],
+            ["/fake/claude", "plugin", "update", "dpf-platform@dpf-platform-local", "--scope", "project"],
+        )
+        self.assertEqual(run.call_args[1]["cwd"], str(stale))
+
+    def test_build_metadata_on_the_pack_version_does_not_mark_current_records_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            current = self._project(root, "current")
+            home = self._home(root, [{"scope": "project", "projectPath": str(current), "version": "0.2.8"}])
+            with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+                "subprocess.run"
+            ) as run:
+                lines = updater.converge_claude_project_connectors(
+                    home, "0.2.8+codex.20260726032301", dry_run=False
+                )
+        run.assert_not_called()
+        self.assertIn("current 1", lines[0])
+
+    def test_records_for_missing_projects_are_reported_not_touched(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gone = str(root / "gone")
+            home = self._home(root, [{"scope": "project", "projectPath": gone, "version": "0.2.5"}])
+            with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+                "subprocess.run"
+            ) as run:
+                result = updater.converge_claude_project_plugins(home, "0.2.8", dry_run=False)
+        self.assertEqual(result["pruned"], [gone])
+        run.assert_not_called()
+
+    def test_failed_update_is_reported(self) -> None:
+        failed = self._Result()
+        failed.returncode = 1
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stale = self._project(root, "stale")
+            home = self._home(root, [{"scope": "project", "projectPath": str(stale), "version": "0.2.5"}])
+            with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+                "subprocess.run", return_value=failed
+            ):
+                result = updater.converge_claude_project_plugins(home, "0.2.8", dry_run=False)
+        self.assertEqual(result["failed"], [str(stale)])
+
+    def test_dry_run_reports_without_running_or_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stale = self._project(root, "stale")
+            (stale / ".mcp.json").write_text(json.dumps(
+                {"mcpServers": {"dpf": {"type": "http", "url": "https://localhost/api/mcp/v1?tier=full"}}}
+            ))
+            home = self._home(root, [{"scope": "project", "projectPath": str(stale), "version": "0.2.5"}])
+            with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+                "subprocess.run"
+            ) as run:
+                lines = updater.converge_claude_project_connectors(home, "0.2.8", dry_run=True)
+            self.assertTrue((stale / ".mcp.json").exists())
+            self.assertFalse((stale / ".mcp.json.legacy-bak").exists())
+        run.assert_not_called()
+        self.assertIn(f"    would update to 0.2.8: {stale}", lines)
+        self.assertTrue(any("would disable duplicate dpf connector" in line for line in lines))
+
+    def test_dpf_only_project_mcp_json_is_renamed_to_a_backup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            original = json.dumps({"mcpServers": {"dpf": {
+                "type": "http", "url": "${DPF_MCP_URL:-http://127.0.0.1:3000/api/mcp/v1}",
+                "headers": {"Authorization": "Bearer ${DPF_MCP_BEARER_TOKEN:-}"},
+            }}})
+            (project / ".mcp.json").write_text(original)
+            backup = updater.retire_duplicate_project_mcp_json(project, dry_run=False)
+            self.assertEqual(backup, str(project / ".mcp.json.legacy-bak"))
+            self.assertFalse((project / ".mcp.json").exists())
+            self.assertEqual((project / ".mcp.json.legacy-bak").read_text(), original)
+
+    def test_existing_backup_is_never_overwritten(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / ".mcp.json.legacy-bak").write_text("older")
+            (project / ".mcp.json").write_text(json.dumps(
+                {"mcpServers": {"dpf": {"url": "https://localhost/api/mcp/v1?tier=full"}}}
+            ))
+            backup = updater.retire_duplicate_project_mcp_json(project, dry_run=False)
+            self.assertEqual(backup, str(project / ".mcp.json.legacy-bak.1"))
+            self.assertEqual((project / ".mcp.json.legacy-bak").read_text(), "older")
+
+    def test_other_servers_survive_and_only_the_duplicate_is_dropped(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            other = {"command": "npx", "args": ["other-server"]}
+            (project / ".mcp.json").write_text(json.dumps({"mcpServers": {
+                "dpf": {"url": "https://localhost/api/mcp/v1?tier=full"}, "other": other,
+            }}))
+            backup = updater.retire_duplicate_project_mcp_json(project, dry_run=False)
+            kept = json.loads((project / ".mcp.json").read_text())
+            self.assertEqual(kept, {"mcpServers": {"other": other}})
+            self.assertIn("dpf", json.loads(Path(backup).read_text())["mcpServers"])
+
+    def test_unrelated_or_absent_project_mcp_json_is_left_alone(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            self.assertIsNone(updater.retire_duplicate_project_mcp_json(project, dry_run=False))
+            content = json.dumps({"mcpServers": {"dpf": {"url": "https://example.com/other/endpoint"}}})
+            (project / ".mcp.json").write_text(content)
+            self.assertIsNone(updater.retire_duplicate_project_mcp_json(project, dry_run=False))
+            self.assertEqual((project / ".mcp.json").read_text(), content)
+
+
+class ClaudeUserScopeDpfServerTest(unittest.TestCase):
+    """BI-81B0A3BE: a user-scope dpf server duplicates the plugin connector everywhere."""
+
+    class _Result:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    LEGACY = {
+        "type": "http",
+        "url": "http://127.0.0.1:3000/api/mcp/v1?tier=full",
+        "headers": {"Authorization": "Bearer ${DPF_MCP_BEARER_TOKEN:-}"},
+    }
+
+    def _home(self, root: Path, servers: dict, plugin_installed: bool = True) -> Path:
+        home = root / "home"
+        home.mkdir()
+        (home / ".claude.json").write_text(json.dumps({"mcpServers": servers, "projects": {}}))
+        if plugin_installed:
+            path = updater.claude_installed_plugins_path(home)
+            path.parent.mkdir(parents=True)
+            path.write_text(json.dumps({"plugins": {updater.CLAUDE_PLUGIN_ID: [
+                {"scope": "local", "projectPath": str(root), "version": "0.2.8"},
+            ]}}))
+        return home
+
+    def _retire(self, home: Path, dry_run: bool = False, result: Any = None):
+        with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+            "subprocess.run", return_value=result or self._Result()
+        ) as run:
+            status = updater.retire_user_scope_dpf_server(home, dry_run)
+        return status, run
+
+    def test_duplicate_is_backed_up_then_removed_through_the_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = self._home(Path(tmp), {"dpf": self.LEGACY})
+            status, run = self._retire(home)
+            backup = home / ".claude" / "dpf-user-mcp.legacy-bak.json"
+            self.assertEqual(json.loads(backup.read_text()), {"mcpServers": {"dpf": self.LEGACY}})
+        self.assertEqual(status, f"removed (backup {backup})")
+        self.assertEqual(run.call_args[0][0], ["/fake/claude", "mcp", "remove", "dpf", "-s", "user"])
+
+    def test_dry_run_reports_without_backup_or_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = self._home(Path(tmp), {"dpf": self.LEGACY})
+            status, run = self._retire(home, dry_run=True)
+            self.assertFalse((home / ".claude" / "dpf-user-mcp.legacy-bak.json").exists())
+        run.assert_not_called()
+        self.assertTrue(status.startswith("would remove"))
+
+    def test_existing_backup_is_never_overwritten(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = self._home(Path(tmp), {"dpf": self.LEGACY})
+            older = home / ".claude" / "dpf-user-mcp.legacy-bak.json"
+            older.write_text("older")
+            self._retire(home)
+            self.assertEqual(older.read_text(), "older")
+            self.assertTrue((home / ".claude" / "dpf-user-mcp.legacy-bak.1.json").exists())
+
+    def test_left_alone_without_the_plugin_connector(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = self._home(Path(tmp), {"dpf": self.LEGACY}, plugin_installed=False)
+            status, run = self._retire(home)
+        self.assertIsNone(status)
+        run.assert_not_called()
+
+    def test_unrelated_user_servers_are_left_alone(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = self._home(Path(tmp), {
+                "dpf": {"type": "http", "url": "https://example.com/other"},
+                "other": {"type": "http", "url": "https://localhost/api/mcp/v1"},
+            })
+            status, run = self._retire(home)
+        self.assertIsNone(status)
+        run.assert_not_called()
+
+    def test_failed_cli_removal_is_reported(self) -> None:
+        failed = self._Result()
+        failed.returncode = 1
+        with tempfile.TemporaryDirectory() as tmp:
+            home = self._home(Path(tmp), {"dpf": self.LEGACY})
+            status, _ = self._retire(home, result=failed)
+        self.assertTrue(status.startswith("failed:"))
+
+    def test_missing_cli_is_reported_and_nothing_is_written(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = self._home(Path(tmp), {"dpf": self.LEGACY})
+            with patch.object(updater, "resolve_claude_binary", return_value=None), patch(
+                "subprocess.run"
+            ) as run:
+                status = updater.retire_user_scope_dpf_server(home, dry_run=False)
+            self.assertFalse((home / ".claude" / "dpf-user-mcp.legacy-bak.json").exists())
+        run.assert_not_called()
+        self.assertEqual(status, "failed: Claude CLI not found")
+
+
 class AntigravityMcpConfigTest(unittest.TestCase):
     def test_skipped_when_agy_absent(self) -> None:
         with patch.object(updater, "resolve_antigravity_binary", return_value=None):
@@ -855,21 +1097,24 @@ class AntigravityMcpConfigTest(unittest.TestCase):
         self.assertEqual(status, "skipped: Antigravity CLI (agy) not found")
 
     def test_upserts_dpf_server_env_backed_and_idempotent(self) -> None:
+        # Plain http: the header is the only credential path there. The https
+        # default carries no header (OnePluginOwnedConnectorTest).
+        http_url = "http://127.0.0.1:3000/api/mcp/v1"
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
             with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
                 first = updater.ensure_antigravity_mcp_config(
-                    home, updater.DEFAULT_MCP_URL, dry_run=False
+                    home, http_url, dry_run=False
                 )
                 second = updater.ensure_antigravity_mcp_config(
-                    home, updater.DEFAULT_MCP_URL, dry_run=False
+                    home, http_url, dry_run=False
                 )
             self.assertEqual(first, "converged")
             self.assertEqual(second, "already current")
             cfg = json.loads(updater.antigravity_mcp_config_path(home).read_text())
             dpf = cfg["mcpServers"]["dpf"]
             self.assertEqual(dpf["type"], "http")
-            self.assertEqual(dpf["url"], updater.DEFAULT_MCP_URL)
+            self.assertEqual(dpf["url"], http_url)
             self.assertEqual(dpf["headers"]["Authorization"], "Bearer ${DPF_MCP_BEARER_TOKEN}")
             # No plaintext secret is ever written.
             self.assertNotIn("dpfmcp_", updater.antigravity_mcp_config_path(home).read_text())
@@ -1422,15 +1667,176 @@ class ClaudeMcpConfigSchemeAwarenessTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             pack = Path(tmp)
             updater.ensure_claude_repo_mcp_config(
-                pack, "http://127.0.0.1:3000/api/mcp/v1", dry_run=False
+                pack, updater.DEFAULT_MCP_URL, dry_run=False
             )
             generated = (pack / "claude.mcp.json").read_text()
         self.assertEqual(generated, repo_descriptor.read_text())
 
 
+class OnePluginOwnedConnectorTest(unittest.TestCase):
+    """BI-5201141C (design 12.4.4): the plugin descriptor is THE dpf connector.
+
+    Claude Code matches a plugin server against configured servers by endpoint,
+    so a descriptor whose default differs from the install's canonical origin
+    loads beside any other connector instead of replacing it. Every shipped
+    descriptor is therefore URL-only on the canonical loopback https origin,
+    authenticates by OAuth (no bearer header), and Claude keeps its scope pin.
+    Grok names bearer_token_file (design 12.4.7). It does not use a pasted env var.
+    """
+
+    PACK = Path(__file__).resolve().parents[1]
+
+    def _read(self, name: str) -> dict:
+        return json.loads((self.PACK / name).read_text())
+
+    def test_default_endpoint_is_the_canonical_loopback_https_origin(self) -> None:
+        self.assertEqual(updater.DEFAULT_MCP_URL, "https://localhost/api/mcp/v1")
+
+    def test_claude_descriptor_is_url_only_https_with_the_scope_pin(self) -> None:
+        server = self._read("claude.mcp.json")["mcpServers"]["dpf"]
+        self.assertEqual(server["url"], "${DPF_CLAUDE_MCP_URL:-https://localhost/api/mcp/v1?tier=full}")
+        self.assertNotIn("headers", server)
+        self.assertEqual(server["oauth"], {"scopes": updater.MCP_CLIENT_OAUTH_SCOPE_PIN})
+
+    def test_antigravity_descriptor_is_url_only_https(self) -> None:
+        server = self._read("antigravity.mcp.json")["mcpServers"]["dpf"]
+        self.assertEqual(server["url"], "${DPF_MCP_URL:-https://localhost/api/mcp/v1}")
+        self.assertNotIn("headers", server)
+
+    def test_checked_in_antigravity_descriptor_matches_the_generator(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            pack = Path(tmp)
+            updater.ensure_antigravity_plugin_descriptor(pack, updater.DEFAULT_MCP_URL, dry_run=False)
+            generated = (pack / "antigravity.mcp.json").read_text()
+        self.assertEqual(generated, (self.PACK / "antigravity.mcp.json").read_text())
+
+    def test_antigravity_descriptor_keeps_the_header_only_where_oauth_cannot_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            pack = Path(tmp)
+            updater.ensure_antigravity_plugin_descriptor(pack, "http://127.0.0.1:3000/api/mcp/v1", dry_run=False)
+            server = json.loads((pack / "antigravity.mcp.json").read_text())["mcpServers"]["dpf"]
+        self.assertEqual(server["headers"]["Authorization"], "Bearer ${DPF_MCP_BEARER_TOKEN:-}")
+
+    def test_grok_descriptor_names_the_refreshed_bearer_file(self) -> None:
+        server = self._read("grok.mcp.json")["mcp_servers"]["dpf"]
+        self.assertEqual(server["bearer_token_file"], "~/.grok/dpf-mcp-token")
+        self.assertNotIn("bearer_token_env_var", server)
+
+
 
 
 class OAuthDefaultTest(unittest.TestCase):
+    def test_saved_endpoint_read_mode_does_not_echo_query_credentials(self):
+        for key in ("access_token", "api_key", "API-Key", "client_secret"):
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as tmp:
+                home = Path(tmp)
+                path = updater.codex_config_path(home)
+                path.parent.mkdir(parents=True)
+                original = f'[mcp_servers.dpf]\nurl="https://example.test/api/mcp/v1?{key}=synthetic-secret&tier=full"\n'
+                path.write_text(original)
+                with patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}), patch("builtins.print") as output:
+                    with self.assertRaisesRegex(ValueError, "explicit.*endpoint"):
+                        updater.main(["--print-existing-codex-mcp-url"])
+                output.assert_not_called()
+                self.assertEqual(path.read_text(), original)
+
+    def test_saved_endpoint_reader_refuses_credentials_and_non_urls(self):
+        for endpoint in ("not an endpoint", "https://u:p@example.test/api/mcp/v1"):
+            with self.subTest(endpoint=endpoint):
+                with self.assertRaisesRegex(ValueError, "explicit.*endpoint"):
+                    updater.existing_codex_mcp_endpoint(f'[mcp_servers.dpf]\nurl="{endpoint}"\n')
+
+    def test_saved_endpoint_read_mode_refuses_unreadable_url_without_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            path = updater.codex_config_path(home)
+            path.parent.mkdir(parents=True)
+            original = '[mcp_servers.dpf]\nurl="""https://operator.example/api/mcp/v1"""\n'
+            path.write_text(original)
+            with patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}), patch("builtins.print") as output:
+                with self.assertRaisesRegex(ValueError, "explicit.*endpoint"):
+                    updater.main(["--print-existing-codex-mcp-url"])
+            output.assert_not_called()
+            self.assertEqual(path.read_text(), original)
+            self.assertFalse(updater.codex_managed_plugin_path(home).exists())
+
+    def test_saved_endpoint_read_mode_changes_nothing(self):
+        for existing in (None, "http://127.0.0.1:3000/api/mcp/v1?tier=full", "https://example.test/api/mcp/v1?tenant=demo&tier=full"):
+            with self.subTest(existing=existing), tempfile.TemporaryDirectory() as tmp:
+                home = Path(tmp)
+                path = updater.codex_config_path(home)
+                original = f'[mcp_servers.dpf]\nurl="{existing}"\n' if existing else None
+                if original:
+                    path.parent.mkdir(parents=True)
+                    path.write_text(original)
+                with patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}), patch("builtins.print") as output:
+                    self.assertEqual(updater.main(["--print-existing-codex-mcp-url"]), 0)
+                output.assert_called_once_with(existing or "")
+                self.assertFalse(updater.codex_managed_plugin_path(home).exists())
+                self.assertEqual(path.read_text() if path.exists() else None, original)
+
+    def test_codex_unreadable_saved_endpoint_requires_explicit_repair(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            path = updater.codex_config_path(home)
+            path.parent.mkdir(parents=True)
+            original = '[mcp_servers.dpf]\nurl="""https://operator.example/api/mcp/v1"""\n'
+            path.write_text(original)
+            with self.assertRaisesRegex(ValueError, "explicit.*endpoint"):
+                updater.ensure_codex_config(home, None, False)
+            self.assertEqual(path.read_text(), original)
+            updater.ensure_codex_config(home, "https://repair.example/api/mcp/v1", False)
+            self.assertIn('url = "https://repair.example/api/mcp/v1?tier=full"', path.read_text())
+
+    def test_main_distinguishes_implicit_environment_and_cli_endpoints(self):
+        original = "http://127.0.0.1:3000/api/mcp/v1?tier=full"
+        environment = "https://environment.example/api/mcp/v1"
+        explicit = "http://127.0.0.1:3001/api/mcp/v1"
+        for named_env, cli, expected in (("", [], original),
+                                        (environment, [], environment + "?tier=full"),
+                                        (environment, ["--mcp-url", explicit], explicit + "?tier=full")):
+            with self.subTest(environment=named_env, cli=cli), tempfile.TemporaryDirectory() as tmp:
+                home = Path(tmp)
+                path = updater.codex_config_path(home)
+                path.parent.mkdir(parents=True)
+                path.write_text(f'[mcp_servers.dpf]\nurl="{original}"\nstartup_timeout_sec=45\n')
+                with patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp, "DPF_MCP_URL": named_env}), \
+                        patch.object(updater, "resolve_codex_binary", return_value=None):
+                    code = updater.main(["--codex-only", "--skip-codex-cli-install",
+                                         "--skip-grok-cli-install", "--skip-antigravity-cli-install", *cli])
+                self.assertEqual(code, 0)
+                self.assertIn(f'url = "{expected}"', path.read_text())
+                self.assertIn("startup_timeout_sec=45", path.read_text())
+
+    def test_codex_implicit_convergence_preserves_existing_endpoint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            path = updater.codex_config_path(home)
+            path.parent.mkdir(parents=True)
+            path.write_text('[mcp_servers."dpf"]\nurl="http://127.0.0.1:3000/api/mcp/v1?tier=full"\nstartup_timeout_sec=45\n')
+            updater.ensure_codex_config(home, None, False)
+            first = path.read_text()
+            self.assertIn('url = "http://127.0.0.1:3000/api/mcp/v1?tier=full"', first)
+            self.assertIn("startup_timeout_sec=45", first)
+            self.assertNotIn("bearer_token_env_var", first)
+            updater.ensure_codex_config(home, None, False)
+            self.assertEqual(first, path.read_text())
+
+    def test_codex_new_connection_keeps_https_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            updater.ensure_codex_config(home, None, False)
+            self.assertIn('url = "https://localhost/api/mcp/v1?tier=full"', updater.codex_config_path(home).read_text())
+
+    def test_codex_explicit_endpoint_replaces_existing_endpoint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            path = updater.codex_config_path(home)
+            path.parent.mkdir(parents=True)
+            path.write_text('[mcp_servers.dpf]\nurl="http://127.0.0.1:3000/api/mcp/v1"\n')
+            updater.ensure_codex_config(home, "https://explicit.example/api/mcp/v1", False)
+            self.assertIn('url = "https://explicit.example/api/mcp/v1?tier=full"', path.read_text())
+
     def test_policy_agrees_with_shared_fixtures(self):
         cases = json.loads(Path(__file__).with_name("mcp-credential-policy-cases.json").read_text())
         for case in cases:
@@ -1450,6 +1856,471 @@ class OAuthDefaultTest(unittest.TestCase):
             self.assertIn("https://other.example/mcp", first)
             updater.ensure_codex_config(home, "http://127.0.0.1:3000/api/mcp/v1", False)
             self.assertEqual(first, path.read_text())
+
+class WrapperEndpointParityTest(unittest.TestCase):
+    """BI-772023BC: the shell and PowerShell wrappers are twins of the Python
+    updater. The default endpoint and auth mode have one source, the Python
+    updater (DEFAULT_MCP_URL, DPF_MCP_URL, DPF_MCP_AUTH_MODE); a wrapper only
+    forwards an endpoint the operator named. The .ps1 is parsed as text so the
+    check runs without pwsh."""
+
+    SCRIPTS = Path(__file__).resolve().parent
+    URL_LITERAL = re.compile(r"""https?://[^\s"'$]+/api/mcp""")
+
+    def wrappers(self):
+        repo = Path(__file__).resolve().parents[3]
+        found = {
+            "pack.ps1": self.SCRIPTS / "update-agent-toolchain.ps1",
+            "pack.sh": self.SCRIPTS / "update-agent-toolchain.sh",
+        }
+        repo_ps1 = repo / "scripts/update-dpf-agent-toolchain.ps1"
+        if repo_ps1.exists():
+            found["repo.ps1"] = repo_ps1
+        return {name: path.read_text() for name, path in found.items()}
+
+    def test_wrappers_hard_code_no_endpoint_or_auth_mode(self):
+        for name, text in self.wrappers().items():
+            with self.subTest(wrapper=name):
+                self.assertIsNone(self.URL_LITERAL.search(text), "hard-coded MCP endpoint")
+                self.assertNotIn("--auth-mode", text)
+                self.assertNotIn(updater.TOKEN_ENV_VAR, text)
+
+    def test_ps1_forwards_endpoint_only_when_named(self):
+        text = self.wrappers()["pack.ps1"]
+        self.assertRegex(text, r'\[string\]\$McpUrl\s*=\s*""')
+        self.assertRegex(text, r'if \(\$McpUrl\) \{ \$argsList \+= @\("--mcp-url", \$McpUrl\) \}')
+        self.assertNotRegex(text, r'"--mcp-url", \$McpUrl\s*\n\s*\)')
+
+    def test_sh_forwards_no_default_endpoint(self):
+        code = [line for line in self.wrappers()["pack.sh"].splitlines() if not line.lstrip().startswith("#")]
+        self.assertNotIn("--mcp-url", "\n".join(code))
+
+    # The bootstrap twins need a concrete endpoint for their probes and the
+    # plan bridge. When the operator names none they read the updater's own
+    # DEFAULT_MCP_URL line, so there is still one home for the default.
+    SH_DEFAULT_READ = """sed -n 's/^DEFAULT_MCP_URL = "\\(.*\\)"$/\\1/p'"""
+    PS1_DEFAULT_READ = """'^DEFAULT_MCP_URL = "(.*)"$'"""
+
+    def bootstraps(self):
+        repo = Path(__file__).resolve().parents[3]
+        sh = repo / "scripts/dpf-bootstrap-agent-toolchain.sh"
+        ps1 = repo / "scripts/dpf-bootstrap-agent-toolchain.ps1"
+        if not sh.exists():
+            self.skipTest("Repository bootstraps are not shipped in standalone packs")
+        return sh.read_text(), ps1.read_text()
+
+    def test_bootstraps_hard_code_no_endpoint(self):
+        for name, text in zip(("bootstrap.sh", "bootstrap.ps1"), self.bootstraps()):
+            with self.subTest(bootstrap=name):
+                self.assertIsNone(self.URL_LITERAL.search(text), "hard-coded MCP endpoint")
+
+    def test_bootstraps_fall_back_to_the_updater_default(self):
+        sh, ps1 = self.bootstraps()
+        self.assertIn(self.SH_DEFAULT_READ, sh)
+        self.assertIn(self.PS1_DEFAULT_READ, ps1)
+        source = self.SCRIPTS / "update_agent_toolchain.py"
+        read = subprocess.run(["sh", "-c", self.SH_DEFAULT_READ + ' "$1"', "sh", str(source)],
+                              capture_output=True, text=True, check=True)
+        self.assertEqual(read.stdout.strip(), updater.DEFAULT_MCP_URL)
+        match = [m.group(1) for m in map(re.compile(self.PS1_DEFAULT_READ.strip("'")).match, source.read_text().splitlines()) if m]
+        self.assertEqual(match, [updater.DEFAULT_MCP_URL])
+
+    def test_bootstraps_forward_only_the_named_endpoint_to_the_updater(self):
+        sh, ps1 = self.bootstraps()
+        self.assertNotIn('--mcp-url "$MCP_ENDPOINT"', sh)
+        self.assertIn('--mcp-url "$MCP_ENDPOINT_NAMED"', sh)
+        self.assertNotRegex(ps1, r"-McpUrl \$McpEndpoint\b(?!Named)")
+        self.assertIn("-McpUrl $McpEndpointNamed", ps1)
+        # A named non-https endpoint reaches the clients only through
+        # --mcp-url; it is never written to the env file or launchd that
+        # Claude's OAuth connector reads (BI-8FD7C0C9).
+        self.assertNotIn('dpf_launchd_setenv DPF_MCP_URL "$MCP_ENDPOINT"', sh)
+        self.assertNotIn('dpf_set_client_env_export DPF_MCP_URL "$MCP_ENDPOINT"', sh)
+
+    def test_python_default_is_canonical_https_oauth(self):
+        self.assertEqual(updater.DEFAULT_MCP_URL, "https://localhost/api/mcp/v1")
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("DPF_MCP_AUTH_MODE", None)
+            self.assertFalse(updater.mcp_client_bearer_header_required(updater.DEFAULT_MCP_URL))
+
+
+class CodexRegistrationConvergenceTest(unittest.TestCase):
+    def fixture(self, home, canonical=True, legacy=True):
+        config = updater.codex_config_path(home)
+        config.parent.mkdir(parents=True)
+        config.write_text(
+            f'[plugins."dpf-platform@personal"]\nenabled = {str(canonical).lower()}\ncustom = "keep"\n'
+            f'[plugins."dpf-platform@dpf-platform-local"]\nenabled = {str(legacy).lower()}\n'
+            '[plugins."other@personal"]\nenabled = true\n'
+            '[hooks.state."dpf-platform@personal:hooks/hooks.json:hash"]\ntrusted = true\n',
+            encoding="utf-8",
+        )
+        cache = home / ".codex/plugins/cache/dpf-platform-local/dpf-platform/version"
+        cache.mkdir(parents=True)
+        (cache / "preserved.txt").write_text("operator cache", encoding="utf-8")
+        managed = updater.codex_managed_plugin_path(home)
+        managed.mkdir(parents=True)
+        calls = []
+
+        def run(command, **kwargs):
+            calls.append(command)
+            if command[1:3] == ["plugin", "add"]:
+                return unittest.mock.Mock(returncode=0, stdout=json.dumps({"installedPath": str(managed)}))
+            text = config.read_text(encoding="utf-8")
+            return unittest.mock.Mock(returncode=0, stdout=json.dumps({"installed": [
+                {"pluginId": plugin_id, "name": "dpf-platform", "installed": True,
+                 "enabled": updater.toml_table_enabled(text, f"plugins.{plugin_id}") is not False}
+                for plugin_id in ["dpf-platform@personal", "dpf-platform@dpf-platform-local"]
+                if "--marketplace" not in command or plugin_id.endswith("@personal")
+            ]}))
+        return config, cache, run, calls
+
+    def install(self, home, run, dry_run=False):
+        with patch.object(updater, "resolve_codex_binary", return_value="/fake/codex"), \
+                patch.object(updater, "codex_content_version", return_value="verified"), \
+                patch("subprocess.run", side_effect=run):
+            return updater.install_codex_plugin(home, dry_run)
+
+    def test_verified_replacement_disables_only_known_duplicate_and_converges(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config, cache, run, calls = self.fixture(home)
+            self.assertNotIn("failed", self.install(home, run))
+            once = config.read_text(encoding="utf-8")
+            self.assertIs(updater.toml_table_enabled(once, "plugins.dpf-platform@dpf-platform-local"), False)
+            self.assertIn('custom = "keep"', once)
+            self.assertIn('trusted = true', once)
+            self.assertIs(updater.toml_table_enabled(once, "plugins.other@personal"), True)
+            self.assertTrue((cache / "preserved.txt").is_file())
+            self.assertNotIn("failed", self.install(home, run))
+            self.assertEqual(config.read_text(encoding="utf-8"), once)
+            self.assertFalse(any("remove" in command for command in calls))
+
+    def test_failed_install_leaves_legacy_usable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config, _, _, _ = self.fixture(home)
+            before = config.read_text(encoding="utf-8")
+            status = self.install(home, lambda *a, **k: unittest.mock.Mock(returncode=1, stdout=""))
+            self.assertIn("failed", status)
+            self.assertEqual(config.read_text(encoding="utf-8"), before)
+
+    def test_failed_cleanup_readback_restores_legacy_registration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config, _, native, _ = self.fixture(home)
+            lists = 0
+            def run(command, **kwargs):
+                nonlocal lists
+                if command[1:3] == ["plugin", "list"]:
+                    lists += 1
+                    if lists == 2:
+                        return unittest.mock.Mock(returncode=1, stdout="")
+                return native(command, **kwargs)
+            self.assertIn("failed", self.install(home, run))
+            self.assertIs(updater.toml_table_enabled(config.read_text(), "plugins.dpf-platform@dpf-platform-local"), True)
+
+    def test_explicitly_disabled_canonical_keeps_operator_choice_and_legacy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config, _, native, _ = self.fixture(home, canonical=False)
+            status = self.install(home, native)
+            self.assertIn("disabled", status)
+            self.assertNotIn("failed", status)
+            self.assertIs(updater.toml_table_enabled(config.read_text(), "plugins.dpf-platform@personal"), False)
+            self.assertIs(updater.toml_table_enabled(config.read_text(), "plugins.dpf-platform@dpf-platform-local"), True)
+
+    def test_dry_run_changes_nothing_and_invokes_no_cli(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config, _, native, calls = self.fixture(home)
+            before = config.read_text()
+            self.assertIn("dry-run", self.install(home, native, dry_run=True))
+            self.assertEqual(config.read_text(), before)
+            self.assertEqual(calls, [])
+
+    def test_failed_native_add_cannot_enable_an_operator_disabled_plugin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config, _, _, _ = self.fixture(home, canonical=False)
+            def run(command, **kwargs):
+                config.write_text(updater.set_codex_plugin_enabled(
+                    config.read_text(), updater.CODEX_PLUGIN_ID, True))
+                return unittest.mock.Mock(returncode=1, stdout="")
+            self.assertIn("failed", self.install(home, run))
+            self.assertIs(updater.toml_table_enabled(config.read_text(), "plugins.dpf-platform@personal"), False)
+            self.assertIs(updater.toml_table_enabled(config.read_text(), "plugins.dpf-platform@dpf-platform-local"), True)
+
+    def test_direct_install_inherits_disabled_legacy_preference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config, _, native, _ = self.fixture(home)
+            config.write_text('[plugins."dpf-platform@dpf-platform-local"]\nenabled = false\n')
+            self.assertIn("disabled", self.install(home, native))
+            self.assertIs(updater.toml_table_enabled(config.read_text(), "plugins.dpf-platform@personal"), False)
+
+    def test_cache_mismatch_preserves_active_legacy_and_cache(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config, cache, native, _ = self.fixture(home)
+            with patch.object(updater, "resolve_codex_binary", return_value="/fake/codex"), \
+                    patch.object(updater, "codex_content_version", side_effect=["stale", "current"]), \
+                    patch("subprocess.run", side_effect=native):
+                status = updater.install_codex_plugin(home, False)
+            self.assertIn("cache does not match", status)
+            self.assertIs(updater.toml_table_enabled(config.read_text(), "plugins.dpf-platform@dpf-platform-local"), True)
+            self.assertTrue((cache / "preserved.txt").is_file())
+
+    def test_repository_bootstraps_refresh_plugins_before_computing_config_plan(self):
+        repo = Path(__file__).resolve().parents[3]
+        if not (repo / "scripts/dpf-bootstrap-agent-toolchain.sh").exists():
+            self.skipTest("Repository adapters are not shipped in standalone packs")
+        # Ordering is the invariant: the plan must observe migrated preferences,
+        # not overwrite a legacy disabled choice before the updater reads it.
+        sh = (repo / "scripts/dpf-bootstrap-agent-toolchain.sh").read_text()
+        ps = (repo / "scripts/dpf-bootstrap-agent-toolchain.ps1").read_text()
+        self.assertLess(sh.index('bash "$PLUGIN_UPDATER"'), sh.index('if ! pnpm "${bridge_args[@]}"'))
+        self.assertLess(ps.index('& $PluginUpdater'), ps.index('$planJson = & pnpm'))
+        self.assertIn('--codex-plugin-only', sh[:sh.index('# --- Compute plan via Node bridge')])
+        self.assertIn('-CodexPluginOnly', ps[:ps.index('# --- Compute plan via Node bridge')])
+
+    def test_shell_bootstrap_refresh_propagates_failure_and_dry_run(self):
+        source = Path(__file__).resolve().parents[3] / "scripts/dpf-bootstrap-agent-toolchain.sh"
+        if not source.exists():
+            self.skipTest("Repository adapter is not shipped in standalone packs")
+        text = source.read_text()
+        block = text[text.index('# Refresh native plugin registrations'):text.index('# --- Compute plan via Node bridge')]
+        with tempfile.TemporaryDirectory() as tmp:
+            stub = Path(tmp) / "packages/dpf-skill-pack/scripts/update-agent-toolchain.sh"
+            stub.parent.mkdir(parents=True)
+            stub.write_text('printf "%s\\n" "$@"\nexit "$DPF_TEST_EXIT"\n')
+            for exit_code, named in ((0, "https://example.invalid/api/mcp/v1"), (7, "https://example.invalid/api/mcp/v1"), (0, "")):
+                result = subprocess.run(
+                    [updater.shutil.which("bash") or "bash", "-c", 'fail() { printf "%s\\n" "$1"; }\n' + block + '\nprintf "PLAN_REACHED\\n"'],
+                    env={**os.environ, "REPO_ROOT": Path(tmp).as_posix(), "MCP_ENDPOINT": "https://localhost/api/mcp/v1",
+                         "MCP_ENDPOINT_NAMED": named, "DRY_RUN": "1", "DPF_TEST_EXIT": str(exit_code)},
+                    capture_output=True, text=True,
+                )
+                self.assertIn("--dry-run", result.stdout, result.stderr)
+                self.assertIn("--codex-plugin-only", result.stdout)
+                # Only an endpoint the operator named reaches the updater.
+                if named:
+                    self.assertIn(named, result.stdout)
+                else:
+                    self.assertNotIn("--mcp-url", result.stdout)
+                self.assertEqual(result.returncode, 0 if exit_code == 0 else 1)
+                self.assertEqual("PLAN_REACHED" in result.stdout, exit_code == 0)
+
+    def test_registration_only_mode_does_not_write_connectors_or_other_clients(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config, _, native, _ = self.fixture(home)
+            connector = '[mcp_servers.dpf]\nurl = "https://example.invalid/operator-choice"\ncustom = "retain"\n'
+            config.write_text(config.read_text() + connector)
+            with patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}), \
+                    patch.object(updater, "resolve_codex_binary", return_value="/fake/codex"), \
+                    patch("subprocess.run", side_effect=native):
+                code = updater.main(["--codex-plugin-only"])
+            self.assertEqual(code, 0)
+            self.assertIn(connector, config.read_text())
+            self.assertIs(updater.toml_table_enabled(config.read_text(), "plugins.dpf-platform@dpf-platform-local"), False)
+            for path in (home / ".claude", home / ".grok", home / ".gemini", updater.shared_managed_plugin_path(home)):
+                self.assertFalse(path.exists(), str(path))
+
+    def test_unknown_enabled_dpf_source_is_reported_without_retiring_known_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config, _, native, _ = self.fixture(home)
+            def run(command, **kwargs):
+                result = native(command, **kwargs)
+                if command[1:3] == ["plugin", "list"]:
+                    data = json.loads(result.stdout)
+                    data["installed"].append({"pluginId": "dpf-platform@custom", "name": "dpf-platform", "installed": True, "enabled": True})
+                    result.stdout = json.dumps(data)
+                return result
+            self.assertIn("failed", self.install(home, run))
+            self.assertIs(updater.toml_table_enabled(config.read_text(), "plugins.dpf-platform@dpf-platform-local"), True)
+
+    def test_config_migration_preserves_disabled_legacy_choice_and_plugin_options(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config, _, _, _ = self.fixture(home)
+            config.write_text('[plugins."dpf-platform@dpf-platform-local"]\nenabled = false\n')
+            updater.ensure_codex_config(home, updater.DEFAULT_MCP_URL, False)
+            self.assertIs(updater.toml_table_enabled(config.read_text(), "plugins.dpf-platform@personal"), False)
+            config.write_text('[plugins."dpf-platform@personal"]\nenabled = false\ncustom = "keep"\n')
+            updater.ensure_codex_config(home, updater.DEFAULT_MCP_URL, False)
+            self.assertIn('custom = "keep"', config.read_text())
+
+    def test_brand_asset_is_packaged_and_survives_standalone_copy(self):
+        source = Path(__file__).resolve().parents[1]
+        manifest = updater.read_json(source / ".codex-plugin/plugin.json", {})
+        logo = manifest["interface"]["logo"]
+        self.assertTrue(logo.startswith("./assets/"))
+        self.assertTrue((source / logo).is_file())
+        platform_logo = source.parents[1] / "apps/web/public/logos/open-digital-product-factory-logo.svg"
+        if platform_logo.is_file():
+            self.assertEqual((source / logo).read_bytes(), platform_logo.read_bytes())
+        with tempfile.TemporaryDirectory() as tmp:
+            copied = Path(tmp) / "standalone"
+            updater.copy_skill_pack(source, copied, False)
+            self.assertEqual((copied / logo).read_bytes(), (source / logo).read_bytes())
+            version = updater.codex_content_version(copied)
+            (copied / logo).write_text("changed brand asset", encoding="utf-8")
+            self.assertNotEqual(updater.codex_content_version(copied), version)
+
+
+
+class CodexProjectConfigTest(unittest.TestCase):
+    def test_missing_file_stays_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.assertFalse(updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False))
+            self.assertFalse((root / ".codex" / "config.toml").exists())
+
+    @unittest.skipIf(tomllib is None, "project TOML validation requires a TOML parser")
+    def test_preserves_other_settings_disabled_state_and_custom_credentials(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir()
+            original = 'model="custom"\n[mcp_servers.dpf]\nurl="http://127.0.0.1:3000/api/mcp/v1"\nenabled=false\nbearer_token_env_var="CUSTOM_TOKEN"\nstartup_timeout_sec=45\n[mcp_servers.other]\nurl="https://other.example/mcp"\n'
+            config.write_text(original)
+            self.assertTrue(updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False))
+            expected = tomllib.loads(original)
+            expected["mcp_servers"]["dpf"]["url"] = "https://localhost/api/mcp/v1?tier=full"
+            self.assertEqual(tomllib.loads(config.read_text()), expected)
+            self.assertFalse(updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False))
+
+    @unittest.skipIf(tomllib is None, "project TOML validation requires a TOML parser")
+    def test_no_override_does_not_create_one(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir()
+            config.write_text('model="custom"\n')
+            self.assertFalse(updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False))
+            self.assertEqual(config.read_text(), 'model="custom"\n')
+
+    @unittest.skipIf(tomllib is None, "project TOML validation requires a TOML parser")
+    def test_malformed_toml_is_unchanged_and_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir()
+            original = '[mcp_servers.dpf]\nurl="unfinished'
+            config.write_text(original)
+            with self.assertRaisesRegex(ValueError, "project.*TOML"):
+                updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False)
+            self.assertEqual(config.read_text(), original)
+
+
+    def test_missing_parser_refuses_an_existing_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir()
+            original = '[mcp_servers.dpf]\nurl="http://localhost:3000/mcp"'
+            config.write_text(original)
+            with patch.dict(sys.modules, {"tomllib": None, "tomli": None}):
+                with self.assertRaisesRegex(ValueError, "Python 3.11"):
+                    updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False)
+            self.assertEqual(config.read_text(), original)
+
+    @unittest.skipIf(tomllib is None, "project TOML validation requires a TOML parser")
+    def test_dry_run_and_managed_oauth_policy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir()
+            original = '[mcp_servers.dpf]\nurl="http://localhost:3000/mcp"\nbearer_token_env_var="DPF_MCP_BEARER_TOKEN"\n'
+            config.write_text(original)
+            with patch.dict(os.environ, {"DPF_MCP_AUTH_MODE": "oauth"}):
+                self.assertTrue(updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", True))
+                self.assertEqual(config.read_text(), original)
+                updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False)
+            parsed = tomllib.loads(config.read_text())
+            self.assertNotIn("bearer_token_env_var", parsed["mcp_servers"]["dpf"])
+            self.assertNotIn("enabled", parsed["mcp_servers"]["dpf"])
+
+    def test_main_forwards_explicit_project_and_endpoint_even_on_dry_run(self):
+        import contextlib
+        import io
+        skill_pack = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory) / "home"
+            home.mkdir()
+            project = Path(directory) / "repo"
+            with patch.object(updater, "home_dir", return_value=home), patch.object(updater, "ensure_codex_project_config", return_value=False) as converge, contextlib.redirect_stdout(io.StringIO()):
+                code = updater.main(["--skill-pack-path", str(skill_pack), "--project-root", str(project), "--mcp-url", "https://selected.example/mcp", "--dry-run", "--codex-only", "--skip-codex-cli-install", "--skip-grok-cli-install", "--skip-antigravity-cli-install"])
+            self.assertEqual(code, 0)
+            converge.assert_called_once_with(project, "https://selected.example/mcp", True)
+
+
+class ClaimRefreshParityTest(unittest.TestCase):
+    """BI-C3D3762B: the claim-marker refresh reaches Grok and the Codex fallback copy."""
+
+    SKILL_PACK = Path(__file__).resolve().parents[1]
+
+    def _plugin_refresh_group(self) -> dict[str, Any]:
+        data = json.loads((self.SKILL_PACK / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+        return next(
+            g for g in data["hooks"]["PostToolUse"]
+            if any(updater.CLAIM_REFRESH_SCRIPT in h["command"] for h in g["hooks"])
+        )
+
+    def test_matcher_mirrors_the_plugin_hooks_json(self) -> None:
+        self.assertEqual(updater.CLAIM_REFRESH_MATCHER, self._plugin_refresh_group()["matcher"])
+        self.assertTrue((self.SKILL_PACK / "hooks" / updater.CLAIM_REFRESH_SCRIPT).exists())
+
+    def test_matcher_covers_each_surface_tool_name_form(self) -> None:
+        matcher = re.compile(updater.CLAIM_REFRESH_MATCHER)
+        for name in ("mcp__plugin_dpf-platform_dpf__heartbeat_workroom", "mcp__dpf__adopt_worktree", "mcp__dpf__claim_backlog_item_for_work"):
+            self.assertTrue(matcher.search(name), name)
+        for name in ("Shell", "mcp__dpf__get_workroom", "mcp__dpf__heartbeat_workroom_v2"):
+            self.assertFalse(matcher.search(name), name)
+
+    def test_grok_payload_runs_the_refresh_after_claim_tools(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            managed = home / ".agents" / "plugins" / "plugins" / "dpf-platform"
+            updater.copy_skill_pack(self.SKILL_PACK, managed, dry_run=False)
+            updater.install_grok_hooks(managed, home, dry_run=False)
+            data = json.loads(updater.grok_hooks_file(home).read_text())
+            post = data["hooks"]["PostToolUse"]
+            self.assertEqual(len(post), 1)
+            self.assertEqual(post[0]["matcher"], updater.CLAIM_REFRESH_MATCHER)
+            self.assertIn(str(managed / "hooks" / updater.CLAIM_REFRESH_SCRIPT), post[0]["hooks"][0]["command"])
+
+    def test_codex_fallback_copy_carries_the_refresh_and_keeps_foreign_post_hooks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            managed = home / "managed"
+            hooks_dir = managed / "hooks"
+            hooks_dir.mkdir(parents=True)
+            for script in (*updater.CODEX_BASH_GUARDS, *updater.CODEX_ASK_GUARDS, updater.CLAIM_REFRESH_SCRIPT):
+                (hooks_dir / script).write_text("// stub\n", encoding="utf-8")
+            (home / ".codex").mkdir()
+            foreign = {"hooks": {"PostToolUse": [{"matcher": ".*", "hooks": [{"type": "command", "command": "node /foreign/audit.js"}]}]}}
+            (home / ".codex" / "hooks.json").write_text(json.dumps(foreign), encoding="utf-8")
+
+            updater.install_codex_hooks(managed, home, dry_run=False)
+            merged = json.loads((home / ".codex" / "hooks.json").read_text())
+            post_cmds = [h["command"] for g in merged["hooks"]["PostToolUse"] for h in g["hooks"]]
+            self.assertIn("node /foreign/audit.js", post_cmds)
+            self.assertTrue(any(updater.CLAIM_REFRESH_SCRIPT in c for c in post_cmds))
+
+            # rerun is idempotent: one refresh entry, not two
+            updater.install_codex_hooks(managed, home, dry_run=False)
+            again = json.loads((home / ".codex" / "hooks.json").read_text())
+            refresh = [h for g in again["hooks"]["PostToolUse"] for h in g["hooks"] if updater.CLAIM_REFRESH_SCRIPT in h["command"]]
+            self.assertEqual(len(refresh), 1)
+
+            # pruning (plugin plane proven) removes the DPF refresh and keeps the foreign hook
+            pruned = updater.prune_codex_hooks_payload(again, hooks_dir)
+            pruned_cmds = [h["command"] for g in pruned["hooks"].get("PostToolUse", []) for h in g["hooks"]]
+            self.assertEqual(pruned_cmds, ["node /foreign/audit.js"])
+
 
 if __name__ == "__main__":
     unittest.main()

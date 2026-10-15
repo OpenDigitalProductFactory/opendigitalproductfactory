@@ -24,7 +24,7 @@ export type CodeGraphEdgeKind =
 export type CodeGraphConfidence = "exact" | "heuristic";
 
 /**
- * Optional primitive metadata projected onto a node/edge (Neo4j `SET n += map`).
+ * Optional primitive metadata projected onto a node/edge (shallow-merged into the graph node props).
  * Values are limited to primitives so they map cleanly to graph properties.
  */
 export type CodeGraphAttributes = Record<string, string | number | boolean>;

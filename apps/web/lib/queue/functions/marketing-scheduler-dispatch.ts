@@ -11,15 +11,15 @@
 // outbound-send kernel veto still applies to every send; and the job is catalog
 // `editable`, so an operator can disable it from /admin/scheduled-jobs.
 
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 import { prisma } from "@dpf/db";
 import { createDurableConnectorAudit, drainDurableCallbackDispatch } from "@/lib/integrations/kernel/audit";
 import { runInboundResponder } from "@/lib/marketing/channels/email-postmark/responder";
 
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
-export const marketingSchedulerDispatch = inngest.createFunction(
+export const marketingSchedulerDispatch = jobs.createFunction(
   { id: "marketing/scheduler-dispatch", retries: 1, triggers: [cron("5,35 * * * *")] },
   async ({ step }) => {
     const gate = await gateAtEntry(step, "marketing/scheduler-dispatch");
@@ -85,12 +85,12 @@ async function drainPostmarkCallbacks(deliveryKey?: string, terminalAudit?: {
   return { attempted: batch.attempted, terminalAudits: terminalAudit ? 1 : 0 };
 }
 
-export const postmarkCallbackDispatchRequested = inngest.createFunction(
+export const postmarkCallbackDispatchRequested = jobs.createFunction(
   { id: "integrations/postmark-callback-dispatch", retries: 3, triggers: [{ event: "integrations/postmark-callback.received" }] },
   async ({ event: received, step }) => step.run("drain-postmark-callback", () => drainPostmarkCallbacks(received.data.deliveryKey, received.data.terminalAudit)),
 );
 
-export const postmarkCallbackDispatchSweep = inngest.createFunction(
+export const postmarkCallbackDispatchSweep = jobs.createFunction(
   {
     id: "integrations/postmark-callback-sweep",
     retries: 2,

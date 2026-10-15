@@ -7,7 +7,8 @@ import { confirmDialog } from "@/components/ui/Dialog";
 import { Spinner } from "@/components/ui/Spinner";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import ReactMarkdown from "react-markdown";
+import { MarkdownHtml } from "@/components/shared/MarkdownHtml";
+import { DOCUMENT_MARKDOWN_OPTIONS } from "@/components/shared/markdown-document-options";
 import { FeatureBriefPanel } from "./FeatureBriefPanel";
 import { BusinessBriefPanel } from "./BusinessBriefPanel";
 import { OwnerChangeProofPanel } from "./OwnerChangeProofPanel";
@@ -42,13 +43,12 @@ import {
   type BuildStudioCustomerStatus,
 } from "@/lib/build/customer-status-projection";
 import {
-  ownerStateBadgeLabel,
   reconcileBuildStudioCustomerStatus,
   type BuildStudioOwnerState,
 } from "@/lib/build/owner-status-reconciliation";
 import { deriveBuildAttention } from "@/lib/build/build-attention";
 import { projectAutonomousBuildCustody } from "@/lib/build/autonomous-build-custody";
-import { BuildOperatorHeaderDetails, formatOperatorPhaseLabel } from "./BuildOperatorContext";
+import { BuildOperatorHeaderDetails } from "./BuildOperatorContext";
 import { BuildOperatorOverview } from "./BuildOperatorOverview";
 import { groupOperatorBuilds } from "./build-studio-operator-view";
 import { resolveBuildStudioBranchBadge } from "./build-studio-branch-badge";
@@ -903,7 +903,7 @@ export function BuildStudio({
               )}
 
               <div className="flex min-h-0 flex-1 flex-col">
-                {activeBuild && activeBuild.phase === "ship" && (
+                {activeBuild.phase === "ship" && (
                   <div className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3">
                     <ReleaseDecisionPanel
                       build={activeBuild}
@@ -913,7 +913,7 @@ export function BuildStudio({
                     />
                   </div>
                 )}
-                {activeBuild && workflowAction && activeBuild.phase !== "ship" && (
+                {workflowAction && activeBuild.phase !== "ship" && (
                   <div className="border-b border-[var(--dpf-border)]">
                     {/* compact=true renders the 40px ActionBanner via the
                         delegation in BuildStudioWorkflowActionCard (T9). The
@@ -1255,9 +1255,7 @@ function CanonicalDocSection({ build }: { build: FeatureBuildRow }) {
         </div>
       )}
       {description ? (
-        <div className="prose prose-sm prose-invert max-w-none text-[var(--dpf-text)] leading-relaxed [&_h1]:text-base [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-3 [&_h3]:text-sm [&_h3]:font-semibold [&_p]:my-2 [&_ul]:my-2 [&_ol]:my-2 [&_code]:text-xs">
-          <ReactMarkdown>{description}</ReactMarkdown>
-        </div>
+        <MarkdownHtml source={description} options={DOCUMENT_MARKDOWN_OPTIONS} />
       ) : (
         <p className="text-xs text-[var(--dpf-muted)]">
           No description was captured for this build. The originating backlog item may have only had a title.

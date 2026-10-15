@@ -15,7 +15,7 @@ import type { DemandScoreInputs, DemandScoreResult } from "@/lib/demand/scoring"
 import type { DemandEvidenceDb } from "@/lib/demand/evidence-repository";
 import type { DemandTransitionDb } from "@/lib/demand/transition-repository";
 import { resolveEstimateProvenance } from "@/lib/demand/estimate-provenance";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import {
   approveDemandForFundingHandler,
@@ -162,10 +162,11 @@ const definitions: ToolDefinition[] = [
   {
     name: "set_backlog_delivery_budget",
     description:
-      "View or set the operator-owned backlog delivery budget: how many backlog items the governed daily tee-up (and on-demand process_backlog_for_build_studio) is funded to promote into Build Studio per day, plus whether governed promotion is enabled at all. Called with no fields, it's a read: returns the current budget alongside live parallelism context. A bigger budget only affects INTAKE — it does not raise how many builds can execute at once (Build Studio's shared sandbox is hard-capped, separately, at BUILD_WIP_CAP=3; see buildWipCap/activeBuilds in the response). Every change is audited.",
+      "View or set the operator-owned backlog delivery budget: how many backlog items the governed daily tee-up (and on-demand process_backlog_for_build_studio) is funded to promote into Build Studio per day, plus whether governed promotion is enabled at all and whether the capacity drain is switched on. Called with no fields, it's a read: returns the current budget alongside live parallelism context. A bigger budget only affects INTAKE: each start is still admitted by its portfolio's points in flight, and the Build Studio sandbox pool is the separate physical limit on builds executing at once (see sandboxPoolSize/activeBuilds in the response). Every change is audited.",
     inputSchema: {
       type: "object",
       properties: {
+        wipAdmissionMode: { type: "string", enum: ["shadow", "enforce"], description: "Points-in-flight admission: shadow records every admit/warn/refuse decision without blocking (the default, per WWMD DI-D83D9C13686B); enforce refuses autonomous starts past a portfolio's allowance." },
         dailyBudget: {
           type: "integer",
           description: "Items/day funded for governed backlog→build promotion (0-50). Omit to leave unchanged (or, with enabled also omitted, to just read current state).",
@@ -174,6 +175,10 @@ const definitions: ToolDefinition[] = [
           type: "boolean",
           description: "Turn governed backlog promotion on/off entirely (governedBacklogEnabled). Omit to leave unchanged.",
         },
+        capacityDrainEnabled: {
+          type: "boolean",
+          description: "Turn the use-it-or-lose-it capacity drain on/off (capacityDrainEnabled; opt-in, kernel decision DI-5FED0D945EBB): near the weekly LLM allocation reset it starts the top demand-ranked ready work so unspent allocation is used. Omit to leave unchanged.",
+        },
       },
       required: [],
     },
@@ -181,6 +186,9 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
     // changes identity or authority → consult-gated (TAK §8.4.1).
     consequence: "authority",
+    consequenceForCall: async ({ params }) => Object.keys(params).length === 0
+      ? { consequence: null, reason: "backlog-delivery-budget-read" }
+      : { consequence: "authority", reason: "backlog-delivery-budget-change" },
   },
   {
     name: "find_duplicate_candidates",
@@ -251,12 +259,13 @@ const definitions: ToolDefinition[] = [
   {
     name: "approve_demand_for_funding",
     description:
-      "Route a scored demand item's funding decision through the organization's own WWWD stance (governed, audited) and, if approved, advance it to the 'ready' funnel stage so it can be promoted to build. This is the investment-approval gate: the decision is recorded to the decision ledger and surfaces in the decision-review workspace. When the org's stance escalates or defers, the item stays at its current stage for a human call.",
+      "Route a scored demand item's funding decision through the organization's own WWWD stance (governed, audited) and, if approved, advance it to the 'ready' funnel stage so it can be promoted to build. This is the investment-approval gate: the decision is recorded to the decision ledger and surfaces in the decision-review workspace. When the org's stance escalates or defers, the item stays at its current stage for a human call. Funding reserves the item's points against its portfolio's budget for the quarter; past the allocation an autonomous caller is refused and a person must give overrideReason.",
     inputSchema: {
       type: "object",
       properties: {
         itemId: { type: "string", description: "The scored demand item to consider funding (must have a demandScore)." },
         rationale: { type: "string", description: "Optional short reason recorded with the funding decision." },
+        overrideReason: { type: "string", description: "Required only when this approval takes the portfolio past its quarterly budget; recorded with the reservation." },
       },
       required: ["itemId"],
     },
@@ -329,6 +338,19 @@ async function buildScorePatch(
   return { patch, result, framework, nextStage };
 }
 
+const VALUE_INPUT_KEYS = ["reach", "impact", "confidence", "businessValue", "timeCriticality", "riskOpportunity"] as const;
+
+/** Who supplied the value inputs on this write, or null when none were supplied. */
+export function stampValueInputSource(
+  params: Record<string, unknown>,
+  who: { userId?: string; agentId?: string },
+): { demandInputSource: "ai" | "human"; demandInputActorRef: string | null; demandInputAt: Date } | null {
+  if (!VALUE_INPUT_KEYS.some((key) => typeof params[key] === "number")) return null;
+  return who.agentId
+    ? { demandInputSource: "ai", demandInputActorRef: who.agentId, demandInputAt: new Date() }
+    : { demandInputSource: "human", demandInputActorRef: who.userId ?? null, demandInputAt: new Date() };
+}
+
 async function scoreDemandItemHandler(
   params: Record<string, unknown>,
   userId?: string,
@@ -362,6 +384,11 @@ async function scoreDemandItemHandler(
     humanJobSize: item.estimateHumanJobSize,
     agreed: item.estimateAgreed,
   });
+  // Value-input provenance (BI-00C68162): supplying any value input attributes
+  // the inputs to whoever supplied them. A person's write is the owner override
+  // the demand-scoring steward never proposes over; an agent's stays "ai".
+  const inputSource = stampValueInputSource(params, { userId, agentId: context?.agentId });
+  if (inputSource) Object.assign(patch, inputSource);
   await prisma.$transaction([
     prisma.backlogItem.update({ where: { itemId }, data: patch }),
     prisma.backlogItemActivity.create({
@@ -388,6 +415,7 @@ async function scoreDemandItemHandler(
               ? null
               : patch["investmentBucket"],
           demandStage: nextStage,
+          inputSource: inputSource?.demandInputSource ?? item.demandInputSource ?? null,
         },
         recordedById: userId ?? null,
         recordedByAgentId: context?.agentId ?? null,

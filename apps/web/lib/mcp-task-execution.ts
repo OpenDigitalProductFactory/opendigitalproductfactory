@@ -1,9 +1,16 @@
+import { reservationIdentity, dispatchIdentity, settleRemoteTask } from "./mcp-task-attempt-state";
+import { projectRemoteTaskReplay } from "./mcp-task-replay-projection";
+import { TASK_IN_FLIGHT_STATES } from "@/lib/tak/task-states";
+import { remoteTaskConversation } from "./mcp-task-conversation";
 import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
 import { loadPirEvidenceContext } from "./pir-evidence-context";
+import { remoteReviewSensitivity } from "./mcp-task-review-sensitivity";
+import { loadReviewerProfile } from "./backlog/initiative-readiness/reviewer-profile";
 import { prisma, type Prisma } from "@dpf/db";
 import { terminalWriterDispatchContractForProvider } from "@/lib/routing/execution-plan";
 import type { RequestContract } from "@/lib/routing/request-contract";
-import { loadInitiativeReviewOutcome } from "./mcp-task-review-outcome";
+import { loadInitiativeReviewOutcome, loadTaskInitiativeReviewOutcome, persistedReviewCompletionData } from "./mcp-task-review-outcome";
+import { foldNativeMcpExecutions } from "@/lib/tak/native-mcp-executions";
 import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
 import {
   executeAutonomousAgenticLoop,
@@ -27,11 +34,8 @@ import {
   requiredToolNames,
   requiresInitiativeReviewEffort,
 } from "./mcp-task-review-contract";
-import type {
-  RemoteTaskSubmitAuth,
-  RemoteTaskSubmitOutcome,
-  RemoteTaskSubmitParams,
-} from "./mcp-task-submit";
+import type { RemoteTaskSubmitAuth, RemoteTaskSubmitOutcome } from "./mcp-task-submit-types";
+import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 import { withTaskRunApprovalLocation } from "./mcp/external-approval-location-lookup";
 import {
   TERMINAL_WRITER_REJECTED_WAIT_REASON,
@@ -62,23 +66,6 @@ function approvalRequiredEnvelopeId(value: unknown): string | null {
   return optionalString((data as Record<string, unknown>)["envelopeId"]);
 }
 
-export function remoteTaskConversation(input: {
-  systemPrompt: string;
-  prompt: string;
-  resumeKind?: "capacity" | "terminal-writer";
-  terminalWriterContext?: string;
-}): {
-  systemPrompt: string;
-  chatHistory: Array<{ role: "user"; content: string }>;
-} {
-  return {
-    systemPrompt: input.resumeKind === "terminal-writer" && input.terminalWriterContext
-      ? `${input.systemPrompt}\n\n${input.terminalWriterContext}`
-      : input.systemPrompt,
-    chatHistory: [{ role: "user", content: input.prompt }],
-  };
-}
-
 export async function executeRemoteTaskAttempt(input: {
   run: { id: string; taskRunId: string; contextId: string | null };
   threadId: string;
@@ -90,8 +77,53 @@ export async function executeRemoteTaskAttempt(input: {
   terminalWriterContext?: string;
   capacityAttempt: number;
   terminalWriterAttempt?: number;
+  /** Identity acquired by the caller's reservation CAS; null denotes initial execution. */
+  expectedReservation?: string | null;
+  expectedDispatchClaim?: string | null;
 }): Promise<RemoteTaskSubmitOutcome> {
   const { run, token, userContext, parsed } = input;
+  const admittedRun = await prisma.taskRun.findUnique({
+    where: { taskRunId: run.taskRunId }, select: { status: true, progressPayload: true, a2aMetadata: true },
+  });
+  if (!admittedRun || !(TASK_IN_FLIGHT_STATES as readonly string[]).includes(admittedRun.status)) {
+    return {
+      kind: "result",
+      result: {
+        taskRunId: run.taskRunId,
+        status: admittedRun?.status ?? "unknown",
+        progressPayload: admittedRun?.progressPayload ?? null,
+        requiresApproval: false,
+        resumable: false,
+        isError: !admittedRun,
+      },
+    };
+  }
+  const reservation = input.expectedReservation !== undefined
+    ? input.expectedReservation : reservationIdentity(admittedRun?.progressPayload);
+  const dispatchClaim = input.expectedDispatchClaim !== undefined
+    ? input.expectedDispatchClaim : dispatchIdentity(admittedRun?.progressPayload);
+  if (admittedRun && (reservationIdentity(admittedRun.progressPayload) !== reservation
+    || dispatchIdentity(admittedRun.progressPayload) !== dispatchClaim)) {
+    return projectRemoteTaskReplay({ existing: { ...admittedRun, taskRunId: run.taskRunId }, requestMatches: true });
+  }
+  const settle = (args: Prisma.TaskRunUpdateManyArgs & { where: { taskRunId: string } }) =>
+    settleRemoteTask(args, reservation, dispatchClaim);
+  // A lost acknowledgement is recovery work, not another independent assessment.
+  // Keep the same bound receipt and let the fenced settlement preserve cancellation.
+  const priorReview = parsed.initiativeReviewBinding
+    ? await loadTaskInitiativeReviewOutcome(run.taskRunId, parsed.initiativeReviewBinding)
+    : null;
+  if (priorReview) {
+    const displaced = await settle({
+      where: { taskRunId: run.taskRunId },
+      data: persistedReviewCompletionData(admittedRun.progressPayload, priorReview),
+    });
+    return displaced ?? { kind: "result", result: {
+      taskRunId: run.taskRunId, status: "completed", idempotentReplay: true,
+      requiresApproval: false, resumable: false, content: remoteTaskContent(priorReview.summary),
+      structuredContent: priorReview, isError: false,
+    } };
+  }
   const agent = await resolveAutonomousWorkAgent({
     agentId: parsed.agentId,
     routeContext: parsed.routeContext,
@@ -162,11 +194,14 @@ export async function executeRemoteTaskAttempt(input: {
     intentQuery: parsed.prompt,
     requiredToolNames: exactRequiredToolNames,
   });
+  const reviewProfile = parsed.initiativeReviewBinding?.gate === "spec-approval"
+    ? await loadReviewerProfile(prisma, parsed.initiativeReviewBinding.itemId) : null;
   const tools = narrowInitiativeReviewTools(
     resolvedTools,
     exactRequiredToolNames,
     parsed.initiativeReviewBinding,
     parsed.prompt,
+    reviewProfile,
   );
   const effortWarrant = requiresInitiativeReviewEffort(exactRequiredToolNames)
     ? deriveEffortWarrant({
@@ -200,12 +235,14 @@ export async function executeRemoteTaskAttempt(input: {
     terminalWriterContext: input.terminalWriterContext,
   });
 
+  // BI-2E479619: rows a CLI wrote natively during THIS attempt start here.
+  const attemptStartedMs = Date.now();
   try {
     const result = await executeAutonomousAgenticLoop({
       systemPrompt: conversation.systemPrompt,
       systemPromptInstructionSpans: coworkerBriefSpans(agent.systemPrompt),
       chatHistory: conversation.chatHistory,
-      sensitivity: agent.sensitivity ?? "internal",
+      sensitivity: await remoteReviewSensitivity(parsed, token, agent.sensitivity ?? "internal"),
       tools: tools.tools,
       toolsForProvider: tools.toolsForProvider,
       deferredTools: tools.deferredTools,
@@ -216,6 +253,9 @@ export async function executeRemoteTaskAttempt(input: {
       taskRunId: run.taskRunId,
       apiTokenId: token.tokenId,
       tokenScope: token.capability,
+      // The task's authority scope bounds the reviewer's nested governed dispatch
+      // (a writer re-reading its bound artifact); without it that check sees no grants (BI-F8C661D0).
+      tokenGrantScopes: parsed.authorityScope,
       taskType: "external-mcp",
       agentDisplayName: optionalString(agent.displayName) ?? resolvedAgentId,
       ...(effortWarrant ? { effortWarrant } : {}),
@@ -223,12 +263,29 @@ export async function executeRemoteTaskAttempt(input: {
       ...(modelRequirements ? { modelRequirements } : {}),
     });
 
+    // BI-2E479619: a CLI adapter runs the governed tools natively, so the
+    // loop's records can miss them. Fold this attempt's native rows (deduped
+    // against any the loop already folded) so the writer check, a writer
+    // refusal and executedToolCount all read the same calls.
+    if (terminalToolPolicy) {
+      await foldNativeMcpExecutions({
+        taskRunId: run.taskRunId,
+        providerId: (result as { providerId?: string }).providerId,
+        sinceMs: attemptStartedMs,
+        records: (result.executedTools ??= []),
+      });
+    }
     const writerResult = parsed.initiativeReviewBinding
       ? result.executedTools?.filter((tool) => tool.name === parsed.initiativeReviewBinding!.writerToolName && tool.result.success).at(-1)?.result
       : undefined;
     const receiptId = optionalString(writerResult?.data?.["receiptId"]);
-    const persistedOutcome = receiptId && parsed.initiativeReviewBinding
-      ? await loadInitiativeReviewOutcome(parsed.initiativeReviewBinding, receiptId) : null;
+    // The persisted receipt is the authority, not this turn's records: before
+    // anything is classified as a missing writer, consult the receipt this
+    // TaskRun's writer recorded (also one minted by an earlier attempt).
+    const persistedOutcome = parsed.initiativeReviewBinding
+      ? (receiptId ? await loadInitiativeReviewOutcome(parsed.initiativeReviewBinding, receiptId) : null)
+        ?? await loadTaskInitiativeReviewOutcome(run.taskRunId, parsed.initiativeReviewBinding)
+      : null;
     if (persistedOutcome) {
       result.content = persistedOutcome.summary;
       result.failure = undefined;
@@ -301,7 +358,7 @@ export async function executeRemoteTaskAttempt(input: {
       delete approvalProgress.terminalWriterEscalation;
       delete approvalProgress.terminalWriterContextFailure;
       delete approvalProgress.resourceWait;
-      await prisma.taskRun.update({
+      const displaced = await settle({
         where: { taskRunId: run.taskRunId },
         data: {
           status: "input-required",
@@ -317,6 +374,7 @@ export async function executeRemoteTaskAttempt(input: {
           },
         },
       });
+      if (displaced) return displaced;
       return {
         kind: "result",
         result: await withTaskRunApprovalLocation({
@@ -350,7 +408,7 @@ export async function executeRemoteTaskAttempt(input: {
         && !Array.isArray(currentRun.progressPayload)
         ? currentRun.progressPayload as Record<string, unknown>
         : {};
-      await prisma.taskRun.update({
+      const displaced = await settle({
         where: { taskRunId: run.taskRunId },
         data: {
           status: "input-required",
@@ -379,6 +437,7 @@ export async function executeRemoteTaskAttempt(input: {
           },
         },
       });
+      if (displaced) return displaced;
       return {
         kind: "result",
         result: {
@@ -431,7 +490,7 @@ export async function executeRemoteTaskAttempt(input: {
             attempt: terminalWriterAttempt,
           })
         : null;
-      await prisma.taskRun.update({
+      const displaced = await settle({
         where: { taskRunId: run.taskRunId },
         data: {
           status: "input-required",
@@ -458,6 +517,7 @@ export async function executeRemoteTaskAttempt(input: {
           },
         },
       });
+      if (displaced) return displaced;
       return {
         kind: "result",
         result: {
@@ -518,7 +578,7 @@ export async function executeRemoteTaskAttempt(input: {
         ?? await prisma.taskRun.findUnique({ where: { taskRunId: run.taskRunId }, select: { progressPayload: true } });
       const priorDispatch = progressRow?.progressPayload && typeof progressRow.progressPayload === "object"
         ? (progressRow.progressPayload as Record<string, unknown>)["dispatch"] : undefined;
-      await prisma.taskRun.update({
+      const displaced = await settle({
         where: { taskRunId: run.taskRunId },
         data: {
           status: "submitted",
@@ -532,6 +592,7 @@ export async function executeRemoteTaskAttempt(input: {
           },
         },
       });
+      if (displaced) return displaced;
 
       return {
         kind: "result",
@@ -551,7 +612,7 @@ export async function executeRemoteTaskAttempt(input: {
     }
 
     if (result.failure) {
-      await prisma.taskRun.update({
+      const displaced = await settle({
         where: { taskRunId: run.taskRunId },
         data: {
           status: "failed",
@@ -565,6 +626,7 @@ export async function executeRemoteTaskAttempt(input: {
           },
         },
       });
+      if (displaced) return displaced;
       return {
         kind: "result",
         result: {
@@ -581,7 +643,7 @@ export async function executeRemoteTaskAttempt(input: {
       };
     }
 
-    await prisma.taskRun.update({
+    const displaced = await settle({
       where: { taskRunId: run.taskRunId },
       data: {
         status: "completed",
@@ -595,6 +657,7 @@ export async function executeRemoteTaskAttempt(input: {
         },
       },
     });
+    if (displaced) return displaced;
 
     return {
       kind: "result",
@@ -612,7 +675,7 @@ export async function executeRemoteTaskAttempt(input: {
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown remote coworker execution error";
-    await prisma.taskRun.update({
+    const displaced = await settle({
       where: { taskRunId: run.taskRunId },
       data: {
         status: "failed",
@@ -624,6 +687,7 @@ export async function executeRemoteTaskAttempt(input: {
         },
       },
     });
+    if (displaced) return displaced;
     return {
       kind: "result",
       result: {

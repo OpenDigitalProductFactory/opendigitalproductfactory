@@ -22,6 +22,8 @@ export const GATE_EXIT = Object.freeze({
   SANDBOX_DRIFT: 3,
   EVIDENCE_PENDING: 4,
   CONTROL_PLANE_STARVATION: 5,
+  SLOT_SUBSTRATE_UNAVAILABLE: 9,
+  MERGE_CONFLICT_WITH_BASE: 10,
   ABANDONED_OR_UNRECORDED: 7,
   DURABLE_WAIT: 75,
   WAIT_CANCELLED: 81,
@@ -85,6 +87,22 @@ export function classifyGateExit({ code, output = "" }) {
         kind: "cancelled", retry: false, verdict: "none",
         summary: "the queued wait was cancelled, or its lease may not be replaced; nothing ran",
         next: "run pregate again only if the work should still be gated",
+      };
+    // BI-277ECBDB: the gate refused to claim because no slot's PostgreSQL
+    // container can run. Re-running the same command fails the same way.
+    case GATE_EXIT.SLOT_SUBSTRATE_UNAVAILABLE:
+      return {
+        kind: "substrate-unavailable", retry: false, verdict: "none",
+        summary: "BLOCKED — slot substrate unavailable: no local-CI slot PostgreSQL container can run, so nothing was claimed",
+        next: "read pnpm pregate:status for the container and Docker's refusal; gating again changes nothing until it runs",
+      };
+    // BI-FCC1DCB2: the candidate does not merge onto origin/main. A verdict
+    // about the branch; every retry fails identically until the author merges.
+    case GATE_EXIT.MERGE_CONFLICT_WITH_BASE:
+      return {
+        kind: "merge-conflict-with-base", retry: false, verdict: "fail",
+        summary: "the candidate does not merge cleanly onto origin/main — nothing was graded",
+        next: "merge origin/main into your branch and resolve the paths pnpm pregate:status names, then gate the new commit",
       };
     case GATE_EXIT.SOURCE_DRIFT:
       return {

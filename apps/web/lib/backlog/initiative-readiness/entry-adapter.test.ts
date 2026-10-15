@@ -2,104 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { projectBacklogItemReadiness, projectBacklogItemReadinessSummary, readinessShapeFromWorkShape } from "./entry-adapter";
 
-const item = {
-  id: "row-1",
-  itemId: "BI-ENTRY",
-  type: "portfolio",
-  source: "user-request",
-  workType: "feature",
-  scopeKind: "platform",
-  archetypeCategories: [],
-  archetypeIds: [],
-  activeBuildKind: null,
-};
-
-const transitionObject = {
-  kind: "work-capsule" as const,
-  id: "WC-PENDING",
-  expectedVersion: "new",
-  targetState: "working",
-};
-
-const baseline = {
-  schemaVersion: 1,
-  baselineId: "baseline-1",
-  subject: { kind: "backlog-item", id: "BI-ENTRY" },
-  profile: "cross-domain",
-  artifactDigest: "sha256:design",
-  supersedesBaselineId: null,
-  objectiveStatements: [{ objectiveId: "OBJ-1" }],
-  acceptanceStatements: [{ acceptanceId: "AC-1" }],
-  approvalReceiptId: "r-approval",
-  authoritySnapshot: { decision: "allow" },
-};
-
-function receipt(id: string, gateKey: string, decision: "pass" | "not-applicable" = "pass") {
-  return {
-    id,
-    kind: "initiative_gate_receipt",
-    gateKey,
-    recordedAt: new Date("2026-08-22T00:00:00.000Z"),
-    payload: {
-      schemaVersion: 1,
-      receiptId: id,
-      policyVersion: "initiative-readiness.v1",
-      gate: gateKey,
-      decision,
-      subject: { kind: "backlog-item", id: "BI-ENTRY" },
-      artifactRef: { kind: "document-version", versionId: "version-1" },
-      artifactDigest: "sha256:design",
-      artifactAuthorRef: "PRN-AUTHOR",
-      reviewerPrincipalId: "PRN-REVIEWER",
-      reviewerAgentId: "AGT-REVIEWER",
-      authorityDecisionId: "DI-1",
-      authoritySnapshot: {
-        decision: "allow",
-        effectiveHumanCapability: "manage_backlog",
-        effectiveAgentGrant: "initiative_review",
-        tokenScope: "organization",
-        organizationId: "ORG-1",
-        actionKey: "review_initiative",
-        policyVersion: "coworker-authority.v1",
-      },
-      reason: "Reviewed against the current canonical design.",
-      findingRefs: [],
-      resolvedFindingRefs: [],
-    },
-  };
-}
-
-function readyActivities() {
-  return [
-    { id: "baseline-row", kind: "initiative_scope_baseline", gateKey: null, recordedAt: new Date(), payload: baseline },
-    receipt("r-research", "research"),
-    receipt("r-approval", "spec-approval"),
-    receipt("r-architecture", "architecture-review"),
-    receipt("r-data", "data-review", "not-applicable"),
-    receipt("r-ux", "ux-fit-review", "not-applicable"),
-    receipt("r-security", "security-review", "not-applicable"),
-    receipt("r-compliance", "compliance-review", "not-applicable"),
-    receipt("r-domain", "domain-review", "not-applicable"),
-    receipt("r-plan-review", "plan-review"),
-    receipt("r-dependencies", "dependency-disposition", "not-applicable"),
-    {
-      id: "coverage-1",
-      kind: "plan_backlog_coverage",
-      gateKey: null,
-      recordedAt: new Date(),
-      payload: {
-        schemaVersion: 2,
-        decision: "atomic",
-        planPath: "docs/superpowers/plans/plan.md",
-        planArtifactRef: { kind: "repo-blob-at-commit", path: "docs/superpowers/plans/plan.md" },
-        planArtifactDigest: "sha256:plan",
-        scopeBaselineId: "baseline-1",
-        scopeBaselineArtifactDigest: "sha256:design",
-        deliverables: [],
-      },
-    },
-  ];
-}
+import { baseline, item, readyActivities, receipt, transitionObject } from "./entry-adapter.test-fixtures";
 
 function terminalFixture(payloadOverride: Record<string, unknown> = {}) {
   const decision = projectBacklogItemReadiness({
@@ -198,6 +101,36 @@ describe("projectBacklogItemReadiness", () => {
     });
 
     expect(summary.decisions.completion.verdict).toBe("input-required");
+  });
+
+  // BI-094B41AC: the completion gate's own evaluation, when the reader ran it.
+  it("returns the completion gate's evaluation as the completion decision, and only that target", () => {
+    const gateDecision = { ...terminalFixture().decision, decisionId: "unpersisted" };
+    const summary = projectBacklogItemReadinessSummary({
+      item: { ...item, status: "awaiting-acceptance" },
+      activities: [],
+      hasSpec: true,
+      hasPlan: true,
+      evaluatedAt: "2026-08-23T00:00:00.000Z",
+      completionDecision: gateDecision,
+    });
+
+    expect(summary.decisions.completion).toBe(gateDecision);
+    expect(summary.decisions.implementation.target).toBe("implementation");
+  });
+
+  it("lets a persisted terminal decision win over a gate evaluation passed in", () => {
+    const fixture = terminalFixture();
+    const summary = projectBacklogItemReadinessSummary({
+      item: { ...item, status: "done" },
+      activities: [fixture.activity],
+      hasSpec: true,
+      hasPlan: true,
+      evaluatedAt: "2026-08-23T00:00:00.000Z",
+      completionDecision: { ...fixture.decision, verdict: "input-required" },
+    });
+
+    expect(summary.decisions.completion).toEqual(fixture.decision);
   });
 
   it("does not reuse a terminal completion decision for a nonterminal item", () => {
@@ -505,6 +438,44 @@ describe("plan-review binds the plan artifact, not the design (BI-B5C8FEFC)", ()
   });
 });
 
+describe("a design amended after its spec approval owes the approval again (BI-7531B73C)", () => {
+  const later = new Date(Date.now() + 60_000);
+  const amended = (id: string, gateKey: string, digest = "sha256:amended") => {
+    const base = receipt(id, gateKey);
+    return { ...base, recordedAt: later, payload: { ...base.payload, artifactDigest: digest } };
+  };
+  const project = (activities: ReturnType<typeof readyActivities>) => projectBacklogItemReadiness({
+    item,
+    activities,
+    target: "implementation",
+    transitionObject,
+    authorization: "pass",
+    capsuleIdentity: "pass",
+    evaluatedAt: "2026-08-22T00:00:00.000Z",
+  });
+
+  it("reads spec approval stale once a review records against a newer design", () => {
+    const projection = project([...readyActivities(), amended("r-data-amended", "data-review")]);
+    expect(projection.decision.unmet.find((entry) => entry.code === "SPEC_APPROVAL_REQUIRED")?.state).toBe("stale");
+  });
+
+  it("stays satisfied when later receipts bind the approved design", () => {
+    const projection = project([...readyActivities(), amended("r-data-same", "data-review", "sha256:design")]);
+    expect(projection.decision.unmet.find((entry) => entry.code === "SPEC_APPROVAL_REQUIRED")).toBeUndefined();
+  });
+
+  it("ignores a plan review, which binds the plan", () => {
+    const projection = project([...readyActivities(), amended("r-plan-later", "plan-review", "sha256:plan-v2")]);
+    expect(projection.decision.unmet.find((entry) => entry.code === "SPEC_APPROVAL_REQUIRED")).toBeUndefined();
+  });
+
+  it("ignores receipts recorded before the baseline, such as research on an earlier draft", () => {
+    const early = { ...receipt("r-research-draft", "research"), payload: { ...receipt("r-research-draft", "research").payload, artifactDigest: "sha256:draft" } };
+    const projection = project([...readyActivities(), early]);
+    expect(projection.decision.unmet.find((entry) => entry.code === "SPEC_APPROVAL_REQUIRED")).toBeUndefined();
+  });
+});
+
 describe("v3: the bound delivery shape keys the gates", () => {
   it("parses the Workroom workShape ref and ignores non-delivery shapes", () => {
     expect(readinessShapeFromWorkShape("delivery-small@1.0.0")).toBe("small");
@@ -612,6 +583,59 @@ describe("v3: the bound delivery shape keys the gates", () => {
       },
     });
     expect(completed.decision.unmet.map((entry) => entry.code)).toContain("RESEARCH_REQUIRED");
+  });
+
+  // BI-6EB2DBBB: an external session cannot hold initiative_evidence_write, so a
+  // small fix stalled at claim. For a SMALL FIX the operator directed (2026-09-23)
+  // that research is the reproduction the author already produced: the defect on
+  // a named ref plus a failing-to-passing test, recorded as execution evidence.
+  describe("a small fix's recorded reproduction at claim (BI-6EB2DBBB)", () => {
+    const evidence = (id: string, evidenceKind: string, at: string) => ({
+      id,
+      kind: "evidence",
+      gateKey: null,
+      recordedAt: new Date(at),
+      payload: { evidenceKind },
+    });
+    const reproduction = [
+      evidence("ev-src", "source_verified", "2026-10-01T10:00:00.000Z"),
+      evidence("ev-test", "test_pass", "2026-10-01T10:05:00.000Z"),
+    ];
+    const claim = (overrides: { workType?: string; workShape?: string; activities?: ReturnType<typeof evidence>[] }) =>
+      projectBacklogItemReadiness({
+        item: {
+          ...item,
+          workType: overrides.workType ?? "bug",
+          workShape: overrides.workShape ?? "delivery-small@1.0.0",
+          deliverySensitivity: "low",
+        },
+        activities: overrides.activities ?? reproduction,
+        target: "implementation",
+        transitionObject,
+        authorization: "pass",
+        capsuleIdentity: "pass",
+        evaluatedAt: "2026-10-01T11:00:00.000Z",
+      });
+    const unmet = (result: ReturnType<typeof claim>) => result.decision.unmet.map((entry) => entry.code);
+
+    it("satisfies research at claim from source_verified plus test_pass on a small fix", () => {
+      expect(unmet(claim({}))).not.toContain("RESEARCH_REQUIRED");
+    });
+
+    it("still demands research when either half of the reproduction is missing", () => {
+      expect(unmet(claim({ activities: [reproduction[0]] }))).toContain("RESEARCH_REQUIRED");
+      expect(unmet(claim({ activities: [reproduction[1]] }))).toContain("RESEARCH_REQUIRED");
+    });
+
+    it("does not count a test_pass that a later test_fail superseded", () => {
+      const failedAfter = [...reproduction, evidence("ev-fail", "test_fail", "2026-10-01T10:10:00.000Z")];
+      expect(unmet(claim({ activities: failedAfter }))).toContain("RESEARCH_REQUIRED");
+    });
+
+    it("keeps the robust research gate for net-new work and for medium fixes", () => {
+      expect(unmet(claim({ workType: "feature" }))).toContain("RESEARCH_REQUIRED");
+      expect(unmet(claim({ workShape: "delivery-medium@1.0.0" }))).toContain("RESEARCH_REQUIRED");
+    });
   });
 
   // BI-0E2E3BC5: a Build Studio build writes no initiative receipts — its research

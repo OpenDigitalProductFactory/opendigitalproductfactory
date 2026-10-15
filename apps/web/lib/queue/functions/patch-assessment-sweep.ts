@@ -11,8 +11,8 @@
 // Inngest harness) + a thin wrapper with the quiescence gate. KEV/OSV are best-effort —
 // an unreachable feed degrades coverage, it does not fail the job or fabricate findings.
 
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import { runEstatePatchAssessment, type PatchStoreDb } from "@/lib/patch/patch-assessment-store";
 import {
@@ -75,7 +75,7 @@ export async function runPatchAssessmentSweep(): Promise<PatchAssessmentSummary>
   return runEstatePatchAssessment(prisma as unknown as PatchStoreDb, provider, { now: new Date() });
 }
 
-export const patchAssessmentSweep = inngest.createFunction(
+export const patchAssessmentSweep = jobs.createFunction(
   { id: "ops/patch-assessment-sweep", retries: 2, triggers: [cron("0 5 * * *")] },
   async ({ step }) => {
     const gate = await gateAtEntry(step, "ops/patch-assessment-sweep");

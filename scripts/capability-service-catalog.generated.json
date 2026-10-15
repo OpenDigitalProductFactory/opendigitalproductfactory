@@ -289,6 +289,7 @@
             "/var/run/docker.sock:/var/run/docker.sock",
             "browser_evidence:/evidence:ro",
             "dpf-source-code:/workspace",
+            "map_data:/var/lib/dpf/maps",
             "sandbox_workspace:/sandbox-workspace"
           ]
         },
@@ -313,6 +314,7 @@
           "service": "portal-init",
           "targetClassification": "ephemeral-lifecycle",
           "volumes": [
+            "${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro",
             "dpf-source-code:/workspace"
           ]
         },
@@ -1075,7 +1077,7 @@
             "linux"
           ],
           "ports": [
-            "11434:11434"
+            "127.0.0.1:11434:11434"
           ],
           "profiles": [
             "runtime-external-ai"
@@ -1104,7 +1106,7 @@
       "services": [
         {
           "backupPolicy": "separate-required",
-          "boundaryReason": "Separate dpf-tts runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
+          "boundaryReason": "Docker speech runtime for Windows/Linux; macOS uses the host-native Chatterbox service declared by its platform overlay.",
           "canonicalDataOwner": "tts-voices",
           "capability": "runtime:local-speech",
           "class": "capability-activated",
@@ -1113,7 +1115,6 @@
           "healthSemantics": "compose-healthcheck",
           "hostPlatforms": [
             "linux",
-            "macos",
             "windows"
           ],
           "ports": [
@@ -1135,7 +1136,7 @@
       ]
     }
   ],
-  "catalogHash": "ba364cb279c151dc9e27ffe4793b8b621d9f469735f6b554087fdb740768c546",
+  "catalogHash": "c41a8c22e60fb47c03a82468f29c700d90bfd511980c8b3d0aaf7a3801762120",
   "catalogVersion": 1,
   "substrateManifestVersion": 2
 }

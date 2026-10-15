@@ -5,16 +5,7 @@
  */
 
 import type { RoutedExecutionPlan } from "./recipe-types";
-import type { ChatMessage } from "../ai-inference";
-
-/** Named type for tool call entries (matches InferenceResult.toolCalls shape) */
-export type ToolCallEntry = {
-  id: string;
-  name: string;
-  arguments: Record<string, unknown>;
-  /** Opaque native continuation data; never authority to execute a tool. */
-  gemini?: { modelId: string; functionCallId?: string; thoughtSignature?: string };
-};
+import type { ChatMessage, ToolCallEntry } from "./chat-message-types";
 
 /** Pre-resolved provider connection info — callProvider resolves before dispatch */
 export interface ResolvedProvider {
@@ -56,6 +47,10 @@ export interface AdapterRequest {
    * use this field.
    */
   fetchImpl: typeof fetch;
+  /** Outer runtime layer supplies read-only evidence without reversing the routing dependency. */
+  readLocalThinkingBudgetEvidence?: (
+    apiRoot: string, modelId: string, fetchImpl: typeof fetch,
+  ) => Promise<import("./types").LocalThinkingBudgetEvidence | undefined>;
   messages: ChatMessage[];
   systemPrompt: string;
   tools?: Array<Record<string, unknown>>;

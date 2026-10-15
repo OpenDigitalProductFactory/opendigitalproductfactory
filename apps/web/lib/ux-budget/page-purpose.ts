@@ -415,6 +415,11 @@ export type RatifiedPurposeContractSource = z.infer<
 export type PurposeContractSource = z.infer<
   typeof purposeContractSourceSchema
 >;
+/** One purpose-contracts/* module: the contract sources it contributes. Lives
+ *  here, beside PurposeContractSource, so the modules name it without importing
+ *  the purpose-contracts index that imports them (M11 step 2 needs apps/web's
+ *  all-imports graph acyclic). */
+export type PurposeContractModule = readonly PurposeContractSource[];
 export type PagePurposeContract = z.infer<typeof pagePurposeContractSchema>;
 export type PagePurposeRegistry = z.infer<typeof pagePurposeRegistrySchema>;
 export type PurposeIdentityBaseline = z.infer<typeof purposeIdentityBaselineSchema>;

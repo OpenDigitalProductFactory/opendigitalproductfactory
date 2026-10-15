@@ -165,6 +165,38 @@ export async function loadContributorChangeLaneReadModel(
   };
 }
 
+export type ContributorInventorySource = (typeof SNAPSHOT_SOURCES)[number];
+
+export type ContributorInventorySourceRead<T> = {
+  rows: T[];
+  freshness: LaneReadModelFreshness;
+};
+
+/**
+ * One snapshot source under the same latest-successful-per-source semantics the
+ * change-lanes dashboard uses, without the lane projection. For read tools that
+ * report the recorded inventory itself (pull requests, branches, worktrees).
+ */
+export async function loadContributorInventorySource<T>(
+  source: ContributorInventorySource,
+  args: Pick<LaneReadModelArgs, "db" | "now" | "staleHeartbeatThresholdMs"> = {},
+): Promise<ContributorInventorySourceRead<T>> {
+  const db = args.db ?? prisma;
+  const now = args.now ?? new Date();
+  const notConfigured =
+    source === "github-pr" && !(await isGithubPrCredentialBound(db)) ? "not-configured" : null;
+  const freshness: LaneReadModelFreshness[] = [];
+  const rows = await readSnapshotSource<T>(
+    db,
+    source,
+    freshness,
+    now,
+    args.staleHeartbeatThresholdMs ?? DEFAULT_STALE_THRESHOLD_MS,
+    notConfigured,
+  );
+  return { rows, freshness: freshness[0]! };
+}
+
 // ─── Snapshot source resolver (latest-successful-per-source) ────────────────
 
 async function readSnapshotSource<T>(

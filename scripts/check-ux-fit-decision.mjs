@@ -35,7 +35,6 @@
 // and Build Studio, because all changes land via PR (AGENTS.md §4/§17).
 
 import { readFileSync } from "node:fs";
-import { execFileSync } from "node:child_process";
 import { fetchOriginMainSharedSafe } from "./lib/git-fetch-shared-safe.mjs";
 import { listChangedFiles, exitUnresolvable } from "./lib/git-changed-files.mjs";
 // Canonical sensitivity constants (single source, shared with the gate-context pack;
@@ -48,6 +47,7 @@ import {
   UX_EXCLUDE_RE as EXCLUDE_RE,
   UX_ROUTE_FILE_RE as ROUTE_FILE_RE,
 } from "./lib/gate-sensitivity.mjs";
+import { runGit } from "./lib/git.mjs";
 
 // ── What counts as a UI-impacting change ────────────────────────────────────────
 
@@ -394,13 +394,8 @@ function assertSafePath(path) {
 
 // execFile with arg array — bypasses the shell entirely, so individual args containing
 // $, `, ;, &, |, etc. are inert.
-function git(...args) {
-  try {
-    return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-  } catch (e) {
-    return (e.stdout && e.stdout.toString()) || "";
-  }
-}
+// Fail-open as before: partial stdout (or "") when git fails.
+const git = (...args) => runGit(args, { cwd: process.cwd() }).stdout;
 
 function lines(out) {
   return out.split("\n").map((s) => s.trim()).filter(Boolean);

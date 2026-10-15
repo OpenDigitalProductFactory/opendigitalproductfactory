@@ -1,40 +1,12 @@
-import Link from "next/link";
-import { notFound } from "next/navigation";
-
-import { BindingDetailDrawer } from "@/components/platform/authority/BindingDetailDrawer";
-import { getAuthorityBinding, getAuthorityBindingEvidence } from "@/lib/authority/bindings";
+import { permanentRedirect } from "next/navigation";
 
 type Props = {
-  params: Promise<{
-    bindingId: string;
-  }>;
+  params: Promise<{ bindingId: string }>;
 };
 
-export default async function AiAssignmentsBindingPage({ params }: Props) {
+// EP-2FB6C0CC (BI-DD763B93): superseded by the in-page binding drawer, which is
+// what every binding link opens. Saved links keep the binding id.
+export default async function AiAssignmentsBindingRedirect({ params }: Props) {
   const { bindingId } = await params;
-  const [binding, evidence] = await Promise.all([
-    getAuthorityBinding(bindingId),
-    getAuthorityBindingEvidence(bindingId),
-  ]);
-
-  if (!binding) {
-    notFound();
-  }
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <div className="text-xs uppercase tracking-[0.08em] text-[var(--dpf-muted)]">
-          <Link href="/platform/ai/assignments" className="text-[var(--dpf-accent)]">
-            Resource bindings
-          </Link>
-          {" · "}AI Workforce{" · "}Assignments
-        </div>
-        <p className="mt-2 text-sm text-[var(--dpf-muted)]">
-          Coworker-first fallback view for the shared authority binding detail surface.
-        </p>
-      </div>
-      <BindingDetailDrawer binding={binding} evidence={evidence} />
-    </div>
-  );
+  permanentRedirect(`/platform/ai/assignments?binding=${bindingId}`);
 }

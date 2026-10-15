@@ -1,5 +1,6 @@
 import { prisma } from "@dpf/db";
 import { DEFAULT_COOLDOWN_MINUTES } from "./cooldown";
+import { DEFAULT_DRAIN_WAIT_BUDGET_MS } from "./quiescence-contract";
 import {
   DEFAULT_BATCH_MIN_PENDING_PRS,
   DEFAULT_BATCH_MAX_WAIT_HOURS,
@@ -52,6 +53,12 @@ export type SelfUpgradeConfig = {
    * {@link DEFAULT_COOLDOWN_MINUTES}.
    */
   cooldownMinutes: number;
+  /**
+   * How long a self-upgrade waits for in-flight work after closing admission,
+   * before pausing as `awaiting-operator` (BI-F9EE05E5, spec §11a). Default
+   * {@link DEFAULT_DRAIN_WAIT_BUDGET_MS} (60 minutes); Keep waiting extends it.
+   */
+  drainWaitBudgetMs: number;
   /**
    * Release batching: routine (scheduled / agent-requested) upgrades wait
    * until at least this many merged upstream PRs have accumulated since the
@@ -141,6 +148,7 @@ const DEFAULTS: SelfUpgradeConfig = {
   channel: "stable",
   checkIntervalHours: 24,
   cooldownMinutes: DEFAULT_COOLDOWN_MINUTES,
+  drainWaitBudgetMs: DEFAULT_DRAIN_WAIT_BUDGET_MS,
   batchMinPendingPrs: DEFAULT_BATCH_MIN_PENDING_PRS,
   batchMaxWaitHours: DEFAULT_BATCH_MAX_WAIT_HOURS,
   healthTarget: 100,
@@ -218,6 +226,10 @@ export function parseSelfUpgradeConfig(raw: unknown): SelfUpgradeConfig {
       typeof cfg.cooldownMinutes === "number" && cfg.cooldownMinutes >= 0
         ? cfg.cooldownMinutes
         : DEFAULTS.cooldownMinutes,
+    drainWaitBudgetMs:
+      typeof cfg.drainWaitBudgetMs === "number" && Number.isFinite(cfg.drainWaitBudgetMs) && cfg.drainWaitBudgetMs > 0
+        ? Math.floor(cfg.drainWaitBudgetMs)
+        : DEFAULTS.drainWaitBudgetMs,
     batchMinPendingPrs:
       typeof cfg.batchMinPendingPrs === "number" &&
       Number.isFinite(cfg.batchMinPendingPrs) &&

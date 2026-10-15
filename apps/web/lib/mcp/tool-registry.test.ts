@@ -22,6 +22,7 @@ import { coworkerServiceCatalogPack } from "./packs/coworker-service-catalog-pac
 import { coworkerToolGrantPack } from "./packs/coworker-tool-grant-pack";
 import { coworkerMemoryPack } from "./packs/coworker-memory-pack";
 import { demandScoringPack } from "./packs/demand-scoring-pack";
+import { portfolioBudgetPack } from "./packs/portfolio-budget-pack";
 import { composeToolPacks } from "./tool-registry";
 // The inline-case ratchet's extractor lives in the CI guard (scripts/), kept as
 // the single source of truth so this test and the guard can never disagree.
@@ -57,13 +58,14 @@ describe("deliberation-siem tool pack", () => {
 });
 
 describe("runtime-coordination tool pack", () => {
-  it("bundles its five runtime tools, each with a (lazy) handler", () => {
+  it("bundles its runtime tools, each with a (lazy) handler", () => {
     expect(runtimeCoordinationPack.definitions.map((t) => t.name).sort()).toEqual([
       "get_runtime_coordination_map",
       "heartbeat_runtime_target",
       "record_runtime_verification",
       "register_runtime_target",
       "release_runtime_target",
+      "verify_archetype_projection",
     ]);
     for (const def of runtimeCoordinationPack.definitions) {
       expect(runtimeCoordinationPack.handlers[def.name], def.name).toBeTypeOf("function");
@@ -275,6 +277,34 @@ describe("coworker memory pack", () => {
   it("keeps every pack tool present in the live PLATFORM_TOOLS registry", () => {
     const platformNames = new Set(PLATFORM_TOOLS.map((t) => t.name));
     for (const def of coworkerMemoryPack.definitions) {
+      expect(platformNames.has(def.name), def.name).toBe(true);
+    }
+  });
+});
+
+describe("portfolio-budget tool pack", () => {
+  it("bundles the epic attribution doors with handlers", () => {
+    expect(portfolioBudgetPack.definitions.map((t) => t.name)).toEqual([
+      "propose_epic_portfolios",
+      "confirm_epic_portfolios",
+      "propose_portfolio_budgets",
+      "set_portfolio_budget",
+      "set_portfolio_owner",
+    ]);
+    for (const def of portfolioBudgetPack.definitions) {
+      expect(portfolioBudgetPack.handlers[def.name], def.name).toBeTypeOf("function");
+    }
+  });
+
+  it("mirrors the agent-grant gating source exactly (R3 no-drift)", () => {
+    for (const [name, grants] of Object.entries(portfolioBudgetPack.grants)) {
+      expect(TOOL_TO_GRANTS[name], name).toEqual(grants);
+    }
+  });
+
+  it("keeps every pack tool present in the live PLATFORM_TOOLS registry", () => {
+    const platformNames = new Set(PLATFORM_TOOLS.map((t) => t.name));
+    for (const def of portfolioBudgetPack.definitions) {
       expect(platformNames.has(def.name), def.name).toBe(true);
     }
   });

@@ -10,6 +10,7 @@ import { issueReportTriage } from "./issue-report-triage";
 import { routeWorkItem } from "./route-work-item";
 import { SCHEDULED_JOB_CATALOG } from "@/lib/operate/scheduled-jobs/catalog";
 import { asyncOperationTaskHub } from "./async-operation-task-hub";
+import { buildResumeAfterUpgradePause } from "./build-resume-after-upgrade-pause";
 
 describe("getInngestFunctionsForRuntime", () => {
   it("omits scheduled cron functions unless explicitly enabled", () => {
@@ -23,6 +24,12 @@ describe("getInngestFunctionsForRuntime", () => {
     expect(eventFunctions).toContain(asyncOperationTaskHub);
     expect(scheduledFunctions).not.toContain(asyncOperationTaskHub);
     expect(getInngestFunctionsForRuntime({})).toContain(asyncOperationTaskHub);
+  });
+
+  // BI-E9DAA23F: an event function, so it runs even when crons are off.
+  it("always registers the resume-after-upgrade-pause subscriber as an event function", () => {
+    expect(eventFunctions).toContain(buildResumeAfterUpgradePause);
+    expect(getInngestFunctionsForRuntime({})).toContain(buildResumeAfterUpgradePause);
   });
 
   it("includes scheduled cron functions when explicitly enabled", () => {

@@ -1,3 +1,4 @@
+import { blocksStart } from "@/lib/build/investment-admission";
 import * as crypto from "crypto";
 import { generateBuildId, mergeHappyPathStateIntoPlan } from "@/lib/feature-build-types";
 import {
@@ -16,10 +17,11 @@ import {
   shouldAutoApproveGovernedDraft,
   type AutonomousTeeUpStart,
 } from "@/lib/build/autonomous-tee-up";
+import { rankForStart, type RankedForStart, type StartRankingContext } from "@/lib/demand/start-ranking";
+import { loadStartRankingContext } from "@/lib/demand/start-ranking-context";
 export { shouldAutoApproveGovernedDraft } from "@/lib/build/autonomous-tee-up";
 
 const ELIGIBLE_EFFORT_SIZES = new Set(["small", "medium", "large"]);
-const ACTIVE_EPIC_STATUSES = new Set(["open", "in-progress"]);
 const DEFAULT_DAILY_CAP = 3;
 
 /** Structured Fix Context fields carried on FeatureBrief.fixContext for kind=fix. */
@@ -129,9 +131,15 @@ export type GovernedBacklogTeeUpCandidate = {
    */
   activeEpicId: string | null;
   digitalProductId: string | null;
+  /** The item's portfolio; its accountable person owns a scheduled build (BI-67B27832). */
+  portfolioId?: string | null;
   epicId: string | null;
   createdAt: Date;
   epic: { status: string } | null;
+  /** Demand ranking inputs (BI-78540D2C); null = not scored / no bucket. */
+  demandScore?: number | null;
+  demandScoreFramework?: string | null;
+  investmentBucket?: string | null;
 };
 
 type GovernedBacklogConfig = {
@@ -243,28 +251,21 @@ function isEligibleCandidate(item: GovernedBacklogTeeUpCandidate): boolean {
   );
 }
 
-function candidatePriority(item: GovernedBacklogTeeUpCandidate): number {
-  return ACTIVE_EPIC_STATUSES.has(item.epic?.status ?? "") ? 0 : 1;
+/** Eligible candidates in start order, by the shared demand ranking (BI-78540D2C). */
+export function rankGovernedBacklogTeeUpCandidates(
+  items: GovernedBacklogTeeUpCandidate[],
+  limit: number,
+  context?: StartRankingContext,
+): RankedForStart<GovernedBacklogTeeUpCandidate>[] {
+  return rankForStart(items.filter(isEligibleCandidate), limit, context);
 }
 
 export function selectGovernedBacklogTeeUpCandidates(
   items: GovernedBacklogTeeUpCandidate[],
   limit: number,
+  context?: StartRankingContext,
 ): GovernedBacklogTeeUpCandidate[] {
-  if (limit <= 0) return [];
-
-  return items
-    .filter(isEligibleCandidate)
-    .sort((left, right) => {
-      const priorityDiff = candidatePriority(left) - candidatePriority(right);
-      if (priorityDiff !== 0) return priorityDiff;
-
-      const createdAtDiff = left.createdAt.getTime() - right.createdAt.getTime();
-      if (createdAtDiff !== 0) return createdAtDiff;
-
-      return left.itemId.localeCompare(right.itemId);
-    })
-    .slice(0, limit);
+  return rankGovernedBacklogTeeUpCandidates(items, limit, context).map((entry) => entry.item);
 }
 
 export async function promoteBacklogItemToBuildDraft(
@@ -629,6 +630,19 @@ export async function runGovernedBacklogTeeUp(input: {
   limit?: number;
   /** Overrides the daily cap as the per-run ceiling (capacity-drain path). */
   capOverride?: number;
+  /**
+   * Admission by points in flight (BI-3430B3A4). The tee-up is an autonomous
+   * start, so a candidate past its portfolio's allowance is refused and the
+   * reason is recorded on the item. Injected in tests; defaults to the live check.
+   */
+  admit?: (itemId: string) => Promise<{ verdict: "admit" | "warn" | "refuse"; reason: string; mode?: "shadow" | "enforce" }>;
+  /**
+   * Who owns each build this run creates (BI-67B27832). Scheduled runs pass the
+   * portfolio-aligned resolver so a build, and the room it opens, belong to the
+   * accountable person of its item's portfolio. Omitted: every build is owned
+   * by `userId`, the person who asked for the run.
+   */
+  ownerForPortfolio?: (portfolioId: string | null) => Promise<string>;
 }): Promise<{
   trigger: GovernedBacklogTeeUpTrigger;
   requestedLimit: number;
@@ -636,6 +650,7 @@ export async function runGovernedBacklogTeeUp(input: {
   createdCount: number;
   skippedCount: number;
   builds: Array<{ backlogItemId: string; buildId: string }>;
+  refused: Array<{ backlogItemId: string; reason: string }>;
 }> {
   const { prisma, userId, trigger, limit, capOverride } = input;
   const config = await prisma.platformDevConfig.findUnique({
@@ -643,6 +658,7 @@ export async function runGovernedBacklogTeeUp(input: {
     select: {
       governedBacklogEnabled: true,
       backlogTeeUpDailyCap: true,
+      demandBucketTargets: true,
     },
   });
 
@@ -655,6 +671,7 @@ export async function runGovernedBacklogTeeUp(input: {
       createdCount: 0,
       skippedCount: 0,
       builds: [],
+      refused: [],
     };
   }
 
@@ -667,7 +684,6 @@ export async function runGovernedBacklogTeeUp(input: {
       // Exclude items already being delivered by a decomposition Epic (BI-1D0CA7A0).
       activeEpicId: null,
     },
-    orderBy: { createdAt: "asc" },
     select: {
       id: true,
       itemId: true,
@@ -680,8 +696,12 @@ export async function runGovernedBacklogTeeUp(input: {
       activeBuildId: true,
       activeEpicId: true,
       digitalProductId: true,
+      portfolioId: true,
       epicId: true,
       createdAt: true,
+      demandScore: true,
+      demandScoreFramework: true,
+      investmentBucket: true,
       epic: {
         select: {
           status: true,
@@ -690,25 +710,35 @@ export async function runGovernedBacklogTeeUp(input: {
     },
   });
 
-  const selected = selectGovernedBacklogTeeUpCandidates(items, requestedLimit);
+  const selected = rankGovernedBacklogTeeUpCandidates(items, requestedLimit, await loadStartRankingContext(prisma, config));
   const builds: Array<{ backlogItemId: string; buildId: string }> = [];
+  const refused: Array<{ backlogItemId: string; reason: string }> = [];
   let skippedCount = 0;
+  const admit = input.admit ?? liveTeeUpAdmission(userId, trigger);
 
-  for (const item of selected) {
-    const activitySummary =
-      trigger === "daily"
-        ? `Created by the daily backlog tee-up from ${item.itemId}.`
-        : `Created by manual backlog processing from ${item.itemId}.`;
+  for (const { item, reason: rankingReason } of selected) {
+    const admission = await admit(item.itemId);
+    // Shadow mode records the refusal and lets the start proceed (WWMD DI-D83D9C13686B).
+    if (blocksStart(admission)) {
+      refused.push({ backlogItemId: item.itemId, reason: admission.reason });
+      skippedCount += 1;
+      continue;
+    }
+    const origin = trigger === "daily" ? "the daily backlog tee-up" : trigger === "capacity-drain" ? "the capacity drain" : "manual backlog processing";
+    const activitySummary = `Created by ${origin} from ${item.itemId}. ${rankingReason}`;
 
     const autonomousStart = await resolveAutonomousTeeUpStart({
       item,
       db: prisma,
     });
+    const ownerUserId = input.ownerForPortfolio
+      ? await input.ownerForPortfolio(item.portfolioId ?? null)
+      : userId;
     const result = await prisma.$transaction((tx) =>
       promoteBacklogItemToBuildDraft({
         tx,
         itemId: item.itemId,
-        userId,
+        userId: ownerUserId,
         governedBacklogEnabled: config.governedBacklogEnabled === true,
         autonomousStart,
         activity: {
@@ -735,5 +765,17 @@ export async function runGovernedBacklogTeeUp(input: {
     createdCount: builds.length,
     skippedCount,
     builds,
+    refused,
+  };
+}
+
+/** The live admission check for tee-up starts, recording each refusal on its item. */
+function liveTeeUpAdmission(userId: string, trigger: GovernedBacklogTeeUpTrigger) {
+  return async (itemId: string) => {
+    const { prisma } = await import("@dpf/db");
+    const { evaluateItemAdmission, recordAdmissionOutcome } = await import("@/lib/build/investment-admission");
+    const admission = await evaluateItemAdmission(prisma as never, { itemId, startKind: "autonomous" });
+    await recordAdmissionOutcome(prisma as never, admission, { source: `governed-backlog-tee-up:${trigger}`, userId });
+    return admission;
   };
 }

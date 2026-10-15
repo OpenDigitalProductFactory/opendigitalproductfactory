@@ -83,6 +83,8 @@ model OrganizationLicenseRecord {
   feeSchedules               LicenseFeeSchedule[]
   readinessIssues            LicenseReadinessIssue[]
 
+  controlledSubstanceRegisters ControlledSubstanceRegister[]
+
   @@index([organizationLicenseProfileId])
   @@index([requirementReferenceId])
   @@index([status, expiresAt])
@@ -114,6 +116,8 @@ model PersonLicenseRecord {
   displayObligations   LicenseDisplayObligation[]
   feeSchedules         LicenseFeeSchedule[]
   readinessIssues      LicenseReadinessIssue[]
+
+  controlledSubstanceRegisters ControlledSubstanceRegister[]
 
   @@index([principalAliasId])
   @@index([organizationId])

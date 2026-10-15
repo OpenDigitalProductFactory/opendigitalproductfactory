@@ -21,12 +21,14 @@ import {
   resolveSelfUpgradeStatusTarget,
   resolveVerifiedReleaseUpgradeCandidate,
 } from "./status-target";
+import { DEFAULT_DRAIN_WAIT_BUDGET_MS } from "./drain-wait";
 
 const config = {
   enabled: true,
   channel: "stable",
   checkIntervalHours: 24,
   cooldownMinutes: 60,
+  drainWaitBudgetMs: DEFAULT_DRAIN_WAIT_BUDGET_MS,
   batchMinPendingPrs: 1,
   batchMaxWaitHours: 24,
   healthTarget: 100,

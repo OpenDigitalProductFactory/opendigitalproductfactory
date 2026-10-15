@@ -6,6 +6,7 @@
 import { prisma } from "@dpf/db";
 import { getQuiescenceLevel, QuiescingError } from "@/lib/self-upgrade/quiescence";
 import { recordQueueTransition } from "@/lib/queue/queue-telemetry";
+import { sandboxPoolSize } from "@/lib/build/wip-cap";
 
 /**
  * Flow-telemetry queue key for the shared sandbox-slot pool (EP-3516E23D). The
@@ -16,7 +17,7 @@ const SANDBOX_QUEUE_KEY = "compute:sandbox-pool";
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
-const POOL_SIZE = Number(process.env.DPF_SANDBOX_POOL_SIZE) || 1;
+const POOL_SIZE = sandboxPoolSize();
 
 /**
  * Docker Compose container names and ports for the sandbox pool.

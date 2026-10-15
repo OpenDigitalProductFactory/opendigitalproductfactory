@@ -7,7 +7,7 @@ import { EventEmitter } from "events";
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
-vi.mock("@/lib/ai-inference", () => {
+vi.mock("@/lib/routing/inference-error", () => {
   class InferenceError extends Error {
     name = "InferenceError";
     constructor(
@@ -312,6 +312,41 @@ describe("codexCliAdapter — E2BIG spawn error classification", () => {
   });
 });
 
+describe("Codex inference context isolation", () => {
+  it("runs outside the shared checkout and cleans up its own context directory", async () => {
+    vi.clearAllMocks();
+    const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
+    vi.mocked(getDecryptedCredential).mockResolvedValue({ secretRef: "sk-test", cachedToken: null } as never);
+    mockExecAsync.mockResolvedValue({ stdout: "", stderr: "" });
+    const writes: string[] = [];
+    mockSpawn.mockImplementation((_command: string, args: string[]) => {
+      const proc = makeMockProcess();
+      if (args.includes("-i")) {
+        proc.stdin.write.mockImplementation((data: string, cb?: () => void) => {
+          writes.push(Buffer.from(data, "base64").toString("utf8"));
+          cb?.();
+          return true;
+        });
+        proc.stdin.end.mockImplementation(() => process.nextTick(() => proc.emit("close", 0)));
+      } else {
+        process.nextTick(() => {
+          proc.stdout.emit("data", Buffer.from('{"decision":"pass"}'));
+          proc.emit("close", 0);
+        });
+      }
+      return proc;
+    });
+    const { codexCliAdapter } = await import("./codex-cli-adapter");
+    await codexCliAdapter.execute(makeRequest());
+    const runner = writes.find(value => value.startsWith("#!/bin/sh"))!;
+    const directory = runner.match(/cd (\/tmp\/codex-cwd-[\w-]+) \|\| exit 1/)?.[1];
+    expect(directory).toBeDefined();
+    expect(runner).not.toContain("cd /workspace");
+    expect(runner).toContain(`mkdir -p ${directory} || exit 1`);
+    expect(mockExecAsync.mock.calls.some(([command]) => command.includes(`rmdir ${directory}`))).toBe(true);
+  });
+});
+
 // ── Auth-vs-rate classification (routing-resilience spec D2) ─────────────────
 // An expired OAuth token must classify as `auth` (→ provider disable + reconnect
 // surfacing) even when the CLI also emits throttle-looking text, so the fallback
@@ -400,6 +435,37 @@ describe("cliFailureSignal — classify the CLI's own error, not the echoed prom
   it("still classifies the CLI's own auth error as auth", () => {
     const expired = stderr.replace(/ERROR: You've hit[^\n]*/, "ERROR: unexpected status 401 Unauthorized: Missing bearer");
     expect(looksLikeCliAuthFailure(cliFailureSignal(expired))).toBe(true);
+  });
+
+  // BI-07EC0FB4 (live, 2026-10-14 00:07–00:20Z): a revoked OpenAI sign-in. The 401s
+  // sit only on timestamped `... ERROR codex_models_manager` lines, which the
+  // signal drops; the CLI's own ERROR: line says "sign in again", which no
+  // pattern matched, so 39 Workroom turns failed as provider_error and the
+  // provider was never disabled or flagged for re-auth.
+  it("classifies a refresh-token failure that asks to sign in again as auth", () => {
+    const revoked = [
+      "Reading prompt from stdin...",
+      "2026-10-14T00:16:54.477268Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized: Your authentication token has expired. Please try refreshing it.",
+      "OpenAI Codex v0.162.1",
+      "--------",
+      "model: gpt-5.6-luna",
+      "--------",
+      "user",
+      "You are executing one stage of a standing Workroom activity.",
+      "ERROR: Your access token could not be refreshed because you have since logged out or signed in to another account. Please sign in again.",
+      "ERROR: Your access token could not be refreshed because you have since logged out or signed in to another account. Please sign in again.",
+    ].join("\n");
+    const signal = cliFailureSignal(revoked);
+    expect(looksLikeCliAuthFailure(signal)).toBe(true);
+    expect(looksLikeCliRateLimit(signal)).toBe(false);
+  });
+
+  it.each([
+    "ERROR: Please sign in again.",
+    "ERROR: please sign in to continue",
+    "ERROR: Your access token could not be refreshed.",
+  ])("classifies sign-in phrasing %j as auth", (text) => {
+    expect(looksLikeCliAuthFailure(cliFailureSignal(text))).toBe(true);
   });
 
   it("falls back to the tail when the CLI printed no ERROR line", () => {

@@ -7,7 +7,7 @@
 // a current server-issued independent review through the token-bound task owner.
 // Central TOOL_TO_GRANTS owns disclosure; the request guard narrows execution.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { dispatchExternalCoworkerTask } from "@/lib/mcp/external-coworker-task-adapter";
 import { authorizeCoworkerRequest } from "@/lib/mcp/independent-review-request";
@@ -65,6 +65,27 @@ const initiativeReviewProperties = {
 } as const;
 
 const definitions: ToolDefinition[] = [
+  {
+    name: "get_my_approval_status",
+    description: "Read an exact approval outcome by envelopeId, or use mode pending to discover up to 20 unexpired requests for the authenticated user and current assistant. Pending entries name owner, expiry, exact Inbox link and immutable review locator; hasMore names a bounded page. Does not approve, retry, transfer ownership or grant access.",
+    inputSchema: { type: "object", properties: {
+      mode: { type: "string", enum: ["exact", "pending"], description: "Defaults to exact; pending omits envelopeId." },
+      envelopeId: { type: "string", minLength: 1, maxLength: 128 },
+    }, additionalProperties: false },
+    requiredCapability: null,
+    sideEffect: false,
+    executionMode: "immediate",
+  },
+  {
+    name: "probe_pending_approval_conversion",
+    title: "Probe pending approval conversion",
+    description: "Dry-run, for every pending proposal, what converting it to an approval request would hit: the authority decision, identity resolution, governance hook verdicts and alignment requirement, with one refusal code per row and the owner's activity. Read-only: runs no tool, approves nothing and writes nothing. Platform administrators only.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    requiredCapability: "manage_platform",
+    // Read-only by construction: evaluation runs on read-only transactions and no handler is called.
+    sideEffect: false,
+    executionMode: "immediate",
+  },
   {
     name: "request_coworker",
     description:
@@ -173,6 +194,7 @@ async function requestCoworkerHandler(
         callerAgentId: context.agentId ?? null,
         questionPacketSummary: typeof params["questionPacketSummary"] === "string" ? params["questionPacketSummary"] : undefined,
         routeContext: context.routeContext,
+        runtimeMode: context.coworkerMode,
       },
       userId,
     );
@@ -220,6 +242,7 @@ async function summonCoworkerHandler(
         tier: tierParam === 3 ? 3 : 2,
         callerAgentId: context.agentId ?? null,
         routeContext: context.routeContext,
+        runtimeMode: context.coworkerMode,
       },
       userId,
     );
@@ -334,6 +357,39 @@ async function findCoworkerHandler(params: Record<string, unknown>): Promise<Too
 }
 
 const handlers: Record<string, ToolPackHandler> = {
+  get_my_approval_status: async (params, userId, context) => {
+    if (params.mode !== undefined && params.mode !== "exact" && params.mode !== "pending") {
+      return { success: false, error: "invalid_params", message: "Choose exact or pending approval lookup." };
+    }
+    if (params.mode === "pending") {
+      if (Object.hasOwn(params, "envelopeId")) return { success: false, error: "invalid_params", message: "Pending discovery must omit envelopeId." };
+      if (!userId || !context?.agentId) return { success: false, error: "approval_identity_required", message: "Approval discovery requires an authenticated user and assistant." };
+      const { listPendingApprovalOutcomes } = await import("@/lib/coworker/approval-outcome-store");
+      const data = await listPendingApprovalOutcomes(userId, context.agentId);
+      return { success: true, message: data.hasMore
+        ? "Showing 20 pending requests. Open your Inbox to review the remaining requests."
+        : `Found ${data.approvals.length} pending approval request(s) for your current user and assistant.`, data };
+    }
+    const envelopeId = typeof params.envelopeId === "string" ? params.envelopeId.trim() : "";
+    if (!envelopeId || envelopeId.length > 128) return { success: false, error: "invalid_params", message: "An approval request ID is required." };
+    const { readApprovalOutcome } = await import("@/lib/coworker/approval-outcome-store");
+    const outcome = await readApprovalOutcome(envelopeId, userId, context?.agentId);
+    if (!outcome) return { success: false, error: "approval_not_available", message: "This approval request is not available to your current user and assistant." };
+    return { success: true, message: `${outcome.label}. ${outcome.nextAction}`, data: outcome };
+  },
+  probe_pending_approval_conversion: async (params, userId) => {
+    if (Object.keys(params).length) return { success: false, error: "invalid_params", message: "This probe takes no inputs; it reads every pending proposal." };
+    const [{ currentUserContext }, { can }] = await Promise.all([
+      import("@/lib/govern/current-user-context"), import("@/lib/govern/permissions"),
+    ]);
+    const user = await currentUserContext(userId);
+    if (!user || !can(user, "manage_platform")) return { success: false, error: "forbidden", message: "Platform administration permission is required." };
+    const [{ prisma }, { runApprovalConvergenceProbe }] = await Promise.all([
+      import("@dpf/db"), import("@/lib/coworker/approval-convergence-probe-run"),
+    ]);
+    const report = await runApprovalConvergenceProbe(prisma);
+    return { success: true, message: `Probed ${report.summary.rows} pending proposal(s) at ${report.probedAt}.`, data: report };
+  },
   request_coworker: (params, userId, context) => requestCoworkerHandler(params, userId, context),
   summon_coworker: (params, userId, context) => summonCoworkerHandler(params, userId, context),
   find_coworker: (params) => findCoworkerHandler(params),
