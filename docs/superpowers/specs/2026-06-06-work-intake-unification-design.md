@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Work Intake Unification — One Front Door for Portal-Dev Work
 
 | Field | Value |
