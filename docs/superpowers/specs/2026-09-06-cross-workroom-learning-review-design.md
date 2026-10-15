@@ -530,3 +530,111 @@ common/profile contract and persistence choices, then decompose delivery under B
 No operator decision is needed merely to repeat already-authorized read-only analysis.
 Schedule activation, principal appointment and consequential publication use their own existing
 authority contracts when the implementation is ready.
+
+## 14. Populated-install migration recovery incident (2026-10-15)
+
+BI-BF20F828 also owns the repair of its migration's failed canonical upgrade.
+Evidence `cmv95kew2kls501o9uxmusntz` records SUR-5B92E384, targeting
+`8f84efd877f1ccdb3108129f796a2859708fda76`. The install still serves
+`c4b60a729b7d58c433e34abbb607395060d032f1`; this incident blocks deployment
+of the independent-review and provider follow-through as well as this slice.
+
+The bounded PostgreSQL runtime log at 2026-10-14 19:22:15.227 UTC records the
+first error, `initiative governance activities are append-only`, from
+`refuse_initiative_governance_activity_mutation`. The subsequent aborted
+transaction error occurred while Prisma tried to record that failure. Migration
+`20261014012000_workroom_activity_ingestion_hardening` updates legacy NULL
+positions without excluding protected `work-intent-declared` activities. The
+existing `initiative_work_intent_immutable` trigger rejects those updates.
+An empty-schema migration pass did not exercise this populated-install case.
+
+### Repair constraints and unresolved design choice
+
+Retain the exact bytes and checksums of every merged migration, immutable
+activity content, existing assigned positions, counters, completed receipts and
+failed migration evidence. Do not disable a live trigger, reset the database,
+mark a failed migration applied, or repair production rows through a client.
+No new counter, ordering ledger or activity copy is needed.
+
+The existing inventory and human-principal migration recovery classifiers and
+the inventory P3018 recovery plan provide source-owned precedents: exact failure
+identity and candidate checksums, no durable partial effects, narrow recovery
+classification, then ordinary migration deployment through the promoter. Their
+allowlists do not authorize this incident. Extend an existing recovery owner
+only after independently reviewing this migration's actual failure state.
+
+Before selecting implementation, compare preserving protected legacy NULL
+coverage against a transactional, source-owned preparation migration that
+assigns only canonical ingestion metadata while preserving every original
+activity field and restoring all invariant guards before commit. Either option
+must make the unchanged failing migration safe on populated installs; a later
+migration alone cannot run past an earlier failure. A claimed rollback must
+prove its effects and migration-history disposition. This section records the
+choice still owed, not an authorization for either approach.
+
+### Candidate for independent design review
+
+The proposed candidate is an additive preparation migration ordered before the
+unchanged failing migration. It acquires both existing table locks, verifies the
+expected predecessor guards and reconciles counters upward. Within that same
+transaction, it refines the existing refusal function only for a protected
+WorkCapsuleActivity UPDATE whose sole change is a NULL-to-assigned ingestion
+position. Every other field, DELETE and other table remains protected. It assigns
+protected rows only in rooms with headroom for all retained NULL rows, preserves
+existing positions, and restores the exact original refusal function before
+commit. Interruption must roll back the function change and data together.
+No relaxed function or disabled trigger may survive a committed preparation.
+This is a source migration proposal, not permission for live SQL.
+
+The unchanged hardening migration can then sequence ordinary remaining rows.
+Overflow rooms must remain unmodified and explicitly retention-unverified.
+Already-applied histories require a no-op preparation; the new sequence-identity
+guard must not be removed to repair those histories. The resulting ordering is
+new ingestion metadata, never a claim about historical event chronology.
+
+The alternative is a preparation trigger that skips protected metadata updates,
+retains their NULL coverage and is removed after the failing migration. It
+preserves stricter row immutability but leaves transitional behavior committed
+between migrations and depends on trigger execution order. Rewriting the merged
+migration is rejected because it changes published fleet checksums. A later-only
+migration cannot address the observed earlier failure.
+
+[PostgreSQL trigger behavior](https://www.postgresql.org/docs/current/trigger-definition.html)
+documents transactional rollback, trigger ordering and row skipping. The existing
+inventory and human-principal classifiers demonstrate two local implementations
+of exact failed-history recovery. Adopt their identity, checksum and effect
+checks; reject broad failure matching and automatic replay on ambiguous history.
+[Prisma failed-migration recovery](https://www.prisma.io/docs/orm/prisma-migrate/workflows/patching-and-hotfixing)
+describes explicit history resolution; DPF confines that to its reviewed promoter
+procedure rather than an operator hotfix. The kernel's Fleet-Safe Schema Evolution
+principle requires immutable migrations and populated-install coverage.
+
+Kernel consultation DI-B166928828BA returned insufficient signal because the
+options supplied no numeric features. It selected no option and grants no
+authority. The candidate above is engineering judgment submitted for independent
+review. Review must settle whether assigning ingestion metadata meets the
+append-only contract, whether every shared use of the refusal function remains
+protected, and whether failed-history inspection can prove an effect-free
+attempt. No production migration-history inspection has yet established that
+last condition; a log's aborted transaction alone is insufficient.
+
+### Verification owed
+
+Use the canonical isolated PostgreSQL lease to construct the actual predecessor
+schema with protected legacy work intents, ordinary NULL activities, already
+assigned positions and integer-overflow rooms. First reproduce the immutable
+trigger failure. Then verify the selected forward path on failed, clean and
+already-applied histories, including interrupted preparation, mixed failures,
+checksum drift and concurrent writers. Assert unchanged semantic activity bytes,
+no renumbering, preserved unknown coverage and no unauthorized history repair.
+Run source-local affected tests and typechecks, canonical migration/build gates,
+genuine independent review, DCO PR and protected queue before canonical upgrade
+and served acceptance. All of these repair checks remain unrun here.
+
+WC-1ABA2F71 is admitted for design on branch
+`codex/review-release-migration-recovery`, based on
+`1469d7a214a232efc8532fde95355a1ae94dce4d`. Plan admission currently refuses
+missing canonical design, research, independent approval, architecture,
+baseline and artifact-author evidence (IRD-41A3FF58F385). Reconcile the real
+published artifacts and obtain the required independent decisions; do not
+synthesize receipts or reinterpret design admission as implementation access.
