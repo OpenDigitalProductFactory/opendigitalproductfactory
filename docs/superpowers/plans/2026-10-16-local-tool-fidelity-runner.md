@@ -8,7 +8,7 @@ status: draft
 **Workroom:** WC-8B480D69
 **Delivery shape:** delivery-medium@1.0.0
 **Source base:** 3c6f0a51b5a6acff1ca344167a068f4f8cabe461
-**Status:** Design preparation; no implementation admission or runtime qualification.
+**Status:** Source implementation admitted under IRD-3E8F0E98B710; publication and runtime qualification remain outstanding.
 
 For agentic workers: execute one independently reviewable backlog item at a time.
 Use DPF's test-first, merged-code verification and DCO publication procedures.
@@ -70,6 +70,8 @@ apps/web/lib/mcp-governed-execute.ts,
 apps/web/lib/mcp-governed-execute-types.ts,
 apps/web/lib/coworker/authorized-surface-execution-types.ts and
 apps/web/lib/mcp-governed-execute-audit-identity.test.ts.
+User documentation extends docs/user-guide/ai-workforce/provider-developer-notes.md
+under its existing local provider section; no new route or heading is needed.
 The shared executor may expose its actual persisted audit row ID additively;
 it must never accept a caller-supplied ID or manufacture one after audit failure.
 The optional ID alone is not success: readback still validates the matching

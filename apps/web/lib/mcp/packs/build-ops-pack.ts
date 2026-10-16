@@ -29,7 +29,7 @@ import { inferProviderIdFromRouteContext } from "@/lib/ai-provider-route-context
 import { promoteBacklogItemToBuildDraft } from "@/lib/governed-backlog-tee-up";
 import { assertEndpointConcurrencySelection } from "@/lib/operate/endpoint-concurrency-diagnostic";
 
-import type { EndpointTestRunRequest, ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { EndpointTestRunRequest, ToolDefinition, ToolResult, ToolExecutionContext } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [
@@ -145,7 +145,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "run_endpoint_tests",
-    description: "Run the agent test harness against a scoped endpoint. On provider detail routes, omit endpointId to use the current provider and default to quick probes. Set allEndpoints=true or allModels=true only for exhaustive diagnostics. Select concurrencyOnly=true with explicit local endpointId and modelId to observe two ordinary calls, queued handoff and complete answers without capability grading.",
+    description: "Run scoped endpoint diagnostics; provider detail routes default to quick probes. Use allEndpoints/allModels only for exhaustive diagnostics. concurrencyOnly observes two local calls without grading. fidelityOnly observes a bounded local tool-selection and governed-read matrix without changing ratings or tool caps; requires explicit provider/account/model and attributable runtime identity.",
     inputSchema: {
       type: "object",
       properties: {
@@ -154,6 +154,8 @@ const definitions: ToolDefinition[] = [
         taskType: { type: "string", description: "Run only scenarios for this task type (default: all)" },
         probesOnly: { type: "boolean", description: "Run only capability probes, skip scenarios (default: true for coworker calls)" },
         concurrencyOnly: { type: "boolean", description: "Run exactly two local calls in one 30-second observation. Requires explicit endpointId and modelId; incompatible with probesOnly=true, taskType, allModels or allEndpoints. Preserves completion/admission evidence; never updates capability ratings." },
+        fidelityOnly: { type: "boolean", description: "Observe nine golden prompts at surfaces 8/15/24/32/48, at most 45 local turns in four minutes. Requires explicit endpointId, modelId and providerConnectionId; incompatible with other modes/exhaustive scopes. Preserves failures and unknowns; no production cap or rating writes." },
+        providerConnectionId: { type: "string", description: "Exact configured account identity, required for fidelityOnly." },
         allEndpoints: { type: "boolean", description: "Explicitly test every active LLM endpoint. Use only when the user asks for all endpoints." },
         allModels: { type: "boolean", description: "Test every active model profile for the endpoint. Use only for exhaustive diagnostics." },
       },
@@ -504,8 +506,18 @@ async function resolveRepresentativeEndpointModelId(endpointId: string): Promise
 async function runEndpointTestsHandler(
   params: Record<string, unknown>,
   userId: string,
-  context?: { routeContext?: string },
+  context?: ToolExecutionContext,
 ): Promise<ToolResult> {
+  if (params["fidelityOnly"] === true) {
+    if (params["concurrencyOnly"] === true || params["probesOnly"] === true || params["taskType"]
+      || params["allModels"] === true || params["allEndpoints"] === true) {
+      return { success: false, message: "Fidelity diagnostics require a single explicit selection without other diagnostic modes." };
+    }
+    const { runLocalToolFidelityDiagnostic } = await import("@/lib/routing/tool-fidelity-runner");
+    return runLocalToolFidelityDiagnostic({ endpointId: typeof params["endpointId"] === "string" ? params["endpointId"] : "",
+      modelId: typeof params["modelId"] === "string" ? params["modelId"] : "",
+      providerConnectionId: typeof params["providerConnectionId"] === "string" ? params["providerConnectionId"] : "" }, userId, context);
+  }
   const { runEndpointTests } = await import("@/lib/endpoint-test-runner");
   const request = buildEndpointTestRunRequest(params, context);
 

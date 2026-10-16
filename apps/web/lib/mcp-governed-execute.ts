@@ -656,6 +656,7 @@ async function governedExecuteToolRun(args: GovernedExecuteArgs, run: ApprovalRu
       governedSource: args.source,
       tokenScope: args.context?.tokenScope,
       tokenGrantScopes: args.context?.tokenGrantScopes,
+      roomAuthorizedGrants: args.context?.roomAuthority?.authorizedGrants,
       authorizedSurfaceContext: args.context?.authorizedSurfaceContext,
       authorityDecisionId,
       approvedAuthorityEnvelopeId,
@@ -776,6 +777,7 @@ async function governedExecuteToolRun(args: GovernedExecuteArgs, run: ApprovalRu
     ...result,
     governance: {
       durationMs,
+      ...(auditRow?.id ? { toolExecutionId: auditRow.id } : {}),
       ...(gppPermit?.handle ? { permit: { handle: gppPermit.handle, verdict: gppPermit.verdict } } : {}),
       ...(gppPermit?.handle && gppPermit.handleExpiresAt ? { permitHandleExpiresAt: gppPermit.handleExpiresAt } : {}),
     },
