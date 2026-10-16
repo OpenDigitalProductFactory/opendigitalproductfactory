@@ -1,3 +1,5 @@
+import { classifyDispatchFailure } from "../inference/dispatch-failure-class";
+import { executionUncertaintyFromError } from "../shared/execution-uncertainty";
 import { randomUUID } from "node:crypto";
 import { prisma, type Prisma } from "@dpf/db";
 import { reserveSubmittedTaskRunWorking, withHeartbeatTicker } from "@/lib/observability/heartbeat";
@@ -88,10 +90,12 @@ type BranchPhase = "checkpoint-read" | "provider-call" | "checkpoint-write";
 function safeBranchFailure(error: unknown, agentId: string, phase: BranchPhase) {
   const record = object(error);
   const name = error instanceof Error ? error.name : null;
-  const knownKinds = ["Error", "TypeError", "RangeError", "PrismaClientKnownRequestError", "PrismaClientUnknownRequestError", "PrismaClientValidationError", "GovernedInferenceDeadlineError"];
+  const knownKinds = ["Error", "TypeError", "RangeError", "PrismaClientKnownRequestError", "PrismaClientUnknownRequestError", "PrismaClientValidationError", "GovernedInferenceDeadlineError", "NativeCliExecutionUncertainError"];
   const knownCodes = ["P2002", "P2024", "P2028", "P2034", "ETIMEDOUT", "ECONNRESET", "INFERENCE_PARENT_STOPPED"];
   return { agentId, phase, errorKind: name && knownKinds.includes(name) ? name : "unclassified",
-    errorCode: typeof record.code === "string" && knownCodes.includes(record.code) ? record.code : null };
+    errorCode: typeof record.code === "string" && knownCodes.includes(record.code) ? record.code : null,
+    ...(classifyDispatchFailure(error).code === "execution-uncertain"
+      ? { executionUncertainty: executionUncertaintyFromError(error) } : {}) };
 }
 
 async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generation: string,
