@@ -518,6 +518,8 @@ COPY scripts/lib/entry-module.mjs /promoter/scripts/lib/entry-module.mjs
 COPY scripts/rotate-runtime-transition-secret.mjs /promoter/scripts/rotate-runtime-transition-secret.mjs
 COPY scripts/lib/transition-signing.mjs /promoter/scripts/lib/transition-signing.mjs
 COPY scripts/promoter-migration-envelope.mjs /promoter/scripts/promoter-migration-envelope.mjs
+COPY scripts/promoter-epoch-evidence.mjs /promoter/scripts/promoter-epoch-evidence.mjs
+COPY scripts/lib/maintenance-epoch-receipt.mjs /promoter/scripts/lib/maintenance-epoch-receipt.mjs
 COPY scripts/installer/validate-install-state.mjs /promoter/scripts/installer/validate-install-state.mjs
 COPY scripts/installer/install-state-transaction.mjs /promoter/scripts/installer/install-state-transaction.mjs
 COPY scripts/installer/install-release-assets.mjs /promoter/scripts/installer/install-release-assets.mjs
