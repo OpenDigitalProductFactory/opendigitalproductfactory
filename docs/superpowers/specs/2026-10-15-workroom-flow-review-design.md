@@ -94,11 +94,13 @@ recent Workroom activity feed or its retention window.
 
 The current createOrTouchImprovementSignal call is insufficient for this promise:
 it increments recurrence on each retry and can file a backlog item before saving
-its backlink. BI-B146AB6B must supply occurrence-aware intake, counting a due
-review period once, and idempotent backlog publication with a stable shared
-investigation key. Require concurrency and crash-between-publication-and-link
-tests on that facility before enabling investigation routing here. Until that
-dependency is verified, persist review reports with routing explicitly pending;
+its backlink. This delivery must refactor the shared facility for occurrence-aware
+intake, counting a due review period once, and idempotent backlog publication
+with a stable shared investigation key. Require concurrency and
+crash-between-publication-and-link tests before enabling investigation routing.
+BI-B146AB6B remains the separate recurring-control classification dependency;
+its recorded scope does not supply these publication guarantees. Until the
+required contracts are verified, persist reports with routing explicitly pending;
 do not claim AC-F8B-4 or AC-F8B-5 complete or repeatedly call the current helper
 and describe its source-id uniqueness as sufficient.
 
