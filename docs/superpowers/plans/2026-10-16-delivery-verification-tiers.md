@@ -12,6 +12,12 @@ This plan implements BI-5445CECA atomically. Policy declaration, receipt validat
 
 Related independently owned work remains mapped to existing records: BI-25CB699C (refresh/correction reuse), BI-329B6128 (source-head scope), BI-E3B918C2 (durable release acceptance), BI-8D56F777 (capacity). Validate and consume their outcomes; do not close them based on source inspection.
 
+## Coordination reconciliation: PR #6441
+
+Inspected immutable source `f510fbaf5ac8965ab11af8965472e059b4bceea7` of [PR #6441](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/6441). It already implements post-publication correction production, shared classification, stage-receipt/lock reuse, affected command planning, and Git-hook/packaged-guard/readiness/health consumption. These are upstream prerequisites to consume, not deliverables to rebuild in phases 2 or 3. Do not claim their paths for competing changes. Preserve its qualified initial anchor, stable merge-base identity, changed-input rejection and truthful integration UNRUN result.
+
+Before implementation, refresh against the containing source and prove any residual gap in initial publication, lifecycle declarations, Build Studio/server transport or release admission with a named failing fixture. A missing broad policy abstraction alone is not evidence that a working adapter must be replaced. PR #6439's review-identity fix is merged at `03bbac43850f25a69575341c329c3d0ea4280238`; containing served proof is still required before retrying this room's refused review requests. Record new immutable artifact identities and fresh review packets for this amended design/plan; the previous research receipt is historical evidence, not approval of changed scope.
+
 ## Sequence
 
 1. **Reconcile baseline and approvals.** Read current provider source and live status for related work. Record research, independent spec approval and architecture review. Publish this immutable plan and record atomic coverage. Read the Workroom change-impact contract before claiming implementation paths; unresolved advice requires exhaustive verification. Requirements: OBJ-VT-1 through OBJ-VT-4. Contracts: CT-VT-1 through CT-VT-4. Flow: FLOW-VT-1, claim to policy resolution. Verification: AC-VT-1 through AC-VT-8; source inspection is not served acceptance.
