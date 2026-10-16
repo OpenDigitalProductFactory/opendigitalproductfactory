@@ -165,6 +165,51 @@ No table, migration, new status vocabulary, or second liveness engine is added.
 The source of truth remains `Workroom.backlogItemId` plus
 `classifyWorkCapsuleLiveness`.
 
+## 2026-10-14 automatic source identity repair
+
+BI-023EF164 extends the existing adoption adapters. On source
+`5a1d2cf63486416d7453e67157f256db3f2f3a52`, an executed assertion proved that
+`planAdoption` discards a supplied full base SHA. The CLI, creation hook and
+reconciler capture the head alone. Existing server columns and the identity
+repair projection already support both SHAs; the defect is incomplete capture
+and unchecked readback, not a missing data model.
+
+**OBJ-SOURCE-001:** Automatic local adoption captures repository, actual branch,
+worktree, base branch, merge-base SHA and head SHA from the caller's Git checkout.
+
+**OBJ-SOURCE-002:** Automatic adoption reports unavailable identity or conflicting
+authoritative readback explicitly and does not cache either as verified binding.
+
+The ordered fix is atomic: extract bounded local Git identity capture into the
+existing binder, thread both SHAs through its existing planning function, use
+that capture in the CLI, creation hook and reconciliation, and check the returned
+identity before caching a successful automatic binding. All callers retain their
+existing unavailable/refusal and ownership behavior. The server must never treat
+an external caller's filesystem path as locally accessible.
+
+| Acceptance ID | Objective IDs | Required evidence |
+| --- | --- | --- |
+| AC-SOURCE-001 | OBJ-SOURCE-001 | A real temporary Git repository with divergent base and topic commits proves automatic capture returns the actual repository, branch, worktree, merge base and head; outbound adoption carries both full SHAs. |
+| AC-SOURCE-002 | OBJ-SOURCE-002 | Missing base history, detached head and invalid source identity produce explicit unavailable outcomes, without an adoption call or marker. |
+| AC-SOURCE-003 | OBJ-SOURCE-002 | A successful response containing conflicting or incomplete source identity cannot be cached as verified binding; exact matching identity can. |
+| AC-SOURCE-004 | OBJ-SOURCE-001, OBJ-SOURCE-002 | Affected tests and applicable source, semantic review and protected PR checks pass, with deployed verification reported separately. |
+
+Contracts: CT-SOURCE-CAPTURE is bounded read-only local Git observation;
+CT-SOURCE-ADOPTION is the existing authenticated adoption request and exact
+readback. FLOW-SOURCE-BIND is capture, adopt, validate, cache. There is no migration,
+new scheduler, new authority or runtime deployment procedure. Existing legacy
+direct callers remain explicit compatibility paths, not proof of automatic
+identity validation. Broad server claim completeness, deleted-branch and expired
+lease reconciliation remain BI-2641F34A. This scope is separate from canonical
+identity repair BI-CAP-437F7745 and role/room configuration BI-56E9CEC2. Semantic
+review exception reconciliation BI-CAP-371D70E7 is a delivery dependency, not an
+authorization override. Relevant refactoring reuses the binder rather than
+adding separate orchestration.
+
+Research follows Git's documented `merge-base` and `rev-parse --verify` contracts:
+https://git-scm.com/docs/git-merge-base and https://git-scm.com/docs/git-rev-parse.
+No arbitrary base commit is substituted when ancestry is unavailable.
+
 ### Hardening acceptance mapping
 
 | Acceptance ID | Objective IDs | Required evidence |

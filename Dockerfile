@@ -122,6 +122,10 @@ COPY scripts/installer/resolve-host-identity.mjs ./scripts/installer/
 COPY scripts/installer/local-model-policy.json ./scripts/installer/
 COPY scripts/capability-service-catalog.generated.json ./scripts/
 COPY scripts/installer/validate-install-state.mjs ./scripts/installer/
+COPY scripts/installer/runtime-apply-lock.mjs ./scripts/installer/
+COPY scripts/installer/recovery-filesystem.mjs ./scripts/installer/
+COPY scripts/lib/canonical-json.mjs ./scripts/lib/
+COPY scripts/lib/local-sandbox-fence.mjs ./scripts/lib/
 COPY scripts/installer/install-state-transaction.mjs ./scripts/installer/
 COPY scripts/installer/install-release-assets.mjs ./scripts/installer/
 COPY scripts/installer/install-state-lock-contract.json ./scripts/installer/
@@ -194,6 +198,8 @@ COPY scripts/lib/worktree-liveness.mjs ./scripts/lib/
 # claims through the shared MCP client (plan 2026-09-08 §10.5 S8).
 COPY scripts/lib/mcp-client.mjs ./scripts/lib/
 COPY scripts/lib/mcp-credential.mjs ./scripts/lib/
+# mcp-credential.mjs re-exports the client_credentials exchange from the skill pack (BI-84C1F526).
+COPY packages/dpf-skill-pack/scripts/lib/client-credentials-exchange.mjs ./packages/dpf-skill-pack/scripts/lib/
 COPY scripts/lib/junction-safe-worktree-remove.mjs ./scripts/lib/
 COPY scripts/lib/pr-trailer-contract.mjs ./scripts/lib/
 COPY scripts/lib/module-size-scope.mjs ./scripts/lib/
@@ -294,6 +300,11 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     cp scripts/lib/resolve-capability-compose-profiles.mjs scripts/lib/govern-capability-compose-args.mjs scripts/lib/script-argv.mjs scripts/lib/git.mjs scripts/lib/capability-state-hash.mjs /dpf-release-assets/scripts/lib/ && \
     cp scripts/capability-service-catalog.generated.json /dpf-release-assets/scripts/ && \
     cp scripts/installer/prepare-runtime-state.mjs scripts/installer/stage-ca-password.mjs /dpf-release-assets/scripts/installer/ && \
+    cp scripts/installer/runtime-apply-lock.mjs /dpf-release-assets/scripts/installer/ && \
+    cp scripts/installer/recovery-filesystem.mjs /dpf-release-assets/scripts/installer/ && \
+    cp scripts/lib/canonical-json.mjs /dpf-release-assets/scripts/lib/ && \
+    cp scripts/lib/local-sandbox-fence.mjs /dpf-release-assets/scripts/lib/ && \
+    cp scripts/lib/entry-module.mjs /dpf-release-assets/scripts/lib/ && \
     cp scripts/installer/local-model-policy.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/validate-install-state.mjs /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state-transaction.mjs scripts/installer/install-release-assets.mjs scripts/installer/install-state-lock-contract.json /dpf-release-assets/scripts/installer/ && \
@@ -499,6 +510,11 @@ COPY scripts/lib/git.mjs /promoter/scripts/lib/git.mjs
 COPY Dockerfile /promoter/Dockerfile
 COPY scripts/apply-runtime-capability-transition.mjs /promoter/scripts/apply-runtime-capability-transition.mjs
 COPY scripts/runtime-transition-authority.mjs /promoter/scripts/runtime-transition-authority.mjs
+COPY scripts/installer/runtime-apply-lock.mjs /promoter/scripts/installer/runtime-apply-lock.mjs
+COPY scripts/installer/recovery-filesystem.mjs /promoter/scripts/installer/recovery-filesystem.mjs
+COPY scripts/lib/canonical-json.mjs /promoter/scripts/lib/canonical-json.mjs
+COPY scripts/lib/local-sandbox-fence.mjs /promoter/scripts/lib/local-sandbox-fence.mjs
+COPY scripts/lib/entry-module.mjs /promoter/scripts/lib/entry-module.mjs
 COPY scripts/rotate-runtime-transition-secret.mjs /promoter/scripts/rotate-runtime-transition-secret.mjs
 COPY scripts/lib/transition-signing.mjs /promoter/scripts/lib/transition-signing.mjs
 COPY scripts/promoter-migration-envelope.mjs /promoter/scripts/promoter-migration-envelope.mjs

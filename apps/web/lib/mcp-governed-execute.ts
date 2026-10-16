@@ -747,7 +747,7 @@ async function governedExecuteToolRun(args: GovernedExecuteArgs, run: ApprovalRu
   );
   let auditRow: { id: string } | null = reservedAuditId ? { id: reservedAuditId } : null;
   if (reservedAuditId && reservedReceiptId) {
-    await updateAudit(reservedAuditId, result, durationMs);
+    await updateAudit(reservedAuditId, result, durationMs, findTool(args.toolName));
     try {
       await finalizeConsequentialToolExecutionReceipt({
         receiptId: reservedReceiptId, result, toolName: args.toolName, args,

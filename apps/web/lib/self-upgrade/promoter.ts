@@ -501,6 +501,11 @@ export const PROMOTER_JIT_BUILD_SCRIPT =
   "cp /promoter/scripts/salvage-sweep.mjs \"$BDIR/scripts/salvage-sweep.mjs\" && " +
   "cp /promoter/scripts/apply-runtime-capability-transition.mjs \"$BDIR/scripts/apply-runtime-capability-transition.mjs\" && " +
   "cp /promoter/scripts/runtime-transition-authority.mjs \"$BDIR/scripts/runtime-transition-authority.mjs\" && " +
+  "cp /promoter/scripts/installer/runtime-apply-lock.mjs \"$BDIR/scripts/installer/runtime-apply-lock.mjs\" && " +
+  "cp /promoter/scripts/installer/recovery-filesystem.mjs \"$BDIR/scripts/installer/recovery-filesystem.mjs\" && " +
+  "cp /promoter/scripts/lib/canonical-json.mjs \"$BDIR/scripts/lib/canonical-json.mjs\" && " +
+  "cp /promoter/scripts/lib/local-sandbox-fence.mjs \"$BDIR/scripts/lib/local-sandbox-fence.mjs\" && " +
+  "cp /promoter/scripts/lib/entry-module.mjs \"$BDIR/scripts/lib/entry-module.mjs\" && " +
   "cp /promoter/scripts/rotate-runtime-transition-secret.mjs \"$BDIR/scripts/rotate-runtime-transition-secret.mjs\" && " +
   "cp /promoter/scripts/lib/transition-signing.mjs \"$BDIR/scripts/lib/transition-signing.mjs\" && " +
   "cp /promoter/scripts/promoter-migration-envelope.mjs \"$BDIR/scripts/promoter-migration-envelope.mjs\" && " +

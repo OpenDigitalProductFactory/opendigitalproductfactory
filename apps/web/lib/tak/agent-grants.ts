@@ -272,8 +272,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Surface readiness (G9, multi-client governance parity, BI-6AC65187): a
   // client surface's self-reported heartbeat rides the same tier as the other
   // heartbeats; the fleet rollup is an ops read like the coordination map.
-  record_surface_readiness: ["work_capsule_write"],
-  get_fleet_readiness: ["work_capsule_read"],
+  record_surface_readiness: ["work_capsule_write"], get_fleet_readiness: ["work_capsule_read"],
+  issue_grok_credentials_client: ["sandbox_execute"], // BI-84C1F526: Grok credential carries dpf.build
   register_runtime_target: ["work_capsule_write"],
   verify_archetype_projection: ["sandbox_execute"],
   heartbeat_runtime_target: ["work_capsule_write"],

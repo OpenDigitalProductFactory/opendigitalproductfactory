@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   setGovernedToolAuditOverridesForTests,
+  updateGovernedToolAudit,
   writeGovernedToolAudit,
 } from "./governed-tool-audit";
 import type { ToolDefinition } from "./mcp-tool-types";
@@ -229,5 +230,31 @@ describe("writeGovernedToolAudit — the approval resume marker", () => {
     const { GOVERNED_AUDIT_PARAMETER_KEYS, originalToolParameters } = await import("./attention/coworker-envelope-decision");
     expect(GOVERNED_AUDIT_PARAMETER_KEYS.has("_approvalResume")).toBe(true);
     expect(originalToolParameters({ trigger: "cadence", _approvalResume: { v: 1 } })).toEqual({ trigger: "cadence" });
+  });
+});
+
+// BI-84C1F526: a tool that hands the caller a secret (the Grok credentials
+// client) keeps a ledger row, but the secret never lands in it.
+describe("secretResultKeys", () => {
+  const secretTool: ToolDefinition = { ...baseTool, name: "issue_grok_credentials_client", sideEffect: true, secretResultKeys: ["credentialsClient"] };
+  const result = { success: true, message: "issued", data: { credentialsClient: { clientId: "dpfoc_x", clientSecret: "dpfocs_secret" }, created: true } };
+
+  it("redacts the declared result keys on write", async () => {
+    const create = vi.fn(async () => ({ id: "row-1" }));
+    setGovernedToolAuditOverridesForTests({ create });
+    await writeGovernedToolAudit({
+      toolName: secretTool.name, tool: secretTool, rawParams: {}, result, userId: "u1", source: "external-jsonrpc", durationMs: 3,
+    });
+    const row = (create.mock.calls[0] as unknown[])[0] as { result: { data: Record<string, unknown> } };
+    expect(row.result.data).toEqual({ credentialsClient: "[REDACTED]", created: true });
+    expect(JSON.stringify(row)).not.toContain("dpfocs_secret");
+  });
+
+  it("redacts the declared result keys when a reserved row is finalized", async () => {
+    const update = vi.fn(async () => ({}));
+    setGovernedToolAuditOverridesForTests({ update });
+    await updateGovernedToolAudit("row-1", result, 3, secretTool);
+    expect(JSON.stringify(update.mock.calls[0])).not.toContain("dpfocs_secret");
+    expect(result.data.credentialsClient.clientSecret).toBe("dpfocs_secret");
   });
 });

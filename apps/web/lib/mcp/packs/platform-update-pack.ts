@@ -157,17 +157,17 @@ export const platformUpdatePack: ToolPack = {
   packId: "platform-update",
   definitions,
   handlers: {
-    preview_runtime_capability_reconciliation: async () => {
+    preview_runtime_capability_reconciliation: async (_params, userId) => {
       try {
-        const { previewRuntimeCapabilityReconciliation } = await import("@/lib/actions/runtime-capabilities");
-        return { success: true, message: "Runtime capability baselines observed; no settings changed.", data: await previewRuntimeCapabilityReconciliation() };
+        const { previewRuntimeCapabilityReconciliationForActor } = await import("@/lib/platform-runtime/runtime-capability-commands");
+        return { success: true, message: "Runtime capability baselines observed; no settings changed.", data: await previewRuntimeCapabilityReconciliationForActor(userId) };
       } catch (error) { return { success: false, message: "Runtime capability preview is unavailable.", error: getErrorMessage(error) }; }
     },
-    reconcile_runtime_capabilities: async (params) => {
+    reconcile_runtime_capabilities: async (params, userId) => {
       try {
-        const { requestRuntimeCapabilityTransition } = await import("@/lib/actions/runtime-capabilities");
+        const { requestRuntimeCapabilityTransitionForActor } = await import("@/lib/platform-runtime/runtime-capability-commands");
         const intent = structuredClone(params.reconciliation) as RuntimeReconciliationIntent;
-        const result = await requestRuntimeCapabilityTransition({ transitionId: params.transitionId as string, desiredKeys: [...intent.desiredHostEnabledKeys], mode: "reconciliation", reconciliation: intent });
+        const result = await requestRuntimeCapabilityTransitionForActor({ transitionId: params.transitionId as string, desiredKeys: [...intent.desiredHostEnabledKeys], mode: "reconciliation", reconciliation: intent }, userId);
         return { success: result.status === "succeeded", message: result.status === "succeeded" ? "Runtime capability reconciliation completed." : "Runtime capability reconciliation is not complete; retain this request for recovery.", data: result };
       } catch (error) { return { success: false, message: "Runtime capability reconciliation refused or requires recovery.", error: getErrorMessage(error) }; }
     },

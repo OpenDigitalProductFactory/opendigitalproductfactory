@@ -24,7 +24,8 @@ export function isProviderAccountVisible(
   account: ProviderAccountIdentity,
   context: { firstRun: boolean; legacyCredentialPresent?: boolean },
 ): boolean {
-  return context.firstRun || isLocalProviderId(account.providerId) || !account.isDefault
+  const configuredLocal = isLocalProviderId(account.providerId) && account.status !== "unconfigured";
+  return context.firstRun || account.providerId === "local" || configuredLocal || !account.isDefault
     || account.status === "paused" || account.status === "disconnected"
     || Boolean(account.credential?.hasUsableMaterial || account.modelsVerifiedAt
       || account.lastReviewedAt || account.supplierContractId || context.legacyCredentialPresent);

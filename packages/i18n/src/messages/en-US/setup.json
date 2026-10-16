@@ -1,5 +1,7 @@
 {
   "providerConnection": {
+    "modelsExecution": "Models and execution",
+    "modelsEmpty": "No discovered models yet.",
     "reconnect": "Sign in again",
     "accountActions": "Account actions",
     "upgradePaused": "The platform is upgrading. Connection setup is paused. Try again after the upgrade finishes.",

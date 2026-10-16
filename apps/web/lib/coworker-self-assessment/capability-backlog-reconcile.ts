@@ -36,6 +36,8 @@ interface OrphanNeed {
   severity: string;
   need: string;
   blocks: string;
+  /** Same evidence the submit path files with, so both pick the same origin (BI-891E4E11). */
+  evidenceJson?: unknown;
 }
 
 /** Statuses that mean the need is already closed — never re-file these. */
@@ -82,6 +84,7 @@ export async function reconcileCapabilityNeedBacklog(
       severity: true,
       need: true,
       blocks: true,
+      evidenceJson: true,
     },
     orderBy: { createdAt: "asc" },
   });

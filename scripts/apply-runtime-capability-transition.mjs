@@ -70,11 +70,11 @@ const contend = (reason) => { process.stderr.write(JSON.stringify({ status: "con
 
 const acquireApplyLock = () => {
   try { mkdirSync(applyLock); }
-  catch {
-    const expiresAt = Date.parse(readFileSync(join(applyLock, "expires-at"), "utf8").trim());
-    if (!Number.isFinite(expiresAt) || expiresAt >= Date.now()) contend("transition_apply_in_progress");
-    rmSync(applyLock, { recursive: true, force: true });
-    try { mkdirSync(applyLock); } catch { contend("transition_apply_in_progress"); }
+  catch (error) {
+    // Legacy locks carry no process-start or descendant settlement evidence.
+    // Expiry is a deadline, never proof that the previous writer stopped.
+    if (error.code === "EEXIST") contend("transition_apply_in_progress");
+    throw error;
   }
   writeFileSync(join(applyLock, "expires-at"), new Date(Date.now() + 10 * 60_000).toISOString(), { flag: "wx", mode: 0o600 });
 };
@@ -129,12 +129,18 @@ try { if (!journal) { await mkdir(claim); await writeFile(join(claim, "expires-a
   } catch (error) { if (error?.code !== "ENOENT") contend("transition_already_claimed"); contend("invalid_transition_claim"); }
 }
 
-const catalogPath = process.env.DPF_CAPABILITY_CATALOG_PATH ?? "/host-source/scripts/capability-service-catalog.generated.json";
+const catalogPath = process.env.DPF_CAPABILITY_CATALOG_PATH ?? new URL("./capability-service-catalog.generated.json", import.meta.url);
 let catalog;
 try { catalog = JSON.parse(await readFile(catalogPath, "utf8")); } catch { await fail("capability_catalog_unreadable"); }
 const { catalogHash, ...catalogContent } = catalog;
 if (catalogHash !== envelope.catalogHash || sha(catalogBytes(catalogContent)) !== catalogHash) await fail("capability_catalog_mismatch");
 const byId = new Map(catalog.capabilities.map((c) => [c.capabilityId, c]));
+// Keep the v2 host projection aligned with the server and canonical catalog
+// resolver without importing bytes outside this actuator's signed closure.
+const hostPlatform = envelope.version === 2 && envelope.mode === "reconciliation"
+  ? new Map([["win32", "windows"], ["darwin", "macos"], ["linux", "linux"]]).get(envelope.reconciliation?.observedHost?.platform)
+  : undefined;
+if (envelope.version === 2 && envelope.mode === "reconciliation" && !hostPlatform) await fail("runtime_transition_host_platform_unverifiable");
 const project = (keys) => {
   const enabled = new Set();
   const add = (id) => {
@@ -149,7 +155,7 @@ const project = (keys) => {
   const enabledKeys = [...enabled].sort();
   const services = catalog.capabilities.filter((capability) => enabled.has(capability.capabilityId))
     .flatMap((capability) => capability.services)
-    .filter((service) => service.targetClassification !== "ephemeral-lifecycle");
+    .filter((service) => service.targetClassification !== "ephemeral-lifecycle" && (!hostPlatform || service.hostPlatforms.includes(hostPlatform)));
   return {
     enabledKeys,
     profiles: [...new Set(services.flatMap((service) => service.profiles))].sort(),
@@ -183,10 +189,56 @@ const baseArgs = ["compose", "--project-name", composeProject]; for (const f of 
 const dockerPrefix = process.env.DPF_DOCKER_PREFIX_ARGS ? JSON.parse(process.env.DPF_DOCKER_PREFIX_ARGS) : [];
 if (!Array.isArray(dockerPrefix) || dockerPrefix.some((value) => typeof value !== "string")) await fail("invalid_docker_configuration");
 const compose = (args, timeout = 9 * 60 * 1000) => spawnSync(process.env.DPF_DOCKER_BIN ?? "docker", [...dockerPrefix, ...baseArgs, ...args], { encoding: "utf8", timeout });
+// Match govern-capability-compose-args.mountOverride without extending the
+// signed actuator's dependency closure. Only bind overrides are persisted;
+// rendered configuration may contain credentials and must never be logged.
+try {
+  const profiles = [...new Set([...previous.profiles, ...desired.profiles])].sort().flatMap(profile => ["--profile", profile]);
+  const rendered = compose([...profiles, "config", "--format", "json"], 30_000);
+  if (rendered.status !== 0) throw new Error();
+  const mapStrings = (value, transform) => typeof value === "string" ? transform(value)
+    : Array.isArray(value) ? value.map(entry => mapStrings(entry, transform))
+      : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, mapStrings(entry, transform)])) : value;
+  const config = mapStrings(JSON.parse(rendered.stdout), value => value.replaceAll("$$", "$"));
+  if (!config || typeof config !== "object" || Array.isArray(config)) throw new Error();
+  const hasBinds = Object.values(config.services ?? {}).some(service => service.volumes?.some(volume => volume.type === "bind"));
+  let mounts = [];
+  if (hasBinds) {
+    if (!process.env.HOSTNAME) throw new Error();
+    const inspected = spawnSync(process.env.DPF_DOCKER_BIN ?? "docker", [...dockerPrefix, "inspect", process.env.HOSTNAME, "--format", "{{json .Mounts}}"], { encoding: "utf8", timeout: 30_000 });
+    if (inspected.status !== 0) throw new Error();
+    mounts = JSON.parse(inspected.stdout);
+    if (!Array.isArray(mounts)) throw new Error();
+  }
+  const within = (path, root) => path === root || path.startsWith(`${root}/`);
+  const trim = path => path.replace(/\/$/, "");
+  const bindings = mounts.filter(mount => mount.Type === "bind")
+    .map(mount => ({ ...mount, Destination: trim(mount.Destination) })).sort((a, b) => b.Destination.length - a.Destination.length);
+  const root = trim(process.env.PROMOTE_SOURCE ?? "/host-source");
+  const services = {};
+  for (const [name, service] of Object.entries(config.services ?? {})) {
+    const volumes = [];
+    for (const volume of service.volumes ?? []) {
+      if (volume.type !== "bind") continue;
+      const binding = bindings.find(mount => within(volume.source, mount.Destination));
+      if (binding) volumes.push(mapStrings({ ...volume, source: trim(binding.Source.replaceAll("\\", "/")) + volume.source.slice(binding.Destination.length) }, value => value.replaceAll("$", () => "$$")));
+      else if (within(volume.source, root)) throw new Error();
+    }
+    if (volumes.length) services[name] = { volumes };
+  }
+  if (Object.keys(services).length) {
+    const overridePath = join(receiptDir, `${envelope.transitionId}.compose-mounts.json`);
+    await atomicJson(overridePath, { services });
+    process.on("exit", () => { try { rmSync(overridePath); } catch {} });
+    baseArgs.push("-f", overridePath);
+  }
+} catch { await fail("runtime_compose_mount_preflight_failed"); }
 const reconcile = (from, to) => {
   const disabled = from.required.filter((service) => !to.required.includes(service));
   if (disabled.length) { const stopped = compose(["stop", ...disabled]); if (stopped.status !== 0) return stopped; const removed = compose(["rm", "-f", ...disabled]); if (removed.status !== 0) return removed; }
-  const args = []; for (const p of to.profiles) args.push("--profile", p); args.push("up", "-d", ...to.required);
+  // Detached startup is not readiness. Bound each readiness wait, leaving room
+  // for rollback; legacy stop/remove subprocesses retain their own timeouts.
+  const args = []; for (const p of to.profiles) args.push("--profile", p); args.push("up", "-d", "--wait", "--wait-timeout", "180", ...to.required);
   return compose(args);
 };
 const observe = () => {
@@ -201,7 +253,22 @@ const observe = () => {
 const transitionServices = [...new Set([...envelope.previousServices, ...envelope.desiredServices])];
 const healthSemantics = new Map(catalog.capabilities.flatMap((capability) => capability.services).map((service) => [service.service, service.healthSemantics]));
 const exact = (projection, observed, health) => projection.required.every((service) => observed.includes(service) && (healthSemantics.get(service) !== "compose-healthcheck" || health[service] === "healthy")) && transitionServices.filter((service) => !projection.required.includes(service)).every((service) => !observed.includes(service));
-const next = { ...before, enabledRuntimeCapabilities: desired.enabledKeys, capabilityCatalogHash: catalogHash, capabilityStateVersion: desired.stateHash };
+// BI-28D2919A: a portal change to an operator-decided capability is the
+// operator's decision; record it so the install stops reading as "undecided".
+// Inlined, not imported from lib/resolve-capability-compose-profiles.mjs: the
+// signed protocol identity hashes only this file and transition-signing.mjs,
+// so an extra import would extend the trusted closure outside that identity.
+// Keep in step with OPERATOR_DECIDED_CAPABILITIES there.
+const OPERATOR_DECIDED_CAPABILITIES = ["runtime:deep-observability"];
+// decidedAt is the SIGNED issuedAt, never the wall clock: crash replay
+// recomputes `next` and must equal the journaled one byte for byte.
+const decidedAt = new Date(issued).toISOString();
+const decidedKeys = before.schemaVersion !== 2 ? [] : OPERATOR_DECIDED_CAPABILITIES.filter((key) =>
+  (envelope.version === 2 && envelope.mode === "reconciliation" && envelope.reconciliation.touchedKeys.includes(key))
+  || envelope.previousKeys.includes(key) !== envelope.desiredKeys.includes(key));
+const next = { ...before, enabledRuntimeCapabilities: desired.enabledKeys, capabilityCatalogHash: catalogHash, capabilityStateVersion: desired.stateHash,
+  ...(decidedKeys.length ? { runtimeCapabilityDecisions: { ...(before.runtimeCapabilityDecisions ?? {}), ...Object.fromEntries(decidedKeys.map((key) =>
+    [key, { decision: desired.enabledKeys.includes(key) ? "enabled" : "disabled", source: "portal", decidedAt }])) } } : {}) };
 const nextValidation = await validateInstallState(next, schemaPath);
 if (!nextValidation.valid) await fail("install_state_schema_invalid");
 if (journal && (!sameInstallState(journal.before, before) || !sameInstallState(journal.next, next))) await fail("invalid_transition_journal");

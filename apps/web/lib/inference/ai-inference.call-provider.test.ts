@@ -85,9 +85,35 @@ vi.mock("./provider-inference-transport", async (importOriginal) => ({
 }));
 
 import { callProvider } from "./ai-inference";
+import { runEndpointConcurrencyDiagnostic } from "../operate/endpoint-concurrency-diagnostic";
 import { _setAdapterTelemetryWriteOverrideForTests } from "../routing/adapter-telemetry-writer";
 
 describe("callProvider", () => {
+  it.each(["stop", undefined])("observes actual local lane calls and preserves HTTP completion evidence (%s)", async finishReason => {
+    const { chatAdapter } = await vi.importActual<typeof import("../routing/chat-adapter")>("../routing/chat-adapter");
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "local", status: "active", authMethod: "none", authHeader: null,
+      baseUrl: "http://provider.invalid/v1", endpoint: null,
+    });
+    mockAdapterExecute.mockImplementation(chatAdapter.execute);
+    mockProviderFetch.mockImplementation(async () => new Response(JSON.stringify({
+      choices: [{ message: { content: "READY" }, ...(finishReason ? { finish_reason: finishReason } : {}) }],
+      usage: { prompt_tokens: 75, completion_tokens: 22 },
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    _setAdapterTelemetryWriteOverrideForTests(async () => {});
+    try {
+      const result = await runEndpointConcurrencyDiagnostic("local", "test-model");
+      expect(mockProviderFetch).toHaveBeenCalledTimes(2);
+      expect(mockAcquireSlot).not.toHaveBeenCalled(); // Local uses the real shared ResourceLane.
+      expect(result.callers.map(c => c.content)).toEqual(["READY", "READY"]);
+      expect(result.callers.map(c => c.finishReason)).toEqual([finishReason ?? null, finishReason ?? null]);
+      expect(result.callers.every(c => c.released)).toBe(true);
+      expect(result.contentionObserved).toBe(true);
+      expect(result.outcome).toBe(finishReason ? "passed" : "deferred");
+    } finally {
+      _setAdapterTelemetryWriteOverrideForTests(null);
+    }
+  });
   it("removes a cancelled caller queued behind the shared local holder", async () => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
       providerId: "local", status: "active", authMethod: "none",

@@ -15,6 +15,8 @@ export type GrokClientRow = {
   revokedAt: Date | null;
   allowedScopes: string[];
   clientSecretEnc: string | null;
+  /** OAuthClient.agentId: the Agent record id the client acts as, or null. */
+  agentId: string | null;
 };
 
 export type GrokClientCreate = {
@@ -26,12 +28,15 @@ export type GrokClientCreate = {
   ownerUserId: string;
   allowedScopes: readonly string[];
   redirectUris: readonly [];
+  agentId: string | null;
 };
 
 export type EnsuredGrokClient = {
   clientId: string;
   clientSecret: string;
   created: boolean;
+  /** True when the client acts as the Grok agent, so its tokens can write workrooms. */
+  agentBound: boolean;
 };
 
 function sameScopeSet(actual: readonly string[], expected: readonly string[]): boolean {
@@ -61,7 +66,16 @@ export async function ensureGrokCredentialsClient(input: {
   decrypt: (enc: string) => string | null;
   prepareSecret: () => { plaintext: string; hash: string; enc: string };
   newClientId?: () => string;
+  /**
+   * The Agent record id of AGT-EXT-GROK when it may act for this client
+   * (active, not archived, holds work_room_write), else null (BI-8D152751).
+   * The token endpoint carries the client's agent into every token; without
+   * one, workCapsuleActor refuses every workroom write from Grok.
+   */
+  grokAgent: () => Promise<string | null>;
+  bindAgent: (oAuthClientId: string, agentRecordId: string) => Promise<void>;
 }): Promise<EnsuredGrokClient> {
+  const grokAgentId = await input.grokAgent();
   const existing = selectActiveGrokCredentialsClient(await input.rows(), input.ownerUserId);
   if (existing) {
     if (!existing.clientSecretEnc) {
@@ -71,7 +85,14 @@ export async function ensureGrokCredentialsClient(input: {
     if (!secret || !secret.startsWith("dpfocs_")) {
       throw new Error("The stored Grok client secret cannot be read. Refusing to mint a second client.");
     }
-    return { clientId: existing.oAuthClientId, clientSecret: secret, created: false };
+    // Bind an unbound client in place. A client already bound to some other
+    // agent is left alone: rebinding an identity is not setup's call.
+    let agentBound = grokAgentId !== null && existing.agentId === grokAgentId;
+    if (grokAgentId !== null && existing.agentId === null) {
+      await input.bindAgent(existing.oAuthClientId, grokAgentId);
+      agentBound = true;
+    }
+    return { clientId: existing.oAuthClientId, clientSecret: secret, created: false, agentBound };
   }
 
   const secret = input.prepareSecret();
@@ -91,6 +112,7 @@ export async function ensureGrokCredentialsClient(input: {
     ownerUserId: input.ownerUserId,
     allowedScopes: GROK_CREDENTIAL_SCOPES,
     redirectUris: [],
+    agentId: grokAgentId,
   });
-  return { clientId, clientSecret: secret.plaintext, created: true };
+  return { clientId, clientSecret: secret.plaintext, created: true, agentBound: grokAgentId !== null };
 }

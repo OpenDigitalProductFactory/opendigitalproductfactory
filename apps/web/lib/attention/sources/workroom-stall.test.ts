@@ -328,6 +328,14 @@ describe("projectRoomStall for a stage that could not finish", () => {
     const item = projectRoomStall(row({ drive: pause("budget_exhausted"), ladderOwner: owner }));
     expect(item?.context).not.toContain("appoint them");
   });
+
+  // BI-72679FE0: 2026-10-14, ~56 such cards sat in "Needs you" as "Who should own
+  // this stuck work?" while their own text said an owner would not help.
+  it("does not ask the owner for judgment an appointment cannot supply", () => {
+    expect(projectRoomStall(row({ drive: pause("executor_writeback_unavailable"), blockedCause: null }))?.triage.decideEffort)
+      .toBe("review");
+    expect(projectRoomStall(row({ ladderOwner: owner }))?.triage.decideEffort).toBe("judgment");
+  });
 });
 
 describe("loadRoomStallRows reads blocked causes in a separate bounded query", () => {

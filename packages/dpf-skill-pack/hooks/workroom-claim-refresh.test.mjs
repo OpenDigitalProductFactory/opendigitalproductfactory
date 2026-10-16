@@ -46,6 +46,14 @@ test("the dpf tools that return a live capsule are claim tools, on any server pr
   }
 });
 
+test("Grok's MCP tool names (server__tool, no mcp__ prefix) are claim tools (BI-C3D3762B)", () => {
+  // Live-probed 2026-10-14, Grok 1.0.52: the payload's tool_name is "dpf__get_backlog_item".
+  for (const tool of ["adopt_worktree", "heartbeat_workroom", "claim_backlog_item_for_work"]) {
+    assert.equal(isClaimTool(`dpf__${tool}`), true, tool);
+  }
+  assert.equal(isClaimTool("dpf__get_workroom"), false);
+});
+
 test("other tools are not claim tools", () => {
   for (const tool of ["Edit", "Bash", "mcp__plugin_dpf-platform_dpf__get_workroom", "mcp__x__heartbeat_workroom_v2", undefined, ""]) {
     assert.equal(isClaimTool(tool), false, String(tool));
@@ -61,6 +69,15 @@ test("the MCP answer is read as the JSON text Claude Code records, or as content
   assert.deepEqual(parseToolResponse({ content: [{ type: "text", text: JSON.stringify(body) }] }), body);
   assert.deepEqual(parseToolResponse({ structuredContent: body }), body);
   assert.deepEqual(parseToolResponse(body), body);
+});
+
+test("Grok's MCP result envelope is read (BI-C3D3762B)", () => {
+  // Live-probed 2026-10-14, Grok 1.0.52: tool_response (and toolResult) =
+  // {type:"MCP", tool_name, server_name, output:{OkayOutput:"<JSON text>"}}.
+  const body = { capsule: capsule() };
+  const grok = { type: "MCP", tool_name: "heartbeat_workroom", server_name: "dpf", output: { OkayOutput: JSON.stringify(body) } };
+  assert.deepEqual(parseToolResponse(grok), body);
+  assert.equal(parseToolResponse({ type: "MCP", output: { ErrOutput: "workroom_access_denied" } }), null);
 });
 
 test("a failed call or an unreadable answer is no answer", () => {
@@ -160,6 +177,25 @@ test("AC-1: after heartbeat_workroom renews the lease, the next edit is allowed"
     // the session folder is the install, not the worktree: the hook must follow the answer's worktreePath
     run(hookPath, { hook_event_name: "PostToolUse", tool_name: "mcp__plugin_dpf-platform_dpf__heartbeat_workroom", tool_input: { capsuleId: "WC-D24FEA53" }, tool_response: JSON.stringify(answer), cwd: root });
 
+    assert.equal(JSON.parse(readFileSync(join(gitDir, CLAIM_MARKER_NAME), "utf8")).leaseExpiresAt, lease);
+    assert.equal(run(guardPath, editIn(wt)).trim(), "", "guard allows silently");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a Grok heartbeat payload (camelCase + snake_case, MCP envelope) refreshes the marker end to end", () => {
+  const { root, wt, gitDir } = makeRepo();
+  try {
+    const lease = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    const answer = { capsule: capsule({ headBranch: "fix/a", worktreePath: wt.split("\\").join("/"), leaseExpiresAt: lease }) };
+    const result = { type: "MCP", tool_name: "heartbeat_workroom", server_name: "dpf", output: { OkayOutput: JSON.stringify(answer) } };
+    run(hookPath, {
+      hookEventName: "PostToolUse", hook_event_name: "PostToolUse",
+      toolName: "dpf__heartbeat_workroom", tool_name: "dpf__heartbeat_workroom",
+      toolInput: { capsuleId: "WC-D24FEA53" }, tool_input: { capsuleId: "WC-D24FEA53" },
+      toolResult: result, tool_response: result, cwd: root, workspaceRoot: root,
+    });
     assert.equal(JSON.parse(readFileSync(join(gitDir, CLAIM_MARKER_NAME), "utf8")).leaseExpiresAt, lease);
     assert.equal(run(guardPath, editIn(wt)).trim(), "", "guard allows silently");
   } finally {
