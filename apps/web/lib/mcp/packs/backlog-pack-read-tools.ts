@@ -1,6 +1,7 @@
-import type { ToolResult } from "@/lib/mcp-tool-types";
+import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import { resolveEpicRowId, resolveListLimit } from "./backlog-read-helpers";
 import { addScopeFilters, backlogScopeSelect, scopeData } from "./backlog-scope-metadata";
+import { boundedBacklogRecoveryRead, canReadRecoveryPacket, isRecoveryReadGate, recoveryReadDecision } from "../backlog-recovery-read";
 
 const INITIATIVE_READINESS_ACTIVITY_KINDS = [
   "initiative_gate_receipt",
@@ -383,7 +384,7 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
   };
 }
 
-export async function getBacklogItem(params: Record<string, unknown>, currentAgentId: string | null = null, currentUserId?: string): Promise<ToolResult> {
+export async function getBacklogItem(params: Record<string, unknown>, currentAgentId: string | null = null, currentUserId?: string, context?: ToolExecutionContext): Promise<ToolResult> {
   const { prisma } = await import("@dpf/db");
   const itemIdRaw = String(params["itemId"] ?? "").trim();
   if (!itemIdRaw)
@@ -477,17 +478,39 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
   const readiness = gateCompletion
     ? { ...projectedReadiness, completionEvaluation: { source: "completion-gate" as const, mergeDelivery: gateCompletion.mergedThroughGates } }
     : projectedReadiness;
-  const completion = readiness.decisions?.completion;
+  const requestedGate = params["recoveryGate"];
+  if (requestedGate !== undefined && !isRecoveryReadGate(requestedGate)) {
+    return { success: false, error: "invalid_recovery_gate", message: "Choose a declared recoveryGate from get_backlog_item's schema. No review request was delivered." };
+  }
+  const completion = requestedGate !== undefined
+    ? await recoveryReadDecision(requestedGate, readiness.decisions ?? {}) : readiness.decisions?.completion;
   const needsTerminalRecovery = completion && completion.verdict !== "allowed"
-    && [...completion.blockers, ...completion.unmet]
+    && (requestedGate !== undefined || [...completion.blockers, ...completion.unmet]
       .some((entry) => ["POST_IMPLEMENTATION_REVIEW_REQUIRED", "PLAN_REVIEW_REQUIRED",
-        "ACCEPTANCE_EVIDENCE_REQUIRED", "OBJECTIVE_RECONCILIATION_REQUIRED"].includes(entry.code));
+        "ACCEPTANCE_EVIDENCE_REQUIRED", "OBJECTIVE_RECONCILIATION_REQUIRED"].includes(entry.code)));
+  let taskAuthority: { userId: string; taskAuthorityKey: string } | null = null;
+  if (needsTerminalRecovery && requestedGate === "plan-review" && context?.authSource === "oauth") {
+    const taskAuthorityKey = currentUserId && context.apiTokenId
+      ? await (await import("@/lib/auth/oauth-task-authority")).resolveMcpTaskAuthorityKey({
+        tokenId: context.apiTokenId, userId: currentUserId, source: "oauth",
+      }) : null;
+    if (!taskAuthorityKey || !currentUserId) return { success: false, error: "review_task_authority_unavailable",
+      message: "The current connection's review task authority could not be verified. No replacement request was delivered; restore the authorized connection before reading plan recovery." };
+    taskAuthority = { userId: currentUserId, taskAuthorityKey };
+  }
   const recovery = needsTerminalRecovery
     ? await (await import("@/lib/backlog/initiative-readiness/terminal-recovery")).resolveTerminalInitiativeRecovery({
       currentUserId,
         decision: completion, currentAgentId, refusedWorkroomId: null,
+        ...(taskAuthority ? { taskAuthority } : {}),
       })
     : undefined;
+  if (requestedGate !== undefined) {
+    if (!await canReadRecoveryPacket({ gate: requestedGate, recovery, currentAgentId, currentUserId })) {
+      return { success: false, error: "workroom_data_access_required", message: "The current connection cannot read this Workroom's review packet. Follow the existing room admission remedy; item visibility grants no additional access." };
+    }
+    return boundedBacklogRecoveryRead({ itemId: item.itemId, status: item.status, workShape: boundWorkShape, gate: requestedGate, recovery });
+  }
   return {
     success: true,
     message: specPlanCaveat ? `Loaded ${item.itemId}. ${specPlanCaveat}` : `Loaded ${item.itemId}`,

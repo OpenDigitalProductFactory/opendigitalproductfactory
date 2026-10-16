@@ -48,7 +48,7 @@ async function hasCompletedReview(params: Record<string, unknown>, userId: strin
 type RequestAuthority = { bounded: boolean; refusal?: ToolResult; notice?: string };
 const deny = (message: string): RequestAuthority => ({ bounded: true, refusal: {
   success: false, error: "independent_review_request_denied", message,
-  data: { action: "For design, architecture or plan review, refresh claim_backlog_item_for_work on the exact Workroom with workIntent plan or implementation and submit recovery.reviewerRoutes[].requestCoworker unchanged. For terminal review, read get_backlog_item recovery. Workroom access must already be authorized." },
+  data: { action: "For design, architecture or plan review, refresh claim_backlog_item_for_work on the exact Workroom with workIntent plan or implementation and submit recovery.reviewerRoutes[].requestCoworker unchanged. For terminal review, read get_backlog_item recovery. If the request was not delivered in a large response, use get_backlog_item with itemId and recoveryGate for one exact bounded request or explicit recovery. Workroom access must already be authorized." },
 } });
 
 /** An evidence author may request an independent review, never impersonate its writer.
@@ -157,7 +157,7 @@ export async function authorizeCoworkerRequest(
     })();
   if (!issued.some((issuedPacket) => canonicalJson(issuedPacket) === canonicalJson(params))) {
     if (!options?.sourceOnly && await hasCompletedReview(params, userId, context)) return { bounded: true };
-    return deny("The review request has changed or is no longer eligible. Refresh readiness to get the current request.");
+    return deny("The review request has changed or is no longer eligible. This refusal does not deliver a replacement packet. Read get_backlog_item with itemId and recoveryGate for the current exact request or explicit recovery; never reconstruct it.");
   }
   // Read protected bytes only after consent, grants, room access and exact
   // issuance are established. Existing requests join their recorded work;
