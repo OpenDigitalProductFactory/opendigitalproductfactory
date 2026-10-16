@@ -1,13 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ task: vi.fn(), item: vi.fn(), room: vi.fn(), version: vi.fn(), source: vi.fn(), access: vi.fn() }));
+const mocks = vi.hoisted(() => ({ task: vi.fn(), item: vi.fn(), room: vi.fn(), rooms: vi.fn(), snapshots: vi.fn(), version: vi.fn(), source: vi.fn(), access: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: { taskRun: { findUnique: mocks.task }, backlogItem: { findUnique: mocks.item },
-  workroom: { findUnique: mocks.room }, documentVersion: { findUnique: mocks.version } } }));
+  workroom: { findUnique: mocks.room, findMany: mocks.rooms }, contributorInventorySnapshot: { findMany: mocks.snapshots }, documentVersion: { findUnique: mocks.version } } }));
 vi.mock("./baseline-source", () => ({ loadBaselineSourceForItem: mocks.source }));
 vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: async () => ({}) }));
 vi.mock("@/lib/permissions", () => ({ can: () => true }));
 vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({ resolveAgentWorkroomAccess: mocks.access }));
 import { readInitiativeBodyVersion } from "./body-baseline-reader";
 import { bodyBaselineDigest, bodyCriteriaVersion } from "./body-baseline-version";
+import { createPullRequestObservation } from "@/lib/contributor-change-lanes/pull-request-observation";
 
 const body = "## Acceptance\n- Verify canonical grants.";
 const digest = bodyBaselineDigest(body);
@@ -35,6 +36,22 @@ beforeEach(() => {
   mocks.access.mockResolvedValue({ decision: { level: "content" } });
 });
 describe("retained body immutable reader", () => {
+  it.each([true, false])("reads archived delivered authors only with current content admission=%s", async admitted => {
+    const room = { id: "room", capsuleId: "WC-CASE", backlogItemId: "BI-CASE",
+      repositoryFullName: "owner/repo", headSha: binding.workroomRef.headSha, headBranch: binding.workroomRef.branchName,
+      baseSha: "b".repeat(40), createdByPrincipalId: "author", status: "archived", pullRequestNumber: 6265,
+      archivedAt: new Date("2026-10-16T06:00:00Z"), createdAt: new Date("2026-10-15T06:00:00Z") };
+    mocks.room.mockResolvedValue(room);
+    mocks.rooms.mockImplementation(async ({ where }) => where.archivedAt === null ? [] : [room]);
+    mocks.snapshots.mockResolvedValue([{ payload: createPullRequestObservation({ repositoryFullName: "owner/repo",
+      number: 6265, url: "https://github.com/owner/repo/pull/6265", title: "repair", headBranch: room.headBranch,
+      headSha: room.headSha, state: "merged", isDraft: false, mergeStateStatus: null, mergeCommitSha: "c".repeat(40),
+      mergedAt: "2026-10-16T05:00:00Z", providerUpdatedAt: "2026-10-16T05:00:00Z", observedAt: "2026-10-16T05:01:00Z" }) }]);
+    mocks.access.mockResolvedValue({ decision: { level: admitted ? "content" : "none" } });
+    const result = await readInitiativeBodyVersion(parameters, "user", context);
+    expect(result.success).toBe(admitted);
+    if (!admitted) expect(mocks.version).not.toHaveBeenCalled();
+  });
   it("uses the canonical page contract for the exact authorized review", async () => {
     const result = await readInitiativeBodyVersion(parameters, "user", context);
     expect(result).toMatchObject({ success: true, data: { path: parameters.path, version: parameters.version,

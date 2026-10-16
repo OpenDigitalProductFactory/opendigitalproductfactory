@@ -3,6 +3,7 @@ import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
 import { loadBaselineSourceForItem, type BaselineSourceDb } from "./baseline-source";
 import { bodyBaselineInputsMatch } from "./body-baseline-binding";
+import { isCurrentDeliveredBodyAuthor } from "./body-baseline-author-room";
 
 import {
   authorizeObjectiveMappingRequestKeyEvolution,
@@ -68,7 +69,7 @@ type ObjectiveMappingSubmissionPacket = Parameters<typeof authorizeObjectiveMapp
 type ObjectiveMappingAdmissionDb = Pick<
   Prisma.TransactionClient,
   "backlogItem" | "backlogItemActivity" | "workroom" | "taskRun" | "toolExecution"
-  | "featureBuild" | "nonProductionEnvironmentLease"
+  | "featureBuild" | "nonProductionEnvironmentLease" | "contributorInventorySnapshot"
 >;
 
 type WorkroomLivenessReader = (
@@ -112,14 +113,16 @@ async function loadObjectiveMappingAdmissionSnapshot(args: {
     },
   });
   const expectedRoom = packet.binding.workroomRef;
-  if (!room || room.archivedAt !== null
+  if (!room
     || (room.backlogItemId !== item.itemId && room.backlogItemId !== item.id)
     || room.repositoryFullName?.toLocaleLowerCase("en-US") !== expectedRoom.repositoryFullName.toLocaleLowerCase("en-US")
     || room.headBranch !== expectedRoom.branchName
     || room.headSha?.toLocaleLowerCase("en-US") !== expectedRoom.headSha.toLocaleLowerCase("en-US")) {
     return { ...err("workroom-identity-conflict"), reason: "workroom-identity-conflict" };
   }
-  if (!await args.workroomIsLive(db, room.capsuleId)) {
+  const deliveredBodyAuthor = room.archivedAt !== null && packet.binding.artifactRef.kind === "document-version"
+    && await isCurrentDeliveredBodyAuthor(db, item, expectedRoom);
+  if (!deliveredBodyAuthor && (room.archivedAt !== null || !await args.workroomIsLive(db, room.capsuleId))) {
     return { ...err("workroom-identity-conflict"), reason: "workroom-identity-conflict" };
   }
 
@@ -197,7 +200,7 @@ async function loadObjectiveMappingAdmissionSnapshot(args: {
         baseSha: room.baseSha,
         headBranch: room.headBranch,
         headSha: room.headSha!,
-        isLive: true,
+        isLive: !deliveredBodyAuthor,
       },
       baselineRows: baselineRows!,
       baseline: baseline as ObjectiveMappingAdmissionSnapshot["baseline"],

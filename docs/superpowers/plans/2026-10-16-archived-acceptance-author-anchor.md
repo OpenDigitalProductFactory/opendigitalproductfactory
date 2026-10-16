@@ -95,3 +95,26 @@ above). Contract reference: C-AUTHOR-ANCHOR. Flow reference:
 F-INDEPENDENT-ACCEPTANCE. Verification references: V-RED, V-REGRESSIONS, V-LIVE.
 The live immutable coverage receipt will be recorded against the published plan
 and checked before implementation; this paragraph itself grants no admission.
+
+Recorded plan admission: atomic coverage `cmvangprt007001mhnyo4j2fs`, checked
+valid before the native request-entrypoint change. Earlier coverage
+`cmvan67v11iqz01pj4xywdmo6` preceded that added scope. Research receipt:
+`initiative-098d7d5f-2807-4032-9a0a-afe03ac73565`; implementation admission:
+`IRD-2EBF72F1E1CD`. Final publication refreshes coverage against this exact blob.
+
+## Source verification and workflow fit
+
+Actual capture regression failed before repair (expected one retained version,
+got zero). Native request regression separately failed before its repair with
+the exact issued packet refused at the archived-room filter. Both now pass.
+Expanded source verification: 1,087 passed, six skipped across 85 passing suites
+and one skipped suite. Both web production/test typechecks pass. Style Drift
+Guard and documentation index/diagram freshness checks pass. Shared integration,
+protected CI and canonical functional acceptance remain separate, unrun at this
+source checkpoint.
+
+Workflow fit: backend-only correction to existing Workspace completion recovery;
+no layout, route, component or navigation addition. Preserve the exact current
+native packet and actual admission checks. Recovery explains missing source
+proof instead of directing an agent into a repeated reopen loop. No visual
+redesign or prototype is required for this service-only repair.

@@ -10,6 +10,7 @@ import { bodyBaselineDigest } from "./body-baseline-version";
 import { bodyBaselineInputsMatch } from "./body-baseline-binding";
 import { currentBaseline, parseBaselinePayloads } from "./terminal-recovery";
 import { loadBaselineSourceForItem, type BaselineSourceDb } from "./baseline-source";
+import { isCurrentDeliveredBodyAuthor } from "./body-baseline-author-room";
 
 /** This reader is an exact acceptance TaskRun reader, never a general document lookup. */
 export async function readInitiativeBodyVersion(params: Record<string, unknown>, userId: string,
@@ -38,7 +39,8 @@ export async function readInitiativeBodyVersion(params: Record<string, unknown>,
   if (!baseline || !bodyBaselineInputsMatch(baseline, { ...item, binding })) return refuse("OBJECTIVE_BASELINE_CONFLICT");
   const room = binding.workroomRef && await prisma.workroom.findUnique({ where: { capsuleId: binding.workroomRef.workroomId },
     select: { id: true, backlogItemId: true, headSha: true, repositoryFullName: true, headBranch: true, archivedAt: true } });
-  if (!room || room.archivedAt || ![item.id, item.itemId].includes(room.backlogItemId ?? "")
+  if (!room || (room.archivedAt && !await isCurrentDeliveredBodyAuthor(prisma, item, binding.workroomRef!))
+    || ![item.id, item.itemId].includes(room.backlogItemId ?? "")
     || room.headSha !== binding.workroomRef!.headSha || room.headBranch !== binding.workroomRef!.branchName
     || room.repositoryFullName !== binding.workroomRef!.repositoryFullName) return refuse("OBJECTIVE_BASELINE_CONFLICT");
   if ((await resolveAgentWorkroomAccess({ userId, agentId: context.agentId, workroomId: room.id, requested: "content" })).decision.level !== "content") {

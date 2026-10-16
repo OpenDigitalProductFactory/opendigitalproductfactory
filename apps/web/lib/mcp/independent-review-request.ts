@@ -14,6 +14,7 @@ import { deterministicExternalTaskRunId, remoteTaskRequestMatches } from "@/lib/
 import { loadTaskInitiativeReviewOutcome } from "@/lib/mcp-task-review-outcome";
 import { BUILD_STUDIO_ASSISTANT_AGENT_ID, buildStudioOwedRoutes } from "@/lib/backlog/initiative-readiness/build-studio-owed-routes";
 import { reviewDocumentPreflight } from "@/lib/mcp-task-review-document";
+import { isCurrentDeliveredBodyAuthor } from "@/lib/backlog/initiative-readiness/body-baseline-author-room";
 
 /** Match the durable request identity, never a caller's task-handle assertion. */
 async function matchingReviewRequest(params: Record<string, unknown>, userId: string, context: ToolExecutionContext) {
@@ -107,8 +108,15 @@ export async function authorizeCoworkerRequest(
   }
   // A Build Studio room records the item's ROW id in backlogItemId (the
   // attachment writes backlogItem.id); an adopted room records the BI- id.
-  const room = await prisma.workroom.findFirst({ where: { capsuleId: binding.workroomRef.workroomId, archivedAt: null },
+  let room = await prisma.workroom.findFirst({ where: { capsuleId: binding.workroomRef.workroomId, archivedAt: null },
     select: { id: true, backlogItemId: true, executorKind: true, requestedByPrincipalId: true, featureBuild: { select: { createdById: true } } } });
+  if (!room && binding.gate === "objective-mapping" && binding.artifactRef.kind === "document-version") {
+    const subject = await prisma.backlogItem.findUnique({ where: { itemId: binding.itemId }, select: { id: true } });
+    if (subject && await isCurrentDeliveredBodyAuthor(prisma, { ...subject, itemId: binding.itemId }, binding.workroomRef)) {
+      room = await prisma.workroom.findFirst({ where: { capsuleId: binding.workroomRef.workroomId, archivedAt: { not: null } },
+        select: { id: true, backlogItemId: true, executorKind: true, requestedByPrincipalId: true, featureBuild: { select: { createdById: true } } } });
+    }
+  }
   const roomOwnsItem = Boolean(room) && (room!.backlogItemId === binding.itemId
     || (room!.backlogItemId !== null && room!.backlogItemId === (await prisma.backlogItem.findUnique({ where: { itemId: binding.itemId }, select: { id: true } }))?.id));
   const buildStudioRoom = roomOwnsItem && room!.executorKind === "build-studio";
