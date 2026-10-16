@@ -55,6 +55,29 @@ describe("routing workspace investigation", () => {
     expect(screen.getByText("No execution evidence · 1 unknown")).toBeTruthy();
     expect(screen.getByText("No feedback recorded")).toBeTruthy();
   });
+  it("keeps traffic evidence labeled when rows reflow on narrow screens", () => {
+    mount();
+    const table = within(screen.getByRole("region", { name: "Recent routing decisions" })).getByRole("table");
+    expect(within(table).getAllByText("Execution")).toHaveLength(2);
+    expect(within(table).getAllByText("Recorded")).toHaveLength(2);
+    expect(within(table).getByRole("button", { name: /review.*worker/i })).toBeTruthy();
+    expect(within(table).getByText("model · internal")).toBeTruthy();
+  });
+  it("keeps evaluation denominators paired with labels in reflowed rows", () => {
+    window.history.replaceState(null, "", "/platform/ai/operations-map?routingView=evaluation&routingWindow=60");
+    mount();
+    const table = within(screen.getByRole("region", { name: "Task evaluation" })).getByRole("table");
+    expect(within(table).getAllByText("Evaluated quality")).toHaveLength(2);
+    expect(within(table).getAllByText("Operator feedback")).toHaveLength(2);
+    expect(within(table).getByText("0/1 scored · unavailable")).toBeTruthy();
+  });
+  it("keeps the searchable traffic catalog's reflowed evidence labeled", () => {
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: "View all 1" }));
+    const table = within(screen.getByRole("dialog", { name: "Routing traffic" })).getByRole("table");
+    expect(within(table).getAllByText("Cost")).toHaveLength(2);
+    expect(within(table).getByRole("button", { name: /review.*worker/i })).toBeTruthy();
+  });
 });
 
 describe("existing provider navigation", () => {
