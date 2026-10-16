@@ -4,6 +4,92 @@ status: active
 
 # Execution reliability and process visibility
 
+## October 16 prospective launch-evidence preparation (BI-06AE6833)
+
+WC-1D447592 owns the fresh CLI launch-binding gap identified by original
+task99B4B339F227 after servedc38. Normal DESIGN admission and two exact document
+claims are accepted. Reuse the prospective amendment in
+[maintenance evidence](../specs/2026-10-15-maintenance-epoch-recovery-evidence.md#prospective-cli-launch-binding--october-16-design-amendment).
+
+This is preparation, not an admitted implementation plan. First establish fit
+of the existing AsyncInferenceOp lifecycle and local sandbox execution boundary;
+TaskArtifact is evidence only. A native execution handle cannot be mislabeled a
+provider-issued operation ID. Map CL-1 through CL-5 to the existing canonical
+attempt/lease/start-indeterminate/transition substrate, and reject any design
+that introduces another scheduler or uses absent observations as no-start proof.
+
+The design's immutable-target, duplicate-start, crash, stale-fence, cancellation
+and evidence-integrity fixtures are required before source implementation.
+Independent assessment, live deliverable mapping/coverage and normal
+implementation admission remain outstanding. Preserve the existing original
+review99 at bf94ff7ed5f48d481b6afdff9990c3157b76735e and its request digest;
+do not submit a replacement review or claim this prospective work settles it.
+
+This preparation is separate from the admitted BI-8B8731EE canonical-verdict
+dedup primitive, BI-6BA00C83 approval-consumer correction and the approval-target
+display repair below. It does not hold the already coordinated next release cut.
+
+## October 16 approved runtime target outcome (BI-06AE6833, WC-1D447592)
+
+Original approval cmv9vetqp01la01olbsbz684d remains unknown even though its exact
+target RCT-BI5-RECOVERY95-20261015 committed succeeded with a verified host
+receipt and one terminal event. The v2026.10.16 advance preserves its original
+receipt, completion time and event count. Recover the observation, not execution.
+
+1. Extend the existing approval outcome store and shared pure projection. Keep
+   native user-and-assistant isolation and history's owner predicate. Resolve
+   only an approved reconcile_runtime_capabilities request whose original
+   parameters match its stored input fingerprint, tool and actor binding.
+2. Read the exact transition, bound to the requesting actor and full immutable
+   reconciliation packet. Require trusted request/decision chronology, terminal
+   succeeded state and completion, a structurally valid applied signed receipt,
+   exact envelope identity and the identical committed succeeded event receipt.
+   Missing, conflicting, unsigned, malformed, pending or failed evidence cannot
+   produce success. Preserve existing terminal-envelope and explicit receipt
+   precedence; never use current enabled settings or another transition.
+3. Trust the established server-only verified completion transaction as durable
+   historical evidence. Do not depend on today's signing secret, host filesystem
+   or actuator for history reads: legitimate key rotation does not erase a
+   previously verified outcome. This adds no execution authority, reservation,
+   receipt, target mutation, table, workflow or retry. Share the resolver between
+   native exact reads and browser history, and reuse original parameter rules.
+4. First reproduce the exact unknown-to-executed defect. Cover mismatched actor,
+   request fingerprint, target, packet, envelope, receipt, event and chronology;
+   absent/nonterminal/failed/rollback evidence; unrelated actions; caller
+   isolation; existing outcome precedence; malformed-row isolation; and readable
+   historical outcomes without current secret access. Run affected tests,
+   typechecks, impact guards, governed verification and independent assessment.
+5. Publish through protected PR/queue, qualify the next canonical containing
+   release, then verify the SAME original approval through native read and its
+   deep-linked Inbox. Compare the SAME target receipt, timestamps and event count
+   before/after. Never reapply the host action to make the display pass.
+
+This is one atomic observation repair under the existing execution-reliability
+objective. Approximately one fifth consolidates parameter and outcome resolution
+across readers. It does not settle original uncertain provider executions,
+authorize retries or satisfy the remaining seven-scenario, nested or OAuth
+acceptance. Current source/release delivery and those obligations stay separate.
+
+Coverage for this amendment:
+
+- approved-runtime-target-outcome maps OBJ-DELIVERY-VISIBILITY,
+  OBJ-DELIVERY-CONVERGENCE, OBJ-DELIVERY-MEASUREMENT and OBJ-DELIVERY-REFACTOR
+  to AC-DELIVERY-VISIBILITY, AC-DELIVERY-CONVERGENCE, AC-DELIVERY-ADMISSION,
+  AC-DELIVERY-MEASUREMENT and AC-DELIVERY-REFACTOR. Contracts are
+  exact-approved-input-fingerprint, actor-bound-runtime-target,
+  durable-verified-terminal-receipt and caller-scoped-approval-outcome. Flows are
+  original-approval-to-original-transition and native-and-inbox-shared-projection.
+  It depends on parent-verification-dependencies for whole-objective completion.
+- parent-verification-dependencies retains pending OBJ-DELIVERY-VISIBILITY,
+  OBJ-DELIVERY-CAMPAIGN, OBJ-DELIVERY-PLACEMENT, OBJ-DELIVERY-CONVERGENCE,
+  OBJ-DELIVERY-MEASUREMENT and OBJ-DELIVERY-REFACTOR; acceptance remains
+  AC-DELIVERY-VISIBILITY, AC-DELIVERY-CAMPAIGN, AC-DELIVERY-PLACEMENT,
+  AC-DELIVERY-CONVERGENCE, AC-DELIVERY-ADMISSION, AC-DELIVERY-MEASUREMENT and
+  AC-DELIVERY-REFACTOR. Existing flows parent-delivery-convergence,
+  parent-placement-and-campaign and parent-runtime-and-outcome-verification
+  remain governed by docs/superpowers/specs/2026-09-03-local-first-agentic-delivery-throughput-design.md.
+  This row preserves traceability; it is not new implementation or acceptance.
+
 ## October 11 owned review recovery readback (BI-CAP-3147C64B)
 
 WC-502E167E repairs the missing observation path for expired semantic reviews.
@@ -1174,3 +1260,46 @@ stateful test database adapter across recovery suites. Regression cases cover ca
 inference, stale admission, canceled hydration and replacement during hydration.
 No operator workflow or configuration changes: this restores the documented cancellation
 and same-task retry contract. Source tests and review do not prove deployed acceptance.
+
+### October 16 prospective native lifecycle compatibility
+
+Continue the existing maintenance-epoch spec's prospective CLI amendment under
+BI-06AE6833/WC-1D447592. Normal design admission IRD-0A77CE9467D0 and the two
+existing document claims permit this preparation only. Original plan review99
+remains uncertain; this amendment does not retry it or admit runtime changes.
+
+The architecture audit requires a real adapter/storage compatibility contract.
+Kernel decision DI-418EB31838D7 selects the existing AsyncInferenceOp lifecycle
+with an explicit native identity version and typed execution handle. Preserve
+remote version1 provider IDs; reuse registered Claude/Codex adapter kinds and
+the existing worker, authority, queue, transitions and cursor readers. The spec
+is the single home for the handle fields, boundary table and compatibility
+matrix; do not duplicate their detailed contract here.
+
+1. Verify the actual current source inventory: provider/context parser, database
+   constraints, store/query filters, worker, queue/runtime, Workroom/Task readers,
+   cancel path and outbox. Map legacy0, remote1, proposed native2, malformed/future
+   rows and mixed-worker/rollback behavior. Do not enable a native admission yet.
+2. Prove the additive canonical representation with source-local database and
+   injected process/provider fixtures. Real create IDs must be durable before
+   start; test a lost response at every boundary and no repeat create/start.
+   Preserve the synchronous caller contract without another inference/scheduler.
+3. Assess the exact amended design and representation/migration. Obtain current
+   mapping/coverage and normal Large implementation admission before editing
+   runtime code. If the original review's uncertainty prevents a supported new
+   admission, retain that explicit blocker; do not invent a replacement key.
+4. After admission, consolidate both adapters' target/handle/observation helpers
+   while retaining exact remote behavior. Run affected and adversarial tests,
+   both typechecks, impact guards and the governed exact-tree gate. Publish
+   through independent source review, DCO and the protected merge queue.
+5. Qualify a containing canonical release and verify an actual safe prospective
+   launch/result or an attributable unavailable state. Never use that evidence
+   to manufacture original99/941/870/755 membership or effect settlement.
+
+Recovery101's authenticated retirement and current Sandbox reconciliation are
+credited only for their actual epoch. The original seven scenarios, approval
+outcome projection, nested Workroom and complete OAuth acceptance remain open.
+The reported post-publication stage-fold delay is not a proven source defect:
+the canonical drive folds evidence before its inactive-work check, and its
+15-minute schedule plus the deployment drain can explain the stale snapshot.
+Observe a healthy scheduled tick before proposing a corrective stage writer.

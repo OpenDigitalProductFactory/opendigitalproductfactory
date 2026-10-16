@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { projectWorkroomRecovery } from "./workroom-recovery-projection";
+import { projectWorkroomRecovery, projectWorkroomIdentityRepair } from "./workroom-recovery-projection";
 import type { ReviewerExecutionObservation } from "@/lib/work-management/semantic-review-room-projection";
 
 const identity = {
@@ -46,6 +46,16 @@ describe("projectWorkroomRecovery", () => {
 });
 
 describe("identity repair packet (observed 2026-09-23: the packet could not be replayed)", () => {
+  it.each(["baseSha", "headSha"] as const)("repairs an invalid legacy %s without retaining it in the executable packet", field => {
+    const repair = projectWorkroomIdentityRepair({ ...identity, [field]: "abc123" }, { title: "Repair", [field]: "unverified-packet-value" });
+    expect(repair).not.toBeNull();
+    expect(repair?.missingFields).toEqual([field]);
+    expect(repair?.retainedFields).not.toHaveProperty(field);
+    expect(repair?.packet).not.toHaveProperty(field);
+    expect(repair?.packet).toMatchObject({ title: "Repair", [field === "baseSha" ? "headSha" : "baseSha"]:
+      identity[field === "baseSha" ? "headSha" : "baseSha"] });
+  });
+
   it("carries every field adopt_worktree requires, and names the missing SHAs", () => {
     const recovery = projectWorkroomRecovery({
       ...identity,

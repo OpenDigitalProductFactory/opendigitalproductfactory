@@ -9,11 +9,57 @@ import { classifySlotRecord } from "./pregate-status.mjs";
 import { readLocalCiGateState } from "./local-ci-gate-state.mjs";
 import { collectToolchainFingerprint, defaultBuildStrategy } from "./local-integration-ci.mjs";
 import {
+  classifyMergeTreeResult,
   couldBeDocumentationFiles,
   createPreAdmissionGateIdentity,
+  preAdmissionDisposition,
   repositorySlugFromRemote,
+  resolveIntegrationTree,
   runPreAdmissionDocumentationLane,
 } from "./documentation-evidence-lane.mjs";
+
+const TREE = "a".repeat(40);
+
+describe("merge-tree classification", () => {
+  it("keeps a clean written tree", () => {
+    assert.deepEqual(
+      classifyMergeTreeResult({ status: 0, stdout: `${TREE}\n` }),
+      { kind: "clean", tree: TREE },
+    );
+  });
+
+  it("names a merge conflict instead of an empty integration ref", () => {
+    const stderr = "Auto-merging scripts/gate-worktree.mjs\nCONFLICT (content): Merge conflict in scripts/gate-worktree.mjs\n";
+    assert.deepEqual(
+      classifyMergeTreeResult({ status: 1, stderr }),
+      { kind: "conflict", paths: ["scripts/gate-worktree.mjs"] },
+    );
+    assert.deepEqual(
+      resolveIntegrationTree({ sha: TREE, ancestorStatus: 1, mergeStatus: 1, mergeStderr: stderr }),
+      { kind: "conflict", paths: ["scripts/gate-worktree.mjs"] },
+    );
+  });
+
+  it("treats a non-conflict merge-tree failure as unavailable", () => {
+    assert.deepEqual(
+      classifyMergeTreeResult({ status: 128, stderr: "fatal: not a valid object name" }),
+      { kind: "unavailable" },
+    );
+  });
+
+  it("stops a resumed gate on conflict before source drift, and keeps a real identity loss as drift", () => {
+    const conflict = preAdmissionDisposition({
+      handled: false,
+      mergeConflict: { baseRef: "origin/main", paths: ["scripts/gate-worktree.mjs"] },
+    }, { resumed: true });
+    assert.equal(conflict.action, "conflict");
+    assert.equal(conflict.exitCode, 10);
+    const drift = preAdmissionDisposition({ handled: false }, { resumed: true });
+    assert.deepEqual(drift, { action: "source-drift", reasons: ["gate-identity-unavailable"] });
+    const fresh = preAdmissionDisposition({ handled: false, gateIdentity: { repository: "o/r" } }, { resumed: false });
+    assert.equal(fresh.action, "continue");
+  });
+});
 
 describe("couldBeDocumentationFiles", () => {
   it("rejects an invalid worker profile before unavailable-planner fallback or admission", async () => {

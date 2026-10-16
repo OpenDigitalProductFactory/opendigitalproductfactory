@@ -109,6 +109,23 @@ Cross-domain / archetype profiles add specialist review gates (data / ux / secur
 
 You do **not** choose the reviewer or hand-build the review call. The server issues a **recovery packet** naming, per unmet gate, the exact coworker and a ready-to-send handoff. The flow:
 
+**Native source identity.** Supplied `baseSha` and `headSha` must be full
+40-character commit IDs; malformed values are refused before claim or adoption
+writes. Source-less design and planning remain valid. Implementation requires
+both usable persisted values even when the optional claim inputs are omitted.
+Exact claim readback returns `baseSha`, `headSha` and `sourceIdentityComplete`.
+That flag describes recorded SHA syntax, not observed Git state, approval or
+publication authority. The existing local Git capture observes the actual
+repository, branch, worktree, merge base and head on the caller's host.
+
+An unusable legacy value is named in `identityRepair.missingFields` and excluded
+from the repair packet; valid recorded values are retained. Capture the actual
+missing values locally, then use the issued `adopt_worktree` packet or retry the
+claim with the full values. No reviewer artifact lookup or dispatch uses an
+incomplete source identity. Never invent a base or substitute the running
+install's commit for unpublished work. Other readiness and authority gates
+still apply.
+
 1. **Bind a Workroom to the item, with a real base *and* head.** `adopt_worktree(title, objective, repositoryFullName, headBranch, headSha, baseBranch, baseSha, worktreePath, backlogItemId)`. Without **both** an immutable `baseSha` and `headSha`, no reviewer binding can be issued (`no-canonical-artifact`) — the review has nothing immutable to pin. The artifact commit must be **resolvable on the provider** (a squash-merged, deleted branch will not resolve — re-publish it).
 2. **Attempt the governed claim.** `claim_backlog_item_for_work(itemId, worktreePath, branchName, provider, sessionRef)`. When the item is not ready it *refuses* and returns `data.recovery`:
    - `reviewerRoutes[]` — per gate: `accountableRole`, `gate`, `targetAgentId`, `independent`, and a ready `requestCoworker` packet with `requiredToolNames` + `initiativeReviewBinding` (the writer tool + the immutable `artifactRef` — repo, commitSha, path, providerBlobId).
