@@ -82,3 +82,11 @@ Before this can be ready:
 2. UX Design Critic must return an attributable critique of the exact compact revision, with corpus references or an explicit grounding limitation, concrete findings and dispositions.
 3. Reconcile those findings and the operator's density requirements into the actual account read model and UI. Preserve backend reliability repairs already committed.
 4. Re-run exact-source tests/typechecks and governed integration verification, then exercise the served application in relevant themes/viewports. UI counts and accessibility passes supplement the critique; they do not replace it.
+
+## Operator follow-up: multiple accounts per provider option
+
+The operator requested additional accounts under each provider option. The revised draft shows two named Claude API accounts with independent states, offers a contextual Add account action with provider preselection, and uses the same entry form from the page-level Add account action. Provider and account counts derive from the fixture collection; search and status filters remain account-scoped. Under filtering, the first visible account retains the provider's Add account entry.
+
+The local preview collects only a provider option and a human-readable account name. It explains the supported connection method and adds a temporary Setup needed row. No credential is collected, and no live account is created. A new account inherits no sibling verification, model-access, allowed-work approval, routing eligibility or quota evidence. Implementation must preserve explicit shared authentication ownership and provider-wide restrictions where the actual provider contract requires them; adding a row must not imply an independent allowance or bypass a shared quota.
+
+Browser verification added an Operations team draft under Claude / Anthropic: account count rose from nine to ten, the original Team API account remained Working, and the new account showed Not connected / Not eligible for routing / No successful request. Reusing the same name under that provider was rejected with an inline validation message and no extra row. The original sparse prototype remains unchanged. This extension remains an unapproved design draft under the existing incomplete specialist review.
