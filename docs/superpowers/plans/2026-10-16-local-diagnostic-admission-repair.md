@@ -71,6 +71,16 @@ run. Continuation supplies that run and the expected observation index; replay
 of a completed index returns its retained result and cannot advance another
 case. Ordinary probes, scenarios and concurrency diagnostics keep their scope.
 
+The public operation explicitly accepts ONE observation, not a whole matrix.
+Its response states remaining coverage and whether another distinct step is
+permitted. It never promises that an invisible client loop will finish a matrix.
+Accepted case identity and progress belong to the server row across disconnect,
+credential refresh, client/executor changes and portal restart. Readback itself
+requires current authorization. A changed executor must use its actual current
+identity and supported authority; it may inspect authorized status but cannot
+impersonate the old executor or adopt an in-flight claim. An interrupted case
+remains held until actual recorded settlement, never safe-to-repeat by default.
+
 The existing JSON result retains the immutable selection/runtime/source/catalog
 fingerprints, ordered 45-case schedule, original authority binding, observation
 records and a versioned checkpoint. Only one next distinct case can be claimed.
@@ -201,3 +211,6 @@ AC-HONEST-PROGRESS, AC-REGRESSION. Contract refs: CONTRACT-CHECKPOINT,
 CONTRACT-AUTHORITY, CONTRACT-TIMING. Flow: FLOW-CHECKPOINT. Verification:
 VERIFY-NEGATIVES, VERIFY-LIVE. Immutable provider-verified coverage is pending;
 this draft is not implementation admission or a completed acceptance receipt.
+Prior coverage cmvawa9tt08ix01p0oqpdmp0g binds the ab1de1b draft. Refresh the
+native immutable coverage after publishing this scope clarification; the native
+record is authoritative and no self-referential document hash is manufactured.
