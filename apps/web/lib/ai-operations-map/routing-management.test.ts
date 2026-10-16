@@ -11,6 +11,43 @@ const usage = { id: "u1", traceId: "trace", providerId: "provider", inputTokens:
 const project = (decisions: Parameters<typeof projectRoutingManagement>[0]["decisions"] = [decision]) => projectRoutingManagement({ decisions, attempts: [attempt], outcomes: [], usage: [usage], models: [model] });
 
 describe("routing investigation evidence", () => {
+  it.each(["error", "timeout", "cancelled"])("does not let an older outcome success override a newer %s attempt", status => {
+    const row = projectRoutingManagement({ decisions: [decision], models: [model], usage: [],
+      attempts: [{ ...attempt, status, startedAt: new Date(now.getTime() + 1000) }],
+      outcomes: [{ id: "o1", traceId: "trace", providerId: "provider", modelId: "model", fallbackOccurred: false, providerErrorCode: null, latencyMs: 10, inputTokens: 10, outputTokens: 5, costUsd: .1, createdAt: now }],
+    }).receipts[0];
+    expect(row.execution).toBe("unknown");
+    expect(row.selectedExecution).toBe("unknown");
+    expect(routingCohorts([row])[0]).toMatchObject({ successes: 0, knownExecution: 0 });
+  });
+  it.each([false, true])("keeps conflicting outcome records unknown regardless of insertion order (%s)", reverse => {
+    const success = { id: "o1", traceId: "trace", providerId: "provider", modelId: "model", fallbackOccurred: false, providerErrorCode: null, latencyMs: 10, inputTokens: 10, outputTokens: 5, costUsd: .1, createdAt: now };
+    const failure = { ...success, id: "o2", providerErrorCode: "timeout", createdAt: new Date(now.getTime() + 1000) };
+    const row = projectRoutingManagement({ decisions: [decision], models: [model], usage: [], attempts: [attempt], outcomes: reverse ? [failure, success] : [success, failure] }).receipts[0];
+    expect(row.execution).toBe("unknown");
+    expect(row.selectedExecution).toBe("unknown");
+  });
+  it.each([-1000, 1000])("does not let a failed outcome override a successful attempt using its write timestamp (%s)", offset => {
+    const row = projectRoutingManagement({ decisions: [decision], models: [model], usage: [], attempts: [attempt],
+      outcomes: [{ id: "o1", traceId: "trace", providerId: "provider", modelId: "model", fallbackOccurred: false, providerErrorCode: "timeout", latencyMs: 10, inputTokens: 10, outputTokens: 5, costUsd: .1, createdAt: new Date(now.getTime() + offset) }],
+    }).receipts[0];
+    expect(row.execution).toBe("unknown");
+    expect(row.selectedExecution).toBe("unknown");
+  });
+  it("does not break equally timed conflicting attempt ties by identifier", () => {
+    const row = projectRoutingManagement({ decisions: [decision], models: [model], usage: [], outcomes: [], attempts: [attempt, { ...attempt, id: "a2", status: "error" }] }).receipts[0];
+    expect(row.execution).toBe("unknown");
+    expect(row.selectedExecution).toBe("unknown");
+  });
+  it("retains fallback success while a selected model has conflicting evidence", () => {
+    const row = projectRoutingManagement({ decisions: [decision], models: [model], usage: [],
+      attempts: [{ ...attempt, status: "error" }, { ...attempt, id: "fallback", providerId: "other", modelId: "other", startedAt: new Date(now.getTime() + 1000) }],
+      outcomes: [{ id: "o1", traceId: "trace", providerId: "provider", modelId: "model", fallbackOccurred: false, providerErrorCode: null, latencyMs: 10, inputTokens: 10, outputTokens: 5, costUsd: .1, createdAt: now }],
+    }).receipts[0];
+    expect(row.execution).toBe("success");
+    expect(row.selectedExecution).toBe("unknown");
+    expect(routingCohorts([row])[0].successes).toBe(0);
+  });
   it("does not expose source JSON, prompt-like reasons or adapter payloads", () => {
     const receipt = project()["receipts"][0];
     expect(JSON.stringify(receipt)).not.toContain("prompt secret");

@@ -28,6 +28,22 @@ const text = (value: unknown) => typeof value === "string" ? value : null;
 const finite = (value: unknown): number | null => value != null && Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : null;
 const sumKnown = (values: Array<number | null>) => values.length > 0 && values.every(v => v !== null) ? values.reduce<number>((sum, v) => sum + v!, 0) : null;
 
+const attemptExecution = (status: string): RoutingReceipt["execution"] => status === "success" ? "success"
+  : status === "policy-block" ? "blocked"
+  : ["error", "timeout", "refusal", "cancelled"].includes(status) ? "error" : "unknown";
+
+/** Outcome insertion time is not attempt identity: never resolve conflicting ledgers by last write. */
+function executionEvidence(attempts: RoutingReceipt["attempts"], outcomes: RoutingEvidenceOutcomeRow[]): RoutingReceipt["execution"] {
+  const latest = attempts.at(-1);
+  const relevant = latest ? outcomes.filter(o => o.providerId === latest.providerId && o.modelId === latest.modelId) : outcomes;
+  const states = new Set<RoutingReceipt["execution"]>(relevant.map(o => o.providerErrorCode ? "error" : "success"));
+  if (latest) {
+    // Equal start times cannot establish which attempt was last either.
+    for (const a of attempts.filter(a => a.startedAt === latest.startedAt)) states.add(attemptExecution(a.status));
+  }
+  return states.size === 1 ? [...states][0] : "unknown";
+}
+
 /** Allowlist only: never spread decisions, adapter rows, JSON traces or vendor payloads. */
 export function projectRoutingManagement(input: {
   decisions: Array<RoutingDecisionSourceRow & { traceId: string | null; inferenceDataScreenReceipt?: unknown }>;
@@ -65,17 +81,10 @@ export function projectRoutingManagement(input: {
     }));
     const uniqueExclusions = exclusions.filter((e,i) => exclusions.findIndex(o => o.providerId === e.providerId && o.modelId === e.modelId && o.hold === e.hold) === i);
     const screen = projectSafeInferenceScreenReceipt(d.inferenceDataScreenReceipt);
-    const execution = attempts.at(-1)?.status === "success" ? "success"
-      : outcomes.length > 0 ? outcomes.at(-1)!.providerErrorCode ? "error" : "success"
-      : screen?.routeEffect === "block" ? "blocked"
-      : attempts.some(a => a.status === "policy-block") ? "blocked"
-      : attempts.some(a => ["error", "timeout", "refusal", "cancelled"].includes(a.status)) ? "error" : "unknown";
+    const execution = attempts.length === 0 && outcomes.length === 0 && screen?.routeEffect === "block" ? "blocked" : executionEvidence(attempts, outcomes);
     const selectedAttempts = attempts.filter(a => a.providerId === providerId && a.modelId === (model?.modelId ?? d.selectedModelId));
-    const selectedOutcome = outcomes.filter(o => o.providerId === providerId && o.modelId === (model?.modelId ?? d.selectedModelId)).at(-1);
-    const selectedExecution = selectedAttempts.at(-1)?.status === "success" ? "success"
-      : selectedOutcome ? selectedOutcome.providerErrorCode ? "error" : "success"
-      : selectedAttempts.some(a => a.status === "policy-block") ? "blocked"
-      : selectedAttempts.some(a => ["error", "timeout", "refusal", "cancelled"].includes(a.status)) ? "error" : "unknown";
+    const selectedOutcomes = outcomes.filter(o => o.providerId === providerId && o.modelId === (model?.modelId ?? d.selectedModelId));
+    const selectedExecution = executionEvidence(selectedAttempts, selectedOutcomes);
     const pricedRows = usage.length > 0 ? usage : outcomes;
     return {
       id: d.id, occurredAt: d.createdAt.toISOString(), actorId: d.agentId, task: d.taskType, sensitivity: d.sensitivity,
