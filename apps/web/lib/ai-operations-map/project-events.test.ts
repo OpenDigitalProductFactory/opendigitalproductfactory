@@ -30,6 +30,17 @@ import type {
 } from "./types";
 
 describe("AI operations map projection", () => {
+  it("keeps a proven automatic capacity wait observable without offering duplicate manual recovery", () => {
+    const projection = projectTaskRun(makeTaskRun({ status: "input-required", a2aMetadata: { gateKind: "semantic-review" },
+      progressPayload: { semanticReview: { schemaVersion: 1, reason: "review-capacity-deferred", requestDigest: "a".repeat(64),
+        deadlineAt: "2099-01-01T00:00:00Z", recoveryAttempt: 1,
+        capacityRecovery: { schemaVersion: 1, requestDigest: "a".repeat(64), checks: 0, nextCheckAt: "2098-12-31T23:30:00Z" } } } }));
+    expect(projection.recovery).toBeUndefined();
+    expect(projection.summary).toContain("server will recheck");
+    expect(projection.links.historyHref).toBeTruthy();
+    expect(projection.reviewBudget?.recoveryAttempt).toBe(1);
+  });
+
   it("explains native authorization waits and preserves their recovery limits", () => {
     const projection = projectTaskRun(makeTaskRun({ status: "auth-required", a2aMetadata: { gateKind: "semantic-review" },
       progressPayload: { semanticReview: { schemaVersion: 1, deadlineAt: "2000-01-01T00:00:00Z", recoveryAttempt: 2 } } }));

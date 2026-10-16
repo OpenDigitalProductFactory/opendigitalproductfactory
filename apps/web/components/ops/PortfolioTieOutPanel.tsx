@@ -28,9 +28,10 @@ type Props = {
   formatLocale?: string;
   /** Further portfolio controls that belong behind the same disclosure (the accountable owners, BI-67B27832). */
   children?: ReactNode;
+  initiallyOpen?: boolean;
 };
 
-export function PortfolioTieOutPanel({ tieOut, proposedPoints, unconfirmedEpics, formatLocale, children }: Props) {
+export function PortfolioTieOutPanel({ tieOut, proposedPoints, unconfirmedEpics, formatLocale, children, initiallyOpen = false }: Props) {
   const t = useT("portfolio");
   const [editing, setEditing] = useState<string | null>(null);
   const quarter = `${new Date(tieOut.period.start).toISOString().slice(0, 10)} to ${new Date(new Date(tieOut.period.end).getTime() - 1).toISOString().slice(0, 10)}`;
@@ -76,7 +77,7 @@ export function PortfolioTieOutPanel({ tieOut, proposedPoints, unconfirmedEpics,
       <h2 id="tie-out-heading" className="text-base font-semibold text-[var(--dpf-text)]">{t("tieOut.heading")}</h2>
       <p className="mt-1 text-sm text-[var(--dpf-text)]">{tieOutHeadline(tieOut)}</p>
       {/* Detail defers behind a disclosure, so the page stays within its arrival budget (UX route sweep). */}
-      <details className="mt-2">
+      <details className="mt-2" open={initiallyOpen}>
         <summary className="cursor-pointer text-sm text-[var(--dpf-accent)]">{t("tieOut.show")}</summary>
       <p className="mt-2 max-w-3xl text-xs text-[var(--dpf-muted)]">
         This quarter ({quarter}, {tieOut.weeksRemaining} weeks left), in points: what each portfolio has committed against what it

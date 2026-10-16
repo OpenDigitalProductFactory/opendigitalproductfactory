@@ -36,6 +36,18 @@ describe("admitted preview automation identity", () => {
   });
 });
 
+describe("Docker Desktop host mount identity", () => {
+  it("accepts the Windows host path from Linux but rejects foreign drive, worktree and relative paths", () => {
+    const windowsLease = { ...lease, worktreePath: "D:/DPF-worktrees/scoped-investment-balance" };
+    const container = { State: { Running: true }, NetworkSettings: { Ports: { "3000/tcp": [{ HostIp: "127.0.0.1", HostPort: "3001" }] } }, Mounts: [{ Type: "bind", Source: "/run/desktop/mnt/host/d/DPF-worktrees/scoped-investment-balance", Destination: "/workspace" }], Config: { Env: ["DPF_ENVIRONMENT_CLASS=development"], Labels: { "com.docker.compose.service": "dev-portal", "dpf.preview.lease": "NPEL-1", "dpf.preview.sha": "sha" } } };
+    assertPreviewIssuerContainer(container, windowsLease, "sha");
+    for (const wrong of ["/run/desktop/mnt/host/e/DPF-worktrees/scoped-investment-balance", "/run/desktop/mnt/host/d/DPF-source-root", "D:DPF-worktrees/scoped-investment-balance", "/run/desktop/mnt/host/d/DPF-worktrees/../DPF-source-root"]) {
+      container.Mounts[0]!.Source = wrong;
+      expect(() => assertPreviewIssuerContainer(container, windowsLease, "sha")).toThrow("preview_issuer_binding_mismatch");
+    }
+  });
+});
+
 describe("canonical preview session issuance", () => {
   const sha = "a".repeat(40);
   const db = { $disconnect: mocks.disconnect };

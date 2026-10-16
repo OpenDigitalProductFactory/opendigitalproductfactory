@@ -1,12 +1,19 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render as renderComponent, screen } from "@testing-library/react";
+import type { ReactElement, ReactNode } from "react";
+import { DEFAULT_LOCALE, namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { ProjectionFreshness } from "./ProjectionFreshness";
 
 const { refresh } = vi.hoisted(() => ({ refresh: vi.fn() }));
+const render = (ui: ReactElement) => renderComponent(ui, {
+  wrapper: ({ children }: { children: ReactNode }) => <MessagesProvider locale={DEFAULT_LOCALE}
+    messages={{ workrooms: namespaceMessages(DEFAULT_LOCALE, "workrooms") }}>{children}</MessagesProvider>,
+});
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
-afterEach(() => { cleanup(); vi.useRealTimers(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.clearAllMocks(); vi.restoreAllMocks(); });
 
 describe("projection freshness", () => {
   beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-21T12:00:00Z")); });
@@ -34,6 +41,50 @@ function deferredRefresh() {
   refresh.mockImplementation(() => new Promise<void>(resolve => { complete = resolve; }));
   return () => complete();
 }
+
+describe("Workroom snapshot connectivity", () => {
+  it("preserves the two existing freshness paragraphs when there is no connectivity notice", () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    const { container } = render(<ProjectionFreshness readAt={null} lastEvidenceAt={null} />);
+    expect(container.querySelectorAll("p")).toHaveLength(2);
+  });
+
+  it("retains the snapshot and keyboard target when offline, then offers manual retry without refreshing automatically", async () => {
+    const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    render(<ProjectionFreshness readAt="2026-10-16T03:00:00Z" lastEvidenceAt={null} />);
+    const button = screen.getByRole("button", { name: "Refresh state" });
+    button.focus();
+    await act(async () => { fireEvent.click(button); });
+    expect(refresh).not.toHaveBeenCalled();
+    expect(screen.getByText("Browser offline. Showing the saved snapshot. Reconnect to refresh.").closest("p")).toHaveAttribute("aria-live", "polite");
+    expect(button).toHaveFocus();
+    expect(button).not.toBeDisabled();
+    online.mockReturnValue(true);
+    fireEvent(window, new Event("online"));
+    expect(screen.getByText("Connection restored. Refresh to check for changes.").closest("p")).toHaveAttribute("aria-live", "polite");
+    expect(refresh).not.toHaveBeenCalled();
+    await act(async () => { fireEvent.click(button); });
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+
+  it("checks connectivity at activation even if the offline event has not arrived", async () => {
+    const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    render(<ProjectionFreshness readAt={null} lastEvidenceAt={null} />);
+    online.mockReturnValue(false);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Refresh state" })); });
+    expect(refresh).not.toHaveBeenCalled();
+    expect(screen.getByText(/Browser offline/)).toBeInTheDocument();
+  });
+
+  it("announces an offline event without replacing the snapshot or refreshing", () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    render(<ProjectionFreshness readAt={null} lastEvidenceAt={null} />);
+    fireEvent(window, new Event("offline"));
+    expect(screen.getByText(/Browser offline/)).toBeInTheDocument();
+    expect(screen.getByText("Snapshot age unknown.")).toBeInTheDocument();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+});
 
 describe("Workroom snapshot refresh focus", () => {
   it("keeps its keyboard target focusable while pending, guards repeat activation and retains focus on completion", async () => {

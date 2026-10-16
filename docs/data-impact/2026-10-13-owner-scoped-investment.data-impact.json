@@ -1,0 +1,39 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": ["AdapterRunTelemetry attempt ledger", "Owner allocation read model", "Workroom and Build Studio guidance", "Prisma-to-EA current-state mirror"],
+  "migration": {
+    "name": "20261013060000_owner_scoped_investment_attribution",
+    "backfill": "Additive nullable attribution fields and indexes only. No historical attribution is guessed or backfilled. Existing telemetry stays unassigned. Existing budget/configuration values are not overwritten.",
+    "rollback": "Roll application code back while retaining the nullable fields and immutable policy revisions. Do not drop attribution after writes; a destructive schema rollback requires separate retention review."
+  },
+  "tests": ["apps/web/lib/portfolio/investment-balance.test.ts", "apps/web/lib/portfolio/investment-balance-policy.test.ts", "apps/web/lib/portfolio/investment-balance-server.test.ts", "apps/web/lib/routing/adapter-telemetry-writer.test.ts", "apps/web/lib/inference/ai-inference.call-provider.test.ts"],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:adapter-run-telemetry#investment-attribution",
+      "prismaModel": "AdapterRunTelemetry",
+      "lifecycleDisposition": "One record per real adapter attempt; existing telemetry-bounded 180-day retention applies. Principal, organization and item relations restrict deletion while history exists. Null usage is unknown; legacy rows remain unassigned. Ownership and policy changes never rewrite prior snapshots.",
+      "fields": [
+        { "fieldId": "AdapterRunTelemetry.investmentPrincipalId", "resolution": "governed", "reason": "Canonical funding owner at dispatch", "provenance": "BI-0ACB97B5; live identity and policy resolver; identity/telemetry classification registry" },
+        { "fieldId": "AdapterRunTelemetry.investmentOrganizationId", "resolution": "governed", "reason": "Canonical funding organization at dispatch", "provenance": "BI-0ACB97B5; organization authority and item-boundary checks" },
+        { "fieldId": "AdapterRunTelemetry.investmentItemId", "resolution": "governed", "reason": "Canonical funded item at dispatch", "provenance": "BI-0ACB97B5; FeatureBuild originating item" },
+        { "fieldId": "AdapterRunTelemetry.investmentPurpose", "resolution": "governed", "reason": "Typed funded purpose independent of environment and executor", "provenance": "BI-0ACB97B5; explicit funding binding" },
+        { "fieldId": "AdapterRunTelemetry.investmentClass", "resolution": "governed", "reason": "Typed repair/new classification from an owner-evidenced item binding or unambiguous work type; otherwise unclassified", "provenance": "BI-0ACB97B5; governed Workroom funding binding and classifyInvestment" },
+        { "fieldId": "AdapterRunTelemetry.investmentPolicyRef", "resolution": "governed", "reason": "Serialized immutable policy revision/default and optional item classification provenance references", "provenance": "BI-0ACB97B5; PlatformConfig revision ledger and Workroom binding history" },
+        { "fieldId": "AdapterRunTelemetry.investmentInstallationRef", "resolution": "governed", "reason": "Canonical source device identity read without minting", "provenance": "BI-0ACB97B5; federation.identity" },
+        { "fieldId": "AdapterRunTelemetry.investmentCapturedAt", "resolution": "governed", "reason": "Dispatch capture instant reused on success and failure", "provenance": "BI-0ACB97B5; adapter dispatch regression tests" }
+      ]
+    },
+    {
+      "kind": "model", "assetId": "data:platform-config#investment-balance", "prismaModel": "PlatformConfig",
+      "lifecycleDisposition": "Versioned owner/organization/purpose policy values are immutable. Current pointers use optimistic concurrency and serializable transactions. Installation funding keys include device and organization identity. No setup overwrite, clone inheritance or arbitrary historical owner reassignment.",
+      "fields": [{ "fieldId": "PlatformConfig.value", "resolution": "governed", "reason": "Existing scoped configuration substrate, no new policy table", "provenance": "DI-A40A56094690; BI-0ACB97B5 design section 5" }]
+    },
+    {
+      "kind": "model", "assetId": "data:workroom#investment-binding", "prismaModel": "Workroom",
+      "lifecycleDisposition": "Explicit per-item funding bindings preserve unrelated promotionPolicy keys. Binding changes are recorded in WorkroomActivity. Containment inheritance rejects conflicts, cycles and cross-organization funding.",
+      "fields": [{ "fieldId": "Workroom.promotionPolicy", "resolution": "governed", "reason": "References funding scope without duplicating percentages", "provenance": "BI-0ACB97B5; binding resolver and transaction writer" }]
+    }
+  ]
+}

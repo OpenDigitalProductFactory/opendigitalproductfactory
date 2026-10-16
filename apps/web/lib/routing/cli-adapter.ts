@@ -681,6 +681,17 @@ export const cliAdapter: ExecutionAdapterHandler = {
         usage: parsed.usage,
         inferenceMs,
       };
+    } catch (error) {
+      // Quota is an account observation, not proof that native tool effects settled.
+      // Use only the validated terminal envelope, never raw output or a reset guess.
+      const terminal = error instanceof NativeCliExecutionUncertainError ? error.diagnostics?.terminalResult : undefined;
+      if (terminal?.type === "result" && terminal.status === "error" && terminal.isError === true && terminal.hint === "quota") {
+        try {
+          await recordCliRateLimit("claude-cli", providerId,
+            "The native CLI reported a usage limit; its reset time is unknown.", poolIdentity);
+        } catch { /* Persistence must never replace the original execution hold. */ }
+      }
+      throw error;
     } finally {
       // Clean up temp files (fire-and-forget). The mcp-config file carries the
       // short-lived JWT; even though it's already 5-minute capped, we wipe it

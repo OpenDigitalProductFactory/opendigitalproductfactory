@@ -223,6 +223,8 @@ test("real repository identity changes on metadata, main, plan, environment and 
   const first = identifyGuardExecution(input);
   assert.ok(first, "the real pinned pnpm/Git environment must be identifiable");
   assert.deepEqual(identifyGuardExecution(input), first);
+  assert.deepEqual(identifyGuardExecution({ ...input, env: { ...input.env, CODEX_TOOL_CALL_ID: "another-observability-call" } }), first,
+    "a per-call tracing identifier does not change executed guard inputs");
   assert.notDeepEqual(identifyGuardExecution({ ...input, plan: ["other-command"] }), first);
   assert.notDeepEqual(identifyGuardExecution({ ...input, env: { ...input.env, CI: "receipt-fixture" } }), first);
   git(["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "--allow-empty", "-m", "metadata"]);

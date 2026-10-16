@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { prisma, type Prisma } from "@dpf/db";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
-import { humanApprovalForExecution } from "@/lib/coworker/human-approved-execution";
+import { humanApprovalForConsumption, humanApprovalForExecution } from "@/lib/coworker/human-approved-execution";
 import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
 import { loadEnvironmentClassResolution } from "@/lib/install/environment-class";
 import { loadInstallationOperatingIntent } from "@/lib/installation-journey/operating-intent";
@@ -104,7 +104,7 @@ export async function recordSemanticReviewExemption(params: Record<string, unkno
     || !can(context.userContext, "manage_platform")) return refuse("An authenticated platform operator must authorize this exception.");
   if (!nonempty(context.agentId)) return refuse("The canonical waiver requires an operator-approved delegated call.");
   const approval = await humanApprovalForExecution({ envelopeId: context.approvedAuthorityEnvelopeId,
-    toolName: "record_semantic_review_exemption", userId, agentId: context.agentId, params });
+    toolName: "record_semantic_review_exemption", userId, agentId: context.agentId, params, requiredApproverCapability: "manage_platform" });
   if (approval?.userId !== userId) return refuse("The delegate needs the existing verified operator approval for this exact exception.");
   if (!validIdentity(params) || !await isEngineeringDevelopment()) return refuse("Exceptions require a current source identity, expiry within 24 hours, and the development/evolve-dpf installation.");
   const room = await prisma.workroom.findUnique({ where: { capsuleId: String(params.capsuleId) } });
@@ -118,7 +118,8 @@ export async function recordSemanticReviewExemption(params: Record<string, unkno
   if (finalRoom?.headSha !== room.headSha || finalRoom.repositoryFullName !== room.repositoryFullName) return refuse("Workroom identity changed while authorizing the exception.");
   const details = { ...value, ...bindings, schemaVersion: SEMANTIC_REVIEW_EXEMPTION_SCHEMA_VERSION,
     policyVersion: CHANGE_REVIEW_POLICY_VERSION, sourceRepository: room.repositoryFullName, sourceBranch: room.headBranch,
-    approvedByUserId: userId, authorityEnvelopeId: approval?.envelopeId ?? null, authorityInputFingerprint: fingerprintCoworkerInput(params),
+    approvedByUserId: userId, approvalDeciderUserId: approval.approverUserId, approvalOnBehalfOfUserId: approval.onBehalfOf,
+    authorityEnvelopeId: approval.envelopeId, authorityInputFingerprint: fingerprintCoworkerInput(params),
     issuedAt: new Date().toISOString(), nativeReview: "UNRUN" };
   const record = await recordExternalEvidence({ actorUserId: userId, recordedByAgentId: context.agentId,
     routeContext: "change-review", operationType, target: room.capsuleId, provider: "dpf-change-review", workCapsuleId: room.id,
@@ -141,15 +142,14 @@ export async function resolveWorkroomReviewExemption(capsuleId: string, roomId: 
       || value.sourceExecutorRef !== room.executorRef || value.independentReview !== "UNVERIFIED"
       || !nonempty(value.approvedByUserId) || !nonempty(value.requestingAgentId) || !nonempty(value.authorityEnvelopeId)) return null;
     if (value.requestingAgentId) {
-      const approval = await prisma.coworkerActionEnvelope.findUnique({ where: { id: String(value.authorityEnvelopeId) } });
       const approvedInput = Object.fromEntries(inputKeys.map(key => [key, value[key]]));
-      const marker = approval && isRecord(approval.argsJson) && isRecord(approval.argsJson.humanApproval) ? approval.argsJson.humanApproval : null;
-      if (!approval || !["approved", "executed"].includes(approval.status) || approval.delegatingUserId !== value.approvedByUserId
-        || approval.coworkerAgentId !== value.requestingAgentId || approval.manifestActionId !== "record_semantic_review_exemption"
-        || (approval.status === "approved" && !approval.resolvedAt) || marker?.userId !== value.approvedByUserId
-        || typeof marker.approvedAt !== "string" || !(Date.parse(marker.approvedAt) <= Date.now())
-        || approval.inputFingerprint !== value.authorityInputFingerprint
-        || approval.inputFingerprint !== fingerprintCoworkerInput(approvedInput)) return null;
+      const approval = await humanApprovalForConsumption({ envelopeId: String(value.authorityEnvelopeId),
+        toolName: "record_semantic_review_exemption", userId: String(value.approvedByUserId),
+        agentId: String(value.requestingAgentId), params: approvedInput, requiredApproverCapability: "manage_platform" });
+      if (!approval || approval.inputFingerprint !== value.authorityInputFingerprint) return null;
+      if ("approvalDeciderUserId" in value || "approvalOnBehalfOfUserId" in value) {
+        if (value.approvalDeciderUserId !== approval.approverUserId || value.approvalOnBehalfOfUserId !== approval.onBehalfOf) return null;
+      } else if (approval.approverUserId !== value.approvedByUserId || approval.onBehalfOf !== null) return null;
     }
     const bindings = await resolveBindings(value, roomId);
     if (!bindings || bindings.bindingDigest !== value.bindingDigest || bindings.assessmentRecordedByAgentId !== value.assessmentRecordedByAgentId) return null;

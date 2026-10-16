@@ -89,7 +89,7 @@ test("publication scans existing slot records without executing the gate", () =>
   const records = readPublicationGateRecords({ rootClone: "D:/repo", gitCommonDir: "D:/repo/.git", candidateGitDir: "D:/repo/.git/worktrees/example" }, path => {
     paths.push(path);
     return path.includes("metadata") ? publicationProof()[0].metadata : publicationProof()[0].state;
-  });
+  }, () => ({ ok: false }));
   assert.ok(records.length > 0);
   assert.equal(paths.length, records.length * 2);
   assert.ok(paths.some(path => path.includes("worktrees")));

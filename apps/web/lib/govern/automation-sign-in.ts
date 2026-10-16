@@ -40,9 +40,9 @@ import {
 } from "@/lib/install/environment-class";
 import { isRecord } from "@/lib/shared/coerce";
 import type { FixtureActor, FixtureRequest } from "./automation-fixture";
+import { AUTOMATION_PERSONA_EMAIL, AUTOMATION_PERSONA_DISPLAY_NAME } from "./automation-persona-identity";
 
-export const AUTOMATION_PERSONA_EMAIL = "automation@dpf.local";
-export const AUTOMATION_PERSONA_DISPLAY_NAME = "Platform automation";
+export { AUTOMATION_PERSONA_EMAIL, AUTOMATION_PERSONA_DISPLAY_NAME } from "./automation-persona-identity";
 export const AUTOMATION_SIGN_IN_PATH = "/api/automation/sign-in";
 export const AUTOMATION_SIGN_IN_GRANT_KEY = "automation.signIn.enabled";
 export const AUTOMATION_SIGN_IN_CONSUMED_KEY = "automation.signIn.consumed";

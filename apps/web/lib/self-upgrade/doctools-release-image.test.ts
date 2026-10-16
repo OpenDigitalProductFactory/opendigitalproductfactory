@@ -310,6 +310,55 @@ describe("reconcileReleaseDoctoolsImage on a customizable, source-built install 
     expect(await reconcileReleaseDoctoolsImage(h.deps)).toEqual({ outcome: "built-locally", image: LOCAL_ID });
   });
 
+  // BI-660D77EC: the nearest tag may never have published dpf-doctools. Fall
+  // back to an ancestor that did, and do not build, before giving up.
+  it("uses the nearest ancestor release that published dpf-doctools", async () => {
+    const ancestor = "v2026.09.18-prior.1";
+    const h = sourceHarness({
+      docker: (args) => {
+        const ref = args.find((arg) => String(arg).includes("dpf-doctools:"));
+        if (inspectTag(args) && ref?.endsWith(LINEAGE_TAG)) return { exitCode: 1, stderr: "ERROR: manifest unknown" };
+        if (inspectTag(args) && ref?.endsWith(ancestor)) return { exitCode: 0, stdout: manifestJson(DIGEST) };
+        if (present(args)) return { exitCode: 1, stderr: "No such image" };
+        return { exitCode: 0 };
+      },
+    });
+    h.deps.ancestorReleaseTags = async () => [ancestor];
+    expect(await reconcileReleaseDoctoolsImage(h.deps)).toEqual({ outcome: "resolved", image: LINEAGE_PINNED, pulled: true });
+    expect(h.builds).toEqual([]);
+    expect(h.stored()?.releaseTag).toBe(ancestor);
+    expect(h.stored()?.origin).toBe("published");
+  });
+
+  it("stops the ancestor walk when the registry becomes unavailable", async () => {
+    const ancestor = "v2026.09.18-prior.1";
+    const later = "v2026.09.11-older.1";
+    const seen: string[] = [];
+    const h = sourceHarness({
+      docker: (args) => {
+        const ref = args.find((arg) => String(arg).includes("dpf-doctools:")) ?? "";
+        seen.push(ref);
+        if (ref.endsWith(ancestor)) return { exitCode: 1, stderr: "dial tcp: lookup ghcr.io: no such host" };
+        return { exitCode: 1, stderr: "ERROR: manifest unknown" };
+      },
+    });
+    h.deps.ancestorReleaseTags = async () => [ancestor, later];
+    expect(await reconcileReleaseDoctoolsImage(h.deps)).toMatchObject({ outcome: "unavailable" });
+    expect(h.builds).toEqual([]);
+    expect(seen.some((ref) => ref.endsWith(later))).toBe(false);
+  });
+
+  it("does not walk ancestors when the tip registry check is unavailable", async () => {
+    let walked = false;
+    const h = sourceHarness({ docker: () => ({ exitCode: 1, stderr: "dial tcp: lookup ghcr.io: no such host" }) });
+    h.deps.ancestorReleaseTags = async () => {
+      walked = true;
+      return ["v2026.09.18-prior.1"];
+    };
+    expect(await reconcileReleaseDoctoolsImage(h.deps)).toEqual({ outcome: "built-locally", image: LOCAL_ID });
+    expect(walked).toBe(false);
+  });
+
   it("a failed local build leaves conversion off without throwing, and keeps no stale pin", async () => {
     const h = sourceHarness({
       docker: () => ({ exitCode: 1, stderr: "i/o timeout" }),
