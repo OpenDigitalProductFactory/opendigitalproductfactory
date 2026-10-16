@@ -60,6 +60,28 @@ BI-0169B7D7 and BI-A472354E own broader routing/profile work, outside this runne
 
 ## Ordered work
 
+Declared implementation paths: apps/web/lib/routing/tool-fidelity-harness.ts,
+apps/web/lib/routing/tool-fidelity-harness.test.ts,
+apps/web/lib/routing/tool-fidelity-runner.ts,
+apps/web/lib/routing/tool-fidelity-runner.test.ts,
+apps/web/lib/mcp/packs/build-ops-pack.ts,
+apps/web/lib/mcp/packs/build-ops-pack.test.ts,
+apps/web/lib/mcp-governed-execute.ts,
+apps/web/lib/mcp-governed-execute-types.ts,
+apps/web/lib/coworker/authorized-surface-execution-types.ts and
+apps/web/lib/mcp-governed-execute-audit-identity.test.ts.
+The shared executor may expose its actual persisted audit row ID additively;
+it must never accept a caller-supplied ID or manufacture one after audit failure.
+The optional ID alone is not success: readback still validates the matching
+terminal read, actor and invocation. Pre-execution refusals cannot qualify.
+Keep existing scorer and normal diagnostics backward compatible.
+
+Impact contract: normal source claims resolved. Resolve graph-linked tests for
+all six implementation/type entries before RED; if the graph is unavailable,
+use colocated tests and the full matching executor/pack/fidelity test families.
+Run the style drift guard and check capability-completeness/doc-index derived
+artifacts. Missing graph advice expands verification, not authority.
+
 1. **Admission and test contract.** Before source implementation, reconcile
    current workroom/source, research, body acceptance and immutable plan coverage.
    CWN-63C5BE75 is a historical misclassification, not a grant dependency.
