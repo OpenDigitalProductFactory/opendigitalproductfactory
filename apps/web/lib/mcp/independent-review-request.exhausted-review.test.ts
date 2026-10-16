@@ -32,7 +32,6 @@ import { resolveInitiativeReviewerRecovery } from "@/lib/tak/initiative-readines
 import { createExhaustedPlanReviewPredicate } from "@/lib/backlog/initiative-readiness/exhausted-plan-review";
 import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
 import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness/types";
-import { designPhaseReviewDecision } from "@/lib/backlog/initiative-readiness/design-phase-recovery";
 
 const binding: InitiativeReviewBinding = { writerToolName: "record_initiative_post_implementation_review", itemId: "BI-TEST", gate: "post-implementation-review",
   expectedCurrentBaselineId: null,
