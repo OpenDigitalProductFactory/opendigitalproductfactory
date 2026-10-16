@@ -8,8 +8,9 @@ import { evaluateReadiness, buildGatePlan } from "./pr-readiness/core.mjs";
 import { evaluatePrHealth } from "./pr-health.mjs";
 import { evaluateGateRecord, evaluateGateVerdict, decide } from "../packages/dpf-skill-pack/hooks/pregate-evidence-guard.mjs";
 import { correctionPlanDigest, classifyPublishedCorrection } from "../packages/dpf-skill-pack/hooks/lib/published-correction.mjs";
-import { verifyPublishedCorrection, chooseInitialAnchor, buildCorrectionCommands, qualifyCorrectionExecution, correctionReceiptPath, inspectCorrectionRecord, readPublishedContext } from "./published-correction.mjs";
+import { verifyPublishedCorrection, chooseInitialAnchor, buildCorrectionCommands, qualifyCorrectionExecution, correctionReceiptPath, inspectCorrectionRecord, readPublishedContext, execute } from "./published-correction.mjs";
 import { guardShellEnv } from "./lib/guard-bash.mjs";
+import { guardGitEnv } from "./lib/git-hook-env.mjs";
 import { readPublicationGateRecords } from "./pr-readiness.mjs";
 
 const now = Date.parse("2026-10-16T05:30:00Z");
@@ -18,6 +19,14 @@ const original = "b".repeat(40);
 const branch = "fix/example-correction";
 const repositoryFullName = "example/platform";
 const reason = "published-correction: affected checks executed; integration delegated to protected GitHub";
+
+test("actual correction children cannot inherit the pushing Git repository location", () => {
+  const result = execute("node", ["--input-type=module", "-e",
+    "import assert from 'node:assert/strict'; for(const key of ['GIT_DIR','GIT_WORK_TREE','GIT_INDEX_FILE']) assert.equal(process.env[key],undefined,key); console.log('isolated');"],
+  { env: { ...process.env, GIT_DIR: "/parent/repository", GIT_WORK_TREE: "/parent/tree", GIT_INDEX_FILE: "/parent/index" } });
+  assert.equal(result.exitCode, 0, result.output);
+  assert.match(result.stdout, /isolated/);
+});
 
 test("GitHub context lookup supplies the actual branch with an explicit origin repository", () => {
   const cwd = mkdtempSync(join(tmpdir(), "correction-context-"));
@@ -204,7 +213,7 @@ test("published readiness refreshes metadata guards while delegating broad sourc
 
 function gitFixture() {
   const cwd = mkdtempSync(join(tmpdir(), "dpf-published-correction-git-"));
-  const git = (...args) => execFileSync("git", args, { cwd, encoding: "utf8", windowsHide: true }).trim();
+  const git = (...args) => execFileSync("git", args, { cwd, env: guardGitEnv(), encoding: "utf8", windowsHide: true }).trim();
   git("init", "--quiet", "-b", "main");
   git("config", "core.autocrlf", "false");
   git("config", "user.name", "Fixture Author"); git("config", "user.email", "fixture@example.invalid");

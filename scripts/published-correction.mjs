@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { gitText } from "./lib/git.mjs";
 import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
 import { guardShellEnv } from "./lib/guard-bash.mjs";
+import { guardGitEnv } from "./lib/git-hook-env.mjs";
 import { createStageReceiptWriter, readStageReceipt, stageIdentityMatches } from "./lib/local-ci-stage-receipt.mjs";
 import { guardReceiptDirectory, identifyGuardExecution } from "./lib/pregate-preflight-receipt.mjs";
 import { createEvidencePlan, loadEvidencePolicy } from "./lib/ci-evidence-plan.mjs";
@@ -27,9 +28,9 @@ export function readCorrectionRecord(cwd = process.cwd(), candidateGitDir = null
   } catch { return null; }
 }
 
-function execute(command, args, { cwd = process.cwd(), env = process.env, timeout = 30_000 } = {}) {
+export function execute(command, args, { cwd = process.cwd(), env = process.env, timeout = 30_000 } = {}) {
   const invocation = resolveHostCommandInvocation(command, args, { env });
-  const childEnv = { ...guardShellEnv(env) };
+  const childEnv = guardGitEnv(guardShellEnv(env));
   // This is a separate execution, including when its adapter is tested under
   // node:test. Inheriting this private parent marker makes Node skip the child.
   delete childEnv.NODE_TEST_CONTEXT;
