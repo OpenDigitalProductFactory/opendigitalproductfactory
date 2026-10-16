@@ -513,6 +513,20 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
     if (!await canReadRecoveryPacket({ gate: requestedGate, recovery, currentAgentId, currentUserId })) {
       return { success: false, error: "workroom_data_access_required", message: "The current connection cannot read this Workroom's review packet. Follow the existing room admission remedy; item visibility grants no additional access." };
     }
+    if (recovery && currentUserId && currentAgentId && context?.authSource === "oauth") {
+      const { issueOriginalReviewRecoveryTarget } = await import("@/lib/mcp-task-review-recovery");
+      const key = taskAuthority?.taskAuthorityKey ?? (context.apiTokenId ? await (await import("@/lib/auth/oauth-task-authority"))
+        .resolveMcpTaskAuthorityKey({ tokenId: context.apiTokenId, userId: currentUserId, source: "oauth" }) : null);
+      if (!key) return { success: false, error: "review_task_authority_unavailable", message: "The current connection's review task authority could not be verified. No request was delivered." };
+      for (const route of recovery.reviewerRoutes.filter(route => route.gate === requestedGate && route.independent)) {
+        const issued = await issueOriginalReviewRecoveryTarget({ packet: route.requestCoworker,
+          userId: currentUserId, actingAgentId: currentAgentId, taskAuthorityKey: key });
+        if (issued.kind === "refused") return { success: false, error: "original_review_recovery_required",
+          message: "The existing review needs reconciliation before any new dispatch. No replacement request was delivered.",
+          data: { reason: issued.reason, itemId: item.itemId, recoveryGate: requestedGate } };
+        if (issued.kind === "target") route.requestCoworker = { ...route.requestCoworker, ...{ reviewRecovery: issued.target } };
+      }
+    }
     return boundedBacklogRecoveryRead({ itemId: item.itemId, status: item.status, workShape: boundWorkShape, gate: requestedGate, recovery });
   }
   return {

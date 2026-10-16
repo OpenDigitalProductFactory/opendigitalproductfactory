@@ -17,6 +17,7 @@ export type ExternalCoworkerTaskInput = {
   title?: string;
   requiredToolNames?: unknown;
   initiativeReviewBinding?: unknown;
+  reviewRecovery?: unknown;
   userId: string;
   context?: ToolExecutionContext;
 };
@@ -168,6 +169,7 @@ export async function dispatchExternalCoworkerTask(input: ExternalCoworkerTaskIn
         authorityScope: reviewPacket?.authorityScope ?? input.context?.tokenGrantScopes ?? [],
         ...(reviewPacket ? { initiativeReviewBinding: reviewPacket.binding } : {}),
         collaborationKind: input.collaborationKind,
+        ...(input.reviewRecovery !== undefined ? { reviewRecovery: input.reviewRecovery } : {}),
       },
     });
   } catch (error) {

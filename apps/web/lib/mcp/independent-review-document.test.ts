@@ -1,3 +1,4 @@
+vi.mock("@/lib/mcp-task-review-recovery", () => ({ issueOriginalReviewRecoveryTarget: async () => ({ kind: "none" }) }));
 import { beforeEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ agent: vi.fn(), token: vi.fn(), room: vi.fn(), human: vi.fn(),
   consent: vi.fn(), access: vi.fn(), item: vi.fn(), recovery: vi.fn(), task: vi.fn(), source: vi.fn(), outcome: vi.fn() }));
