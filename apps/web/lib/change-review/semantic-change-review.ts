@@ -8,7 +8,7 @@
  */
 
 import { z } from "zod";
-import { readRoutingEligibility, type RoutingEligibility } from "../inference/routing-exclusion-buckets";
+import { readRoutingEligibility, type RoutingEligibility } from "../inference/routing-exclusion-buckets.ts";
 import type { DeliberationArtifactType } from "../deliberation/external-review-activation";
 
 export const LEGACY_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION = "semantic-change-review-receipt.v2";
