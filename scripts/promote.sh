@@ -997,6 +997,37 @@ if [[ $_dry_run -eq 0 ]]; then
     "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
     -c 'cd /app && pnpm --filter @dpf/db exec prisma migrate resolve --rolled-back 20260714110000_bet5_pgvector_foundation' >/dev/null 2>&1 || true
 
+  # BI-BF20F828: the immutable activity hardening migration can hit the
+  # existing append-only work-intent trigger. Its exact checker proves the
+  # predecessor schema and reproduces that failure in an always-rolled-back
+  # transaction, including when Prisma could not persist the first error.
+  # Run this before the older classifiers, which refuse unrelated failures.
+  _workroom_activity_recovery="$(
+    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+      "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
+      -c 'cd /app && node packages/db/scripts/recover-workroom-activity-migration.mjs'
+  )" || {
+    printf 'error: workroom activity migration recovery did not prove a safe state\n' >&2
+    exit 1
+  }
+  case "$_workroom_activity_recovery" in
+    recover:*)
+      _workroom_activity_migration_id="${_workroom_activity_recovery#recover:}"
+      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+        "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
+        -c 'cd /app && pnpm --filter @dpf/db exec prisma migrate resolve --rolled-back 20261014012000_workroom_activity_ingestion_hardening'
+      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+        "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
+        -c 'cd /app && node packages/db/scripts/recover-workroom-activity-migration.mjs --verify-rolled-back "$1"' \
+        sh "$_workroom_activity_migration_id"
+      ;;
+    not-needed) ;;
+    *)
+      printf 'error: workroom activity migration recovery returned an unknown decision\n' >&2
+      exit 1
+      ;;
+  esac
+
   # BI-2BD99239: a pre-fix upgrade can leave the human-principal backfill
   # failed at zero steps on the PrincipalAlias uniqueness collision. The
   # candidate-owned checker proves the exact migration bytes, SQLSTATE,

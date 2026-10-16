@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  item: vi.fn(), readiness: vi.fn(), recovery: vi.fn(), history: vi.fn(), authority: vi.fn(),
+  item: vi.fn(), readiness: vi.fn(), recovery: vi.fn(), history: vi.fn(), historyMany: vi.fn(), authority: vi.fn(),
   access: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({ prisma: {
@@ -13,7 +13,7 @@ vi.mock("@dpf/db", () => ({ prisma: {
     toolGrants: [{ grantKey: "initiative_evidence_write" }] }) },
   mcpApiToken: { findUnique: vi.fn().mockResolvedValue({ userId: "human", agentId: "AGT-AUTHOR",
     authorityBindingId: "consent", oauthClient: { registrationKind: "dynamic" } }) },
-  taskRun: { findFirst: mocks.history },
+  taskRun: { findFirst: mocks.history, findMany: mocks.historyMany },
 } }));
 vi.mock("@/lib/backlog/spec-plan-search", () => ({
   searchSpecsAndPlans: vi.fn().mockResolvedValue({ corpus: {}, results: [] }), specPlanCorpusCaveat: () => null,
@@ -60,6 +60,7 @@ const gates = [
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.history.mockResolvedValue(null);
+  mocks.historyMany.mockResolvedValue([]);
   mocks.authority.mockResolvedValue(authority.taskAuthorityKey);
   mocks.access.mockImplementation(async ({ requested }) => ({ decision: { level: requested } }));
   mocks.item.mockResolvedValue({ id: "item-row", itemId: "BI-ROUNDTRIP", title: "Current review", status: "open",
@@ -98,6 +99,11 @@ describe("bounded recovery packet round trip", () => {
     const read = await getBacklogItem({ itemId: "BI-ROUNDTRIP", recoveryGate: gate[0], taskAuthorityKey: "client-forgery" }, "AGT-AUTHOR", "human", context);
     expect(read.success, JSON.stringify(read)).toBe(true);
     const packet = packetFrom(read);
+    expect(mocks.historyMany).toHaveBeenCalledWith(expect.objectContaining({ where: {
+      userId: "human", status: { notIn: ["completed", "canceled", "rejected", "archived"] },
+      AND: [{ a2aMetadata: { path: ["idempotencyKey"], equals: packet.requestKey } },
+        { a2aMetadata: { path: ["tokenSource"], equals: "oauth" } }],
+    } }));
     expect(await authorizeCoworkerRequest(packet, "human", context)).toEqual({ bounded: true });
     expect(mocks.authority).toHaveBeenCalledWith({ tokenId: "access", userId: "human", source: "oauth" });
     expect((await authorizeCoworkerRequest({ ...packet, requestKey: `${packet.requestKey}:changed` }, "human", context)).refusal).toBeDefined();
@@ -107,14 +113,15 @@ describe("bounded recovery packet round trip", () => {
     expect(revoked.data ?? {}).not.toHaveProperty("recovery");
   });
 
-  it("retains an owned uncertain legacy design task instead of inventing a new request", async () => {
+  it.each([false, true])("retains an owned uncertain legacy design task (OAuth metadata: %s)", async (hasOAuthMetadata) => {
     const { issue } = prepare(gates[0]);
     const old = (await issue(null)).reviewerRoutes[0]!.requestCoworker;
     const taskRunId = deterministicExternalTaskRunId(authority.taskAuthorityKey, old.requestKey);
     const authorityScope = ["initiative_evidence_write", "backlog-item:BI-ROUNDTRIP", ...old.requiredToolNames!.map(name => `tool:${name}`)];
-    mocks.history.mockImplementation(async ({ where }) => where.taskRunId === taskRunId ? {
+    const row = {
       taskRunId, userId: "human", currentAgentId: old.targetAgent, status: "input-required", authorityScope,
       a2aMetadata: { taskAuthorityKey: authority.taskAuthorityKey, idempotencyKey: old.requestKey, requestedAgentId: old.targetAgent,
+        ...(hasOAuthMetadata ? { tokenSource: "oauth", apiTokenId: "access" } : {}),
         requestDigestVersion: 2, requestDigest: remoteTaskRequestDigest({ agentId: old.targetAgent, routeContext: "/build",
           title: old.questionPacketSummary, objective: old.objective, prompt: old.objective, idempotencyKey: old.requestKey,
           riskClass: "bounded-write", authorityScope, collaborationKind: "handoff", initiativeReviewBinding: old.initiativeReviewBinding }) },
@@ -124,10 +131,22 @@ describe("bounded recovery packet round trip", () => {
           writerToolName: "record_initiative_design_review", resumeMode: "same-taskrun",
           dispatchContract: "required-tool-call", attempt: 3, observedAt: "2026-10-16T00:00:00Z" },
       },
-    } : null);
+    };
+    mocks.history.mockImplementation(async ({ where }) =>
+      where.taskRunId === taskRunId && where.userId === row.userId ? row : null);
+    mocks.historyMany.mockImplementation(async ({ where }) => {
+      const key = where.AND.find((entry: { a2aMetadata: { path: string[] } }) =>
+        entry.a2aMetadata.path[0] === "idempotencyKey")?.a2aMetadata.equals;
+      const source = where.AND.find((entry: { a2aMetadata: { path: string[] } }) =>
+        entry.a2aMetadata.path[0] === "tokenSource")?.a2aMetadata.equals;
+      return where.userId === row.userId && !where.status.notIn.includes(row.status)
+        && key === row.a2aMetadata.idempotencyKey && source === row.a2aMetadata.tokenSource ? [row] : [];
+    });
     const read = await getBacklogItem({ itemId: "BI-ROUNDTRIP", recoveryGate: "design-spec" }, "AGT-AUTHOR", "human", context);
     expect(read.success).toBe(true);
     expect(packetFrom(read)).toEqual(old);
+    await expect(mocks.historyMany.mock.results[0]!.value).resolves.toEqual(hasOAuthMetadata ? [row] : []);
+    expect(packetFrom(read)).not.toHaveProperty("reviewRecovery");
     expect(await authorizeCoworkerRequest(old, "human", context)).toEqual({ bounded: true });
   });
 });
