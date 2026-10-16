@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync, rmSync, mkdirSync, readFileSync, existsSync
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 import { evaluateReadiness, buildGatePlan } from "./pr-readiness/core.mjs";
 import { evaluatePrHealth } from "./pr-health.mjs";
 import { evaluateGateRecord, evaluateGateVerdict, decide } from "../packages/dpf-skill-pack/hooks/pregate-evidence-guard.mjs";
@@ -306,15 +307,101 @@ test("dirty source appearing during an affected command cannot publish reusable 
   } finally { fixture.remove(); }
 });
 
+function vitestResult(command, report) {
+  const testReport = JSON.stringify(report);
+  const path = join(tmpdir(), "dpf-correction-synthetic", "report.json");
+  return { exitCode: 0, outcome: null, stdout: "launcher notices", testReport,
+    report: { format: "vitest-json-file", path, command: command.command,
+      args: [...command.args, "--outputFile", path], bytes: Buffer.byteLength(testReport),
+      sha256: createHash("sha256").update(testReport).digest("hex") } };
+}
+const completeVitestReport = { numTotalTests: 1, numPassedTests: 1,
+  numFailedTests: 0, numPendingTests: 0, numTodoTests: 0, success: true };
+
 test("exit zero without an executed complete test report is not affected verification", () => {
   const node = { command: "node", args: ["--test", "--test-reporter=tap", "fixture.test.mjs"] };
   assert.equal(qualifyCorrectionExecution(node, { exitCode: 0, stdout: "no tests executed" }).outcome, "test-report-unproven");
   assert.equal(qualifyCorrectionExecution(node, { exitCode: 0, stdout: "# tests 2\n# pass 1\n# fail 0\n# skipped 1\n# cancelled 0\n# todo 0\n" }).outcome, "test-report-incomplete");
   const vitest = { command: "pnpm", args: ["exec", "vitest", "run", "fixture.test.ts", "--reporter=json"] };
-  const report = { numTotalTests: 2, numPassedTests: 1, numFailedTests: 0, numPendingTests: 1, success: true };
-  assert.equal(qualifyCorrectionExecution(vitest, { exitCode: 0, stdout: JSON.stringify(report) }).outcome, "test-report-incomplete");
+  const report = { ...completeVitestReport, numTotalTests: 2, numPassedTests: 1, numPendingTests: 1 };
+  assert.equal(qualifyCorrectionExecution(vitest, vitestResult(vitest, report)).outcome, "test-report-incomplete");
   report.numPassedTests = 2; report.numPendingTests = 0;
-  assert.equal(qualifyCorrectionExecution(vitest, { exitCode: 0, stdout: JSON.stringify(report) }).outcome, undefined);
+  assert.equal(qualifyCorrectionExecution(vitest, vitestResult(vitest, report)).outcome, null);
+  assert.equal(qualifyCorrectionExecution(vitest, { exitCode: 0, stdout: JSON.stringify(report) }).outcome, "test-report-unproven");
+});
+
+test("real Vitest file output qualifies despite launcher noise and an old project report", { timeout: 60_000 }, () => {
+  const cwd = process.cwd();
+  const fixture = mkdtempSync(join(tmpdir(), "correction-vitest fixture-"));
+  try {
+    const config = join(fixture, "vitest.config.mjs");
+    const file = join(fixture, "report.test.mjs");
+    const oldPath = join(fixture, "old-output.json");
+    const stale = JSON.stringify({ ...completeVitestReport, numTotalTests: 999, numPassedTests: 999 });
+    writeFileSync(oldPath, stale);
+    writeFileSync(config, `console.log('launcher reporter preamble'); export default { test: { root: ${JSON.stringify(fixture)}, globals: true, include: ['*.test.mjs'], outputFile: { json: ${JSON.stringify(oldPath)} } } };`);
+    writeFileSync(file, "test('executes the actual Vitest runner', () => expect(2 + 2).toBe(4));\n");
+    const command = { command: "pnpm", args: ["--filter", "web", "exec", "vitest", "run", file,
+      "--config", config, "--maxWorkers=1", "--reporter=json"] };
+    const result = execute(command.command, command.args, { cwd, timeout: 45_000 });
+    assert.equal(result.exitCode, 0, result.output);
+    assert.match(result.stdout, /launcher reporter preamble/);
+    const qualified = qualifyCorrectionExecution(command, result);
+    assert.equal(qualified.outcome, null, qualified.output);
+    assert.equal(JSON.parse(result.testReport).numPassedTests, 1);
+    assert.deepEqual(result.report.args, [...command.args, "--outputFile", result.report.path]);
+    assert.equal(readFileSync(oldPath, "utf8"), stale, "the project-default report must not be consumed or overwritten");
+    assert.equal(existsSync(result.report.path), false, "only the fresh adapter-owned report is cleaned up");
+  } finally { rmSync(fixture, { recursive: true, force: true }); }
+});
+
+test("Vitest evidence binds the exact invocation and report bytes", () => {
+  const command = { command: "pnpm", args: ["exec", "vitest", "run", "fixture.test.ts", "--reporter=json"] };
+  for (const change of [
+    result => { result.report.command = "other"; },
+    result => { result.report.args = ["vitest", "run", "foreign.test.ts"]; },
+    result => { result.report.sha256 = "0".repeat(64); },
+    result => { result.report.bytes += 1; },
+  ]) {
+    const result = vitestResult(command, completeVitestReport); change(result);
+    assert.equal(qualifyCorrectionExecution(command, result).outcome, "test-report-unproven");
+  }
+  for (const change of [{ numTodoTests: 1 }, { numPassedTests: "1", numTotalTests: "1" }]) {
+    assert.equal(qualifyCorrectionExecution(command, vitestResult(command, { ...completeVitestReport, ...change })).outcome,
+      "test-report-incomplete");
+  }
+});
+
+test("Vitest cannot borrow stdout success when its fresh report is absent, malformed or oversized", () => {
+  for (const mode of ["absent", "malformed", "oversized"]) {
+    const script = `import { writeFileSync, openSync, ftruncateSync, closeSync } from 'node:fs';
+      const index = process.argv.indexOf('--outputFile');
+      const path = index < 0 ? null : process.argv[index + 1];
+      console.log(${JSON.stringify(JSON.stringify(completeVitestReport))});
+      if (path && ${JSON.stringify(mode)} === 'malformed') writeFileSync(path, '{');
+      if (path && ${JSON.stringify(mode)} === 'oversized') { const fd = openSync(path, 'w'); ftruncateSync(fd, 32 * 1024 * 1024 + 1); closeSync(fd); }`;
+    const command = { command: "node", args: ["--input-type=module", "-e", script, "--", "vitest", "--reporter=json"] };
+    const result = execute(command.command, command.args);
+    assert.equal(result.exitCode, 0, result.output);
+    assert.equal(qualifyCorrectionExecution(command, result).outcome, "test-report-unproven", mode);
+  }
+});
+
+test("a complete Vitest file cannot overrule a failed or interrupted child", () => {
+  for (const mode of ["failed", "timeout"]) {
+    const script = `import { writeFileSync } from 'node:fs';
+      const path = process.argv[process.argv.indexOf('--outputFile') + 1];
+      writeFileSync(path, ${JSON.stringify(JSON.stringify(completeVitestReport))});
+      if (${JSON.stringify(mode)} === 'failed') process.exit(7);
+      else setInterval(() => {}, 1000);`;
+    const command = { command: "node", args: ["--input-type=module", "-e", script, "--", "vitest", "--reporter=json"] };
+    const result = execute(command.command, command.args, { timeout: 600 });
+    const qualified = qualifyCorrectionExecution(command, result);
+    assert.notEqual(qualified.exitCode, 0);
+    if (mode === "failed") assert.equal(qualified.exitCode, 7);
+    else assert.equal(qualified.outcome, "ETIMEDOUT");
+    assert.equal(existsSync(result.report.path), false);
+  }
 });
 
 test("a recorded arbitrary command list cannot replace the source-derived affected plan", async () => {

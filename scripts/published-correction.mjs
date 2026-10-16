@@ -2,8 +2,10 @@
 // Existing-PR publication policy. No sandbox lease and no integration PASS.
 import { parseArgs } from "node:util";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, mkdtempSync, lstatSync, openSync, fstatSync, readSync, closeSync, unlinkSync, rmdirSync } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { createHash } from "node:crypto";
 import { gitText } from "./lib/git.mjs";
 import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
 import { guardShellEnv } from "./lib/guard-bash.mjs";
@@ -28,16 +30,55 @@ export function readCorrectionRecord(cwd = process.cwd(), candidateGitDir = null
   } catch { return null; }
 }
 
+const MAX_TEST_REPORT_BYTES = 32 * 1024 * 1024;
+const reportDigest = bytes => createHash("sha256").update(bytes).digest("hex");
+function readFreshTestReport(path) {
+  if (!lstatSync(path).isFile()) throw new Error("Report is not a regular file");
+  const fd = openSync(path, "r");
+  try {
+    const initial = fstatSync(fd);
+    if (!initial.isFile() || initial.size <= 0 || initial.size > MAX_TEST_REPORT_BYTES) throw new Error("Report size is unproven");
+    const bytes = Buffer.alloc(initial.size + 1);
+    let length = 0, count;
+    while (length < bytes.length && (count = readSync(fd, bytes, length, bytes.length - length, length)) > 0) length += count;
+    if (length !== initial.size || fstatSync(fd).size !== initial.size) throw new Error("Report changed while reading");
+    return bytes.subarray(0, length);
+  } finally { closeSync(fd); }
+}
+
 export function execute(command, args, { cwd = process.cwd(), env = process.env, timeout = 30_000 } = {}) {
-  const invocation = resolveHostCommandInvocation(command, args, { env });
+  // Vitest 5 writes JSON to a file by default. Never borrow that shared path,
+  // parse a path from stdout, or let launcher notices masquerade as a report.
+  const reportDirectory = args.includes("vitest") ? mkdtempSync(join(tmpdir(), "dpf-correction-vitest-")) : null;
+  const reportPath = reportDirectory ? join(reportDirectory, "report.json") : null;
+  const actualArgs = reportPath ? [...args, "--outputFile", reportPath] : args;
+  const invocation = resolveHostCommandInvocation(command, actualArgs, { env });
   const childEnv = guardGitEnv(guardShellEnv(env));
   // This is a separate execution, including when its adapter is tested under
   // node:test. Inheriting this private parent marker makes Node skip the child.
   delete childEnv.NODE_TEST_CONTEXT;
-  const result = spawnSync(invocation.command, invocation.args, { cwd, env: childEnv,
-    encoding: "utf8", timeout, windowsHide: true, maxBuffer: 32 * 1024 * 1024 });
-  return { exitCode: result.status ?? -1, outcome: result.error?.code ?? result.signal ?? null,
-    stdout: result.stdout ?? "", output: `${result.stdout ?? ""}${result.stderr ?? ""}` };
+  try {
+    const result = spawnSync(invocation.command, invocation.args, { cwd, env: childEnv,
+      encoding: "utf8", timeout, windowsHide: true, maxBuffer: 32 * 1024 * 1024 });
+    const observation = { exitCode: result.status ?? -1, outcome: result.error?.code ?? result.signal ?? null,
+      stdout: result.stdout ?? "", output: `${result.stdout ?? ""}${result.stderr ?? ""}` };
+    if (reportPath) {
+      observation.report = { format: "vitest-json-file", path: reportPath, command, args: actualArgs };
+      try {
+        const bytes = readFreshTestReport(reportPath);
+        observation.testReport = bytes.toString("utf8");
+        Object.assign(observation.report, { bytes: bytes.length, sha256: reportDigest(bytes) });
+        if (observation.exitCode !== 0) observation.output += `\nVitest report: ${observation.testReport.slice(-8000)}`;
+      } catch {
+        if (observation.exitCode === 0 && !observation.outcome) observation.outcome = "test-report-unproven";
+      }
+    }
+    return observation;
+  } finally {
+    // No recursive removal and no deletion of the project's default report.
+    if (reportPath) { try { unlinkSync(reportPath); } catch { /* Missing or invalid child output. */ } }
+    if (reportDirectory) { try { rmdirSync(reportDirectory); } catch { /* Never traverse unexpected child-created entries. */ } }
+  }
 }
 export function qualifyCorrectionExecution(command, result) {
   if (result.exitCode !== 0 || result.outcome) return result;
@@ -50,8 +91,16 @@ export function qualifyCorrectionExecution(command, result) {
   }
   if (command.args.includes("vitest")) {
     try {
-      const report = JSON.parse(String(result.stdout ?? result.output));
-      if (report.numTotalTests <= 0 || report.numFailedTests !== 0 || report.numPendingTests !== 0
+      const evidence = result.report;
+      if (typeof result.testReport !== "string" || evidence?.format !== "vitest-json-file" || !evidence.path
+        || evidence.command !== command.command
+        || JSON.stringify(evidence.args) !== JSON.stringify([...command.args, "--outputFile", evidence.path])
+        || evidence.bytes !== Buffer.byteLength(result.testReport) || evidence.bytes > MAX_TEST_REPORT_BYTES
+        || evidence.sha256 !== reportDigest(result.testReport)) return { ...result, outcome: "test-report-unproven" };
+      const report = JSON.parse(result.testReport);
+      const counts = [report.numTotalTests, report.numPassedTests, report.numFailedTests, report.numPendingTests, report.numTodoTests];
+      if (counts.some(count => !Number.isSafeInteger(count) || count < 0)
+        || report.numTotalTests <= 0 || report.numFailedTests !== 0 || report.numPendingTests !== 0 || report.numTodoTests !== 0
         || report.numPassedTests !== report.numTotalTests || report.success !== true) return { ...result, outcome: "test-report-incomplete" };
     } catch { return { ...result, outcome: "test-report-unproven" }; }
   }
@@ -210,7 +259,7 @@ export async function verifyPublishedCorrection({ cwd = process.cwd(), relatedTe
     writer.start({ integrationStatus: "UNRUN" });
     for (const command of commands) {
       const result = qualifyCorrectionExecution(command, await run(command.command, command.args, { cwd, timeout: 10 * 60_000 }));
-      const { stdout: _stdout, ...observation } = result;
+      const { stdout: _stdout, testReport: _testReport, ...observation } = result;
       results.push({ ...observation, output: String(result.output ?? "").slice(-8000) });
       writer.heartbeat({ command, exitCode: result.exitCode, outcome: result.outcome ?? null });
       if (result.exitCode !== 0 || result.outcome || result.skipped) throw new Error(`Affected check failed or did not run: ${command.command} ${command.args.join(" ")} (${result.outcome ?? result.exitCode})\n${String(result.output ?? "").slice(-1500)}`);
