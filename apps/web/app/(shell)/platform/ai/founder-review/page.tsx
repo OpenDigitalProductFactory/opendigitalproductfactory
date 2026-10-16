@@ -190,7 +190,7 @@ export default async function FounderReviewPage({ searchParams }: PageProps) {
           ))}
         </div>
         <p className="mt-3 text-xs text-[var(--dpf-muted)]">
-          These cards are created when an AI decision is deferred or escalated. Resolved
+          These cards show AI decisions awaiting an owner response. Resolved
           history, blank questions, internal consults, and duplicate asks are hidden here.
         </p>
       </section>
