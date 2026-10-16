@@ -36,6 +36,41 @@ const discoverCanonicalArtifact = vi.fn().mockResolvedValue({
 
 
 describe("claimGovernedBacklogWorkspace", () => {
+  it("uses the actual claim source to discover an amendment despite other subject rooms", async () => {
+    const actual = await vi.importActual<typeof import("@/lib/backlog/initiative-readiness/canonical-artifact-discovery")>(
+      "@/lib/backlog/initiative-readiness/canonical-artifact-discovery");
+    const source = { repositoryFullName: input.repositoryFullName, headBranch: input.headBranch,
+      baseSha: "3".repeat(40), headSha: "1".repeat(40) };
+    const activities = readyActivities().map(activity => activity.kind === "initiative_scope_baseline"
+      ? { ...activity, payload: { ...activity.payload, artifactRef: { kind: "repo-blob-at-commit",
+        repositoryFullName: input.repositoryFullName, commitSha: source.baseSha,
+        path: CANONICAL_DESIGN_PATH, providerBlobId: CANONICAL_BLOB_SHA } } } : activity);
+    const db = database(activities);
+    const lock = vi.fn().mockResolvedValue([]);
+    Object.assign(db, { $queryRaw: lock });
+    const rooms = [{ ...source, capsuleId: "WC-ENTRY" },
+      { ...source, capsuleId: "WC-OTHER", headBranch: "feat/other" }];
+    vi.mocked(db.workroom.findMany).mockImplementation(async query => {
+      const { where } = query as { where: Record<string, unknown> };
+      return rooms.filter(room =>
+      ["repositoryFullName", "headBranch", "baseSha", "headSha"].every(key =>
+        where[key] === undefined || where[key] === room[key as keyof typeof room])) as never;
+    });
+    const readCurrentArtifact = vi.fn().mockResolvedValue({ state: "verified", digest: "sha256:new-design" });
+    const prepare = vi.fn((args: Parameters<typeof actual.prepareCurrentDesignObservation>[0]) =>
+      actual.prepareCurrentDesignObservation({ ...args, ports: { readCurrentArtifact } }));
+    const claimWorkspace = vi.fn();
+    const result = await claimGovernedBacklogWorkspace({ db, input: { ...input, ...source }, actor,
+      workIntent: "plan", dependencies: { claimWorkspace, discoverCanonicalArtifact, prepareCurrentDesign: prepare } });
+    expect(result.ok).toBe(false);
+    expect(claimWorkspace).not.toHaveBeenCalled();
+    expect(readCurrentArtifact).toHaveBeenCalledWith(expect.objectContaining({ room: rooms[0] }));
+    expect(lock).toHaveBeenCalled();
+    if (result.ok) throw new Error("An amendment still requires independent approval");
+    expect(result.data.readiness.unmet).toContainEqual(expect.objectContaining({ code: "SPEC_APPROVAL_REQUIRED", state: "stale" }));
+    expect(result.data.recovery.reviewerRoutes.find(route => route.gate === "spec-approval")?.requestCoworker
+      .initiativeReviewBinding?.artifactRef).toMatchObject({ commitSha: source.headSha, providerBlobId: CANONICAL_BLOB_SHA });
+  });
   it("keeps trusted task identity when coverage synthesizes spec approval for a fix", async () => {
     taskAuthority.resolve.mockResolvedValue("oauth-family:claim");
     const history = vi.spyOn(prisma.taskRun, "findFirst").mockResolvedValue(null);

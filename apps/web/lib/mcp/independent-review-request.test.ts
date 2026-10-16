@@ -55,7 +55,8 @@ beforeEach(() => {
   mocks.token.mockResolvedValue({ userId: "human", agentId: "AGT-AUTHOR", authorityBindingId: "consent", oauthClient: { registrationKind: "dynamic" } });
   mocks.currentConsent.mockResolvedValue(true);
   mocks.human.mockResolvedValue({ isSuperuser: true, platformRole: null });
-  mocks.room.mockResolvedValue({ id: "room-row", backlogItemId: "BI-TEST", executorKind: "claude-desktop", requestedByPrincipalId: "prn-human" });
+  mocks.room.mockResolvedValue({ id: "room-row", backlogItemId: "BI-TEST", executorKind: "claude-desktop", requestedByPrincipalId: "prn-human",
+    repositoryFullName: "org/repo", headBranch: "fix/test", baseSha: "c".repeat(40), headSha: "a".repeat(40) });
   mocks.itemRow.mockResolvedValue({ id: "cuid-item" });
   mocks.alias.mockResolvedValue({ principalId: "prn-human" });
   mocks.access.mockResolvedValue({ decision: { level: "action" } });
@@ -69,6 +70,14 @@ beforeEach(() => {
 });
 
 describe("consent-bound independent review request", () => {
+  it.each([{ repositoryFullName: "other/repo" }, { headBranch: "fix/other" },
+    { headSha: "f".repeat(40) }, { baseSha: "invalid" }, { headSha: null }, { backlogItemId: "BI-FOREIGN" }])(
+    "refuses a foreign or changed persisted room before readiness %j", async change => {
+      mocks.room.mockResolvedValue({ ...await mocks.room(), ...change });
+      expect((await authorizeCoworkerRequest(packet, "human", context)).refusal?.success).toBe(false);
+      expect(mocks.item).not.toHaveBeenCalled();
+      expect(mocks.preflight).not.toHaveBeenCalled();
+    });
   it.each([true, false])("requires verified source proof for the status-only archived author (valid=%s)", async validProof => {
     const author = { id: "room-row", capsuleId: "WC-TEST", backlogItemId: "BI-TEST", executorKind: "codex-desktop",
       requestedByPrincipalId: "prn-human", featureBuild: null, repositoryFullName: "org/repo",
@@ -352,6 +361,9 @@ describe("consent-bound independent review request", () => {
     expect(mocks.recovery).toHaveBeenLastCalledWith(expect.objectContaining({ refusedWorkroomId: "WC-SECOND" }));
   });
   it("replays a finished review after refresh only with the same persisted request and a real writer receipt", async () => {
+    // Historical receipt readback needs current room access, not a new execution
+    // against the room's later source. No receipt still refuses below.
+    mocks.room.mockResolvedValue({ ...await mocks.room(), headSha: "f".repeat(40) });
     mocks.item.mockResolvedValue({ success: true, data: { readiness: { decisions: { completion: { verdict: "allowed" } } } } });
     mocks.task.mockResolvedValue({ a2aMetadata: { requestDigestVersion: 2, requestDigest: remoteTaskRequestDigest({
       agentId: packet.targetAgent, routeContext: "/build", title: packet.questionPacketSummary,
