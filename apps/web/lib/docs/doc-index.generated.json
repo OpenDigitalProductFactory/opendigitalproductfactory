@@ -4272,6 +4272,7 @@
       "publishedPortal": false,
       "anchors": [
         "rule",
+        "decision-outcomes",
         "why",
         "how-to-apply"
       ]

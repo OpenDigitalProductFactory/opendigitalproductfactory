@@ -14,6 +14,17 @@ procedure and pre-enrolled independent authorities, never from this document.
   alone grants no runtime mutation capability.
 - `offline-recovery-kit.mjs` reads protected POSIX files and checks original
   ancestry and directory generations. Enrollment remains outside the kit.
+- `offline-recovery-enrollment.mjs` supplies a create-new POSIX enrollment
+  helper. An administrator supplies independently witnessed public key pins and
+  a manifest signed by both owners. It verifies the exact manifest, installation
+  and expiry before writing a private canonical trust file, flushes it, and
+  checks file and parent generations. The directory flush uses the retained,
+  no-follow directory descriptor whose identity was verified before creation.
+  It never replaces an existing enrollment,
+  receives private keys, or enrolls keys from a portable kit. There is no
+  operator-facing enrollment command yet. Rotation and epoch advancement still
+  require the remaining shared-writer protocol. A late flush failure retains
+  complete or partial output for inspection; it does not prove no file exists.
 - `offline-recovery-kit-prepare.mjs` copies the captured verified public bytes
   into a new protected destination, flushes them and verifies the result.
   Interrupted writes retain their destination for inspection. A late directory
@@ -67,7 +78,7 @@ files. That source-local execution is not a canonical runtime or deployment test
 
 ## Remaining acceptance
 
-Protected witnessed enrollment and epoch advancement, all-writer exclusion,
+Operational witnessed enrollment and epoch advancement, all-writer exclusion,
 measured descendant/daemon settlement, bounded restore/resume/rollback, signed
 journal and authenticated idempotent evidence import remain required. The final
 path must pass the design's portal/MCP/queue/approval-store/self-upgrade outage

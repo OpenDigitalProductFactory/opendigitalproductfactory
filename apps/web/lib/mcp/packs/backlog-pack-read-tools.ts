@@ -448,9 +448,13 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
   // — any other status, or an evaluation that could not run — keeps the
   // existing projection.
   const { readBacklogItemCompletion } = await import("@/lib/backlog/initiative-readiness/backlog-completion-evaluation");
-  const gateCompletion = await readBacklogItemCompletion({ itemRowId: item.id, status: item.status, evaluatedAt });
+  const { prepareCurrentDesignObservation } = await import("@/lib/backlog/initiative-readiness/canonical-artifact-discovery");
+  const currentDesign = await prepareCurrentDesignObservation({ itemId: item.itemId });
+  const gateCompletion = await readBacklogItemCompletion({ itemRowId: item.id, status: item.status, evaluatedAt,
+    currentDesign: currentDesign.evidence });
   // BI-DEDAC950: the governing principle per unmet code, beside the decisions.
   const projectedReadiness = withReadinessGoverningPrinciples(projectBacklogItemReadinessSummary({
+    currentDesign: currentDesign.evidence,
     completionDecision: gateCompletion?.decision ?? null,
     inheritedScope,
     item: {
@@ -484,7 +488,7 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
   }
   const completion = requestedGate !== undefined
     ? await recoveryReadDecision(requestedGate, readiness.decisions ?? {}) : readiness.decisions?.completion;
-  const needsTerminalRecovery = completion && completion.verdict !== "allowed"
+  const needsTerminalRecovery = currentDesign.evidence.state !== "unavailable" && completion && completion.verdict !== "allowed"
     && (requestedGate !== undefined || [...completion.blockers, ...completion.unmet]
       .some((entry) => ["POST_IMPLEMENTATION_REVIEW_REQUIRED", "PLAN_REVIEW_REQUIRED",
         "ACCEPTANCE_EVIDENCE_REQUIRED", "OBJECTIVE_RECONCILIATION_REQUIRED"].includes(entry.code)));

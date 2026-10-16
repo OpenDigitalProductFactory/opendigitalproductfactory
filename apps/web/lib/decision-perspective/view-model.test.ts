@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest";
 import { decisionInteractionRowToGateView } from "./view-model";
 
 describe("decisionInteractionRowToGateView", () => {
+  it("retains the recorded route without inferring it from the evaluation outcome", () => {
+    const view = decisionInteractionRowToGateView({ interactionId: "DI-HUMAN", profileId: "p", profileVersionId: "v", outcomeType: "recommend", escalationRoute: "human", escalationReason: "damaging-critical-risk", escalationFollowOn: null, createdAt: new Date() });
+    expect(view).toMatchObject({ outcomeType: "recommend", escalationRoute: "human", escalationReason: "damaging-critical-risk", escalationFollowOn: null });
+  });
   it("normalizes a decision interaction row for Build Studio display", () => {
     const view = decisionInteractionRowToGateView({
       interactionId: "DI-ABC123",

@@ -40,6 +40,34 @@ function interaction(overrides: Partial<DecisionInteractionGateView> = {}): Deci
 }
 
 describe("DecisionPerspectiveGatePanel", () => {
+  it("offers owner capture for a human-routed recommendation", async () => {
+    const capture = vi.fn();
+    render(<DecisionPerspectiveGatePanel interaction={interaction({ escalationRoute: "human", escalationReason: "damaging-critical-risk" })} onCapture={capture} />);
+    expect(screen.getByText("Human review required")).toBeTruthy();
+    fireEvent.click(screen.getByText("Capture owner direction"));
+    fireEvent.change(screen.getByLabelText("Owner direction"), { target: { value: "Proceed with the recorded limits" } });
+    fireEvent.submit(screen.getByTestId("wwmd-gate-capture-form"));
+    await waitFor(() => expect(capture).toHaveBeenCalledWith(expect.objectContaining({ outcomeType: "escalate" })));
+  });
+
+  it.each(["defer", "escalate"] as const)("does not offer owner capture for an independent-review %s", (outcomeType) => {
+    render(<DecisionPerspectiveGatePanel interaction={interaction({ outcomeType, escalationRoute: "independent_review", escalationReason: "independent-review-required", escalationFollowOn: "corpus-gap" })} onCapture={vi.fn()} />);
+    expect(screen.getByText("Independent review outstanding")).toBeTruthy();
+    expect(screen.queryByTestId("wwmd-gate-capture")).toBeNull();
+  });
+
+  it("does not offer an enabled capture when this surface has no capture action", () => {
+    render(<DecisionPerspectiveGatePanel interaction={interaction({ escalationRoute: "human" })} />);
+    expect(screen.getByTestId("wwmd-gate-capture").hasAttribute("disabled")).toBe(true);
+  });
+  it("moves focus into capture and returns it to the trigger on cancel", () => {
+    render(<DecisionPerspectiveGatePanel interaction={interaction({ escalationRoute: "human" })} onCapture={vi.fn()} />);
+    const trigger = screen.getByRole("button", { name: "Capture owner direction" });
+    fireEvent.click(trigger);
+    expect(document.activeElement).toBe(screen.getByLabelText("Owner direction"));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(document.activeElement).toBe(trigger);
+  });
   it("renders nothing before WWMD has been invoked", () => {
     const html = renderToStaticMarkup(
       <DecisionPerspectiveGatePanel interaction={null} onCapture={vi.fn()} />,
