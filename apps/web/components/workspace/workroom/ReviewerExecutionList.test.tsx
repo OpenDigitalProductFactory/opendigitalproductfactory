@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { ReviewerExecutionList } from "./ReviewerExecutionList";
 import type { ReviewerExecutionObservation } from "@/lib/work-management/semantic-review-room-projection";
+import { loadSemanticReviewRoomProjection } from "@/lib/work-management/semantic-review-room-projection";
 vi.mock("@/components/platform/StalledTaskRecoveryActions", () => ({
   StalledTaskRecoveryActions: ({ taskRunId, reviewBudget }: { taskRunId: string; reviewBudget: unknown }) =>
     <div data-testid="recovery">{taskRunId} {JSON.stringify(reviewBudget)}</div>,
@@ -18,6 +19,26 @@ const run: ReviewerExecutionObservation = {
   checkpoints: [{ taskNodeId: "TN-1", recordId: "node-1", title: "Architecture review", status: "completed", actorId: "AGT-181" }],
 };
 describe("reviewer execution inside a Workroom", () => {
+  it("renders a readable automatic capacity wait without offering duplicate manual recovery", async () => {
+    const now = new Date("2026-09-21T07:00:00Z");
+    const view = await loadSemanticReviewRoomProjection({
+      taskRun: { findMany: async () => [{ id: "row-1", taskRunId: "TR-1", userId: "requester-1",
+        status: "input-required", updatedAt: now, lastHeartbeatAt: null, nodes: [],
+        progressPayload: { semanticReview: { schemaVersion: 1, requestDigest: "a".repeat(64), reason: "review-capacity-deferred",
+          capacityWaitReason: "host-gpu-busy", nextAction: "retry-review", deadlineAt: "2026-09-21T07:30:00Z", recoveryAttempt: 1,
+          capacityRecovery: { schemaVersion: 1, requestDigest: "a".repeat(64), checks: 0, nextCheckAt: "2026-09-21T07:00:30Z" } } } }] },
+      $queryRaw: vi.fn().mockResolvedValue([{ rowId: "row-1", capsuleId: "WC-1", requestBound: true,
+        requestSchemaVersion: 2, requestArtifactType: "code-change", identityArtifactType: "code-change", identityArtifactTypePresent: true,
+        sourceHeadSha: "a".repeat(40), currentHeadSha: "a".repeat(40), issuedAt: "2026-09-21T06:50:00Z" }]),
+    }, ["WC-1"], now);
+    render(<ReviewerExecutionList runs={view.runs} />);
+    expect(screen.getByText("Review is waiting for the graphics processor to become available.")).toBeInTheDocument();
+    expect(screen.getByText(/server will recheck capacity/)).toBeInTheDocument();
+    expect(screen.queryByTestId("recovery")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Recorded reason: host-gpu-busy/)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Request history" })).toHaveAttribute("href", "/api/internal/tasks/TR-1");
+  });
+
   it("shows the correlated receipt's verdict and summary without claiming the room is complete", () => {
     render(<ReviewerExecutionList runs={[{ ...run, receipt: { id: "receipt-1", decision: "inconclusive", summary: "A required branch could not finish." } }]} />);
     expect(screen.getByText(/A required branch could not finish/)).toBeInTheDocument();
