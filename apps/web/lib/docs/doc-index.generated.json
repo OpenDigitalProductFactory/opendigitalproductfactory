@@ -9465,6 +9465,82 @@
         "delivery-schedule-and-submission-boundary"
       ]
     },
+    "docs/publications/trusted-agent-tbm/README.md": {
+      "publicHref": "/publications/trusted-agent-tbm/README/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "trusted-agent-engineering-lftbm-discussion-packet",
+        "use-the-packet",
+        "canonical-owners",
+        "file-provenance-and-reproduction"
+      ]
+    },
+    "docs/publications/trusted-agent-tbm/demo-script.md": {
+      "publicHref": "/publications/trusted-agent-tbm/demo-script/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "synthetic-expense-demonstration-script-and-static-fallback",
+        "opening-statement",
+        "readiness-manifest",
+        "seven-minute-walkthrough",
+        "frozen-vector-proposal",
+        "static-fallback-annotated-specimen",
+        "recording-plan"
+      ]
+    },
+    "docs/publications/trusted-agent-tbm/governance-options.md": {
+      "publicHref": "/publications/trusted-agent-tbm/governance-options/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "governance-and-intellectual-property-discussion-options",
+        "recommended-meeting-request",
+        "options",
+        "proposed-operating-terms-for-review",
+        "owner-decisions-before-filing"
+      ]
+    },
+    "docs/publications/trusted-agent-tbm/known-gaps.md": {
+      "publicHref": "/publications/trusted-agent-tbm/known-gaps/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "known-gaps-and-claim-limits"
+      ]
+    },
+    "docs/publications/trusted-agent-tbm/meeting-brief.md": {
+      "publicHref": "/publications/trusted-agent-tbm/meeting-brief/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "trusted-agent-execution",
+        "the-proposal",
+        "four-responsibilities",
+        "model-the-execution-chain",
+        "evidence-before-adoption",
+        "two-contexts-one-contract",
+        "measure-acceptable-work",
+        "the-collaboration-request",
+        "sources-and-current-limits"
+      ]
+    },
+    "docs/publications/trusted-agent-tbm/sources.md": {
+      "publicHref": "/publications/trusted-agent-tbm/sources/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "meeting-packet-source-register",
+        "existing-dpf-source-owners"
+      ]
+    },
     "docs/runbooks/2026-07-18-self-upgrade-mounts-denied-state-dir.md": {
       "publicHref": "/runbooks/2026-07-18-self-upgrade-mounts-denied-state-dir/",
       "portalHref": null,
