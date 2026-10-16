@@ -179,7 +179,7 @@ describe("load_tools per-name status", () => {
     });
     expect(status[1]).toMatchObject({ reason: "reviewer-route-required", callableByName: false });
     expect(status[1].recovery).toBe(
-      "This tool is for the independent reviewer. For design, architecture or plan review, refresh the exact Workroom with claim_backlog_item_for_work (workIntent plan or implementation) and submit recovery.reviewerRoutes[].requestCoworker unchanged. For terminal review, read get_backlog_item recovery.",
+      "This tool is for the independent reviewer. For design, architecture or plan review, refresh the exact Workroom with claim_backlog_item_for_work (workIntent plan or implementation) and submit recovery.reviewerRoutes[].requestCoworker unchanged. For terminal review, read get_backlog_item recovery. If a large response did not deliver the packet, call get_backlog_item with itemId and recoveryGate for one exact bounded request or finite recovery. Research belongs to its author.",
     );
     expect(status[2]).toMatchObject({ reason: "reviewer-route-required" });
     expect(status[3]).toMatchObject({

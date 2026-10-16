@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   projectReadiness: vi.fn(),
   resolveTerminalRecovery: vi.fn(),
   readCompletion: vi.fn(),
+  roomAccess: vi.fn(),
 }));
 
 const CORPUS_AVAILABLE = { available: true, root: "/repo", searchedPaths: ["docs/superpowers/specs", "docs/superpowers/plans"], missingPaths: [], fileCount: 2, reason: "Searched 2 markdown file(s)." };
@@ -46,6 +47,10 @@ vi.mock("@/lib/backlog/initiative-readiness/entry-adapter", () => ({
 }));
 vi.mock("@/lib/backlog/initiative-readiness/backlog-completion-evaluation", () => ({
   readBacklogItemCompletion: mocks.readCompletion,
+}));
+vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({
+  resolveAgentWorkroomAccess: mocks.roomAccess,
+  resolveHumanWorkroomAccess: mocks.roomAccess,
 }));
 
 import { getBacklogItem, listBacklogItems } from "./backlog-pack-read-tools";
@@ -89,6 +94,7 @@ describe("backlog deferral read projection", () => {
     mocks.mapDemandRows.mockReturnValue([{ activation: null, evidenceLinks: [] }]);
     mocks.projectReadiness.mockReturnValue({ verdict: "allowed" });
     mocks.readCompletion.mockResolvedValue(null);
+    mocks.roomAccess.mockResolvedValue({ decision: { level: "content" } });
   });
 
   it("does not report a plan-only epic as having a spec", async () => {
@@ -151,6 +157,62 @@ describe("backlog deferral read projection", () => {
     const result = await getBacklogItem({ itemId: baseItem.itemId });
     expect(mocks.resolveTerminalRecovery).toHaveBeenCalledWith({ decision: completion, currentAgentId: null, refusedWorkroomId: null });
     expect(result).toMatchObject({ success: true, data: { recovery } });
+  });
+
+  it("returns one exact bounded packet for a large six-gate item without its body or other packets", async () => {
+    mocks.findUnique.mockResolvedValue({
+      ...baseItem, id: "row-bi", status: "in-progress", body: "large context ".repeat(10_000),
+      createdAt: new Date("2026-09-21T00:00:00Z"), completedAt: null,
+      deferOwnerPrincipal: null, epic: null, digitalProduct: null, organization: null,
+      productLine: null, businessProduct: null, demandEvidenceLinks: [], activities: [],
+    });
+    const gates = ["plan-review", "design-spec", "spec-approval", "architecture-review", "data-review", "ux-fit-review"];
+    const completion = { verdict: "input-required", shapeDecision: { effective: "large" }, blockers: [],
+      unmet: gates.map((_, i) => ({ code: i ? "REVIEW_REQUIRED" : "PLAN_REVIEW_REQUIRED" })) };
+    const routes = gates.map(gate => ({ gate, workroomId: "WC-BOUND", requestCoworker: {
+      requestKey: `immutable:${gate}`, targetAgent: "AGT-REVIEW", objective: "Read immutable evidence. ".repeat(60),
+      initiativeReviewBinding: { itemId: baseItem.itemId, gate, headSha: "a".repeat(40) },
+    } }));
+    mocks.projectReadiness.mockReturnValue({ decisions: { completion } });
+    mocks.resolveTerminalRecovery.mockResolvedValue({ reviewerRoutes: routes, escalations: [], unroutable: [] });
+    const first = await getBacklogItem({ itemId: baseItem.itemId, recoveryGate: "plan-review" }, "AGT-AUTHOR", "user-1");
+    expect(first).toMatchObject({ success: true, data: {
+      itemId: baseItem.itemId, recovery: { reviewerRoutes: [routes[0]] },
+    } });
+    expect(first.data).not.toHaveProperty("body");
+    expect(first.data).not.toHaveProperty("recentActivity");
+    expect(JSON.stringify(first).length).toBeLessThanOrEqual(8_000);
+    const second = await getBacklogItem({ itemId: baseItem.itemId, recoveryGate: "plan-review" }, "AGT-AUTHOR", "user-1");
+    expect(second.data?.recovery).toEqual(first.data?.recovery);
+    expect(mocks.resolveTerminalRecovery).toHaveBeenCalledWith(expect.objectContaining({
+      decision: completion, currentAgentId: "AGT-AUTHOR", currentUserId: "user-1",
+    }));
+    expect(mocks.roomAccess).toHaveBeenCalledWith({ userId: "user-1", agentId: "AGT-AUTHOR", workroomId: "WC-BOUND", requested: "content" });
+    mocks.roomAccess.mockResolvedValue({ decision: { level: "none" } });
+    const denied = await getBacklogItem({ itemId: baseItem.itemId, recoveryGate: "plan-review" }, "AGT-AUTHOR", "user-1");
+    expect(denied).toMatchObject({ success: false, error: "workroom_data_access_required" });
+    expect(denied.data ?? {}).not.toHaveProperty("recovery");
+  });
+
+  it("offers author-owned research recovery even when six pre-delivery gates are unmet", async () => {
+    mocks.findUnique.mockResolvedValue({
+      ...baseItem, id: "row-bi", status: "open", body: null,
+      createdAt: new Date("2026-09-21T00:00:00Z"), completedAt: null,
+      deferOwnerPrincipal: null, epic: null, digitalProduct: null, organization: null,
+      productLine: null, businessProduct: null, demandEvidenceLinks: [], activities: [],
+    });
+    const plan = { verdict: "input-required", shapeDecision: { effective: "large" }, blockers: [],
+      unmet: ["RESEARCH_REQUIRED", "CANONICAL_DESIGN_REQUIRED", "SPEC_APPROVAL_REQUIRED", "REVIEW_REQUIRED",
+        "OBJECTIVE_BASELINE_REQUIRED", "ARTIFACT_AUTHOR_REQUIRED"].map(code => ({ code })) };
+    mocks.projectReadiness.mockReturnValue({ decisions: { plan } });
+    const recovery = { reviewerRoutes: [], unroutable: [], escalations: [{
+      reason: "research-evidence-required", toolName: "record_initiative_evidence", accountableRole: "design-author",
+    }] };
+    mocks.resolveTerminalRecovery.mockResolvedValue(recovery);
+    const result = await getBacklogItem({ itemId: baseItem.itemId, recoveryGate: "research" }, "AGT-AUTHOR", "user-1");
+    expect(result).toMatchObject({ success: true, data: { recovery } });
+    expect(mocks.resolveTerminalRecovery).toHaveBeenCalledWith(expect.objectContaining({ decision: plan }));
+    expect(JSON.stringify(result).length).toBeLessThanOrEqual(8_000);
   });
 
   it.each(["OBJECTIVE_RECONCILIATION_REQUIRED", "ACCEPTANCE_EVIDENCE_REQUIRED", "PLAN_REVIEW_REQUIRED"])(
