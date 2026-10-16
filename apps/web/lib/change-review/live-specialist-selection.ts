@@ -1,42 +1,13 @@
 import { WORK_CAPSULE_STATUSES } from "@/lib/work-capsules";
 import { isTerminalCapsuleStatus } from "@/lib/work-capsules/work-capsule-branch-identity";
 import { ACUMEN_ROOM_SHAPES } from "@/lib/work-management/acumen-room-shapes";
-import { createHash } from "node:crypto";
-import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { deriveImpactedAcumens } from "@/lib/decision-perspective/acumen-impact";
 import { PROFESSION_REGISTRY, findProfessionFamilyForAgentIdentity } from "@/lib/decision-perspective/resolve-profession-profile";
 import { selectableCoworkerIdentityRefs } from "@/lib/coworker-record/selectable-coworker";
-import { z } from "zod";
 
-export type LiveReviewSpecialist = { professionKey: string; agentId: string; displayName: string };
-export type LiveReviewSpecialistSelection = {
-  schemaVersion: 1;
-  userId: string;
-  capsuleId: string;
-  registryVersion: string;
-  authorAgentIds: string[];
-  requiredProfessions: string[];
-  specialists: LiveReviewSpecialist[];
-  unavailableProfessions: string[];
-};
-const professionKey = z.string().refine(key => PROFESSION_REGISTRY.families.some(family => family.professionKey === key), "Expected a registered profession");
-export const liveReviewSpecialistSelectionSchema = z.object({
-  schemaVersion: z.literal(1), userId: z.string().min(1), capsuleId: z.string().min(1), registryVersion: z.string().min(1),
-  authorAgentIds: z.array(z.string().min(1)).max(1000),
-  requiredProfessions: z.array(professionKey).max(PROFESSION_REGISTRY.families.length),
-  specialists: z.array(z.object({ professionKey, agentId: z.string().min(1), displayName: z.string().min(1) }).strict()).max(PROFESSION_REGISTRY.families.length),
-  unavailableProfessions: z.array(professionKey).max(PROFESSION_REGISTRY.families.length),
-}).strict().superRefine((selection, ctx) => {
-  const assigned = [...selection.specialists.map(row => row.professionKey), ...selection.unavailableProfessions];
-  const required = new Set(selection.requiredProfessions);
-  const authors = new Set(selection.authorAgentIds.map(id => selectableCoworkerIdentityRefs(id).canonicalAgentId));
-  if (required.size !== selection.requiredProfessions.length || new Set(assigned).size !== assigned.length
-    || assigned.length !== required.size || assigned.some(key => !required.has(key))
-    || new Set(selection.specialists.map(row => row.agentId)).size !== selection.specialists.length
-    || selection.specialists.some(row => authors.has(selectableCoworkerIdentityRefs(row.agentId).canonicalAgentId))) {
-    ctx.addIssue({ code: "custom", message: "Specialist selection must account for every required profession once and exclude the author" });
-  }
-});
+import { liveReviewSpecialistSelectionSchema, type LiveReviewSpecialist, type LiveReviewSpecialistSelection } from "./semantic-change-review";
+export { liveReviewSpecialistSelectionDigest, liveReviewSpecialistSelectionSchema, type LiveReviewSpecialist, type LiveReviewSpecialistSelection } from "./semantic-change-review";
+
 type AgentRow = { agentId: string; name: string | null; slugId: string | null; status: string; archived: boolean; lifecycleStage: string };
 type SelectionDb = { agent: { findMany(args: unknown): Promise<AgentRow[]> } };
 
@@ -113,11 +84,6 @@ export async function verifyLiveReviewSpecialistSelection(selection: LiveReviewS
     }
   }
   return true;
-}
-
-
-export function liveReviewSpecialistSelectionDigest(selection: LiveReviewSpecialistSelection): string {
-  return createHash("sha256").update(canonicalJson(liveReviewSpecialistSelectionSchema.parse(selection))).digest("hex");
 }
 
 

@@ -6,7 +6,7 @@ import { deriveSemanticReviewGateIdentity } from "@/lib/gates/gate-run-identity"
 import { resolveSemanticReviewCoordination, type SemanticChangeReviewOperationInput } from "./semantic-change-review-operation";
 import { DELIBERATION_ARTIFACT_TYPES } from "../deliberation/external-review-activation";
 import { SEMANTIC_REVIEW_ARTIFACT_CONTRACT_VERSION } from "./semantic-change-review";
-import { liveReviewSpecialistSelectionDigest, liveReviewSpecialistSelectionSchema } from "./live-specialist-selection";
+import { liveReviewSpecialistSelectionDigest, liveReviewSpecialistSelectionSchema } from "./semantic-change-review";
 import { PROFESSION_BOUND_CHANGE_REVIEWER_VERSION } from "./semantic-change-review-operation";
 
 export const REVIEW_ARTIFACT_TYPES = DELIBERATION_ARTIFACT_TYPES;

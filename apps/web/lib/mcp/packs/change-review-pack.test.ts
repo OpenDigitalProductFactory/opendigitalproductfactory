@@ -204,6 +204,7 @@ describe("change-review MCP pack", () => {
       changeReviewPack.handlers.review_semantic_change!(input, "user-1", { agentId: "codex" }),
     ]);
 
+    expect([left, right]).toEqual([expect.objectContaining({ success: true }), expect.objectContaining({ success: true })]);
     expect([left.data?.disposition, right.data?.disposition].sort())
       .toEqual(["admitted", "subscribed"]);
     expect(mocks.dispatchRoutedSemanticReview).not.toHaveBeenCalled();

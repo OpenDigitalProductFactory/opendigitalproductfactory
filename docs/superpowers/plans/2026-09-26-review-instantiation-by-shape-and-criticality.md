@@ -469,3 +469,16 @@ compatibility re-export. Ninety-seven tests across six selected engagement,
 adapter, readiness and attention suites passed. Seed-fit and convergence guards
 passed after adding the recorded global-default/auto-converges attestations.
 Canonical integration, native baseline renewal and live acceptance remain owed.
+
+
+The exact merged-source preflight at 50ca4f3 failed after 558 seconds, before
+claiming a local-CI lease. It caught type re-exports in both new server-action
+wrappers. The image-script dependency check also found a new static zod edge
+through live-specialist-selection; its enclosing host stage was inconclusive,
+which must not be treated as a pass. The wrappers now retain inline type aliases,
+and immutable selection schema/digest live beside the existing semantic receipt
+schema, below the live provider resolver. Both failed guards now pass, as does
+the unchanged 75-file cycle budget. All 129 tests in eight affected suites pass.
+A transient lazy-import experiment failed the concurrent pack test and was
+removed; admission retains its original static preparation seam. The next
+canonical gate must cover this corrected source, not reuse 50ca4f3 as a pass.
