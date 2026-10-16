@@ -43,6 +43,10 @@ Recorded cost uses correlated token usage when present, otherwise correlated rou
 
 Data policy and clearance, token/context limits, quota/cooldown, payment, disabled configuration, sign-in, operator pause and unavailable capacity evidence are distinct reasons. Current provider restrictions come from the same read model as provider settings; an exclusion on an older decision is historical evidence, not a claim about current eligibility.
 
+A quota with no confirmed reset remains paused for ordinary work. An estimated retry time allows an availability check; it does not mean the account has recovered. DPF keeps the observed capacity and exclusion reason with each routing decision. If no eligible account remains, it reports the hold before starting a provider request. Completed recovery evidence must be newer than the quota observation; an old success cannot clear a newer limit.
+
+Supported ChatGPT and Codex subscription checks run at most hourly and may find recovery before a provider's estimated reset. They preserve manual pauses, sign-in changes and independent billing or access restrictions. A channel without a supported check remains explicitly held; retrying an uncertain review is not a recovery check.
+
 **Settings & overrides** opens the existing provider detail. The Providers navigation returns to the catalog; Traffic or Evaluation restores the routing scope. Provider settings remain the place to manage credentials, connections, operator pauses and sensitivity overrides. Risk acceptance still requires the existing warning, acknowledged scope, rationale and expiry. Revoking an override or lifting a pause does not clear another restriction. Assignment settings remain the place for coworker model pins.
 
 Account identity is not inferred from a provider name. If the safe receipt has no account attribution, it says so. An attempt's channel describes its recorded adapter or quota pool; it does not certify retention or data clearance for that account.

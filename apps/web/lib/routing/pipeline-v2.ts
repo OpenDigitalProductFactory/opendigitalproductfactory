@@ -22,6 +22,7 @@ import { filterByPolicy } from "./pipeline";
 import { checkModelCapacity, getEndpointRuntimeState } from "./rate-tracker";
 import {
   applyCapacitySoftExclusion,
+  capacityEvidenceForEndpoint,
   type CapacitySnapshot,
 } from "./capacity-routing-exclude";
 import { cliSaturationPercent } from "./cli-concurrency";
@@ -574,7 +575,7 @@ export async function routeEndpointV2(
       reason: `No eligible endpoints for task type '${contract.taskType}' with sensitivity '${sensitivity}'. ${allCandidates.length} endpoint(s) excluded.${clearanceBlocked ? ` No connected provider is cleared for '${sensitivity}' data.` : ""}`,
       fitnessScore: 0,
       fallbackChain: [],
-      candidates: allCandidates.map(withAccountIdentity),
+      candidates: allCandidates.map(withAccountIdentity).map(trace => ({ ...trace, ...capacityEvidenceForEndpoint(trace, capacityByProvider) })),
       excludedCount: allCandidates.length,
       excludedReasons: allExcludedReasons,
       policyRulesApplied: policyResult.applied,
@@ -771,7 +772,7 @@ export async function routeEndpointV2(
     routingConfidence: buildRoutingConfidence(hardResult.qualityFloorRelaxed, ranked.length, preferenceSelection.resolution?.fallbackUsed),
     fitnessScore: winner.rankScore,
     fallbackChain: fullFallbackChain,
-    candidates: [...eligibleTraces, ...allCandidates].map(withAccountIdentity),
+    candidates: [...eligibleTraces, ...allCandidates].map(withAccountIdentity).map(trace => ({ ...trace, ...capacityEvidenceForEndpoint(trace, capacityByProvider) })),
     excludedCount: allCandidates.length,
     excludedReasons: allExcludedReasons,
     policyRulesApplied: policyResult.applied,

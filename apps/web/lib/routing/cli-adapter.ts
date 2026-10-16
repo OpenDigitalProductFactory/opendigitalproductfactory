@@ -30,6 +30,7 @@ import { extractToolCalls as extractToolCallsFromText } from "./extract-tool-cal
 import { createMcpSessionToken } from "@/lib/mcp/session-token";
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";
 import { recordCliRateLimit, clearCliRateLimit } from "./cli-pool-status";
+import { NATIVE_QUOTA_UNKNOWN_RESET_MESSAGE } from "./subscription-quota-policy";
 import { withCliSlot } from "./cli-concurrency";
 import { isSideEffectingGrant } from "./grant-capability";
 import { toCliParsedUsage, type CliParsedUsage, type CliUsagePayload } from "./cli-usage";
@@ -688,7 +689,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
       if (terminal?.type === "result" && terminal.status === "error" && terminal.isError === true && terminal.hint === "quota") {
         try {
           await recordCliRateLimit("claude-cli", providerId,
-            "The native CLI reported a usage limit; its reset time is unknown.", poolIdentity);
+            NATIVE_QUOTA_UNKNOWN_RESET_MESSAGE, poolIdentity);
         } catch { /* Persistence must never replace the original execution hold. */ }
       }
       throw error;

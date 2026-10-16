@@ -41,6 +41,22 @@ No external dependency is introduced. Prototype represents proposed states, not 
 
 Refactoring allocation: at least 20% of this repair consolidates account status presentation and reuses existing verification/CAS rather than adding alternate provider state. No runtime install files are changed.
 
+## Unknown quota recovery policy (October 16 continuation)
+
+WWMD direction DI-B23366FAC9DE selects bounded verification and an honest hold. Its option features are author comparative estimates, not measured results. Earlier DI-5B6560B895FA returned insufficient signal and is not approval. Implementation admission IRD-8C7AF7595DC0 reuses this medium workroom and plan.
+
+The fresh native E3 quota observation updated both capacity records before preserving unknown execution settlement. Its 60-second heuristic retry time has no authoritative reset or weekly evidence. Expiry cannot prove recovery. Preserve the completed propagation child BI-EDDDABE2; this continuation changes selection and evidence retention, not that child's delivered record.
+
+Reuse the existing capacity classifier fields and safe projection: new native observations carry an unconfirmed usage-quota code and unknown reset confidence. Existing observations remain readable through their exact fixed safe native message; do not parse arbitrary stdout or rewrite live rows. Ordinary throttles and actual provider reset estimates retain their existing behavior. An unconfirmed quota stays excluded from ordinary work even when every candidate is held. A newer canonical success may lift the matching pool projection; a stale success may not.
+
+The existing route decision retains actual exclusions before the no-selection error propagates. A quota hold must not be mislabeled a missing tool capability. Only that future path can establish a predispatch hold; it does not settle or replay any historical uncertain task. Existing account, clearance, residency, capability, model and recipe constraints remain authoritative. No provider or model is forced.
+
+Reuse hourly verification-only CAS for already-supported ChatGPT/Codex channels. Do not invent a same-budget Anthropic CLI probe. Without supported recovery evidence, the honest outcome is a held candidate with an actionable explanation, not a fabricated recovery time or provider success.
+
+Additional acceptance: unknown reset remains held after the heuristic minute; all-held selection returns no endpoint with preserved trace; an eligible peer remains available; old canonical success cannot clear a newer quota; real reset dates and unrelated soft throttle behavior survive; raw material never enters the safe projection; failures and concurrent credential/account changes preserve independent holds. Tests run with mocks, without paid model calls or review replay.
+
+Retained E3 trace 54006973231fc15bea43c8e3b2034816 was subsequently found and independently read: development sensitivity, 23 eligible Anthropic-family candidates and 19 exclusions. Other candidates failed quality floors or retained quota dates. This corrects the earlier absence-of-trace assessment. The predispatch capacity snapshot is still overwritten; no active-cooldown violation, forced account pin, recipe cause or third-provider eligibility is established. F89's restricted/local-only no-dispatch refusal and its separate uncertain objective-mapping task are different cases. Global citation freshness remains advisory, separate from per-account runtime compliance evidence.
+
 ## Failure analysis and verification
 
 ### Native quota observation while execution remains held

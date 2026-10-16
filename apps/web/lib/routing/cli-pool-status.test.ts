@@ -54,6 +54,7 @@ import {
 import type { WeeklyQuotaSnapshot } from "./weekly-quota";
 import { prisma } from "@dpf/db";
 import { applyCapacitySoftExclusion, capacityRoutingExclusionReason } from "./capacity-routing-exclude";
+import { loadProviderCapacitySnapshots } from "./provider-capacity/store";
 
 it("projects typed scoped CLI cooldowns conservatively alongside legacy aliases", () => {
   const later = new Date("2026-10-15T00:00:00Z");
@@ -176,12 +177,15 @@ describe("recordCliRateLimit", () => {
       create: expect.objectContaining({ adapterType: null, adapterKind: "claude_code", providerId: "anthropic-sub" }),
     }));
     const row = vi.mocked(prisma.providerCapacityStatus.upsert).mock.calls[0]![0].create;
-    expect(row).toMatchObject({ state: "rate_limited", confidence: "heuristic", source: "cli", rawSnippet: message });
+    expect(row).toMatchObject({ state: "rate_limited", confidence: "unknown", providerCode: "usage_limit_reached", source: "cli", rawSnippet: message });
     expect(row.safeSummary).toContain("not a confirmed quota reset");
+    expect(status?.resetAt).toBeNull();
+    vi.mocked(prisma.providerCapacityStatus.findMany).mockResolvedValueOnce([row] as never);
+    const capacity = await loadProviderCapacitySnapshots();
     const endpoints = [{ providerId: "anthropic-sub", providerConnectionId: identity.providerConnectionId },
       { providerId: "local", providerConnectionId: "local-default" }];
     const result = applyCapacitySoftExclusion({ endpoints,
-      capacityByProvider: new Map([[identity.providerId, { state: "rate_limited", retryAtMs: status!.resetAt!.getTime() }]]),
+      capacityByProvider: capacity,
       nowMs: Date.now() });
     expect(result.eligible).toEqual([endpoints[1]]);
     expect(result.excluded.map(entry => entry.endpoint)).toEqual([endpoints[0]]);
@@ -265,6 +269,39 @@ describe("getCliPoolStatus", () => {
   it("returns null when no rate-limit recorded for that adapter", async () => {
     const status = await getCliPoolStatus("claude-cli");
     expect(status).toBeNull();
+  });
+
+  it("retains a validated native quota hold after the heuristic minute without inventing a reset", async () => {
+    vi.useFakeTimers();
+    try {
+      const identity = { providerId: "anthropic-sub", providerConnectionId: "subscription-team" };
+      await recordCliRateLimit("claude-cli", identity.providerId,
+        "The native CLI reported a usage limit; its reset time is unknown.", identity);
+      vi.advanceTimersByTime(61_000);
+      expect(await getCliPoolStatus("claude-cli", identity)).toMatchObject({
+        isExhausted: true, quotaResetUnconfirmed: true, secondsUntilReset: null,
+      });
+      expect((await getAllCliPoolStatuses())[0]).toMatchObject({
+        isExhausted: true, quotaResetUnconfirmed: true, secondsUntilReset: null,
+      });
+      await clearCliRateLimit("claude-cli", identity);
+      expect(await getCliPoolStatus("claude-cli", identity)).toBeNull();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("accepts only a newer canonical successful observation over an old native quota hold", async () => {
+    vi.useFakeTimers();
+    try {
+      const limitedAt = Date.now();
+      await recordCliRateLimit("claude-cli", "anthropic-sub",
+        "The native CLI reported a usage limit; its reset time is unknown.");
+      const available = (successAt: number) => [{ providerId: "anthropic-sub", state: "available",
+        retryAt: null, lastObservedAt: new Date(limitedAt + 1_000), lastSuccessAt: new Date(successAt) }];
+      vi.mocked(prisma.providerCapacityStatus.findMany).mockResolvedValueOnce(available(limitedAt - 1) as never);
+      expect((await getCliPoolStatus("claude-cli"))?.isExhausted).toBe(true);
+      vi.mocked(prisma.providerCapacityStatus.findMany).mockResolvedValueOnce(available(limitedAt + 1) as never);
+      expect(await getCliPoolStatus("claude-cli")).toMatchObject({ isExhausted: false, resetAt: null });
+    } finally { vi.useRealTimers(); }
   });
 
   it("computes isExhausted=true when resetAt is in the future", async () => {

@@ -35,6 +35,19 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("provider capacity store", () => {
+  it("retains legacy validated native quota uncertainty without exposing its raw material", async () => {
+    vi.mocked(prisma.providerCapacityStatus.findMany).mockResolvedValue([{
+      providerId: "anthropic-sub", scopeKey: "provider:anthropic-sub", state: "rate_limited",
+      source: "cli", confidence: "heuristic", providerCode: null,
+      rawSnippet: "The native CLI reported a usage limit; its reset time is unknown.",
+      retryAt: new Date(NOW.getTime() - 1), lastObservedAt: NOW,
+      safeSummary: "Quota reset is unknown.", action: "retry_with_backoff", isHumanActionRequired: false,
+    }] as never);
+    const snapshot = (await loadProviderCapacitySnapshots()).get("anthropic-sub");
+    expect(snapshot).toMatchObject({ quotaResetUnconfirmed: true });
+    expect(snapshot).not.toHaveProperty("rawSnippet");
+  });
+
   it("projects current account recovery facts without credential or raw provider material", async () => {
     vi.mocked(prisma.providerCapacityStatus.findMany).mockResolvedValue([{
       providerId: null, scopeKey: accountCapacityScope("openai", identity.accountId),

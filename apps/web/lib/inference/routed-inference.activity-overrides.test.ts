@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { makeActivity } from "./routed-inference-test-fixture";
+import { makeActivity, localAndCloudSuitabilitySource } from "./routed-inference-test-fixture";
 import {
   ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION,
   activityHarnessProposalParameters,
@@ -40,12 +40,12 @@ vi.mock("@/lib/routing/loader", () => ({
   persistRouteDecision: mocks.persistRouteDecision,
   // Mirror the real gating so the persistDecision:false test observes the
   // same contract the production helper enforces (BI-F4D3B9E9(c)).
-  persistFailedRouteDecision: (
+  persistFailedRouteDecision: async (
     decision: unknown,
     options?: { persistDecision?: boolean },
   ) => {
     if (options?.persistDecision === false) return;
-    void mocks.persistRouteDecision(decision, options);
+    await mocks.persistRouteDecision(decision, options);
   },
   updateProviderSuitabilityReceipt: mocks.updateProviderSuitabilityReceipt,
 }));
@@ -701,6 +701,25 @@ describe("routeAndCall activity harness overrides", () => {
     });
   });
 
+  it("reports a quota capacity hold before provider start rather than a tool-capability failure", async () => {
+    const reason = "provider capacity rate_limited; quota reset unconfirmed; availability check required";
+    mocks.routeEndpointV2.mockResolvedValue({ selectedEndpoint: null, selectedModelId: null,
+      reason: "No eligible endpoints.", fitnessScore: 0, fallbackChain: [],
+      candidates: [{ endpointId: "quota-endpoint", providerId: "anthropic-sub", modelId: "quota-model",
+        endpointName: "Subscription", fitnessScore: 0, dimensionScores: {}, costPerOutputMToken: 0,
+        excluded: true, excludedReason: reason }],
+      excludedCount: 1, excludedReasons: [`quota-endpoint: ${reason}`], policyRulesApplied: [],
+      taskType: "conversation", sensitivity: "internal", timestamp: new Date(), executionPlan: null });
+    await expect(routeAndCall([{ role: "user", content: "hi" }], "system", "internal", {
+      taskType: "conversation", requireTools: true,
+      tools: [{ type: "function", function: { name: "read_fixture", description: "Read fixture", parameters: { type: "object", properties: {} } } }],
+    })).rejects.toMatchObject({ message: expect.stringMatching(/quota reset is unconfirmed/i), providerDispatch: "not-started" });
+    expect(mocks.callWithFallbackChain).not.toHaveBeenCalled();
+    expect(mocks.persistRouteDecision).toHaveBeenCalledWith(expect.objectContaining({
+      selectedEndpoint: null, excludedReasons: [`quota-endpoint: ${reason}`],
+    }), expect.anything());
+  });
+
   it("does not persist the failed decision when persistDecision is disabled", async () => {
     mocks.routeEndpointV2.mockResolvedValue({
       selectedEndpoint: null,
@@ -728,72 +747,3 @@ describe("routeAndCall activity harness overrides", () => {
     expect(mocks.persistRouteDecision).not.toHaveBeenCalled();
   });
 });
-
-function localAndCloudSuitabilitySource() {
-  return {
-    businessProfile: {
-      organizationId: "org-1",
-      archetypeId: "software-platform",
-      archetypeCategory: "software-platform",
-      operatesIn: ["us"],
-      sellsTo: [],
-      employsIn: [],
-      dataResidency: [],
-      riskPosture: "balanced",
-    },
-    handlesCardPayments: false,
-    regulationResults: [],
-    connections: [
-      {
-        label: "Local model",
-        status: "active",
-        facts: {
-          providerId: "local",
-          catalogProviderId: "local",
-          category: "local",
-          jurisdictions: ["us"],
-          externalEgress: "none",
-          supportsZdr: true,
-          supportsNoTraining: true,
-          supportsRegionalRouting: false,
-          supportedRegions: [],
-          regionalEndpoints: [],
-          providerConnectionId: "connection-local",
-          executionChannel: "local-runtime",
-          accountClass: "unknown",
-          commercialBasis: "local-compute",
-          authMethod: "local",
-          contractEvidence: {},
-          entitlements: { noTraining: true },
-          evidenceStatus: "operator-attested",
-          lastReviewedAt: "2026-07-01T00:00:00.000Z",
-        },
-      },
-      {
-        label: "OpenAI regular",
-        status: "active",
-        facts: {
-          providerId: "openai",
-          catalogProviderId: "openai",
-          category: "direct",
-          jurisdictions: ["us"],
-          externalEgress: "provider-cloud",
-          supportsZdr: false,
-          supportsNoTraining: false,
-          supportsRegionalRouting: false,
-          supportedRegions: [],
-          regionalEndpoints: [],
-          providerConnectionId: "connection-openai-regular",
-          executionChannel: "direct-api",
-          accountClass: "regular",
-          commercialBasis: "usage-metered",
-          authMethod: "api-key",
-          contractEvidence: {},
-          entitlements: {},
-          evidenceStatus: "operator-attested",
-          lastReviewedAt: "2026-07-01T00:00:00.000Z",
-        },
-      },
-    ],
-  };
-}

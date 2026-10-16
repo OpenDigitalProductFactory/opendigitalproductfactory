@@ -16,6 +16,7 @@ import { parseUnifiedRateLimitHeaders, type WeeklyQuotaSnapshot } from "./weekly
 import { conservativeQuotaScope } from "./provider-capacity/scopes";
 import { loadProviderCapacitySnapshots } from "./provider-capacity/store";
 import type { CapacitySnapshot } from "./capacity-routing-exclude";
+import { NATIVE_QUOTA_UNKNOWN_RESET_MESSAGE, UNCONFIRMED_USAGE_QUOTA_CODE } from "./subscription-quota-policy";
 
 export type CliAdapterType = "claude-cli" | "codex-cli";
 export type CliPoolIdentity = { providerId: string; providerConnectionId: string };
@@ -70,6 +71,7 @@ export interface CliPoolState {
   errorSnippet: string | null;
   /** True when resetAt is in the future (pool is currently exhausted). */
   isExhausted: boolean;
+  quotaResetUnconfirmed?: boolean;
   /** Seconds until the pool is expected to be available again. Null if unknown. */
   secondsUntilReset: number | null;
   /**
@@ -220,7 +222,19 @@ export async function recordCliRateLimit(
 }
 
 /** Reconcile pre-fix capped rows with the canonical provider quota projection. */
-function effectivePoolReset(row: { providerId: string; resetAt: Date | null }, capacity: Map<string, CapacitySnapshot>, now: number): Date | null {
+function hasNewerAvailability(row: { providerId: string; rateLimitedAt: Date }, capacity: Map<string, CapacitySnapshot>): boolean {
+  const observed = capacity.get(row.providerId);
+  return observed?.state === "available" && typeof observed.lastSuccessAtMs === "number"
+    && observed.lastSuccessAtMs >= row.rateLimitedAt.getTime();
+}
+
+function unconfirmedPoolQuota(row: { providerId: string; rateLimitedAt: Date; errorSnippet: string | null }, capacity: Map<string, CapacitySnapshot>): boolean {
+  return !hasNewerAvailability(row, capacity) && (capacity.get(row.providerId)?.quotaResetUnconfirmed === true
+    || row.errorSnippet === NATIVE_QUOTA_UNKNOWN_RESET_MESSAGE);
+}
+
+function effectivePoolReset(row: { providerId: string; resetAt: Date | null; rateLimitedAt: Date }, capacity: Map<string, CapacitySnapshot>, now: number): Date | null {
+  if (hasNewerAvailability(row, capacity)) return null;
   const known = capacity.get(row.providerId);
   const quotaReset = known?.state === "quota_resets_at" ? known.retryAtMs : null;
   return quotaReset != null && quotaReset > now && quotaReset > (row.resetAt?.getTime() ?? 0)
@@ -256,9 +270,11 @@ export async function getCliPoolStatus(
     if (!row) return null;
 
     const now = Date.now();
-    const resetAt = effectivePoolReset(row, await poolCapacitySnapshots(), now);
+    const capacity = await poolCapacitySnapshots();
+    const quotaResetUnconfirmed = unconfirmedPoolQuota(row, capacity);
+    const resetAt = quotaResetUnconfirmed ? null : effectivePoolReset(row, capacity, now);
     const resetMs = resetAt?.getTime() ?? null;
-    const isExhausted = resetMs != null && resetMs > now;
+    const isExhausted = quotaResetUnconfirmed || (resetMs != null && resetMs > now);
     const secondsUntilReset =
       isExhausted && resetMs != null ? Math.ceil((resetMs - now) / 1_000) : null;
 
@@ -270,6 +286,7 @@ export async function getCliPoolStatus(
       retryAfterSeconds: row.retryAfterSeconds,
       errorSnippet: row.errorSnippet,
       isExhausted,
+      ...(quotaResetUnconfirmed ? { quotaResetUnconfirmed: true } : {}),
       secondsUntilReset,
       ...weeklyFields(row),
     };
@@ -294,9 +311,10 @@ export async function getAllCliPoolStatuses(): Promise<CliPoolState[]> {
       const adapterType: CliAdapterType | null = row.adapterType === "codex-cli" || row.adapterType === "claude-cli" ? row.adapterType
         : row.adapterKind === "codex" ? "codex-cli" : row.adapterKind === "claude_code" ? "claude-cli" : null;
       if (!adapterType) return [];
-      const resetAt = effectivePoolReset(row, capacity, now);
+      const quotaResetUnconfirmed = unconfirmedPoolQuota(row, capacity);
+      const resetAt = quotaResetUnconfirmed ? null : effectivePoolReset(row, capacity, now);
       const resetMs = resetAt?.getTime() ?? null;
-      const isExhausted = resetMs != null && resetMs > now;
+      const isExhausted = quotaResetUnconfirmed || (resetMs != null && resetMs > now);
       return [{
         adapterType,
         providerId: row.providerId,
@@ -305,6 +323,7 @@ export async function getAllCliPoolStatuses(): Promise<CliPoolState[]> {
         retryAfterSeconds: row.retryAfterSeconds,
         errorSnippet: row.errorSnippet,
         isExhausted,
+        ...(quotaResetUnconfirmed ? { quotaResetUnconfirmed: true } : {}),
         secondsUntilReset: isExhausted && resetMs != null ? Math.ceil((resetMs - now) / 1_000) : null,
         ...weeklyFields(row),
       }];
@@ -515,7 +534,8 @@ async function recordCliCapacity(
         safeSummary: subscriptionCap
           ? `The subscription's usage limit is reached; the provider says to try again at ${retryAt.toISOString()}.`
           : `The CLI reported a usage or rate limit. DPF will back off until ${retryAt.toISOString()}; this is a bounded retry time, not a confirmed quota reset.`,
-        confidence: subscriptionCap ? "exact" : "heuristic",
+        confidence: errorText === NATIVE_QUOTA_UNKNOWN_RESET_MESSAGE ? "unknown" : subscriptionCap ? "exact" : "heuristic",
+        ...(errorText === NATIVE_QUOTA_UNKNOWN_RESET_MESSAGE ? { providerCode: UNCONFIRMED_USAGE_QUOTA_CODE } : {}),
         isHumanActionRequired: false,
       },
     })));

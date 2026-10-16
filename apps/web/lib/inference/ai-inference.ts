@@ -349,7 +349,9 @@ export async function callProvider(
     if (poolState?.isExhausted) {
       const waitSecs = poolState.secondsUntilReset ?? "unknown";
       throw new InferenceError(
-        `${cliAdapterType} pool exhausted — resets in ~${waitSecs}s (EP-COST pool check)`,
+        poolState.quotaResetUnconfirmed
+          ? `${cliAdapterType} quota reset is unconfirmed; an availability check is required before ordinary work`
+          : `${cliAdapterType} pool exhausted — resets in ~${waitSecs}s (EP-COST pool check)`,
         "rate_limit",
         providerId,
         undefined,

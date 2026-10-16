@@ -10,6 +10,7 @@ vi.mock("./champion-challenger", () => ({
     explorationMode: "champion",
   }),
 }));
+vi.mock("./provider-capacity/store", () => ({ loadProviderCapacitySnapshots: async () => new Map() }));
 
 function makeEndpoint(overrides: Partial<EndpointManifest> = {}): EndpointManifest {
   return {
@@ -97,6 +98,26 @@ const qualityModel = makeEndpoint({
   name: "Claude Sonnet",
   reasoning: 90,
   costPerOutputMToken: 15,
+});
+
+it("retains an actual quota-only no-selection trace instead of redispatching the sole candidate", async () => {
+  const endpoint = makeEndpoint({ id: "quota-endpoint", providerId: "anthropic-sub" });
+  const now = Date.now();
+  const quota = { state: "rate_limited", retryAtMs: now - 1,
+    observedAtMs: now - 60_000, quotaResetUnconfirmed: true };
+  const decision = await routeEndpointV2([endpoint], makeContract(), [], [], {
+    skipRecipe: true, nowMs: now, capacityByProvider: new Map([["anthropic-sub", quota]]),
+  });
+  expect(decision.selectedEndpoint).toBeFalsy();
+  expect(decision.fallbackChain).toEqual([]);
+  expect(decision.candidates).toEqual([expect.objectContaining({
+    endpointId: "quota-endpoint", providerId: "anthropic-sub", excluded: true,
+    excludedReason: expect.stringMatching(/quota.*unconfirmed/i),
+    capacityEvidence: { provider: quota },
+  })]);
+  const recordedRetry = decision.candidates[0].capacityEvidence?.provider?.retryAtMs;
+  quota.retryAtMs = now + 60_000;
+  expect(decision.candidates[0].capacityEvidence?.provider?.retryAtMs).toBe(recordedRetry);
 });
 
 beforeEach(async () => {

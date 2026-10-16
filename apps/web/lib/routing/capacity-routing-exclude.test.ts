@@ -86,6 +86,29 @@ describe("capacityRoutingExclusionReason", () => {
 });
 
 describe("applyCapacitySoftExclusion", () => {
+  const unconfirmedQuota = { state: "rate_limited", retryAtMs: NOW - 1,
+    observedAtMs: NOW - 60_000, quotaResetUnconfirmed: true };
+
+  it("keeps an observed quota hold after heuristic probe eligibility, without claiming a reset", () => {
+    expect(capacityRoutingExclusionReason(unconfirmedQuota, NOW)).toMatch(/quota.*unconfirmed/i);
+  });
+
+  it("does not restore a quota-held sole candidate when there is no eligible alternative", () => {
+    const endpoint = { providerId: "anthropic-sub", id: "subscription" };
+    const result = applyCapacitySoftExclusion({ endpoints: [endpoint],
+      capacityByProvider: new Map([[endpoint.providerId, unconfirmedQuota]]), nowMs: NOW });
+    expect(result.eligible).toEqual([]);
+    expect(result.excluded).toEqual([{ endpoint, reason: expect.stringMatching(/quota.*unconfirmed/i) }]);
+  });
+
+  it("preserves the actual quota exclusion while retaining an otherwise eligible peer", () => {
+    const endpoints = [{ providerId: "anthropic-sub", id: "subscription" }, { providerId: "local", id: "local" }];
+    const result = applyCapacitySoftExclusion({ endpoints,
+      capacityByProvider: new Map([["anthropic-sub", unconfirmedQuota]]), nowMs: NOW });
+    expect(result.eligible).toEqual([endpoints[1]]);
+    expect(result.excluded).toEqual([{ endpoint: endpoints[0], reason: expect.stringMatching(/quota.*unconfirmed/i) }]);
+  });
+
   const eps = [
     { providerId: "codex", id: "e1" },
     { providerId: "local", id: "e2" },

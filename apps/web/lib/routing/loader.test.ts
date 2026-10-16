@@ -6,6 +6,7 @@ import {
   loadPolicyRules,
   invalidateRoutingLoaderCache,
   persistRouteDecision,
+  persistFailedRouteDecision,
 } from "./loader";
 import type { InferenceDataScreenReceipt } from "@/lib/inference/data-screening/types";
 import type { RouteDecision } from "./types";
@@ -42,6 +43,20 @@ describe("persistRouteDecision", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockPrisma.routeDecisionLog.create.mockResolvedValue({ id: "decision-log-1" });
+  });
+
+  it("awaits retention of a failed candidate trace before predispatch hold propagation", async () => {
+    let finish!: (value: { id: string }) => void;
+    mockPrisma.routeDecisionLog.create.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const recording = persistFailedRouteDecision(makeDecision(), { agentId: "build-specialist" });
+    expect(recording).toBeInstanceOf(Promise);
+    let completed = false;
+    const completion = Promise.resolve(recording).then(() => { completed = true; });
+    await Promise.resolve();
+    expect(completed).toBe(false);
+    finish({ id: "retained-failed-route" });
+    await completion;
+    expect(completed).toBe(true);
   });
 
   it("rejects new route decision logs without an explicit actor", async () => {

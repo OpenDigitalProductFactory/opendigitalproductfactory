@@ -202,6 +202,8 @@ export interface CandidateTrace {
   costPerOutputMToken: number | null;
   excluded: boolean;
   excludedReason?: string;
+  /** Immutable, safe observed facts; retry eligibility must not masquerade as recovery. */
+  capacityEvidence?: { provider?: import("./capacity-routing-exclude").CapacitySnapshot; account?: import("./capacity-routing-exclude").CapacitySnapshot };
 }
 
 export interface RouteDecision {

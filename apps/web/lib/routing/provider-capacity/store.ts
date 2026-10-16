@@ -4,6 +4,7 @@ import type { ProviderCapacityClassification, ProviderQuotaObservation, Provider
 import { accountCapacityScope, capacityCredentialRevision, isAccountCapacityState } from "./scopes";
 import { accountRuntimeKey } from "../provider-account-candidates";
 import { capacityRoutingExclusionReason, type CapacitySnapshot } from "../capacity-routing-exclude";
+import { hasUnconfirmedQuotaReset } from "../subscription-quota-policy";
 
 export type ProviderCapacitySource = "api" | "cli" | "opencode" | "oauth" | "manual";
 export type CapacityAccountIdentity = { accountId: string; connectionId: string; credentialEntryId: string | null; credentialUpdatedAt: Date; credentialRevision: string };
@@ -14,12 +15,13 @@ export function capacityAccountIdentity(account: { id: string; connectionId: str
 }
 
 /** Conservative quota grouping proves no shared authentication or grant lineage. */
-export function indexProviderCapacityByProvider<T extends { providerId: string | null; state: string; retryAt: Date | null; lastObservedAt?: Date | null }>(rows: readonly T[], nowMs = Date.now()): Map<string, T> {
+export function indexProviderCapacityByProvider<T extends { providerId: string | null; state: string; retryAt: Date | null; lastObservedAt?: Date | null;
+  providerCode?: string | null; confidence?: string | null; source?: string | null; rawSnippet?: string | null }>(rows: readonly T[], nowMs = Date.now()): Map<string, T> {
   const map = new Map<string, T>();
   for (const row of rows) if (row.providerId) map.set(row.providerId, row);
   for (const row of rows) {
     if (!["codex", "chatgpt"].includes(row.providerId ?? "") || !["quota_resets_at", "rate_limited"].includes(row.state)
-      || !capacityRoutingExclusionReason({ state: row.state, retryAtMs: row.retryAt?.getTime(), observedAtMs: row.lastObservedAt?.getTime() }, nowMs)) continue;
+      || !capacityRoutingExclusionReason({ state: row.state, retryAtMs: row.retryAt?.getTime(), observedAtMs: row.lastObservedAt?.getTime(), quotaResetUnconfirmed: hasUnconfirmedQuotaReset(row) }, nowMs)) continue;
     for (const providerId of ["codex", "chatgpt"]) {
       const current = map.get(providerId);
       if (!current || !["quota_resets_at", "rate_limited"].includes(current.state)
@@ -37,7 +39,7 @@ export function capacityProviderIds(providerIds: readonly string[]): string[] {
 export async function loadProviderCapacitySnapshots(options: { includeInactiveAccountHealth?: boolean } = {}): Promise<Map<string, CapacitySnapshot>> {
   const rows = await prisma.providerCapacityStatus.findMany({
     select: { providerId: true, scopeKey: true, observedCredentialRevision: true, state: true, retryAt: true, lastObservedAt: true, lastSuccessAt: true,
-      safeSummary: true, action: true, isHumanActionRequired: true,
+      safeSummary: true, action: true, isHumanActionRequired: true, providerCode: true, confidence: true, source: true, rawSnippet: true,
       ownedAccount: { select: { id: true, connectionId: true, providerId: true, status: true, credentialEntryId: true, credentialEntry: { select: { id: true, status: true, updatedAt: true, secretRef: true, clientSecret: true, cachedToken: true, refreshToken: true } } } } },
   });
   const map = new Map<string, CapacitySnapshot>();
@@ -59,11 +61,15 @@ export async function loadProviderCapacitySnapshots(options: { includeInactiveAc
 /** Explicit safe fields only: raw snippets and credential storage stay server-side. */
 function snapshotFor(row: { state: string; retryAt: Date | null; lastObservedAt: Date | null;
   lastSuccessAt?: Date | null;
-  safeSummary: string | null; action: string; isHumanActionRequired: boolean }): CapacitySnapshot {
+  safeSummary: string | null; action: string; isHumanActionRequired: boolean;
+  providerCode?: string | null; confidence?: string | null; source?: string | null; rawSnippet?: string | null }): CapacitySnapshot {
+  const confidence = row.confidence === "exact" || row.confidence === "header" || row.confidence === "heuristic" || row.confidence === "unknown" ? row.confidence : undefined;
   return { state: row.state, retryAtMs: row.retryAt?.getTime() ?? null,
     observedAtMs: row.lastObservedAt?.getTime() ?? null, safeSummary: row.safeSummary,
     action: row.action, isHumanActionRequired: row.isHumanActionRequired,
-    ...(row.lastSuccessAt ? { lastSuccessAtMs: row.lastSuccessAt.getTime() } : {}) };
+    ...(row.lastSuccessAt ? { lastSuccessAtMs: row.lastSuccessAt.getTime() } : {}),
+    ...(confidence ? { confidence } : {}),
+    ...(hasUnconfirmedQuotaReset(row) ? { quotaResetUnconfirmed: true } : {}) };
 }
 
 async function persistScopedCapacity(input: {

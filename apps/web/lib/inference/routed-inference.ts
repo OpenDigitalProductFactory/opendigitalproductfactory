@@ -39,6 +39,7 @@ import { callWithFallbackChain } from "@/lib/routing/fallback";
 import { bindProviderAccountSuitability } from "@/lib/routing/provider-account-candidates";
 import { accountAffinityKey } from "@/lib/routing/provider-account-allocation";
 import { conservativeQuotaScope } from "@/lib/routing/provider-capacity/scopes";
+import { UNCONFIRMED_QUOTA_EXCLUSION } from "@/lib/routing/subscription-quota-policy";
 import { prisma } from "@dpf/db";
 import { getLocalOnlyInference } from "@/lib/inference/local-only";
 import { resolveDispatchPosture, type DispatchPosture } from "@/lib/golden-triangle/dispatch";
@@ -422,7 +423,8 @@ async function routeAndCallAttempt(
 
   // BI-F4D3B9E9(c): persist the failed route decision BEFORE throwing so the
   // excludedTrace survives for diagnosis (see persistFailedRouteDecision).
-  const persistFailedDecision = () => persistFailedRouteDecision(decision, options);
+  const persistFailedDecision = () => persistFailedRouteDecision({ ...decision, traceId,
+    designRevision: AI_ROUTING_ARCHITECTURE_VERSION }, options);
   const noEligible = (reason: string, missingCapability?: string) => new NoEligibleEndpointsError(
     taskType, reason, decision.excludedCount, missingCapability, options?.agentId,
     routingEligibilitySummary(contract.sensitivity, contract.residencyPolicy, decision.excludedCount, decision.excludedReasons));
@@ -436,7 +438,7 @@ async function routeAndCallAttempt(
     const floorFailure = soleCapabilityFloorFailure(decision.candidates);
     if (floorFailure) {
       const missingCap = floorFailure.missingCapability;
-      persistFailedDecision();
+      await persistFailedDecision();
       throw noEligible(
         `No endpoint satisfies agent capability floor (EP-AGENT-CAP-002). ` +
         `Missing: ${missingCap ?? "unknown"}. ` +
@@ -444,6 +446,11 @@ async function routeAndCallAttempt(
         missingCap,
       );
     }
+  }
+
+  if (!decision.selectedEndpoint && decision.excludedReasons.some(reason => reason.includes(UNCONFIRMED_QUOTA_EXCLUSION))) {
+    await persistFailedDecision();
+    throw noEligible("Quota reset is unconfirmed; verified availability is required before ordinary work can resume.");
   }
 
   // Graceful degradation: if all endpoints were excluded because they lack tool
@@ -460,7 +467,7 @@ async function routeAndCallAttempt(
           `Enable a tool-capable LOCAL model (or run the build through the opencode engine, which supplies the tool loop), ` +
           `or turn off local-only inference in Admin > AI > Providers & Routing.`
         : `Configure a tool-capable provider (OpenAI, Anthropic, Gemini) or check that existing providers are active.`;
-      persistFailedDecision();
+      await persistFailedDecision();
       throw noEligible(
         `No tool-capable endpoint available. Build Studio requires tool support — cannot fall back to generic chat. ${fix}`,
       );
@@ -491,7 +498,7 @@ async function routeAndCallAttempt(
   }
 
   if (!decision.selectedEndpoint) {
-    persistFailedDecision();
+    await persistFailedDecision();
     const contextDetail = decision.excludedReasons
       .filter((reason) => /context window too small/i.test(reason))
       .join("; ");
