@@ -91,6 +91,13 @@ Run those actual checks; no generated-file claim is implied by this source claim
 | `docs/user-guide/ai-workforce/decision-perspective.md` | One wrapped practice-guide link |
 | `docs/architecture/agent-standards-dpf-conformance.md` | Date and qualify the source-declared first-pass projection; correct five stale source-path occurrences without a new assessment |
 | `docs/superpowers/evidence/2026-09-27-trusted-agent-publication-reconciliation.md` | Dated source/live/download/owner dispositions; actual white-paper 2.2 delivery and remaining publication work |
+| `apps/web/lib/docs/doc-impact.generated.json` | Existing derived source-reference graph only; no new runtime code or graph substrate |
+
+The first source checks found the doc index and 42 guide diagrams fresh, but
+the doc-impact graph stale after the five corrected source locators. Its exact
+generated path was ordinarily claimed at 20:48:08 UTC before regeneration.
+The nine-path coverage `cmvbftzxv5tz001pthkqtyo43` was valid before this added
+derived scope; refresh it for all ten paths before generating that artifact.
 
 This is thirteen reference occurrences plus their related publication
 projections. Intentionally excluded drafts remain excluded: use immutable
@@ -341,7 +348,7 @@ Current packet maps atomically to BI-928E1B0F with `PUB-REQ`, `PUB-CONTRACT`,
 are one repair to the observed published reading path; their checks, provenance,
 review and post-release observations are internal completion steps. They add no
 independent capability. Record and validate fresh immutable coverage for the
-nine actual claimed paths before public source implementation. The earlier
+ten actual claimed paths before the remaining derived implementation. The earlier
 `cmvbf7m2w5h3e01ptvjzj63gb` covers only e2's original plan scope and is retained
 as historical evidence, not reused for this changed scope.
 
