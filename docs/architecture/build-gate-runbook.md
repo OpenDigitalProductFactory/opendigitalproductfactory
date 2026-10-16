@@ -213,12 +213,17 @@ reproduce the named failure, obtain independent review of changed code, and leav
 final main+PR integration to required GitHub checks and the protected merge queue.
 Never relabel an earlier full local PASS as covering a changed tree.
 
-The current pre-push hook supports exact PASS or an audited override, not a
-native cloud-delegation receipt. Where explicit scoped operator recovery
-authorization exists, use the documented override route above and record local
-integration as **unrun/delegated**, not passed. This is not a blanket override,
-an authorization grant, or permission to disable protected checks. The native
-post-publication delegation policy remains tracked in BI-25CB699C.
+The pre-push hook and readiness command automatically verify eligible published
+corrections under BI-25CB699C. They require an initial qualified publication
+anchor, a current open PR, and actual required checks and merge-queue protection.
+Changed bytes execute the existing affected-test plan; unchanged bytes execute
+no source suite. Fresh metadata guards still run. Failed, skipped, stale or
+unbound proof refuses publication without restarting full local integration.
+The emitted `published-correction` attestation records full local integration
+as **unrun/delegated**, never as a canonical PASS. Initial publication retains
+its existing gate. See [PR health](../testing/pr-health.md#corrections-after-publication)
+for commands, proof identity and freshness requirements. Scoped operator
+recovery remains a separate audited route when its conditions apply.
 
 `pregate:preflight` and `pr:ready` reuse wholly successful local guard results
 for at most one hour when the clean worktree, HEAD/tree, main, command plan,

@@ -379,6 +379,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "scripts/pr-health.test.mjs",
+        "scripts/published-correction.test.mjs",
         "scripts/check-stuck-auto-merge.test.mjs",
         "scripts/check-failure-readiness.test.mjs",
         "scripts/dev-postgres-pgvector-contract.test.mjs",
