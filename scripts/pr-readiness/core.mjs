@@ -11,6 +11,7 @@ import { classifySlotRecord } from "../lib/pregate-status.mjs";
 import { guardAppliesToScope } from "../lib/pregate-preflight.mjs";
 import { hasBoundDocumentationEvidence } from "../lib/local-ci-gate-state.mjs";
 import { classifyLocalCiOverride, classifyGateInfrastructureEvidence, GATE_INFRASTRUCTURE_UNAVAILABLE_CODE } from "../../packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs";
+import { classifyPublishedCorrection } from "../../packages/dpf-skill-pack/hooks/lib/published-correction.mjs";
 import {
   PR_TRAILER_NAMES,
   SUPPORTED_PR_TRAILERS,
@@ -50,6 +51,7 @@ export function buildGatePlan({
   prLabelsJson = "[]",
   profiles = POLICY_GUARD_PROFILES,
   changeScope = null,
+  publishedCorrection = false,
 } = {}) {
   const env = {
     BASE_SHA: "origin/main",
@@ -60,6 +62,7 @@ export function buildGatePlan({
 
   return LOCAL_READINESS_PROFILE_NAMES.flatMap((profileName) =>
     (profiles[profileName] ?? []).flatMap((entry) => {
+      if (publishedCorrection && !new Set(["docs-impact-gate", "seed-fit-gate", "spec-plan-doc-gate", "data-impact-gate", "convergence-impact-gate", "design-grounding-gate", "hidden-unicode-commit-text-guard"]).has(entry.id)) return [];
       if (!guardAppliesToScope(entry, changeScope)) return [];
       // The readiness command runs in the author's topic worktree. Never replay
       // CI setup that rewrites Git state there. Its checks remain covered by CI
@@ -165,6 +168,12 @@ function publicationAttestation({ repo, trailers, records, now }) {
   } else {
     const classified = classifyLocalCiOverride(override.value);
     if (!classified.ok) blockers.push(classified.reason);
+    else if (classified.code === "published-correction") {
+      const qualified = records.some(({ state, publicationInspection }) => publicationInspection?.ok === true && publicationInspection.state === state && state?.skipReason === override.value
+        && classifyPublishedCorrection(state, { sha: repo.headSha, branch: repo.branch, repositoryFullName: repo.repositoryFullName, now }).ok);
+      if (!qualified) blockers.push("Published correction requires qualified current-head machine proof; prose alone is not evidence. Run the affected correction verifier, not the entire local integration gate.");
+      else notes.push("Local integration UNRUN; affected checks qualified and full integration delegated to protected GitHub checks and merge queue.");
+    }
     else if (classified.code === GATE_INFRASTRUCTURE_UNAVAILABLE_CODE && !records.some(({ state }) =>
       state?.sha === repo.headSha && state?.branch === repo.branch && state.skipped === true
       && state.gatePassed === false && state.skipReason === override.value
