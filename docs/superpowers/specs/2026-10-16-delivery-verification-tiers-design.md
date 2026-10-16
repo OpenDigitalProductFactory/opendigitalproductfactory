@@ -84,6 +84,18 @@ Measure stage wait separately from execution, repeated executions per compatible
 
 ## Acceptance
 
+### Authenticated prerequisite ordering: bounded first slice
+
+The coordinator reported an integration-bound run spending 514.9 seconds on 84 successful host guards before MCP lease admission failed TLS verification. This duration is attributed evidence, not a fresh reproduction. Source inspection confirms that `scripts/pregate.mjs:runHostPreflight` already calls `readEarlyQuiescenceStatus` before guards, but `scripts/lib/gate-quiescence.mjs` converts unavailable, denied and malformed reads to `null`, after which the guard process starts. Adding a second early probe would duplicate the wrong abstraction.
+
+**CT-VT-5:** Refactor the existing early prerequisite result into ready, draining, unavailable and denied outcomes. Only an authenticated, understood NORMAL response permits the ordinary integration-bound guard phase. Draining uses the existing durable-quiescence wait. Unavailable transport/credentials or malformed/unknown state returns a bounded inconclusive result without starting guards, claiming a lease or writing a PASS. An authorization denial stops the denied operation and names the supported remedy. A ready probe reserves no capacity and does not replace the later real admission/pressure checks.
+
+Explicit standalone source-only checks remain available through `pregate-preflight` and must not claim integration readiness. Preserve dry-run, help, existing record-exempt operations and already-authorized recovery contracts; do not invent an environment-variable exemption. Use the same resolved endpoint and current credential contract as admission, and retain origin checks. Output contains structured reason codes and safe remedies, never credentials or raw failure payloads.
+
+Trust resolution remains owned by BI-2D545A0C and `scripts/installer/lib/mcp-client-env.{ps1,sh}`. Its existing resolver chooses the installed bundle and endpoint. Coordinate that owner's process-launch adapter rather than introduce another CA reader or modify root stores. Node reads `NODE_EXTRA_CA_CERTS` at startup; a launcher must supply the resolved value before spawning a fresh Node process, not set it after the gate has initialized TLS. The preflight-ordering slice can truthfully refuse unavailable trust while that separate convergence adapter is pending. BI-DE1E6485 owns updater reporting and BI-84C1F526 owns Grok credential-refresh outcome; neither copy convergence nor a successful native Windows-TLS connector proves Node-child connectivity.
+
+Implementation authority is currently missing: normal implementation claim `IRD-56B31C53B8EA` returned input-required. Existing submitted native design, spec and architecture tasks have no recorded passing receipt in readiness at this observation; do not replay unknown executions or turn client source assessment into native approval. This amendment is not a coverage receipt or permission to implement.
+
 | Acceptance ID | Objective IDs | Statement |
 | --- | --- | --- |
 | AC-VT-1 | OBJ-VT-1 | Every executable delivery shape resolves a versioned policy and required tier obligations; xlarge, unknown versions and missing policy cannot select a lighter verification path. |
@@ -94,6 +106,7 @@ Measure stage wait separately from execution, repeated executions per compatible
 | AC-VT-6 | OBJ-VT-3, OBJ-VT-4 | Served acceptance retains exact artifact and per-outcome context, and an authoring chat can end after durable handoff without losing a pending acceptance obligation. |
 | AC-VT-7 | OBJ-VT-4 | Existing operational projections distinguish waiting, executed, reused, delegated and pending acceptance, with blocker and next action; any changed UI is verified in the served target in light/dark and desktop/mobile contexts. |
 | AC-VT-8 | OBJ-VT-2, OBJ-VT-4 | A seven-day before/after report includes sample size, workload mix, duplicate executions, median/p95 delivery time and queue metrics, with unmeasured cost and unrun checks explicitly identified. |
+| AC-VT-9 | OBJ-VT-1, OBJ-VT-2, OBJ-VT-4 | The existing early authenticated prerequisite permits ordinary integration-bound guards only on understood NORMAL, parks draining through the existing wait, and starts zero guard/lease processes on denied, unavailable, malformed or unknown state; explicit source-only checks and later real admission remain separate. |
 
 ## Rollout, risks and rollback
 
