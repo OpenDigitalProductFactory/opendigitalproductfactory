@@ -169,6 +169,7 @@ import {
 import { asyncOperationTaskHub } from "./async-operation-task-hub";
 
 export const scheduledFunctions = [
+  subscriptionQuotaRecovery,
   providerPauseReconcile,
   decisionConciergeSweepScheduled, // EP-0AF96937: drafts what the owner should do about decisions waiting on them, every 4h
   decisionTrustRecomputeScheduled, // BI-7D1E43DE: governed-decision TrustState from the shadow ledger, report only, every 6h
@@ -263,7 +264,6 @@ export const eventFunctions = [
   providerCatalogRefresh, // BI-7F2FBDA3: on-demand provider re-discovery after a model refusal — event-triggered, NOT a cron
   rateRecovery,
   providerRecovery,
-  subscriptionQuotaRecovery,
   providerPauseExpiry,
   mcpCatalogSync,
   codeGraphReconcileEvent,

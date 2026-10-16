@@ -6,6 +6,7 @@ import {
   scheduledFunctions,
   eventFunctions,
 } from "./index";
+import { subscriptionQuotaRecovery } from "./subscription-quota-recovery";
 import { issueReportTriage } from "./issue-report-triage";
 import { routeWorkItem } from "./route-work-item";
 import { SCHEDULED_JOB_CATALOG } from "@/lib/operate/scheduled-jobs/catalog";
@@ -17,6 +18,7 @@ describe("getInngestFunctionsForRuntime", () => {
     const functions = getInngestFunctionsForRuntime({});
 
     expect(functions).not.toContain(issueReportTriage);
+    expect(functions).not.toContain(subscriptionQuotaRecovery);
     expect(functions).toContain(routeWorkItem);
   });
 
@@ -38,6 +40,7 @@ describe("getInngestFunctionsForRuntime", () => {
     });
 
     expect(functions).toEqual(allFunctions);
+    expect(functions).toContain(subscriptionQuotaRecovery);
     expect(functions).toEqual(expect.arrayContaining(scheduledFunctions));
   });
 });
