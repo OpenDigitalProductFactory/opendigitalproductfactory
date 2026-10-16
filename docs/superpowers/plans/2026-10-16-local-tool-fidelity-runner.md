@@ -95,6 +95,9 @@ attribution and compare the canonical audit writer's existing empty-string
 thread value exactly; never invent a thread or accept a foreign nonempty one.
 Recheck the turn abort before starting a read and after audit verification.
 Late verification is incomplete, even when the global run budget remains.
+Capture the turn's absolute expiry at timer creation; a delayed abort callback
+must not permit a read or late qualification. Check expiry immediately before
+dispatch and after audit verification as well as checking cancellation signals.
 When composing a small surface, prefer a correct authorized read that does not
 require target identifiers missing from the golden prompt, such as list_workrooms
 instead of a required-ID get_workroom. Never invent a target or pad the catalog.

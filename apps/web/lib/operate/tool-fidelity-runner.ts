@@ -111,9 +111,17 @@ export async function runLocalToolFidelityDiagnostic(
         const traceId = createRoutingTraceId();
         observation.traceId = traceId;
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), Math.min(30_000, deadline - Date.now()));
+        const turnDeadline = Math.min(deadline, Date.now() + 30_000);
+        const stopExpiredTurn = () => {
+          if (Date.now() < turnDeadline && !controller.signal.aborted && !outerSignal?.aborted) return false;
+          stopped = true; observation.status = "incomplete"; observation.reason = "budget_or_cancellation";
+          observation.executionPassed = false;
+          return true;
+        };
+        const timer = setTimeout(() => controller.abort(), Math.max(0, turnDeadline - Date.now()));
         timer.unref?.();
         try {
+          if (stopExpiredTurn()) continue;
           const answer = await withInferenceCancellation(controller.signal, () => awaitInferenceCancellation(
             callProvider(selection.endpointId, selection.modelId, [{ role: "user", content: golden.prompt }],
               "Select an appropriate read tool for this question. Do not claim an action completed.",
@@ -131,12 +139,14 @@ export async function runLocalToolFidelityDiagnostic(
             || canonicalLocalModelKey(actualModel) !== canonicalLocalModelKey(selection.modelId)) {
             stopped = true; observation.status = "incomplete"; observation.reason = "model_identity_unverified"; continue;
           }
-          if (controller.signal.aborted || Date.now() >= deadline || outerSignal?.aborted) { stopped = true; observation.status = "incomplete"; observation.reason = "budget_or_cancellation"; continue; }
+          if (stopExpiredTurn()) continue;
           const scored = scoreToolFidelitySelection(golden, surface, answer);
           observation.status = scored.status;
           observation.reason = scored.status === "passed" ? "execution_unverified" : "selection_not_verified";
+          if (stopExpiredTurn()) continue;
           if (scored.status !== "passed" || !scored.call) continue;
           observation.selectionPassed = true;
+          if (stopExpiredTurn()) continue;
           const executed = await awaitInferenceCancellation(governedDispatch(scored.call.name, scored.call.arguments),
             outerSignal ? AbortSignal.any([controller.signal, outerSignal]) : controller.signal);
           const id = executed.governance?.toolExecutionId;
@@ -148,10 +158,7 @@ export async function runLocalToolFidelityDiagnostic(
             parameters: scored.call.arguments, userId, agentId, threadId: threadId ?? "", taskRunId: context.taskRunId ?? null }, id, row, executed);
           observation.status = observation.executionPassed ? "passed" : "failed";
           observation.reason = observation.executionPassed ? "verified_governed_read" : "execution_not_verified";
-          if (controller.signal.aborted || Date.now() >= deadline || outerSignal?.aborted) {
-            stopped = true; observation.status = "incomplete"; observation.reason = "budget_or_cancellation";
-            observation.executionPassed = false;
-          }
+          stopExpiredTurn();
         } finally { clearTimeout(timer); }
       } catch {
         observation.status = "incomplete"; observation.reason = "observation_incomplete";

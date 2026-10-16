@@ -3,6 +3,7 @@ import { GOLDEN_CASES } from "@/lib/routing/tool-fidelity-harness";
 import { runLocalToolFidelityDiagnostic } from "./tool-fidelity-runner";
 import type { ToolExecutionContext } from "@/lib/mcp-tool-types";
 import { accountExecutionVersion } from "@/lib/routing/provider-account-candidates";
+import { currentInferenceSignal } from "@/lib/routing/governed-inference-deadline";
 
 const mocks = vi.hoisted(() => ({ call: vi.fn(), manifests: vi.fn(), tools: vi.fn(), version: vi.fn(),
   proof: vi.fn(), create: vi.fn(), update: vi.fn(), audit: vi.fn(), provider: vi.fn(), grants: vi.fn(),
@@ -159,6 +160,36 @@ describe("bounded local fidelity diagnostic", () => {
     vi.useFakeTimers(); vi.setSystemTime(0);
     mocks.audit.mockImplementationOnce(async ({ where }: { where: { id: string } }) => {
       await vi.advanceTimersByTimeAsync(30_001);
+      return rows.get(where.id);
+    });
+    const result = await runLocalToolFidelityDiagnostic(selection, "u", context());
+    expect(result.data).toMatchObject({ qualified: false });
+    expect(mocks.call).toHaveBeenCalledTimes(1); expect(reads).toHaveBeenCalledTimes(1);
+    expect((result.data!.observations as Array<{ status: string; executionPassed: boolean }>)[0])
+      .toMatchObject({ status: "incomplete", executionPassed: false });
+  });
+  it("starts no read after expiry while the abort callback is still pending", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(0);
+    let signal: AbortSignal | undefined;
+    const answer = mocks.call.getMockImplementation()!;
+    mocks.call.mockImplementation((...args) => { signal = currentInferenceSignal(); return answer(...args); });
+    mocks.proof.mockResolvedValueOnce(identity).mockResolvedValueOnce(identity).mockImplementationOnce(async () => {
+      vi.setSystemTime(30_001);
+      expect(signal?.aborted).toBe(false);
+      return identity;
+    });
+    const result = await runLocalToolFidelityDiagnostic(selection, "u", context());
+    expect(result.data).toMatchObject({ qualified: false });
+    expect(mocks.call).toHaveBeenCalledTimes(1); expect(reads).not.toHaveBeenCalled();
+  });
+  it("cannot qualify late audit proof before the abort callback is delivered", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(0);
+    let signal: AbortSignal | undefined;
+    const answer = mocks.call.getMockImplementation()!;
+    mocks.call.mockImplementation((...args) => { signal = currentInferenceSignal(); return answer(...args); });
+    mocks.audit.mockImplementationOnce(async ({ where }: { where: { id: string } }) => {
+      vi.setSystemTime(30_001);
+      expect(signal?.aborted).toBe(false);
       return rows.get(where.id);
     });
     const result = await runLocalToolFidelityDiagnostic(selection, "u", context());
