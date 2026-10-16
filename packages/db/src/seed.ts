@@ -6,7 +6,7 @@ import { prisma } from "./client.js";
 import { Prisma } from "../generated/client/client";
 import { parseRoleId, parseAgentTier, parseAgentType, parseAgentPortfolioSlug } from "./seed-helpers.js";
 import { resolveAgentIdentity, resolveCanonicalAgentId } from "./agent-identity.js";
-import { seedCanonicalAgentToolGrants } from "./seed-agent-tool-grants.js";
+import { assertInteractiveAgentPermissionState, seedCanonicalAgentToolGrants } from "./seed-agent-tool-grants.js";
 import { resolvePrincipalSensitivityClearance } from "./principal-sensitivity.js";
 import { convergeAgentPrincipals, type AgentPrincipalDb } from "./agent-principal-convergence.js";
 import { upsertCoworkerAgentTolerant } from "./coworker-agent-upsert.js";
@@ -2849,31 +2849,13 @@ async function assertAnthropicSubToolCapability(): Promise<void> {
 }
 
 /**
- * Every coworker and onboarding agent the user can talk to must have at least
- * one tool grant. Without grants, isToolAllowedByGrants() denies every tool
- * and the agent can only hallucinate tool calls (it will claim reviews passed,
- * claim evidence was saved, etc. — all with no DB effect). Fail the seed
- * loudly rather than ship a broken configuration.
+ * Interactive identities must resolve to a provisioned canonical authority.
+ * Retained revocations and unresolved alias decisions may intentionally leave
+ * no effective tools. Report missing provisioning without restoring access or
+ * requiring duplicate grants on execution aliases.
  */
 async function assertCoworkerAgentsHaveGrants(): Promise<void> {
-  const offenders = await prisma.agent.findMany({
-    where: {
-      type: { in: ["coworker", "onboarding"] },
-      archived: false,
-    },
-    select: { agentId: true, name: true, type: true, toolGrants: { select: { id: true } } },
-  });
-  const missing = offenders.filter((a) => a.toolGrants.length === 0);
-  if (missing.length > 0) {
-    const list = missing.map((a) => `${a.agentId} (${a.name}, type=${a.type})`).join(", ");
-    throw new Error(
-      `Seed invariant violated: ${missing.length} interactive agent(s) without tool grants: ${list}. ` +
-        `Without grants these agents will silently fail every tool call and hallucinate successful outcomes. ` +
-        `Add grants to HARDCODED_COWORKER_GRANTS in seedCoworkerAgents() (for hardcoded coworkers), ` +
-        `to seedOnboardingAgent() in apps/web/lib/inference/bootstrap-first-run.ts (for onboarding agents), ` +
-        `or to tool_grants in packages/db/data/agent_registry.json (for registry agents).`,
-    );
-  }
+  await assertInteractiveAgentPermissionState(prisma);
 }
 
 main()
