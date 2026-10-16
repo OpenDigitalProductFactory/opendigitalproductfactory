@@ -1726,6 +1726,45 @@ class OnePluginOwnedConnectorTest(unittest.TestCase):
 
 
 class OAuthDefaultTest(unittest.TestCase):
+    def test_explicit_portal_origin_keeps_the_canonical_mcp_path(self):
+        for endpoint in ("https://localhost", "https://localhost/", "http://127.0.0.1:3000?tenant=demo"):
+            with self.subTest(endpoint=endpoint), tempfile.TemporaryDirectory() as tmp:
+                home = Path(tmp)
+                path = updater.codex_config_path(home)
+                path.parent.mkdir(parents=True)
+                path.write_text('[mcp_servers.dpf]\nurl="https://localhost/api/mcp/v1?tier=full"\nstartup_timeout_sec=45\n')
+                updater.ensure_codex_config(home, endpoint, False)
+                value = updater.existing_codex_mcp_endpoint(path.read_text())
+                self.assertEqual(updater.urlsplit(value).path, "/api/mcp/v1")
+                self.assertIn("startup_timeout_sec=45", path.read_text())
+                if "tenant=demo" in endpoint:
+                    self.assertIn("tenant=demo", value)
+
+    def test_explicit_proxy_endpoint_preserves_path_and_query(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            updater.ensure_codex_config(home, "https://proxy.example/tenant/mcp/?tenant=demo&empty=", False)
+            self.assertEqual(updater.existing_codex_mcp_endpoint(updater.codex_config_path(home).read_text()),
+                             "https://proxy.example/tenant/mcp/?tenant=demo&empty=&tier=full")
+
+    def test_unsafe_explicit_endpoint_refuses_before_any_host_write(self):
+        for endpoint in ("not-an-endpoint", "ftp://localhost", "https:localhost", "https:///localhost", "https://localhost\\evil",
+                         "https://localhost:invalid", "https://u:p@example.test", "https://localhost?api_key=synthetic-secret"):
+            with self.subTest(endpoint=endpoint), tempfile.TemporaryDirectory() as tmp:
+                home = Path(tmp)
+                path = updater.codex_config_path(home)
+                path.parent.mkdir(parents=True)
+                original = '[mcp_servers.dpf]\nurl="https://localhost/api/mcp/v1"\n'
+                path.write_text(original)
+                with patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}), patch("builtins.print") as output, \
+                        patch.object(updater, "resolve_codex_binary", return_value=None):
+                    with self.assertRaisesRegex(ValueError, "MCP endpoint"):
+                        updater.main(["--mcp-url", endpoint, "--codex-only", "--skip-codex-cli-install",
+                                      "--skip-grok-cli-install", "--skip-antigravity-cli-install"])
+                output.assert_not_called()
+                self.assertEqual(path.read_text(), original)
+                self.assertFalse(updater.codex_managed_plugin_path(home).exists())
+
     def test_saved_endpoint_read_mode_does_not_echo_query_credentials(self):
         for key in ("access_token", "api_key", "API-Key", "client_secret"):
             with self.subTest(key=key), tempfile.TemporaryDirectory() as tmp:

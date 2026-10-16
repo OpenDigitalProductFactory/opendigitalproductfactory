@@ -304,3 +304,54 @@ change. The original quoted medium criteria and six-route obligations above
 remain applicable and unverified beyond their actual evidence. Rollback reverts
 this continuation without deleting original refusals, tasks, budgets or receipts.
 The separate missing-terminal-writer task remains an execution recovery matter.
+
+## 2026-10-16: bounded recovery read on the existing item reader
+
+Finish BI-C56AE9A2's retained medium criteria in the same Workroom. The live
+evaluator claim delivered three complete review requests, but that is not the
+original six-or-more-unmet-gates/client-budget qualification. The existing
+`get_backlog_item` still includes the whole body, activity payloads and all
+recovery requests; retrying that large response cannot recover a cut-off packet.
+
+Extend that existing reader with an optional `recoveryGate` projection. Reuse
+the canonical readiness and terminal recovery issuer, caller identity, live
+Workroom, immutable artifact and baseline. Return only the requested gate's exact
+request, its source identity, available gate names and the issuer's finite
+escalations. Omit unrelated body/history and other request objects. Never trim a
+request to fit a budget, reconstruct a request or create an alternate store.
+If a single request exceeds the declared bounded-response budget, refuse it
+explicitly without returning a partial packet. Re-reading unchanged inputs must
+return the identical request; stale source or readiness yields the issuer's new
+refusal or current packet, never a cached approval.
+
+Research is now author-owned. Its bounded read must return the existing
+`record_initiative_evidence` recovery, not invent an independent research writer.
+Design/review claim and dispatch refusal guidance must name this reader and the
+specific gate, distinguishing a mismatched request from delivery that was not
+completed. This changes no reviewer eligibility, grant, equality or task budget.
+
+Ordered atomic fix:
+
+1. Reproduce with an effective-large six-or-more-unmet-gate decision, six issued
+   requests and large body/history. Assert one complete bounded request, exact
+   reread equality, unknown/missing gate refusal, oversized single-request
+   refusal and author-owned research escalation before production edits.
+2. Share one bounded recovery projection in the existing item read. Retain the
+   normal unfiltered item response for callers not requesting it. Resolve owed
+   pre-delivery and terminal lanes through the same canonical issuer.
+3. Update advertised schema and author guidance; preserve negative permission,
+   self-review, stale binding and altered-packet tests. Use actual caller/task
+   authority and never resume either existing missing-writer task as a test.
+4. Run affected tests, both official web typechecks and guards; independently
+   assess the committed delta, protect publication, then verify the bounded read
+   on the containing served version. Existing provider acceptance remains with
+   its owner and independent reviewer completion remains separately required.
+
+This is one atomic `reviewer-packet-contract` deliverable for BI-C56AE9A2,
+OBJ-MCP-RECOVERY/OBJ-MCP-PROCESS and AC-C56-PACKET/AC-C56-REFUSAL/AC-C56-REMEDY.
+The four original medium acceptance bullets quoted above remain unchanged;
+current author-owned research is explicitly qualified rather than silently
+converted into self-review. More than 20% of effort consolidates packet
+projection, validation and recovery guidance in the existing owners. No schema,
+UI, credential, provider or runtime configuration changes. Rollback reverts the
+optional projection while retaining all earlier packets, refusals and TaskRuns.
