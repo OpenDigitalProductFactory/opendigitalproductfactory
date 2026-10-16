@@ -146,6 +146,7 @@
     "other": "Other exclusion"
   },
   "dataLabel": "Data",
+  "allAiWorkspaces": "All AI workspaces",
   "selectedModelExecution": "Selected model execution",
   "requestExecution": "Request execution",
   "shadowDecision": "Shadow decision",

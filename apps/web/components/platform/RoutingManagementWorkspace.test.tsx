@@ -7,7 +7,8 @@ import type { OperationsMapRoutingTopology } from "@/lib/ai-operations-map/types
 import { RoutingManagementWorkspace } from "./RoutingManagementWorkspace";
 import { RoutingManagementNav } from "./RoutingManagementNav";
 
-vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(window.location.search), usePathname: () => window.location.pathname }));
+const navigation = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(window.location.search), usePathname: () => window.location.pathname, useRouter: () => ({ push: navigation.push }) }));
 vi.mock("next/link", () => ({ default: ({ children, ...props }: React.ComponentProps<"a">) => <a {...props}>{children}</a> }));
 const end = "2026-10-12T12:00:00Z";
 const receipt: RoutingReceipt = { id: "decision-1", occurredAt: end, actorId: "worker", task: "review", sensitivity: "internal", providerId: "cloud", modelId: "model", endpointId: "endpoint", correlation: "missing", screen: null, exclusions: [{ providerId: "local", modelId: null, hold: "tokens" }], attempts: [], execution: "unknown", selectedExecution: "unknown", shadowMode: false, costUsd: null, tokens: null, costSource: null, sourceIds: [], recipeKey: null, evaluator: null, quality: null };
@@ -16,6 +17,7 @@ const topology: OperationsMapRoutingTopology = { coworkers: [{ agentId: "worker"
 const mount = (value = data) => render(withMessages(<RoutingManagementWorkspace data={value} topology={topology} evidenceEnd={end} windowLabel="Bounded evidence" />));
 
 beforeEach(() => {
+  navigation.push.mockClear();
   window.history.replaceState(null, "", "/platform/ai/operations-map?routingWindow=60&routingTask=review&routingData=internal");
   HTMLDialogElement.prototype.showModal = function () { this.open = true; };
   HTMLDialogElement.prototype.close = function () { this.open = false; };
@@ -56,13 +58,31 @@ describe("routing workspace investigation", () => {
 });
 
 describe("existing provider navigation", () => {
-  it("groups contextual routing links without duplicating the platform navigation landmark", () => {
+  it("uses one canonical platform navigation with direct routing views and a wider-workspace exit", () => {
     window.history.replaceState(null, "", "/platform/ai/providers");
     render(withMessages(<RoutingManagementNav />));
-    const shortcuts = screen.getByRole("group", { name: "Routing management" });
-    expect(within(shortcuts).getByRole("link", { name: "Traffic" })).toBeTruthy();
-    expect(within(shortcuts).getByRole("link", { name: "Providers" }).getAttribute("aria-current")).toBe("page");
-    expect(screen.queryByRole("navigation")).toBeNull();
+    expect(document.querySelectorAll('[data-component="platform-tab-nav"]')).toHaveLength(1);
+    const traffic = screen.getByRole("link", { name: "Traffic" });
+    expect(traffic.closest("[data-advanced-tools]")).toBeNull();
+    expect(screen.getByRole("link", { name: "Providers" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("link", { name: "All AI workspaces" }).getAttribute("href")).toContain("/platform/ai/overview");
+    expect(screen.queryByRole("link", { name: "Providers & Routing" })).toBeNull();
+    const mobile = screen.getByRole("combobox", { name: "Routing management" });
+    expect((within(mobile).getByRole("option", { name: "Providers" }) as HTMLOptionElement).selected).toBe(true);
+    expect(within(mobile).getByRole("option", { name: "All AI workspaces" })).toBeTruthy();
+    const target = screen.getByRole("link", { name: "Evaluation" }).getAttribute("href")!;
+    fireEvent.change(mobile, { target: { value: target } });
+    expect(navigation.push).toHaveBeenLastCalledWith(target);
+  });
+  it("retains investigation scope across a reload in the wider AI workspace", () => {
+    window.history.replaceState(null, "", "/platform/ai/overview?routingWindow=15&routingTask=review&routingData=internal");
+    const view = render(withMessages(<RoutingManagementNav />));
+    expect(screen.getByRole("link", { name: "Workforce" })).toBeTruthy();
+    window.history.replaceState(null, "", "/platform/ai/providers");
+    view.rerender(withMessages(<RoutingManagementNav />));
+    const query = new URLSearchParams(window.location.search);
+    expect(query.get("routingTask")).toBe("review");
+    expect(query.get("routingWindow")).toBe("15");
   });
   it("restores scope when an existing catalog link omits it, and persists it for reload", () => {
     const view = render(withMessages(<RoutingManagementNav />));

@@ -25,7 +25,9 @@ order: 2
 
 ## Read the routing picture
 
-Open **Platform → AI → Operations Map**. Traffic, Evaluation and Providers share routing context. Choose a task, provider, data sensitivity and time window; the URL preserves those choices for reload, browser Back and provider round trips.
+Open **Platform → AI Operations → Providers & Routing**, then choose **Traffic**, **Evaluation** or **Providers** in the shared AI navigation. These views replace the wider AI tabs while you investigate routing. **All AI workspaces** returns to the workforce and other AI tools. The same destinations are available in the mobile view selector.
+
+Choose a task, provider, data sensitivity and time window; the URL preserves those choices for reload, browser Back and provider round trips. Provider pages show the retained investigation context once above their settings. Traffic and Evaluation show it in their filters.
 
 ## Follow traffic
 

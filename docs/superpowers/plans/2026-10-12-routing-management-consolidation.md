@@ -51,3 +51,8 @@ The safe projection must not leak raw evidence or conflate an estimated adapter 
 ## Backlog coverage
 
 Atomic: one web-package routing workspace refactor, mapped to BI-2BBD9D34. These phases are internal sequencing, not separate releases: a new default without safe receipts or contextual navigation is an incomplete operator workflow; navigation without the new operational view is likewise incomplete. No independent backend service or provider write feature is included. Live immutable plan-coverage receipt will be recorded against this blob before source implementation and referenced by a later evidence note.
+**Navigation refinement from served review.**
+
+The served Providers review rejected stacking a custom routing row below the existing AI navigation. Compose Traffic, Evaluation, Providers and All AI workspaces into the canonical PlatformTabNav/SectionNav instead. The mobile selector exposes the same scoped destinations; wider AI workspaces retain their normal navigation. Workspace sibling views are explicitly primary in that local composition, so Simple mode does not hide them in the diagnostic disclosure. Global route audience classifications and route permissions stay authoritative.
+
+Show retained scope once on provider pages and in the existing filters on the routing workspace. Preserve provider detail, reload, Back and the scoped exit through the wider AI workspace. Source and screenshot review are separate from the still-owed native UX coworker/WSID acceptance. Only a reviewed measurement of the final structure may update the Providers accessibility snapshot; keep every numeric limit and all other route entries intact.

@@ -10,9 +10,8 @@ export default async function AiLayout({ children }: { children: React.ReactNode
   const { language } = await getLocaleContext();
   return (
     <div>
-      <PlatformTabNav />
-      <MessagesProvider locale={language} messages={{ routingManagement: namespaceMessages(language, "routingManagement"), setup: namespaceMessages(language, "setup"), errors: namespaceMessages(language, "errors") }}>
-      <Suspense><RoutingManagementNav /></Suspense>
+      <MessagesProvider locale={language} messages={{ routingManagement: namespaceMessages(language, "routingManagement"), shell: namespaceMessages(language, "shell"), setup: namespaceMessages(language, "setup"), errors: namespaceMessages(language, "errors") }}>
+      <Suspense fallback={<PlatformTabNav />}><RoutingManagementNav /></Suspense>
       {children}
       </MessagesProvider>
     </div>

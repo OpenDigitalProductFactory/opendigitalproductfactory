@@ -5,8 +5,8 @@
   "scope": {
     "files": [
       "apps/web/components/platform/AiOperationsMap.tsx",
+      "apps/web/components/shell/SectionNav.tsx",
       "apps/web/components/platform/RoutingManagementInspector.tsx",
-      "apps/web/components/platform/RoutingManagementNav.tsx",
       "apps/web/components/platform/RoutingManagementWorkspace.tsx"
     ]
   },
@@ -24,7 +24,7 @@
     "evidenceClass": "Operator-reviewed clickable prototype, source-grounded canonical controls and owning-scope comparison. Served verification is required separately; this manifest does not claim it passed. UX engagement CE-1FE20783 requested; no completed critique claimed."
   },
   "rationale": {
-    "consolidated": "Refactor the existing routing workspace with grouped traffic, overlays, task outcomes and context-preserving provider navigation. Keep provider and assignment actions at their existing homes.",
+    "consolidated": "Refactor the existing routing workspace with grouped traffic, overlays, task outcomes and context-preserving provider navigation. Replace the AI sub-navigation on routing routes through the canonical PlatformTabNav and SectionNav; keep a direct All AI workspaces exit. Keep provider and assignment actions at their existing homes.",
     "add-dashboard": "Adds duplicated state and override controls, increasing navigation and policy drift."
   }
 }
