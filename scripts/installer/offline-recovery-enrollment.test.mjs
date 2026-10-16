@@ -107,11 +107,30 @@ test("late directory sync failure retains complete enrollment for inspection", p
   const f = await fixture(t); const originalOpen = fsPromises.open;
   fsPromises.open = async (...args) => {
     const handle = await originalOpen(...args);
-    if (args[0] === f.dir && args[1] === "r") handle.sync = async () => { throw Object.assign(new Error("fixture EIO"), { code: "EIO" }); };
+    if (args[0] === f.dir) handle.sync = async () => { throw Object.assign(new Error("fixture EIO"), { code: "EIO" }); };
     return handle;
   };
   syncBuiltinESMExports();
   try { await assert.rejects(enrollOfflineRecoveryAuthority(f.args), { code: "EIO" }); }
   finally { fsPromises.open = originalOpen; syncBuiltinESMExports(); }
   assert.equal(JSON.parse(await readFile(f.args.destination)).minimumTrustEpoch, 4);
+});
+
+test("rejects a directory descriptor for a different generation before flushing it", posix, async t => {
+  const f = await fixture(t); const other = await fixture(t);
+  const originalOpen = fsPromises.open; let injected = false; let flushed = false;
+  fsPromises.open = async (...args) => {
+    if (args[0] === f.dir) {
+      injected = true;
+      const handle = await originalOpen(other.dir, "r");
+      handle.sync = async () => { flushed = true; };
+      return handle;
+    }
+    return originalOpen(...args);
+  };
+  syncBuiltinESMExports();
+  try { await assert.rejects(enrollOfflineRecoveryAuthority(f.args), /offline_recovery_enrollment_changed/); }
+  finally { fsPromises.open = originalOpen; syncBuiltinESMExports(); }
+  assert.equal(injected, true);
+  assert.equal(flushed, false);
 });

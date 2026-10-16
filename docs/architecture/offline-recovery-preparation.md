@@ -18,7 +18,9 @@ procedure and pre-enrolled independent authorities, never from this document.
   helper. An administrator supplies independently witnessed public key pins and
   a manifest signed by both owners. It verifies the exact manifest, installation
   and expiry before writing a private canonical trust file, flushes it, and
-  checks file and parent generations. It never replaces an existing enrollment,
+  checks file and parent generations. The directory flush uses the retained,
+  no-follow directory descriptor whose identity was verified before creation.
+  It never replaces an existing enrollment,
   receives private keys, or enrolls keys from a portable kit. There is no
   operator-facing enrollment command yet. Rotation and epoch advancement still
   require the remaining shared-writer protocol. A late flush failure retains
