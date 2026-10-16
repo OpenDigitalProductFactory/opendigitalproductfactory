@@ -213,20 +213,27 @@ and engagement identities while completing the normal publication/evidence path.
 
 ## Phase 4: room-bound instantiation
 
-- Add `stepReviewBinding` to the external coworker task contract (`apps/web/lib/mcp/external-coworker-task-adapter.ts`), following `initiativeReviewBinding`.
-- Extend `apps/web/lib/backlog/initiative-readiness/server-reviewer-dispatch.ts` to dispatch step reviews idempotently on `step-review:<workroom>:<stage>:<head>:<profession>`. Validate the exact server-issued binding, current caller and provider authority, sensitivity and room access before participant assignment or enqueue. Then upsert `WorkroomParticipant` role `reviewer` through `room-participant-assignment.server.ts`; reconcile its association to the same durable task after interruption.
-- Generalise `resolveBoundInitiativeReviewBinding` in `apps/web/lib/govern/authority/resolve-coworker-tool-authority.ts` to recognise `stepReviewBinding`, so the reviewer's writer carries `independent-reviewer` steering.
-- Tests: missing authority creates neither participant nor task; dispatch is idempotent across interrupted association/enqueue; steering resolves for the bound writer only. Assignment itself supplies no tool grants.
+Design section 8 supersedes the original external `stepReviewBinding` proposal.
+Reuse the semantic-review TaskRun and fenced per-agent TaskNode checkpoints;
+do not add an external terminal writer or repurpose the CI-correlation tool.
+
+- Extend the immutable contracts in `semantic-change-review.ts` and `semantic-review-request.ts` with server-derived room, current stage, head, criticality, authority and complete profession obligations. Version new requests explicitly; preserve historical packets, identities and unknown effects.
+- Resolve stage facts in `review-specialist-preparation.ts` before selecting providers. Inspect the existing room/shape, item sensitivity and transition-risk readers; an unresolved required fact leaves admission outstanding rather than defaulting to a lower floor. Keep authoring obligations distinct from independent review depth and exclude author identities from every independent reviewer, including the core reviewer.
+- Add the claimed `step-review-participants.ts` seam beside the existing admission store. Validate original actor/token/consent, legitimate room-invitation authority, current canonical provider grants and both execution identities, independence, sensitivity and restrictive room policy before any write. Reuse `room-participant-assignment.server.ts`; preserve existing roles and refuse removed participants or policy widening.
+- In `semantic-review-single-flight.ts`, put new participant assignments and the same durable TaskRun admission in one transaction. A repeated request subscribes to its original admission; it creates no replacement task or participant lifecycle reset. Existing native per-provider checkpoints remain the distinct evidence obligations.
+- Tests: authorization refusal writes neither participant nor task; a transaction failure rolls both back; concurrent admission has one winner; a removed participant stays removed; restrictive policy and revoked canonical authority refuse; alias grants cannot restore a revocation; original actor and room/stage/head remain bound after reconstruction. Resolve graph-linked and colocated tests for every changed seam before Red; unresolved impact advice expands the gate.
 
 ## Phase 5: need and traceable receipts
 
-- `resolveSemanticReviewCoordination` derives the review need from the room's shape and the step's criticality (design §3.2), and only then selects crafts.
-- The semantic-review receipt gains `stageKey`, `criticality` and `authority` (`semantic-review-background.ts`).
-- Tests: the same files in a routine small room and a critical large room draw different reviews, and each receipt names the cause.
+- Connect the existing pure `resolveStepReviewNeed` to server-owned preparation, then `resolveSemanticReviewCoordination`. Required authoring professions remain accounted for even when independent review is routine. Every required profession has a result or an explicit unavailable obligation; bounded concurrency never truncates the set.
+- Bind `stageKey`, exact head, criticality, authority, providers, corpus fingerprints and author disposition into immutable request and receipt identity. A stage/head/authority change invalidates reuse. Use the existing semantic background packet forwarding and per-agent checkpoints; coordinate its file owner before editing that module if a real change is needed.
+- Recheck current actor, room, stage and provider authority before each inference and the final independent core review. Craft proposals remain advisory and cannot manufacture blocking authority, calibration or source-read provenance.
+- Extend the existing engagement lifecycle with a supported revision extension and author disposition while retaining prior requests, findings and original task effects. A completion projection must match the current stage and artifact and retain actual source/corpus evidence. Never re-label an earlier critique as coverage for a corrected artifact.
+- Tests: identical files in routine/small and critical/large rooms draw different review depth and name its cause; a declared HTML prototype requires UX before React files exist; more than three required professions all receive accounted outcomes; partial failure cannot pass; stage/head changes and revocation during execution stop later calls; authoring and independent review use separate eligible principals; accepted/rejected author dispositions retain the contribution and rationale.
 
 ## Phase 6: undecided decisions hold for review
 
-- Set `INDEPENDENT_REVIEW_INTERIM = "hold"` (BI-74B2A8CD §3.6) and dispatch a step review at `consequential` for an `independent_review` decision route, carrying its follow-on.
+- Only after the amended reviewer path is executable and verified, set `INDEPENDENT_REVIEW_INTERIM = "hold"` (BI-74B2A8CD §3.6) and dispatch a step review at `consequential` for an `independent_review` decision route, carrying its follow-on. Preserve the current behavior before qualification; an unavailable reviewer is not a fabricated receipt.
 - Tests: an undecided non-damaging decision holds its step until a reviewer receipt releases or blocks it; a damaging one still goes to a person.
 
 ## Traceability
@@ -236,9 +243,13 @@ and engagement identities while completing the normal publication/evidence path.
 | step-criticality | 1 | OBJ-NEED | resolveStepCriticality | design §3.1 | AC-1 |
 | review-authority | 2 | OBJ-AUTHORITY | resolveReviewAuthority | design §3.5 | AC-5 |
 | craft-classifier | 3 | OBJ-CRAFT | deriveImpactedAcumens | design §3.3 | AC-3 |
-| room-instantiation | 4 | OBJ-INSTANCE | stepReviewBinding | design §3.4 | AC-4 |
+| room-instantiation | 4 | OBJ-INSTANCE | immutable semantic request and fenced TaskNode obligations | design §8 supersedes §3.4 | AC-4 |
 | need-and-receipts | 5 | OBJ-NEED | resolveSemanticReviewCoordination | design §3.2 | AC-2 |
 | undecided-hold | 6 | OBJ-UNDECIDED | INDEPENDENT_REVIEW_INTERIM | design §3.6 | AC-6 |
+| declared-profession-obligations | 4-5 | OBJ-CRAFT | requiredProfessions and current-stage preparation | design §7 and §8 | AC-7 |
+| complete-craft-scheduling | 4-5 | OBJ-INSTANCE | immutable semantic request and per-agent TaskNode | design §7 and §8 | AC-8 |
+| returned-contribution-and-disposition | 5 | OBJ-INSTANCE | engagement task binding and attributable result | design §7 and §8 | AC-9 |
+| explicit-profession-consult | 3 | OBJ-CRAFT | consultProfessionKey with original actor ledger | design §7 | AC-10 |
 
 ## Resumption and expanded participation scope, 2026-10-15
 
@@ -526,3 +537,61 @@ guard and canonical actor/empty-provider-alias/revocation cases. No heap limit
 was raised. The type-reexport, image-script dependency and unchanged 75-file
 cycle guards passed. Live-specialist authority and prototype acceptance are
 still unrun on this corrected source; the existing failed native gate is retained.
+
+## Published checkpoint and current boundary, 2026-10-16
+
+### Acceptance evidence to collect after qualification
+
+| Outcome | Required proof | Does not satisfy it |
+|---|---|---|
+| Specialists selected for the deliverable | A declared UX prototype requires UX before a changed React file exists; a non-UX deliverable selects its owning profession from the registry; the room names the current stage and each obligation. | A static roster or every profession assigned to every room. |
+| Complete participation | More than three required professions retain distinct attributable outcomes across bounded batches. One failed or unavailable contribution remains outstanding. | Three successful branches with the remaining obligations omitted. |
+| Independent review | Authoring contributors and the core/craft independent reviewers have separate eligible principals; current stage, head, consent and revocation checks are exercised through admission and each inference. | A role label, invitation or the author reviewing its own contribution. |
+| UX craft actually applied | The UX critic's returned assessment names the current immutable artifact, consulted WSID/corpus references and versions, concrete criteria/findings, calibration limitations and the author's disposition. | A requested engagement, client-authored critique or an empty calibrated corpus described as support. |
+| Useful density and disclosure | The owning UI delivery verifies aligned account comparison with status, actionable cause, next timing, work boundary and next action visible. Secondary model inventories and diagnostics disclose on demand. Verify desktop and a 390px viewport with readable text and usable controls. | More text, smaller targets, hidden blocking facts or a screenshot without functional checks. |
+| Human-readable surface | Human account/model/work labels identify records and actions; opaque IDs are confined to useful diagnostics. Inspect the relevant served pages because the original attached screenshot itself showed no opaque IDs. | Treating the owner's report about other pages as a finding visible in that screenshot. |
+| Routine bounded handoff | BI-5366EF78 proves request, receiver acknowledgement and completion within the existing authority and room envelope without an unnecessary person gate. True authority, credential and damaging boundaries remain enforced. | Historical BI-B22C8E02 diagnostics or approval of the already-executed invitation. |
+
+These are acceptance obligations, not executed results or a new coverage receipt.
+The provider-page and routing UI owners retain their implementation scope. Bind
+served proof to the containing deployed revision; a merge, source-local pass or
+transport repair alone does not close their UX acceptance.
+
+Exact d33af4512f5f81c14400e795f1aa59caf88cbf2a passed canonical local-CI
+evidence cmvarkqmw0bct01t3qxkypfsa and was normally pushed. The merged tree
+d843a2dc7abd897cc37fba4191a666c470309916 passed 990 suites and 11,541 tests,
+both TypeScript programs, 58 repository guards and all 633 migrations. Sixteen
+suites and 78 tests were skipped, with five todo tests. The production build is
+delegated to the merge queue; this is no production-build or live acceptance
+claim. Independent client SOURCE0 covers the exact correction; it is not a
+native review receipt. The earlier 1f710 failure remains failed.
+
+Author research is recorded as initiative-19a6682a-32df-47e1-a263-9141952ec1e0
+against the published design blob f3368430fcc01583bf8df57df62caae16f061a72.
+The exact issuer's amended spec and architecture requests were submitted without
+new human approval. The spec task ending BF8A1F1B2D2F is input-required with
+actual unknown provider settlement; its effects must be reconciled before any
+retry. The architecture task ending 73E9748A68F5 was submitted and reported
+capacity deferral. Neither admission is approval, and the older unknown tasks
+are preserved. Native baseline and revised coverage remain pending.
+
+The existing governed capability remedy requested file_read for UX Design
+Critic AGT-906. Approval envelope cmvar6kgq079f01t3eeaadva1 is waiting for a
+person because this changes authority. No grant changed. This is distinct from
+the already-executed invitation. A pending grant cannot qualify a provider.
+The proposed canonical grant persists across eligible contexts and covers
+project readers/search, version readers and Build Studio artifact revisions.
+It has no one-blob, room or expiry restriction. Existing token/user checks,
+protected-path rules, canonical-repository provider checks and task bindings
+still apply; they do not establish that every accessible artifact is public.
+The task's exact artifact allowlist is narrower than the durable grant itself.
+Native UX work still refuses until real authority and the containing release
+are verified. Design section 9's artifact-sharing proposal is optional future
+work, not a prerequisite replacing this supported remedy. Do not implement it
+or bypass the current reader boundary to obtain a critique.
+
+The phase 4-6 instructions above now follow design section 8. This plan
+reconciliation is preparation, not permission to implement those phases before
+the amended baseline and coverage are satisfied. BI-5366EF78 owns the new
+bounded request/acknowledge/completion handoff; historical BI-B22C8E02 delivery
+does not prove that successor is implemented or accepted.
