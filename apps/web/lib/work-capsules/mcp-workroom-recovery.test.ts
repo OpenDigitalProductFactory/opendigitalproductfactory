@@ -21,7 +21,7 @@ describe("get_workroom native review readback", () => {
       status: "working", updatedAt: now, lastHeartbeatAt: now,
       progressPayload: { privateProviderOutput: "must-not-escape", semanticReview: { schemaVersion: 1,
         deadlineAt: new Date(now.getTime() + 60_000).toISOString(), recoveryAttempt: 0 } }, nodes: [] }]);
-    db.$queryRaw.mockResolvedValue([{ rowId: "review-row", capsuleId: "WC-1", requestBound: true,
+    db.$queryRaw.mockResolvedValue([{ rowId: "review-row", capsuleId: "WC-1", requestBound: true, requestSchemaVersion: 2, requestArtifactType: "code-change", identityArtifactType: "code-change", identityArtifactTypePresent: true,
       requesterAgentId: "AGT-EXT-CODEX", sourceHeadSha: room.headSha, currentHeadSha: room.headSha,
       issuedAt: new Date(now.getTime() - 1_000).toISOString() }]);
   });
@@ -37,7 +37,7 @@ describe("get_workroom native review readback", () => {
   it("returns the recorded final result and keeps full receipts behind tasks/result authorization", async () => {
     db.taskRun.findMany.mockResolvedValue([{ id: "review-row", taskRunId: "TR-REVIEW", userId: "requester-1",
       status: "completed", updatedAt: now, lastHeartbeatAt: now, progressPayload: {}, nodes: [] }]);
-    db.$queryRaw.mockResolvedValue([{ rowId: "review-row", capsuleId: "WC-1", requestBound: true,
+    db.$queryRaw.mockResolvedValue([{ rowId: "review-row", capsuleId: "WC-1", requestBound: true, requestSchemaVersion: 2, requestArtifactType: "code-change", identityArtifactType: "code-change", identityArtifactTypePresent: true,
       sourceHeadSha: room.headSha, currentHeadSha: room.headSha, issuedAt: new Date(now.getTime() - 1_000).toISOString(),
       receiptId: "receipt-1", receiptDecision: "pass", receiptSummary: "Native review passed.", receiptCreatedAt: now }]);
     const result = await getWorkCapsuleTool({ capsuleId: "WC-1" }, "requester-1");

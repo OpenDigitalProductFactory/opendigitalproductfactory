@@ -167,6 +167,17 @@ The SessionStart health hook reads the OAuth challenge on https (a `401` naming 
 
 **Preserve an existing Codex connection.** A toolchain updater run without `--mcp-url` or a nonempty process `DPF_MCP_URL` preserves the saved `mcp_servers.dpf` URL and operator options. Bootstrap also reads that saved URL before install-origin defaults when no process endpoint is named, so its probes and planner use the approved resource. Fresh bootstrap still follows the install HTTPS origin; new standalone connections default to HTTPS localhost. An explicitly named endpoint replaces the saved URL; CLI selection takes precedence over the environment. The shared read-only reader refuses an unreadable URL, embedded credentials or recognized credential query keys before printing the URL or writing configuration. Check the saved endpoint and the public discovery metadata before retrying authentication. If the endpoint changed unexpectedly, restore the approved endpoint through the supported connector command and inspect the client result; changing the resource may initiate OAuth again. Do not treat successful login as proof of silent refresh or task authority. Do not disable certificate validation, inject a legacy token, or substitute a different host.
 
+**Portal origins and MCP endpoints (BI-E2CE164A).** `--from-portal` selects the
+trusted portal that publishes the signed toolchain. `--mcp-url` names the MCP
+resource the clients will use. The standalone updater and Node bootstrap planner
+interpret an explicit bare HTTP(S) origin, with an empty path or `/`, as
+`/api/mcp/v1` on that same origin. An explicit non-root proxy path and its
+non-secret query options remain intact. Unsafe schemes, embedded credentials and
+credential query options are refused before host configuration is read or
+written; diagnostics do not echo the input. An update with no explicit endpoint
+continues to preserve the saved Codex resource. Refresh installed copies through
+the signed portal updater after this repair ships, then restart active clients.
+
 **Concurrent sessions and refresh.** Several sessions of one client can share a stored refresh token. When the same client refreshes the same token again within `DPF_OAUTH_REFRESH_REUSE_GRACE_SECONDS` (default 60s) of rotating it, the server issues a sibling credential and revokes nothing. Reuse after the window, or by another client, still revokes the whole credential family as `refresh_token_replayed`, and the client reports "This connection was reused. Reconnect to continue." In that case, re-authenticate with `/mcp`. The rule and its security reasoning: [credential-lifecycle amendment](../superpowers/specs/2026-09-21-oauth-external-build-authority-design.md#refresh-reuse-grace-amendment-bi-25c6219e-2026-10-02) (BI-25C6219E).
 
 **Token rotation — the PAT fallback only.** Both tools read the token from the `DPF_MCP_BEARER_TOKEN` environment variable. **The commands below are Windows/PowerShell.** On macOS the variable is set with `launchctl setenv DPF_MCP_BEARER_TOKEN <value>` (a shell-profile `export` is not enough — the desktop clients are launched by launchd, not from your shell), and on Linux it follows that host's user-environment mechanism. The portal's token dialog currently offers only the PowerShell form; see BI-B6088EC6. `.mcp.json` references it as `${DPF_MCP_BEARER_TOKEN}`; Codex does the same via `bearer_token_env_var` in `~/.codex/config.toml`. Token rotation from Admin > Platform Development > MCP is:

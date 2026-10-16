@@ -11,7 +11,7 @@ describe("loadCapsuleLivenessInventory", () => {
     const findMany = vi.fn().mockResolvedValue([{ id: "review-row", taskRunId: "TR-REVIEW", userId: "requester-1",
       status: "working", updatedAt: now, lastHeartbeatAt: now, progressPayload: {}, nodes: [] }]);
     const db = { workroom: { findMany: vi.fn().mockResolvedValue(rooms) }, featureBuild: { findMany: vi.fn() },
-      taskRun: { findMany }, $queryRaw: vi.fn().mockResolvedValue([{ rowId: "review-row", capsuleId: "WC-1", requestBound: true,
+      taskRun: { findMany }, $queryRaw: vi.fn().mockResolvedValue([{ rowId: "review-row", capsuleId: "WC-1", requestBound: true, requestSchemaVersion: 2, requestArtifactType: "code-change", identityArtifactType: "code-change", identityArtifactTypePresent: true,
         sourceHeadSha: "1".repeat(40), currentHeadSha: "1".repeat(40), issuedAt: "2026-10-15T23:59:00Z" }]) };
     const result = await loadCapsuleLivenessInventory(db, { where: {}, take: 10 }, now);
     expect(findMany).toHaveBeenCalledTimes(1);
