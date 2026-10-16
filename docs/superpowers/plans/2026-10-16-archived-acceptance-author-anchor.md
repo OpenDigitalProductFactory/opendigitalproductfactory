@@ -18,6 +18,9 @@ objective-mapping-repository and backlog-completion-evaluation under
 `apps/web/lib/backlog/initiative-readiness/`. Reuse the existing provider-verified
 `contributor-change-lanes/pull-request-observation.ts` snapshot parser. No new
 receipt, identity, permission, persistence model or runtime is required.
+The native OAuth request entrypoint `apps/web/lib/mcp/independent-review-request.ts`
+also excludes archived authors; apply the same exact merged body-only check there
+and retain current OAuth consent, action admission and server packet equality.
 
 ## Observed failure
 
