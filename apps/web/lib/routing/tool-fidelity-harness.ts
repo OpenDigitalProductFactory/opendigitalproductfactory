@@ -6,11 +6,16 @@
 // locates THIS model's empirical selection cliff, replacing the assumed ~15.
 //
 // Inference is INJECTED (`runTurn`) so the pure scorer unit-tests without a live
-// model; the operator-facing runner (scripts/eval-tool-fidelity.mjs) wires the
-// real routed inference. Emits ToolFidelitySample[] to store in
+// model; operate/tool-fidelity-runner.ts composes the existing run_endpoint_tests
+// diagnostic mode with real local inference and governed-read observations.
+// The legacy pure scorer emits ToolFidelitySample[] to store in
 // ModelProfile.customScores (via tool-fidelity-policy).
 
 import { TASK_CLASSES } from "@/lib/tak/intent-taxonomy";
+import { fromJSONSchema } from "zod";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+import { isRecord } from "@/lib/shared/coerce";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import { mergeToolFidelitySample, type ToolFidelitySample } from "./tool-fidelity-policy";
 
 export interface GoldenCase {
@@ -80,4 +85,51 @@ export async function measureToolFidelity(params: {
     samples = mergeToolFidelitySample(samples, surfaceSize, accuracy, cases.length);
   }
   return samples;
+}
+
+/** Pure scoring only: neither this result nor injected fixtures prove live execution. */
+export function scoreToolFidelitySelection(
+  golden: GoldenCase, attached: readonly ToolDefinition[], result: {
+    content?: string; truncated?: boolean; finishReason?: string;
+    toolCalls?: Array<{ name: string; arguments: unknown }>;
+  },
+): { status: "passed" | "failed" | "incomplete"; call?: { name: string; arguments: Record<string, unknown> } } {
+  if (result.truncated === true || !["stop", "tool_calls", "function_call"].includes(result.finishReason ?? "")) {
+    return { status: "incomplete" };
+  }
+  const call = result.toolCalls?.[0];
+  const tool = attached.find(candidate => candidate.name === call?.name);
+  if (!call || !tool || tool.sideEffect !== false || tool.consequence || tool.consequenceForCall
+    || !golden.correctToolNames.includes(call.name) || !isRecord(call.arguments)) return { status: "failed" };
+  try {
+    if (!fromJSONSchema(tool.inputSchema).safeParse(call.arguments).success) return { status: "failed" };
+  } catch { return { status: "incomplete" }; }
+  return { status: "passed", call: { name: call.name, arguments: call.arguments } };
+}
+
+export type FidelityExecutionExpectation = {
+  toolName: string; parameters: Record<string, unknown>; userId: string;
+  agentId: string; threadId: string; taskRunId: string | null;
+};
+
+/** Exact persisted identity, not time-window correlation or model/handler claims. */
+export function scoreToolFidelityExecution(
+  expected: FidelityExecutionExpectation, executionId: string | undefined, row: unknown,
+  invocationResult?: Pick<ToolResult, "success" | "data">,
+): boolean {
+  if (!executionId || !isRecord(row) || row.id !== executionId || row.success !== true
+    || typeof row.durationMs !== "number" || !Number.isFinite(row.durationMs) || row.durationMs < 0
+    || !isRecord(row.result)
+    || (isRecord(row.result.data) && row.result.data.status === "proposed")) return false;
+  if (row.userId !== expected.userId || row.agentId !== expected.agentId || row.threadId !== expected.threadId
+    || row.taskRunId !== expected.taskRunId || row.toolName !== expected.toolName) return false;
+  // The ID comes directly from our original governedDispatch, never a lookup or
+  // caller-supplied claim. Metrics-only retention intentionally drops plaintext
+  // arguments; it does not unbind that exact invocation from its validated input.
+  if (row.auditClass === "metrics_only") {
+    if (invocationResult?.success !== true || invocationResult.data?.status === "proposed" || row.result.error) return false;
+    if (isRecord(row.parameters) && Object.keys(row.parameters).length === 0) return true;
+  } else if (row.result.success !== true) return false;
+  try { return canonicalJson(row.parameters) === canonicalJson(expected.parameters); }
+  catch { return false; }
 }

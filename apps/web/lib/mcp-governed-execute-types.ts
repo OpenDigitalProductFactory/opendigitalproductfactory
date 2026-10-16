@@ -182,6 +182,8 @@ export type GovernedExecuteRejection =
 
 export type GovernedExecuteResult = ToolResult & {
   governance?: {
+    /** Actual persisted audit row, never a handler assertion; its outcome still needs validation. */
+    toolExecutionId?: string;
     rejected?: GovernedExecuteRejection;
     durationMs?: number;
     authorityReason?: CoworkerAuthorityDecision["reasonCode"];

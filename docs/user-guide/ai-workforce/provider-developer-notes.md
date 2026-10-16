@@ -83,6 +83,24 @@ The `refreshOAuthToken()` function handles automatic token refresh. It uses the 
 
 ### Docker Model Runner / Ollama
 
+The existing `run_endpoint_tests` MCP operation also supports `fidelityOnly: true`
+with explicit `endpointId`, `modelId` and `providerConnectionId`. Ask the coworker
+to run this mode for one configured local account/model; it cannot be combined
+with ordinary probes, scenarios, concurrency tests or exhaustive scopes.
+The diagnostic runs at most 45 local turns in four minutes and records selection
+and actual governed-read results separately in the existing test-run history.
+It changes no model ratings, confidence or production tool limits.
+
+This mode needs positive served-source and observed model/runtime identity.
+Its initial identity reader reuses the existing audited DMR parser/template
+proof; unsupported engines or model templates remain unrun rather than inheriting
+another model's results. A changed identity, missing permissions, invalid tool
+arguments or incomplete response cannot qualify a cohort. Three observations
+per task class do not meet the five-observation class-specific minimum.
+The result's `runtimeAcceptance` remains unverified until independently accepted.
+An expired turn cannot start a read or qualify from late audit verification.
+Ordinary OAuth clients can use this mode without a conversation thread.
+
 - Auth method: `none`
 - Auto-activates when reachable
 - `getTestUrl()` returns `/v1/models` when baseUrl contains `/v1` (Docker Model Runner), falls back to `/api/tags` for legacy Ollama
@@ -106,4 +124,4 @@ The `refreshOAuthToken()` function handles automatic token refresh. It uses the 
 - **Different token exchange formats** — Anthropic needs JSON + state, OpenAI needs form-encoded without state. Always check when adding a new provider.
 - **Session cookies don't cross ports** — callback routes on different ports (e.g., 1455 for Codex) can't use `auth()` for session verification. Use the `OAuthPendingFlow.state` for CSRF protection instead.
 - **Docker redirects use 0.0.0.0** — inside Docker, `request.url` resolves to `http://0.0.0.0:3000`. Callback routes must use `appBase()` helper for redirect URLs.
-- **Build cache** — after changing `provider-oauth.ts`, always verify the new code is deployed with a clean build (`docker compose build --no-cache portal`). Stale builds are a common source of confusion.
+- **Deployed source identity** — after changing `provider-oauth.ts`, use the qualified canonical release and governed self-upgrade path. Confirm the served source contains the change.

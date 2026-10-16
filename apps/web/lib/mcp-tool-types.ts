@@ -16,6 +16,8 @@ import type { ToolCallConsequenceRefiner, ToolConsequence, ToolConsequenceScope 
 
 export type BuildPhaseTag = "ideate" | "plan" | "build" | "review" | "ship";
 export type ToolExecutionContext = AuthorizedSurfaceToolExecutionContext & {
+  /** Fresh catalog compiled by the original governed executor, never supplied by a tool caller. */
+  governedReadToolCatalog?: () => Promise<ToolDefinition[]>;
   routeContext?: string;
   agentId?: string;
   threadId?: string;
