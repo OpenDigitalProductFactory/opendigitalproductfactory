@@ -58,3 +58,20 @@ One atomic helper contribution under BI-8B8731EE. No new API, table, tool,
 dependency, account configuration or migration. Rollback removes the helper and
 shared predicate refactor; existing native uncertainty handling stays controlled.
 Local tests are source evidence, not proof of live reviewer recovery.
+
+## Parser contribution evidence
+
+The [Claude Code headless contract](https://code.claude.com/docs/en/headless)
+describes JSON results on stdout for failures inside a run. That output carries
+diagnostics; it does not establish absence of remote effects. The helper accepts
+only a complete result with a boolean error flag, a known subtype and nonempty
+string payload. Unknown or nonempty error arrays remain unclassified/unknown.
+Known success prose is never inspected for failure hints. Existing non-native
+classification retains its behavior and shares the auth/overload predicates.
+
+The first run of the new 32 fixtures failed because the parser did not exist.
+After implementation, all 95 tests in the metadata, quota-banner, quota-fallback,
+adapter and adapter-grant suites passed. Both web TypeScript 7 programs passed;
+documentation index/link checks and diff whitespace checks passed.
+Independent assessment and containing
+runtime qualification belong to WC-1D447592. Native review remains unrun here.

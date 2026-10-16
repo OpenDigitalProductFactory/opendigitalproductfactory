@@ -15,6 +15,57 @@ export function isProviderOverloadMessage(text: string): boolean {
   return /\b529\b|overloaded/i.test(text);
 }
 
+function isCliAuthError(text: string): boolean {
+  return text.length < 300
+    && /invalid api key|fix external api key|please log in|authentication failed|not authenticated/i.test(text);
+}
+function isCliOverloadError(text: string): boolean {
+  return text.length < 600 && isProviderOverloadMessage(text);
+}
+
+const RESULT_SUBTYPES = [
+  "success", "error_during_execution", "error_max_turns",
+  "error_max_budget_usd", "error_max_structured_output_retries",
+] as const;
+type CliResultSubtype = typeof RESULT_SUBTYPES[number];
+export interface CliTerminalResultMetadata {
+  status: "success" | "error" | "unknown";
+  type: "result" | "unknown";
+  subtype: CliResultSubtype | "unknown";
+  isError: boolean | null;
+  hint: "quota" | "auth" | "overloaded" | "model" | "unclassified";
+}
+
+/** Output diagnostics only. No child output proves remote settlement or retry safety. */
+export function parseCliTerminalResultMetadata(output: string): CliTerminalResultMetadata {
+  const metadata: CliTerminalResultMetadata = {
+    status: "unknown", type: "unknown", subtype: "unknown", isError: null, hint: "unclassified",
+  };
+  let payload: unknown;
+  try { payload = JSON.parse(output.trim()); } catch { return metadata; }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return metadata;
+  const record = payload as Record<string, unknown>;
+  if (record.type !== "result") return metadata;
+  metadata.type = "result";
+  if (typeof record.is_error === "boolean") metadata.isError = record.is_error;
+  const subtype = RESULT_SUBTYPES.find((known) => known === record.subtype);
+  if (subtype) metadata.subtype = subtype;
+  // Unknown/error arrays can contain sensitive text and do not supply a result.
+  // Contradictory nonempty arrays also cannot establish a complete envelope.
+  if (!subtype || metadata.isError === null
+    || typeof record.result !== "string" || !record.result.trim()
+    || (record.errors !== undefined && (!Array.isArray(record.errors) || record.errors.length > 0))) return metadata;
+  metadata.status = metadata.isError || subtype !== "success" ? "error" : "success";
+  if (metadata.status === "success") return metadata;
+  const text = record.result;
+  if (isCliQuotaBanner(text)) metadata.hint = "quota";
+  else if (isCliAuthError(text)) metadata.hint = "auth";
+  else if (isCliOverloadError(text)) metadata.hint = "overloaded";
+  else if (text.length < 300
+    && /^(?:the )?model\s+\S+\s+does not exist or you do not have access to it\.?$/i.test(text.trim())) metadata.hint = "model";
+  return metadata;
+}
+
 function failedResult(output: string): boolean {
   let payload: unknown;
   try { payload = JSON.parse(output.trim()); } catch { return false; }
@@ -37,11 +88,10 @@ export function assertCliResultSucceeded(
   if ((failed || withoutTools) && isCliQuotaBanner(text)) {
     throw new InferenceError(`Claude CLI usage limit reached (from stdout): ${text.slice(0, 200)}`, "rate_limit", providerId);
   }
-  if ((failed || withoutTools) && text.length < 300
-    && /invalid api key|fix external api key|please log in|authentication failed|not authenticated/i.test(text)) {
+  if ((failed || withoutTools) && isCliAuthError(text)) {
     throw new InferenceError(`Claude CLI auth error (from stdout): ${text.slice(0, 200)}`, "auth", providerId);
   }
-  if ((failed || withoutTools) && text.length < 600 && isProviderOverloadMessage(text)) {
+  if ((failed || withoutTools) && isCliOverloadError(text)) {
     throw new InferenceError(`Claude CLI overloaded (from stdout): ${text.slice(0, 300)}`, "overloaded", providerId);
   }
   // Do not echo unfamiliar error arrays: they can contain prompt or secret data.
