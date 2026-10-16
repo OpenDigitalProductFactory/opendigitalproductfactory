@@ -390,9 +390,10 @@ PR #6452: Vitest exited zero with nine passing tests but wrote its JSON report
 to `.vitest/json/output.json`, while stdout contained launcher notices. The
 adapter correctly refused `test-report-unproven`; that refusal and the original
 report remain evidence, not failed source tests or a passing publication proof.
-Continue this same policy under BI-25CB699C and WC-0B3EF2C5, using the three
+Continue this same policy under BI-25CB699C and WC-0B3EF2C5, using the five
 normally claimed paths `scripts/published-correction.mjs`,
-`scripts/published-correction.test.mjs` and this plan. No new work carrier,
+`scripts/published-correction.test.mjs`, `scripts/pr-readiness.mjs`,
+`scripts/pr-readiness.test.mjs` and this plan. No new work carrier,
 schema, permission, receipt store or integration authority is introduced.
 
 Before implementation, publish this immutable continuation, refresh its atomic
@@ -415,3 +416,13 @@ through the ordinary push path. Initial bounded DEV recovery, if needed, uses
 only the existing audited route and reports full integration unrun. Current
 coverage, independent assessment, publication and functional results for this
 continuation are still pending; earlier f510/d412 evidence is historical.
+
+The same deployed policy also misroutes a reused branch's initial publication
+when GitHub returns its historical MERGED or CLOSED PR. PR #6455 preparation
+reproduced that failure against old PR #6439. Extract the existing orchestration
+without changing its behavior, reproduce the failure, then attempt proportional
+verification only for an OPEN PR. MERGED/CLOSED contexts retain the ordinary
+initial-publication path and its actual attestation/metadata requirements;
+malformed state remains unproven. Test those transitions and fresh OPEN-context
+rechecks. The documented metadata-only recovery remains truthful zero-execution
+metadata work, not a passing integration record or a protection waiver.
