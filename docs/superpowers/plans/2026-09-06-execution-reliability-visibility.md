@@ -1260,3 +1260,46 @@ stateful test database adapter across recovery suites. Regression cases cover ca
 inference, stale admission, canceled hydration and replacement during hydration.
 No operator workflow or configuration changes: this restores the documented cancellation
 and same-task retry contract. Source tests and review do not prove deployed acceptance.
+
+### October 16 prospective native lifecycle compatibility
+
+Continue the existing maintenance-epoch spec's prospective CLI amendment under
+BI-06AE6833/WC-1D447592. Normal design admission IRD-0A77CE9467D0 and the two
+existing document claims permit this preparation only. Original plan review99
+remains uncertain; this amendment does not retry it or admit runtime changes.
+
+The architecture audit requires a real adapter/storage compatibility contract.
+Kernel decision DI-418EB31838D7 selects the existing AsyncInferenceOp lifecycle
+with an explicit native identity version and typed execution handle. Preserve
+remote version1 provider IDs; reuse registered Claude/Codex adapter kinds and
+the existing worker, authority, queue, transitions and cursor readers. The spec
+is the single home for the handle fields, boundary table and compatibility
+matrix; do not duplicate their detailed contract here.
+
+1. Verify the actual current source inventory: provider/context parser, database
+   constraints, store/query filters, worker, queue/runtime, Workroom/Task readers,
+   cancel path and outbox. Map legacy0, remote1, proposed native2, malformed/future
+   rows and mixed-worker/rollback behavior. Do not enable a native admission yet.
+2. Prove the additive canonical representation with source-local database and
+   injected process/provider fixtures. Real create IDs must be durable before
+   start; test a lost response at every boundary and no repeat create/start.
+   Preserve the synchronous caller contract without another inference/scheduler.
+3. Assess the exact amended design and representation/migration. Obtain current
+   mapping/coverage and normal Large implementation admission before editing
+   runtime code. If the original review's uncertainty prevents a supported new
+   admission, retain that explicit blocker; do not invent a replacement key.
+4. After admission, consolidate both adapters' target/handle/observation helpers
+   while retaining exact remote behavior. Run affected and adversarial tests,
+   both typechecks, impact guards and the governed exact-tree gate. Publish
+   through independent source review, DCO and the protected merge queue.
+5. Qualify a containing canonical release and verify an actual safe prospective
+   launch/result or an attributable unavailable state. Never use that evidence
+   to manufacture original99/941/870/755 membership or effect settlement.
+
+Recovery101's authenticated retirement and current Sandbox reconciliation are
+credited only for their actual epoch. The original seven scenarios, approval
+outcome projection, nested Workroom and complete OAuth acceptance remain open.
+The reported post-publication stage-fold delay is not a proven source defect:
+the canonical drive folds evidence before its inactive-work check, and its
+15-minute schedule plus the deployment drain can explain the stale snapshot.
+Observe a healthy scheduled tick before proposing a corrective stage writer.
