@@ -1,11 +1,11 @@
 import { prisma } from "@dpf/db";
 import { isActiveDefaultSubscription, matchesCredentialRevision, type ActiveAccountSnapshot } from "@/lib/inference/active-provider-account-verification";
-import { captureProviderQuotaObservation } from "@/lib/actions/provider-quota-revalidation";
-import { testProviderAuthInternal } from "@/lib/actions/provider-auth-test";
-import { reconcileProviderQuotaObservation, loadProviderCapacitySnapshots, recordProviderCapacityStatus, capacityAccountIdentity } from "./provider-capacity/store";
-import { accountRuntimeKey } from "./provider-account-candidates";
-import type { ProviderQuotaObservation } from "./provider-capacity/types";
-import { nextSubscriptionQuotaCheck, subscriptionQuotaJobId, SUBSCRIPTION_RECHECK_MS } from "./subscription-quota-policy";
+import { captureProviderQuotaObservation } from "./provider-quota-revalidation";
+import { testProviderAuthInternal } from "./provider-auth-test";
+import { reconcileProviderQuotaObservation, loadProviderCapacitySnapshots, recordProviderCapacityStatus, capacityAccountIdentity } from "@/lib/routing/provider-capacity/store";
+import { accountRuntimeKey } from "@/lib/routing/provider-account-candidates";
+import type { ProviderQuotaObservation } from "@/lib/routing/provider-capacity/types";
+import { nextSubscriptionQuotaCheck, subscriptionQuotaJobId, SUBSCRIPTION_RECHECK_MS } from "@/lib/routing/subscription-quota-policy";
 
 /** A completed probe cannot clear a newer limit, replaced sign-in or manual pause. */
 export async function reconcileActiveSubscriptionQuota(snapshot: ActiveAccountSnapshot, observation: ProviderQuotaObservation) {

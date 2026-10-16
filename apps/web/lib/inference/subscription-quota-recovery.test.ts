@@ -7,11 +7,11 @@ vi.mock("@dpf/db", () => {
     scheduledJob: { findUnique: mocks.job, upsert: mocks.upsert, updateMany: mocks.claim, update: mocks.update }, $queryRaw: mocks.lock };
   return { prisma: { ...db, $transaction: (run: (tx: typeof db) => unknown) => run(db) } };
 });
-vi.mock("@/lib/actions/provider-auth-test", () => ({ testProviderAuthInternal: mocks.probe }));
-vi.mock("@/lib/actions/provider-quota-revalidation", () => ({ captureProviderQuotaObservation: mocks.capture }));
-vi.mock("./provider-capacity/store", () => ({ reconcileProviderQuotaObservation: mocks.reconcile,
+vi.mock("./provider-auth-test", () => ({ testProviderAuthInternal: mocks.probe }));
+vi.mock("./provider-quota-revalidation", () => ({ captureProviderQuotaObservation: mocks.capture }));
+vi.mock("@/lib/routing/provider-capacity/store", () => ({ reconcileProviderQuotaObservation: mocks.reconcile,
   loadProviderCapacitySnapshots: mocks.health, recordProviderCapacityStatus: mocks.record, capacityAccountIdentity: () => ({ accountId: "account-1" }) }));
-import { nextSubscriptionQuotaCheck } from "./subscription-quota-policy";
+import { nextSubscriptionQuotaCheck } from "@/lib/routing/subscription-quota-policy";
 import { recheckSubscriptionQuotas } from "./subscription-quota-recovery";
 const now = new Date("2026-10-15T12:00:00Z");
 const revision = new Date("2026-10-13T00:00:00Z");

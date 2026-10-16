@@ -4,7 +4,6 @@
   "decisionInteractionId": "DI-BDCAE2635809",
   "scope": {
     "files": [
-      "apps/web/components/agent/AgentCoworkerShell.tsx",
       "apps/web/components/platform/ProviderAccountsOverview.tsx"
     ]
   },
