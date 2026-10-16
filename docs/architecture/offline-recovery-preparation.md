@@ -76,6 +76,16 @@ reject new candidate readiness requirements absent from old staging and execute
 key initialization from a temporary directory containing only historical staged
 files. That source-local execution is not a canonical runtime or deployment test.
 
+## Observed staging release
+
+Canonical self-upgrade `SUR-3F9B7AB8` succeeded on 2026-10-16 and serves
+`e05900d547cd74989e79d07d31f70cf011a41f79`. The official live preflight returned
+`CAN-TEST` for the compatibility preparation and enrollment repair merges.
+The released closure now records the exact staging list from that served commit,
+including the shared-lock dependency closure and the previously missing Git
+helper. Earlier closure history remains in Git. This records deployed staging;
+it does not activate shared writers or prove offline recovery acceptance.
+
 ## Remaining acceptance
 
 Operational witnessed enrollment and epoch advancement, all-writer exclusion,
