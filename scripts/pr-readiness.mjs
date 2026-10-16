@@ -162,6 +162,21 @@ export async function runGate(gate, { progress, signal } = {}) {
   };
 }
 
+export async function verifyCurrentPublication({ contextReader = readPublishedContext, verify = verifyPublishedCorrection } = {}) {
+  let publishedContext;
+  try { publishedContext = contextReader(); } catch { /* Initial publication retains its existing path. */ }
+  if (publishedContext) {
+    const state = publishedContext.pullRequest?.state;
+    if (state === "MERGED" || state === "CLOSED") return;
+    if (state !== "OPEN") throw new Error("Published PR state is unproven; inspect the GitHub context before publication.");
+    let observed = false;
+    await verify({ contextReader: () => {
+      if (!observed) { observed = true; return publishedContext; }
+      return contextReader();
+    } });
+  }
+}
+
 async function main() {
   let args;
   try {
@@ -185,19 +200,11 @@ async function main() {
   }
 
   if (args.runGates) {
-    let publishedContext;
-    try { publishedContext = readPublishedContext(); } catch { /* Initial publication retains its existing path. */ }
-    if (publishedContext) {
-      let observed = false;
-      try { await verifyPublishedCorrection({ contextReader: () => {
-        if (!observed) { observed = true; return publishedContext; }
-        return readPublishedContext();
-      } }); }
-      catch (error) {
-        console.error(`PR readiness: NOT READY. ${error.message} No broad local guard or integration rerun was started.`);
-        process.exitCode = 1;
-        return;
-      }
+    try { await verifyCurrentPublication(); }
+    catch (error) {
+      console.error(`PR readiness: NOT READY. ${error.message} No broad local guard or integration rerun was started.`);
+      process.exitCode = 1;
+      return;
     }
   }
   const inspected = inspectCorrectionRecord();
