@@ -9575,14 +9575,6 @@
     "longSentences": 0,
     "textMass": 11
   },
-  "apps/web/components/workspace/workroom/WorkroomReviewRequirements.tsx": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 119
-  },
   "apps/web/components/workspace/workroom/WorkroomShape.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,

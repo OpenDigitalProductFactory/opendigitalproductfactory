@@ -1,4 +1,7 @@
+"use client";
+
 import { EmptyState, Notice, StatusBadge } from "@/components/ui/report-kit";
+import { useT } from "@/lib/i18n/use-t";
 import type { WorkroomView } from "@/lib/work-management/room-types";
 
 const disclosureClass = "min-h-11 cursor-pointer px-4 py-3 text-sm font-semibold text-dpf-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]";
@@ -6,41 +9,42 @@ const disclosureClass = "min-h-11 cursor-pointer px-4 py-3 text-sm font-semibold
 /** Present the authorized profile; composing requirements never assesses them. */
 export function WorkroomReviewRequirements({ profile }: { profile?: WorkroomView["reviewProfile"] }) {
   const source = profile?.source;
+  const t = useT("workrooms");
 
   return (
-    <section aria-label="Review and learning" className="rounded-dpf-xl border border-dpf-border bg-dpf-surface-1">
+    <section aria-label={t("reviewProfile.section")} className="rounded-dpf-xl border border-dpf-border bg-dpf-surface-1">
       <details>
-        <summary className={disclosureClass}>Review requirements</summary>
+        <summary className={disclosureClass}>{t("reviewProfile.requirements")}</summary>
         <div className="space-y-4 border-t border-dpf-border px-4 py-4">
-          <StatusBadge intent="neutral" label="Not yet assessed" variant="soft" />
-          <p className="text-sm text-dpf-muted">Organization fit has not been assessed.</p>
-          <p className="text-sm text-dpf-muted">Requirements describe what must be checked. They do not establish a passed review.</p>
+          <StatusBadge intent="neutral" label={t("reviewProfile.notAssessed")} variant="soft" />
+          <p className="text-sm text-dpf-muted">{t("reviewProfile.organizationFit")}</p>
+          <p className="text-sm text-dpf-muted">{t("reviewProfile.requirementsBoundary")}</p>
           {!source ? (
-            <EmptyState size="sm" bordered={false} title="Review requirements are unavailable."
-              description="The source profile is missing. No review result can be inferred." />
+            <EmptyState size="sm" bordered={false} title={t("reviewProfile.missingTitle")}
+              description={t("reviewProfile.missingDescription")} />
           ) : source.status !== "resolved" ? (
             <Notice variant="warn" title={source.status === "unsupported"
-              ? "This source has no supported review profile." : "Requirements need reconciliation."}>
-              <p>Keep the unresolved requirements for the delivery owner to reconcile before relying on this profile.</p>
+              ? t("reviewProfile.unsupported") : t("reviewProfile.conflicting")}>
+              <p>{t("reviewProfile.reconcile")}</p>
             </Notice>
           ) : null}
           {source ? (
             <>
               <ul className="space-y-4">
                 {source.requirements.map((requirement) => (
-                  <li key={requirement.ref} className="space-y-2 border-l-2 border-dpf-border pl-3 text-sm">
+                  <li key={requirement.ref} className="space-y-2 border-s-2 border-dpf-border ps-3 text-sm">
                     <p className="font-dpf-medium text-dpf-text">{requirement.outcome}</p>
-                    <p className="text-dpf-muted">Compare against: {requirement.denominator}</p>
+                    <p className="text-dpf-muted">{t("reviewProfile.compareAgainst", { denominator: requirement.denominator })}</p>
                     <details>
                       <summary className="min-h-11 cursor-pointer py-3 text-dpf-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]">
-                        Evidence fields and provenance
+                        {t("reviewProfile.evidenceDisclosure")}
                       </summary>
                       <dl className="space-y-2 break-words text-dpf-muted">
-                        <div><dt>Required evidence</dt><dd>{requirement.evidence.join(", ") || "Not recorded"}</dd></div>
-                        <div><dt>Critical failures</dt><dd>{requirement.criticalFailures.join(", ") || "Not recorded"}</dd></div>
-                        <div><dt>Inherited from</dt><dd>{requirement.provenance.join(", ")}</dd></div>
+                        <div><dt>{t("reviewProfile.evidence")}</dt><dd>{requirement.evidence.join(", ") || t("reviewProfile.notRecorded")}</dd></div>
+                        <div><dt>{t("reviewProfile.failures")}</dt><dd>{requirement.criticalFailures.join(", ") || t("reviewProfile.notRecorded")}</dd></div>
+                        <div><dt>{t("reviewProfile.inheritedFrom")}</dt><dd>{requirement.provenance.join(", ")}</dd></div>
                         {requirement.maxAgeSeconds !== undefined ? (
-                          <div><dt>Maximum evidence age</dt><dd>{requirement.maxAgeSeconds} seconds</dd></div>
+                          <div><dt>{t("reviewProfile.maximumAge")}</dt><dd>{t("reviewProfile.seconds", { count: requirement.maxAgeSeconds })}</dd></div>
                         ) : null}
                       </dl>
                     </details>
@@ -49,14 +53,14 @@ export function WorkroomReviewRequirements({ profile }: { profile?: WorkroomView
               </ul>
               <details>
                 <summary className="min-h-11 cursor-pointer py-3 text-sm text-dpf-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]">
-                  Profile identity and unresolved references
+                  {t("reviewProfile.identityDisclosure")}
                 </summary>
                 <dl className="space-y-2 break-all text-sm text-dpf-muted">
-                  <div><dt>Source definition</dt><dd>{source.identity
-                    ? `${source.identity.sourceKey} · version ${source.identity.definitionVersion}` : "Unavailable"}</dd></div>
-                  <div><dt>Profile fingerprint</dt><dd>{source.fingerprint ?? "Unresolved"}</dd></div>
-                  <div><dt>Requirement sources</dt><dd>{source.provenance.join(", ")}</dd></div>
-                  <div><dt>Unresolved references</dt><dd>{source.conflicts.join(", ") || "None in this composition"}</dd></div>
+                  <div><dt>{t("reviewProfile.definition")}</dt><dd>{source.identity
+                    ? t("reviewProfile.definitionVersion", { source: source.identity.sourceKey, version: source.identity.definitionVersion }) : t("reviewProfile.unavailable")}</dd></div>
+                  <div><dt>{t("reviewProfile.fingerprint")}</dt><dd>{source.fingerprint ?? t("reviewProfile.unresolved")}</dd></div>
+                  <div><dt>{t("reviewProfile.sources")}</dt><dd>{source.provenance.join(", ")}</dd></div>
+                  <div><dt>{t("reviewProfile.references")}</dt><dd>{source.conflicts.join(", ") || t("reviewProfile.noConflicts")}</dd></div>
                 </dl>
               </details>
             </>
@@ -64,11 +68,11 @@ export function WorkroomReviewRequirements({ profile }: { profile?: WorkroomView
         </div>
       </details>
       <details className="border-t border-dpf-border">
-        <summary className={disclosureClass}>Did the change help?</summary>
+        <summary className={disclosureClass}>{t("reviewProfile.improvement")}</summary>
         <div className="space-y-2 border-t border-dpf-border px-4 py-4 text-sm text-dpf-muted">
-          <p>No independent assessment is available in this view.</p>
-          <p>An assessment needs an applied version, a comparison window, and an independent reviewer.</p>
-          <p>A recorded receipt or closed cycle alone does not establish improvement.</p>
+          <p>{t("reviewProfile.noAssessment")}</p>
+          <p>{t("reviewProfile.assessmentNeeds")}</p>
+          <p>{t("reviewProfile.receiptBoundary")}</p>
         </div>
       </details>
     </section>

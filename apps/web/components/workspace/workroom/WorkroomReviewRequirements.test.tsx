@@ -1,9 +1,27 @@
-import { renderToStaticMarkup } from "react-dom/server";
+import type { ReactNode } from "react";
+import { renderToStaticMarkup as renderMarkup } from "react-dom/server";
+import { DEFAULT_LOCALE, namespaceMessages } from "@dpf/i18n";
 import { describe, expect, it } from "vitest";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { composeRoomReviewProfile } from "@/lib/work-management/room-review-profile";
 import { WorkroomReviewRequirements } from "./WorkroomReviewRequirements";
 
+const renderToStaticMarkup = (node: ReactNode, locale = DEFAULT_LOCALE) => renderMarkup(
+  <MessagesProvider locale={locale} messages={{ workrooms: namespaceMessages(locale, "workrooms") }}>{node}</MessagesProvider>,
+);
+
 describe("Workroom review requirements", () => {
+  it.each(["en-XA", "ar-XB"])("uses the viewer's %s messages while retaining authored evidence", (locale) => {
+    const source = composeRoomReviewProfile("booking", []);
+    const html = renderToStaticMarkup(<WorkroomReviewRequirements profile={{
+      source, applicability: "unknown", assessment: "not-exercised",
+    }} />, locale);
+    expect(html).not.toContain(">Review requirements</summary>");
+    expect(html).not.toContain(">Did the change help?</summary>");
+    expect(html).toContain(source.requirements[0].outcome);
+    expect(html).toContain(locale === "en-XA" ? "⟦" : "\u202e");
+  });
+
   it("keeps unsupported identity explicit while preserving inherited common requirements", () => {
     const source = composeRoomReviewProfile("unregistered-source", []);
     const html = renderToStaticMarkup(<WorkroomReviewRequirements profile={{

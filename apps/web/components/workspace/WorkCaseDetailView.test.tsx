@@ -1,4 +1,7 @@
-import { renderToStaticMarkup } from "react-dom/server";
+import type { ReactNode } from "react";
+import { renderToStaticMarkup as renderMarkup } from "react-dom/server";
+import { DEFAULT_LOCALE, namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
@@ -12,6 +15,10 @@ import { WorkroomBodyContent } from "./workroom/WorkroomBody";
 import type { WorkspaceWorkCaseDetailView } from "@/lib/work-management/workspace-case-loader";
 import type { WorkroomView } from "@/lib/work-management/room-types";
 import { composeRoomReviewProfile } from "@/lib/work-management/room-review-profile";
+
+const renderToStaticMarkup = (node: ReactNode) => renderMarkup(
+  <MessagesProvider locale={DEFAULT_LOCALE} messages={{ workrooms: namespaceMessages(DEFAULT_LOCALE, "workrooms") }}>{node}</MessagesProvider>,
+);
 
 const room: WorkroomView = {
   roomKey: "booking%3ABK-1",
