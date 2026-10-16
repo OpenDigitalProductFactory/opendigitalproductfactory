@@ -203,7 +203,8 @@ already verifies the packet's subject and exact Workroom access, then calls
 `getBacklogItem` without that room's source identity. Its generic current-design
 read can still return unavailable and refuse the claim's unchanged packet.
 The earlier packet roundtrip suite stubs this reader and readiness; its pass
-does not prove admission with multiple actual rooms. Publication remains held.
+does not prove admission with multiple actual rooms. Publication was held until
+the selected-room admission path could be exercised.
 
 This is the same atomic `governed-claim` / `exact-item-read` route-agreement
 repair. Before implementation, normally claim the admission file,
@@ -223,3 +224,28 @@ completion reads remain unscoped and can still report unavailable; this work
 does not guess a room for them or add a public selection API. Run the affected
 admission, item-read, claim and readiness suites and both TypeScript programs,
 then independently assess the complete frozen change before publication.
+
+The owner normally released both admission source and its affected test after
+PR #6451 merged as ca812ae29d364fff864ae8271532a4a8f5a45090. WC-2A0FAF55 normally
+claimed them, integrated that merge, and refreshed published plan coverage to
+cmvarah4j07rd01t3nfg1n48n at ceaa2cc905a388016f1822cbe967356e6766305e; the native
+check returned valid and IRD-E004E4CF855F allowed implementation. The graph-linked
+authorization/document/exhaustion fixtures are also normally claimed.
+
+The actual claim-to-admission regression failed before source propagation and
+now passes with the real pure readiness projector, persisted-room reader and
+both real issuers. Public selector-shaped parameters remain ignored. Six
+foreign/changed/incomplete persisted-room cases refuse before readiness or
+protected document reads. A completed review can still return its existing
+writer receipt after the room source moves, but only for the identical persisted
+request and current room access; no receipt means refusal. The archived
+body-acceptance path from PR #6451 retains its source proof and policy.
+
+Current affected validation passes 1,518 tests across 125 suites, with 10
+PostgreSQL-dependent tests in two suites skipped. Both web TypeScript programs,
+style and diff checks pass. The earlier e9de6 handoff ran all 84 host preflight
+guards successfully; the subsequent main-only integration ran 14 fresh committed
+policy guards and explicitly skipped exhaustive host and shared-runtime gates.
+These are distinct results, not a full gate pass on a later tree. Independent
+assessment of the complete final change, final-head coverage, protected CI/queue
+and live exact-claim/current-packet acceptance remain pending.
