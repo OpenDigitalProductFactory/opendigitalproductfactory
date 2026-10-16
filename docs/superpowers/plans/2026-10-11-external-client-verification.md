@@ -420,3 +420,64 @@ secret exposure and a changed default endpoint. Negative tests must fence each.
 Rollback is a reviewed source revert and normal canonical release. Revoke only
 an explicitly identified newly issued test client through its supported owner
 flow if cleanup is required; never revoke or rotate another client's credential.
+
+### Same-account autonomous provisioning addendum
+
+The UI/resolver-only sequence above is insufficient for autonomous qualification:
+the authorized verification browser belongs to a test persona, not the native
+caller's human. Its client would not prove the intended source authority.
+This addendum supersedes that sequence's assumption that existing issuance is
+enough; all prior reproduction, UI, compatibility and negative-test requirements
+remain. No credential has been issued during this investigation.
+
+Native discovery and the fresh `origin/main` sweep found the Grok-specific
+issuer in `surface-readiness-pack.ts`, backed by `grok-credential-issue.ts` and
+`grok-credentials-client.ts`. OAuthClient already stores the owner, Agent row,
+encrypted secret and scopes. The source graph corroborates those symbols; its
+EXPOSES_TOOL relation remains absent, so it is not absence evidence. A bounded
+EP-CLIENT-CONFIG query found zero tool items and seven open bugs; it did not
+identify another own source-credential issuer. The broad list was truncated and
+is not an exhaustive absence claim. Existing BI-84C1F526 owns Grok provisioning;
+this correction stays in BI-10AC904B and does not reuse Grok's identity.
+
+WWMD DI-1F9835170DA5 recommends `extend-owned-client-mechanism` with high
+confidence and usable signal over human-only provisioning or borrowing another
+credential. This is owning platform direction, not a new runtime grant. Retain
+the tool governor's authority consequence, required build grant, current human
+capability and secret-result redaction. A failure in those controls stops issuance.
+
+**HCB-R3 / HCB-CT-OWN-CLIENT / HCB-FLOW-PROVISION / HCB-VC-OWN-CLIENT:**
+extract the existing owned-client selection, secret preparation/decryption and
+creation mechanism into one helper. Preserve the Grok wrapper's existing scope,
+unbound-upgrade and foreign-binding compatibility. Add a source profile that is
+strictly bound to the native caller's authenticated user and current canonical
+assistant. No arbitrary recipient, assistant or scope parameters are accepted.
+Reuse OAuth eligibility and the current token-to-public-scope check; the fixed
+read/work/build scopes must already fit the caller. Binding to the same assistant
+preserves its dynamic grant intersection rather than minting grants.
+
+Expose `issue_source_credentials_client` in the existing surface-readiness pack,
+with the existing sandbox_execute mapping, view_platform capability, authority
+consequence and credentialsClient secret-result key. It returns only the caller's
+own source client, or creates it once in OAuthClient. Serialize the owner/assistant
+subject in a normal database transaction using the established advisory-lock
+pattern. Recheck eligibility inside that transaction. Refuse anonymous/session-only
+callers, ineligible actors, narrower tokens, multiple current matches, conflicting
+scope/binding and unreadable stored secrets; never mint a replacement to hide a
+conflict. Revoked clients stay revoked. Do not add tables, roles or grant keys.
+
+Add red/green tests for these refusals, repeated issuance, serialization wiring,
+Grok compatibility, registry parity and secret audit redaction. Regenerate the
+existing capability-completeness outputs. Extend the current authorization
+runbook and immutable coverage before coding this new scope, then refresh normal
+implementation admission. The previous UI/resolver green remains attributed to
+that narrower source; it does not qualify this addendum.
+
+After protected merge and canonical deployment, call the new governed tool from
+the native connection, keep its secret out of transcripts, and write only the
+canonical untracked source credential file. Use the existing trusted endpoint
+configuration and canonical resolver/transport. Read back the actual assistant
+and user-bound authority; test an authorized own-room operation through its normal
+admission. Preserve the working native connector, existing credentials and peer
+limits. If the new capability is unavailable or refused, record that exact limit
+instead of borrowing a token, changing scope or claiming same-account proof.
