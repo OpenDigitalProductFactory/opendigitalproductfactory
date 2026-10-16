@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, cpSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, dirname } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -46,7 +46,7 @@ test("terminal keys are stopped instead of scanned or replaced", () => {
 });
 
 import { protectedServiceIdentity, REQUIRED_PREVIEW_DELIVERY_TOOLS, assertToolReadiness, assertPreviewConfig, assertPreviewContainer, previewOverride, runPreviewLifecycle, stopOwnedPreviewContainers } from './dev-preview-runtime.mjs';
-const identity = { worktree: '/feature/worktree', sha: 'a'.repeat(40), leaseId: 'NPEL-MINE' };
+const identity = { worktree: resolve('/feature/worktree'), sha: 'a'.repeat(40), leaseId: 'NPEL-MINE' };
 const config = () => {
   const result = previewOverride(identity);
   Object.assign(result.services['dev-init'].environment, { CONTRIBUTOR_PREVIEW_PASSWORD: 'only-in-memory',

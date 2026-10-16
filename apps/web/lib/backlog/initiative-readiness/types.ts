@@ -123,6 +123,8 @@ export type InitiativeReadinessFacts = {
   plan: ReadinessEvidenceState;
   planReview: ReadinessEvidenceState;
   planCoverage: ReadinessEvidenceState;
+  /** xlarge completion only: current decomposed coverage and distinct real children. */
+  decomposition?: ReadinessEvidenceState;
   traceability?: ReadinessEvidenceState;
   dependencies: ReadinessEvidenceState;
   authorization: ReadinessEvidenceState;

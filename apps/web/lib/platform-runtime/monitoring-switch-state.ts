@@ -4,9 +4,11 @@
 // capability row: "on" means install-state enables runtime:deep-observability
 // AND prometheus, grafana and postgres-exporter are observed running. Any other
 // mix is named rather than hidden (design 2026-10-13 monitoring operator choice
-// §6). When the install snapshot and the database disagree, a transition would
-// be refused as stale, so the switch locks with an honest reason instead
-// (BI-5ACBAC50 owns the reconcile).
+// §6). The switch requests a reconciliation-mode change (BI-F0C2E8F5), so a
+// monitoring record that disagrees with install-state no longer locks it: the
+// status follows the host and the button offers to match the record to what is
+// running. The lock remains only when reconciliation itself cannot run — the
+// records are incomplete or install-state belongs to another catalog.
 //
 // `reason` is an `admin` catalog key, not prose, so the page can localize it.
 
@@ -30,8 +32,9 @@ export interface MonitoringSwitchInput {
   dbState: string | null;
   observed: Record<string, { composePresent: boolean; healthy: boolean | null }>;
   decision: MonitoringDecisionRecord | null;
-  /** Install-state vs database disagreement from the divergence diagnosis. */
-  divergent: boolean;
+  /** The records cannot be reconciled: a catalog capability has no record, or
+   * install-state was written for a different capability catalog. */
+  unreconcilable: boolean;
   pendingTransition?: "enabling" | "disabling" | null;
 }
 
@@ -42,11 +45,13 @@ export interface MonitoringSwitchState {
   undecided: boolean;
   /** Enabled: services absent or unhealthy. Disabled: services still present. */
   missingServices: string[];
+  /** The monitoring record disagrees with install-state; the action matches it. */
+  recordMismatch: boolean;
 }
 
 export function deriveMonitoringSwitchState(input: MonitoringSwitchInput): MonitoringSwitchState {
   const undecided = input.decision === null || input.decision.decision === "undecided";
-  const base = { undecided, missingServices: [] as string[] };
+  const base = { undecided, missingServices: [] as string[], recordMismatch: false };
 
   if (input.pendingTransition) {
     return {
@@ -60,12 +65,12 @@ export function deriveMonitoringSwitchState(input: MonitoringSwitchInput): Monit
     return { ...base, status: "needs-attention", canToggle: false, reason: "monitoringSettings.reason.installUnknown" };
   }
 
-  const enabled = input.installEnabled.includes(MONITORING_CAPABILITY);
-  const rowDisagrees =
-    (input.dbState === "active" && !enabled) || (input.dbState === "disabled" && enabled);
-  if (input.divergent || rowDisagrees) {
+  if (input.unreconcilable) {
     return { ...base, status: "unreconciled", canToggle: false, reason: "monitoringSettings.reason.unreconciled" };
   }
+
+  const enabled = input.installEnabled.includes(MONITORING_CAPABILITY);
+  base.recordMismatch = (input.dbState === "active" && !enabled) || (input.dbState === "disabled" && enabled);
 
   if (enabled) {
     const missing = MONITORING_SERVICES.filter((service) => {

@@ -5,6 +5,8 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { execFileSync } from "node:child_process";
+import { scrubGitRepoLocationEnv } from "./git-hook-env.mjs";
 import {
   classifyReadiness,
   readinessReason,
@@ -593,7 +595,7 @@ test("an install newer than the lockfile, or either file absent, is not reported
 // BI-5DF74F0D: `--force` ran the install and then failed its own post-install
 // probe on build_record_unreadable, because an install that links nothing new
 // never reaches pnpm's build phase. The documented recovery could not recover.
-test("a missing build record is forgiven only after an install this call completed", () => {
+test("a missing build record without retained proof is forgiven only after this call installs", () => {
   const withNoBuildRecord = (buildRecordOptional) => {
     const sizes = { "ignored-builds": "Automatically ignored builds during installation:\n  Cannot identify as no node_modules found\n" };
     return probeWorktreeReadiness("/wt", {
@@ -612,6 +614,91 @@ test("a missing build record is forgiven only after an install this call complet
   // Forgiving right after a successful install, which is the only caller that
   // sets the flag — otherwise --force can never reach compile-ready.
   assert.doesNotMatch(withNoBuildRecord(true).reason, /^build_record_unreadable:/);
+});
+
+for (const buildRecord of ["None", "Cannot identify as no node_modules found"]) {
+  test(`unsupported proof inputs retain successful one-call readiness: ${buildRecord}`, () => {
+    const sandbox = mkdtempSync(join(tmpdir(), "dpf-bootstrap-hook-"));
+    try {
+      execFileSync("git", ["init", "--quiet", sandbox], { env: scrubGitRepoLocationEnv() });
+      writeFileSync(join(sandbox, "package.json"), '{"packageManager":"pnpm@10.33.2"}');
+      writeFileSync(join(sandbox, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+      writeFileSync(join(sandbox, "pnpm-workspace.yaml"), "packages: []\n");
+      writeFileSync(join(sandbox, ".pnpmfile.cjs"), "module.exports = {};\n");
+      for (const path of ["node_modules", "apps/web/node_modules", "packages/db/generated"]) {
+        mkdirSync(join(sandbox, path), { recursive: true });
+        writeFileSync(join(sandbox, path, "fixture.txt"), "present");
+      }
+      writeFileSync(join(sandbox, "node_modules/.modules.yaml"), "nodeLinker: hoisted\n");
+      const execute = (cmd, args) => ({ ok: true, status: 0, stderr: "", stdout: args?.[0] === "ignored-builds"
+        ? `Automatically ignored builds during installation:\n  ${buildRecord}\n` : cmd === "git" ? "a".repeat(40) : "10.33.2" });
+      assert.equal(bootstrapWorktreeDeps(sandbox, { execute, force: true }).status, "compile-ready");
+      const next = probeWorktreeReadiness(sandbox, { execute });
+      assert.equal(next.status, buildRecord === "None" ? "compile-ready" : "source-only");
+      assert.equal(next.checks.managedInstallProof, false, "unsupported inputs never acquire reusable proof");
+    } finally {
+      assert.ok(sandbox.startsWith(join(tmpdir(), "dpf-bootstrap-hook-")));
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+}
+
+test("a successful managed install remains ready on unchanged subsequent probes", () => {
+  const sandbox = mkdtempSync(join(tmpdir(), "dpf-bootstrap-continuity-"));
+  try {
+    execFileSync("git", ["init", "--quiet", sandbox], { env: scrubGitRepoLocationEnv() });
+    writeFileSync(join(sandbox, "package.json"), JSON.stringify({ packageManager: "pnpm@10.33.2" }));
+    writeFileSync(join(sandbox, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+    writeFileSync(join(sandbox, "pnpm-workspace.yaml"), "packages:\n  - 'apps/*'\nallowBuilds:\n  esbuild: true\n");
+    for (const path of ["node_modules", "apps/web/node_modules", "packages/db/generated"]) {
+      mkdirSync(join(sandbox, path), { recursive: true });
+      writeFileSync(join(sandbox, path, "fixture.txt"), "present");
+    }
+    writeFileSync(join(sandbox, "node_modules/.modules.yaml"), "nodeLinker: hoisted\n");
+    const manifest = join(sandbox, "apps/web/package.json");
+    writeFileSync(manifest, '{"name":"web","dependencies":{}}');
+    let installs = 0;
+    let failInstall = false;
+    let unclassified = false;
+    const execute = (cmd, args) => {
+      if (args?.includes("install")) {
+        installs += 1;
+        if (failInstall) return { ok: false, status: 1, stdout: "", stderr: "install failed" };
+      }
+      return { ok: true, status: 0, stderr: "", stdout: args?.[0] === "ignored-builds"
+        ? `Automatically ignored builds during installation:\n  Cannot identify as no node_modules found\n${unclassified ? "  new-undecided-package\n" : ""}`
+        : cmd === "git" ? "a".repeat(40) : "10.33.2" };
+    };
+    assert.equal(bootstrapWorktreeDeps(sandbox, { execute }).status, "compile-ready");
+    assert.equal(installs, 1);
+    assert.equal(probeWorktreeReadiness(sandbox, { execute }).status, "compile-ready",
+      "the next unchanged probe must retain the successful managed install's qualified evidence");
+    assert.equal(bootstrapWorktreeDeps(sandbox, { execute }).status, "compile-ready");
+    assert.equal(installs, 1, "an unchanged install must not run again");
+    writeFileSync(manifest, '{"name":"web","dependencies":{"new-uninstalled-package":"1.0.0"}}');
+    assert.equal(probeWorktreeReadiness(sandbox, { execute }).status, "source-only", "a workspace dependency change invalidates retained proof");
+    failInstall = true;
+    assert.equal(bootstrapWorktreeDeps(sandbox, { execute }).status, "source-only", "the frozen install's manifest/lock mismatch must not be skipped");
+    failInstall = false;
+    writeFileSync(manifest, '{"name":"web","dependencies":{}}');
+    assert.equal(bootstrapWorktreeDeps(sandbox, { execute }).status, "compile-ready");
+    unclassified = true;
+    assert.equal(probeWorktreeReadiness(sandbox, { execute }).status, "source-only", "retained proof cannot classify an undecided build");
+    unclassified = false;
+    const artifact = join(sandbox, "packages/db/generated/fixture.txt");
+    rmSync(artifact);
+    assert.equal(probeWorktreeReadiness(sandbox, { execute }).status, "source-only", "missing artifacts still fail");
+    writeFileSync(artifact, "present");
+    assert.equal(probeWorktreeReadiness(sandbox, { execute, linkCheckDeps: {
+      readdir: () => ["db"], realpath: () => "/another-worktree/packages/db",
+    } }).status, "source-only", "stale links still fail");
+    failInstall = true;
+    assert.equal(bootstrapWorktreeDeps(sandbox, { execute, force: true }).status, "source-only");
+    assert.equal(probeWorktreeReadiness(sandbox, { execute }).status, "source-only", "a failed forced install cannot reuse old success");
+  } finally {
+    assert.ok(sandbox.startsWith(join(tmpdir(), "dpf-bootstrap-continuity-")));
+    rmSync(sandbox, { recursive: true, force: true });
+  }
 });
 
 // BI-5DF74F0D: the banner told every agent node_modules is "a junction to the

@@ -16,6 +16,14 @@ const mocks = vi.hoisted(() => ({
   readSelfUpgradeSupport: vi.fn(),
   resolveCurrentSelfUpgradeTarget: vi.fn(),
   admitSelfUpgrade: vi.fn(),
+  loadInstanceStance: vi.fn(),
+  prismaInstanceStanceStore: vi.fn(),
+}));
+
+vi.mock("@dpf/db", () => ({ prisma: {} }));
+vi.mock("@/lib/install/instance-stance", () => ({
+  loadInstanceStance: mocks.loadInstanceStance,
+  prismaInstanceStanceStore: mocks.prismaInstanceStanceStore,
 }));
 
 vi.mock("@/lib/jobs", () => ({
@@ -120,6 +128,8 @@ describe("requestSelfUpgrade", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSelfUpgradeConfig.mockResolvedValue(CONFIG);
+    mocks.loadInstanceStance.mockResolvedValue({ environmentClass: "production", primaryPurpose: "operate-organization" });
+    mocks.prismaInstanceStanceStore.mockReturnValue({});
     mocks.resolveOperatingScheduleForSystem.mockResolvedValue({
       schedule: SCHEDULE,
       timezone: "America/Chicago",
@@ -176,6 +186,40 @@ describe("requestSelfUpgrade", () => {
       routine: false,
     }));
     expect(mocks.inngestSend).not.toHaveBeenCalled();
+  });
+
+  it("admits an authorized DEV batch outside business hours with agent provenance", async () => {
+    mocks.loadInstanceStance.mockResolvedValue({ environmentClass: "development", primaryPurpose: "evolve-dpf" });
+    mocks.isUpgradeWindowOpen.mockReturnValue(false);
+    mocks.nextUpgradeWindowOpen.mockReturnValue(new Date("2026-10-07T22:00:00.000Z"));
+    const result = await requestSelfUpgrade({
+      requestedBy: "mcp:codex",
+      actorKind: "agent",
+      now: new Date("2026-10-07T15:20:00.000Z"),
+    });
+    expect(result).toMatchObject({ status: "queued", triggeredBy: "mcp:codex+outside-window" });
+    expect(mocks.admitSelfUpgrade).toHaveBeenCalledWith(expect.objectContaining({
+      triggeredBy: "mcp:codex+outside-window", routine: true, requestedForce: false,
+    }));
+    expect(mocks.recordDeferredUpgradeRequest).not.toHaveBeenCalled();
+  });
+
+  it("keeps an ineligible DEV batch out of admission", async () => {
+    mocks.loadInstanceStance.mockResolvedValue({ environmentClass: "development", primaryPurpose: "evolve-dpf" });
+    mocks.isUpgradeWindowOpen.mockReturnValue(false);
+    mocks.resolveReleaseBatchStatus.mockResolvedValue({ ...BATCH_ELIGIBLE, eligible: false });
+    expect(await requestSelfUpgrade({ requestedBy: "mcp:codex", actorKind: "agent" }))
+      .toMatchObject({ status: "batch_below_threshold" });
+    expect(mocks.admitSelfUpgrade).not.toHaveBeenCalled();
+  });
+
+  it("falls back to window deferral when trusted stance cannot be read", async () => {
+    mocks.loadInstanceStance.mockRejectedValue(new Error("Context unavailable"));
+    mocks.isUpgradeWindowOpen.mockReturnValue(false);
+    mocks.nextUpgradeWindowOpen.mockReturnValue(new Date("2026-10-07T22:00:00.000Z"));
+    expect(await requestSelfUpgrade({ requestedBy: "mcp:codex", actorKind: "agent" }))
+      .toMatchObject({ status: "deferred_to_window" });
+    expect(mocks.admitSelfUpgrade).not.toHaveBeenCalled();
   });
 
   it("BI-2128872C AC-2: an operator outside the window runs now and the run records the bypass", async () => {

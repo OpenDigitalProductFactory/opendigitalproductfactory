@@ -136,7 +136,7 @@ export async function refreshDefaultProviderConnectionOwners(
     }),
     loadDefaultProviderConnectionSource(prisma, providerId),
     prisma.aiProviderConnection.findUnique({
-      where: { connectionId }, select: { authMethod: true, executionChannel: true, credentialEntryId: true },
+      where: { connectionId }, select: { authMethod: true, executionChannel: true, credentialEntryId: true, capacityStatus: { select: { scopeKey: true } } },
     }),
   ]);
   const projection = provider ? buildDefaultProviderConnection(provider) : undefined;
@@ -146,7 +146,7 @@ export async function refreshDefaultProviderConnectionOwners(
       ...(!credential?.providerConnection || credential.providerConnection.connectionId === connectionId
         ? { credentialEntryId: credential?.id ?? null }
         : {}),
-      ...(!capacityStatus?.providerConnection || capacityStatus.providerConnection.connectionId === connectionId
+      ...(!current?.capacityStatus?.scopeKey?.startsWith("account:") && (!capacityStatus?.providerConnection || capacityStatus.providerConnection.connectionId === connectionId)
         ? { capacityStatusId: capacityStatus?.id ?? null }
         : {}),
   };

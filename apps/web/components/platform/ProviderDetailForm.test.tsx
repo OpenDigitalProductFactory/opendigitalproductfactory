@@ -90,6 +90,20 @@ const providerFixture: ProviderWithCredential = {
 };
 
 describe("ProviderDetailForm", () => {
+  it.each([true, false])("keeps server-owned recipes with the existing Models and execution disclosure (write=%s)", canWrite => {
+    render(<ProviderDetailForm pw={providerFixture} canWrite={canWrite} models={[]} profiles={[]} hasActiveProvider
+      executionRecipes={<p>Execution recipes · 29</p>} />);
+    const toggle = screen.getByRole("button", { name: "Models and execution" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText("Execution recipes · 29")).toBeNull();
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("Execution recipes · 29")).toBeTruthy();
+    fireEvent.click(toggle);
+    expect(screen.queryByText("Execution recipes · 29")).toBeNull();
+    expect(configureProvider).not.toHaveBeenCalled();
+    expect(discoverModels).not.toHaveBeenCalled();
+  });
   it("preserves exact-account recovery when default ChatGPT shared ownership is unproven", async () => {
     const fixture: ProviderWithCredential = { ...providerFixture, provider: { ...providerFixture.provider, providerId: "chatgpt", name: "ChatGPT", authMethod: "oauth2_authorization_code", supportedAuthMethods: ["oauth2_authorization_code"] }, credential: { ...providerFixture.credential!, status: "ok", tokenExpiresAt: new Date(Date.now() + 3600000).toISOString() } };
     vi.mocked(startProviderOAuth).mockResolvedValue({ error: "Fixture sign-in result" });
@@ -103,7 +117,7 @@ describe("ProviderDetailForm", () => {
     const fixture: ProviderWithCredential = { ...providerFixture, provider: { ...providerFixture.provider, providerId: "codex", authMethod: "oauth2_authorization_code", supportedAuthMethods: ["oauth2_authorization_code"] } };
     render(<ProviderDetailForm pw={fixture} canWrite={false} models={[]} profiles={[]} hasActiveProvider />);
     expect((screen.getByRole("button", { name: "Sign in with Z.ai" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "Advanced diagnostics" }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: "Models and execution" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("keeps workspace editing open when clearing an ID to replace it", () => {
@@ -204,12 +218,12 @@ describe("ProviderDetailForm", () => {
     render(<ProviderDetailForm pw={providerFixture} canWrite models={[model]} profiles={[]} hasActiveProvider />);
     expect(screen.queryByText("historical-model")).toBeNull();
     expect(screen.queryByText("Ready")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Advanced diagnostics" }));
+    fireEvent.click(screen.getByRole("button", { name: "Models and execution" }));
     expect(screen.getByText("historical-model")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Refresh model diagnostics" }));
     await waitFor(() => expect(screen.getByText("1 model discovered (0 new)")).toBeTruthy());
     expect(profileModels).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Hide diagnostics" }));
+    fireEvent.click(screen.getByRole("button", { name: "Models and execution" }));
     expect(screen.queryByText("historical-model")).toBeNull();
   });
 

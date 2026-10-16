@@ -61,6 +61,25 @@ function completeBoundary(): BuildWorkroomViewInput["boundary"] {
 }
 
 describe("Work Room read model", () => {
+  it("does not ask to assign an owner when the room has recorded accountability", () => {
+    const detail = caseDetail({ state: "triage", nextAction: "Assign owner", assignedToUserId: null });
+    const owned = buildWorkroomView({ caseKey: "booking%3ABK-100", detail, boundary: completeBoundary() });
+    expect(owned.boundary.accountablePrincipalRef).toBe("prn-user-1");
+    expect(owned.work.nextAction).toBe("Review the next step with the accountable owner");
+    const unowned = buildWorkroomView({ caseKey: "booking%3ABK-100", detail });
+    expect(unowned.work.nextAction).toBe("Assign owner");
+    const waiting = buildWorkroomView({ caseKey: "booking%3ABK-100",
+      detail: caseDetail({ state: "waiting-on-system", nextAction: "Wait for system recovery" }),
+      boundary: completeBoundary() });
+    expect(waiting.work.nextAction).toBe("Wait for system recovery");
+    const held = buildWorkroomView({ caseKey: "booking%3ABK-100", detail,
+      boundary: completeBoundary(), processOverseerObservation: { attentionReason: "Wait for the recorded dependency" } });
+    expect(held.work.nextAction).toBe("Wait for the recorded dependency");
+    const specific = buildWorkroomView({ caseKey: "booking%3ABK-100",
+      detail: caseDetail({ state: "triage", nextAction: "Classify the customer request" }), boundary: completeBoundary() });
+    expect(specific.work.nextAction).toBe("Classify the customer request");
+  });
+
   it("projects inherited requirements without treating source resolution as domain qualification", () => {
     const room = buildWorkroomView({ caseKey: "booking%3ABK-100", detail: caseDetail() });
     expect(room.reviewProfile).toMatchObject({

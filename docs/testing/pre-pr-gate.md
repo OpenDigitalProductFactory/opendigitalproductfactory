@@ -14,6 +14,16 @@ wins and this doc is the bug — fix it.
 
 ## The contract (read this first)
 
+Automatic worktree adoption observes the actual repository, branch, worktree,
+fetched base branch, merge-base SHA and head SHA through the existing binder.
+Local Git observation has one ten-second elapsed budget. Missing ancestry is
+unavailable identity, never a substitute base equal to HEAD. The creation hook,
+CLI and reconciliation validate authoritative readback and recheck source
+identity after adoption before caching a binding. Conflicting, incomplete or
+changed identity leaves the recorded room for inspection and writes no success
+marker. Legacy direct adoption remains a compatibility path; a saved claim is
+not by itself proof that current source identity or review readiness is valid.
+
 Host policy commands use the existing observed-process runner with a 30-minute
 command budget, bounded diagnostic tails and graceful/forced tree termination.
 The parent preflight has a 60-minute outer budget. Full source guard loops have

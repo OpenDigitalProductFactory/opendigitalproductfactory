@@ -16,6 +16,8 @@
  */
 
 import { excerptHeadAndTail } from "@/lib/shared/excerpt-head-and-tail";
+import { randomUUID } from "node:crypto";
+import { renderOwnedCliRunner, NativeCliExecutionUncertainError } from "./cli-owned-runner";
 import type { ToolCallEntry } from "./chat-message-types";
 import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./adapter-types";
 import { InferenceError } from "./inference-error";
@@ -179,8 +181,8 @@ export function extractMentionedPlatformToolNames(text: string): string[] {
  * - tokens.access_token: the OAuth access token
  * - tokens.id_token: a JWT (same as access_token if JWT, or synthetic)
  */
-export async function prepareCodexCliAuth(providerId: string): Promise<{ mode: "oauth" } | { mode: "apikey"; apiKey: string }> {
-  const credential = await getDecryptedCredential(providerId);
+export async function prepareCodexCliAuth(providerId: string, authHome: string, connectionId?: string, expectedExecutionVersion?: string): Promise<{ mode: "oauth" } | { mode: "apikey" }> {
+  const credential = connectionId ? expectedExecutionVersion ? await getDecryptedCredential(providerId, connectionId, expectedExecutionVersion) : await getDecryptedCredential(providerId, connectionId) : await getDecryptedCredential(providerId);
   if (!credential) {
     throw new InferenceError(
       `No credential for "${providerId}". Configure via ${providerSetupLocation(providerId)}.`,
@@ -189,14 +191,15 @@ export async function prepareCodexCliAuth(providerId: string): Promise<{ mode: "
     );
   }
 
-  // API key mode — use OPENAI_API_KEY env var
+  // Force private file-based authentication for API and subscription accounts.
   if (credential.secretRef && !credential.cachedToken) {
-    return { mode: "apikey", apiKey: credential.secretRef };
+    await writeContainerFileViaStdin(Buffer.from(JSON.stringify({ OPENAI_API_KEY: credential.secretRef })).toString("base64"), `${authHome}/auth.json`, "600");
+    return { mode: "apikey" };
   }
 
   // OAuth mode — inject auth.json
   // Use getProviderBearerToken which handles token refresh automatically.
-  const tokenResult = await getProviderBearerToken(providerId);
+  const tokenResult = connectionId ? expectedExecutionVersion ? await getProviderBearerToken(providerId, connectionId, expectedExecutionVersion) : await getProviderBearerToken(providerId, connectionId) : await getProviderBearerToken(providerId);
   if ("error" in tokenResult) {
     throw new InferenceError(
       `OAuth token error for "${providerId}": ${tokenResult.error}. Re-authenticate via ${providerSetupLocation(providerId)}.`,
@@ -207,6 +210,15 @@ export async function prepareCodexCliAuth(providerId: string): Promise<{ mode: "
 
   const accessToken = tokenResult.token;
   const isJwt = accessToken.split(".").length === 3;
+  let accountId: string | null = null;
+  try {
+    const claims = JSON.parse(Buffer.from(accessToken.split(".")[1] ?? "", "base64url").toString("utf8"));
+    const value = claims?.["https://api.openai.com/auth"]?.chatgpt_account_id;
+    if (typeof value === "string" && value.trim()) accountId = value;
+  } catch { /* Legacy credentials may predate a supported identity claim. */ }
+  if (connectionId && connectionId !== `provider-default-${providerId}` && !accountId) {
+    throw new InferenceError("Selected account has no supported ChatGPT identity; reconnect this account", "auth", providerId);
+  }
   const idToken = isJwt
     ? accessToken
     : Buffer.from('{"alg":"none","typ":"JWT"}').toString("base64url")
@@ -219,16 +231,13 @@ export async function prepareCodexCliAuth(providerId: string): Promise<{ mode: "
       access_token: accessToken,
       refresh_token: credential.refreshToken ?? "",
       id_token: idToken,
-      account_id: null,
+      account_id: accountId,
     },
     last_refresh: new Date().toISOString(),
   });
 
-  const execAsync = lazyUtil().promisify(lazyChildProcess().exec);
-  // mkdir is a tiny command — safe to run via execAsync.
-  await execAsync(`docker exec ${SANDBOX_CONTAINER} mkdir -p /root/.codex`, { timeout: 5_000 });
   const authB64 = Buffer.from(authJson).toString("base64");
-  await writeContainerFileViaStdin(authB64, "/root/.codex/auth.json");
+  await writeContainerFileViaStdin(authB64, `${authHome}/auth.json`, "600");
 
   return { mode: "oauth" };
 }
@@ -240,10 +249,8 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
 
   async execute(request: AdapterRequest): Promise<AdapterResult> {
     const { providerId, modelId, messages, systemPrompt, tools } = request;
+    const poolIdentity = request.plan.providerConnectionId ? { providerId, providerConnectionId: request.plan.providerConnectionId } : undefined;
     const startMs = Date.now();
-
-    // 1. Inject auth
-    const auth = await prepareCodexCliAuth(providerId);
 
     // 2. Build prompt from messages
     const promptParts: string[] = [];
@@ -294,50 +301,30 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
 
     // 3. Write prompt to temp file in sandbox
     const slug = `codex-conv-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const promptFile = `/tmp/${slug}-prompt.txt`;
-    const runnerScript = `/tmp/${slug}-run.sh`;
     // Inference consumes the supplied packet, not the unrelated shared build tree.
     // Match the Claude adapter: never discover project rules from /workspace.
-    const cliWorkingDir = `/tmp/codex-cwd-${slug}`;
-    // Records the in-container codex PID so a timeout can reap the actual
-    // process inside the sandbox (BI-F36E7510). proc.kill() below only reaches
-    // the local `docker exec` client, not the containerized process.
-    const pidFile = `/tmp/${slug}-pid.txt`;
+    const authHome = `/tmp/dpf-codex-auth-${randomUUID()}`;
+    const promptFile = `${authHome}/${slug}-prompt.txt`;
+    const runnerScript = `${authHome}/${slug}-run.js`;
 
     const cp = lazyChildProcess();
     const execAsync = lazyUtil().promisify(cp.exec);
     const spawnCb = cp.spawn;
+    let containerDispatchStarted = false;
 
     try {
+      await execAsync(`docker exec ${SANDBOX_CONTAINER} sh -c 'mkdir -p ${authHome} && chmod 700 ${authHome}'`, { timeout: 5_000 });
+      await prepareCodexCliAuth(providerId, authHome, request.plan.providerConnectionId, request.plan.providerConnectionVersion);
       // Write prompt via stdin to avoid the POSIX ARG_MAX limit (BI-2685C1E5).
       // See writeContainerFileViaStdin for full rationale.
       const promptB64 = Buffer.from(prompt).toString("base64");
       await writeContainerFileViaStdin(promptB64, promptFile);
 
       // 4. Build runner script
-      const modelFlag = modelId ? `-m ${modelId}` : "";
-      let authExportLine: string;
-      if (auth.mode === "apikey") {
-        authExportLine = `export OPENAI_API_KEY=${auth.apiKey}`;
-      } else {
-        // OAuth mode — auth.json already injected
-        authExportLine = "# OAuth auth via ~/.codex/auth.json";
-      }
 
-      // codex is backgrounded (NOT `exec`ed) so the runner sh stays the parent
-      // and records codex's PID to pidFile — letting the timeout path reap the
-      // real in-container process tree (BI-F36E7510). stdout/stderr are
-      // inherited by the background child, so capture is unchanged.
-      const script = [
-        "#!/bin/sh",
-        `mkdir -p ${cliWorkingDir} || exit 1`,
-        `cd ${cliWorkingDir} || exit 1`,
-        authExportLine,
-        `codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < ${promptFile} &`,
-        `CLIPID=$!`,
-        `echo "$CLIPID" > ${pidFile}`,
-        `wait "$CLIPID"`,
-      ].join("\n");
+      // The container supervisor owns the child handle through settlement and cleanup.
+      const script = renderOwnedCliRunner({ command: "codex", args: ["exec", "-c", 'cli_auth_credentials_store="file"', "--dangerously-bypass-approvals-and-sandbox", "--skip-git-repo-check", ...(modelId ? ["-m", modelId] : [])],
+        home: authHome, cwd: authHome, promptFile, timeoutMs: CLI_TIMEOUT_MS, env: { CODEX_HOME: authHome } });
 
       const scriptB64 = Buffer.from(script).toString("base64");
       await writeContainerFileViaStdin(scriptB64, runnerScript, "755");
@@ -362,8 +349,9 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
       // outside the slot so slots turn over on real inference, not prep.
       const { stdout } = await withCliSlot(() => new Promise<{ stdout: string }>((resolve, reject) => {
         const proc = spawnCb("docker", [
-          "exec", SANDBOX_CONTAINER, runnerScript,
+          "exec", SANDBOX_CONTAINER, "node", runnerScript,
         ]);
+        containerDispatchStarted = true;
 
         let stdout = "";
         let stderr = "";
@@ -371,31 +359,19 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
         const timer = setTimeout(() => {
           timedOut = true;
           proc.kill("SIGTERM");
-          // proc.kill() only signals the local `docker exec` client; the
-          // containerized process is not forwarded the signal and would orphan,
-          // pinning the shared sandbox and leaking pids/threads (BI-F36E7510).
-          // Reap the in-container tree explicitly, escalating to SIGKILL.
-          const reap = (sig: "TERM" | "KILL") =>
-            execAsync(
-              `docker exec ${SANDBOX_CONTAINER} sh -c "kill -${sig} $(cat ${pidFile} 2>/dev/null) 2>/dev/null; pkill -${sig} -f ${runnerScript} 2>/dev/null; true"`,
-              { timeout: 5_000 },
-            ).catch(() => {});
-          void reap("TERM");
-          setTimeout(() => void reap("KILL"), 3_000);
-        }, CLI_TIMEOUT_MS);
+          // The container supervisor independently settles its owned child.
+        }, CLI_TIMEOUT_MS + 15_000);
 
         proc.stdout.on("data", (data: Buffer) => { stdout += data.toString(); });
         proc.stderr.on("data", (data: Buffer) => { stderr += data.toString(); });
 
         proc.on("close", (code: number | null) => {
           clearTimeout(timer);
-          if (timedOut) {
-            reject(new InferenceError(
-              `Codex CLI timed out after ${CLI_TIMEOUT_MS / 1000}s`,
-              "provider_error",
-              providerId,
-            ));
-          } else if (code === 0 || stdout.trim()) {
+          if (timedOut || code === null || code === 124 || stderr.includes("DPF_CLI_TIMEOUT")) {
+            reject(new NativeCliExecutionUncertainError(providerId));
+          } else if (code !== 0 && stdout.trim()) {
+            reject(new NativeCliExecutionUncertainError(providerId));
+          } else if (code === 0) {
             resolve({ stdout });
           } else {
             const signal = cliFailureSignal(stderr);
@@ -413,7 +389,7 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
               ));
             } else if (looksLikeCliRateLimit(signal)) {
               // EP-COST Phase 4: record pool exhaustion so orchestrator can back off
-              void recordCliRateLimit("codex-cli", providerId, stderr);
+              void recordCliRateLimit("codex-cli", providerId, stderr, poolIdentity);
               reject(new InferenceError(
                 `Codex CLI rate limited: ${excerptHeadAndTail(stderr, 600)}`,
                 "rate_limit",
@@ -431,6 +407,7 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
 
         proc.on("error", (err: Error) => {
           clearTimeout(timer);
+          containerDispatchStarted = false;
           // E2BIG / ENOMEM: combined arg+env exceeded OS ARG_MAX.
           // After the stdin-pipe fix this should not occur for prompt writes,
           // but classify correctly if it ever does so the fallback chain can
@@ -515,7 +492,7 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
       }
 
       // EP-COST Phase 4: successful call proves the pool is available — clear any stale exhaustion record.
-      void clearCliRateLimit("codex-cli");
+      void clearCliRateLimit("codex-cli", poolIdentity);
 
       return {
         text: toolCalls.length > 0 ? text.replace(/```json\n?\{[\s\S]*?```/g, "").trim() : text,
@@ -525,9 +502,8 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
       };
     } finally {
       // Clean up temp files (fire-and-forget)
-      execAsync(
-        `docker exec ${SANDBOX_CONTAINER} sh -c "rm -f ${promptFile} ${runnerScript} ${pidFile}; rmdir ${cliWorkingDir} 2>/dev/null"`,
-        { timeout: 5_000 },
+      if (!containerDispatchStarted) await execAsync(
+        `docker exec ${SANDBOX_CONTAINER} sh -c 'rm -rf ${authHome}'`, { timeout: 5_000 },
       ).catch(() => {});
     }
   },

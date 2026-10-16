@@ -2,14 +2,17 @@ import { readFile } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { prisma } from "@dpf/db";
 import { readImageVersion } from "@/lib/platform/image-version";
+import { parseReleaseInstallContext } from "@/lib/self-upgrade/release-target";
+import { RELEASE_IMAGE_TAG } from "@/lib/self-upgrade/registry-release";
 import catalogSeed from "../../../../scripts/capability-service-catalog.generated.json";
 import { isPromoterAvailable, resolvePromoterArtifact, runPromoter, runRuntimeCapabilityProtocolProbe } from "@/lib/self-upgrade/promoter";
 import { countAttributedWork, createPrismaWorkAttributionStore } from "./work-attribution";
 import { computeCapabilityStateVersion, coordinateRuntimeCapabilityTransition, createPrismaRuntimeTransitionReceipts } from "./transition-coordinator";
 import { canonicalTransitionPayload, prepareRuntimeReconciliationIntent, type RuntimeReconciliationIntent, type RuntimeTransitionReceipt } from "./transition-protocol";
 import { computeCapabilityStateVersion as computeHostStateVersion } from "../../../../scripts/lib/capability-state-hash.mjs";
+import { runtimeTransitionHostContext, runtimeTransitionHostPlatform } from "./runtime-transition-host-context";
 
-type CatalogEntry = { capabilityId: string; dependencies: string[]; services: Array<{ service: string; profiles: string[]; dependsOn: string[]; targetClassification?: string; healthSemantics?: string }> };
+type CatalogEntry = { capabilityId: string; dependencies: string[]; services: Array<{ service: string; profiles: string[]; dependsOn: string[]; targetClassification?: string; healthSemantics?: string; hostPlatforms: string[] }> };
 const catalog = catalogSeed as { catalogHash: string; capabilities: CatalogEntry[] };
 
 export function requiredRuntimeServicesAreHealthy(
@@ -24,14 +27,14 @@ export function requiredRuntimeServicesAreHealthy(
   });
 }
 
-function resolveProjection(keys: readonly string[], states: Readonly<Record<string, string>>) {
+function resolveProjection(keys: readonly string[], states: Readonly<Record<string, string>>, hostPlatform?: string) {
   const byId = new Map(catalog.capabilities.map((entry) => [entry.capabilityId, entry]));
   const enabled = new Set<string>();
   const add = (id: string) => { const entry = byId.get(id); if (!entry) throw new Error(`unknown_runtime_capability:${id}`); if (enabled.has(id)) return; entry.dependencies.forEach(add); enabled.add(id); };
   keys.forEach(add);
   const enabledKeys = [...enabled].sort();
   if (JSON.stringify(enabledKeys) !== JSON.stringify([...keys].sort())) throw new Error("runtime_capability_dependency_closure_required");
-  const services = catalog.capabilities.filter((entry) => enabled.has(entry.capabilityId)).flatMap((entry) => entry.services).filter((service) => service.targetClassification !== "ephemeral-lifecycle");
+  const services = catalog.capabilities.filter((entry) => enabled.has(entry.capabilityId)).flatMap((entry) => entry.services).filter((service) => service.targetClassification !== "ephemeral-lifecycle" && (!hostPlatform || service.hostPlatforms.includes(hostPlatform)));
   return { catalogHash: catalog.catalogHash, stateHash: computeCapabilityStateVersion(catalog.catalogHash, states), enabledKeys, composeProfiles: [...new Set(services.flatMap((service) => service.profiles))].sort(), requiredServices: [...new Set(services.map((service) => service.service))].sort() };
 }
 
@@ -73,7 +76,19 @@ async function inspectPackagedReconciliationProtocol(observedHostSnapshot?: Runt
     readFile("/promoter/scripts/lib/transition-signing.mjs"),
   ]);
   const expected = { sourceSha, actuatorSha256: createHash("sha256").update(actuator).digest("hex"), signerSha256: createHash("sha256").update(signer).digest("hex") };
-  const artifact = await resolvePromoterArtifact({ targetSha: sourceSha });
+  // Consumer installs carry published promoter images, not a source-built
+  // dpf-promoter:<sha>. Resolve the installed immutable release, never its
+  // moving discovery channel; the existing artifact validator still binds the
+  // source revision and packaged protocol bytes before any host authority.
+  const installMode = observedHostSnapshot && "installMode" in observedHostSnapshot ? observedHostSnapshot.installMode : null;
+  const releaseInstall = installMode === "consumer" || installMode === "customer";
+  const release = releaseInstall ? parseReleaseInstallContext({ state: observedHostSnapshot, markerMode: null, env: process.env }) : null;
+  if (releaseInstall && (!release || !RELEASE_IMAGE_TAG.test(release.imageTag) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/.test(release.ghcrOwner))) {
+    throw new Error("runtime_protocol_release_identity_missing");
+  }
+  const reference = release ? `ghcr.io/${release.ghcrOwner.toLowerCase()}/dpf-promoter:${release.imageTag}` : null;
+  const artifact = await resolvePromoterArtifact({ targetSha: sourceSha,
+    ...(reference ? { promoterImage: reference, candidateReference: reference } : {}) });
   const info = await runRuntimeCapabilityProtocolProbe({ artifact, expected, containerName: `dpf-runtime-protocol-${randomUUID()}`, ...(observedHostSnapshot ? { observedHostSnapshot } : {}) });
   if (!info.signingVersions.includes(2) || !info.applyVersions.includes(2) || !info.reconciliationVersions.includes(2)) throw new Error("runtime_reconciliation_protocol_unsupported");
   return { info, artifact };
@@ -126,8 +141,9 @@ export async function executeProductionRuntimeCapabilityTransition(input: { tran
   const desiredSet = new Set(input.desiredKeys);
   const desiredStates = prepared ? { ...prepared.desiredDatabaseStates } : Object.fromEntries(rows.map((row) => [row.capabilityId, desiredSet.has(row.capabilityId) ? "active" : "disabled"]));
   const hostStates = (keys: readonly string[]) => Object.fromEntries(catalog.capabilities.map(entry => [entry.capabilityId, keys.includes(entry.capabilityId) ? "active" : "disabled"]));
-  const previousProjection = resolveProjection(previousKeys, prepared ? hostStates(previousKeys) : previousStates);
-  const desiredProjection = resolveProjection(input.desiredKeys, prepared ? hostStates(input.desiredKeys) : desiredStates);
+  const hostPlatform = prepared ? runtimeTransitionHostPlatform(prepared.observedHost) : undefined;
+  const previousProjection = resolveProjection(previousKeys, prepared ? hostStates(previousKeys) : previousStates, hostPlatform);
+  const desiredProjection = resolveProjection(input.desiredKeys, prepared ? hostStates(input.desiredKeys) : desiredStates, hostPlatform);
   if (prepared) {
     previousProjection.stateHash = prepared.observedHost.capabilityStateVersion;
     desiredProjection.stateHash = computeHostStateVersion(catalog.catalogHash, input.desiredKeys, catalog.capabilities.map(entry => entry.capabilityId));
@@ -141,7 +157,7 @@ export async function executeProductionRuntimeCapabilityTransition(input: { tran
   const protocolSecret = (await readFile("/dpf-state/runtime-transition.secret", "utf8")).trim();
   const hostInstallPath = process.env.DPF_HOST_INSTALL_PATH, stateDirHostPath = process.env.DPF_STATE_DIR_HOST, protocolSecretFileHostPath = process.env.DPF_RUNTIME_TRANSITION_SECRET_FILE_HOST;
   if (!hostInstallPath || !stateDirHostPath || !protocolSecretFileHostPath) throw new Error("runtime_transition_host_configuration_missing");
-  const promoterParams = { hostInstallPath, stateDirHostPath, runtimeCapabilitySecretFileHostPath: protocolSecretFileHostPath, targetSha: protocol?.artifact.sourceSha ?? process.env.DEPLOYED_SHA ?? "runtime-capability-transition", ...(protocol ? { promoterImage: protocol.artifact.digest } : {}), backupPath: "/backups/runtime-capability-transition", healthUrl: `${process.env.APP_URL ?? "http://localhost:3000"}/api/health`, composeFiles: (process.env.DPF_SELF_UPGRADE_COMPOSE_FILES ?? "docker-compose.yml").split(/\s+/).filter(Boolean), composeProject: process.env.COMPOSE_PROJECT_NAME ?? "dpf" };
+  const promoterParams = { ...runtimeTransitionHostContext(prepared?.observedHost), runtimeCapabilitySecretFileHostPath: protocolSecretFileHostPath, targetSha: protocol?.artifact.sourceSha ?? process.env.DEPLOYED_SHA ?? "runtime-capability-transition", ...(protocol ? { promoterImage: protocol.artifact.digest } : {}), backupPath: "/backups/runtime-capability-transition", healthUrl: `${process.env.APP_URL ?? "http://localhost:3000"}/api/health` };
   if (!(await reconcileAuthority(promoterParams))) return { status: "transition_in_progress" as const };
   const reserve = await runPromoter({ ...promoterParams, runtimeCapabilityTransitionId: input.transitionId, runtimeTransitionAuthorityOperation: "reserve", containerName: `dpf-promoter-authority-${input.transitionId}`, timeoutMs: 60_000 });
   if (reserve.exitCode !== 0) return { status: "transition_in_progress" as const };
