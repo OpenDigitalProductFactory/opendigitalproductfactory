@@ -37,6 +37,10 @@ No new gate, receipt kind, authority tier or baseline mutation is needed.
    stale-evidence/CAS refusal, not volatile heartbeat timestamps. A changed
    binding, ambiguous room/design, missing file or unavailable source yields
    explicit unavailable evidence, never an unchanged digest or permission.
+   Acquire the subject/guard locks before loading claim gate facts, so a
+   concurrently committed failed review cannot be hidden by an earlier read.
+   A provider comparison at its 300-file cap is incomplete, even when it shows
+   zero or one design; never treat it as absence or select its visible design.
 4. Feed the verified content digest into `judgedDesignDigest`. Current verified
    input has three explicit states: verified, not-applicable and unavailable.
    Unavailable own-repository evidence cannot fall back to old all-pass receipts

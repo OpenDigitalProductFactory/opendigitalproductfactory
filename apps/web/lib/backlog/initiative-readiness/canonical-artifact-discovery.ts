@@ -330,9 +330,9 @@ async function discoverCanonicalDesignArtifactWithFetch(
     };
   }
 
-  if (args.purpose === "post-implementation-review" && files.length >= COMPARE_FILE_LIMIT) {
+  if (files.length >= COMPARE_FILE_LIMIT) {
     return { resolved: false, code: "provider-unavailable",
-      nextAction: "The provider comparison reached its file limit. The repair scope may be incomplete; narrow the immutable review range before retrying." };
+      nextAction: "The provider comparison reached its file limit. The review scope may be incomplete; select the exact canonical design or narrow the immutable review range before retrying." };
   }
 
   const candidates = files

@@ -85,6 +85,20 @@ describe("current canonical design observation", () => {
       commitSha: HEAD_SHA, expectedBlobId: null }));
     expect(result).toMatchObject({ state: "verified", digest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) });
   });
+  it.each([false, true])("withholds current verification on a capped comparison (visible design: %s)", async visibleDesign => {
+    const files = Array.from({ length: 300 }, (_, index) => ({
+      filename: visibleDesign && index === 0 ? "docs/superpowers/specs/visible.md" : `apps/web/lib/file-${index}.ts`,
+      sha: BLOB_SHA, status: "modified",
+    }));
+    const fetchImpl = vi.fn().mockResolvedValue(compareResponse(files));
+    const readBlob = vi.fn().mockResolvedValue({ ok: true, data: new TextEncoder().encode("old baseline"), blobId: BLOB_SHA });
+    const evidence = await readCurrentDesignArtifact({ ...snapshot(), selection: "No explicit design selection" }, {
+      discoverArtifact: async input => discoverCanonicalDesignArtifact({ ...args(fetchImpl as typeof fetch), backlogBody: input.backlogBody }),
+      readBlob,
+    });
+    expect(evidence).toEqual({ state: "unavailable" });
+    expect(readBlob).not.toHaveBeenCalled();
+  });
   it.each(["ambiguous-canonical-design", "provider-unavailable", "no-canonical-design"])("never substitutes the baseline after unresolved explicit selection (%s)", async code => {
     const readBlob = vi.fn();
     const result = await readCurrentDesignArtifact(snapshot(), {

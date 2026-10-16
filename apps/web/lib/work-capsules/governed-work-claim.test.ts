@@ -17,7 +17,8 @@ import {
   governingRulesLine,
 } from "@/lib/kernel/governing-principles";
 import type { CapsuleDb } from "./work-capsule-store-types";
-import { readyActivities } from "@/lib/backlog/initiative-readiness/entry-adapter.test-fixtures";
+import { readyActivities, receipt } from "@/lib/backlog/initiative-readiness/entry-adapter.test-fixtures";
+import type { InitiativeReadinessActivity } from "@/lib/backlog/initiative-readiness/entry-adapter";
 
 const actor = { userId: "user-1", agentId: "AGT-1", principalId: "PRN-1" };
 const CANONICAL_DESIGN_PATH = "docs/superpowers/specs/2026-08-22-entry-design.md";
@@ -141,6 +142,25 @@ function database(activities: unknown[] = []) {
 }
 
 describe("claimGovernedBacklogWorkspace", () => {
+  it("reads gate facts only after the guard locks, so a concurrent fail cannot be lost", async () => {
+    const activities: InitiativeReadinessActivity[] = readyActivities();
+    const db = database(activities);
+    vi.mocked(db.backlogItemActivity!.findMany).mockImplementation(async () => [...activities]);
+    currentDesign.guard.mockImplementation(async () => {
+      const failed = receipt("concurrent-failed-review", "spec-approval");
+      activities.push({ ...failed, recordedAt: new Date(Date.now() + 1_000), payload: { ...failed.payload, decision: "fail" } });
+      return { state: "verified", digest: "sha256:design" };
+    });
+    const claimWorkspace = vi.fn().mockResolvedValue({ capsuleId: "WC-ENTRY" });
+    const result = await claimGovernedBacklogWorkspace({ db, input, actor, workIntent: "plan",
+      dependencies: { claimWorkspace, declareIntent: vi.fn(), discoverCanonicalArtifact } });
+    expect(claimWorkspace).not.toHaveBeenCalled();
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.data.readiness.blockers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "REVIEW_FAILED", state: "fail" }),
+    ]));
+  });
   it("issues the existing independent approval packet for a previously invisible amendment", async () => {
     currentDesign.guard.mockResolvedValue({ state: "verified", digest: "sha256:new-design" });
     const claimWorkspace = vi.fn();

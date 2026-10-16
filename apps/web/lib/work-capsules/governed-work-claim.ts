@@ -453,6 +453,11 @@ export async function claimGovernedBacklogWorkspace(args: {
   try {
     const outcome = await transact(async (tx) => {
       if (!tx.backlogItem || !tx.backlogItemActivity) throw new Error("Readiness transaction lost backlog access.");
+      // Receipt writers lock this subject too. Read every gate fact only after
+      // that lock and the prepared source guard, including a newly failed review.
+      if (tx.$queryRaw) await tx.$queryRaw`SELECT "id" FROM "BacklogItem"
+        WHERE "itemId" = ${args.input.backlogItemId} OR "id" = ${args.input.backlogItemId} FOR UPDATE`;
+      const currentDesign = await currentDesignObservation.admissionGuard(tx as never);
       const item = await tx.backlogItem.findFirst({
         where: { OR: [{ itemId: args.input.backlogItemId }, { id: args.input.backlogItemId }] },
         select: {
@@ -472,7 +477,7 @@ export async function claimGovernedBacklogWorkspace(args: {
         { childItemId: item.itemId, childRowId: item.id },
       );
       const projection = projectBacklogItemReadiness({
-        currentDesign: await currentDesignObservation.admissionGuard(tx as never),
+        currentDesign,
         item: {
           ...item,
           activeBuildKind: item.activeBuild?.kind ?? null,
