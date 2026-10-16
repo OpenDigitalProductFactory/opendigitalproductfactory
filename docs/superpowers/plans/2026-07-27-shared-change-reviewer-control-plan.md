@@ -313,3 +313,9 @@ Rollback reverts the additive readback correction and preserves all stored tasks
 receipts and the recorded failures. Existing coverage is historical; record and
 check new live coverage against this immutable plan and seven claimed paths
 before implementation. The owned runbook must describe the current issuer action.
+
+Pre-implementation coverage: `cmvaq0s9y0dal01pdk2faigd7`, checked valid, bound
+to plan blob `177bca1ab7966efde7944527ba0e31d079f0bda7` at
+`9b9a83f088ccf4d3bd30e55ab6bd6195e22d5e57`; implementation admission
+`IRD-58F6C6246868` allowed the existing small/low delivery. Refresh final
+immutable coverage after publication; these receipts remain historical evidence.
