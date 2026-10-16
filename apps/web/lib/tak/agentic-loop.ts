@@ -911,7 +911,7 @@ export function buildToolSessionHintMessage(
   );
 }
 
-export type RunAgenticLoopParams = {
+export type RunAgenticLoopParams = Pick<LoopToolContextInput, "taskExecutionFence"> & {
 
   chatHistory: ChatMessage[];
   systemPrompt: string;
@@ -1201,7 +1201,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // `mcp__dpf__*` tools instead of text-described prompt content. Other
     // adapters ignore the field. The agentic loop is the only place with
     // both userId and threadId in scope, so it is the natural source.
-    mcpSession: { userId, agentId, threadId, routeContext, taskRunId: taskRunId ?? null },
+    mcpSession: { userId, agentId, threadId, routeContext, taskRunId: taskRunId ?? null, taskExecutionFence: params.taskExecutionFence },
   };
 
   // BI-2AC48661: persistent execution plan. When enabled, expose the two
@@ -2361,7 +2361,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       // side-effecting non-artifact tool is raised as an approval request through
       // the monitor for the owner to decide (null = execute normally; BI-7BCC87BB).
       const contextInput: LoopToolContextInput = {
-        routeContext, agentId, threadId, taskRunId, apiTokenId, interactionMode, chatHistory,
+        routeContext, agentId, threadId, taskRunId, taskExecutionFence: params.taskExecutionFence, apiTokenId, interactionMode, chatHistory,
         tokenScope: params.tokenScope, tokenGrantScopes: params.tokenGrantScopes, skillId: tracker.activeSkillId,
         workroomId: params.workroomId ?? null, externalAccessEnabled: params.externalAccessEnabled,
         requiresExternalAccess: toolDef.requiresExternalAccess, roomAuthority: params.roomAuthority,

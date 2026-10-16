@@ -28,6 +28,7 @@ vi.mock("@dpf/db", () => ({
 
 import { prisma } from "@dpf/db";
 import { resolveMcpApiToken } from "@/lib/auth/mcp-api-token";
+import { verifyMcpSessionToken } from "@/lib/mcp/session-token";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { POST } from "./route";
 
@@ -77,6 +78,17 @@ beforeEach(() => {
 const SERVER_ONLY = { proposeBoundary: true, approvalCompletion: "platform", chatMessageId: "MSG-FORGED" };
 
 describe("POST tools/call — server-only approval context", () => {
+  it.each([true, false])("accepts an execution fence only from verified session authentication: %s", async (signed) => {
+    const taskExecutionFence = { schemaVersion: 1 as const, reservation: "admitted", dispatchClaim: "dispatch", authorityDigest: null, requestDigest: "9".repeat(64) };
+    vi.mocked(verifyMcpSessionToken).mockResolvedValue({ userId: "u1", agentId: "AGT-CAPSULE", taskRunId: "TR-BOUND",
+      scopes: ["work_capsule_write"], capability: "write", ...(signed ? { taskExecutionFence } : {}) });
+    const request = toolRequest({ name: "create_workroom", arguments: { ...ARGS, taskExecutionFence: { forged: true } },
+      _meta: { taskExecutionFence: { forged: true } }, taskExecutionFence: { forged: true } });
+    request.headers.set("x-mcp-session", "synthetic-test-session");
+    await POST(request);
+    expect(govMock).toHaveBeenCalledOnce();
+    expect(govMock.mock.calls[0]?.[0].context?.taskExecutionFence).toEqual(signed ? taskExecutionFence : undefined);
+  });
   it("never maps client input into proposeBoundary, approvalCompletion or chatMessageId", async () => {
     await POST(toolRequest({
       name: "create_workroom",

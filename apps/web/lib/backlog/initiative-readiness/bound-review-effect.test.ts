@@ -1,5 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
-import { publishBoundReviewEffect } from "./bound-review-effect";
+import { boundReviewReceiptId, publishBoundReviewEffect, type BoundReviewScope } from "./bound-review-effect";
+
+it("keeps canonical receipt identity stable across ephemeral execution generations", () => {
+  const scope: BoundReviewScope = { actionKey: "record_initiative_design_review", itemId: "BI-1", gate: "design-spec",
+    artifactRef: { kind: "document-version", versionId: "version-1" }, reviewerUserId: "reviewer",
+    reviewerAgentId: "AGT-REVIEW", authorityDecisionId: "AUTH-1",
+    boundReviewTask: { taskRunId: "TR-ORIGINAL", requestDigest: "9".repeat(64) } };
+  const originalId = boundReviewReceiptId(scope, "artifact-digest");
+  for (const reservation of [null, "later-admission"]) {
+    const next: BoundReviewScope = { ...scope, boundReviewTask: { ...scope.boundReviewTask!, executionFence: {
+      schemaVersion: 1, reservation, dispatchClaim: "dispatch-2", authorityDigest: null, requestDigest: "9".repeat(64),
+    } } };
+    expect(boundReviewReceiptId(next, "artifact-digest")).toBe(originalId);
+  }
+});
 
 describe("bounded transaction-race reconciliation", () => {
   it.each(["P2034", "P2002"])("reads a committed winner after %s without retrying the write", async (code) => {

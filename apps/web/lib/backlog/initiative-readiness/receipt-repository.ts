@@ -15,7 +15,7 @@ import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import { resolveReviewerIdentity } from "./reviewer-identity";
 import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
 import { canonicalPlanMatchesArtifact, loadCanonicalPlanSource, sameCanonicalPlanSource } from "./canonical-plan-source";
-import { boundReviewReceiptId, findBoundReviewWinner, lockBoundReviewEffect, publishBoundReviewEffect,
+import { boundReviewReceiptId, checkBoundReviewWriteExecution, findBoundReviewWinner, lockBoundReviewEffect, publishBoundReviewEffect,
   type BoundReviewTask } from "./bound-review-effect";
 import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 
@@ -157,8 +157,8 @@ export async function recordInitiativeGateReceipt(args: {
     return { ok: false, code: "malformed-receipt", error: "Findings require unique non-empty issues." };
   }
   return publishBoundReviewEffect<RecordInitiativeGateReceiptResult>(Boolean(args.boundReviewTask), (winnerOnly) => prisma.$transaction(async (tx) => {
-    const taskRefusal = await lockBoundReviewEffect(tx, args, item.organizationId);
-    if (taskRefusal) return taskRefusal;
+    const taskLock = await lockBoundReviewEffect(tx, args, item.organizationId);
+    if (taskLock.refusal) return taskLock.refusal;
     // Every receipt writer for a subject serializes on the subject row. Without
     // this seam, a concurrent fail could introduce a blocker after a pass had
     // read history but before either append committed.
@@ -255,6 +255,8 @@ export async function recordInitiativeGateReceipt(args: {
       receipt: winner.receipt as unknown as Record<string, unknown>, deduplicated: true };
     if (winnerOnly) return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
       error: "Concurrent publication did not leave a qualified canonical winner. No write was retried." };
+    const executionRefusal = checkBoundReviewWriteExecution(args, taskLock.execution);
+    if (executionRefusal) return executionRefusal;
     const history = await tx.backlogItemActivity.findMany({
       where: { backlogItemId: item.id, kind: "initiative_gate_receipt", gateKey },
       orderBy: [{ recordedAt: "asc" }, { id: "asc" }],

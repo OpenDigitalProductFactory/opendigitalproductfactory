@@ -1,9 +1,14 @@
+---
+status: active
+backlog: BI-F646BC4E
+---
+
 # Bound canonical review writes to their admitted execution
 
 Backlog: BI-F646BC4E. Historical parent: BI-7906C73E; umbrella BI-06AE6833.
 Source baseline: d800c3d968ef1a32889c36c799b2f4cf07fe59dc, plus published parent design7008f45a20a9240db2f0d17c7531014065717d7c.
 Workroom WC-A6F24B2D; branch fix/original-review-writer-fence.
-Normal plan admission IRD-4039EEBDE400 allowed; research receipt initiative-a0c59719-7431-4d59-a84c-59ba46171f97. Implementation admission and checks remain pending.
+Normal plan admission IRD-4039EEBDE400 and implementation admission IRD-C3C5D12FD426 allowed; research receipt initiative-a0c59719-7431-4d59-a84c-59ba46171f97. The server derived HIGH sensitivity and capped this fix at medium. Runtime verification remains pending.
 
 ## Boundary and acceptance criteria
 
@@ -59,8 +64,12 @@ Requirement refs: AC-WF-1, AC-WF-2, AC-WF-3, AC-WF-4, AC-WF-5.
 Contract ref: canonical-write-generation.
 Flow ref: admitted-task-to-writer.
 Verification ref: writer-fence-pg-races.
-Native coverage receipt: pending immutable plan publication and record_plan_backlog_coverage; this paragraph is not a receipt.
+Initial immutable plan617b485bcf08b944521a7f8159184170dca0bcc0, blob6283a9e2af9dce6420497f2367a4ba80b780802a earned coverage. Latest scope reconciliation before this status update: cmvbfq7cp0xzc01o3x1bm2b89. Rebind this updated plan after publication; this paragraph is not a receipt.
 
 ## Evidence and stop conditions
 
-No runtime code, tests, independent native approval or served outcome is currently claimed. Worktree was classified source-only; use managed bootstrap before any local compile/test claim. Stop denied operations, unresolved scope conflicts, missing coverage or failed implementation admission. Do not treat an infrastructure result as product PASS/FAIL, broaden grants, mutate task data directly, replay755 or make another source head solely to evade an unresolved review.
+Managed bootstrap qualified this worktree compile-ready. The assembled source passed1337 tests across97 suites;10 PostgreSQL race cases remain skipped, not passed. Production and test TypeScript7, prose/style checks and the module-size ratchet passed. These are source-local observations, not exact-tree integration, native independent review, historical settlement or served acceptance.
+
+All required context paths were normally claimed after handoff. The CLI pair released only after its existing approval envelope cmvbfjrsp0vov01o3t07uczjs completed. The provider-readiness owner's bdc9160 head is local-only; remote19b9 and its unmerged quota-message delta remain distinct. Preserve actual owner changes at eventual integration. No forced claim, alternative provider or retry resulted.
+
+Stop denied operations, unresolved scope conflicts, missing coverage or failed implementation admission. Do not treat an infrastructure result as product PASS/FAIL, broaden grants, mutate task data directly, replay755 or make another source head solely to evade an unresolved review.
