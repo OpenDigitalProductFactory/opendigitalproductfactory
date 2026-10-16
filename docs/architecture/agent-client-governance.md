@@ -7,6 +7,16 @@ Trust comes from layered controls and observed outcomes.
 
 Every change review requires [failure analysis and recovery evidence](failure-analysis-and-recovery.md), beginning in design and refined against the final change. Server review and publication boundaries resolve executed evidence and require an independent adequacy assessment. Internal engineering coordinates technical recovery; the business owner retains genuine scope and risk-acceptance decisions.
 
+When a client cannot call the MCP task protocol directly, the review owner can
+call `get_workroom` with `capsuleId` and `reviewTaskRunId`. The optional
+`ownedReviewRecovery` response covers only that owner's native semantic review
+bound to that room, including historical source versions. It returns the same
+bounded recovery facts as `tasks/get`; it excludes provider output and does not
+authorize retry, establish settlement, or approve the current source. Other
+owners and rooms return `owned_review_unavailable`. An unavailable read returns
+an explicit error. Expired execution still follows the recorded reconciliation
+and `retry_semantic_review` procedure.
+
 ## The four governance altitudes
 
 | Altitude | Purpose | Authoritative mechanism |

@@ -122,3 +122,40 @@ tests pass with the disposition check. Broader gates, independent review and
 runtime verification are still required; no delivery completion is claimed here.
 Documentation impact: update the existing agent-client-governance guidance so
 it no longer promises automatic approval for docs-only or low-risk changes.
+
+## Owner review readback repair (BI-CAP-29F5787B)
+
+The operator requested source repair after the closeout stalled because this host
+cannot invoke MCP protocol `tasks/get` or `tasks/result`. Those methods already
+enforce the authenticated task owner and use `readSemanticReviewRecovery`.
+The initial install projected only the room's direct `taskRun` relation.
+Refreshing the branch revealed PR #6423 already loads metadata-linked reviews
+and projects the current source's result. Reuse that delivered repair. Its
+result action still points to protocol methods this host cannot invoke, and a
+historical request cannot be recovered after the branch is refreshed.
+
+Extend the existing Workroom read, after its existing admission, with optional
+`reviewTaskRunId`. Query only the authenticated user's exact requested native
+semantic review whose persisted metadata binds this exact room. Reuse
+`readSemanticReviewRecovery` for deadlines, digest and execution settlement.
+Do not accept a caller-supplied owner or grant override; do not expose raw
+provider output. Other room readers receive no owner's task recovery details.
+An unavailable recovery read reports unavailable, never approval or settlement.
+No schema, grant, task dispatch, retry budget or receipt writer changes are needed.
+
+Acceptance: the admitted review owner sees the requested exact-room task and bounded
+recovery without `deliberation_read`; another owner or room cannot match; anonymous
+reads do not query tasks; a read failure is explicit. Cover those cases before
+implementation, then run Workroom, MCP pack and review lifecycle regressions.
+Preserve the original cache patch. Documentation stays in this existing design
+because another live Workroom owns the shared authorization runbook.
+
+Implementation sequence: add owner/exact-room/malformed/unavailable regressions;
+observe them fail while the existing current-review controls pass; add the scoped
+reader and preserve its response through the Workroom budget projection; run the
+related Workroom, semantic-review lifecycle and MCP pack suites and typechecks.
+Obtain independent review, a fresh exact-tree gate, and canonical rollout before
+claiming the original parked task is readable. Its historical identity never
+approves the refreshed source. This also covers BI-CAP-29F5787B's readback criteria;
+provider settlement remains an executed-evidence requirement, not this patch's
+claim. Rollback uses a revert PR and leaves original tasks and receipts intact.
