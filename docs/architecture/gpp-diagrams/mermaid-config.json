@@ -1,4 +1,6 @@
 {
+  "fontSize": 24,
+  "handDrawnSeed": 1,
   "theme": "base",
   "themeVariables": {
     "primaryColor": "#dbeafe",

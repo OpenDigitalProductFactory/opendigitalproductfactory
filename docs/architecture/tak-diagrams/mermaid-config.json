@@ -1,4 +1,10 @@
 {
+  "flowchart": {
+    "subGraphTitleMargin": {
+      "top": 0,
+      "bottom": 24
+    }
+  },
   "theme": "base",
   "themeVariables": {
     "primaryColor": "#dbeafe",

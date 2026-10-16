@@ -4,7 +4,6 @@
  * Usage: pnpm exec tsx docs/architecture/generate-jsi-docx.mjs
  */
 
-import { publicationConfig } from "./agent-standard-publications.mjs";
-import { generateDocxFromMarkdown } from "./generate-docx-from-markdown.mjs";
+import { generateAgentStandardDocx } from "./generate-agent-standard-docx.mjs";
 
-await generateDocxFromMarkdown(publicationConfig("jsi"));
+await generateAgentStandardDocx("jsi");
