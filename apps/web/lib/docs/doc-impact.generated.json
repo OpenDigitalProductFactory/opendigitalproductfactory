@@ -895,6 +895,9 @@
     "apps/web/lib/govern/auth.ts": [
       "docs/strategy/2026-09-us-dependency-inventory-and-sovereign-channel.md"
     ],
+    "apps/web/lib/govern/authority/escalation-gate.conformance.test.ts": [
+      "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md"
+    ],
     "apps/web/lib/govern/data/field-classification.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
@@ -3576,6 +3579,9 @@
     ],
     "docs/founder-kernel/wiki/principles/dco-sign-off-required.md": [
       "scripts/pre-push-dco-check.mjs"
+    ],
+    "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md": [
+      "apps/web/lib/govern/authority/escalation-gate.conformance.test.ts"
     ],
     "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md": [
       "apps/web/lib/backlog/initiative-readiness/delivery-sensitivity.ts",

@@ -31,14 +31,11 @@ const OUTCOME_LABEL: Record<DecisionInteractionGateView["outcomeType"], string> 
   decline: "Declined",
 };
 
-function confidenceTier(score: number): ConfidenceTier {
+function confidenceTier(score: number | null): ConfidenceTier | "Unknown" {
+  if (score == null) return "Unknown";
   if (score >= 0.85) return "High";
   if (score >= 0.55) return "Medium";
   return "Low";
-}
-
-function confidenceLabel(score: number | null): string {
-  return score == null ? "Unknown" : confidenceTier(score);
 }
 
 function captureLabel(outcomeType: DecisionInteractionGateView["outcomeType"]): string | null {
@@ -226,10 +223,10 @@ export function DecisionPerspectiveGatePanel({ interaction, onCapture, voiceOutp
           </div>
           <div className="flex flex-wrap gap-2 text-[10px] uppercase sm:justify-end">
             <span className="whitespace-nowrap">
-              Before {confidenceLabel(activeInteraction.confidenceBefore)}
+              Before {confidenceTier(activeInteraction.confidenceBefore)}
             </span>
             <span className="whitespace-nowrap">
-              After {confidenceLabel(activeInteraction.confidenceAfter)}
+              After {confidenceTier(activeInteraction.confidenceAfter)}
             </span>
             <span className="whitespace-nowrap">
               {activeInteraction.sources.length} source{activeInteraction.sources.length === 1 ? "" : "s"}
@@ -308,33 +305,21 @@ export function DecisionPerspectiveGatePanel({ interaction, onCapture, voiceOutp
 
               {captureOutcomeType === "escalate" ? (
                 <>
-                  <label className="grid gap-1 text-xs font-semibold text-[var(--dpf-text)]">
-                    Decision criteria
-                    <textarea
-                      value={criteriaText}
-                      onChange={(event) => setCriteriaText(event.target.value)}
-                      rows={2}
-                      className="min-h-16 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-3 py-2 text-xs font-normal leading-relaxed text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
-                    />
-                  </label>
-                  <label className="grid gap-1 text-xs font-semibold text-[var(--dpf-text)]">
-                    Rationale
-                    <textarea
-                      value={rationale}
-                      onChange={(event) => setRationale(event.target.value)}
-                      rows={2}
-                      className="min-h-16 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-3 py-2 text-xs font-normal leading-relaxed text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
-                    />
-                  </label>
-                  <label className="grid gap-1 text-xs font-semibold text-[var(--dpf-text)]">
-                    Resolved objections
-                    <textarea
-                      value={objectionsResolvedText}
-                      onChange={(event) => setObjectionsResolvedText(event.target.value)}
-                      rows={2}
-                      className="min-h-16 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-3 py-2 text-xs font-normal leading-relaxed text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
-                    />
-                  </label>
+                  {[
+                    { label: "Decision criteria", value: criteriaText, setValue: setCriteriaText },
+                    { label: "Rationale", value: rationale, setValue: setRationale },
+                    { label: "Resolved objections", value: objectionsResolvedText, setValue: setObjectionsResolvedText },
+                  ].map(({ label, value, setValue }) => (
+                    <label key={label} className="grid gap-1 text-xs font-semibold text-[var(--dpf-text)]">
+                      {label}
+                      <textarea
+                        value={value}
+                        onChange={(event) => setValue(event.target.value)}
+                        rows={2}
+                        className="min-h-16 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-3 py-2 text-xs font-normal leading-relaxed text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
+                      />
+                    </label>
+                  ))}
                 </>
               ) : (
                 <label className="grid gap-1 text-xs font-semibold text-[var(--dpf-text)]">
