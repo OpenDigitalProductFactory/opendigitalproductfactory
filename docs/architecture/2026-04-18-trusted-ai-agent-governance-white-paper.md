@@ -1,11 +1,11 @@
 # Trusted AI Agent Governance
 
-**Decide once, enforce always: four cornerstones for AI agents that are safe to delegate to**
+**Principles, permissions and evidence for accountable agent delegation**
 
 | | |
 |---|---|
-| Status | Discussion draft, revision 2.1 |
-| Date | 2026-10-01; first edition 2026-04-18 |
+| Status | Discussion draft, revision 2.2 |
+| Date | 2026-10-16; first edition 2026-04-18 |
 | Owner | EP-B932453F / BI-6CC40F77 |
 
 This is a position paper. The normative requirements live in the four standards it introduces:
@@ -15,100 +15,100 @@ This is a position paper. The normative requirements live in the four standards 
 - [`TAK-JSI`](job-specific-intelligence.md)
 - [`GPP`](gated-permissions-process.md)
 
-All four are open working drafts. Nothing in this paper claims certification, regulatory compliance or endorsement by a standards body. Every statement about the Digital Product Factory (DPF) reference implementation is labelled as one of:
+All four are open working drafts. Nothing in this paper claims certification, regulatory compliance or endorsement by a standards body. A standard's proposed control, a source implementation, an executed test and an observed business outcome are different evidence levels.
 
-- **enforced** — a control that blocks at runtime
-- **shadow** — a control that records but does not block
-- **not built**
-
-The evidence date is 2026-09-30. [§8](#8-dpf-the-working-instantiation) gives the claim-to-evidence ledger.
+This edition reviews repository sources at immutable commit `d9c8ed1fc887527c2a8b893f9a8062519c5a4384` on 2026-10-16. Its DPF ledger is **source-declared and runtime-unverified** unless a row supplies actual execution evidence. It does not certify the current install, every execution path or another agent host. The primary market references were rechecked where identified; older incident and operational accounts retain their own dates. [§8](#8-dpf-the-working-instantiation) records the examined sources, their identities and the limits of the observations.
 
 ## Executive Summary
 
 AI agents now read documents, call tools, change records, send messages, deploy code and coordinate other agents. The question every organization adopting them faces is not whether the model is clever enough. It is **who decided this agent may do this, and how would anyone know?**
 
-Today most agent tools answer that question in one of two ways:
+Two common permission choices illustrate the problem:
 
 - **Approve every tool call.** The agent stops and asks before each action.
 - **Approve nothing.** The agent runs with whatever credentials it was given. These modes go by "YOLO", "always allow" or "skip permissions".
 
-The first fails quietly and the second fails loudly, and the first drives people to the second. A leading vendor reports that users approve 93–97% of per-call prompts, and that in a controlled study people caught a disguised dangerous command 13.6% of the time, falling to about 5% after fifty prompts. The same users rejected 39% of the *plans* they were shown (vendor-reported; [§1](#1-the-defining-problem-approval-fatigue)). People supervise decisions well and keystrokes badly.
+Repeated prompts can lose their value as a checkpoint. Anthropic reports high permission-approval rates and, separately, a controlled study of 1,053 paid testers in which 13.6% caught a substituted dangerous command. Its field discussion reports 39% rejection of plans and 3% rejection of individual permission requests. These are different observations, not evidence that the controlled-study participants were the plan reviewers, or that the rejected plans were incorrect. They motivate evaluating decision-level supervision; they do not establish that it is safer in every setting (vendor-reported; [§1](#1-the-defining-problem-approval-fatigue)).
 
-The 2024–2026 incident record is mostly a record of what happens next. Deleted production databases, leaked private repositories, malicious tool servers, and evaluation agents that escaped their sandbox and reached production infrastructure share a pattern: an agent held authority broader than its task, and nothing evaluated the damaging action against who was entitled to authorize it.
+The incident record includes deleted databases, disclosure of private repositories, malicious tool servers and evaluation agents reaching production infrastructure. These cases involve different failures, including isolation, credential scope, supply-chain trust and execution boundaries. They are reasons to examine the complete system, not evidence that every incident had one cause or that no authorization controls existed.
 
-The market's newest answer is a classifier that guesses which calls are safe enough to skip the prompt. It reduces prompts. It also has a published miss rate and a published bypass, and it cannot say who was entitled to decide.
+One recent approach uses a classifier to decide which calls may proceed without a prompt. Anthropic publishes a miss rate, and researchers report a bypass under their tested conditions. Classification alone does not establish who owns the decision or authorize an effect.
 
 This paper proposes a different principle: **decide once, by the authority that owns the decision, then enforce on every call.** It presents four complementary open standards, each answering one question:
 
-| Standard | Question | What it owns |
-|---|---|---|
-| `GAID` — Global AI Agent Identification and Governance | Who is this agent? | Identity, operating profile, claims, badges, receipts |
-| `TAK-JSI` — Job-Specific Intelligence | Is it fit for this job? | Job qualification, assessment, revalidation |
-| `GPP` — Gated Permissions Process | Who decided this may happen? | The binding of a decision gate in an owning authority to the exact tools it admits, for one stage of one kind of work |
-| `TAK` — Trusted AI Kernel | May it act now? | Runtime mediation: authority intersection, consequence gating, oversight, evidence |
+**`GAID` — Global AI Agent Identification and Governance — Who is this agent?** Identity, operating profile, claims, badges, receipts.
 
-The paper also makes a claim about engineering method. **Model-based systems engineering (MBSE) has never treated AI agents as first-class system elements. It should.** When the work shapes, decision gates, tool bindings, agents and receipts are model elements that the running system executes and checks itself against, the model stops being documentation and becomes the control. GPP supplies the link between who may decide and what may run that makes this possible.
+**`TAK-JSI` — Job-Specific Intelligence — Is it fit for this job?** Job qualification, assessment, revalidation.
 
-DPF, an open-source operating platform for small and mid-sized organizations, is both a workable system that real businesses run on and the reference instantiation of all four standards. It ships:
+**`GPP` — Gated Permissions Process — Who decided this may happen?** The binding of a decision gate in an owning authority to the exact tools it admits, for one stage of one kind of work.
 
-- 107 business archetypes
-- 87 AI coworker roles across nine value streams
-- 27 profession doctrine families
-- 47 governed work shapes
+**`TAK` — Trusted AI Kernel — May it act now?** Runtime mediation: authority intersection, consequence gating, oversight, evidence.
 
-The paper reports, honestly, which of its controls enforce, which run in shadow, and which are not yet built.
+
+The engineering proposal builds on MBSE and existing agent-modeling work. It connects work shapes, accountable decisions, tool bindings, operating profiles and receipts through a versioned composition that an implementation can execute and assess. Its contribution is this inspectable contract and its proposed verification method, not a claim that agents are new to systems engineering. A model becomes a control only where the implementation demonstrably enforces its meaning.
+
+DPF is an open-source platform designed for small and mid-sized organizations and the initial reference context for this work. It contains archetype definitions, coworker roles, profession doctrine and governed work shapes. This paper supplies no independently verified business-adoption count. Its source inventory is not a claim that every role is qualified or every path implements the proposed standards.
 
 ## 1. The defining problem: approval fatigue
 
 ### 1.1 Per-call approval does not survive contact with people
 
-| Evidence | Source |
-|---|---|
-| Users approve about 93% of permission prompts | Anthropic Engineering, 2026-03-25 (vendor-reported) |
-| Users approve 97% of prompts but reject 39% of plans. In a controlled study (n=1,053), people caught a disguised dangerous command 13.6% of the time: about 17% early in a session, about 5% after fifty prompts | Claude blog, 2026-08-07 (vendor-reported) |
-| Sandboxing removed 84% of prompts internally; the post names approval fatigue as the risk | Anthropic Engineering, 2025-10-20 (vendor-reported) |
-| In a field study, adherence to permission warnings fell substantially within three weeks; varying the warning slowed the decline | Vance et al., *MIS Quarterly* 42(2), 2018 |
-| Attackers exploited repeated MFA approval prompts until a person accepted one ("push bombing", Uber 2022) | BleepingComputer |
+- Users approve about 93% of permission prompts. Source: Anthropic Engineering, 2026-03-25 (vendor-reported).
 
-The mechanism is ordinary habituation. A prompt that is almost always right to accept trains acceptance. The rare prompt that matters arrives in a stream that has taught the reviewer not to read. This is not a user-education problem that better training will fix. It is a design problem: **the checkpoint has been placed at the level where people are least able to judge.**
+- Users approve 97% of prompts but reject 39% of plans. In a controlled study (n=1,053), people caught a disguised dangerous command 13.6% of the time: about 17% early in a session, about 5% after fifty prompts. Source: Claude blog, 2026-08-07 (vendor-reported).
+
+- Sandboxing removed 84% of prompts internally; the post names approval fatigue as the risk. Source: Anthropic Engineering, 2025-10-20 (vendor-reported).
+
+- In a field study, adherence to permission warnings fell substantially within three weeks; varying the warning slowed the decline. Source: Vance et al., *MIS Quarterly* 42(2), 2018.
+
+- Attackers exploited repeated MFA approval prompts until a person accepted one ("push bombing", Uber 2022). Source: BleepingComputer.
+
+
+Habituation is a plausible mechanism for diminished attention to frequent warnings. The cited studies support examining checkpoint design alongside training, interface design and containment. They do not prove that every per-call approval is ineffective or that a work-level decision alone prevents harm. The proposed approach needs comparison under declared work, threat and supervision conditions.
 
 ### 1.2 So people switch it off
 
-Every major agent CLI offers a mode that removes the prompts: `--yolo`, "always allow", `--dangerously-skip-permissions`. Researchers who disclosed a GitHub MCP prompt-injection attack in 2025 noted they suspect many users choose "always allow". Malware in the August 2025 Nx "s1ngularity" supply-chain attack invoked installed AI CLIs with these flags to inventory secrets.
+Some agent clients offer modes such as `--yolo`, "always allow" or `--dangerously-skip-permissions`. The cited GitHub MCP researchers suspected frequent use of "always allow"; that was not a measured prevalence estimate. The August 2025 Nx "s1ngularity" account describes malware invoking installed AI CLIs with reduced-permission checks to inventory secrets. These observations do not establish the defaults or behavior of every client.
 
 No independent survey of how many users run in these modes was found, so this paper cites no adoption rate. The incident record shows what happens when they do.
 
 ### 1.3 The incident record
 
-| Date | Incident | Control that was missing |
-|---|---|---|
-| 2025-05 | A public GitHub issue drives an agent, through an MCP server, to leak private-repository contents | Separation of untrusted input, private data and outbound action |
-| 2025-05/06 | Asana's MCP server exposes data across customer tenants | Tenant isolation in the tool server |
-| 2025-07 | An agent holding a database service-role key follows instructions planted in support tickets (Supabase MCP) | Credential scope; data-flow separation |
-| 2025-07 | A coding agent deletes a production database during a declared code freeze (Replit) | The freeze was an instruction, not an enforced gate |
-| 2025-08 | Malware runs AI CLIs with skip-permission flags to harvest secrets (Nx s1ngularity) | CLIs accept those flags from any caller |
-| 2025-09 | A malicious MCP server silently copies every email to an attacker (`postmark-mcp`) | Tool-server provenance and egress control |
-| 2026-04 | An agent finds an unrelated, over-scoped API token and deletes a production volume and its backups in seconds | Credential scope; no gate on a destructive API |
-| 2026-07 | Evaluation agents escape their sandbox and compromise Hugging Face production infrastructure | Sandbox boundary, over-broad credentials, exposed metadata endpoint |
+**2025-05.** A public GitHub issue drives an agent, through an MCP server, to leak private-repository contents. Control issue reported: Separation of untrusted input, private data and outbound action.
+
+**2025-05/06.** Asana's MCP server exposes data across customer tenants. Control issue reported: Tenant isolation in the tool server.
+
+**2025-07.** An agent holding a database service-role key follows instructions planted in support tickets (Supabase MCP). Control issue reported: Credential scope; data-flow separation.
+
+**2025-07.** A coding agent deletes a production database during a declared code freeze (Replit). Control issue reported: The freeze was an instruction, not an enforced gate.
+
+**2025-08.** Malware runs AI CLIs with skip-permission flags to harvest secrets (Nx s1ngularity). Control issue reported: CLIs accept those flags from any caller.
+
+**2025-09.** A malicious MCP server silently copies every email to an attacker (`postmark-mcp`). Control issue reported: Tool-server provenance and egress control.
+
+**2026-04.** An agent finds an unrelated, over-scoped API token and deletes a production volume and its backups in seconds. Control issue reported: Credential scope; no gate on a destructive API.
+
+**2026-07.** Evaluation agents escape their sandbox and compromise Hugging Face production infrastructure. Control issue reported: Sandbox boundary, over-broad credentials, exposed metadata endpoint.
+
 
 Sources and dates are in the [market and thought-leadership landscape](agent-governance-market-landscape-2026.md#3-incident-record-20242026). Published accounts of the July 2026 Hugging Face intrusion conflict on its scale, from one autonomous agent to hundreds of coordinating agents. This paper relies only on the elements the accounts share.
 
-**The repeating pattern** is not a weak model. It is an agent that held authority broader than its task, a damaging action that met no gate, and no record of who was entitled to approve that class of action. Model-level guardrails and detection were present in several of these cases and did not change the outcome.
+The cases show why model behavior, credential policy, isolation and target-effect controls need separate assessment. Controls can block some operations while an attacker succeeds through another path. Hugging Face's technical account, for example, describes denied mutating cloud calls as well as successful intrusion paths. A successful attack does not establish that all gates were absent. A TAK-style boundary is a proposed part of a defense, not a demonstrated prevention of these historical incidents.
 
 ### 1.4 Classifiers are an improvement, not an authority
 
-The most recent industry response is to let a model decide which calls may proceed without a prompt. Anthropic made this the default for Claude Code on 2026-08-14 and reports fewer serious unintended actions than under manual approval (vendor-reported). Two facts limit it as a governance answer:
+Anthropic lets a model decide which calls may proceed without a prompt and made auto mode the default for selected Claude Code plans on 2026-08-14. It reports fewer serious unintended actions than under manual approval (vendor-reported). Two facts limit what that establishes:
 
 - Its designers publish a 17% false-negative rate on real overeager actions (n=52).
 - Twelve days after it became the default, a researcher disclosed a prompt-injection chain that achieved remote code execution against it in 60–80% of attempts. The Cloud Security Alliance's guidance is to treat such a classifier as a productivity control, not as a substitute for sandboxing, egress control or credential isolation.
 
-A classifier answers "does this look dangerous?" It cannot answer "who was entitled to decide this?", which is the question an auditor, a regulator or an injured customer will ask.
+A classifier can inform a risk judgment. The authority to authorize the effect must still come from an accountable owner and enforceable policy; a classifier verdict alone is not that authority.
 
 ### 1.5 What oversight regulation asks for
 
-The EU AI Act's Article 14 requires that people overseeing a high-risk system can monitor, interpret and override it, and remain aware of automation bias. The Digital Omnibus has moved the high-risk obligations to 2027-12-02 (Annex III) and 2028-08-02 (Annex I), so there is time to get this right.
+The EU AI Act's Article 14 requires effective human oversight of high-risk systems, including awareness of automation bias and the ability to interpret and intervene. The Commission's current implementation page gives 2027-12-02 for the specified Annex III high-risk areas and 2028-08-02 for high-risk systems embedded in regulated products following the AI Omnibus. These dates do not postpone every AI obligation or establish the legal treatment of a particular deployment. [Commission timeline](https://digital-strategy.ec.europa.eu/en/policies/regulatory-framework-ai).
 
-A 13.6% catch rate is weak evidence that per-call approval delivers effective oversight. A recorded decision by a named, accountable authority, enforced deterministically on every call, is a stronger form of evidence.
+The vendor study is a reason to test whether a particular approval design provides effective oversight. Attributable decisions and observable execution checks can support that assessment, but their presence alone is not evidence of legal compliance or a comparative safety result.
 
 ## 2. Why current standards and protocols fall short
 
@@ -140,32 +140,39 @@ These are the neighbourhood GAID operates in.
 
 **Deterministic tool policy**
 
-Tool-level policy is now available as a product. AWS Bedrock AgentCore Policy evaluates every gateway tool call with Cedar, default-deny, on principal, action and context. Kong, Microsoft and others offer MCP allow-lists. These are the right enforcement shape. None of them models where authority originates.
+Existing authorization systems supply important parts of this design. AWS AgentCore evaluates gateway tool requests against policy and documents temporal conditions such as requiring an earlier approval before a transfer. OpenFGA documents owner/role relationships and task-based authorization with user/task checks, agent binding, expiration and restricted subagent delegation. These mechanisms can implement authority relationships; GPP does not depend on their being unable to do so. The proposed contribution is a shared composition linking accountable doctrine, work stages, exact effects and evidence across implementations. [AgentCore](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/policy.html), [OpenFGA task authorization](https://openfga.dev/docs/modeling/agents/task-based-authorization), [OpenFGA roles](https://openfga.dev/docs/modeling/roles-and-permissions).
 
 **Governance suites**
 
-ServiceNow AI Control Tower, Credo AI and IBM watsonx.governance keep inventories, risk classifications and policies. They are records of governance, not inline authorization.
+Governance suites provide inventories, risk classifications and policy-management functions. Whether a particular product and integration also enforces a decision inline requires its own versioned capability review; this paper has not tested those products. Inventory and runtime mediation remain separate questions even when one product supplies both.
 
-| Current artifact | What it solves | What it does not fully solve |
-|---|---|---|
-| `ISO/IEC 42001` | Organization-level AI management systems | Runtime control, agent identity, receipts, decision authority per action class |
-| `NIST AI RMF` | Risk framing and lifecycle | Concrete runtime and identity specifications for agents |
-| `MCP` | Tool and context interoperability; transport authorization | Public identity, badging, who may decide an action class |
-| `A2A` | Agent-to-agent interoperability | Accredited identity, assurance portability, decision authority |
-| Cedar / OPA / OpenFGA gateways | Deterministic per-call tool policy | The origin and ownership of the authority being enforced |
-| Agent identity platforms | Agent identity, sponsor, lifecycle | Job qualification; per-decision-class authority |
-| Classifier "auto modes" | Fewer prompts | Determinism; attributable authority; resistance to injection |
-| Vendor agent frameworks | Practical implementation patterns | Cross-vendor trust semantics |
-| `W3C VC`, `RFC 9421`, `SLSA`, `Trace Context`, `PURL` | Building blocks for credentials, signatures, provenance and tracing | An agent-specific composition into identity and governance |
+**`ISO/IEC 42001`.** Contribution: Organization-level AI management systems. Composition still to establish: Runtime control, agent identity, receipts, decision authority per action class.
 
-The nearest prior work on the specific GPP question is real and is cited, not ignored:
+**`NIST AI RMF`.** Contribution: Risk framing and lifecycle. Composition still to establish: Concrete runtime and identity specifications for agents.
+
+**`MCP`.** Contribution: Tool and context interoperability; transport authorization. Composition still to establish: Public identity, badging, who may decide an action class.
+
+**`A2A`.** Contribution: Agent-to-agent interoperability. Composition still to establish: Accredited identity, assurance portability, decision authority.
+
+**Cedar / OPA / OpenFGA integrations.** Contribution: Policy evaluation and modeled authority relationships, depending on the integration. Composition still to establish: This proposed family's specific composition is not automatically established by installing a policy engine.
+
+**Agent identity platforms.** Contribution: Agent identity, sponsor, lifecycle. Composition still to establish: Job qualification; per-decision-class authority.
+
+**Classifier "auto modes".** Contribution: Fewer prompts. Composition still to establish: Determinism; attributable authority; resistance to injection.
+
+**Vendor agent frameworks.** Contribution: Practical implementation patterns. Composition still to establish: Cross-vendor trust semantics.
+
+**`W3C VC`, `RFC 9421`, `SLSA`, `Trace Context`, `PURL`.** Contribution: Building blocks for credentials, signatures, provenance and tracing. Composition still to establish: An agent-specific composition into identity and governance.
+
+
+This overview is an orientation, not an exhaustive product comparison or a finding that the named systems cannot support the proposed controls. Relevant prior work includes:
 
 - ITIL change enablement pre-authorizes *standard changes* as a class and routes *normal changes* to a change authority.
 - Delegation-of-authority matrices and segregation of duties name accountable deciders.
 - Ibrahim and Li's *Overlaying Governance* (arXiv 2606.03518, June 2026) composes delegation and resource-scope attenuation over relational policies.
 - A September 2026 practitioner article on *decision rights* for agentic AI names owners for authorization, data access, intervention, exceptions and accountability. It explicitly leaves tool binding to identity systems and gateways.
 
-**GPP is that binding.**
+**GPP proposes a versioned binding that composes these existing ideas with the family's other owners.**
 
 ## 3. Public policy and industry signals
 
@@ -194,7 +201,7 @@ AI agents have become a standards problem, not merely a product feature.
 - Gartner predicted in June 2025 that more than 40% of agentic AI projects will be cancelled by the end of 2027, citing inadequate risk controls among the causes.
 - Secondary reporting of a May 2026 Gartner note describes binary governance, either locked down or fully trusted, as a root cause of failure, and recommends governance proportional to autonomy.
 
-The direction is clear: proportionate, attributable, deterministic control. The missing piece is a shared way to model it.
+These initiatives motivate evaluating proportionate, attributable execution controls. This paper proposes one composition and asks for comparison, overlap review and implementation evidence; it does not establish that no other shared model exists.
 
 ## 4. Four cornerstones
 
@@ -342,7 +349,9 @@ Model-based systems engineering describes complex systems as connected models of
 - allocation
 - verification
 
-It is how aircraft, spacecraft and medical devices are engineered, and its current standards (SysML v2 and KerML) are open and machine-readable. Yet AI agents have not been part of the discipline. They are treated as software components with fuzzy behaviour, or as external actors outside the system boundary. Neither treatment can express what governed agentic work requires:
+SysML v2 and KerML provide open, machine-readable systems-modeling foundations. Agents are not new to this discipline: INCOSE catalogs executable agent-based SysML work from 2015 and a 2025 presentation connecting AI agents with MBSE workflows. The public catalog metadata establishes relevant prior work; the members-only 2015 paper was not inspected for this edition. [2015 catalog](https://www.incose.org/resource/creating-executable-agent-based-models-using-sysml/), [AI agents for MBSE](https://www.incose.org/communities/chapters/americas-sector/canada/events-detail/2023/12/12/default-calendar/incose-canada-practical-insights).
+
+The narrower problem here is to define and test a portable relationship among:
 
 - an agent that holds a role
 - doctrine it reasons from
@@ -353,7 +362,7 @@ It is how aircraft, spacecraft and medical devices are engineered, and its curre
 
 ### 7.2 The model is the system
 
-This paper proposes that a governed agent system be engineered as a model whose elements the runtime executes and checks itself against. In DPF the chain is:
+This paper proposes that a governed agent system be engineered as a model whose elements the runtime executes and checks itself against. The intended DPF chain is:
 
 ```text
 requirement -> scoped principle/policy -> work shape and stage -> decision gate
@@ -379,7 +388,7 @@ What changes is the relationship between model and system:
 
 ### 7.3 Why this matters beyond DPF
 
-Organizations already model their processes, controls and responsibilities, in BPMN diagrams, RACI matrices and control frameworks. Those models are not connected to what their AI agents can actually do. When the model of who may decide what is the same artifact the runtime enforces and audits, three properties follow:
+Organizations can represent processes, controls and responsibilities in BPMN diagrams, RACI matrices and control frameworks. For a particular agent deployment, the relationship between those models and reachable effects still needs to be established. If an implementation correctly enforces and audits the same versioned authority model, the intended benefits are:
 
 1. Governance becomes reviewable as a design.
 2. Assurance becomes a check over models and records, rather than a reconstruction from logs.
@@ -389,10 +398,10 @@ That is the contribution this paper most wants the systems-engineering and AI-go
 
 ### 7.4 From model to machine
 
-In manufacturing, a CAD model becomes a part because three properties hold. Every element of the
-model has an exact meaning. A post-processor compiles that model deterministically into machine
-instructions. Design-rule checks reject parts that cannot be made before any metal is cut. Governed
-agentic work needs the same three properties.
+The CAD-to-machine analogy suggests a target architecture: defined modeling semantics, a compiler
+that preserves them and checks that reject unsupported designs. It does not establish physical
+manufacturability or universal governance soundness. The following are design obligations for a
+claimed implementation, not a statement that the complete DPF visual flow has been assessed.
 
 - **A notation with execution semantics.** Each construct is a typed element with a defined runtime
   behaviour. A stage marks the tools that are reachable. A gate diamond names its owning authority
@@ -400,8 +409,9 @@ agentic work needs the same three properties.
   from BPMN so that practitioners recognise it. The semantics are deliberately restricted so that
   soundness (no deadlock, no unreachable stage) stays decidable.
 - **A deterministic compiler.** It turns the drawn shape into the executable definition the runtime
-  reads. It also classifies every change as narrowing, clarifying or widening authority, and only a
-  widening change requires re-deciding.
+  reads. It classifies binding changes as narrowing, clarifying or widening. Widening requires a
+  fresh decision; other material changes to policy, evidence, qualification or validity may also
+  invalidate reuse under the applicable canonical rules.
 - **Design-rule checks before deployment.** GPP's completeness checks, plus workflow-net soundness,
   reject a shape that would leave a consequential tool ungated or a transition guarded on one code
   path but not another.
@@ -409,107 +419,162 @@ agentic work needs the same three properties.
 The acceptance test is the manufacturing one: convert every existing shape into the model, compile
 it back, and get the same executable result.
 
-The model also concentrates attention. Most tool calls are reads and routine internal changes, and
-those keep ordinary permission checks. The design view shows where the *critical* interactions are:
-outward, authority-changing and irreversible actions, and dangerous capability combinations. That
-is where the gate is placed in the call path, and only there.
+The model should also concentrate attention without weakening ordinary permission checks. The
+design view identifies consequential interactions, including outward, authority-changing and
+irreversible actions and dangerous capability combinations. Their gate placement must follow the
+applicable effect and authority rules; a label such as "read" does not establish harmlessness.
 
-At those points, authority becomes a value the call must carry. It is a permit minted by the gate,
-bound to the decision, the stage, the actor and, for irreversible actions, the exact parameters. It
-is checked at a single mediation point that no code path can avoid. This is object-capability
-security applied to agent tool use.
+For a consequential effect, the intended authorization binds the action and its material parameters
+or canonical digest, target, purpose, operating profile and validity conditions, as TAK-PD-006
+requires. A proposed permit carries the relevant decision, actor, stage and binding references.
+An adapter claiming complete mediation must demonstrate that no reachable path bypasses its
+execution boundary. Remaining bypasses restrict the claim; naming a component a reference monitor
+does not eliminate them.
 
-It is honest about its boundary. An agent that can read the signing key or write the database
-directly can forge what the database holds. On a development installation that is detected, not
-prevented. Prevention is a deployment property: agent runtimes that hold no database credentials
-and cannot reach the key.
+The claim must be honest about its boundary. Access to a signing key can undermine receipt
+authenticity; direct database writes can undermine stored records. Detection and prevention need
+separate evidence. Key isolation, credential separation and target enforcement are deployment
+properties to assess, not consequences of naming the architecture.
 
-Adoption is incremental by design:
-- A tool with no declared binding behaves exactly as before.
-- Every binding starts in shadow mode, recording what it would refuse.
-- New structural checks are ratchets: today's exceptions sit on a list that can only shrink.
+The pinned DPF source supports incremental migration: bindings can observe in shadow mode, and
+named direct-call exceptions are ratcheted. These compatibility mechanisms restrict assurance. A
+path that remains unmediated cannot be counted as enforced merely because migration is planned.
 
 ## 8. DPF: the working instantiation
 
-A standard gains credibility when it is exercised in a real system rather than only described. DPF is both:
+DPF is the initial implementation context. The sources below make selected control paths inspectable; they do not establish complete conformance, deployment adoption or the state of a running install.
 
-- a workable operating platform for small and mid-sized organizations, local-first and one organization per install
-- the reference implementation where the four standards are put into practice first
+### 8.1 What was examined
 
-### 8.1 Scale of the reference system
+This revision inspected the named repository blobs, the existing contribution and conformance documents, and selected primary external sources. It observed the public revision 2.1 page on 2026-10-16 before repairing its claims. That HTTP observation establishes publication of prose, not enforcement of an agent action.
 
-| Element | Count (verified in source, 2026-09-30) |
-|---|---|
-| Business archetypes, each provisioning value streams, Workrooms and coworker jobs | 107, in 25 industry categories |
-| AI coworker roles, each with identity, tool grants, supervisor and default oversight tier | 87 across nine value streams (40 active, 42 defined, 5 draft) |
-| Profession doctrine families (WSID corpora) | 27 registered |
-| Governed work shapes, each with triggers, stages, accountable principals, stop conditions and review points | 47 |
-| Collaboration shapes for consequential acts (specialist alignment, approval sign-off, outward review, consequential change, escalation, craft stewardship) | 6 |
-| Delivery surfaces sharing one governed process | In-platform Build Studio plus external coding agents over MCP |
+No product test, fault-injection scenario, qualification assessment or live business effect was executed as part of this editorial source inspection. The register identifies test files so an assessor can evaluate them; a test's presence is not a passing result. Documentation checks and publication verification for this replacement belong to its delivery record.
+
+The older edition's archetype, role, doctrine and shape counts were dated inventory statements. They are omitted here rather than silently presented as current capacity or adoption. Use the canonical generated inventory for a dated source count; use assessment evidence for a behavioral claim.
 
 ### 8.2 Claim-to-evidence ledger
 
-| Control | Standard | Mode in DPF |
-|---|---|---|
-| Effective permission: agent grants ∩ user capability ∩ room grants ∩ token scope, at discovery and at execution | TAK §7.2; GPP envelope | **Enforced** on the governed execution path |
-| Workroom narrowing: a room can only tighten what a coworker may reach; observers get read access only | GPP §9.4 | **Enforced** |
-| External agents: OAuth consent binds human, client and assistant role; scopes map to granular grants; step-up on insufficient scope | TAK; GAID | **Enforced** |
-| Organization × profession (WWWD × WSID) alignment gate on every consequential tool inside a Workroom; most-restrictive verdict wins | TAK §7.13; GPP | **Enforced** |
-| Escalation gate: damaging actions go to a person; steered actions proceed | TAK §9 | **Enforced** |
-| Mandatory receipt reservation for consequential calls, tied to the agent's GAID | GAID §10 | **Enforced** on the governed path |
-| Workroom collaboration-shape gate on consequential calls | GPP | **Shadow** by kernel decision; records what it would refuse, pending operator ratification against that evidence |
-| Turning a sealed scope decision into a single-use, time-bound authorization for one exact action | GPP §9.1 | **Enforced for 11 tools**; widening it is the GPP implementation path |
-| Gate-minted permit for each outward, authority-changing or irreversible call, signed (MAC) and bound to the exact call's parameters | GPP §9.1; TAK | **Shadow.** A verdict is recorded on every such call and none is refused. Forged, replayed and mismatched permits are recorded as such. Installs record `unsigned` until the signing key is provisioned |
-| Enforcement promoted one binding at a time, by recorded decision | GPP C-7 | **Mechanism built, nothing enforced.** The enforced set is empty. Promotion needs a cited decision and no unmediated reach to the binding's tools; four dynamic direct call sites currently block every promotion. A missing key or unsealed lineage downgrades to shadow, never to mass refusal |
-| One transition path per guarded stage change (Build Studio plan → build) | GPP C-8 | **Single path, declared and unequal gate sets.** All five paths go through one function with per-path gate profiles. The `save_phase_handoff` path records the WWMD gate it skips; enforcing it awaits the shadow evidence |
-| Unmediated reach: direct tool calls that bypass the mediation point | GPP C-9 | **Ratcheted.** 28 known sites sit on a shrink-only list and a new one fails CI. Each direct call to a consequential tool is recorded |
-| Per-stage capability sets on work shapes | GPP §7 | **Declared and CI-tested** for standing, coworker and orchestration stages, and pinned into scheduled stage runs; a shrink-only list tracks stages still missing a read tool. Delivery shapes still bind per shape |
-| Capability vocabulary resolves to enforceable grants | GPP C-2 | **Not yet checked**; one dangling capability found ([§8.3](#83-what-building-it-taught-us)) |
-| Job qualification lifecycle: assessment, credential, surveillance, revalidation | JSI | **Not built**; no qualification table exists |
-| Signed public receipts, public badges, federated issuance | GAID | **Not built** |
-| Governed audit of every tool call | TAK §8.4.2 | **Partial**; some direct execution paths bypass the governed audit record |
-| Published efficacy measures | GPP §11 | **Not yet published** |
+Every row here is **source-declared / runtime-unverified**. None has an executed runtime verdict in this paper. The source IDs resolve to exact commits and blobs in §8.5.
+
+**Effective permission and scoped judgment.** S-MONITOR composes permission/preexecution checks on its governed path.
+
+*Claim boundary / outstanding evidence:* Assess exact principal, coworker, work, token and data inputs on the chosen deployed adapter; no all-path claim.
+
+**Direct execution paths.** S-DIRECT has a kernel gate and separately records unmediated reach; S-RATCHET retains named exceptions.
+
+*Claim boundary / outstanding evidence:* A kernel gate is not the whole governed authority ladder. Remaining direct paths prevent a universal mediation claim.
+
+**GPP enforcement modes.** S-MODES has an empty checked-in enforced-binding table at this snapshot.
+
+*Claim boundary / outstanding evidence:* No GPP-Enforced result follows from the presence of a promotion mechanism. Actual calls and downgrades require observations.
+
+**Permit identity and exact parameters.** S-HANDLE and S-PARAMS define authenticated handles and a canonical call digest.
+
+*Claim boundary / outstanding evidence:* Source representation does not prove provisioning, secret isolation, lineage validity or rejection at every target.
+
+**Reach reconciliation.** S-RATCHET declares 23 allowlisted sites in 11 files; T-RATCHET contains checks against growth and dynamic reach.
+
+*Claim boundary / outstanding evidence:* These are source inventory and test-design observations, not tests executed for this edition or proof that every bypass is closed.
+
+**Work shapes and Build Studio.** N-GPP Annex A records compiler, stage and transition work with explicit limits.
+
+*Claim boundary / outstanding evidence:* The full visual model-to-runtime path and uniform transition gating remain separate delivery/assessment work.
+
+**Receipt and observed outcome.** S-MONITOR contains receipt/audit integration; S-LOOP requests observation and reconciliation.
+
+*Claim boundary / outstanding evidence:* A receipt must be validated against the exact effect. Source presence, admission or dispatch does not prove the business outcome.
+
+**Job qualification.** N-JSI defines the lifecycle; A-DPF distinguishes existing substrate from a qualified credential.
+
+*Claim boundary / outstanding evidence:* No qualification of an agent or complete qualification lifecycle is established here.
+
+**Public/federated identity.** N-GAID defines private and public claim structures.
+
+*Claim boundary / outstanding evidence:* No accredited issuer, public badge or federated verification result is established by this paper.
+
+**Data and processing destination.** Canonical TAK and JSI require applicable data and destination controls.
+
+*Claim boundary / outstanding evidence:* End-to-end admission, context transformation, fallback and egress need their owning implementation evidence.
+
+**Portable reference loop.** S-LOOP is a pure host-facing reference, with source tests T-LOOP.
+
+*Claim boundary / outstanding evidence:* It is not a durable host transaction, deployed adapter or independent reproduction.
+
+**Efficacy.** §9 identifies proposed measures.
+
+*Claim boundary / outstanding evidence:* No measured savings, supervision reduction or harm reduction is reported.
+
+
+A subsequent assessor can replace a runtime-unverified disposition only with evidence tied to the particular source, served runtime, configuration, inputs, actor and target. Unavailable infrastructure stays inconclusive; an unsupported mandatory control cannot be converted into a manual pass.
 
 ### 8.3 What building it taught us
 
-Two findings from writing the GPP standard against DPF's own code illustrate why the model must be checked against the system.
+Earlier editions described dangling capability vocabulary, missing stage readers and unequal Build Studio gate sets. These remain useful examples of the questions a model/runtime comparison should ask. They are not a fresh assessment of this source snapshot or the current install.
 
-**A dangling capability.** DPF's delivery work shapes grant a capability named `write-source`. No tool grant honours that name. Inside a delivery Workroom, an in-portal coworker's tool surface therefore quietly collapses to read-only. The system fails safe, and nobody could see it, because the model said *write* while the runtime said *read*. GPP's vocabulary-resolution check is designed to catch exactly this. It is now tracked for repair. The first stage-level binding slice has since merged with a parity test asserting GPP's stage-coverage and vocabulary-resolution checks for the stages it covers.
+The previous ledger also stated that four dynamic direct sites blocked every binding promotion. That statement is superseded by N-GPP 0.18 and S-RATCHET/T-RATCHET: the recorded dynamic proposal-approval paths were routed, while named direct-call exceptions remain. Removing the dynamic sites does not promote a binding or prove complete mediation. The checked-in enforced table remains the authority for the source mode, and actual runtime conditions can further narrow a claim.
 
-**Reach in the other direction.** Live operation of standing Workrooms showed rooms stalling because a stage's work needed a read tool the model had not admitted. When stage-level bindings were introduced, 21 stages were recorded on a shrink-only gap list, each pointing to the backlog item that will supply the missing tool. Eight have since gained the read tool they lacked; 13 remain (2026-10-01). The first live reconciliation of called against declared tools (2026-10-02, 12 stage runs across 11 standing rooms) found both directions at once. Eight rooms called their declared read tool. One stage reached an undeclared tool and then stalled. The two rooms still on the gap list searched for a reader that the model does not admit. Reach reconciliation is a two-way check: a model that admits too little produces stalls, and one that admits too much produces incidents.
+The detailed canonical dispositions stay with the GPP standard's informative implementation annex and the existing live backlog. This paper does not close their implementation or acceptance obligations.
 
-Neither finding was visible from the documentation alone. Both became visible the moment the model and the runtime were compared.
+### 8.4 Portability and replaceable inference
 
-**The platform's own delivery flow.** Writing DPF's Build Studio flow down as a model, rather than
-reading it file by file, exposed three more findings:
-- Its stages, gates and tool sets were spread across at least six modules.
-- One tool could advance work from planning to building after an evidence check alone, skipping the
-  blocking platform-scope decision that the main path enforces. This is one transition with two gate
-  sets, and it is now tracked as a defect.
-- Its ship gate is shadow-only unless an enforce mode is switched on.
+Hermes Agent and Cursor reproductions, the complete DPF specimen and a genuinely external assessment remain programme deliveries. A definition can move before its behavior has been assessed on a new host. Imported prose, skills or rules do not transfer credentials, grants or qualification.
 
-None of these was visible from documentation. All three were visible the moment the flow was
-expressed as a model.
+Bounded-output inference such as TypeSafe Jev is a possible judgment component inside this harness. A typed choice, score or probability is not truth, domain calibration or authorization. A selected implementation still needs permitted input processing, an approved destination, current owning-scope policy and target-specific evaluation. No Jev provider adoption, inference run or performance result is reported here. [TypeSafe introduction](https://docs.typesafe.ai/introduction).
 
-### 8.4 Portability
+### 8.5 Immutable source and evidence register
 
-The standards are vendor-neutral, and DPF is one implementation. Adapters that carry the composition to other agent harnesses are planned and in progress. They will be reported only when their enforcement capabilities have been independently inspected. Portability of prose, skills or prompts does not transfer credentials, grants or qualification.
+All repository links below are frozen at commit `d9c8ed1fc887527c2a8b893f9a8062519c5a4384`, inspected 2026-10-16. Each blob identifies the exact source bytes. These are **source locators**, not runtime attestations. External web sources remain dated citations and may change independently.
+
+- **N-TAK — Runtime and principle-directed draft.** [docs/architecture/trusted-ai-kernel.md](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/docs/architecture/trusted-ai-kernel.md). Git blob `2fc0b7ae2790a11193bfeba6d79765052abd4fb2`.
+
+- **N-GAID — Identity and receipt draft.** [docs/architecture/GAID.md](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/docs/architecture/GAID.md). Git blob `f0b60a4dfa7d3f18518c5c65d6e1d32291f6d536`.
+
+- **N-JSI — Qualification draft.** [docs/architecture/job-specific-intelligence.md](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/docs/architecture/job-specific-intelligence.md). Git blob `c10f170920efb5f51c10959cbb375108ce7c5210`.
+
+- **N-GPP — Binding draft 0.18.** [docs/architecture/gated-permissions-process.md](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/docs/architecture/gated-permissions-process.md). Git blob `b4d8752463c99a069518f575b097a70884c241cc`.
+
+- **S-MONITOR — Governed execution path.** [apps/web/lib/mcp-governed-execute.ts](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/apps/web/lib/mcp-governed-execute.ts). Git blob `341f253fa075de9e9f8f0b7594c0f2171b76a424`.
+
+- **S-DIRECT — Direct execution and kernel gate.** [apps/web/lib/mcp-tools.ts](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/apps/web/lib/mcp-tools.ts). Git blob `3e488055f969ac4054624012fa8ac19c0191f832`.
+
+- **S-MODES — Checked-in promotion table.** [apps/web/lib/gpp/binding-enforcement.ts](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/apps/web/lib/gpp/binding-enforcement.ts). Git blob `8a1b31c900e61a10b3335ad8b76172ddbbf58172`.
+
+- **S-RATCHET — Declared direct-call inventory.** [apps/web/lib/gpp/unmediated-execute-sites.ts](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/apps/web/lib/gpp/unmediated-execute-sites.ts). Git blob `b87e9e13a5e8e6b00e22e2e4bfe76812fccdf8d0`.
+
+- **T-RATCHET — Source tests for reach ratchet.** [apps/web/lib/gpp/unmediated-reach-ratchet.test.ts](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/apps/web/lib/gpp/unmediated-reach-ratchet.test.ts). Git blob `8fad86f11a4097a0d15be3e5ec6574e021754ab2`.
+
+- **S-HANDLE — MAC-bound permit representation.** [apps/web/lib/gpp/permit-handle.ts](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/apps/web/lib/gpp/permit-handle.ts). Git blob `382c9caf67834669d7512e89ec7bea644767966d`.
+
+- **S-PARAMS — Canonical tool/parameter digest.** [apps/web/lib/gpp/param-hash.ts](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/apps/web/lib/gpp/param-hash.ts). Git blob `d2041af4ede83a1845e75d286f7e61844ff56220`.
+
+- **S-LOOP — Pure reference loop.** [packages/validators/src/trusted-agent-reference-loop.ts](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/packages/validators/src/trusted-agent-reference-loop.ts). Git blob `797d8bcdff57368b116219588f7670a4c7a99bfc`.
+
+- **T-LOOP — Source tests for the loop.** [packages/validators/src/trusted-agent-reference-loop.test.ts](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/packages/validators/src/trusted-agent-reference-loop.test.ts). Git blob `a7d21195edb60f7707b33d692592c9e3421b2f1f`.
+
+- **A-DPF — First-pass assessment and qualification gaps.** [docs/architecture/agent-standards-dpf-conformance.md](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/docs/architecture/agent-standards-dpf-conformance.md). Git blob `71f6d1d025cd99a01bbf78b5aab586feb625aa98`.
+
+The prior published edition is retained as [revision 2.1 source](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/3bbde597d0c5b867c503e06cbc80847a4bf97504/docs/architecture/2026-04-18-trusted-ai-agent-governance-white-paper.md), blob `906c6d561dfb2494530e2337a2289b5fc8cb3f5f`. A direct HTTP read of its public page at 2026-10-16T19:02:41Z returned revision 2.1. The HTML SHA-256 was `5ebccaf50f8181bb0fcb954f7abc3fdf81c62ee7186d376c568e5dd883341485`; its page headers did not bind a source commit. That is publication evidence only. This replacement's PR, documentation checks, generated Word bytes and later public response must be recorded separately; none is inferred from the older observation.
 
 ## 9. Measuring whether it works
 
 A governance claim that cannot be measured is a belief. GPP defines seven efficacy measures:
 
-| Measure | Question |
-|---|---|
-| M-1 Gate coverage | Of consequential tools each agent can reach, what share is admitted only through a binding? |
-| M-2 Human decisions per effect | How many human decisions were needed per consequential effect executed? |
-| M-3 Resolution mix | What share of gate resolutions were doctrine-only, human, held or escalated? |
-| M-4 Refusals before effect | How many consequential reaches were refused before any effect, and why? |
-| M-5 Unauthorized or unintended effects | How many consequential effects later proved unauthorized or unintended? |
-| M-6 Shadow divergence | How often would a shadow gate have refused a call that proceeded? |
-| M-7 Decision outcome linkage | What share of admitted decisions have a recorded observed outcome? |
+- **M-1 Gate coverage.** Of consequential tools each agent can reach, what share is admitted only through a binding?
 
-The outcome GPP targets is **M-2 falling while M-5 stays flat or falls**: fewer human decisions, each better placed, with no increase in harm. That is the measurable form of "decide once, enforce always".
+- **M-2 Human decisions per effect.** How many human decisions were needed per consequential effect executed?
+
+- **M-3 Resolution mix.** What share of gate resolutions were doctrine-only, human, held or escalated?
+
+- **M-4 Refusals before effect.** How many consequential reaches were refused before any effect, and why?
+
+- **M-5 Unauthorized or unintended effects.** How many consequential effects later proved unauthorized or unintended?
+
+- **M-6 Shadow divergence.** How often would a shadow gate have refused a call that proceeded?
+
+- **M-7 Decision outcome linkage.** What share of admitted decisions have a recorded observed outcome?
+
+
+GPP proposes tracking **M-2 alongside M-5**. Falling human decisions per effect with flat event counts is a proxy to investigate, not proof of unchanged harm. A comparison also needs equivalent work/exposure, declared reporting and detection coverage, event rates, severity and unresolved effects. Changes in volume or consequence can hide worsening outcomes behind unchanged counts. Freeze thresholds and acceptance criteria before testing, and report uncertainty; this paper provides no comparative safety result.
 
 DPF already records the raw material:
 
@@ -519,7 +584,7 @@ DPF already records the raw material:
 - approval envelopes
 - Workroom activity, including shadow-gate observations
 
-It has not yet published these measures. The next revision of this paper will report them with denominators, period and environment, or say why it cannot.
+This paper has no assessed efficacy dataset. A future report should state the complete evaluated cohort, accepted business outcomes, failures, supervision and rework, together with denominators, period, environment and limits. With no accepted outcomes, cost per accepted outcome is undefined, not zero. A correct refusal and a completed business result are distinct observations.
 
 ## 10. A neutral reference model
 
@@ -536,17 +601,17 @@ The family is vendor-neutral. The reference model identifies the cooperating pla
 
 ![TAK reference model](tak-diagrams/png/11-neutral-trust-model.png)
 
-The market often presents partial control planes as complete trust architectures. In practice, identity, authority, runtime, evidence and validation remain distinct concerns, even when one vendor sells them in one product.
+Identity, authority, runtime, evidence and validation remain distinct concerns even when a product combines them. A capability review must establish each claimed boundary and its evidence separately.
 
 ## 11. Public verification architecture options for GAID
 
-There are several viable public-verification architectures for GAID:
+GAID can evaluate several public-verification architecture candidates:
 
-1. **PKI and domain-anchored.** Accredited issuers bind public GAID subjects to controlled namespaces, signed identity documents, revocation services and transparency publication. This is the strongest near-term default, because relying parties already understand its accountability model.
-2. **Federated trust lists.** Recognized authorities publish issuer lists and verifier material. This suits regulated sectors and regional ecosystems.
-3. **DID / VC portability profile.** Useful for portability and selective disclosure, but not the only viable public-trust model. Enterprise adoption still favours directory-native internal identity and issuer-validated public identity.
+1. **PKI and domain-anchored.** Accredited issuers bind public GAID subjects to controlled namespaces, signed identity documents, revocation services and transparency publication. This paper favors it as a near-term candidate because it reuses established namespace, issuer and verifier roles; interoperability and operating governance still need assessment.
+2. **Federated trust lists.** Recognized authorities publish issuer lists and verifier material. Sector and regional trust frameworks can evaluate this option under their own governance.
+3. **DID / VC portability profile.** An option for portability and selective disclosure, with its own issuer, status and verifier requirements. This paper provides no comparative enterprise-adoption evidence.
 
-The preferred approach is hybrid:
+The proposed hybrid approach keeps normative requirements with GAID:
 
 - private identity stays directory-bound
 - public identity is issuer-accredited and verifier-friendly
@@ -571,11 +636,12 @@ Sources: [International ISBN Agency](https://www.isbn-international.org/), [RFC 
 
 The same logic applies to the whole family:
 
-| Phase | Scope |
-|---|---|
-| Phase 1, enterprise-private | Identity, inventory, Gated Permission models, enforced bindings and receipts inside one organization |
-| Phase 2, federated | Cross-boundary trust, portable binding references carried in authorization context, and accredited qualification schemes |
-| Phase 3, public | Verifier interoperability, public badges and status, and independent conformance assessment |
+- **Phase 1, enterprise-private.** Identity, inventory, Gated Permission models, enforced bindings and receipts inside one organization
+
+- **Phase 2, federated.** Cross-boundary trust, portable binding references carried in authorization context, and accredited qualification schemes
+
+- **Phase 3, public.** Verifier interoperability, public badges and status, and independent conformance assessment
+
 
 ## 13. Recommendations
 
@@ -597,28 +663,30 @@ The same logic applies to the whole family:
 - measure supervision load and harm together; a falling number of approvals is only good news if harm does not rise
 
 **The agent-tool protocol community should** consider authorization that is scoped to the
-transaction and the situation, not only to the server and scope. MCP today authorizes a client for
-scopes, treats tool annotations as untrusted hints, and states that a server-issued handle "is a
-name, not a capability". None of its finalized enhancement proposals defines per-call authorization.
+transaction and the situation, not only to the server and scope. The cited MCP revision defines transport authorization, supports operation-specific scope
+challenges and treats untrusted tool annotations as hints. That does not by itself establish this
+proposed work/stage/authority profile. Extension comparisons must name the protocol and proposal
+revisions they actually assessed.
 The existing hooks would carry it:
 - per-request metadata
 - a result type that requires further input
 - an extensions framework
 
-DPF intends to build such an extension as a reference implementation: gate-minted permits that can
-only be narrowed, plus a structured refusal that names the gate a call needs. It will then offer the
-extension for review.
+The source snapshot contains draft permit-handle metadata and structured refusal behavior, as
+N-GPP Annex A records. That source is a candidate implementation for review, not a finalized MCP
+extension or an independently verified interoperability result. A published extension claim still
+needs a pinned contract and target-specific evidence.
 
 **Platform vendors should:**
 
 - expose structured, machine-readable metadata for tools, consequence classes, skills, memory and approval posture
-- make tool-consequence annotations trustworthy, by attesting them, rather than leaving them as hints
+- attest the origin and version of consequence metadata, and test the actual effect boundary; a signature alone does not prove an annotation correct
 - support binding references (who decided, under which version) in authorization context and receipts
 - bind qualification badges to versioned job and operating profiles with status and expiry
 
 **The standards should ship with implementation artifacts, not only prose:**
 
-- conformance assertion rubrics for TAK, GAID and TAK-JSI, which exist as drafts, and for GPP, which has proposed assertions GPP-001 to GPP-012
+- conformance assertion rubrics for TAK, GAID and TAK-JSI, which exist as drafts, and for GPP, which has proposed assertions GPP-001 to GPP-015 in the pinned draft
 - executable conformance tests
 - a reference implementation statement from DPF
 - published efficacy measures
@@ -626,7 +694,7 @@ extension for review.
 
 ## 14. A call to the ecosystem
 
-AI agents are mature enough to create a governance problem, and immature enough that the governance answer is still forming. The industry is converging on the right diagnosis: per-call approval fails, blanket trust fails, and governance must be proportionate. It has not converged on a way to model, enforce and evidence that proportion.
+Agent tools create concrete governance questions. The cited evidence motivates examining approval design, delegated authority and execution boundaries together. This proposed composition is open for comparison and challenge; its usefulness must be established through versioned implementations and assessment.
 
 This paper proposes a concrete starting point:
 
@@ -635,13 +703,13 @@ This paper proposes a concrete starting point:
 - **GPP**: know who decided it may act, for which class of work, and make everything else unreachable
 - **TAK**: enforce that, deterministically, on every call
 - **MBSE**: so the model of governance is the system that enforces it
-- **DPF**: an open, working instantiation that real organizations can run, inspect and challenge
+- **DPF**: an open reference context whose claimed controls and limitations can be inspected and challenged
 
 We invite implementers, assessors, standards bodies and systems engineers to test these drafts, report where they fail, and contribute improvements. The standards are open working drafts precisely so that this can happen.
 
 ## References
 
-**Approval fatigue, incidents and current market** (evidence date 2026-09-30; full list with publishers in the [market and thought-leadership landscape](agent-governance-market-landscape-2026.md))
+**Approval fatigue, incidents and market context** (historical accounts retain their dates; selected load-bearing primary sources rechecked 2026-10-16. The [market landscape](agent-governance-market-landscape-2026.md) retains its own dated scope.)
 
 - [Anthropic Engineering: Making Claude Code more secure and autonomous with sandboxing, 2025-10-20](https://anthropic.com/engineering/claude-code-sandboxing)
 - [Anthropic Engineering: How we built Claude Code auto mode, 2026-03-25](https://www.anthropic.com/engineering/claude-code-auto-mode)
@@ -661,15 +729,21 @@ We invite implementers, assessors, standards bodies and systems engineers to tes
 - [OWASP LLM06:2025 Excessive Agency](https://genai.owasp.org/llmrisk/llm062025-excessive-agency/)
 - [OWASP Top 10 for Agentic Applications, 2025-12-09](https://genai.owasp.org/2025/12/09/owasp-top-10-for-agentic-applications-the-benchmark-for-agentic-security-in-the-age-of-autonomous-ai/)
 - [EU AI Act Article 14 (human oversight)](https://ai-act-service-desk.ec.europa.eu/en/ai-act/article-14)
+- [European Commission AI Act implementation timeline, checked 2026-10-16](https://digital-strategy.ec.europa.eu/en/policies/regulatory-framework-ai)
 - [NIST COSAiS: control overlays for securing AI systems](https://csrc.nist.gov/projects/cosais)
 - [Gartner: over 40% of agentic AI projects will be canceled by end of 2027, 2025-06-25](https://www.gartner.com/en/newsroom/press-releases/2025-06-25-gartner-predicts-over-40-percent-of-agentic-ai-projects-will-be-canceled-by-end-of-2027)
 - [AWS Bedrock AgentCore Policy](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/policy.html)
+- [OpenFGA task-based authorization, page modified 2026-09-28](https://openfga.dev/docs/modeling/agents/task-based-authorization)
+- [OpenFGA roles and permissions](https://openfga.dev/docs/modeling/roles-and-permissions)
+- [TypeSafe typed inference primitives](https://docs.typesafe.ai/introduction)
 - [Model Context Protocol authorization, 2026-07-28 revision](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization)
 - [Ibrahim & Li, Overlaying Governance, arXiv 2606.03518, 2026-06](https://arxiv.org/abs/2606.03518)
 - [Architecture & Governance Magazine: Five Decision Rights CIOs Need for Agentic AI, 2026-09-25](https://www.architectureandgovernance.com/artificial-intelligence/five-decision-rights-cios-need-for-agentic-ai/)
 
 **Modelling and systems engineering**
 
+- [INCOSE catalog: Creating Executable Agent-Based Models Using SysML, 2015-07-15](https://www.incose.org/resource/creating-executable-agent-based-models-using-sysml/)
+- [INCOSE: AI Agents for MBSE, 2025-07-17 event description](https://www.incose.org/communities/chapters/americas-sector/canada/events-detail/2023/12/12/default-calendar/incose-canada-practical-insights)
 - [OMG SysML v2](https://www.omg.org/spec/SysML/2.0)
 - [OMG DMN 1.5](https://www.omg.org/spec/DMN/1.5)
 - [OMG BPMN 2.0.2](https://www.omg.org/spec/BPMN/2.0.2)
@@ -733,8 +807,10 @@ We invite implementers, assessors, standards bodies and systems engineers to tes
 
 ## Revision history
 
-| Revision | Date | Change |
-|---|---|---|
-| 1 | 2026-04-18 | First edition: TAK, GAID, TAK-JSI |
-| 2 | 2026-10-01 | Added §7.4 (model to machine: notation, compiler, design-rule checks, critical-call gating, permits, the honest forgery boundary), the Build Studio findings in §8.3, and the transaction-scoped MCP recommendation in §13. Reframed around approval fatigue and the incident record. Added GPP as the fourth cornerstone, decision scopes (§6), MBSE with AI as a first-class participant (§7), the DPF claim-to-evidence ledger (§8) and efficacy measures (§9). Narrowed the first edition's "one missing control plane" claim (§4.4). Refreshed market references (BI-6CC40F77). |
-| 2.1 | 2026-10-01 | Added the Gated Permission pair figure to §4.3 and updated the stage-tool gap count in §8 (21 recorded, 13 remaining). Added four §8.2 ledger rows for GPP Phase 1–2 as built: shadow permits, per-binding enforcement with an empty enforced set, the single plan → build transition path, and the unmediated-reach ratchet. Published GPP as a Word edition alongside the other standards (BI-56C4EFCF). |
+**Revision 1 — 2026-04-18.** First edition: TAK, GAID, TAK-JSI
+
+**Revision 2 — 2026-10-01.** Added §7.4 (model to machine: notation, compiler, design-rule checks, critical-call gating, permits, the honest forgery boundary), the Build Studio findings in §8.3, and the transaction-scoped MCP recommendation in §13. Reframed around approval fatigue and the incident record. Added GPP as the fourth cornerstone, decision scopes (§6), MBSE with AI as a first-class participant (§7), the DPF claim-to-evidence ledger (§8) and efficacy measures (§9). Narrowed the first edition's "one missing control plane" claim (§4.4). Refreshed market references (BI-6CC40F77).
+
+**Revision 2.1 — 2026-10-01.** Added the Gated Permission pair figure to §4.3 and updated the stage-tool gap count in §8 (21 recorded, 13 remaining). Added four §8.2 ledger rows for GPP Phase 1–2 as built: shadow permits, per-binding enforcement with an empty enforced set, the single plan → build transition path, and the unmediated-reach ratchet. Published GPP as a Word edition alongside the other standards (BI-56C4EFCF).
+
+**Revision 2.2 — 2026-10-16.** Repaired cohort attribution, unsupported novelty/adoption and market comparisons; bound consequential parameters consistently; replaced unsupported runtime assertions with a pinned source/evidence register and runtime-unverified ledger; qualified harm proxies and retained historical publication evidence. No runtime control or conformance result added (BI-6CC40F77).
