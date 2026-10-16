@@ -3,6 +3,23 @@ import { describe, expect, it, vi } from "vitest";
 import { loadCapsuleLivenessInventory } from "./liveness-inventory";
 
 describe("loadCapsuleLivenessInventory", () => {
+  it("normalizes repeated row-id backlog links in one bounded batch and never emits unresolved raw ids", async () => {
+    const now = new Date("2026-10-16T00:00:00Z");
+    const rooms = ["backlog-row", "backlog-row", "missing-row"].map((backlogItemId, index) => ({
+      capsuleId: `WC-${index}`, backlogItemId, status: "working", updatedAt: now,
+      repositoryFullName: "owner/repo", headBranch: "fix/readback", worktreePath: "D:/readback",
+      baseSha: "0".repeat(40), headSha: "1".repeat(40), taskRun: null }));
+    const findMany = vi.fn().mockResolvedValue([{ id: "backlog-row", itemId: "BI-EXISTING" }]);
+    const db = { workroom: { findMany: vi.fn().mockResolvedValue(rooms) }, featureBuild: { findMany: vi.fn() },
+      backlogItem: { findMany }, taskRun: { findMany: vi.fn().mockRejectedValue(new Error("review unavailable")) } };
+    const result = await loadCapsuleLivenessInventory(db, { where: {}, take: 10 }, now);
+    expect(findMany).toHaveBeenCalledTimes(1);
+    expect(findMany).toHaveBeenCalledWith({ where: { id: { in: ["backlog-row", "missing-row"] } },
+      select: { id: true, itemId: true }, take: 2 });
+    for (const row of result.capsulesAll.slice(0, 2)) expect(row.recovery).toMatchObject({ blocker: {
+      action: { toolName: "get_backlog_item", args: { itemId: "BI-EXISTING" } } } });
+    expect(result.capsulesAll[2].recovery).toMatchObject({ blocker: { action: null } });
+  });
   it("batches metadata-linked reviews and uses the same current-source recovery view", async () => {
     const now = new Date("2026-10-16T00:00:00Z");
     const rooms = ["WC-1", "WC-2"].map(capsuleId => ({ capsuleId, status: "working", updatedAt: now,

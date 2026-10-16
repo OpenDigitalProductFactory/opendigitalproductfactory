@@ -299,3 +299,103 @@ Reviewed against `origin/main` (chief-architect lens, `dpf-architecture-review`)
 | Stale citation `prompt-assembler.ts:215` → `agent-coworker.ts:~778` | nit | **Folded** — §1.2 RC2 |
 
 **Verified-correct by review:** RC1 (`deriveCoworkerToolCap` gates the cliff cap on ≤32,768 only; 131072→48), RC3 (`COMPLETION_CLAIM_PATTERN`/`isSubstantiveReply` return factual prose verbatim), the `pipeline-v2` capability filter, `LOCAL_FALLBACK_MAX_TOOLS=15`, delegation-tool existence, and the RouteOutcome/AdapterRunTelemetry/eval-runner reuse targets. No kernel-principle conflict; no escalated option trade-off (choice already kernel-decided, DI-2A6C75048353).
+
+## 11. Local qualification runner completion (BI-C2F81AB0)
+
+This extension completes the live runner explicitly excluded by the Phase-2
+plan. It does not reopen completed federated BI-DF3092F4. The original
+invariants, taxonomy and thresholds remain authoritative. Status: design
+preparation; runtime admission and independent acceptance are outstanding.
+
+### Observed gap and reuse
+
+At source `3c6f0a51b5a6acff1ca344167a068f4f8cabe461`,
+`tool-fidelity-harness.ts` accepts only a returned tool name. Its comment names
+an absent runner. That seam proves the scorer, not real inference or governed
+execution. The nine golden prompts and `TASK_CLASSES` are reused.
+
+`eval-golden-test.ts` already binds inference to routing traces and excludes
+truncated output from quality scoring. `eval-runner.ts` and
+`EndpointTestRun` provide the evaluation/provenance home. Reuse those contracts;
+do not add a table, queue, MCP tool, provider or grant for this repair.
+BI-C5A25AB4 separately owns bounded failed-probe diagnostics; this runner does
+not replace its work or edit its claimed endpoint-test-runner source.
+
+### Bounded interaction and evidence
+
+1. Resolve an authorized local-only operation, an exact configured account and
+   model/version/adapter, current sensitivity/residency eligibility and a
+   bounded invocation budget before admission. Unavailable authority returns
+   unrun; it is not permission to call inference through another transport.
+2. Freeze the source/runtime identity, golden revision, ordered allowed tool
+   schemas and their digest. Use the existing nine cases at surfaces
+   8, 15, 24, 32 and 48. A surface must contain exactly that many distinct,
+   authorized read tools, including a correct tool for each case. If current
+   grants cannot provide it, record that surface as unrun.
+3. Run one independent turn per case per surface, serially. Defaults therefore
+   bound inference to 45 turns and at most 45 read executions, with explicit
+   deadline, token limit and cancellation. No automatic retry, fallback or
+   additional discovery can silently enlarge this budget or change the model.
+4. Record the actual first returned tool call and validate its arguments against
+   the attached canonical schema. A valid selection is separate from successful
+   execution. Execute only that validated read through the existing governed
+   execution boundary, retaining its invocation/trace and ToolExecution identity.
+5. Read back the matching terminal result. The model's own prose, a proposal or
+   a synthetic callback is never proof that the tool executed. Unknown or
+   truncated output remains incomplete. Completed wrong selection, invalid
+   arguments and failed execution remain failed observations.
+6. Report source fixtures, real selection and actual governed execution
+   separately. Retain all scheduled cases and failures; do not select only
+   successful rows or merge observations from another identity.
+
+The cohort binds configured account/model version, adapter, sensitivity,
+source/runtime, catalog revision and surface size. Task class remains an
+explicit grouping. The default nine turns give nine observations per surface
+and three per class; class-specific results cannot claim the five-observation
+minimum without a separately admitted repeat budget. Independent observations
+have distinct invocation identities; replaying a result does not add a sample.
+
+### Qualification and production isolation
+
+A cohort with unresolved identity, unknown/truncated results or incomplete
+scheduled coverage cannot qualify. Known negative cases stay in the denominator.
+Selection and execution each report their own count and accuracy. Reuse the
+policy's 0.9 threshold and minimum five observations; do not duplicate constants
+or infer review competence from selection success.
+
+This runner is observational. It does not call `persistToolFidelitySamples`,
+promote profile confidence or change production tool caps. The existing
+`resolveLocalToolFidelityCeiling` selects a maximum across active local profiles
+rather than the actual selected model; writing a new cohort into that path
+would risk transferring one model's evidence to another. Model-specific cap
+consumption remains a separate explicitly designed change.
+
+CWN-63C5BE75 / BI-CAP-FEE56611 retains the historical operation/authority question;
+bounded discovery resolved it as source work under existing diagnostic authority.
+Discovery showed missing coworker `tool_evaluation_create`; no denied action
+was invoked. That tool evaluates external dependencies, not model fidelity;
+granting it is not this runner's remedy. The already authorized
+`run_endpoint_tests` is the relevant existing diagnostic operation. Its current
+fixed probes inspect returned calls to stub tools and can update model ratings;
+it does not implement the requested surface matrix or governed-read execution.
+Extend that existing contract only after reconciling its owned source and the
+scoped observational mode. Neither diagnostic was executed during planning.
+Neither this design nor its tests grant capabilities.
+Preserve WC-35B59F09's claimed diagnostic files. A distinct fidelity leaf can
+be reached through the existing diagnostic handler without changing that runner.
+Nested reads reuse the server-provided governedDispatch closure so original
+token, human, agent and room authority is retained. A plain successful return
+does not supply the required positive ToolExecution identity/readback.
+The historical 870/941 executions remain outside the runner and cannot be
+retried, settled or replaced by its results.
+
+### Verification boundary
+
+RED-to-GREEN source tests cover catalog size/eligibility, identity mismatch,
+wrong or absent tool calls, invalid arguments, failed/proposed/foreign
+executions, truncation, duplicate invocation, cancellation and exhausted budget.
+No fixture becomes live qualification. Affected checks, exact-source independent
+review, protected publication and canonical served identity precede a live run.
+Any unavailable runtime prerequisite remains explicit, with no fabricated pass.
+
+Plan: [local runner completion](../plans/2026-10-16-local-tool-fidelity-runner.md).

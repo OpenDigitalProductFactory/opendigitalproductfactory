@@ -265,3 +265,75 @@ is part of this correction. Refresh coverage for the published corrective head,
 obtain independent bounded source assessment, preserve audited DEV publication
 exceptions as skipped/unrun, then use fresh protected CI and canonical deployment
 before rerunning the failed live check.
+
+**Historical-only readback correction, same BI-CAP-21C511CA.** Canonical
+recovery.102 served `a914e8314d52449979af7b84599b3908b2a61036`. Actual
+`get_workroom` for WC-D299E3B8 still returned an incomplete observation, null
+accountable owner and an identical read action when every valid request belonged
+to older source. Failure activity `cmvapsu610au101pdbuv96w2m` preserves this
+observation; the old uncertain TR-GATE-376F91B64F4544826FF58E7F stays historical.
+
+This is one atomic correction of READBACK-CURRENT, READBACK-RESULT,
+READBACK-AUTH and READBACK-UNKNOWN, using the same contracts and flow above.
+No independent delivery, new task reader, receipt, queue or authority is needed.
+PR 6449's native source validation is a source dependency, already merged as
+`203c62de7794a2074f952cb40d513d175786ffc8`. BI-7CCCA696 continues to own automatic
+capacity recovery; canonical identity and role/room repairs remain separate.
+
+1. Distinguish complete historical-only observation from actual query failure,
+   malformed identity, conflicting identity and truncated task/node history.
+   Keep complete absence of a current review unknown, never passing.
+2. Reuse the existing execution projection for explicitly historical summaries
+   (at most five, with an explicit truncation flag), including recorded source,
+   requester, outcome, original budget and requester-bound `tasks/result` action.
+   Historical evidence must never become the current execution or readiness.
+3. When current identity cannot be resolved, expose the existing accountable
+   delivery-coordinator role and the existing `get_backlog_item` bounded
+   post-implementation-review recovery route. This asks the canonical issuer for
+   current recovery, never creates/retries a review or invents a request nonce.
+   For rooms without a linked item, retain an explicit owning-role escalation
+   rather than promising the same read will repair it.
+4. Reserve at least 20 percent for consolidating execution summary/receipt
+   visibility and recovery-action selection in the existing reducer. Both detail
+   and liveness already consume it; do not fork adapter behavior.
+5. Resolve claimed-path test impact before Red. Add loader-to-reducer regressions
+   for complete old-source PASS/FAIL/inconclusive/uncertain state, missing current
+   source, bounded history, source mismatch and corruption; update the existing
+   read-only PostgreSQL regression in
+   `apps/web/lib/work-management/semantic-review-room-projection.postgres.test.ts`.
+   Run related detail/liveness and Ops Map tests,
+   both TypeScript programs and applicable guards. Database suites without a
+   governed database remain explicitly skipped, not passed.
+6. Obtain independent source assessment on the frozen commit, publish a regular
+   DCO PR through protected CI/queue, then repeat the failed live read after a
+   containing canonical upgrade and CAN-TEST. No old uncertain provider replay,
+   post-publication model review, exact-approval waiver substitution or fake PASS.
+
+Rollback reverts the additive readback correction and preserves all stored tasks,
+receipts and the recorded failures. Existing coverage is historical; record and
+check new live coverage against this immutable plan and seven claimed paths
+before implementation. The owned runbook must describe the current issuer action.
+
+Pre-implementation coverage: `cmvaq0s9y0dal01pdk2faigd7`, checked valid, bound
+to plan blob `177bca1ab7966efde7944527ba0e31d079f0bda7` at
+`9b9a83f088ccf4d3bd30e55ab6bd6195e22d5e57`; implementation admission
+`IRD-58F6C6246868` allowed the existing small/low delivery. Refresh final
+immutable coverage after publication; these receipts remain historical evidence.
+
+Independent source assessment of `8b6663317139b37b65eb2ebee1767e2dbaa4741f`
+found a P2: Build Studio rooms may retain a BacklogItem row ID, while the MCP
+recovery reader accepts its semantic BI ID. Hold publication and normalize this
+existing soft pointer in one bounded identifier-only batch, shared by detail and
+liveness. Do not mutate stored linkage or expose item bodies. Missing or failed
+resolution must name coordinator escalation without emitting the raw ID as a
+tool argument. Three regressions reproduced the invalid detail action, missing
+batch resolution and unsafe raw-ID reducer action before repair.
+
+The additional normal claims are `apps/web/lib/work-capsules/mcp-handlers.ts`,
+`apps/web/lib/work-capsules/liveness-inventory.ts`,
+`apps/web/lib/work-capsules/mcp-workroom-recovery.test.ts` and
+`apps/web/lib/work-capsules/liveness-inventory.test.ts`. Expanded eleven-path
+coverage `cmvaqdaka0hdk01pdlogyyuc2` was checked valid against the same published
+pre-implementation plan before correcting these adapters. Reuse graph-linked
+investment readback, terminal recovery, scope-input parity and scope-release
+tests as well as the prior verification set; obtain a new exact source assessment.

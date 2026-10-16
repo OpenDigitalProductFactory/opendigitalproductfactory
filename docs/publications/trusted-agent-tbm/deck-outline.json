@@ -1,0 +1,199 @@
+{
+  "title": "Trusted agent execution",
+  "status": "Discussion draft; no endorsement or completed conformance",
+  "date": "2026-10-16",
+  "slides": [
+    {
+      "title": "Trusted agent execution",
+      "subtitle": "Inspectable authority, work and evidence",
+      "cover": true,
+      "body": [
+        "Discussion draft · TBM Conference",
+        "November 9–11, 2026 · Miami"
+      ],
+      "notes": "DPF-originated discussion material. No foundation endorsement, certification or complete conformance is claimed. Event dates: https://www.tbmconference.org/ . Request: technical scrutiny and independent reproduction, not adoption."
+    },
+    {
+      "title": "The governed action",
+      "diagram": [
+        "Requirement",
+        "Work shape",
+        "Scoped decision",
+        "GPP envelope",
+        "TAK effect",
+        "Receipt + assessment"
+      ],
+      "body": [
+        "A recommendation proposes an action",
+        "Current authority is checked at the effect boundary"
+      ],
+      "notes": "Editable architecture diagram. Intended semantic chain, not evidence of universal runtime coverage. Family owner: docs/architecture/agent-standards-family.md; normative runtime controls: trusted-ai-kernel.md. Past receipts establish facts, not new execution permission."
+    },
+    {
+      "title": "Four distinct responsibilities",
+      "table": [
+        [
+          "Standard",
+          "Responsibility"
+        ],
+        [
+          "GAID",
+          "Identity, active profile and verifiable claims"
+        ],
+        [
+          "TAK-JSI",
+          "Qualification for the job and context"
+        ],
+        [
+          "GPP",
+          "Decision-bound capability envelope"
+        ],
+        [
+          "TAK",
+          "Current authorization and effect mediation"
+        ]
+      ],
+      "notes": "Canonical source: docs/architecture/agent-standards-family.md. Identity claims do not grant authority; qualifications do not grant permission; GPP narrows authority; permission does not prove competence."
+    },
+    {
+      "title": "The MBSE composition",
+      "body": [
+        "SysML: requirements and interfaces",
+        "Process/state views: work progression",
+        "DMN: decision dependencies",
+        "Provenance: evidence relationships",
+        "Added profile: decision → envelope → effect → assessment"
+      ],
+      "notes": "Implementation-profile proposal; no new general language or achieved interchange conformance. https://www.omg.org/spec/SysML/2.0 ; https://www.omg.org/spec/DMN/1.5 ; https://www.w3.org/TR/prov-o/ . DPF baseline: docs/superpowers/specs/2026-09-27-trusted-agent-mbse-baseline-design.md."
+    },
+    {
+      "title": "Decision ownership",
+      "body": [
+        "Platform: execution and integrity constraints",
+        "Organization: business purpose and policy",
+        "Profession: craft judgment and evidence",
+        "DPF bindings: WWMD, WWWD and WSID"
+      ],
+      "notes": "Each owning scope speaks for its decisions. Cross-scope doctrine is advisory until adopted. Portable contract requires accountable scopes, not DPF acronyms. Finance policy is not invented by platform engineers."
+    },
+    {
+      "title": "Two demonstration contexts",
+      "table": [
+        [
+          "Context",
+          "What must be exposed"
+        ],
+        [
+          "Software delivery",
+          "Repository scope, gates, tools and evidence"
+        ],
+        [
+          "Synthetic expense",
+          "Finance policy, authority and isolated approval"
+        ],
+        [
+          "Both",
+          "Current profile, bounded effects and refusal paths"
+        ]
+      ],
+      "notes": "Operator selected approval of a synthetic expense. No real money, bank access or external expense integration. Existing backlog retains specimen and reproduction ownership. These are planned contexts, not passed pilots."
+    },
+    {
+      "title": "Synthetic expense walkthrough",
+      "body": [
+        "Show the requirement, owner and work stage",
+        "Evaluate evidence against the frozen test policy",
+        "Check current authority and GPP binding",
+        "Approve only the isolated synthetic record",
+        "Inspect the genuine receipt and assertion result"
+      ],
+      "disclosure": "STATIC WALKTHROUGH · No execution or recording claimed",
+      "notes": "STATIC WALKTHROUGH until supported by a separately qualified runtime run. Finance owner must approve thresholds, evidence rules and escalation policy. The packet performs no effect. A recording exists only after an actual governed run is captured and checked."
+    },
+    {
+      "title": "Test permission and refusal",
+      "table": [
+        [
+          "Changed condition",
+          "Expected control"
+        ],
+        [
+          "Missing evidence",
+          "Hold or deny under the frozen policy"
+        ],
+        [
+          "Revoked authority / stale binding",
+          "No new effect"
+        ],
+        [
+          "Repeated request",
+          "No duplicate effect"
+        ],
+        [
+          "Evaluator unavailable",
+          "Held or inconclusive; no invented verdict"
+        ],
+        [
+          "Material profile change",
+          "Declared review or revalidation"
+        ]
+      ],
+      "notes": "Proposed vectors, not executed results. Actual outcomes must bind inputs, profile, policy, GPP, effect identity and evidence. A previous approval cannot authorize an unrelated effect. Infrastructure failure is inconclusive."
+    },
+    {
+      "title": "Business value measurement",
+      "body": [
+        "Complete-cohort cost ÷ accepted outcomes",
+        "Include failures, retries, supervision and rework",
+        "Keep acceptance, scope and conditions comparable",
+        "Zero accepted outcomes: ratio undefined",
+        "Savings remain unmeasured"
+      ],
+      "notes": "Proposed complete-cohort metric, not an observed economic result. Do not drop failed attempts from numerator. Correct refusal and completed business work are distinct outcomes. TBM event context: https://www.tbmconference.org/ ."
+    },
+    {
+      "title": "Evidence still required",
+      "body": [
+        "Executable assessment and honest denominator",
+        "Qualified DPF runtime demonstration",
+        "Independent Hermes / Cursor reproduction",
+        "Finance-owned specimen and assessment",
+        "Version freeze and independent acceptance"
+      ],
+      "notes": "Snapshot2026-10-16; refresh before sharing. Reference code and publication do not complete these obligations. TypeSafe Jev is a bounded-output candidate, not an adopted provider or proven safety control: https://docs.typesafe.ai/introduction . See packet known-gaps.md."
+    },
+    {
+      "title": "Open governance options",
+      "table": [
+        [
+          "Route",
+          "Decision still required"
+        ],
+        [
+          "Existing working-group contribution",
+          "Scope, terms and sharing approval"
+        ],
+        [
+          "AAIF Sandbox exploration",
+          "License, assets, charter and maintainers"
+        ],
+        [
+          "Community Specification / JDF",
+          "Specification IP and governance terms"
+        ]
+      ],
+      "notes": "Options only. AAIF policy requires permissive release, working implementation, active maintainer, asset/trademark transfer and LF charter; Sandbox is not endorsement. https://github.com/aaif/technical-committee/blob/main/governance/project-lifecycle-policy.md ; https://aaif.io/submit-a-project ; https://jointdevelopment.org/faq/ ; https://github.com/CommunitySpecification/Community_Specification . Existing DPF Apache-2.0 does not settle specification-essential patents or asset transfer."
+    },
+    {
+      "title": "The proposed next step",
+      "body": [
+        "Review the narrow execution-contract scope",
+        "Identify overlap with existing work",
+        "Recruit one independent implementer",
+        "Name one independent assessor",
+        "Agree the evidence package before adoption"
+      ],
+      "notes": "Proposed spoken request: Would your group review this scoped contract and its negative tests, identify overlap, and help recruit an independent implementer and assessor? No outreach, application, commitment or membership through producing the deck. Existing W3C/IEEE/NIST/IETF venue ownership stays with contribution roadmap."
+    }
+  ]
+}

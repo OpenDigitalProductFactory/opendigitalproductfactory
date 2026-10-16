@@ -3,6 +3,7 @@ import { resolveEpicRowId, resolveListLimit } from "./backlog-read-helpers";
 import { addScopeFilters, backlogScopeSelect, scopeData } from "./backlog-scope-metadata";
 import { boundedBacklogRecoveryRead, canReadRecoveryPacket, isRecoveryReadGate, recoveryReadDecision } from "../backlog-recovery-read";
 import { designPhaseReviewDecision } from "@/lib/backlog/initiative-readiness/design-phase-recovery";
+import type { prepareCurrentDesignObservation as PrepareCurrentDesignObservation } from "@/lib/backlog/initiative-readiness/canonical-artifact-discovery";
 
 const INITIATIVE_READINESS_ACTIVITY_KINDS = [
   "initiative_gate_receipt",
@@ -385,7 +386,8 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
   };
 }
 
-export async function getBacklogItem(params: Record<string, unknown>, currentAgentId: string | null = null, currentUserId?: string, context?: ToolExecutionContext): Promise<ToolResult> {
+export async function getBacklogItem(params: Record<string, unknown>, currentAgentId: string | null = null, currentUserId?: string, context?: ToolExecutionContext,
+  internal?: { currentDesignSource: NonNullable<Parameters<typeof PrepareCurrentDesignObservation>[0]["claimSource"]> }): Promise<ToolResult> {
   const { prisma } = await import("@dpf/db");
   const itemIdRaw = String(params["itemId"] ?? "").trim();
   if (!itemIdRaw)
@@ -450,7 +452,10 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
   // existing projection.
   const { readBacklogItemCompletion } = await import("@/lib/backlog/initiative-readiness/backlog-completion-evaluation");
   const { prepareCurrentDesignObservation } = await import("@/lib/backlog/initiative-readiness/canonical-artifact-discovery");
-  const currentDesign = await prepareCurrentDesignObservation({ itemId: item.itemId });
+  // Only a server caller that already checked exact room access supplies this.
+  // Public tool params deliberately cannot select a room or design source.
+  const currentDesign = await prepareCurrentDesignObservation({ itemId: item.itemId,
+    ...(internal ? { claimSource: internal.currentDesignSource } : {}) });
   const gateCompletion = await readBacklogItemCompletion({ itemRowId: item.id, status: item.status, evaluatedAt,
     currentDesign: currentDesign.evidence });
   // BI-DEDAC950: the governing principle per unmet code, beside the decisions.
