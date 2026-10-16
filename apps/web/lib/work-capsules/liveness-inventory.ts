@@ -11,7 +11,7 @@ import { classifyWorkCapsuleLiveness,
   isDemonstrablyWorking,
   type WorkCapsuleLiveness,
 } from "./liveness";
-import { projectWorkroomRecovery } from "./workroom-recovery-projection";
+import { loadWorkroomRecoveryItems, projectWorkroomRecovery } from "./workroom-recovery-projection";
 import { readBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
 import { projectPrFollowThroughStatus } from "@/lib/build/pr-follow-through";
 import { projectInvocationAttribution, recordedDriveTask } from "./invocation-attribution";
@@ -109,6 +109,7 @@ export async function loadCapsuleLivenessInventory(
   // One bounded review read for the page, never one query per room. A truncated
   // history stays unknown; the detail action narrows the observation to a room.
   const reviews = await loadSemanticReviewRoomProjection(db, rows.map(row => row.capsuleId), now);
+  const recoveryItems = await loadWorkroomRecoveryItems(db, rows);
 
   const taskIds = rows.map((row) => recordedDriveTask(row)?.taskId).filter((id): id is string => Boolean(id));
   const tasks = taskIds.length && db.scheduledAgentTask ? await db.scheduledAgentTask.findMany({
@@ -164,7 +165,7 @@ export async function loadCapsuleLivenessInventory(
       ...(drive ? { drive: { action: drive.lastAction, reason: drive.lastReason,
         attentionRecorded: Boolean(projectStoredWorkroomDriveObservation(row.workspaceState).attentionReason) } } : {}),
       attribution: projectInvocationAttribution(row, tasksById.get(recordedDriveTask(row)?.taskId ?? "")),
-      recovery: projectWorkroomRecovery({ ...row, taskRun: row.taskRun }, reviews),
+      recovery: projectWorkroomRecovery({ ...row, taskRun: row.taskRun }, reviews, recoveryItems.get(row.backlogItemId ?? "") ?? null),
       liveness: verdict.liveness,
       isLive: verdict.isLive,
       isReapable: verdict.isReapable,

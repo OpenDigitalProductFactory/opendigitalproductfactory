@@ -372,6 +372,9 @@ export async function approveDemandForFundingHandler(
 
   const { evaluateOrgBusinessDecisionGate } = await import("@/lib/decision-perspective/org-business-gate");
   const rationale = typeof params["rationale"] === "string" ? (params["rationale"] as string).trim() : "";
+  // No organization currency funding threshold is configured by this model.
+  // The existing quarterly points allocation above remains its own control;
+  // points are not currency and cannot supply a guessed threshold declaration.
   const decision = await evaluateOrgBusinessDecisionGate({
     db: prisma,
     organizationId: item.organizationId,
@@ -392,7 +395,8 @@ export async function approveDemandForFundingHandler(
     },
   });
 
-  // Only advance to `ready` (funded) when the org's stance recommends/arbitrates.
+  // Advance only through the gate's canonical permission projection, including
+  // damaging holds, decisive declines and the recorded independent-review interim.
   const funded = decision.allowed;
   let volunteered: { offered: boolean; agentId: string | null } = { offered: false, agentId: null };
   if (funded) {

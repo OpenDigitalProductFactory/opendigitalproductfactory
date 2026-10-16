@@ -149,6 +149,9 @@ of this slice for that shared refactoring and existing primitive convergence.
 Use theme tokens, 44px actions, labelled disclosure, keyboard activation and
 stable focus. Tests cover resolved, unsupported, conflicting and missing data,
 hostile text, no false pass/benefit and unchanged read-only action boundaries.
+While a snapshot refresh is pending, announce its busy state and refuse repeat
+activation without removing the focused keyboard target. Completion must not
+steal focus if the operator has moved to another action.
 Run affected Workroom component/read-model suites and both web typechecks, then
 the measured UX-fit guard, independent source review and protected CI/queue.
 
@@ -160,6 +163,23 @@ or source test replaces that result. PR 6415, this UI continuation and a generic
 allowed readiness projection do not alone satisfy full AC-09 or the parent.
 
 ## Phase 5 — domain assurance and standards
+
+### AC-09 known-offline refresh correction
+
+The live recovery.100 keyboard refresh failed with an RSC fetch error followed
+by a full document fallback to Chrome's offline error page. This is browser
+connectivity evidence, not a server error. Preserve that failed verification and
+the separate focus-only pass. Reuse the existing freshness control and transport:
+when the browser reports offline, retain the snapshot, announce the condition
+and refuse refresh activation. On reconnection announce a manual retry; do not
+refresh automatically or move focus. Recheck the hint at activation in case the
+offline event has not arrived. Keep snapshot age independent from connectivity.
+DI-376075678C78 selected this bounded option over custom transport and a global
+experimental framework flag. The hint does not establish server reachability,
+handle arbitrary server errors, or guarantee a connection will survive a request.
+Add regression evidence before source changes, preserve the seven existing tests,
+then verify offline Enter, reconnect/manual retry and focus on the containing
+canonical release. Full AC-09 still requires its other error and assistive cases.
 
 Use BI-3AA4A997's existing baseline map for `contract:domain-opportunity-window` and `flow:profile-to-observed-outcome`. Reconcile the current catalog and all source definitions; the earlier 107-leaf count is a dated snapshot. Every archetype receives common defaults and explicit extension/exclusion state. Do not claim all archetypes exercised from catalog coverage.
 

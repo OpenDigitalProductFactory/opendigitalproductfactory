@@ -405,3 +405,51 @@ describe("the writer schema states its contract before the writer refuses it (BI
     expect(properties.resolvedFindingRefs?.description).toMatch(/finding-resolution-invalid/);
   });
 });
+
+describe("bound terminal effect identity carriage", () => {
+  const artifactRef = { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "a".repeat(40),
+    providerBlobId: "b".repeat(40), path: "docs/superpowers/specs/design.md" };
+  const requestDigest = "9".repeat(64);
+  const params = { decision: "pass", reason: "Independent review.", findings: [], resolvedFindingRefs: [],
+    profile: "feature", artifactRole: "design-spec", boundReviewTask: { taskRunId: "TR-FORGED", requestDigest: "8".repeat(64) } };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.findReads.mockResolvedValue([]);
+  });
+
+  it.each(["design-spec", "spec-approval"])("carries authenticated task/digest for %s, ignoring forged tool arguments", async (gate) => {
+    mocks.findTaskRun.mockResolvedValue({ a2aMetadata: { trigger: "external-mcp", requestDigest, initiativeReviewBinding: {
+      writerToolName: "record_initiative_design_review", itemId: "BI-BOUND", gate, artifactRef,
+      expectedCurrentBaselineId: null,
+    } } });
+    mocks.recordGateReceipt.mockResolvedValue({ ok: true, receiptId: "receipt-1" });
+    mocks.recordSpecApproval.mockResolvedValue({ ok: true, receiptId: "receipt-1", baselineId: "baseline-1" });
+    await initiativeReadinessPack.handlers.record_initiative_design_review!(params, "user", {
+      taskRunId: "TR-BOUND", agentId: "AGT-WS-REVIEW", authorityDecisionId: "AUTH-1", tokenScope: "write",
+    } as never);
+    const writer = gate === "spec-approval" ? mocks.recordSpecApproval : mocks.recordGateReceipt;
+    expect(writer).toHaveBeenCalledWith(expect.objectContaining({ boundReviewTask: { taskRunId: "TR-BOUND", requestDigest } }));
+  });
+
+  it("does not accept an argument-selected task identity on an unbound call", async () => {
+    mocks.findTaskRun.mockResolvedValue(null);
+    mocks.recordGateReceipt.mockResolvedValue({ ok: true, receiptId: "receipt-1" });
+    await initiativeReadinessPack.handlers.record_initiative_design_review!({ ...params, itemId: "BI-BOUND", gate: "design-spec", artifactRef },
+      "user", { agentId: "AGT-WS-REVIEW" } as never);
+    expect(mocks.recordGateReceipt.mock.calls[0]?.[0].boundReviewTask).toBeUndefined();
+  });
+
+  it("reports an existing rejecting spec verdict without claiming a new baseline", async () => {
+    mocks.findTaskRun.mockResolvedValue({ a2aMetadata: { trigger: "external-mcp", requestDigest, initiativeReviewBinding: {
+      writerToolName: "record_initiative_design_review", itemId: "BI-BOUND", gate: "spec-approval", artifactRef,
+      expectedCurrentBaselineId: null,
+    } } });
+    mocks.recordSpecApproval.mockResolvedValue({ ok: true, receiptId: "prior-fail", baselineId: null,
+      artifactDigest: `sha256:${"a".repeat(64)}`, deduplicated: true, receipt: { decision: "fail" } });
+    const result = await initiativeReadinessPack.handlers.record_initiative_design_review!(params, "user", {
+      taskRunId: "TR-BOUND", agentId: "AGT-WS-REVIEW", authorityDecisionId: "AUTH-1", tokenScope: "write",
+    } as never);
+    expect(result).toMatchObject({ success: true, entityId: "prior-fail", data: { receiptId: "prior-fail", decision: "fail", idempotentReplay: true } });
+    expect(result.message).not.toMatch(/baseline recorded/i);
+  });
+});

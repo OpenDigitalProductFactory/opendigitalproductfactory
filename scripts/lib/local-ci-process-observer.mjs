@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { resolveHostCommandInvocation } from "./host-command-invocation.mjs";
 import { freemem, loadavg, totalmem } from "node:os";
 import { performance } from "node:perf_hooks";
 
@@ -144,7 +145,7 @@ export function createObservedProcessRunner({
   now = () => new Date().toISOString(),
   platform = process.platform,
 } = {}) {
-  return function runObservedProcess({ command, args, env = process.env, observation = {}, cwd, shell = platform === "win32", signal: cancellationSignal }) {
+  return function runObservedProcess({ command, args, env = process.env, observation = {}, cwd, signal: cancellationSignal }) {
     if (cancellationSignal?.aborted) return Promise.resolve({ ...observation, status: null,
       signal: null, error: null, cancelled: true, childPid: null, outputTail: "", hostSamples: [],
       startedAt: now(), completedAt: now(), deadlineExceeded: false });
@@ -175,10 +176,11 @@ export function createObservedProcessRunner({
       let deadlineTimer = null;
       let forceTimer = null;
       let closeTimer = null;
-      const child = spawnImpl(command, args, {
+      const invocation = resolveHostCommandInvocation(command, args, { platform, env });
+      const child = spawnImpl(invocation.command, invocation.args, {
         env,
         cwd,
-        shell,
+        shell: false,
         detached: platform !== "win32" && boundedDurationMs !== null,
         stdio: ["ignore", "pipe", "pipe"],
         windowsHide: true,

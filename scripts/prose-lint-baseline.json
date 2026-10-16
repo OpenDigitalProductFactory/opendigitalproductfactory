@@ -7109,7 +7109,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 88
+    "textMass": 79
   },
   "apps/web/components/platform/AiReadinessHeaderLink.tsx": {
     "vocabulary": 0,
@@ -7510,6 +7510,14 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 104
+  },
+  "apps/web/components/platform/RoutingManagementWorkspace.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
   },
   "apps/web/components/platform/RoutingProfilePanel.tsx": {
     "vocabulary": 0,
@@ -9662,5 +9670,21 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 0
+  },
+  "apps/web/app/(shell)/ops/installation/page.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 0
+  },
+  "apps/web/components/ops/InvestmentBalance.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
   }
 }

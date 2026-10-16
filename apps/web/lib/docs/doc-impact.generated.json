@@ -895,6 +895,9 @@
     "apps/web/lib/govern/auth.ts": [
       "docs/strategy/2026-09-us-dependency-inventory-and-sovereign-channel.md"
     ],
+    "apps/web/lib/govern/authority/escalation-gate.conformance.test.ts": [
+      "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md"
+    ],
     "apps/web/lib/govern/data/field-classification.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
@@ -1025,6 +1028,9 @@
       "docs/architecture/ai-agent-meta-model.md",
       "docs/architecture/mcp-tool-surface-ergonomics-audit.md",
       "docs/user-guide/ai-workforce/how-governed-work-runs.md"
+    ],
+    "apps/web/lib/mcp-task-persisted-request.ts": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "apps/web/lib/mcp-task-submit-types.ts": [
       "docs/architecture/mcp-tool-packs.md"
@@ -3361,6 +3367,7 @@
       "apps/web/lib/govern/manager-scope.ts",
       "apps/web/lib/gpp/binding-enforcement.ts",
       "apps/web/lib/gpp/permit-carriage.ts",
+      "apps/web/lib/mcp-task-persisted-request.ts",
       "apps/web/lib/mcp/protocol-versions.ts",
       "apps/web/lib/mcp/toolchain-floor.ts",
       "apps/web/lib/tak/mcp-tool-policy.ts",
@@ -3576,6 +3583,9 @@
     ],
     "docs/founder-kernel/wiki/principles/dco-sign-off-required.md": [
       "scripts/pre-push-dco-check.mjs"
+    ],
+    "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md": [
+      "apps/web/lib/govern/authority/escalation-gate.conformance.test.ts"
     ],
     "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md": [
       "apps/web/lib/backlog/initiative-readiness/delivery-sensitivity.ts",

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { loadSemanticReviewRoomProjection, type ReviewerRunSnapshot } from "./semantic-review-room-projection";
+import { projectWorkroomRecovery } from "@/lib/work-capsules/workroom-recovery-projection";
 
 const now = new Date("2026-09-08T20:00:00Z");
 const run = (status: string): ReviewerRunSnapshot => ({
@@ -10,6 +11,30 @@ const run = (status: string): ReviewerRunSnapshot => ({
 });
 
 describe("reviewer state in its Workroom", () => {
+  it.each([
+    { status: "completed", decision: "pass" }, { status: "completed", decision: "fail" },
+    { status: "completed", decision: "inconclusive" }, { status: "input-required", decision: null },
+  ])("keeps complete historical-only $status/$decision observation complete and gives the canonical issuer action", async ({ status, decision }) => {
+    const view = await loadSemanticReviewRoomProjection({ taskRun: { findMany: async () => [run(status)] },
+      $queryRaw: vi.fn().mockResolvedValue([{ rowId: "row-1", capsuleId: "WC-1", requestBound: true,
+        requestSchemaVersion: 2, requestArtifactType: "code-change", identityArtifactType: "code-change", identityArtifactTypePresent: true,
+        sourceHeadSha: "b".repeat(40), currentHeadSha: "a".repeat(40), issuedAt: "2026-09-08T19:00:00Z",
+        requesterAgentId: "AGT-EXT-CODEX", receiptId: decision ? "old-result" : null,
+        receiptDecision: decision, receiptSummary: "Historical only", receiptCreatedAt: now }]),
+    }, ["WC-1"], now);
+    expect(view.partial).toBe(false);
+    const recovery = projectWorkroomRecovery({ capsuleId: "WC-1", backlogItemId: "BI-1", leaseHolderPrincipalId: "principal-1",
+      repositoryFullName: "owner/repo", headBranch: "fix/readback", worktreePath: "D:/source", baseSha: "c".repeat(40), headSha: "a".repeat(40) }, view);
+    expect(recovery.state).toBe("unknown");
+    expect(recovery.reviewerExecution).toBeNull();
+    expect(recovery.blocker).toMatchObject({ reason: "current-review-unavailable",
+      accountableOwner: { principalId: "principal-1", role: "delivery-coordinator" },
+      action: { toolName: "get_backlog_item", args: { itemId: "BI-1", recoveryGate: "post-implementation-review" } } });
+    expect(recovery.historicalReviewerExecutions).toMatchObject([{ taskRunId: "TR-1", identityScope: "historical",
+      sourceHeadSha: "b".repeat(40), resultAction: { requiredUserId: "requester-1" } }]);
+    expect(recovery.historicalReviewerExecutions[0].receipt?.decision).toBe(decision ?? undefined);
+  });
+
   it("replaces obsolete retry instructions after expiry and links a successor", async () => {
     const row = run("input-required");
     row.progressPayload = { semanticReview: { schemaVersion: 1, deadlineAt: "2026-09-08T19:00:00Z",
@@ -26,7 +51,7 @@ describe("reviewer state in its Workroom", () => {
     const old = { ...run("input-required"), id: "old-row", taskRunId: "TR-OLD" };
     const current = { ...run("completed"), id: "current-row", taskRunId: "TR-CURRENT" };
     const identity = (rowId: string, sourceHeadSha: string, issuedAt: string) => ({
-      rowId, capsuleId: "WC-1", requestBound: true, sourceHeadSha,
+      rowId, capsuleId: "WC-1", requestBound: true, requestSchemaVersion: 2, requestArtifactType: "code-change", identityArtifactType: "code-change", identityArtifactTypePresent: true, sourceHeadSha,
       currentHeadSha: "a".repeat(40), issuedAt, receiptId: null,
     });
     const view = await loadSemanticReviewRoomProjection({
@@ -46,7 +71,7 @@ describe("reviewer state in its Workroom", () => {
     const view = await loadSemanticReviewRoomProjection({
       taskRun: { findMany: async () => [run("input-required"), { ...run("completed"), id: "row-2", taskRunId: "TR-2" }] },
       $queryRaw: vi.fn().mockResolvedValue([1, 2].map(index => ({
-        rowId: `row-${index}`, capsuleId: "WC-1", requestBound: true, sourceHeadSha: "a".repeat(40),
+        rowId: `row-${index}`, capsuleId: "WC-1", requestBound: true, requestSchemaVersion: 2, requestArtifactType: "code-change", identityArtifactType: "code-change", identityArtifactTypePresent: true, sourceHeadSha: "a".repeat(40),
         currentHeadSha: "a".repeat(40), issuedAt: `2026-09-08T19:0${index}:00Z`, receiptId: null,
       }))),
     }, ["WC-1"], now);
@@ -74,7 +99,7 @@ describe("reviewer state in its Workroom", () => {
 
   it("exposes a correlated receipt as evidence without promoting Workroom completion", async () => {
     const view = await loadSemanticReviewRoomProjection({ taskRun: { findMany: async () => [run("completed")] },
-      $queryRaw: vi.fn().mockResolvedValue([{ rowId: "row-1", capsuleId: "WC-1", requestBound: true,
+      $queryRaw: vi.fn().mockResolvedValue([{ rowId: "row-1", capsuleId: "WC-1", requestBound: true, requestSchemaVersion: 2, requestArtifactType: "code-change", identityArtifactType: "code-change", identityArtifactTypePresent: true,
         sourceHeadSha: "a".repeat(40), currentHeadSha: "a".repeat(40), issuedAt: "2026-09-08T19:00:00Z",
         requesterAgentId: "AGT-EXT-CODEX", receiptId: "receipt-1", receiptDecision: "pass", receiptSummary: "The committed change was reviewed.",
         receiptCreatedAt: now,
@@ -93,6 +118,26 @@ describe("reviewer state in its Workroom", () => {
       user: { select: { employeeProfile: { select: { displayName: true } } } },
     }) }));
   });
+  it.each(["local-ci-active-capacity-reservation", "host-gpu-busy", "portal-quiescing", "review-authority-unavailable"])(
+    "projects the automatic %s wait instead of an obsolete retry instruction", async reason => {
+      const row = run("input-required");
+      row.nodes = [];
+      row.progressPayload = { semanticReview: { schemaVersion: 1, reason: "review-capacity-deferred",
+        requestDigest: "a".repeat(64), recoveryAttempt: 1, deadlineAt: "2026-09-08T20:10:00Z",
+        nextAction: "retry-review", capacityWaitReason: reason,
+        capacityRecovery: { schemaVersion: 1, requestDigest: "a".repeat(64), checks: 1, nextCheckAt: "2026-09-08T20:00:30Z" } } };
+      const view = await loadSemanticReviewRoomProjection({ taskRun: { findMany: async () => [row] },
+        $queryRaw: vi.fn().mockResolvedValue([{ rowId: "row-1", capsuleId: "WC-1", requestBound: true,
+          requestSchemaVersion: 2, requestArtifactType: "code-change", identityArtifactType: "code-change", identityArtifactTypePresent: true,
+          sourceHeadSha: "a".repeat(40), currentHeadSha: "a".repeat(40), issuedAt: "2026-09-08T19:00:00Z" }]),
+      }, ["WC-1"], now);
+      expect(view.partial).toBe(false);
+      expect(view.runs[0].nextAction).toContain("server will recheck");
+      expect(view.runs[0]).toMatchObject({ requesterId: "requester-1", reason, identityScope: "current", recoveryWait: false });
+      expect(view.runs[0].receipt).toBeUndefined();
+    },
+  );
+
   it("preserves the next action recorded by review settlement", async () => {
     const row = run("input-required");
     row.progressPayload = { semanticReview: { nextAction: "retry-review" } };

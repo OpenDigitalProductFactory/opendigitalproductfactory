@@ -10,8 +10,46 @@ import { completeBacklogItemTransition } from "./backlog-terminal-transition";
 import { evaluateBacklogItemCompletion, readBacklogItemCompletion } from "./backlog-completion-evaluation";
 import type { MergeDeliverySignal } from "./merge-delivery-signal";
 import { item as initiativeItem, readyActivities } from "./entry-adapter.test-fixtures";
+import { bodyCriteriaVersion } from "./body-baseline-version";
+import { createPullRequestObservation } from "@/lib/contributor-change-lanes/pull-request-observation";
 
 const NOW = "2026-10-06T12:00:00.000Z";
+
+describe("independent body acceptance survives source-author archival", () => {
+  it.each([true, false])("reconciles only the current exact verified delivered source (valid=%s)", async valid => {
+    const body = "## Acceptance\n- Verify independently accepted repair.";
+    const { item, client } = fixture({ body, digitalProductId: "product-1" });
+    const room = { id: "room-row", capsuleId: "WC-1", backlogItemId: item.itemId, repositoryFullName: "owner/repo",
+      headBranch: "fix/accepted", headSha: "a".repeat(40), baseSha: "b".repeat(40), createdByPrincipalId: "author",
+      status: "archived", pullRequestNumber: 6265, archivedAt: null,
+      createdAt: new Date("2026-10-05T06:00:00Z"), scopeClaims: [{ source: "declared", workShape: "delivery-medium@1.0.0" }] };
+    const rows = [{ id: "baseline", backlogItemId: item.id, kind: "initiative_scope_baseline", recordedAt: new Date("2026-10-06T07:00:00Z"),
+      payload: { schemaVersion: 1, baselineId: "B-1", supersedesBaselineId: null, origin: "item-body", artifactDigest: "digest",
+        subject: { kind: "backlog-item", id: item.itemId }, objectiveStatements: [],
+        acceptanceStatements: bodyCriteriaVersion(body)!.acceptanceStatements, criteriaDigest: bodyCriteriaVersion(body)!.criteriaDigest,
+        sourceIdentity: { repositoryFullName: room.repositoryFullName, headSha: room.headSha }, authoritySnapshot: { organizationId: "org-1" } } },
+      { id: "E-1", backlogItemId: item.id, kind: "evidence", recordedAt: new Date("2026-10-06T08:00:00Z"), payload: { evidenceKind: "test_pass" } },
+      { id: "mapping", backlogItemId: item.id, kind: "initiative_objective_mapping", recordedAt: new Date("2026-10-06T09:00:00Z"),
+        payload: { schemaVersion: 1, proposalId: "mapping", baselineId: "B-1", artifactDigest: "digest",
+          subject: { kind: "backlog-item", id: item.itemId }, eligibleEvidenceActivityIds: ["E-1"],
+          mappings: [{ objectiveId: "AC-BODY-001", evidenceRefs: ["E-1"] }] } }];
+    client.backlogItemActivity.findMany.mockResolvedValue(rows as never);
+    const db = { ...client, workroom: {
+      findFirst: vi.fn(async ({ where }) => where.archivedAt === null ? null : room),
+      findMany: vi.fn(async ({ where }) => where.archivedAt === null ? [] : [room]) },
+      contributorInventorySnapshot: { findMany: vi.fn().mockResolvedValue([{ payload: createPullRequestObservation({
+        repositoryFullName: room.repositoryFullName, number: 6265, url: "https://github.com/owner/repo/pull/6265", title: "repair",
+        headBranch: room.headBranch, headSha: valid ? room.headSha : "f".repeat(40), state: "merged", isDraft: false,
+        mergeStateStatus: null, mergeCommitSha: "c".repeat(40), mergedAt: "2026-10-06T05:00:00Z",
+        providerUpdatedAt: "2026-10-06T05:00:00Z", observedAt: "2026-10-06T05:01:00Z" }) }]) } };
+    const result = await evaluateBacklogItemCompletion({ db: db as never, item: item as never, rawManifest: undefined,
+      transitionObject: { kind: "backlog-item", id: item.itemId, expectedVersion: "read", targetState: "completion" }, evaluatedAt: NOW,
+      dependencies: { ...deps("merged"), resolveCompletionEvidence: async () => ({ kind: "not-provided" }) as never } });
+    const acceptance = [...result.decision.satisfied, ...result.decision.unmet, ...result.decision.blockers]
+      .find(entry => entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED");
+    expect(acceptance?.state).toBe(valid ? "pass" : "missing");
+  });
+});
 
 function fixture(itemOverrides: Record<string, unknown> = {}) {
   const item = {
@@ -63,6 +101,8 @@ const authority = {
 
 function deps(signal: MergeDeliverySignal) {
   return {
+    prepareCurrentDesign: async () => ({ evidence: { state: "not-applicable" as const },
+      admissionGuard: async () => ({ state: "not-applicable" as const }) }),
     resolveMergeDelivery: async () => signal,
     resolveDeploymentClosure: async () => ({ kind: "unavailable" as const, reason: "no deployment in this fixture" }),
   };
@@ -139,6 +179,25 @@ describe("decomposed initiative completion (BI-DA407BD9)", () => {
     expect(unmetCodes(read!.decision)).toEqual([]);
     expect(readSide.updateMany).not.toHaveBeenCalled();
     expect(readSide.resolveDeploymentClosure).not.toHaveBeenCalled();
+  });
+
+  it("keeps both terminal admission and its read blocked when source observation is unavailable", async () => {
+    const gateSide = aggregateFixture();
+    const guard = vi.fn().mockResolvedValue({ state: "unavailable" });
+    const prepareCurrentDesign = vi.fn().mockResolvedValue({ evidence: { state: "unavailable" }, admissionGuard: guard });
+    const gate = await completeBacklogItemTransition({ db: gateSide.db as never, itemId: gateSide.item.itemId,
+      expectedStatus: "awaiting-acceptance", resolution: "Must not close on historical design passes.",
+      completionEvidence: undefined, actor, authority: { ...authority, objectRef: gateSide.item.itemId }, evaluatedAt: NOW,
+      dependencies: { ...gateSide.dependencies, prepareCurrentDesign } as never });
+    const readSide = aggregateFixture();
+    const read = await readBacklogItemCompletion({ itemRowId: readSide.item.id, status: "awaiting-acceptance",
+      evaluatedAt: NOW, db: readSide.client as never, dependencies: readSide.dependencies as never,
+      currentDesign: { state: "unavailable" } });
+    expect(gate.ok).toBe(false);
+    expect(read?.decision.verdict).not.toBe("allowed");
+    expect(unmetCodes(read!.decision)).toContain("OBJECTIVE_BASELINE_REQUIRED");
+    expect(gateSide.updateMany).not.toHaveBeenCalled();
+    expect(prepareCurrentDesign).toHaveBeenCalledTimes(1); expect(guard).toHaveBeenCalledTimes(1);
   });
   it("does not let the parent's merge close an unfinished child", async () => {
     const result = await evaluate(aggregateFixture("in-progress"));

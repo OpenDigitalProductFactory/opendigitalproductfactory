@@ -37,6 +37,7 @@ function resolveMcpCredentialOrNull({ mcpUrl, env = process.env }) {
   }
 }
 import { checkHostDiskSpace } from "./lib/disk-space-preflight.mjs";
+import { GATE_EXIT } from "./lib/gate-exit-classification.mjs";
 import {
   createLocalCiSlotManifest,
   LOCAL_CI_SLOT_KEYS,
@@ -791,12 +792,36 @@ function readWorkingTreePorcelain() {
   return gitTextOrNull(["status", "--porcelain"], { cwd: process.cwd(), trim: false }) ?? "";
 }
 
+/**
+ * BI-4BCD269B. A pregate that is not the sole foreground command used to run
+ * until image-export and then die, leaving status running and no reason.
+ * `pnpm run` on Windows often has no TTY, and gate:wait is the sanctioned
+ * wrapper, so a bare !isTTY check is not the signal. Help and dry-run do not
+ * occupy the pool.
+ */
+export function wrappedForegroundReason({ stdoutIsTTY, env = process.env, args = [] } = {}) {
+  if (args.includes("--help") || args.includes("-h") || args.includes("--dry-run")) return null;
+  if (stdoutIsTTY) return null;
+  if (env.DPF_PREGATE_ALLOW_CAPTURE === "1") return null;
+  if (env.CI === "true" || env.GITHUB_ACTIONS === "true") return null;
+  return "pregate is not the sole foreground command: stdout is not a terminal, so this run would be captured or wrapped and can die with no recorded reason. Run `pnpm run pregate` in the foreground, or use `pnpm gate:wait`.";
+}
+
 async function main() {
   // BI-B1065D41: `pnpm run pregate | head -5` must survive head exiting. Both
   // this wrapper and the gate it spawns need the tolerance — the gate inherits
   // these very file descriptors.
   installBrokenPipeTolerance();
   const args = process.argv.slice(2);
+  const wrapped = wrappedForegroundReason({
+    stdoutIsTTY: Boolean(process.stdout.isTTY),
+    env: process.env,
+    args,
+  });
+  if (wrapped) {
+    process.stderr.write(`pregate: ${wrapped}\n`);
+    process.exit(GATE_EXIT.WRAPPED_INVOCATION);
+  }
 
   const diskCheck = checkHostDiskSpace();
   if (!diskCheck.ok) {

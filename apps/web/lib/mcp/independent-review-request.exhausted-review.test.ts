@@ -1,3 +1,4 @@
+vi.mock("@/lib/mcp-task-review-recovery", () => ({ issueOriginalReviewRecoveryTarget: async () => ({ kind: "none" }) }));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ agent: vi.fn(), token: vi.fn(), room: vi.fn(),
@@ -49,7 +50,8 @@ beforeEach(() => {
   mocks.token.mockResolvedValue({ userId: "human", agentId: "AGT-AUTHOR", authorityBindingId: "consent", oauthClient: { registrationKind: "dynamic" } });
   mocks.currentConsent.mockResolvedValue(true);
   mocks.human.mockResolvedValue({ isSuperuser: true, platformRole: null });
-  mocks.room.mockResolvedValue({ id: "room-row", backlogItemId: "BI-TEST", executorKind: "claude-desktop", requestedByPrincipalId: "prn-human" });
+  mocks.room.mockResolvedValue({ id: "room-row", backlogItemId: "BI-TEST", executorKind: "claude-desktop", requestedByPrincipalId: "prn-human",
+    repositoryFullName: "org/repo", headBranch: "fix/test", baseSha: "c".repeat(40), headSha: "a".repeat(40) });
   mocks.itemRow.mockResolvedValue({ id: "cuid-item" });
   mocks.alias.mockResolvedValue({ principalId: "prn-human" });
   mocks.access.mockResolvedValue({ decision: { level: "action" } });

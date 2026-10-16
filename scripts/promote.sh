@@ -997,6 +997,37 @@ if [[ $_dry_run -eq 0 ]]; then
     "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
     -c 'cd /app && pnpm --filter @dpf/db exec prisma migrate resolve --rolled-back 20260714110000_bet5_pgvector_foundation' >/dev/null 2>&1 || true
 
+  # BI-BF20F828: the immutable activity hardening migration can hit the
+  # existing append-only work-intent trigger. Its exact checker proves the
+  # predecessor schema and reproduces that failure in an always-rolled-back
+  # transaction, including when Prisma could not persist the first error.
+  # Run this before the older classifiers, which refuse unrelated failures.
+  _workroom_activity_recovery="$(
+    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+      "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
+      -c 'cd /app && node packages/db/scripts/recover-workroom-activity-migration.mjs'
+  )" || {
+    printf 'error: workroom activity migration recovery did not prove a safe state\n' >&2
+    exit 1
+  }
+  case "$_workroom_activity_recovery" in
+    recover:*)
+      _workroom_activity_migration_id="${_workroom_activity_recovery#recover:}"
+      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+        "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
+        -c 'cd /app && pnpm --filter @dpf/db exec prisma migrate resolve --rolled-back 20261014012000_workroom_activity_ingestion_hardening'
+      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+        "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
+        -c 'cd /app && node packages/db/scripts/recover-workroom-activity-migration.mjs --verify-rolled-back "$1"' \
+        sh "$_workroom_activity_migration_id"
+      ;;
+    not-needed) ;;
+    *)
+      printf 'error: workroom activity migration recovery returned an unknown decision\n' >&2
+      exit 1
+      ;;
+  esac
+
   # BI-2BD99239: a pre-fix upgrade can leave the human-principal backfill
   # failed at zero steps on the PrincipalAlias uniqueness collision. The
   # candidate-owned checker proves the exact migration bytes, SQLSTATE,
@@ -1292,12 +1323,38 @@ if [[ $_dry_run -eq 0 ]]; then
   if [[ $_sandbox_ok -eq 1 ]]; then
     _sbx_id="$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
       "${_f_args[@]}" ps -q sandbox 2>/dev/null)" || _sbx_id=""
+    # A service render includes dependency images too; their order is not the
+    # identity of sandbox. Read the named service from the same canonical model.
+    _sbx_images="$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+      "${_f_args[@]}" config --images sandbox 2>/dev/null)" || _sbx_images=""
     _sbx_image_ref="$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
-      "${_f_args[@]}" config --images sandbox 2>/dev/null | head -n 1)" || _sbx_image_ref=""
+      "${_f_args[@]}" config --format json sandbox 2>/dev/null | node -e '
+        let input = "";
+        process.stdin.on("data", chunk => input += chunk).on("end", () => {
+          try {
+            const model = JSON.parse(input);
+            const sandbox = model?.services?.sandbox;
+            let image = sandbox?.image;
+            // Build-only JSON omits image. Verify its generated name against
+            // Compose itself, including the inherited compatibility separator.
+            if (image === undefined && typeof sandbox?.build?.context === "string"
+                && sandbox.build.context.trim() && typeof model.name === "string"
+                && /^[a-z0-9][a-z0-9_-]*$/.test(model.name)) {
+              const rendered = new Set((process.argv[1] ?? "").split(/\r?\n/));
+              const matches = [`${model.name}-sandbox`, `${model.name}_sandbox`]
+                .filter(candidate => rendered.has(candidate));
+              if (matches.length !== 1) process.exit(1);
+              image = matches[0];
+            }
+            if (typeof image !== "string" || !image || image !== image.trim()) process.exit(1);
+            process.stdout.write(image);
+          } catch { process.exit(1); }
+        });
+      ' "$_sbx_images")" || _sbx_image_ref=""
     _sbx_target_id=""
-    [[ -n "$_sbx_image_ref" ]] && _sbx_target_id="$(docker image inspect --format '{{.Id}}' "$_sbx_image_ref" 2>/dev/null)"
+    [[ -n "$_sbx_image_ref" ]] && _sbx_target_id="$(docker image inspect --format '{{.Id}}' "$_sbx_image_ref" 2>/dev/null)" || _sbx_target_id=""
     _sbx_observed=""
-    [[ -n "$_sbx_id" && "$_sbx_id" != *$'\n'* ]] && _sbx_observed="$(docker inspect --format '{{.State.Running}} {{.Image}}' "$_sbx_id" 2>/dev/null)"
+    [[ -n "$_sbx_id" && "$_sbx_id" != *$'\n'* ]] && _sbx_observed="$(docker inspect --format '{{.State.Running}} {{.Image}}' "$_sbx_id" 2>/dev/null)" || _sbx_observed=""
     if [[ "${_sbx_observed%% *}" != "true" ]]; then
       printf 'step=sandbox-refresh-not-running target=%s state=%s\n' "$_built_sha" "${_sbx_observed:-unreadable}"
       _sandbox_ok=0

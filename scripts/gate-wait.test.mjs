@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import { classifyGateExit, GATE_EXIT } from "./lib/gate-exit-classification.mjs";
 import { EXIT_CANDIDATE_MERGE_CONFLICT, EXIT_SOURCE_DRIFT, EXIT_WAIT_CANCELLED } from "./lib/sandbox-freshness.mjs";
-import { delayForAttempt, parseGateStatus, waitForGate } from "./gate-wait.mjs";
+import { delayForAttempt, parseGateStatus, pregateSpawnOptions, waitForGate } from "./gate-wait.mjs";
 
 const noSleep = async () => {};
 
@@ -27,6 +27,41 @@ test("a plain exit 1 is a real failure and stops immediately", () => {
   const v = classifyGateExit({ code: 1, output: "FAIL lib/foo.test.ts" });
   assert.equal(v.verdict, "fail");
   assert.equal(v.retry, false);
+});
+
+// BI-2FFDBE62: spawnSync("pnpm") on Windows returns status null. That is a
+// process that never started, not a verdict about the diff.
+test("gate:wait spawns pnpm.cmd on Windows and allows captured pregate", () => {
+  const win = pregateSpawnOptions({ platform: "win32", env: { PATH: "x" }, cwd: "D:/repo" });
+  assert.equal(win.command, "pnpm.cmd");
+  assert.equal(win.options.shell, false);
+  assert.deepEqual(win.args, ["run", "pregate"]);
+  assert.equal(win.options.env.DPF_PREGATE_ALLOW_CAPTURE, "1");
+  assert.equal(win.options.env.PATH, "x");
+  const posix = pregateSpawnOptions({ platform: "linux", env: {}, cwd: "/repo" });
+  assert.equal(posix.command, "pnpm");
+  assert.equal(posix.options.shell, false);
+  assert.equal(posix.options.env.DPF_PREGATE_ALLOW_CAPTURE, "1");
+});
+
+test("a null exit means pregate did not start and is not a diff failure", () => {
+  for (const code of [null, undefined]) {
+    const v = classifyGateExit({ code });
+    assert.equal(v.kind, "spawn-failed", `code ${code}`);
+    assert.equal(v.retry, false);
+    assert.equal(v.verdict, "none");
+    assert.doesNotMatch(v.summary, /gate failed/);
+  }
+});
+
+// BI-4BCD269B: a wrapped pregate stops before it occupies the pool. The code
+// must not fall through to a product FAIL.
+test("exit 11 is a wrapped invocation, not a product failure", () => {
+  assert.equal(GATE_EXIT.WRAPPED_INVOCATION, 11);
+  const v = classifyGateExit({ code: 11 });
+  assert.equal(v.kind, "wrapped");
+  assert.equal(v.retry, false);
+  assert.equal(v.verdict, "none");
 });
 
 // BI-FCC1DCB2: a candidate that conflicts with origin/main fails the same way on

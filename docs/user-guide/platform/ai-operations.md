@@ -25,11 +25,39 @@ order: 2
 
 ## Read the routing picture
 
-Open **AI Operations Map** (`/platform/ai/operations-map`) when you need one
-at-a-glance answer for how AI work is supposed to move and what the system
-actually recorded.
+Open **Platform → AI Operations → Providers & Routing**, then choose **Traffic**, **Evaluation** or **Providers** in the shared AI navigation. These views replace the wider AI tabs while you investigate routing. **All AI workspaces** returns to the workforce and other AI tools. The same destinations are available in the mobile view selector.
 
-The first map has five stable stations:
+Choose a task, provider, data sensitivity and time window; the URL preserves those choices for reload, browser Back and provider round trips. Provider pages show the retained investigation context once above their settings. Traffic and Evaluation show it in their filters.
+
+## Follow traffic
+
+The default view groups assignments on the left and providers on the right. Counts describe the recorded decisions in your scope. Open **All** to search a larger assignment or provider catalog; model lists come from configured model profiles, including models that received no traffic. **Recent decisions** is a small preview; **View all** opens searchable traffic.
+
+On a narrow screen, traffic and evaluation rows keep their task and model together, with labeled outcome and cost values below. All four scope filters remain directly available.
+
+Select a decision to inspect its sensitivity, screening, exclusions, recorded attempts, tokens and cost in an overlay. Escape or Close returns to the same view. Attempts are ordered by their recorded start time. Missing traces or traces shared by several decisions cannot safely attribute attempts or cost, so the inspector states that limitation.
+
+Recorded cost uses correlated token usage when present, otherwise correlated route outcomes. Adapter estimates are displayed separately and are not added again to recorded cost. Coverage states how many decisions have prices. Unknown price does not mean free.
+
+## Investigate stops and provider setup
+
+Data policy and clearance, token/context limits, quota/cooldown, payment, disabled configuration, sign-in, operator pause and unavailable capacity evidence are distinct reasons. Current provider restrictions come from the same read model as provider settings; an exclusion on an older decision is historical evidence, not a claim about current eligibility.
+
+**Settings & overrides** opens the existing provider detail. The Providers navigation returns to the catalog; Traffic or Evaluation restores the routing scope. Provider settings remain the place to manage credentials, connections, operator pauses and sensitivity overrides. Risk acceptance still requires the existing warning, acknowledged scope, rationale and expiry. Revoking an override or lifting a pause does not clear another restriction. Assignment settings remain the place for coworker model pins.
+
+Account identity is not inferred from a provider name. If the safe receipt has no account attribution, it says so. An attempt's channel describes its recorded adapter or quota pool; it does not certify retention or data clearance for that account.
+
+## Evaluate outcomes
+
+Evaluation groups the same task, provider, model, recipe and evaluator. Execution success has a known-evidence denominator, while missing execution remains unknown. Evaluator quality is separate from accepted/retried operator feedback. A configured evaluator name is not proof that it ran. Without a decision-linked score or comparable rubric/version evidence, the view does not rank models.
+
+Open **Technical routing and replay** for Designed/Observed/Compare architecture, replay, provider/A2A topology, activity diagnostics, governed tuning proposals and source evidence. Existing architecture focus links open this disclosure directly. Compare here is design conformance; Evaluation is task outcome analysis.
+
+The view loads a bounded number of recent records per evidence source within the selected window. Coverage can be partial even when traffic is healthy. Widen the window or inspect canonical evidence before treating a small cohort as representative.
+
+## Technical architecture and replay
+
+Inside **Technical routing and replay**, the architecture map has five stable stations:
 
 1. **Ask & context** — a coworker asks for AI help and assembles the minimum
    work context.
@@ -48,7 +76,7 @@ Switch the same map between:
 - **Observed** for privacy-safe counts, timings, coverage, and findings in the
   selected evidence window.
 - **Compare** to keep the station geometry fixed while seeing design and
-  evidence together. This is the best starting point when something appears
+  evidence together. Use it to inspect design conformance when something appears
   unsafe, unavailable, unexpectedly expensive, or inconsistent with design.
 
 Select a station to open its owner steps, technical names, source files,

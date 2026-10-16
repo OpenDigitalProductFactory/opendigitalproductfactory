@@ -30,6 +30,16 @@ bound retained criteria only for that authorized TaskRun. Room admission is
 checked before reading and again before receipt writing. Automatic reviewer
 dispatch carries the recorded requesting person into these checks.
 
+A merged author's room can remain archived throughout body acceptance. The
+shared author resolver admits only the current unambiguous attempt with an exact
+server-owned, verified merged PR observation matching repository, number, branch
+and head. A newer incomplete or superseded attempt blocks historical fallback.
+This retains source authorship; it grants no execution lease or room admission.
+The reviewer TaskRun, OAuth authority, content access and author separation must
+remain current. Missing merge proof calls for source/observation reconciliation,
+not repeated reopening of a room the reaper correctly considers delivered.
+Spec and post-implementation review retain their existing live-room requirement.
+
 Changed criteria, source identity, organization or eligible evidence reject old
 requests. Refresh recovery for a current successor; unchanged retries reuse the
 TaskRun and proposal. Historical authority stays auditable. Research and
@@ -108,6 +118,37 @@ Cross-domain / archetype profiles add specialist review gates (data / ux / secur
 ## 3. How a gate is handed to the right coworker — the recovery packet
 
 You do **not** choose the reviewer or hand-build the review call. The server issues a **recovery packet** naming, per unmet gate, the exact coworker and a ready-to-send handoff. The flow:
+
+**Native source identity.** Supplied `baseSha` and `headSha` must be full
+40-character commit IDs; malformed values are refused before claim or adoption
+writes. Source-less design and planning remain valid. Implementation requires
+both usable persisted values even when the optional claim inputs are omitted.
+Exact claim readback returns `baseSha`, `headSha` and `sourceIdentityComplete`.
+That flag describes recorded SHA syntax, not observed Git state, approval or
+publication authority. The existing local Git capture observes the actual
+repository, branch, worktree, merge base and head on the caller's host.
+
+**Current and historical review readback.** `get_workroom` and room liveness use
+the same bounded recovery projection. A complete history containing only older
+source is not a failed read, and its outcomes remain explicitly historical.
+Readback includes at most five historical executions and marks truncation;
+their requester-bound `tasks/result` actions retain the existing access check.
+No historical pass, task completion or source identity flag approves the current
+source. Missing current review, incomplete observation and conflicting identity
+remain distinct unknown states. Their recovery names the existing room holder
+principal when recorded and the delivery-coordinator role, then directs callers
+to `get_backlog_item(itemId, recoveryGate: "post-implementation-review")` for the
+current issuer's action. An unlinked room must first be linked by its coordinator.
+Repeating the identical room read does not repair that condition; historical
+unknown provider work must not be replayed or assigned a new request nonce.
+
+An unusable legacy value is named in `identityRepair.missingFields` and excluded
+from the repair packet; valid recorded values are retained. Capture the actual
+missing values locally, then use the issued `adopt_worktree` packet or retry the
+claim with the full values. No reviewer artifact lookup or dispatch uses an
+incomplete source identity. Never invent a base or substitute the running
+install's commit for unpublished work. Other readiness and authority gates
+still apply.
 
 1. **Bind a Workroom to the item, with a real base *and* head.** `adopt_worktree(title, objective, repositoryFullName, headBranch, headSha, baseBranch, baseSha, worktreePath, backlogItemId)`. Without **both** an immutable `baseSha` and `headSha`, no reviewer binding can be issued (`no-canonical-artifact`) — the review has nothing immutable to pin. The artifact commit must be **resolvable on the provider** (a squash-merged, deleted branch will not resolve — re-publish it).
 2. **Attempt the governed claim.** `claim_backlog_item_for_work(itemId, worktreePath, branchName, provider, sessionRef)`. When the item is not ready it *refuses* and returns `data.recovery`:
@@ -206,3 +247,21 @@ safe outcome and recovery guidance, including execution refusals and expiry.
 - **Guessing the reviewer coworker.** The packet resolves the current grant-holder; a guessed target (e.g. an architecture agent for a design-spec gate) will not hold the grant.
 - **Binding a Workroom with a head but no base, or to a deleted/unresolvable commit.** No immutable artifact → no reviewer binding (`no-canonical-artifact`). Push the artifact; anchor base **and** head.
 - **Proxying a stranded reviewer receipt from the author principal.** If a review strands (§6), that is a defect to report, not a licence to self-approve.
+
+
+### Original review recovery across connection changes
+
+For a paused independent review whose interactive OAuth connection changed,
+read `get_backlog_item` with its exact `itemId` and `recoveryGate`. Submit the
+returned `request_coworker` packet unchanged, including its `reviewRecovery`
+target. Current paired Workroom access, human/coworker permissions and immutable
+source must still authorize that review. Recovery retains the original TaskRun,
+reader evidence and retry budget; it does not create a new assessment or transfer
+another person's work. A stale or ambiguous target requires a fresh bounded read
+and actual execution reconciliation. Never remove the locator to obtain a new
+connection's task or treat uncertain provider effects as settled.
+
+The [MCP authorization procedure](mcp-tool-authorization-runbook.md#recovering-an-original-initiative-review-after-a-connection-change)
+describes the current-authority checks, generation reservation and approval
+continuation. Completion still requires the original task's genuine governed
+writer receipt and the readiness finding it actually records.
