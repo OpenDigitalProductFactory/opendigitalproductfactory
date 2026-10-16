@@ -195,6 +195,22 @@ Follow the supported head-sync procedure after freezing the current source; do
 not bind a review to a fabricated or rewound Workroom head. Current design and
 architecture receipts are stale, not renewed approvals.
 
+Independent review of adf3ecd8e618 raised one P2: entry admission did not
+revalidate authority before later batches or the final inference. Both revocation
+regressions reproduced a false pass, then passed with a current check inside
+every actual inference callback. A completed room is also refused before new
+preparation or dispatch. No provider identity is substituted; no membership or
+grant is changed. The focused recovery/selection run passed 109 tests across
+three suites; the subsequent room/dispatch/selection run passed 41 tests in three
+suites, and both TS7 programs passed. Independent closure remains pending.
+
+The Workroom has now been synchronized through normal adoption to exact local
+head adf3ecd8e618cceb52457cca9460e16778a2b767. Renewed author research against
+that immutable artifact was then refused by the repository provider with HTTP422
+because this local source is not yet published. Native receipts remain stale;
+source assessments are not replacement approvals. Preserve the original review
+and engagement identities while completing the normal publication/evidence path.
+
 ## Phase 4: room-bound instantiation
 
 - Add `stepReviewBinding` to the external coworker task contract (`apps/web/lib/mcp/external-coworker-task-adapter.ts`), following `initiativeReviewBinding`.

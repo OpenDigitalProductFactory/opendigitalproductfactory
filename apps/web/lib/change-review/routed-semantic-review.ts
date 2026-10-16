@@ -125,6 +125,12 @@ export async function dispatchRoutedSemanticReview(
   ];
 
   const executeBranch = (branch: (typeof branches)[number], branchPrompt = prompt) => runBranch(branch.agentId, async () => {
+    // Entry admission does not authorize later batches or the final reviewer.
+    // Place this inside the inference callback so cached proof needs no replay.
+    if (selection && !await verifySelection(selection).catch(() => false)) return {
+      decision: "inconclusive" as const, issues: [], summary: "Current Workroom or specialist authority was refused before inference.",
+      inconclusiveReason: "required-specialist-authority-unavailable",
+    };
     const minimumContext = semanticReviewMinimumContextTokens({
       systemPrompt: branch.systemPrompt, userPrompt: branchPrompt,
     });

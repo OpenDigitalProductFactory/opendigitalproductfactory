@@ -1,3 +1,5 @@
+import { WORK_CAPSULE_STATUSES } from "@/lib/work-capsules";
+import { isTerminalCapsuleStatus } from "@/lib/work-capsules/work-capsule-branch-identity";
 import { ACUMEN_ROOM_SHAPES } from "@/lib/work-management/acumen-room-shapes";
 import { createHash } from "node:crypto";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
@@ -102,8 +104,8 @@ export async function verifyLiveReviewSpecialistSelection(selection: LiveReviewS
   const { resolveHumanWorkroomAccess, resolveAgentWorkroomAccess } = await import("@/lib/work-management/workroom-agent-access.server");
   const { getAgentToolGrantsAsync } = await import("@/lib/tak/agent-grants");
   if (!await isLiveReviewSpecialistSelectionCurrent(selection, prisma)) return false;
-  const room = await prisma.workroom.findUnique({ where: { capsuleId: selection.capsuleId }, select: { id: true, archivedAt: true } });
-  if (!room || room.archivedAt || (await resolveHumanWorkroomAccess({ userId: selection.userId, workroomId: room.id, requested: "content" })).decision.level !== "content") return false;
+  const room = await prisma.workroom.findUnique({ where: { capsuleId: selection.capsuleId }, select: { id: true, status: true, archivedAt: true } });
+  if (!room || !reviewWorkroomIsOpen(room) || (await resolveHumanWorkroomAccess({ userId: selection.userId, workroomId: room.id, requested: "content" })).decision.level !== "content") return false;
   for (const specialist of selection.specialists) {
     for (const agentId of new Set(Object.values(selectableCoworkerIdentityRefs(specialist.agentId)))) {
       if (!(await getAgentToolGrantsAsync(agentId)).includes("registry_read")
@@ -116,4 +118,9 @@ export async function verifyLiveReviewSpecialistSelection(selection: LiveReviewS
 
 export function liveReviewSpecialistSelectionDigest(selection: LiveReviewSpecialistSelection): string {
   return createHash("sha256").update(canonicalJson(liveReviewSpecialistSelectionSchema.parse(selection))).digest("hex");
+}
+
+
+export function reviewWorkroomIsOpen(room: { status: string; archivedAt: Date | null }): boolean {
+  return !room.archivedAt && (WORK_CAPSULE_STATUSES as readonly string[]).includes(room.status) && !isTerminalCapsuleStatus(room.status);
 }

@@ -294,6 +294,27 @@ describe("profession-bound dispatch", () => {
     expect(result.craftGrounding).toEqual([expect.objectContaining({ professionKey: "ux-design", corpusPages: ["professions/ux-design/density"], calibratedCritiqueCount: 0 })]);
     expect(result.summary).toMatch(/no calibrated UX critiques/i);
   });
+  it("stops the final independent inference if authority is revoked after the contribution", async () => {
+    const verify = vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(true).mockResolvedValue(false);
+    vi.mocked(routeAndCall).mockResolvedValue({ content: JSON.stringify({ decision: "pass", issues: [], summary: "Contribution complete" }) } as never);
+    const result = await dispatchRoutedSemanticReview("review controls", context, undefined, db, verify);
+    expect(result.decision).toBe("inconclusive");
+    expect(routeAndCall).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(routeAndCall).mock.calls[0]![3]?.agentId).toBe("review-finance");
+  });
+  it("stops later batches after revocation without substituting identities or dispatching the core", async () => {
+    const families = PROFESSION_REGISTRY.families.filter(family => ["finance", "security", "data-architect", "enterprise-architecture", "release-service-management"].includes(family.professionKey));
+    const specialists = families.map(family => ({ professionKey: family.professionKey, agentId: `review-${family.professionKey}`, displayName: family.label }));
+    const selected = { ...selection, requiredProfessions: families.map(family => family.professionKey), specialists };
+    const craftDb = { agent: { findMany: vi.fn().mockResolvedValue(families.map(family => ({ agentId: `review-${family.professionKey}`, name: family.roles[0], slugId: family.roles[0] }))) }, wikiPage: { findMany: vi.fn().mockImplementation(async args => [{ slug: `${args.where.slug.startsWith}criteria`, title: "Criteria", abstract: "Recorded craft", body: "Use evidence for review controls.", metadata: {} }]) } };
+    const verify = vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(true).mockResolvedValueOnce(true).mockResolvedValueOnce(true).mockResolvedValue(false);
+    vi.mocked(routeAndCall).mockResolvedValue({ content: JSON.stringify({ decision: "pass", issues: [], summary: "Contribution complete" }) } as never);
+    const result = await dispatchRoutedSemanticReview("private diff", { ...context, specialistSelection: selected, specialistIds: specialists.map(row => row.agentId) }, undefined, craftDb, verify);
+    expect(result.decision).toBe("inconclusive");
+    expect(routeAndCall).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(routeAndCall).mock.calls.map(call => call[3]?.agentId)).toEqual(specialists.slice(0, 3).map(row => row.agentId));
+    expect(verify.mock.calls.every(([saved]) => saved === selected)).toBe(true);
+  });
   it("dispatches nothing when current selection authority is refused", async () => {
     const result = await dispatchRoutedSemanticReview("private diff", context, undefined, db, async () => false);
     expect(result.decision).toBe("inconclusive");
