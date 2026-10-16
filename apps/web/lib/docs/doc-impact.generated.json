@@ -1029,6 +1029,9 @@
       "docs/architecture/mcp-tool-surface-ergonomics-audit.md",
       "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
+    "apps/web/lib/mcp-task-persisted-request.ts": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
     "apps/web/lib/mcp-task-submit-types.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
@@ -3364,6 +3367,7 @@
       "apps/web/lib/govern/manager-scope.ts",
       "apps/web/lib/gpp/binding-enforcement.ts",
       "apps/web/lib/gpp/permit-carriage.ts",
+      "apps/web/lib/mcp-task-persisted-request.ts",
       "apps/web/lib/mcp/protocol-versions.ts",
       "apps/web/lib/mcp/toolchain-floor.ts",
       "apps/web/lib/tak/mcp-tool-policy.ts",
