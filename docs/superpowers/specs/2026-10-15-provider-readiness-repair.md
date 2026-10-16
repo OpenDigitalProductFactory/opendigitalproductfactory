@@ -43,6 +43,14 @@ Refactoring allocation: at least 20% of this repair consolidates account status 
 
 ## Failure analysis and verification
 
+### Native quota observation while execution remains held
+
+October 16 occurrence: native review task ending `99B4B339F227` reported a structured quota error while its remote effects remained unverified. Both provider capacity and CLI cooldown retained an expired October 15 observation. At served commit c38edb55c0d, native error paths throw execution uncertainty before the existing quota recorder. This is independent of settling or retrying that task.
+
+Extend AC-3 and AC-5 using the existing adapter error boundary: only a validated terminal result with error status, explicit error flag and quota hint records a fixed safe usage-limit observation. Await the existing recorder once with the execution plan's actual CLI pool identity; retain canonical conservative quota sharing. The provider reset remains unknown and the existing bounded heuristic backoff applies. Never persist raw stdout, infer credential lineage, clear the execution hold, fall back within this execution, or retry its original work. Persistence failure must preserve the same uncertainty error.
+
+Ordered verification: reproduce both exit-zero and nonzero native quota misses; implement the common error-boundary observer; reject malformed, successful and nonquota evidence; verify recorder failure leaves the hold; exercise canonical bounded pool/capacity writes and future routing to a permitted alternative. No provider probe, new task, schema, lifecycle or permission change is required. Independent review, exact-tree gates and actual deployment remain separate requirements.
+
 People affected: operators choosing provider accounts and coworkers waiting for inference. A misleading green can send work to an unusable connection; a stale red/wait can waste recovered capacity.
 
 - Refused consultation: returned failure is handled, queued success is acknowledged, deterministic delivered advice is retained. Regression failed before the patch and passed after. Network failures remain explicit; a specialist task that later fails retains its existing runtime handling.

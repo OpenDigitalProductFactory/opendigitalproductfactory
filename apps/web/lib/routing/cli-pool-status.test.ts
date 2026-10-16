@@ -164,6 +164,29 @@ describe("recordCliRateLimit", () => {
     expect(complete).toBe(true);
   });
 
+  it("makes a safe native quota observation available to future routing without inventing a reset", async () => {
+    const identity = { providerId: "anthropic-sub", providerConnectionId: "subscription-team" };
+    const message = "The native CLI reported a usage limit; its reset time is unknown.";
+    await recordCliRateLimit("claude-cli", identity.providerId, message, identity);
+    const status = await getCliPoolStatus("claude-cli", identity);
+    expect(status).toMatchObject({ isExhausted: true, retryAfterSeconds: null, errorSnippet: message });
+    expect(prisma.cliPoolStatus.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { scopeKey: "cli:claude-cli:provider:anthropic-sub" },
+      create: expect.objectContaining({ adapterType: null, adapterKind: "claude_code", providerId: "anthropic-sub" }),
+    }));
+    const row = vi.mocked(prisma.providerCapacityStatus.upsert).mock.calls[0]![0].create;
+    expect(row).toMatchObject({ state: "rate_limited", confidence: "heuristic", source: "cli", rawSnippet: message });
+    expect(row.safeSummary).toContain("not a confirmed quota reset");
+    const endpoints = [{ providerId: "anthropic-sub", providerConnectionId: identity.providerConnectionId },
+      { providerId: "local", providerConnectionId: "local-default" }];
+    const result = applyCapacitySoftExclusion({ endpoints,
+      capacityByProvider: new Map([[identity.providerId, { state: "rate_limited", retryAtMs: status!.resetAt!.getTime() }]]),
+      nowMs: Date.now() });
+    expect(result.eligible).toEqual([endpoints[1]]);
+    expect(result.excluded.map(entry => entry.endpoint)).toEqual([endpoints[0]]);
+    expect((await getCliPoolStatus("codex-cli", { providerId: "codex", providerConnectionId: "other" }))).toBeNull();
+  });
+
   it("still records the dispatch cooldown if provider capacity persistence fails", async () => {
     vi.mocked(prisma.providerCapacityStatus.upsert).mockRejectedValueOnce(new Error("capacity store unavailable"));
     await expect(recordCliRateLimit("claude-cli", "anthropic-sub", "429")).resolves.toBeUndefined();
