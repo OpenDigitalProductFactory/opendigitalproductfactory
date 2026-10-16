@@ -413,6 +413,53 @@ the existing outcome pipeline. Resource/concurrency work owns higher throughput.
 An incident links escaped failure evidence and a scenario follow-up through the
 same outcome record; no fixed checklist proves exhaustive foresight.
 
+## Endpoint eligibility recovery repair — BI-DB4E6F81
+
+### Design grounding
+
+Extend routed-inference, the leaf inference-error contract, routing-exclusion-buckets,
+semantic-review-background checkpoints, recovery-policy/readback and the existing
+Tasks/Workroom recovery controls. No new scheduler, model permission or state table.
+Live TaskRun TR-GATE-6A2F39DE6AF2748BCF40D1CA remained input-required with
+provider-outcome-uncertain at 2026-10-16T03:11:57.092Z. On c38edb55c0d,
+the routing and recovery regressions fail: initial refusal lacks dispatch proof
+and safe diagnostics, and readback recommends another unchanged retry.
+
+The caller's internal floor does not establish effective screened sensitivity.
+Provider reconciliation can follow a provider attempt and finish with an eligibility
+refusal; therefore the final exception type alone cannot prove zero dispatch.
+Preserve screening, clearance, residency, complete diff and independent verdict.
+
+### Ordered atomic fix
+
+All steps map to BI-DB4E6F81. ELIGIBILITY-CONTRACT, ELIGIBILITY-FLOW,
+ELIGIBILITY-ACCEPTANCE and ELIGIBILITY-VERIFY are one delivery: readback without
+durable dispatch evidence would mislead, and checkpointing without recovery
+admission would permit pointless paid retries.
+
+1. ELIGIBILITY-VERIFY: retain failing routing/recovery tests; add direct typed,
+   wrapped, reconciliation-after-dispatch and mixed sibling regressions.
+2. ELIGIBILITY-CONTRACT: move the existing error class to the leaf error module,
+   keeping its public re-export. Only an initial routing refusal gains zero-dispatch
+   proof. Attach effective sensitivity/residency and bounded exclusion counts using
+   existing buckets; never persist prompts, endpoint identifiers or raw errors.
+3. ELIGIBILITY-FLOW: checkpoint proven refusals as inconclusive, preserve successful
+   siblings and ambiguous execution. Project safe diagnostics to Tasks/Workroom;
+   unchanged eligibility requires fresh scoped remediation evidence before retry.
+   Preserve the immutable packet, original deadline/attempt budget and existing
+   qualified expired-successor admission. No automatic retries or budget reset.
+4. ELIGIBILITY-ACCEPTANCE: run affected tests, typecheck, style and shared integration
+   gate; independently review and deliver through DCO PR/merge queue. Exercise
+   served Tasks and Workroom recovery after canonical deployment, and obtain an
+   independent verdict or record a precise remaining blocker. Source checks alone
+   do not close the item or its blocked deliveries.
+
+Risk: falsely proving zero dispatch can repeat paid work. Only the direct typed
+error from a routing call with no reconciliation is eligible; wrapped errors stay
+unknown. A failed checkpoint write stays unknown. Unknown exclusions remain
+explicitly other. Rollback removes the additive projection without erasing stored
+requests/checkpoints; unknown recovery metadata must remain fenced.
+
 ## Recovery repair — BI-8ECEC429
 
 Status: implementation plan, 2026-10-02. This extends the existing request,
