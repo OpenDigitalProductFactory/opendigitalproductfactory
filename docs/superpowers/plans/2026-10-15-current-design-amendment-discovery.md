@@ -195,3 +195,31 @@ the graph-linked build-entry test, bounded item-read tests and the actual packet
 admission roundtrip. Style, diff and both web TypeScript programs pass.
 Independent source assessment, protected publication and containing-release
 verification remain required; a test pass is not live acceptance.
+
+## Selected-room packet admission follow-through
+
+Blast-radius inspection found that `apps/web/lib/mcp/independent-review-request.ts`
+already verifies the packet's subject and exact Workroom access, then calls
+`getBacklogItem` without that room's source identity. Its generic current-design
+read can still return unavailable and refuse the claim's unchanged packet.
+The earlier packet roundtrip suite stubs this reader and readiness; its pass
+does not prove admission with multiple actual rooms. Publication remains held.
+
+This is the same atomic `governed-claim` / `exact-item-read` route-agreement
+repair. Before implementation, normally claim the admission file,
+`apps/web/lib/mcp/packs/backlog-pack-read-tools.ts` and
+`apps/web/lib/mcp/independent-review-packet-roundtrip.test.ts`, then refresh
+immutable coverage and normal admission. The first scope request was refused
+during the recovery-103 drain; it granted no edit authority for those files.
+
+Read the selected room's full source fields from the server only after the
+existing subject/access checks. Match them to the packet binding. Pass that
+verified tuple through a server-internal item-read option to the same canonical
+reader; public tool parameters cannot supply it. Add a regression through actual
+packet admission and the persisted-binding reader with multiple rooms, keeping
+pure readiness projection real. Reject forged or changed room/source bindings,
+revoked access and caller-injected selector parameters. Generic portal/item and
+completion reads remain unscoped and can still report unavailable; this work
+does not guess a room for them or add a public selection API. Run the affected
+admission, item-read, claim and readiness suites and both TypeScript programs,
+then independently assess the complete frozen change before publication.
