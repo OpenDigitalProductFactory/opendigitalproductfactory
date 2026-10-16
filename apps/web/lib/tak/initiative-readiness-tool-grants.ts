@@ -293,7 +293,7 @@ export async function resolveInitiativeReviewerRecovery(input: {
   planArtifact?: InitiativeRecoveryCanonicalArtifact | null;
   expectedCurrentBaselineId?: string | null;
   eligibleEvidenceActivityIds?: readonly string[];
-  /** Server-owned history predicate; never a caller-supplied exclusion list. */
+  /** Server-owned independent-review history predicate; the original name is retained for compatibility. */
   isPlanReviewExhausted?: (packet: ReturnType<typeof requestCoworkerPacket>) => Promise<boolean>;
   isReviewerEligible?: (agentId: string) => Promise<boolean>;
 }): Promise<InitiativeReviewerRecovery> {
@@ -419,7 +419,8 @@ export async function resolveInitiativeReviewerRecovery(input: {
         continue;
       }
       const dispatch = input.dispatchContext;
-      const preparePacket = (targetAgentId: string) => requestCoworkerPacket({
+      const preparePacket = (targetAgentId: string, alternate = false) => {
+        const packet = requestCoworkerPacket({
         decision: input.decision,
         gate: entry.gate,
         toolName: entry.route.toolName,
@@ -429,11 +430,17 @@ export async function resolveInitiativeReviewerRecovery(input: {
         artifact: bindable && artifact?.resolved ? artifact : null,
         expectedCurrentBaselineId: input.expectedCurrentBaselineId ?? null,
         eligibleEvidenceActivityIds,
-      });
+        });
+        // Plan packets already bind the reviewer. Keep existing first-choice
+        // design keys replayable, but never send an alternate under its key.
+        return alternate && entry.gate !== "plan-review"
+          ? { ...packet, requestKey: `${packet.requestKey}:reviewer:${createHash("sha256").update(targetAgentId).digest("hex")}` }
+          : packet;
+      };
       let packet = preparePacket(candidate.agent.agentId);
-      if (entry.gate === "plan-review" && input.isPlanReviewExhausted) {
-        for (const next of candidates) {
-          const nextPacket = preparePacket(next.agent.agentId);
+      if (["design-spec", "spec-approval", "architecture-review", "plan-review"].includes(entry.gate) && input.isPlanReviewExhausted) {
+        for (const [index, next] of candidates.entries()) {
+          const nextPacket = preparePacket(next.agent.agentId, index > 0);
           if (await input.isPlanReviewExhausted(nextPacket)) { candidate = undefined; continue; }
           candidate = next;
           packet = nextPacket;
@@ -442,7 +449,7 @@ export async function resolveInitiativeReviewerRecovery(input: {
         if (!candidate) {
           escalations.push({ accountableRole: entry.role, toolName: entry.route.toolName,
             grant: entry.route.lane.grant, reason: "no-eligible-reviewer",
-            nextAction: "All currently eligible independent plan reviewers exhausted this exact packet. Select another eligible reviewer/provider through recorded authority; do not replay exhausted tasks or reset their attempts." });
+            nextAction: "All currently eligible independent reviewers exhausted this exact packet. Select another eligible reviewer/provider through recorded authority; do not replay exhausted tasks or reset their attempts." });
           continue;
         }
       }

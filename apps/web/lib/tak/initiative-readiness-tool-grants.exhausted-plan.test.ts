@@ -14,6 +14,29 @@ function boundGrantRows(grantKey: string, agentId: string, displayName: string) 
     agent: { agentId, displayName, status: "active", archived: false, lifecycleStage: "production" } }));
 }
 describe("exact exhausted plan reviewer selection", () => {
+  it.each([
+    ["CANONICAL_DESIGN_REQUIRED", "design-checklist-reviewer", "initiative_design_review"],
+    ["SPEC_APPROVAL_REQUIRED", "design-checklist-reviewer", "initiative_design_review"],
+    ["REVIEW_REQUIRED", "architecture-reviewer", "initiative_architecture_review"],
+  ] as const)("selects an alternate for an exhausted %s review without changing the binding", async (code, accountableRole, grant) => {
+    const input = {
+      decision: { ...decision, unmet: [readinessRequirement({ code, state: "missing", accountableRole })] },
+      currentAgentId: "AGT-AUTHOR", dispatchContext,
+      canonicalArtifact: { resolved: true as const, path: "docs/superpowers/specs/recovery.md", providerBlobId: "b".repeat(40) },
+      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([
+        ...boundGrantRows(grant, "AGT-A", "First"), ...boundGrantRows(grant, "AGT-B", "Next"),
+      ]) } },
+      isPlanReviewExhausted: async (packet: { targetAgent: string }) => packet.targetAgent === "AGT-A",
+    };
+    const recovery = await resolveInitiativeReviewerRecovery(input);
+    const original = await resolveInitiativeReviewerRecovery({ ...input, isPlanReviewExhausted: undefined });
+    expect(recovery.reviewerRoutes[0]?.targetAgentId).toBe("AGT-B");
+    expect(recovery.reviewerRoutes[0]?.requestCoworker.requestKey).not.toBe(original.reviewerRoutes[0]?.requestCoworker.requestKey);
+    expect(recovery.reviewerRoutes[0]?.requestCoworker.initiativeReviewBinding).toEqual(original.reviewerRoutes[0]?.requestCoworker.initiativeReviewBinding);
+    const exhausted = await resolveInitiativeReviewerRecovery({ ...input, isPlanReviewExhausted: async () => true });
+    expect(exhausted.reviewerRoutes).toEqual([]);
+    expect(exhausted.escalations[0]?.nextAction).toContain("exhausted this exact packet");
+  });
   it("moves an exhausted exact plan packet to the next eligible independent reviewer", async () => {
     const exhausted = vi.fn(async (packet: { targetAgent: string }) => packet.targetAgent === "AGT-A");
     const input = {

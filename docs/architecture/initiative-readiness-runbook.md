@@ -123,18 +123,20 @@ You do **not** choose the reviewer or hand-build the review call. The server iss
 
 ## 4. The reviewer roster (who holds which grant)
 
-**Exhausted plan review.** If the exact plan-review task reports
+**Exhausted independent review.** If an exact design-spec, spec-approval,
+architecture-review or plan-review task reports
 `terminal-writer-retry-exhausted`, refresh the governed claim instead of
 replaying that task. For the same user and current OAuth task family, the
 server excludes only that recorded exhausted packet and issues the next
 currently eligible independent reviewer with both writer and reader grants.
-The plan, baseline and Workroom binding stay fixed; the existing plan key
-includes the new target. Submit the newly issued packet unchanged. Issuance
+The artifact, baseline and Workroom binding stay fixed; the replacement key
+includes the new target. A matching exhausted legacy task retains its spent
+budget. Submit the newly issued packet unchanged. Issuance
 and authorization use the same exact task-history check. Writer refusals,
 capacity or approval waits, active tasks and uncertain provider outcomes do
 not authorize replacement. If all eligible reviewers are exhausted, the
 server returns a bounded escalation; attempts, grants and receipts are never
-reset or synthesized. This recovery applies to the external OAuth plan lane.
+reset or synthesized. This recovery applies to the external OAuth review lanes.
 
 Live assignment in [`packages/db/data/agent_registry.json`](../../packages/db/data/agent_registry.json); the recovery packet resolves the current holder, so prefer the packet over this table.
 
