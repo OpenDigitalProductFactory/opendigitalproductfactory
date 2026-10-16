@@ -3,7 +3,7 @@ import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
 import { loadBaselineSourceForItem, type BaselineSourceDb } from "./baseline-source";
 import { bodyBaselineInputsMatch } from "./body-baseline-binding";
-import { isCurrentDeliveredBodyAuthor } from "./body-baseline-author-room";
+import { isArchivedBodyAuthorRoom, isCurrentDeliveredBodyAuthor } from "./body-baseline-author-room";
 
 import {
   authorizeObjectiveMappingRequestKeyEvolution,
@@ -110,6 +110,7 @@ async function loadObjectiveMappingAdmissionSnapshot(args: {
       headBranch: true,
       headSha: true,
       archivedAt: true,
+      status: true,
     },
   });
   const expectedRoom = packet.binding.workroomRef;
@@ -120,9 +121,10 @@ async function loadObjectiveMappingAdmissionSnapshot(args: {
     || room.headSha?.toLocaleLowerCase("en-US") !== expectedRoom.headSha.toLocaleLowerCase("en-US")) {
     return { ...err("workroom-identity-conflict"), reason: "workroom-identity-conflict" };
   }
-  const deliveredBodyAuthor = room.archivedAt !== null && packet.binding.artifactRef.kind === "document-version"
+  const archived = isArchivedBodyAuthorRoom(room);
+  const deliveredBodyAuthor = archived && packet.binding.artifactRef.kind === "document-version"
     && await isCurrentDeliveredBodyAuthor(db, item, expectedRoom);
-  if (!deliveredBodyAuthor && (room.archivedAt !== null || !await args.workroomIsLive(db, room.capsuleId))) {
+  if (!deliveredBodyAuthor && (archived || !await args.workroomIsLive(db, room.capsuleId))) {
     return { ...err("workroom-identity-conflict"), reason: "workroom-identity-conflict" };
   }
 

@@ -104,6 +104,21 @@ valid before the native request-entrypoint change. Earlier coverage
 
 ## Source verification and workflow fit
 
+Final runtime metadata reconciliation found WC-EEF1CFD8 has `status=archived`
+and `archivedAt=null`. The governed reaper sets the status through the existing
+transition; it does not promise an archive timestamp. Its current PR6265
+observation matches repository, branch and head exactly and is merged/non-draft.
+Use one status-aware archival predicate at every body acceptance boundary;
+an absent timestamp never makes an archived author live or waives merge proof.
+Seven additional behavior regressions first failed against b31e8167acde, then
+passed after this correction. These include the reader and native requester
+refusing status-only archived source when its provider proof is removed.
+Current expanded source verification: 1,090 passed, six skipped across 85 passing
+suites and one skipped suite; both web TypeScript programs pass. Prior b31e
+shared evidence (5,658 passing tests) and its independent assessment remain
+historical and do not certify the corrected tree. Re-freeze and obtain current
+independent assessment and qualified gate evidence before publication.
+
 Actual capture regression failed before repair (expected one retained version,
 got zero). Native request regression separately failed before its repair with
 the exact issued packet refused at the archived-room filter. Both now pass.

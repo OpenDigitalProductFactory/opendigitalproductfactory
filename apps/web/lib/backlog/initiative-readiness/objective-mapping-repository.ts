@@ -30,7 +30,7 @@ import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inven
 
 import { validateInitiativeBaselineChainHead } from "./baseline-repository";
 import { bodyBaselineInputsMatch } from "./body-baseline-binding";
-import { isCurrentDeliveredBodyAuthor } from "./body-baseline-author-room";
+import { isArchivedBodyAuthorRoom, isCurrentDeliveredBodyAuthor } from "./body-baseline-author-room";
 import { resolveReviewerIdentity } from "./reviewer-identity";
 import { loadBaselineSourceForItem, type BaselineSourceDb } from "./baseline-source";
 import {
@@ -297,6 +297,7 @@ async function validateExecutingObjectiveMappingTask(args: {
       headBranch: true,
       headSha: true,
       archivedAt: true,
+      status: true,
     },
   });
   if (!room
@@ -307,13 +308,14 @@ async function validateExecutingObjectiveMappingTask(args: {
     const error = "The executing TaskRun no longer matches the current live Workroom identity.";
     return { ...err(error), code: "OBJECTIVE_MAPPING_AUTHORITY_CONFLICT" };
   }
-  const deliveredBodyAuthor = room.archivedAt !== null && binding.artifactRef.kind === "document-version"
+  const archived = isArchivedBodyAuthorRoom(room);
+  const deliveredBodyAuthor = archived && binding.artifactRef.kind === "document-version"
     && await isCurrentDeliveredBodyAuthor(args.tx, { id: args.itemRowId, itemId: args.itemId }, binding.workroomRef);
   const liveness = deliveredBodyAuthor ? null : await loadCapsuleLivenessInventory(args.tx, {
     where: { capsuleId: binding.workroomRef.workroomId },
     take: 2,
   });
-  if (!deliveredBodyAuthor && (room.archivedAt !== null || liveness?.capsulesAll.length !== 1 || liveness.capsulesAll[0]?.isLive !== true)) {
+  if (!deliveredBodyAuthor && (archived || liveness?.capsulesAll.length !== 1 || liveness.capsulesAll[0]?.isLive !== true)) {
     const error = "The executing TaskRun no longer matches the current live or verified delivered body-author Workroom identity.";
     return { ...err(error), code: "OBJECTIVE_MAPPING_AUTHORITY_CONFLICT" };
   }

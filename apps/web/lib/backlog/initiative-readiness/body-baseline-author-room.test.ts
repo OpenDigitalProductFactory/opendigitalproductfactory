@@ -20,6 +20,12 @@ const expected = { workroomId: room.capsuleId, repositoryFullName: room.reposito
   branchName: room.headBranch, headSha: room.headSha };
 
 describe("body acceptance source authorship after execution retirement", () => {
+  it("recognizes the reaper's status-only archive with no archive timestamp", async () => {
+    const statusOnly = { ...room, archivedAt: null };
+    const db = database([statusOnly] as never);
+    expect(await resolveBodyBaselineAuthorRoom(db as never, item)).toEqual(statusOnly);
+    expect(await isCurrentDeliveredBodyAuthor(db as never, item, expected)).toBe(true);
+  });
   it("selects the exact verified merged author without changing its archived state", async () => {
     const db = database();
     expect(await resolveBodyBaselineAuthorRoom(db as never, item)).toEqual(room);
@@ -51,7 +57,7 @@ describe("body acceptance source authorship after execution retirement", () => {
     "does not trust malformed or edited observation payloads", async payload => {
       expect(await resolveBodyBaselineAuthorRoom(database([room], payload) as never, item)).toBeNull();
     });
-  it.each([{ status: "abandoned" }, { status: "superseded" }, { archivedAt: null },
+  it.each([{ status: "abandoned" }, { status: "superseded" }, { status: "working", archivedAt: null },
     { createdByPrincipalId: null }, { headSha: "short" }, { baseSha: null }, { pullRequestNumber: null },
     { backlogItemId: "BI-OTHER" }])("refuses incomplete or ineligible current attempts %s", async change => {
     expect(await resolveBodyBaselineAuthorRoom(database([{ ...room, ...change }] as never) as never, item)).toBeNull();

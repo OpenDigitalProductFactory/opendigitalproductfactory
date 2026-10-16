@@ -69,12 +69,12 @@ beforeEach(() => {
 });
 
 describe("consent-bound independent review request", () => {
-  it("admits the exact issued retained-body packet after verified source-author archival", async () => {
+  it.each([true, false])("requires verified source proof for the status-only archived author (valid=%s)", async validProof => {
     const author = { id: "room-row", capsuleId: "WC-TEST", backlogItemId: "BI-TEST", executorKind: "codex-desktop",
       requestedByPrincipalId: "prn-human", featureBuild: null, repositoryFullName: "org/repo",
       headBranch: "fix/test", headSha: "a".repeat(40), baseSha: "b".repeat(40), createdByPrincipalId: "author",
-      status: "archived", archivedAt: new Date("2026-10-16T06:00:00Z"), createdAt: new Date("2026-10-15T06:00:00Z"), pullRequestNumber: 6265 };
-    mocks.room.mockImplementation(async ({ where }) => where.archivedAt === null ? null : author);
+      status: "archived", archivedAt: null, createdAt: new Date("2026-10-15T06:00:00Z"), pullRequestNumber: 6265 };
+    mocks.room.mockImplementation(async ({ where }) => where.archivedAt === null && where.status?.not === "archived" ? null : author);
     mocks.rooms.mockImplementation(async ({ where }) => where.archivedAt === null ? [] : [author]);
     mocks.snapshots.mockResolvedValue([{ payload: createPullRequestObservation({ repositoryFullName: "org/repo",
       number: 6265, url: "https://github.com/org/repo/pull/6265", title: "repair", headBranch: author.headBranch,
@@ -85,7 +85,10 @@ describe("consent-bound independent review request", () => {
         expectedCurrentBaselineId: "baseline-body", eligibleEvidenceActivityIds: ["E-1"],
         artifactRef: { kind: "document-version", repositoryFullName: "org/repo", versionId: "version-body", valueDigest: "sha256:body" } } };
     mocks.recovery.mockResolvedValue({ reviewerRoutes: [{ independent: true, requestCoworker: bodyPacket }] });
-    expect(await authorizeCoworkerRequest(bodyPacket, "human", context)).toEqual({ bounded: true });
+    if (!validProof) mocks.snapshots.mockResolvedValue([]);
+    const result = await authorizeCoworkerRequest(bodyPacket, "human", context);
+    if (validProof) expect(result).toEqual({ bounded: true });
+    else expect(result.refusal).toBeDefined();
     mocks.access.mockResolvedValue({ decision: { level: "none" } });
     expect((await authorizeCoworkerRequest(bodyPacket, "human", context)).refusal).toBeDefined();
   });

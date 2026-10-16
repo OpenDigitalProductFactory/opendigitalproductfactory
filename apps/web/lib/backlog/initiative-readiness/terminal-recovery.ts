@@ -26,7 +26,7 @@ import type { InitiativeReadinessDecision } from "./types";
 import { readRepositoryProviderBlob } from "./repository-artifact";
 import { bodyBaselineInputsMatch } from "./body-baseline-binding";
 import { resolveReviewerIdentity } from "./reviewer-identity";
-import { resolveBodyBaselineAuthorRoom } from "./body-baseline-author-room";
+import { isArchivedBodyAuthorRoom, resolveBodyBaselineAuthorRoom } from "./body-baseline-author-room";
 
 export type TerminalRecoveryRoom = {
   capsuleId: string;
@@ -194,7 +194,7 @@ async function defaultLoadDeliveredBodyAuthor(args: { itemId: string; refusedWor
   const item = await prisma.backlogItem.findUnique({ where: { itemId: args.itemId }, select: { id: true, itemId: true } });
   if (!item) return null;
   const room = await resolveBodyBaselineAuthorRoom(prisma, item);
-  if (!room?.archivedAt || (args.refusedWorkroomId && room.capsuleId !== args.refusedWorkroomId)) return null;
+  if (!room || !isArchivedBodyAuthorRoom(room) || (args.refusedWorkroomId && room.capsuleId !== args.refusedWorkroomId)) return null;
   return { ...room, isLive: false };
 }
 

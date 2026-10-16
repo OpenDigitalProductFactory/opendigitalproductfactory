@@ -23,11 +23,11 @@ function database() {
 }
 beforeEach(() => { history = []; tx = database(); mocks.source.mockImplementation(async () => ({ origin: "own", baselineRows: history })); });
 describe("body criteria capture in the authorized subject transaction", () => {
-  it("retains criteria after the exact merged author room is archived, without resuming it", async () => {
+  it.each([new Date("2026-10-16T06:00:00Z"), null])("retains criteria after merged author archival (timestamp=%s), without resuming it", async archivedAt => {
     const room = { id: "room-row", capsuleId: "WC-CASE", backlogItemId: item.itemId,
       repositoryFullName: "owner/repo", headSha: "a".repeat(40), baseSha: "b".repeat(40),
       headBranch: "fix/accepted", createdByPrincipalId: "owner", status: "archived",
-      archivedAt: new Date("2026-10-16T06:00:00Z"), createdAt: new Date("2026-10-15T06:00:00Z"), pullRequestNumber: 6265 };
+      archivedAt, createdAt: new Date("2026-10-15T06:00:00Z"), pullRequestNumber: 6265 };
     tx.workroom.findMany.mockImplementation(async ({ where }: { where: { archivedAt?: unknown } }) =>
       where.archivedAt === null ? [] : [room]);
     const observed = createPullRequestObservation({ repositoryFullName: room.repositoryFullName,

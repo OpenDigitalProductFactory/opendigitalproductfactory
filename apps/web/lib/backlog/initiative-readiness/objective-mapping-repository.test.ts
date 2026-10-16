@@ -303,7 +303,7 @@ describe("recordInitiativeObjectiveMappingProposal", () => {
     const room = { id: "room-row-1", capsuleId: "WC-PLATFORM", backlogItemId: "BI-PLATFORM",
       repositoryFullName, headBranch: "fix/objective-mapping", headSha, baseSha: "b".repeat(40),
       createdByPrincipalId: "author-row", status: "archived", pullRequestNumber: 6265,
-      archivedAt: new Date("2026-10-16T06:00:00Z"), createdAt: new Date("2026-10-15T06:00:00Z") };
+      archivedAt: null, createdAt: new Date("2026-10-15T06:00:00Z") };
     tx.workroom.findUnique.mockResolvedValue(room);
     const db = { ...tx, workroom: { ...tx.workroom,
       findMany: vi.fn(async ({ where }) => where.archivedAt === null ? [] : [room]) },

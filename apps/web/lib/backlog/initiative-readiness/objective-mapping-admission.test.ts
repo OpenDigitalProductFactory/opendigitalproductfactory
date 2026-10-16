@@ -152,7 +152,7 @@ describe("objective-mapping action-time admission", () => {
     const room = { capsuleId: "WC-ATOMIC", id: "room-row", backlogItemId: "BI-ATOMIC", repositoryFullName,
       headBranch: current.binding.workroomRef.branchName, headSha, baseSha: "1".repeat(40),
       createdByPrincipalId: "author", status: "archived", pullRequestNumber: 6265,
-      archivedAt: new Date("2026-10-16T06:00:00Z"), createdAt: new Date("2026-10-15T06:00:00Z") };
+      archivedAt: null, createdAt: new Date("2026-10-15T06:00:00Z") };
     fixture.db.workroom.findUnique.mockResolvedValue(room);
     fixture.db.backlogItem.findUnique.mockResolvedValue({ id: "row-bi-atomic", itemId: "BI-ATOMIC", body, organizationId: null } as never);
     const readActivities = fixture.db.backlogItemActivity.findMany.getMockImplementation()!;

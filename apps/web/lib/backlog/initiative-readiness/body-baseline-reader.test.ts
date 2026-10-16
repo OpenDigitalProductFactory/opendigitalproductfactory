@@ -40,7 +40,7 @@ describe("retained body immutable reader", () => {
     const room = { id: "room", capsuleId: "WC-CASE", backlogItemId: "BI-CASE",
       repositoryFullName: "owner/repo", headSha: binding.workroomRef.headSha, headBranch: binding.workroomRef.branchName,
       baseSha: "b".repeat(40), createdByPrincipalId: "author", status: "archived", pullRequestNumber: 6265,
-      archivedAt: new Date("2026-10-16T06:00:00Z"), createdAt: new Date("2026-10-15T06:00:00Z") };
+      archivedAt: null, createdAt: new Date("2026-10-15T06:00:00Z") };
     mocks.room.mockResolvedValue(room);
     mocks.rooms.mockImplementation(async ({ where }) => where.archivedAt === null ? [] : [room]);
     mocks.snapshots.mockResolvedValue([{ payload: createPullRequestObservation({ repositoryFullName: "owner/repo",
@@ -51,6 +51,12 @@ describe("retained body immutable reader", () => {
     const result = await readInitiativeBodyVersion(parameters, "user", context);
     expect(result.success).toBe(admitted);
     if (!admitted) expect(mocks.version).not.toHaveBeenCalled();
+    if (admitted) {
+      mocks.version.mockClear();
+      mocks.snapshots.mockResolvedValue([]);
+      expect((await readInitiativeBodyVersion(parameters, "user", context)).success).toBe(false);
+      expect(mocks.version).not.toHaveBeenCalled();
+    }
   });
   it("uses the canonical page contract for the exact authorized review", async () => {
     const result = await readInitiativeBodyVersion(parameters, "user", context);

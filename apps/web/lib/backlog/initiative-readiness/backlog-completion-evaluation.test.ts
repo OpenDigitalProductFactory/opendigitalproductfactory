@@ -21,7 +21,7 @@ describe("independent body acceptance survives source-author archival", () => {
     const { item, client } = fixture({ body, digitalProductId: "product-1" });
     const room = { id: "room-row", capsuleId: "WC-1", backlogItemId: item.itemId, repositoryFullName: "owner/repo",
       headBranch: "fix/accepted", headSha: "a".repeat(40), baseSha: "b".repeat(40), createdByPrincipalId: "author",
-      status: "archived", pullRequestNumber: 6265, archivedAt: new Date("2026-10-06T06:00:00Z"),
+      status: "archived", pullRequestNumber: 6265, archivedAt: null,
       createdAt: new Date("2026-10-05T06:00:00Z"), scopeClaims: [{ source: "declared", workShape: "delivery-medium@1.0.0" }] };
     const rows = [{ id: "baseline", backlogItemId: item.id, kind: "initiative_scope_baseline", recordedAt: new Date("2026-10-06T07:00:00Z"),
       payload: { schemaVersion: 1, baselineId: "B-1", supersedesBaselineId: null, origin: "item-body", artifactDigest: "digest",

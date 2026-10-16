@@ -6,6 +6,11 @@ const select = { id: true, capsuleId: true, backlogItemId: true, repositoryFullN
   baseSha: true, headBranch: true, headSha: true, createdByPrincipalId: true,
   pullRequestNumber: true, status: true, archivedAt: true, createdAt: true } as const;
 
+/** The governed reaper sets status=archived without setting archivedAt. */
+export function isArchivedBodyAuthorRoom(room: { status?: string | null; archivedAt?: Date | null }): boolean {
+  return room.status === "archived" || room.archivedAt != null;
+}
+
 /** Resolve source authorship only. This never grants an execution lease or room access. */
 export async function resolveBodyBaselineAuthorRoom(db: AuthorRoomDb,
   item: { id: string; itemId: string }) {
@@ -19,7 +24,7 @@ export async function resolveBodyBaselineAuthorRoom(db: AuthorRoomDb,
   const attempts = await db.workroom.findMany({ where: { backlogItemId }, select,
     orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 2 });
   const room = attempts[0];
-  if (!room || !room.archivedAt || room.status !== "archived"
+  if (!room || room.status !== "archived"
     || !room.createdByPrincipalId || !room.repositoryFullName || !room.headBranch
     || !room.headSha || !/^[a-f0-9]{40}$/i.test(room.headSha)
     || !room.baseSha || !/^[a-f0-9]{40}$/i.test(room.baseSha)
@@ -44,7 +49,7 @@ export async function isCurrentDeliveredBodyAuthor(db: AuthorRoomDb,
     workroomId: string; repositoryFullName: string; branchName: string; headSha: string;
   }): Promise<boolean> {
   const room = await resolveBodyBaselineAuthorRoom(db, item);
-  return Boolean(room?.archivedAt && room.capsuleId === expected.workroomId
+  return Boolean(room?.status === "archived" && room.capsuleId === expected.workroomId
     && room.repositoryFullName?.toLowerCase() === expected.repositoryFullName.toLowerCase()
     && room.headBranch === expected.branchName && room.headSha?.toLowerCase() === expected.headSha.toLowerCase());
 }

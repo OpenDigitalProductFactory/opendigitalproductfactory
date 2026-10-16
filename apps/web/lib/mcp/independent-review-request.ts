@@ -108,12 +108,14 @@ export async function authorizeCoworkerRequest(
   }
   // A Build Studio room records the item's ROW id in backlogItemId (the
   // attachment writes backlogItem.id); an adopted room records the BI- id.
-  let room = await prisma.workroom.findFirst({ where: { capsuleId: binding.workroomRef.workroomId, archivedAt: null },
+  const bodyAcceptance = binding.gate === "objective-mapping" && binding.artifactRef.kind === "document-version";
+  let room = await prisma.workroom.findFirst({ where: { capsuleId: binding.workroomRef.workroomId, archivedAt: null,
+      ...(bodyAcceptance ? { status: { not: "archived" } } : {}) },
     select: { id: true, backlogItemId: true, executorKind: true, requestedByPrincipalId: true, featureBuild: { select: { createdById: true } } } });
-  if (!room && binding.gate === "objective-mapping" && binding.artifactRef.kind === "document-version") {
+  if (!room && bodyAcceptance) {
     const subject = await prisma.backlogItem.findUnique({ where: { itemId: binding.itemId }, select: { id: true } });
     if (subject && await isCurrentDeliveredBodyAuthor(prisma, { ...subject, itemId: binding.itemId }, binding.workroomRef)) {
-      room = await prisma.workroom.findFirst({ where: { capsuleId: binding.workroomRef.workroomId, archivedAt: { not: null } },
+      room = await prisma.workroom.findFirst({ where: { capsuleId: binding.workroomRef.workroomId, status: "archived" },
         select: { id: true, backlogItemId: true, executorKind: true, requestedByPrincipalId: true, featureBuild: { select: { createdById: true } } } });
     }
   }
