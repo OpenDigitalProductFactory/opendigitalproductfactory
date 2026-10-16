@@ -2,6 +2,7 @@ import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import { resolveEpicRowId, resolveListLimit } from "./backlog-read-helpers";
 import { addScopeFilters, backlogScopeSelect, scopeData } from "./backlog-scope-metadata";
 import { boundedBacklogRecoveryRead, canReadRecoveryPacket, isRecoveryReadGate, recoveryReadDecision } from "../backlog-recovery-read";
+import { designPhaseReviewDecision } from "@/lib/backlog/initiative-readiness/design-phase-recovery";
 
 const INITIATIVE_READINESS_ACTIVITY_KINDS = [
   "initiative_gate_receipt",
@@ -493,13 +494,18 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
       .some((entry) => ["POST_IMPLEMENTATION_REVIEW_REQUIRED", "PLAN_REVIEW_REQUIRED",
         "ACCEPTANCE_EVIDENCE_REQUIRED", "OBJECTIVE_RECONCILIATION_REQUIRED"].includes(entry.code)));
   let taskAuthority: { userId: string; taskAuthorityKey: string } | null = null;
-  if (needsTerminalRecovery && requestedGate === "plan-review" && context?.authSource === "oauth") {
+  // Admission regenerates these packets with trusted task history too. Omitting
+  // it changes a fresh request's identity even when an owned legacy task masks it.
+  const needsDesignTaskAuthority = needsTerminalRecovery && (requestedGate === undefined
+    ? completion && designPhaseReviewDecision(completion) !== null
+    : ["design-spec", "spec-approval", "architecture-review", "plan-review"].includes(requestedGate));
+  if (needsTerminalRecovery && needsDesignTaskAuthority && context?.authSource === "oauth") {
     const taskAuthorityKey = currentUserId && context.apiTokenId
       ? await (await import("@/lib/auth/oauth-task-authority")).resolveMcpTaskAuthorityKey({
         tokenId: context.apiTokenId, userId: currentUserId, source: "oauth",
       }) : null;
     if (!taskAuthorityKey || !currentUserId) return { success: false, error: "review_task_authority_unavailable",
-      message: "The current connection's review task authority could not be verified. No replacement request was delivered; restore the authorized connection before reading plan recovery." };
+      message: "The current connection's review task authority could not be verified. No replacement request was delivered; restore the authorized connection before reading independent design recovery." };
     taskAuthority = { userId: currentUserId, taskAuthorityKey };
   }
   const recovery = needsTerminalRecovery

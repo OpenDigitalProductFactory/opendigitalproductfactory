@@ -23,6 +23,9 @@ export const GATE_INFRASTRUCTURE_FAILURE_KINDS = Object.freeze([
   "credential-rejected",
   "transport-unreachable",
   "server-error",
+  // BI-15E1576D: a queued claim against a pool whose effective capacity is 0
+  // is not a runnable gate.
+  "pool-closed",
 ]);
 
 export const LOCAL_CI_OVERRIDE_REASON_CODES = Object.freeze([

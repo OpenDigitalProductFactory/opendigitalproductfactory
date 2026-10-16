@@ -1,4 +1,8 @@
 {
+  "refresh": {
+    "offline": "Browser offline. Showing the saved snapshot. Reconnect to refresh.",
+    "restored": "Connection restored. Refresh to check for changes."
+  },
   "reviewProfile": {
     "section": "Review and learning",
     "requirements": "Review requirements",

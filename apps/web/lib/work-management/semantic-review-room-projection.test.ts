@@ -93,6 +93,26 @@ describe("reviewer state in its Workroom", () => {
       user: { select: { employeeProfile: { select: { displayName: true } } } },
     }) }));
   });
+  it.each(["local-ci-active-capacity-reservation", "host-gpu-busy", "portal-quiescing", "review-authority-unavailable"])(
+    "projects the automatic %s wait instead of an obsolete retry instruction", async reason => {
+      const row = run("input-required");
+      row.nodes = [];
+      row.progressPayload = { semanticReview: { schemaVersion: 1, reason: "review-capacity-deferred",
+        requestDigest: "a".repeat(64), recoveryAttempt: 1, deadlineAt: "2026-09-08T20:10:00Z",
+        nextAction: "retry-review", capacityWaitReason: reason,
+        capacityRecovery: { schemaVersion: 1, requestDigest: "a".repeat(64), checks: 1, nextCheckAt: "2026-09-08T20:00:30Z" } } };
+      const view = await loadSemanticReviewRoomProjection({ taskRun: { findMany: async () => [row] },
+        $queryRaw: vi.fn().mockResolvedValue([{ rowId: "row-1", capsuleId: "WC-1", requestBound: true,
+          requestSchemaVersion: 2, requestArtifactType: "code-change", identityArtifactType: "code-change", identityArtifactTypePresent: true,
+          sourceHeadSha: "a".repeat(40), currentHeadSha: "a".repeat(40), issuedAt: "2026-09-08T19:00:00Z" }]),
+      }, ["WC-1"], now);
+      expect(view.partial).toBe(false);
+      expect(view.runs[0].nextAction).toContain("server will recheck");
+      expect(view.runs[0]).toMatchObject({ requesterId: "requester-1", reason, identityScope: "current", recoveryWait: false });
+      expect(view.runs[0].receipt).toBeUndefined();
+    },
+  );
+
   it("preserves the next action recorded by review settlement", async () => {
     const row = run("input-required");
     row.progressPayload = { semanticReview: { nextAction: "retry-review" } };

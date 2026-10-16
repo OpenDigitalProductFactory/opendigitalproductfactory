@@ -434,6 +434,25 @@ test("failing record says outright that no reason was recorded", () => {
   assert.match(out.reason, /NO recorded reason/);
 });
 
+// BI-C1121FFB: the gate stores the failing test on failureSummary, and status
+// used to ignore it and print "NO recorded reason".
+test("failing record quotes the failure summary when no failureReason was stored", () => {
+  const out = classifySlotRecord({
+    state: failingRecord({
+      failureSummary: {
+        schema: "dpf-local-ci-failure-summary/v1",
+        failedTests: [{ line: 12, text: "FAIL apps/web/lib/foo.test.ts > the widget" }],
+        failedChecks: [],
+      },
+    }),
+    metadata: null,
+    ...atHead,
+  });
+  assert.equal(out.verdict, "FAIL");
+  assert.match(out.reason, /FAIL apps\/web\/lib\/foo.test.ts > the widget/);
+  assert.doesNotMatch(out.reason, /NO recorded reason/);
+});
+
 test("a started-then-released run requires reconciliation and has no product verdict", () => {
   // The observed shape: the run held the slot, ended early, recorded nothing.
   // local-integration-ci runs at effectiveCapacity 1 and several sessions on

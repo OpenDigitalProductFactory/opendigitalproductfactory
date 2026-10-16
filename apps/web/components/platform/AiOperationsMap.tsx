@@ -45,6 +45,9 @@ import {
 } from "./OperationsTopologyControls";
 import { RoutingArchitectureOverview } from "./RoutingArchitectureOverview";
 import { StalledTaskRecoveryActions } from "./StalledTaskRecoveryActions";
+import { Surface } from "@/components/ui/Surface";
+import { RoutingManagementWorkspace } from "./RoutingManagementWorkspace";
+import type { RoutingManagementData } from "@/lib/ai-operations-map/routing-management-types";
 
 type SelectedItem =
   | { kind: "station"; id: string }
@@ -57,6 +60,8 @@ export type OperationsMapEvidenceRange = {
 };
 
 type Props = {
+  routingManagement?: RoutingManagementData;
+  initialTechnicalOpen?: boolean;
   template: OperationsMapTemplate;
   agents: StationedOperationsMapAgent[];
   projections: OperationsMapProjection[];
@@ -97,6 +102,8 @@ const SEVERITY_CLASS: Record<OperationsMapSeverity, string> = {
 };
 
 export function AiOperationsMap({
+  routingManagement,
+  initialTechnicalOpen = false,
   template,
   agents,
   projections,
@@ -108,6 +115,7 @@ export function AiOperationsMap({
   evidenceRange,
   onReplayWindowChange,
 }: Props) {
+  const [technicalOpen, setTechnicalOpen] = useState(initialTechnicalOpen);
   const [selected, setSelected] = useState<SelectedItem>({
     kind: "station",
     id: template.stations[0]?.id ?? "",
@@ -222,6 +230,10 @@ export function AiOperationsMap({
 
   return (
     <div className="space-y-4">
+      {routingManagement ? <RoutingManagementWorkspace data={routingManagement} topology={routingTopology} evidenceEnd={routingEvidence.window.end} windowLabel={recentWindowLabel} /> : null}
+      <Surface padding="none"><details open={technicalOpen} onToggle={event => setTechnicalOpen(event.currentTarget.open)}>
+        <summary className="min-h-11 cursor-pointer px-4 py-3 text-sm font-semibold text-[var(--dpf-text)]">Technical routing and replay</summary>
+        {technicalOpen ? <div className="space-y-4 p-3">
       <RoutingArchitectureOverview
         evidence={routingEvidence}
         initialMode={initialArchitectureMode}
@@ -232,7 +244,6 @@ export function AiOperationsMap({
         <header className="sr-only">
           <p>AI workforce</p>
           <h1>AI Operations Map</h1>
-          <p>Designed routing, observed evidence, and one technical topology for provider and coworker interactions.</p>
         </header>
 
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2">
@@ -310,6 +321,8 @@ export function AiOperationsMap({
           setSeverityFilters((current) => toggleRequired(current, severity, SEVERITY_OPTIONS));
         }}
       />
+        </div> : null}
+      </details></Surface>
     </div>
   );
 }

@@ -129,6 +129,12 @@ the room again while keeping your selected step and filters. The warning clears
 only when a newer server read arrives. Refreshing does not resume work, approve
 a transition, or prove progress. A missing or future read time remains unknown.
 
+If your browser reports offline, **Refresh state** keeps the displayed snapshot
+and announces that you need to reconnect. When the browser reports a restored
+connection, refresh manually to check for changes. Reconnecting alone does not
+refresh the page or establish that the server is reachable. A connection lost
+during a request may still require a browser reload after reconnection.
+
 Native reviews submitted through OAuth use the same current permission checks as other authenticated reviews. Before dispatch or recovery, the worker checks token expiry, token and client revocation, tool grants, and task ownership. A failed authority check pauses the review before a provider call; it does not grant permission or silently switch credentials.
 
 Native reviewer runs also appear under **Observed execution** while queued or

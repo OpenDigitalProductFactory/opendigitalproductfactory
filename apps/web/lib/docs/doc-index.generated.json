@@ -2221,6 +2221,7 @@
         "offline-recovery-preparation-and-compatible-rollout",
         "available-source-primitives",
         "release-sequence",
+        "observed-staging-release",
         "remaining-acceptance"
       ]
     },
@@ -5735,6 +5736,7 @@
       "publishedPortal": false,
       "anchors": [
         "platform-support-watch-list-living-document",
+        "contributor-preview-mount-identity-on-docker-desktop-bi-0acb97b5",
         "literal-windows-package-manager-arguments-bi-263055e3",
         "capability-reconciliation-on-release-installs-bi-5acbac50",
         "host-process-inventory-before-admission-bi-6de5a3b6",
@@ -12273,6 +12275,7 @@
         "commit-and-push-fast",
         "worktrees-are-source-control-isolation-not-runtime-isolation",
         "heavy-local-commands-use-a-shared-host-resource-lane",
+        "recover-a-review-blocked-by-endpoint-eligibility",
         "clean-up-when-merged",
         "webhooks-closing-the-promotion-loop",
         "adhering-to-the-portals-processes",
@@ -12674,6 +12677,15 @@
         "documentation-freshness"
       ]
     },
+    "docs/user-guide/investment-allocation.md": {
+      "publicHref": "/user-guide/investment-allocation/",
+      "portalHref": "/docs/investment-allocation",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "investment-allocation"
+      ]
+    },
     "docs/user-guide/market-archetypes.md": {
       "publicHref": "/user-guide/market-archetypes/",
       "portalHref": "/docs/market-archetypes",
@@ -12833,6 +12845,10 @@
         "use-this-doc-for",
         "workflow",
         "read-the-routing-picture",
+        "follow-traffic",
+        "investigate-stops-and-provider-setup",
+        "evaluate-outcomes",
+        "technical-architecture-and-replay",
         "confirm-a-routing-override",
         "architecture-and-evidence",
         "understanding-background-inference",
