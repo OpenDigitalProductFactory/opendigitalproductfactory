@@ -15,7 +15,7 @@ const marker = () => ({ userId: "admin", approvedAt: "2026-10-16T04:38:00Z", by:
 const envelope = () => ({ id: "envelope", status: "approved", resolvedAt: new Date("2026-10-16T04:39:00Z"),
   expiresAt: new Date("2026-10-16T05:00:00Z"), delegatingUserId: "owner", coworkerAgentId: "agent",
   manifestActionId: input.toolName, inputFingerprint: fingerprintCoworkerInput(params), argsJson: { humanApproval: marker() } });
-const user = () => ({ isActive: true, isSuperuser: false, automationVerificationId: null, automationProfile: null, automationExpiresAt: null,
+const user = () => ({ email: "human@example.test", isActive: true, isSuperuser: false, automationVerificationId: null, automationProfile: null, automationSlot: null, automationExpiresAt: null,
   groups: [{ platformRole: { roleId: "HR-000" } }] });
 
 beforeEach(() => {
@@ -25,6 +25,14 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe("persisted approval execution", () => {
+  it.each([
+    ["direct", "execution"], ["direct", "consumption"], ["on-behalf", "execution"], ["on-behalf", "consumption"],
+  ])("rejects the canonical legacy automation persona for %s %s even without fixture fields", async (decision, phase) => {
+    m.user.mockResolvedValue({ ...user(), email: "automation@dpf.local", isSuperuser: true });
+    if (decision === "direct") m.envelope.mockResolvedValue({ ...envelope(), argsJson: { humanApproval: { userId: "owner", approvedAt: marker().approvedAt } } });
+    const verify = phase === "execution" ? humanApprovalForExecution : humanApprovalForConsumption;
+    expect(await verify(input)).toBeNull();
+  });
   it("retains the actual eligible administrator and the delegated owner separately", async () => {
     expect(await humanApprovalForExecution(input)).toMatchObject({ envelopeId: "envelope", userId: "owner", approverUserId: "admin", onBehalfOf: "owner" });
     expect(m.user).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "admin" } }));

@@ -18,7 +18,7 @@ beforeEach(() => {
   m.environment.mockResolvedValue({ environmentClass: "development" });
   m.intent.mockResolvedValue({ status: "valid", intent: { primaryPurpose: "evolve-dpf" } });
   m.approval.mockResolvedValue({ envelopeId: "approved", userId: "operator", approverUserId: "operator", onBehalfOf: null });
-  m.user.mockResolvedValue({ isActive: true, isSuperuser: false, automationVerificationId: null, automationProfile: null, automationExpiresAt: null, automationSlot: null, groups: [{ platformRole: { roleId: "HR-000" } }] });
+  m.user.mockResolvedValue({ email: "human@example.test", isActive: true, isSuperuser: false, automationVerificationId: null, automationProfile: null, automationExpiresAt: null, automationSlot: null, groups: [{ platformRole: { roleId: "HR-000" } }] });
   m.rows.mockResolvedValue([]);
   m.failed.mockResolvedValue(null);
   m.ci.mockResolvedValue({ id: "ci", workCapsuleId: "room", operationType: "local_integration_ci", details: { status: "passed", gateKey: "gate", leaseId: "lease", evidenceValidity: { expiresAt: params.expiresAt }, evidence: { sha: head, headTreeHash: tree, diffDigest: digest, gatePassed: true, commands: ["test"], output: "Executed checks passed", completedAt: new Date().toISOString() } } });

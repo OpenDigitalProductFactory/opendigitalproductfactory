@@ -4,6 +4,7 @@ import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-author
 import { isRecord } from "@/lib/shared/coerce";
 import { currentUserContext, currentUserContextFromRecord } from "@/lib/govern/current-user-context";
 import { can, type CapabilityKey } from "@/lib/permissions";
+import { isPlatformAutomationPersona } from "@/lib/govern/automation-persona-identity";
 
 export type HumanApprovalMarker = { userId: string; approvedAt: string;
   by?: string; onBehalfOf?: string; reason?: string };
@@ -60,11 +61,12 @@ async function resolvePersistedHumanApproval(args: ApprovalInput, phase: "execut
 
   if (args.requiredApproverCapability) {
     const user = await prisma.user.findUnique({ where: { id: approval.userId }, select: {
-      isActive: true, isSuperuser: true, automationVerificationId: true, automationProfile: true,
+      email: true, isActive: true, isSuperuser: true, automationVerificationId: true, automationProfile: true,
       automationSlot: true, automationExpiresAt: true, groups: { include: { platformRole: true } },
     } });
     const actor = currentUserContextFromRecord(approval.userId, user);
-    if (!actor || user?.automationVerificationId != null || user?.automationProfile != null
+    if (!actor || !user?.email?.trim() || isPlatformAutomationPersona(user.email)
+      || user.automationVerificationId != null || user.automationProfile != null
       || user?.automationSlot != null || user?.automationExpiresAt != null
       || !can(actor, args.requiredApproverCapability) || (onBehalf && !can(actor, "manage_users"))) return null;
     const owner = onBehalf ? await currentUserContext(args.userId) : actor;
