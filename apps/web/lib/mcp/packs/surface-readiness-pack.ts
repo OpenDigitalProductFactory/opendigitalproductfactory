@@ -16,6 +16,8 @@
 
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
+import { SURFACE_READINESS_TOOL_GRANTS } from "@/lib/tak/surface-readiness-tool-grants";
+import { ownSourceCredentialConsequence } from "@/lib/agent-toolchain/source-credential-issue";
 import {
   SURFACE_READINESS_STATES,
   SURFACE_CLIENT_KINDS,
@@ -98,6 +100,17 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
     // creates the credential an external client acts with → consult-gated (TAK §8.4.1).
     consequence: "authority",
+    secretResultKeys: ["credentialsClient"],
+  },
+  {
+    name: "issue_source_credentials_client",
+    description: "Return or create your own assistant-bound OAuth credentials client for source CLI work. Owner and assistant come from this authenticated connection; no recipient or scope override is accepted. The fixed read/work/build scope must already fit this token. Store data.credentialsClient only in the canonical untracked source credential file, never in transcripts. A portal session or unbound token cannot issue it.",
+    inputSchema: { type: "object", properties: {}, required: [], additionalProperties: false },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    consequence: "authority",
+    consequenceForCall: ownSourceCredentialConsequence,
     secretResultKeys: ["credentialsClient"],
   },
 ];
@@ -267,6 +280,26 @@ async function issueGrokCredentialsClientHandler(userId: string, context?: ToolE
   });
 }
 
+async function issueSourceCredentialsClientHandler(userId: string, context?: ToolExecutionContext): Promise<ToolResult> {
+  const [{ prisma }, { issueSourceCredentialsClientForCaller, sourceCredentialsClientName }, { eligibleOAuthCoworkers }, { prepareClientSecret }, { decryptSecret }] = await Promise.all([
+    import("@dpf/db"), import("@/lib/agent-toolchain/source-credential-issue"), import("@/lib/auth/oauth-identity-binding"),
+    import("@/lib/auth/oauth-tokens"), import("@/lib/govern/credential-crypto"),
+  ]);
+  return issueSourceCredentialsClientForCaller(userId, context ?? {}, {
+    withOwnerLock: (owner, actor, run) => prisma.$transaction(async tx => {
+      const key = `source-credentials:${owner}:${actor}`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`;
+      return run({
+        eligible: async () => (await eligibleOAuthCoworkers(owner, null, null, tx, { agentId: actor })).find(candidate => candidate.agentId === actor) ?? null,
+        rows: () => tx.oAuthClient.findMany({ where: { ownerUserId: owner, clientName: sourceCredentialsClientName(actor) },
+          select: { oAuthClientId: true, clientName: true, registrationKind: true, ownerUserId: true, revokedAt: true, allowedScopes: true, clientSecretEnc: true, agentId: true } }),
+        create: async row => { await tx.oAuthClient.create({ data: { ...row, allowedScopes: [...row.allowedScopes], redirectUris: [] } }); },
+        decrypt: decryptSecret, prepareSecret: prepareClientSecret,
+      });
+    }),
+  });
+}
+
 export const surfaceReadinessPack: ToolPack = {
   packId: "surface-readiness",
   definitions,
@@ -274,14 +307,7 @@ export const surfaceReadinessPack: ToolPack = {
     record_surface_readiness: (params, _userId, context) => recordSurfaceReadinessHandler(params, context),
     get_fleet_readiness: (params) => getFleetReadinessHandler(params),
     issue_grok_credentials_client: (_params, userId, context) => issueGrokCredentialsClientHandler(userId, context),
+    issue_source_credentials_client: (_params, userId, context) => issueSourceCredentialsClientHandler(userId, context),
   },
-  // Mirrors TOOL_TO_GRANTS (BI-6AC65187): the heartbeat upserts on a
-  // caller-supplied surfaceKey, so it rides the heartbeat tier.
-  grants: {
-    record_surface_readiness: ["work_capsule_write"],
-    get_fleet_readiness: ["work_capsule_read"],
-    // The credential carries dpf.build, so issuing it needs a build grant; the
-    // handler also refuses anything wider than the caller (BI-84C1F526).
-    issue_grok_credentials_client: ["sandbox_execute"],
-  },
+  grants: SURFACE_READINESS_TOOL_GRANTS,
 };
