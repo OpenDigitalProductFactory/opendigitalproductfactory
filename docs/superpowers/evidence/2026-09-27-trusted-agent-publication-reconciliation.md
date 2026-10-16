@@ -61,11 +61,50 @@ The documentation index was regenerated without a content change (746 pages),
 and the user-guide link check passed for 93 pages. These checks do not establish
 a Jekyll build, accessibility certification, or production deployment.
 
-This entry describes a repair candidate, not a merged/deployed result. Local
-static HTTP byte verification cannot establish public Pages deployment. After
-merge, record the actual Pages deployment and re-fetch all five public URLs,
-comparing the returned ZIP bytes with the retained hashes. The publication
-milestone remains open while known source-currency or assessment gaps remain.
+### Storage repair delivered
+
+PR [#6462](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/6462)
+merged on October 16 at 19:45:57 UTC as `46bd5e2414bc90c1864016ef9d2159c2602fc5d7`.
+Pages build `1290321268` built that commit at 19:47:23 UTC. Actual public GETs at
+19:47:36 UTC returned all five complete, CRC-checked DOCX ZIPs with word/document.xml;
+their bytes matched the deployed Git blobs and retained hashes above. The
+canonical delivery evidence is `cmvbdroq64rbk01ptfwyrqxd4`, with the complete
+observation recorded in WC-B0709AFB activity 45. This closes that broken-download
+repair, without establishing current normative source parity or conformance.
+
+### White-paper edition 2.2 candidate — BI-6CC40F77
+
+The next white-paper edition replaces unsupported market, prior-art, cohort,
+adoption and runtime-assurance claims with sourced, bounded statements. An
+immutable source register and source-declared/runtime-unverified ledger distinguish
+repository declarations, actual observations and remaining assessment work. The
+normative baseline remains explicitly pinned; the later GPP 0.19 source correction
+is separately identified and does not establish runtime enforcement.
+
+The author inspected all 24 rendered pages. The reproducible export preserves
+the canonical conversion and applies a narrowly scoped inline-image extent fix:
+image pixels and every ZIP member except word/document.xml remain unchanged.
+The candidate DOCX is 1,319,790 bytes, SHA-256
+`3b3226ac0b4677b4ef4ba15120413da75372734b31a8362fcdc1df79cc59f62f`.
+Root's separately attributed CLIENT technical/editorial assessment of source
+`84c7070f8dac68409521adf238a58aecad4d1160` was PASS WITH LIMITS, recorded in
+WC-616A782C activities 23 and 27. Its artifact check independently verified ZIP
+member preservation, media identity and fitting image extents, and inspected the
+three figure pages. It did not independently inspect all 24 pages or grant native
+review, legal/rights approval, runtime conformance or publication permission.
+
+The exact reviewed bytes are retained as a plain Git blob using the merged
+storage exception; this candidate does not change global LFS or Pages policy.
+The homepage snapshot note identifies white-paper 2.2 separately and preserves
+the dated-edition warning for the other Word files. Current GPP Markdown is 0.19;
+its retained Word edition is still 0.8. The historical table above describes the
+storage repair's retained snapshots, not the candidate replacement's currency.
+
+Final exact-tree documentation evidence, native review disposition, source merge,
+actual Pages deployment and returned 2.2 bytes remain separate delivery events.
+Record their actual results before closing this white-paper publication slice.
+The wider programme remains incomplete while implementation and assessment gaps
+remain.
 
 ## Surface dispositions
 
