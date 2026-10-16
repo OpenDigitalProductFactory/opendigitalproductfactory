@@ -52,7 +52,12 @@ Uncertain admission returns unrun88 with the same source-bound resume pin.
 Authoritative refusal, foreign identity and active authority owned by another
 process stop recovery. A wrapped executable that cannot spawn is also unrun88;
 an executed child's nonzero exit remains a code result. Windows package-manager
-shims use the existing command resolver.
+shims use the existing command resolver, which launches the installed
+pnpm/Corepack JavaScript entrypoint through Node with literal argv. Native
+pnpm executables run directly; an unsupported shim fails without a shell
+fallback. The observed process runner disables shell parsing on Windows too.
+Local-CI pinning generates a JavaScript forwarding entrypoint so selecting the
+repository version preserves argument boundaries throughout the launch chain.
 Cleanup refusal or uncertainty is reported separately with the original
 lease/session recovery action; it cannot be presented as a verified release
 or change an executed child's nonzero result to success.

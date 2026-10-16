@@ -149,6 +149,9 @@ of this slice for that shared refactoring and existing primitive convergence.
 Use theme tokens, 44px actions, labelled disclosure, keyboard activation and
 stable focus. Tests cover resolved, unsupported, conflicting and missing data,
 hostile text, no false pass/benefit and unchanged read-only action boundaries.
+While a snapshot refresh is pending, announce its busy state and refuse repeat
+activation without removing the focused keyboard target. Completion must not
+steal focus if the operator has moved to another action.
 Run affected Workroom component/read-model suites and both web typechecks, then
 the measured UX-fit guard, independent source review and protected CI/queue.
 

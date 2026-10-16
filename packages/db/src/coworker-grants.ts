@@ -1,12 +1,13 @@
 // Hardcoded coworker tool grants (LIFE-001).
+import registry from "../data/agent_registry.json" with { type: "json" };
 //
 // Split out of workforce-seed.ts, which crossed the 800-LOC module ceiling when
 // the value-stream orchestrators were seeded. That file owns WHO the coworkers
 // are; this one owns what each may call. They were one module only by history.
 //
-// This map is the DURABLE grant source: grants written to the database are
-// re-seeded from here on every boot, so an entry removed here is a grant
-// revoked, not merely a row edited.
+// This map owns workforce-only defaults. External execution identities below
+// project their canonical registry profiles; they are not separately seeded
+// permission owners. Live explicit removals remain authoritative on every boot.
 //
 // Grant counts are deliberately small. `specialization-over-generalization`
 // (core kernel) caps a coworker at 10 tools relevant to its current task and
@@ -42,15 +43,10 @@
 // and dpf-add-archetype keep those steps in-portal and do not list them on
 // Surface A. marketing_read is not a development grant either; the
 // create-presentation skill's marketing-context reads stay in-portal.
-const EXTERNAL_DEVELOPMENT_GRANTS = [
-  "work_room_read", "work_room_write", "registry_read",
-  "work_capsule_read", "work_capsule_write", "work_capsule_adopt",
-  "backlog_read", "backlog_write", "file_read", "code_graph_read",
-  "build_lifecycle", "sandbox_execute", "initiative_evidence_write",
-  "decision_record_create", "backlog_triage", "document_write", "ea_graph_read",
-  "approval_probe_read",
-  "coworker_catalog_read", "coworker_engagement_write",
-];
+// One default owner per canonical profile. Missing provisioning fails closed;
+// the role-floor tests reject a missing/inconsistent external registry entry.
+const externalDevelopmentGrants = (id: string): readonly string[] =>
+  registry.agents.find(agent => agent.agent_id === id)?.config_profile.tool_grants ?? [];
 
 export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // BI-38678404: agent_registry.json already grants AGT-WS-PORTFOLIO
@@ -363,9 +359,9 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   "soc-investigator": ["siem_read", "siem_investigate", "siem_tune", "registry_read"],
   "soc-threat-hunter": ["siem_read", "siem_tune", "registry_read"],
   "soc-incident-commander": ["siem_read", "siem_investigate", "incident_respond", "registry_read"],
-  "external-claude-code": EXTERNAL_DEVELOPMENT_GRANTS,
-  "external-codex": EXTERNAL_DEVELOPMENT_GRANTS,
-  "external-grok": EXTERNAL_DEVELOPMENT_GRANTS,
+  "external-claude-code": externalDevelopmentGrants("AGT-EXT-CLAUDE"),
+  "external-codex": externalDevelopmentGrants("AGT-EXT-CODEX"),
+  "external-grok": externalDevelopmentGrants("AGT-EXT-GROK"),
   // Value-stream orchestrators and the cross-cutting finance specialist
   // (LIFE-001). These lists are RECONCILED with config_profile.tool_grants in
   // agent_registry.json rather than hand-picked: the registry entry was authored

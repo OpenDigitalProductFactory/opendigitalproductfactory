@@ -85,6 +85,16 @@ describe("decision-chain", () => {
     expect(() => assertAppendOnly(existing, { question: "rewritten" })).toThrow(/append-only/);
   });
 
+  it.each([
+    ["escalationRoute", "human", "decided"],
+    ["escalationReason", "damaging-threshold", "decided"],
+    ["escalationFollowOn", "policy-limit", "corpus-gap"],
+  ])("a sealed decision cannot acquire different authority through %s", (field, original, rewritten) => {
+    const existing = { sealedAt: NOW, [field]: original };
+    expect(() => assertAppendOnly(existing, { [field]: rewritten })).toThrow(/append-only/);
+    expect(() => assertAppendOnly(existing, { [field]: original })).not.toThrow();
+  });
+
   it("append-only guard is a no-op on an unsealed row", () => {
     const unsealed = { sealedAt: null, question: "draft" };
     expect(findAppendOnlyViolations(unsealed, { question: "edited" })).toEqual([]);

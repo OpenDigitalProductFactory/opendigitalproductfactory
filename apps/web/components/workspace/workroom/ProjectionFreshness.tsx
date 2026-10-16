@@ -28,8 +28,12 @@ export function ProjectionFreshness({ readAt, lastEvidenceAt }: {
       <p>Checked: <LocalTime value={Number.isFinite(readTime) ? readAt : null} options={SNAPSHOT_TIME_FORMAT} fallback="Unknown" />
         {" · Evidence: "}<LocalTime value={lastEvidenceAt} options={SNAPSHOT_TIME_FORMAT} fallback="Unknown" /></p>
     </div>
-    <Button variant="secondary" className="min-h-11" disabled={pending}
-      onClick={() => startTransition(() => router.refresh())}>
+    <Button variant="secondary" className="min-h-11 aria-disabled:cursor-wait aria-disabled:opacity-60"
+      aria-disabled={pending} aria-busy={pending}
+      onClick={() => {
+        if (pending) return;
+        startTransition(() => router.refresh());
+      }}>
       {pending ? "Refreshing state…" : "Refresh state"}
     </Button>
   </div>;

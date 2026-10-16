@@ -40,6 +40,25 @@ TOKEN_ENV_VAR = "DPF_MCP_BEARER_TOKEN"
 DEFAULT_MCP_URL = "https://localhost/api/mcp/v1"
 
 
+def normalize_mcp_endpoint(endpoint: str) -> str:
+    """Treat an explicit portal origin as the canonical MCP path, never a root resource."""
+    try:
+        parsed = urlsplit(endpoint)
+        credential_keys = {"access_token", "accesstoken", "refresh_token", "refreshtoken", "token", "api_key", "apikey", "key",
+                           "authorization", "client_secret", "clientsecret", "secret", "password"}
+        if (parsed.scheme not in ("http", "https") or not parsed.hostname or "\\" in endpoint
+                or parsed.username or parsed.password or any(char.isspace() for char in endpoint)
+                or any(key.lower().replace("-", "_") in credential_keys for key, _ in parse_qsl(parsed.query))):
+            raise ValueError("Unsafe endpoint")
+        _ = parsed.port  # Validate the port before any configuration is written.
+        if parsed.path in ("", "/"):
+            return urlunsplit((parsed.scheme, parsed.netloc, "/api/mcp/v1", parsed.query, parsed.fragment))
+        return endpoint
+    except ValueError:
+        # Never include an input that may contain credentials in diagnostics.
+        raise ValueError("MCP endpoint must be a credential-free HTTP(S) URL") from None
+
+
 def with_mcp_catalog_tier(mcp_url: str, tier: str) -> str:
     """Set DPF's explicit catalog tier while preserving other query state."""
     if tier not in {"core", "full"}:
@@ -715,13 +734,7 @@ def existing_codex_mcp_endpoint(text: str) -> Optional[str]:
         quoted = match.group(1)
         try:
             endpoint = json.loads(quoted) if quoted.startswith('"') else quoted[1:-1]
-            parsed = urlsplit(endpoint)
-            credential_keys = {"access_token", "accesstoken", "refresh_token", "refreshtoken", "token", "api_key", "apikey", "key",
-                               "authorization", "client_secret", "clientsecret", "secret", "password"}
-            if (parsed.scheme not in ("http", "https") or not parsed.hostname
-                    or parsed.username or parsed.password or any(char.isspace() for char in endpoint)
-                    or any(key.lower().replace("-", "_") in credential_keys for key, _ in parse_qsl(parsed.query))):
-                raise ValueError("Saved URL is not a credential-free HTTP endpoint")
+            normalize_mcp_endpoint(endpoint)
             return endpoint
         except ValueError as error:
             raise ValueError("Cannot preserve saved Codex URL; select an explicit MCP endpoint to repair it") from error
@@ -763,7 +776,7 @@ def codex_mcp_body(text: str, endpoint: Optional[str], declaration_header: Optio
             retained.append(line)
     # An implicit plugin refresh must not change the resource an OAuth login
     # names. Only an explicitly supplied CLI/environment URL replaces it.
-    endpoint = with_mcp_catalog_tier(endpoint or existing_endpoint or DEFAULT_MCP_URL, "full")
+    endpoint = with_mcp_catalog_tier(normalize_mcp_endpoint(endpoint) if endpoint else existing_endpoint or DEFAULT_MCP_URL, "full")
     body = [f'url = {json.dumps(endpoint)}', "enabled = true", *retained]
     if not custom_bearer and mcp_client_bearer_header_required(endpoint, "codex"):
         body.append(f'bearer_token_env_var = "{TOKEN_ENV_VAR}"')
@@ -2343,6 +2356,8 @@ def main(argv: list[str]) -> int:
         text = path.read_text(encoding="utf-8-sig") if path.exists() else ""
         print(existing_codex_mcp_endpoint(text) or "")
         return 0
+    if args.mcp_url:
+        args.mcp_url = normalize_mcp_endpoint(args.mcp_url)
     if args.from_portal:
         import portal_source
 
