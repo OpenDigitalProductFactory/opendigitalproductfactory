@@ -21,7 +21,13 @@ on:
   # STT Digest Watch re-pin PR) never trigger pull_request workflows, so the
   # bot dispatches this workflow onto its branch to post the required checks.
   # The `changes` fail-safe above applies here too: heavy jobs run.
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      workroom_ingestion_scale:
+        description: Qualify Workroom ingestion at 10000 rooms and 100000 events on the CI-owned database
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -629,6 +635,56 @@ jobs:
       - name: Run web unit tests (shard ${{ matrix.shard }}/4)
         if: needs.changes.outputs.heavy == 'true'
         run: pnpm --filter web exec vitest run --shard=${{ matrix.shard }}/4
+
+      # Reuse this job's service and normal migration chain. This is isolated
+      # SQL/Prisma data-path evidence, not native actor or installed acceptance.
+      # Ordinary PRs and merge candidates never opt into the scale workload.
+      - name: Qualify Workroom ingestion on the CI-owned PostgreSQL fixture
+        id: workroom-ingestion-scale
+        if: github.event_name == 'workflow_dispatch' && inputs.workroom_ingestion_scale == true && matrix.shard == 1
+        timeout-minutes: 35
+        env:
+          DPF_INGESTION_SCALE_QUALIFICATION: '1'
+          DPF_INGESTION_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          import { writeFileSync } from 'node:fs';
+          import { join } from 'node:path';
+          const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
+          writeFileSync(join(process.env.RUNNER_TEMP, 'workroom-ingestion-scale-source.json'), JSON.stringify({
+            sourceSha: git('rev-parse', 'HEAD'), tree: git('rev-parse', 'HEAD^{tree}'),
+            runId: process.env.GITHUB_RUN_ID, attempt: process.env.GITHUB_RUN_ATTEMPT,
+            event: process.env.GITHUB_EVENT_NAME, databaseOwner: 'this-job-postgres-service',
+            rooms: 10000, events: 100000, pageCap: 200, cycleCap: 1000,
+            experimentalDeadlineMinutes: 30, installedAcceptance: false, nativeAuthorityAcceptance: false,
+          }, null, 2));
+          NODE
+          pnpm --filter web exec vitest run lib/work-management/room-review-ingestion.scale.postgres.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile="$RUNNER_TEMP/workroom-ingestion-scale.json" 2>&1 | tee "$RUNNER_TEMP/workroom-ingestion-scale.log"
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          import { join } from 'node:path';
+          const report = JSON.parse(readFileSync(join(process.env.RUNNER_TEMP, 'workroom-ingestion-scale.json'), 'utf8'));
+          const scale = report.testResults.flatMap(suite => suite.assertionResults).find(result =>
+            result.fullName === 'admitted PostgreSQL ingestion scale qualification preserves bounded SQL pages, sparse turns and durable cursor/output effects at the declared load');
+          if (scale?.status !== 'passed' || report.numPendingTests !== 0 || report.numFailedTests !== 0) {
+            throw new Error('The actual PostgreSQL scale case did not execute and pass; auditor-only or skipped results cannot qualify scale');
+          }
+          NODE
+
+      - name: Retain Workroom scale qualification evidence
+        if: always() && steps.workroom-ingestion-scale.outcome != 'skipped'
+        uses: actions/upload-artifact@v7
+        with:
+          name: workroom-ingestion-scale-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/workroom-ingestion-scale-source.json
+            ${{ runner.temp }}/workroom-ingestion-scale.json
+            ${{ runner.temp }}/workroom-ingestion-scale.log
+          if-no-files-found: error
+          retention-days: 30
 
   test-packages:
     name: Unit Tests (packages)
