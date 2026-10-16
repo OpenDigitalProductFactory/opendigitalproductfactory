@@ -275,6 +275,78 @@ authority. This work does not make agent proposals calibration-eligible.
 | AC-9 | OBJ-INSTANCE | Requested, executing, completed, failed and unavailable contributions are distinguishable; only revision-bound returned evidence satisfies a completed contribution, and independent review remains separate from authoring. |
 | AC-10 | OBJ-CRAFT | A governed external Codex caller can consult UX through the supported path with its own authenticated identity retained, the consulted UX profession named, and the result correctly attributed without widening authority. |
 
+### Fulfillment contract for AC-9 and AC-10 — review proposal
+
+The existing service-catalog entry point in `mcp/packs/coworker-service-catalog-pack.ts`
+calls `createCoworkerEngagement` in `coworker-service-catalog/engagements.ts`.
+That function inserts a request with `workCapsuleId: null`. The A2A adapter in
+`coworker-service-catalog/a2a-tasks.ts` projects that request as submitted; it
+does not enqueue execution. Repair that connection through the existing task,
+room and evidence lifecycle. Adding a participant or posting a room message is
+not fulfillment. This proposal does not add a second task model or review queue.
+
+The fulfillment executor must resolve the existing engagement, offer, provider,
+requesting actor, exact input artifact revision and authorized room on the server.
+It must check current consent, effective grants, membership, data sensitivity,
+offer authority, funding and any required approvals before scheduling work.
+An executed invitation establishes only its recorded participation permission;
+it is not a blanket authorization to run a service or disclose an artifact.
+Caller metadata, an engagement ID and an accepted historical review are not
+substitutes for these checks. A declined or unavailable request stays outstanding
+with its actual reason; it cannot manufacture an initiative reviewer packet.
+
+Reuse the governed task dispatch and capacity machinery behind
+`mcp/external-coworker-task-adapter.ts`. Its existing callers require either
+general collaboration authority or an exact server-issued review binding.
+An engagement fulfillment binding therefore needs independent authority review:
+it must bind only this approved offer, provider, actor, room, artifact and allowed
+reader/result writer. Calling the dispatcher directly from engagement creation
+without those checks would widen authority and is excluded. Authorization must
+precede participant assignment and enqueue; participant assignment grants no new
+tools. Resolve any narrower offer or provider boundary before dispatch.
+
+Derive a stable dispatch identity from the engagement and immutable input scope
+on the server. Repeated fulfillment of the same scope returns the original task.
+Revalidation is required before its execution, including revocation after enqueue.
+Creation, association and enqueue must survive interruption through the existing
+durable task lifecycle, with tests at each persisted boundary. Reconcile a missing
+association to the original task rather than create another. Unknown provider
+effects remain unknown until the existing task's supported recovery resolves them;
+an automatic retry must not make a second paid or externally visible request.
+
+A returned contribution binds the provider principal, profession, engagement,
+task, room stage, input artifact revision, consulted corpus references and versions,
+criteria applied, findings and author disposition. Missing corpus evidence is an
+explicit limitation. A consult answer is advisory and does not become independent
+review approval. Reuse is checked against the current revision, obligation and
+reviewer independence; a later artifact cannot inherit a pass from stale evidence.
+Persist through the existing task/engagement/room evidence records; audit the schema
+before implementation and identify any missing contract through the normal design
+process instead of hiding it in unvalidated caller metadata.
+
+For the explicit profession consult, retain the authenticated actor used by
+`mcp/packs/profession-decision-pack.ts` and its permission checks. Resolve a
+separate consulted profession from the registered corpus and stamp both identities
+on the decision evidence. Never clear `context.agentId` or impersonate the UX
+coworker. A fulfilled UX service must actually execute as the selected eligible
+specialist; merely consulting UX doctrine does not satisfy its execution evidence.
+
+The routing reproduction supplied by another chat is an acceptance fixture,
+not a verified completed review: BI-2BBD9D34 reports requested engagements despite
+an executed UX invitation. Test the same distinction against the prototype at
+`docs/ux-fit/2026-10-12-routing-management/routing-explorer.html`, immutable source
+`68c6c46255bc2d5c6cf3a1e394ecc7a00ef2f6db`. The original approved UX request
+CE-D5126472 is another recovery case: preserve its approved input and digest;
+do not submit a replacement engagement to make the old request appear fulfilled.
+
+Verification must include rejection before any assignment/enqueue when authority
+is missing, replay after interruption at each durable boundary, provider revocation,
+unknown effects, partial profession coverage, stale revision, and self-review.
+Positive proof requires an actual eligible UX run returning criteria and corpus
+evidence for the exact prototype, plus a separately attributed external consult.
+Mocked dispatch and source tests establish local contracts only. Live fulfillment
+must be exercised on the served canonical target after the containing release.
+
 ### Related work and boundaries
 
 - BI-E27F3600 owns shape/criticality-based review instantiation. BI-0AABCD1F

@@ -34,9 +34,9 @@ behavior; never enable a hold without its executable reviewer path.
 ## Phase 4: room-bound instantiation
 
 - Add `stepReviewBinding` to the external coworker task contract (`apps/web/lib/mcp/external-coworker-task-adapter.ts`), following `initiativeReviewBinding`.
-- Extend `apps/web/lib/backlog/initiative-readiness/server-reviewer-dispatch.ts` to dispatch step reviews idempotently on `step-review:<workroom>:<stage>:<head>:<profession>`. It first upserts `WorkroomParticipant` role `reviewer`, `assignmentSource: "step-review"`, through `room-participant-assignment.server.ts`.
+- Extend `apps/web/lib/backlog/initiative-readiness/server-reviewer-dispatch.ts` to dispatch step reviews idempotently on `step-review:<workroom>:<stage>:<head>:<profession>`. Validate the exact server-issued binding, current caller and provider authority, sensitivity and room access before participant assignment or enqueue. Then upsert `WorkroomParticipant` role `reviewer` through `room-participant-assignment.server.ts`; reconcile its association to the same durable task after interruption.
 - Generalise `resolveBoundInitiativeReviewBinding` in `apps/web/lib/govern/authority/resolve-coworker-tool-authority.ts` to recognise `stepReviewBinding`, so the reviewer's writer carries `independent-reviewer` steering.
-- Tests: dispatch is idempotent; the participant row exists before the TaskRun; steering resolves for the bound writer only.
+- Tests: missing authority creates neither participant nor task; dispatch is idempotent across interrupted association/enqueue; steering resolves for the bound writer only. Assignment itself supplies no tool grants.
 
 ## Phase 5: need and traceable receipts
 
@@ -151,8 +151,80 @@ adding a property that serializers could drop is not counted as complete.
 - Style/token drift guard and `git diff --check`: passed.
 - The managed dependency bootstrap now reports compile-ready with repository-
   pinned pnpm 10.33.2 and zero ignored builds.
-- Merged-code gate, runtime workflow proof and complete acceptance: pending.
+- Merged-code gate passed for the preparation commit `3a856b8d051fb5f3c96d5e4eb332cd5d7f09ea53` against main `dca25ccab156b7aa73e990dc1391ab18ffc205f8`: 13 affected tests, both TS7 programs and 84 host guards. Full unit suite, live workflow proof and complete acceptance remain unrun. These results do not cover later document revisions.
   This source preparation is not the end-to-end specialist participation fix.
 
 BI-B22C8E02 is being handled by the separate chat named `Execute BI-B22C8E02`;
 this branch does not compete for its approval/handoff implementation scope.
+
+## Fulfillment implementation sequence — pending revised review and coverage
+
+These are internal phases of the requested combined delivery, not additional
+approved deliverables. BI-E27F3600 retains the proposed participation repair;
+BI-0AABCD1F remains its research intake until live delivery mapping is accepted.
+The existing coverage block above still applies. MCP is unavailable at this
+checkpoint: no new baseline, coverage receipt or source-head synchronization is
+claimed. Independent source review can proceed on immutable Git artifacts.
+
+1. **Recover the prerequisite through its existing ownership route.** Latest
+   native read before the connector outage shows BI-74B2A8CD open, no active
+   rooms, and WC-8D031416 past its lease grace. Preserve the existing
+   `fix/decision-escalation-rule-table` branch and worktree. When MCP returns,
+   read its current holder/head and use the supported handoff with those exact
+   values and a manifest naming unfinished acceptance and preserved commits.
+   Do not seize its files, revive an old session identity or invent missing
+   escalation functions. No prerequisite handoff has been requested here.
+2. **Obtain the expanded design and plan assessment.** Review spec section 7,
+   especially the fulfillment binding and actor/consulted-profession split,
+   independently of the already-assessed pure helper. Reconcile feedback, then
+   obtain the live baseline and plan coverage required by the recorded shape.
+   Native code semantic task TR-GATE-A65B7093AF74FAEECF27F9CA was admitted for
+   the earlier preparation commit; its outcome remains unknown during this
+   outage and it cannot approve a later document revision.
+3. **Implement the bounded engagement dispatch connection.** Touched seams:
+   `coworker-service-catalog/engagements.ts`, its tests,
+   `mcp/packs/coworker-service-catalog-pack.ts` and its tests,
+   `mcp/external-coworker-task-adapter.ts` and the current authority resolver.
+   Resolve the exact existing engagement/offer/actor/room/artifact on the server,
+   check authority before any assignment or enqueue, and route through the
+   existing durable task lifecycle. Define the bounded binding in that existing
+   contract, with review of the actual grant intersection. Do not silently
+   extend `initiativeReviewBinding` to mean arbitrary advisory work. Inspect
+   schema and current task enqueue/recovery contracts before deciding where the
+   engagement/task association belongs; no new table is presumed necessary.
+4. **Record and project actual fulfillment.** Extend the existing engagement,
+   A2A result projection and room evidence adapters together. Preserve one task
+   per immutable request scope. Map persisted task state and returned evidence
+   honestly, including failed, unavailable and unknown effects. A completed
+   result requires artifact revision, provider/profession attribution, criteria,
+   corpus references or an explicit limitation, and author disposition. Tests
+   cover interruption before and after enqueue, repeated reads/fulfillment,
+   stale artifact, revocation and unreturned provider effects. Use the original
+   approved engagement in recovery; do not create another as a workaround.
+5. **Implement explicit cross-profession consultation.** Inspect
+   `mcp/packs/profession-decision-pack.ts`, its tests and its imported profession
+   evaluator. Add separate actor and consulted-profession semantics through the
+   existing evaluator and decision ledger. Tests prove an authenticated external
+   software engineer can consult registered UX doctrine while its original actor,
+   grants and membership remain intact; an unregistered profession is rejected;
+   no caller becomes the consulted specialist or earns its approval by naming it.
+6. **Integrate obligations and execute acceptance.** Complete the revised
+   classifier/bounded scheduling work and original phases 1–6 only after their
+   dependencies and scope receipts are satisfied. Preserve all required professions
+   across batches. Verify the original approved UX request and routing prototype
+   case with real dispatch and a returned revision-bound contribution on the
+   served containing release. Unit mocks, invitation execution, room comments
+   and task admission alone do not satisfy AC-9 or AC-10.
+
+| Proposed delivery | Owning coverage to reconcile | Verification |
+|---|---|---|
+| Engagement dispatch and returned evidence | BI-E27F3600 AC-9; BI-0AABCD1F research, final live mapping pending | authority-negative, interruption, replay, revocation, stale-revision and actual UX-run proof |
+| Explicit actor-preserving craft consult | BI-E27F3600 AC-10; BI-0AABCD1F research, final live mapping pending | separate actor/consulted profession, corpus evidence, unknown profession rejection and governed live consult |
+| Required authoring/review professions | BI-E27F3600 AC-7 and AC-8 | prototype before React files, more than three obligations, partial failure and independent principals |
+
+**Release and rollback:** keep undecided-hold behavior unchanged until its
+executable reviewer path passes. Preserve task identities and completed history
+on rollback; never replay unknown provider effects. Disabling new admission must
+not erase existing pending work or label it complete. The containing canonical
+release and live acceptance are coordinated with the existing release owner;
+this source worktree does not build or swap the installed runtime.
