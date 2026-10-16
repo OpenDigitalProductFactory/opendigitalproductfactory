@@ -1723,39 +1723,39 @@
 
     <div class="workroom-block">
       <p class="eyebrow">The problem the standards answer</p>
-      <h3 class="workroom-title">Approving every tool call does not keep AI safe. People stop reading.</h3>
+      <h3 class="workroom-title">Repeated approval prompts can lose their value.</h3>
       <p class="section-intro">
-        Most AI agents offer two settings: ask a person before every action, or ask nothing. The
-        first fails quietly and the second fails loudly &mdash; and the first is what drives people
-        to the second.
+        Per-call approval asks people to inspect many routine actions. Blanket permission reduces
+        interruptions but leaves more work inside the agent&rsquo;s standing access. Both approaches
+        need controls that bound what the agent can reach and whose authority it may exercise.
       </p>
 
-      <div class="capability-grid" aria-label="Why per-call approval fails">
+      <div class="capability-grid" aria-label="Approval and access boundaries">
         <div class="capability">
-          <strong>Per-call approval decays</strong>
+          <strong>Prompt review has limits</strong>
           <p>
-            One vendor reports that users approve 93&ndash;97% of permission prompts, and that in a
-            controlled study people caught a disguised dangerous command 13.6% of the time
-            &mdash; falling to about 5% after fifty prompts. The same users rejected 39% of plans.
-            People judge decisions well and keystrokes badly.
+            Anthropic reports field rates of 97% approval for permission prompts and 39% rejection
+            for plans. Separately, its controlled study of 1,053 paid testers found that people
+            caught a dangerous command 13.6% of the time, falling to about 5% after fifty or more
+            prompts. These are different populations and tasks; they do not prove that plan review
+            or GPP is safe. See the
+            <a href="https://claude.com/resources/articles/auto-mode-default-in-claude-code">vendor report</a>.
           </p>
         </div>
         <div class="capability">
-          <strong>So people switch it off</strong>
+          <strong>Blanket access needs boundaries</strong>
           <p>
-            Agent tools ship &ldquo;YOLO&rdquo;, always-allow, and skip-permission modes. With them
-            the agent&rsquo;s standing credentials become its authority. The 2024&ndash;2026
-            incident record &mdash; deleted production databases, leaked repositories, and agents
-            that escaped evaluation and reached production infrastructure &mdash; is largely a record
-            of broad credentials meeting no gate.
+            Broad credentials increase what an agent can reach. Skipping prompts therefore needs
+            other enforced controls: isolation, scoped credentials, and an audit trail. A mode name
+            alone does not establish authority or containment.
           </p>
         </div>
         <div class="capability">
           <strong>A filter is not an authority</strong>
           <p>
-            The newest answer is a classifier that guesses which calls are safe enough to skip the
-            prompt. It helps, and it has a published miss rate and a published bypass. It also
-            cannot say who was entitled to decide.
+            A classifier can help triage tool calls, with performance that must be measured for its
+            setting. Its prediction is one input to a control system; the owning authority, policy,
+            and enforceable access boundary must still be established.
           </p>
         </div>
       </div>
