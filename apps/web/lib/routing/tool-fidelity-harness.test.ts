@@ -74,6 +74,14 @@ describe("actual fidelity observations", () => {
     expect(scoreToolFidelityExecution(expected, undefined, row)).toBe(false);
     expect(scoreToolFidelityExecution(expected, "exec-1", null)).toBe(false);
   });
+  it("uses the exact server-returned audit identity when metrics-only retention intentionally omits arguments", () => {
+    const metrics = { ...row, auditClass: "metrics_only", parameters: {}, result: {} };
+    expect(scoreToolFidelityExecution(expected, "exec-1", metrics, { success: true })).toBe(true);
+    expect(scoreToolFidelityExecution(expected, "exec-1", metrics)).toBe(false);
+    expect(scoreToolFidelityExecution(expected, "exec-1", { ...metrics, parameters: { limit: 3 } }, { success: true })).toBe(false);
+    expect(scoreToolFidelityExecution(expected, "foreign", metrics, { success: true })).toBe(false);
+    expect(scoreToolFidelityExecution(expected, "exec-1", metrics, { success: true, data: { status: "proposed" } })).toBe(false);
+  });
   it.each([
     { ...row, id: "foreign" }, { ...row, userId: "other" }, { ...row, agentId: "other" },
     { ...row, threadId: "other" }, { ...row, taskRunId: "foreign-task" },

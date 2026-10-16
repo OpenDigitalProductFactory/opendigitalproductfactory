@@ -1,18 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { GOLDEN_CASES } from "./tool-fidelity-harness";
+import { GOLDEN_CASES } from "@/lib/routing/tool-fidelity-harness";
 import { runLocalToolFidelityDiagnostic } from "./tool-fidelity-runner";
 import type { ToolExecutionContext } from "@/lib/mcp-tool-types";
+import { accountExecutionVersion } from "@/lib/routing/provider-account-candidates";
 
 const mocks = vi.hoisted(() => ({ call: vi.fn(), manifests: vi.fn(), tools: vi.fn(), version: vi.fn(),
-  proof: vi.fn(), create: vi.fn(), update: vi.fn(), audit: vi.fn(), provider: vi.fn(), grants: vi.fn() }));
+  proof: vi.fn(), create: vi.fn(), update: vi.fn(), audit: vi.fn(), provider: vi.fn(), grants: vi.fn(),
+  account: vi.fn(), budget: vi.fn(), budgetEvent: vi.fn(), executeAdapter: vi.fn(), admit: vi.fn() }));
 vi.mock("@/lib/ai-inference", () => ({ callProvider: mocks.call }));
-vi.mock("./loader", () => ({ loadEndpointManifests: mocks.manifests, invalidateRoutingLoaderCache: vi.fn() }));
+vi.mock("@/lib/routing/loader", () => ({ loadEndpointManifests: mocks.manifests, invalidateRoutingLoaderCache: vi.fn() }));
 vi.mock("@/lib/mcp-tools", () => ({ getAvailableTools: mocks.tools }));
 vi.mock("@/lib/platform/version", () => ({ loadPlatformVersion: mocks.version }));
 vi.mock("@/lib/inference/dmr-runtime-config", () => ({ getLocalThinkingBudgetEvidence: mocks.proof }));
 vi.mock("@/lib/agent-grants", () => ({ isToolAllowedByGrants: mocks.grants }));
 vi.mock("@dpf/db", () => ({ prisma: { endpointTestRun: { create: mocks.create, update: mocks.update },
-  toolExecution: { findUnique: mocks.audit }, modelProvider: { findUnique: mocks.provider } } }));
+  toolExecution: { findUnique: mocks.audit }, modelProvider: { findUnique: mocks.provider },
+  aiProviderConnection: { findUnique: mocks.account } } }));
+vi.mock("@/lib/inference/budget-gate", () => ({ checkAgentBudgetFromRegistry: mocks.budget, writeBudgetEvent: mocks.budgetEvent }));
+vi.mock("@/lib/routing/execution-adapter-registry", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/routing/execution-adapter-registry")>(),
+  getExecutionAdapter: () => ({ execute: mocks.executeAdapter }),
+}));
+vi.mock("@/lib/inference/inference-admission", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/inference/inference-admission")>(), acquireInferenceSlot: mocks.admit,
+}));
 
 const selection = { endpointId: "local", modelId: "ai/test", providerConnectionId: "provider-default-local" };
 const identity = { modelDigest: `sha256:${"a".repeat(64)}`, engineIdentity: "Running: llama.cpp b9879-test",
@@ -26,6 +37,7 @@ const context = () => ({ agentId: "agent", threadId: "thread", userContext: { pl
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.grants.mockReturnValue(true);
+  mocks.budgetEvent.mockResolvedValue(undefined);
   rows = new Map();
   const names = [...new Set(GOLDEN_CASES.map(c => c.correctToolNames[0]!))];
   const tools = [...names, ...Array.from({ length: 48 }, (_, i) => `read_${i}`)].map(name => ({ name,
@@ -156,5 +168,22 @@ describe("bounded local fidelity diagnostic", () => {
     await vi.advanceTimersByTimeAsync(31_000);
     expect((await pending).data).toMatchObject({ qualified: false });
     expect(mocks.call).toHaveBeenCalledTimes(1); expect(reads).toHaveBeenCalledTimes(1);
+  });
+  it("honors the real provider's daily actor budget before adapter dispatch", async () => {
+    const account = { connectionId: selection.providerConnectionId, providerId: "local", status: "active", authMethod: "local",
+      executionChannel: "direct-api", credentialEntryId: null, credentialEntry: null, accessibleModelIds: ["ai/test"],
+      modelsVerifiedAt: null, evidenceStatus: "unreviewed" };
+    mocks.account.mockResolvedValue(account);
+    mocks.provider.mockResolvedValue({ providerId: "local", status: "active", baseUrl: "http://diagnostic.invalid/v1", authMethod: "none" });
+    const manifests = await mocks.manifests();
+    mocks.manifests.mockResolvedValue([{ ...manifests[0], providerConnectionVersion: accountExecutionVersion(account) }]);
+    mocks.budget.mockResolvedValue({ status: "rejected", actualTokens: 100, limitTokens: 100, ratioPercent: 100 });
+    const real = await vi.importActual<typeof import("@/lib/inference/ai-inference")>("@/lib/inference/ai-inference");
+    mocks.call.mockImplementation(real.callProvider);
+    const result = await runLocalToolFidelityDiagnostic(selection, "u", context());
+    expect(result.data).toMatchObject({ qualified: false });
+    expect(mocks.budget).toHaveBeenCalledWith("agent");
+    expect(mocks.executeAdapter).not.toHaveBeenCalled(); expect(mocks.admit).not.toHaveBeenCalled();
+    expect(reads).not.toHaveBeenCalled(); expect(mocks.call).toHaveBeenCalledTimes(1);
   });
 });

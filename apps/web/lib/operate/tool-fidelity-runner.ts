@@ -11,14 +11,14 @@ import { getOllamaApiRoot } from "@/lib/inference/ollama-url";
 import { canonicalLocalModelKey } from "@/lib/inference/local-model-management";
 import { isRecord } from "@/lib/shared/coerce";
 import { boundLargeStrings } from "@/lib/evidence/bounded-evidence-output";
-import { loadEndpointManifests, invalidateRoutingLoaderCache } from "./loader";
-import { endpointGenuinelyClearsSensitivity } from "./sensitivity-clearance";
-import { resolveDefaultExecutionAdapter } from "./execution-plan";
-import { isLocalProviderId } from "./provider-locality";
-import { createRoutingTraceId } from "./routing-trace";
-import { currentInferenceSignal, withInferenceCancellation, awaitInferenceCancellation } from "./governed-inference-deadline";
-import { GOLDEN_CASES, scoreToolFidelityExecution, scoreToolFidelitySelection } from "./tool-fidelity-harness";
-import { DEFAULT_FIDELITY_THRESHOLD, DEFAULT_MIN_SAMPLE_COUNT } from "./tool-fidelity-policy";
+import { loadEndpointManifests, invalidateRoutingLoaderCache } from "@/lib/routing/loader";
+import { endpointGenuinelyClearsSensitivity } from "@/lib/routing/sensitivity-clearance";
+import { resolveDefaultExecutionAdapter } from "@/lib/routing/execution-plan";
+import { isLocalProviderId } from "@/lib/routing/provider-locality";
+import { createRoutingTraceId } from "@/lib/routing/routing-trace";
+import { currentInferenceSignal, withInferenceCancellation, awaitInferenceCancellation } from "@/lib/routing/governed-inference-deadline";
+import { GOLDEN_CASES, scoreToolFidelityExecution, scoreToolFidelitySelection } from "@/lib/routing/tool-fidelity-harness";
+import { DEFAULT_FIDELITY_THRESHOLD, DEFAULT_MIN_SAMPLE_COUNT } from "@/lib/routing/tool-fidelity-policy";
 
 type Selection = { endpointId: string; modelId: string; providerConnectionId: string };
 type Observation = { surfaceSize: number; caseIndex: number; taskClass: string;
@@ -121,7 +121,8 @@ export async function runLocalToolFidelityDiagnostic(
                 accountAuthMethod: before.endpoint.accountAuthMethod, executionChannel: before.endpoint.executionChannel,
                 recipeId: null, contractFamily: "model-calibration.endpoint-diagnostic", executionAdapter: initial.identity.executionAdapter,
                 maxTokens: 512, providerSettings: {}, toolPolicy: { toolChoice: "auto", allowParallelToolCalls: false }, responsePolicy: {} },
-              undefined, undefined, { traceId }), currentInferenceSignal()!));
+              undefined, undefined, { traceId, agentId, threadId,
+                ...(context.featureBuildId ? { buildId: context.featureBuildId } : {}) }), currentInferenceSignal()!));
           const after = await readIdentity();
           const actualModel = isRecord(answer.raw) && typeof answer.raw.model === "string" ? answer.raw.model : null;
           if (!after || after.fingerprint !== initial.fingerprint || !actualModel
@@ -139,10 +140,10 @@ export async function runLocalToolFidelityDiagnostic(
           const id = executed.governance?.toolExecutionId;
           const row = id && !executions.has(id) ? await prisma.toolExecution.findUnique({ where: { id },
             select: { id: true, toolName: true, parameters: true, userId: true, agentId: true, threadId: true,
-              taskRunId: true, success: true, durationMs: true, result: true } }) : null;
+              taskRunId: true, success: true, durationMs: true, result: true, auditClass: true } }) : null;
           if (id) { observation.toolExecutionId = id; executions.add(id); }
           observation.executionPassed = executed.success && scoreToolFidelityExecution({ toolName: scored.call.name,
-            parameters: scored.call.arguments, userId, agentId, threadId, taskRunId: context.taskRunId ?? null }, id, row);
+            parameters: scored.call.arguments, userId, agentId, threadId, taskRunId: context.taskRunId ?? null }, id, row, executed);
           observation.status = observation.executionPassed ? "passed" : "failed";
           observation.reason = observation.executionPassed ? "verified_governed_read" : "execution_not_verified";
           if (Date.now() >= deadline || outerSignal?.aborted) {

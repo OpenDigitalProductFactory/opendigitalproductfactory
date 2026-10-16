@@ -513,7 +513,7 @@ async function runEndpointTestsHandler(
       || params["allModels"] === true || params["allEndpoints"] === true) {
       return { success: false, message: "Fidelity diagnostics require a single explicit selection without other diagnostic modes." };
     }
-    const { runLocalToolFidelityDiagnostic } = await import("@/lib/routing/tool-fidelity-runner");
+    const { runLocalToolFidelityDiagnostic } = await import("@/lib/operate/tool-fidelity-runner");
     return runLocalToolFidelityDiagnostic({ endpointId: typeof params["endpointId"] === "string" ? params["endpointId"] : "",
       modelId: typeof params["modelId"] === "string" ? params["modelId"] : "",
       providerConnectionId: typeof params["providerConnectionId"] === "string" ? params["providerConnectionId"] : "" }, userId, context);

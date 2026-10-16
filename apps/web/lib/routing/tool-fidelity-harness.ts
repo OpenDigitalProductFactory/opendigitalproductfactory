@@ -6,7 +6,7 @@
 // locates THIS model's empirical selection cliff, replacing the assumed ~15.
 //
 // Inference is INJECTED (`runTurn`) so the pure scorer unit-tests without a live
-// model; tool-fidelity-runner.ts composes the existing run_endpoint_tests
+// model; operate/tool-fidelity-runner.ts composes the existing run_endpoint_tests
 // diagnostic mode with real local inference and governed-read observations.
 // The legacy pure scorer emits ToolFidelitySample[] to store in
 // ModelProfile.customScores (via tool-fidelity-policy).
@@ -15,7 +15,7 @@ import { TASK_CLASSES } from "@/lib/tak/intent-taxonomy";
 import { fromJSONSchema } from "zod";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { isRecord } from "@/lib/shared/coerce";
-import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import { mergeToolFidelitySample, type ToolFidelitySample } from "./tool-fidelity-policy";
 
 export interface GoldenCase {
@@ -115,13 +115,21 @@ export type FidelityExecutionExpectation = {
 /** Exact persisted identity, not time-window correlation or model/handler claims. */
 export function scoreToolFidelityExecution(
   expected: FidelityExecutionExpectation, executionId: string | undefined, row: unknown,
+  invocationResult?: Pick<ToolResult, "success" | "data">,
 ): boolean {
   if (!executionId || !isRecord(row) || row.id !== executionId || row.success !== true
     || typeof row.durationMs !== "number" || !Number.isFinite(row.durationMs) || row.durationMs < 0
-    || !isRecord(row.result) || row.result.success !== true
+    || !isRecord(row.result)
     || (isRecord(row.result.data) && row.result.data.status === "proposed")) return false;
   if (row.userId !== expected.userId || row.agentId !== expected.agentId || row.threadId !== expected.threadId
     || row.taskRunId !== expected.taskRunId || row.toolName !== expected.toolName) return false;
+  // The ID comes directly from our original governedDispatch, never a lookup or
+  // caller-supplied claim. Metrics-only retention intentionally drops plaintext
+  // arguments; it does not unbind that exact invocation from its validated input.
+  if (row.auditClass === "metrics_only") {
+    if (invocationResult?.success !== true || invocationResult.data?.status === "proposed" || row.result.error) return false;
+    if (isRecord(row.parameters) && Object.keys(row.parameters).length === 0) return true;
+  } else if (row.result.success !== true) return false;
   try { return canonicalJson(row.parameters) === canonicalJson(expected.parameters); }
   catch { return false; }
 }

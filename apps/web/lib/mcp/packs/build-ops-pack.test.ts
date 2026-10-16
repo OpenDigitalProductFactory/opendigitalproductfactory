@@ -75,7 +75,7 @@ vi.mock("@/lib/git-utils", () => gitUtils);
 
 const endpointRunner = vi.hoisted(() => ({ runEndpointTests: vi.fn() }));
 const fidelityRunner = vi.hoisted(() => ({ runLocalToolFidelityDiagnostic: vi.fn() }));
-vi.mock("@/lib/routing/tool-fidelity-runner", () => fidelityRunner);
+vi.mock("@/lib/operate/tool-fidelity-runner", () => fidelityRunner);
 vi.mock("@/lib/endpoint-test-runner", () => endpointRunner);
 
 const selfAbandon = vi.hoisted(() => ({ abandonOwnStalledBuild: vi.fn() }));

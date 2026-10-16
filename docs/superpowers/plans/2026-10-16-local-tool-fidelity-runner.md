@@ -62,8 +62,8 @@ BI-0169B7D7 and BI-A472354E own broader routing/profile work, outside this runne
 
 Declared implementation paths: apps/web/lib/routing/tool-fidelity-harness.ts,
 apps/web/lib/routing/tool-fidelity-harness.test.ts,
-apps/web/lib/routing/tool-fidelity-runner.ts,
-apps/web/lib/routing/tool-fidelity-runner.test.ts,
+apps/web/lib/operate/tool-fidelity-runner.ts,
+apps/web/lib/operate/tool-fidelity-runner.test.ts,
 apps/web/lib/mcp/packs/build-ops-pack.ts,
 apps/web/lib/mcp/packs/build-ops-pack.test.ts,
 apps/web/lib/mcp-governed-execute.ts,
@@ -77,6 +77,14 @@ it must never accept a caller-supplied ID or manufacture one after audit failure
 The optional ID alone is not success: readback still validates the matching
 terminal read, actor and invocation. Pre-execution refusals cannot qualify.
 Keep existing scorer and normal diagnostics backward compatible.
+
+The orchestration leaf belongs to operate, which may depend on inference and
+routing; the pure scorer stays in routing. Metrics-only audit rows intentionally
+omit plaintext arguments/results. In that case, verify the successful original
+server dispatch result and its exact returned audit ID against the positive
+persisted actor/thread/task/tool execution; never infer identity by timing.
+Retained nonempty arguments still match exactly. Preserve agent/thread/build
+attribution into callProvider so its ordinary daily budget guard remains active.
 
 Impact contract: normal source claims resolved. Resolve graph-linked tests for
 all six implementation/type entries before RED; if the graph is unavailable,
