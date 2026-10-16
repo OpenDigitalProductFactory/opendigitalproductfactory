@@ -26,7 +26,7 @@ describe("reviewer state in its Workroom", () => {
     const old = { ...run("input-required"), id: "old-row", taskRunId: "TR-OLD" };
     const current = { ...run("completed"), id: "current-row", taskRunId: "TR-CURRENT" };
     const identity = (rowId: string, sourceHeadSha: string, issuedAt: string) => ({
-      rowId, capsuleId: "WC-1", requestBound: true, sourceHeadSha,
+      rowId, capsuleId: "WC-1", requestBound: true, requestSchemaVersion: 2, requestArtifactType: "code-change", identityArtifactType: "code-change", identityArtifactTypePresent: true, sourceHeadSha,
       currentHeadSha: "a".repeat(40), issuedAt, receiptId: null,
     });
     const view = await loadSemanticReviewRoomProjection({
@@ -46,7 +46,7 @@ describe("reviewer state in its Workroom", () => {
     const view = await loadSemanticReviewRoomProjection({
       taskRun: { findMany: async () => [run("input-required"), { ...run("completed"), id: "row-2", taskRunId: "TR-2" }] },
       $queryRaw: vi.fn().mockResolvedValue([1, 2].map(index => ({
-        rowId: `row-${index}`, capsuleId: "WC-1", requestBound: true, sourceHeadSha: "a".repeat(40),
+        rowId: `row-${index}`, capsuleId: "WC-1", requestBound: true, requestSchemaVersion: 2, requestArtifactType: "code-change", identityArtifactType: "code-change", identityArtifactTypePresent: true, sourceHeadSha: "a".repeat(40),
         currentHeadSha: "a".repeat(40), issuedAt: `2026-09-08T19:0${index}:00Z`, receiptId: null,
       }))),
     }, ["WC-1"], now);
@@ -74,7 +74,7 @@ describe("reviewer state in its Workroom", () => {
 
   it("exposes a correlated receipt as evidence without promoting Workroom completion", async () => {
     const view = await loadSemanticReviewRoomProjection({ taskRun: { findMany: async () => [run("completed")] },
-      $queryRaw: vi.fn().mockResolvedValue([{ rowId: "row-1", capsuleId: "WC-1", requestBound: true,
+      $queryRaw: vi.fn().mockResolvedValue([{ rowId: "row-1", capsuleId: "WC-1", requestBound: true, requestSchemaVersion: 2, requestArtifactType: "code-change", identityArtifactType: "code-change", identityArtifactTypePresent: true,
         sourceHeadSha: "a".repeat(40), currentHeadSha: "a".repeat(40), issuedAt: "2026-09-08T19:00:00Z",
         requesterAgentId: "AGT-EXT-CODEX", receiptId: "receipt-1", receiptDecision: "pass", receiptSummary: "The committed change was reviewed.",
         receiptCreatedAt: now,
