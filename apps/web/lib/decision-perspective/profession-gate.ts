@@ -24,6 +24,8 @@ import { evaluateDecisionPerspective } from "./evaluator";
 import { resolveProfileMaterialForProfession } from "./material";
 import { resolveRecommendedOptionId } from "./option-recommendation";
 import { createDecisionInteractionId, persistDecisionInteraction } from "./persistence";
+import { decisionAllowsStep, decisionEscalationMessage, withDecisionEscalation } from "./decision-escalation";
+import type { DecisionDeclarations } from "@/lib/govern/authority/escalation-gate";
 import type {
   DecisionDomainClass,
   DecisionGateKey,
@@ -111,6 +113,12 @@ function operatorMessageFor(
   professionKey: string | null,
   corpusGap: AcumenGapNominationResult | null = null,
 ): string {
+  const routedMessage = decisionEscalationMessage(evaluation);
+  if (routedMessage) {
+    const gap = evaluation.escalation?.route === "independent-review" && optimisationDispatched(evaluation, corpusGap)
+      ? ` Insufficient craft corpus: the ${professionKey} profession has corpus gap ${corpusGap?.needId ?? "(pending)"} open for consolidation.` : "";
+    return routedMessage + gap;
+  }
   if (optimisationDispatched(evaluation, corpusGap)) {
     return (
       `Insufficient craft corpus: the ${professionKey} profession cannot decide this `
@@ -149,6 +157,7 @@ function failClosedEvaluation(input: {
   return {
     outcomeType: "escalate",
     selectedProfileId: input.profile.profileId,
+    evaluationFault: true,
     fallbackProfileId: null,
     profileVersionId: input.profile.currentVersion.versionId,
     confidenceBefore: 0,
@@ -163,7 +172,7 @@ function failClosedEvaluation(input: {
     riskTier: input.riskTier,
     question: input.question,
     options: input.options,
-    rationale: `WSID fail-closed escalation: ${errorClass(input.error)}. The decision could not be safely evaluated, so it routes to the owner.`,
+    rationale: `WSID evaluation fault: ${errorClass(input.error)}. Caller risk and declarations determine the review route.`,
     materialScores: [],
     sources: [],
     gapReason: "material-below-confidence",
@@ -210,6 +219,7 @@ export async function evaluateProfessionDecisionGate(input: {
   scoredOptions?: DecisionScoredOption[];
   domainClass: DecisionDomainClass;
   riskTier: DecisionRiskTier;
+  declarations?: DecisionDeclarations;
   /** Where the decision originated, e.g. "/coworker". Recorded on the ledger. */
   routeContext: string;
   phaseFrom?: string | null;
@@ -275,7 +285,7 @@ export async function evaluateProfessionDecisionGate(input: {
     professionProfileSelected = resolved.professionProfileSelected;
     professionKey = resolved.professionKey;
   } catch (error) {
-    const evaluation = failClosedEvaluation({
+    const evaluation = withDecisionEscalation(failClosedEvaluation({
       profile,
       question,
       options,
@@ -283,7 +293,7 @@ export async function evaluateProfessionDecisionGate(input: {
       riskTier,
       error,
       resolvedProfileChain: [profile.profileId],
-    });
+    }), input.declarations);
     traceWsid("wsid.profession-gate.invoked", {
       interactionId,
       agentIdentity: input.agentIdentity,
@@ -319,7 +329,7 @@ export async function evaluateProfessionDecisionGate(input: {
     });
     traceWsid("wsid.ledger.written", { interactionId, outcomeType: evaluation.outcomeType });
     return {
-      allowed: false,
+      allowed: decisionAllowsStep(evaluation),
       interactionId,
       evaluation,
       operatorMessage: operatorMessageFor(evaluation, professionProfileSelected, professionKey),
@@ -400,6 +410,7 @@ export async function evaluateProfessionDecisionGate(input: {
     evaluation.resolvedProfileChain = resolved.resolvedProfileChain;
   }
 
+  evaluation = withDecisionEscalation({ ...evaluation, riskTier }, input.declarations);
   // BI-6DCF772F. The synchronous evaluator echoes scoredOptions but cannot do
   // the async commandment lookup; apply the same guarded argmax the WWMD/WWWD
   // wrapper uses so a profession decision with caller-supplied option features
@@ -474,7 +485,7 @@ export async function evaluateProfessionDecisionGate(input: {
   });
 
   return {
-    allowed: evaluation.outcomeType === "recommend" || evaluation.outcomeType === "arbitrate",
+    allowed: decisionAllowsStep(evaluation),
     interactionId: persisted.interactionId,
     evaluation,
     operatorMessage: operatorMessageFor(evaluation, professionProfileSelected, professionKey, corpusGap),

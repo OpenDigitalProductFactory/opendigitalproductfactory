@@ -82,6 +82,28 @@ const base = {
 };
 
 describe("evaluateProfessionDecisionGate", () => {
+  it("uses independent review for a non-damaging unresolved craft decision", async () => {
+    const result = await evaluateProfessionDecisionGate({ ...base, db: makeDb() as never,
+      resolver: fakeResolver() as never, evaluator: () => makeEval({ outcomeType: "defer", coverageGap: true }) });
+    expect(result.evaluation.escalation?.route).toBe("independent-review");
+    expect(result.allowed).toBe(true);
+    expect(result.operatorMessage).toMatch(/independent review/i);
+  });
+
+  it("retains declared damage through a profession resolver failure", async () => {
+    const result = await evaluateProfessionDecisionGate({ ...base, db: makeDb() as never,
+      declarations: { consequence: "irreversible" }, resolver: vi.fn().mockRejectedValue(new Error("resolver unavailable")) as never });
+    expect(result.allowed).toBe(false);
+    expect(result.evaluation.evaluationFault).toBe(true);
+    expect(result.evaluation.escalation?.reasonCode).toBe("damaging-consequence");
+  });
+
+  it("does not let evaluator output lower the caller's critical risk", async () => {
+    const result = await evaluateProfessionDecisionGate({ ...base, riskTier: "critical", db: makeDb() as never,
+      resolver: fakeResolver() as never, evaluator: () => makeEval({ outcomeType: "recommend", riskTier: "low" }) });
+    expect(result.allowed).toBe(false);
+    expect(result.evaluation.escalation?.route).toBe("human");
+  });
   it("decides from the profession's own profile and records professionProfileSelected=true", async () => {
     const db = makeDb();
     const result = await evaluateProfessionDecisionGate({
@@ -187,7 +209,7 @@ describe("evaluateProfessionDecisionGate", () => {
     expect(data.fallbackProfileId).toBe(MARK_DPF_PLATFORM_PROFILE.profileId);
   });
 
-  it("coverage gap forces defer and is not allowed", async () => {
+  it("coverage gap records defer and independent review under the current interim", async () => {
     const db = makeDb();
     const result = await evaluateProfessionDecisionGate({
       ...base,
@@ -197,19 +219,21 @@ describe("evaluateProfessionDecisionGate", () => {
     });
     expect(result.evaluation.outcomeType).toBe("defer");
     expect(result.evaluation.rationale).toMatch(/data-architect profession corpus/);
-    expect(result.allowed).toBe(false);
+    expect(result.allowed).toBe(true);
+    expect(result.evaluation.escalation).toMatchObject({ route: "independent-review", followOn: "corpus-gap" });
   });
 
-  it("fail-closed: a resolver error escalates and is still recorded", async () => {
+  it("a resolver fault records outstanding independent review without inventing a verdict", async () => {
     const db = makeDb();
     const result = await evaluateProfessionDecisionGate({
       ...base,
       db: db as never,
       resolver: vi.fn().mockRejectedValue(new Error("db down")) as never,
     });
-    expect(result.allowed).toBe(false);
+    expect(result.allowed).toBe(true);
     expect(result.evaluation.outcomeType).toBe("escalate");
-    expect(result.evaluation.rationale).toMatch(/fail-closed/);
+    expect(result.evaluation.rationale).toMatch(/evaluation fault/);
+    expect(result.evaluation.escalation).toMatchObject({ route: "independent-review", followOn: "evaluation-fault" });
     expect(db.decisionInteraction.create).toHaveBeenCalled();
     // Even the fail-closed row belongs to WSID — an escalation the operator
     // must see in the tier whose gate produced it.
@@ -577,7 +601,8 @@ describe("evaluateProfessionDecisionGate corpus-gap nomination", () => {
       routeContext: "/coworker",
     });
     expect(result.corpusGap).toEqual({ nominated: true, needId: "CWN-EA-1" });
-    expect(result.allowed).toBe(false);
+    expect(result.allowed).toBe(true);
+    expect(result.evaluation.escalation?.route).toBe("independent-review");
     expect(result.operatorMessage).toMatch(/Insufficient craft corpus/);
     expect(result.operatorMessage).toContain("CWN-EA-1");
     expect(result.operatorMessage).not.toMatch(/owner call \(/);
@@ -618,10 +643,12 @@ describe("evaluateProfessionDecisionGate corpus-gap nomination", () => {
       nominateGap,
     });
     expect(result.corpusGap).toEqual({ nominated: true, needId: "CWN-1" });
-    expect(result.operatorMessage).toMatch(/needs an owner call/);
+    expect(result.allowed).toBe(false);
+    expect(result.evaluation.escalation?.route).toBe("human");
+    expect(result.operatorMessage).toMatch(/requires a person.*critical risk/);
   });
 
-  it("keeps the owner-call message when no gap could be opened", async () => {
+  it("keeps independent review outstanding when corpus optimization could not be opened", async () => {
     const nominateGap = vi.fn().mockResolvedValue({ nominated: false, reason: "unknown-acumen" });
     const result = await evaluateProfessionDecisionGate({
       ...base,
@@ -630,7 +657,8 @@ describe("evaluateProfessionDecisionGate corpus-gap nomination", () => {
       evaluator: lowConfidence,
       nominateGap,
     });
-    expect(result.operatorMessage).toMatch(/needs an owner call/);
+    expect(result.evaluation.escalation?.route).toBe("independent-review");
+    expect(result.operatorMessage).toMatch(/Independent review is outstanding/);
   });
 
   it("is fail-open: a throwing nominator changes neither the verdict nor the result shape", async () => {

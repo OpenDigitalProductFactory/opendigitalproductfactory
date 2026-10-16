@@ -11,6 +11,8 @@ import {
  */
 const RECOMMENDATION_BAND = 0.7;
 import { createDecisionInteractionId, findExistingDecisionInteraction, persistDecisionInteraction } from "./persistence";
+import { decisionAllowsStep, decisionEscalationMessage, withDecisionEscalation } from "./decision-escalation";
+import type { DecisionDeclarations } from "@/lib/govern/authority/escalation-gate";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { MARK_DPF_PLATFORM_PROFILE } from "./default-profile";
 import { resolveGateRecommendedOptionId } from "./option-recommendation";
@@ -23,6 +25,7 @@ import { contentAwareDirectionalOutcome } from "./directional-outcome";
 export { RECENT_OVERRIDE_WINDOW_DAYS } from "./override-count";
 import {
   RISK_PENALTY,
+  delegatedRiskLimit,
   hasPrincipleConflict,
   orderedProfileChain,
   riskWithin,
@@ -185,9 +188,7 @@ export function evaluateDecisionPerspective(
   // Beyond the policy's limit the decision escalates, and says which limit.
   const policy = selectedProfile.autonomyPolicy;
   const maxRiskForRecommendation = policy.maxRiskForRecommendation ?? "medium";
-  const delegatedLimit = policy.allowArbitration && !riskWithin(policy.maxRiskForArbitration, maxRiskForRecommendation)
-    ? policy.maxRiskForArbitration
-    : maxRiskForRecommendation;
+  const delegatedLimit = delegatedRiskLimit(policy);
   if (!riskWithin(input.riskTier, delegatedLimit)) {
     return {
       ...baseResult,
@@ -196,6 +197,7 @@ export function evaluateDecisionPerspective(
         `Escalate: ${input.riskTier} risk exceeds the delegated policy of ${selectedProfile.profileId} `
         + `(maxRiskForArbitration=${policy.maxRiskForArbitration}${policy.allowArbitration ? "" : ", arbitration off"}; `
         + `maxRiskForRecommendation=${maxRiskForRecommendation}).`,
+      policyLimitExceeded: true,
     };
   }
 
@@ -322,12 +324,13 @@ export function failClosedEvaluation(input: {
   const className = errorClass(input.error);
   const isWwwd = input.isWwwd ?? false;
   const rationale = isWwwd
-    ? `WWWD fail-closed escalation: ${className}. The decision could not be safely evaluated, so it routes to the owner.`
-    : `WWMD fail-closed escalation: ${className}. The decision kernel could not safely evaluate this advancement request.`;
+    ? `WWWD evaluation fault: ${className}. Caller risk and declarations determine the review route.`
+    : `WWMD evaluation fault: ${className}. Caller risk and declarations determine the review route.`;
 
   return {
     outcomeType: "escalate",
     selectedProfileId: input.profile.profileId,
+    evaluationFault: true,
     fallbackProfileId: null,
     profileVersionId: input.profile.currentVersion.versionId,
     confidenceBefore: 0,
@@ -354,6 +357,8 @@ export function operatorMessageFor(
   orgProfileSelected = false,
   isWwwd = false,
 ): string {
+  const routedMessage = decisionEscalationMessage(evaluation);
+  if (routedMessage) return routedMessage;
   if (isWwwd) {
     const scope = orgProfileSelected
       ? "your organization's recorded stance"
@@ -404,6 +409,7 @@ export async function evaluatePerspectiveGate(input: {
   scoredOptions?: DecisionScoredOption[];
   domainClass: DecisionDomainClass;
   riskTier: DecisionRiskTier;
+  declarations?: DecisionDeclarations;
   routeContext: string;
   build?: PerspectiveGateBuild | null;
   phaseFrom?: string | null;
@@ -464,7 +470,7 @@ export async function evaluatePerspectiveGate(input: {
       profile = resolved.selectedProfile ?? MARK_DPF_PLATFORM_PROFILE;
     }
   } catch (error) {
-    const evaluation = failClosedEvaluation({
+    const evaluation = withDecisionEscalation(failClosedEvaluation({
       profile,
       question: input.question,
       options: input.options,
@@ -473,7 +479,7 @@ export async function evaluatePerspectiveGate(input: {
       error,
       resolvedProfileChain: [input.profileId ?? profile.profileId],
       isWwwd,
-    });
+    }), input.declarations);
 
     const invokeEvent = isWwwd ? "wwwd.org-gate.invoked" : "wwmd.gate.invoked";
     console.info(
@@ -523,7 +529,7 @@ export async function evaluatePerspectiveGate(input: {
     );
 
     return {
-      allowed: false,
+      allowed: decisionAllowsStep(evaluation),
       interactionId,
       evaluation,
       operatorMessage: operatorMessageFor(evaluation, orgProfileSelected, isWwwd),
@@ -576,7 +582,7 @@ export async function evaluatePerspectiveGate(input: {
         })}`
       );
       return {
-        allowed: existing.evaluation.outcomeType === "recommend" || existing.evaluation.outcomeType === "arbitrate",
+        allowed: decisionAllowsStep(existing.evaluation),
         interactionId: existing.interactionId,
         evaluation: existing.evaluation,
         operatorMessage: operatorMessageFor(existing.evaluation, orgProfileSelected, isWwwd),
@@ -684,6 +690,7 @@ export async function evaluatePerspectiveGate(input: {
   if (isWwwd && input.alignmentCorpora) applyConstitutionalAlignment({
     evaluation, question: input.question, corpora: input.alignmentCorpora,
   });
+  evaluation = withDecisionEscalation({ ...evaluation, riskTier: input.riskTier }, input.declarations);
   evaluation.recommendedOptionId = await resolveGateRecommendedOptionId({
     db: input.db,
     scoredOptions: input.scoredOptions,
@@ -742,7 +749,7 @@ export async function evaluatePerspectiveGate(input: {
   }
 
   return {
-    allowed: evaluation.outcomeType === "recommend" || evaluation.outcomeType === "arbitrate",
+    allowed: decisionAllowsStep(evaluation),
     interactionId: persisted.interactionId,
     evaluation,
     operatorMessage: operatorMessageFor(evaluation, orgProfileSelected, isWwwd),

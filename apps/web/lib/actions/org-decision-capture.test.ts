@@ -64,6 +64,20 @@ beforeEach(() => {
 });
 
 describe("captureOrgDecisionOutcome — chosenOptionId (BI-6DCF772F)", () => {
+  it("captures a human-routed recommendation using escalation capture", async () => {
+    mockPrisma.decisionInteraction.findUnique.mockResolvedValue(row({ outcomeType: "recommend", escalationRoute: "human" }));
+    const result = await captureOrgDecisionOutcome({ interactionId: "DI-ORG-1", answer: "Approve with the recorded limits", makeStanding: false });
+    expect(result.ok).toBe(true);
+    expect(mockPrisma.escalationCapture.create).toHaveBeenCalledOnce();
+    expect(mockPrisma.deferralCapture.create).not.toHaveBeenCalled();
+  });
+
+  it.each(["independent_review", "decided"])("rejects owner capture for %s", async (escalationRoute) => {
+    mockPrisma.decisionInteraction.findUnique.mockResolvedValue(row({ escalationRoute }));
+    const result = await captureOrgDecisionOutcome({ interactionId: "DI-ORG-1", answer: "Proceed within the recorded limits", makeStanding: false });
+    expect(result.ok).toBe(false);
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+  });
   it("rejects a chosen option that isn't one of the row's scored options, writing nothing", async () => {
     mockPrisma.decisionInteraction.findUnique.mockResolvedValue(row());
 

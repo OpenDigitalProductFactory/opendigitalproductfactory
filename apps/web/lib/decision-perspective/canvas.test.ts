@@ -66,6 +66,16 @@ function evaluation(
 }
 
 describe("sanitizeOperatorText", () => {
+  it("does not ask an owner to resolve an independent review", () => {
+    const view = projectDecisionCanvas({ evaluation: evaluation({ outcomeType: "defer", escalation: { route: "independent-review", reasonCode: "independent-review-required", damaging: false, followOn: "corpus-gap" } }) });
+    expect(view.recommendation.nextActionLabel).toBe("Independent review outstanding");
+  });
+
+  it("requires human review even when the outcome recommends proceeding", () => {
+    const view = projectDecisionCanvas({ evaluation: evaluation({ escalation: { route: "human", reasonCode: "damaging-critical-risk", damaging: true, followOn: null } }) });
+    expect(view.recommendation.nextActionLabel).toBe("Ask for an owner decision");
+    expect(view.recommendation.state).toBe("needs-review");
+  });
   it("removes raw tool and skill names from operator-facing prose", () => {
     expect(
       sanitizeOperatorText(

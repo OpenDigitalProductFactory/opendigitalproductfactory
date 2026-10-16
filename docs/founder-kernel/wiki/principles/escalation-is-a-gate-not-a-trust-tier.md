@@ -59,6 +59,29 @@ A tool declared as a proposal is always put to a person, because that is its dec
 
 A coworker set to propose, not act, puts every change it attempts to a person, and no recorded policy decides it on that person's behalf.
 
+## Decision outcomes
+
+A decision reaches a person if and only if it is damaging: critical risk, a declared consequence, a crossed threshold, or a regulation.
+
+Damage precedes a decisive corpus result and remains declared by the caller when evaluation fails.
+
+A non-damaging decision answered by the corpus stays decided; a decisive decline does not permit the step.
+
+Every other non-damaging decision routes to independent review with its corpus, vector, capability, policy-limit or evaluation-fault follow-on recorded.
+
+Legacy rows with no recorded escalation route retain their existing human-review and replay behavior.
+
+Novelty alone does not require a person. A new proposition aligned with recorded
+guidance may proceed within the existing delegated risk and confidence policy;
+its novelty remains recorded. Independent review remains outstanding under the
+current R3 interim, which permits the step within its existing authority.
+BI-E27F3600 owns reviewer execution and the qualified change from that interim.
+
+The route is recorded separately from the evaluation outcome. Human queues and
+capture actions read the route; uncertainty and craft-gap analysis retain the
+original evaluation outcome. Missing historical routes are never backfilled or
+recomputed to give old work new permission.
+
 ## Why
 
 Founder ruling, 2026-09-09: "The only reason to escalate to a human is for more sensitive, damaging decisions, notably if there is no automated decision process to steer decisions, as the delegation system for the human in the loop." And, on where the rule belongs: "less prose, more process."
@@ -69,7 +92,10 @@ The emphatic half of the ruling is a second path TO a human, never a path away f
 
 Two authorities stay separate on purpose. The operator decides, per coworker, whether ordinary side effects need approval at all; a graduated coworker keeps acting alone and this rule does not touch that. This rule decides only, among the actions that configuration would have escalated, which ones genuinely need a person. Its conformance guard proves exhaustively that it can only remove escalations, never add one — a fix for over-escalation that introduced new approval envelopes would be the same defect wearing the opposite coat.
 
-This page is generated against the gate it describes. `resolveEscalation` exports these sentences and `check-escalation-gate.ts` fails the build if this page does not state them verbatim, so doctrine and enforcement cannot drift apart on any install.
+This page is checked against the gate it describes. `describeEscalationRule`
+and `describeDecisionEscalationRule` export its rule sentences. The conformance
+tests in `apps/web/lib/govern/authority/escalation-gate.conformance.test.ts`
+require them verbatim, so doctrine and enforcement cannot drift apart.
 
 ## How to apply
 
