@@ -32,9 +32,21 @@ human interface is planned.
 
 ## Backlog coverage
 
-Decomposition decision: **decomposed**. Immutable coverage receipt: **pending**.
-This document does not substitute for that receipt. The root needs its actual
-spec/research/review baseline before server-selected coverage can be recorded.
+- Decision: decomposed
+- Parent: BI-B87FB47D
+- Receipt: blocked-by: BI-B87FB47D has no approved initiative scope baseline, and the repository provider cannot resolve the unpublished design/plan commit; publish the reviewed immutable source, record author research and independent spec approval, then record plan coverage.
+- Dependencies: observation -> orchestration -> mobile-runtime; phone depends on observation/mobile-runtime/continuation; result depends on observation/orchestration; device depends on result and a capable leased host; exit depends on all preceding work.
+
+These are live mappings, not a claim that the pending receipt exists:
+
+- observation -> BI-E15E8897
+- orchestration -> BI-FE8CB8EC
+- mobile-runtime -> BI-05EDC704
+- continuation -> BI-05715F4C
+- phone -> BI-8D1F1094
+- result -> BI-4B208A34
+- device -> BI-224C94C7
+- exit -> BI-3A3E0177
 
 | Key | BI | Prerequisites | Objective / contract / flow / verification |
 | --- | --- | --- | --- |
