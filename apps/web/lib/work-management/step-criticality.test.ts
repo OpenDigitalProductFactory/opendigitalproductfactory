@@ -4,6 +4,7 @@ import { READINESS_SHAPES } from "@/lib/backlog/initiative-readiness/types";
 import { DECISION_RISK_TIERS } from "@/lib/decision-perspective/types";
 import {
   resolveStepCriticality,
+  resolveStepReviewNeed,
   STEP_CRITICALITIES,
   type StepCriticalityInput,
 } from "./step-criticality";
@@ -77,5 +78,32 @@ describe("resolveStepCriticality", () => {
         }
       }
     }
+  });
+});
+
+
+describe("review need from the room and step", () => {
+  it("draws different review depth for identical comment-only files in small and large rooms", () => {
+    const changed = { ...routine, collaborationShape: "change-consequential" as const, impactedProfessions: ["ux-design"], requiredProfessions: [] };
+    expect(resolveStepReviewNeed(changed)).toMatchObject({ criticality: "routine", authority: "advisory", requiredReviewProfessions: [] });
+    const large = resolveStepReviewNeed({ ...changed, effectiveShape: "large" });
+    expect(large).toMatchObject({ criticality: "critical", authority: "blocking" });
+    expect(large.requiredReviewProfessions).toEqual(expect.arrayContaining(["ux-design", "enterprise-architecture"]));
+  });
+  it("retains every declared or impacted family beyond the old cap", () => {
+    const need = resolveStepReviewNeed({ ...routine, effectiveShape: "medium", impactedProfessions: ["ux-design", "security", "finance", "data-architect"], requiredProfessions: ["release-service-management"] });
+    expect(need.requiredReviewProfessions).toHaveLength(5);
+    expect(need.authority).toBe("blocking");
+  });
+  it("keeps a declared craft obligation on a routine step and rejects invented families", () => {
+    expect(resolveStepReviewNeed({ ...routine, impactedProfessions: [], requiredProfessions: ["ux-design"] }).requiredReviewProfessions).toContain("ux-design");
+    expect(() => resolveStepReviewNeed({ ...routine, impactedProfessions: [], requiredProfessions: ["invented"] })).toThrow(/registered profession/i);
+  });
+  it("narrows stewardship review depth without lowering criticality or the damaging human boundary", () => {
+    const input = { ...routine, effectiveShape: "large" as const, collaborationShape: "craft-stewardship" as const, impactedProfessions: ["ux-design"], requiredProfessions: [] };
+    expect(resolveStepReviewNeed(input)).toMatchObject({ criticality: "critical", authority: "blocking", requiredReviewProfessions: ["ux-design"] });
+    const damaging = resolveStepReviewNeed({ ...input, damaging: true });
+    expect(damaging.authority).toBe("blocking-with-person");
+    expect(damaging.requiredReviewProfessions).toContain("enterprise-architecture");
   });
 });

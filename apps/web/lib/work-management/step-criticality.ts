@@ -1,3 +1,6 @@
+import { PROFESSION_REGISTRY } from "@/lib/decision-perspective/resolve-profession-profile";
+import { resolveReviewAuthority } from "@/lib/govern/authority/escalation-gate";
+import type { WorkroomShapeKey } from "./room-shapes";
 import type { ReadinessShape } from "@/lib/backlog/initiative-readiness/types";
 import type { DecisionRiskTier } from "@/lib/decision-perspective/types";
 import type { WorkShapeAdvance } from "./work-shapes";
@@ -44,4 +47,21 @@ export function resolveStepCriticality(input: StepCriticalityInput): StepCritica
     input.declaredCriticality ? STEP_CRITICALITIES.indexOf(input.declaredCriticality) : 0,
   );
   return STEP_CRITICALITIES[rank]!;
+}
+
+
+/** Review need precedes path-to-craft selection. Explicit obligations are never truncated. */
+export function resolveStepReviewNeed(input: StepCriticalityInput & {
+  collaborationShape?: WorkroomShapeKey | null;
+  impactedProfessions: readonly string[];
+  requiredProfessions: readonly string[];
+}) {
+  const criticality = resolveStepCriticality(input);
+  const required = new Set(input.requiredProfessions);
+  if (criticality !== "routine") for (const profession of input.impactedProfessions) required.add(profession);
+  if (criticality === "critical" && (input.collaborationShape !== "craft-stewardship" || input.damaging)) required.add("enterprise-architecture");
+  const registered = new Set(PROFESSION_REGISTRY.families.map(family => family.professionKey));
+  if ([...required, ...input.impactedProfessions].some(key => !registered.has(key))) throw new Error("Review requirements must use a registered profession.");
+  return { criticality, authority: resolveReviewAuthority({ criticality, damaging: input.damaging }),
+    requiredReviewProfessions: PROFESSION_REGISTRY.families.map(family => family.professionKey).filter(key => required.has(key)) };
 }

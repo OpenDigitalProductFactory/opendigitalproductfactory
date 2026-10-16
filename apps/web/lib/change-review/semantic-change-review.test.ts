@@ -263,3 +263,10 @@ describe("surface-neutral review compatibility", () => {
     expect(malformed.parseError).toBe(true);
   });
 });
+
+
+it("retains bounded server craft provenance across a paid-for checkpoint without accepting it from a provider", () => {
+  const saved = { decision: "pass", issues: [], summary: "Reviewed controls", craftGrounding: [{ agentId: "review-finance", professionKey: "finance", corpusPages: ["professions/finance/controls"], corpusDigest: "a".repeat(64), critiqueRefs: [], calibratedCritiqueCount: null }] };
+  expect(restoreSemanticReviewCheckpoint(saved, "review-finance").craftGrounding).toEqual(saved.craftGrounding);
+  expect(parseSemanticReviewResponse(JSON.stringify(saved)).craftGrounding).toBeUndefined();
+});

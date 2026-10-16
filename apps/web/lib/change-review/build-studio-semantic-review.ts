@@ -115,7 +115,7 @@ export async function reviewBuildStudioAssembledChange(args: {
     mode,
   };
   try {
-    operationInput.specialistSelection = await prepareWorkroomReviewSpecialists({ userId: args.build.createdById, capsuleId: capsule.capsuleId, actorAgentId: null, changedFiles });
+    operationInput.specialistSelection = await prepareWorkroomReviewSpecialists({ userId: args.build.createdById, capsuleId: capsule.capsuleId, actorAgentId: null, changedFiles, artifact: diffPatch });
   } catch (error) {
     return { kind: "unavailable", reason: getErrorMessage(error), mayContinue: false };
   }

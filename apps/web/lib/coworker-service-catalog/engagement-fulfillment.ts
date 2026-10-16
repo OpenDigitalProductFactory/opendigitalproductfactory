@@ -158,7 +158,7 @@ export function validateEngagementContribution(binding: EngagementTaskBinding, c
   if (!text(contribution.summary) || !nonemptyStrings(contribution.criteria) || !nonemptyStrings(contribution.corpusRefs) || !Array.isArray(contribution.findings)) return null;
   const reads = executions.filter(row => row.success && row.toolName === "read_source_at_version" && engagementToolAllowed(binding, row.toolName, record(row.parameters)));
   const corpus = executions.filter(row => row.success && row.toolName === "wiki_query");
-  const critiqueLookups = executions.filter(row => row.success && row.toolName === "search_ux_critique_corpus");
+  const critiqueLookups = executions.filter(row => row.success && row.toolName === "search_ux_critique_corpus" && record(row.parameters).calibratedOnly === true);
   const slugs = new Set(corpus.flatMap(row => {
     const results = record(record(row.result).data).results;
     return Array.isArray(results) ? results.flatMap(page => text(record(page).slug) ? [String(record(page).slug)] : []) : [];

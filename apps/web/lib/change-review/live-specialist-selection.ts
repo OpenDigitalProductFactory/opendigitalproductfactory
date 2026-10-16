@@ -1,3 +1,4 @@
+import { ACUMEN_ROOM_SHAPES } from "@/lib/work-management/acumen-room-shapes";
 import { createHash } from "node:crypto";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { deriveImpactedAcumens } from "@/lib/decision-perspective/acumen-impact";
@@ -60,14 +61,20 @@ export async function resolveLiveReviewSpecialists(input: {
   const eligible = rows.filter(row => row.status === "active" && !row.archived && row.lifecycleStage === "production");
   const byId = new Map(eligible.map(row => [row.agentId, row]));
   for (const professionKey of requiredProfessions) {
+    const steward = ACUMEN_ROOM_SHAPES.find(shape => shape.professionKey === professionKey)?.coworkerAgentId;
+    const stewardId = steward ? selectableCoworkerIdentityRefs(steward).canonicalAgentId : null;
+    const family = PROFESSION_REGISTRY.families.find(family => family.professionKey === professionKey)!;
     const candidates = eligible.filter(row => {
       const pair = selectableCoworkerIdentityRefs(row.agentId);
-      if (authorAgentIds.includes(pair.canonicalAgentId) || !byId.has(pair.canonicalAgentId) || !byId.has(pair.runtimeAgentId)) return false;
+      if ((stewardId && pair.canonicalAgentId !== stewardId) || authorAgentIds.includes(pair.canonicalAgentId) || !byId.has(pair.canonicalAgentId) || !byId.has(pair.runtimeAgentId)) return false;
       return [pair.canonicalAgentId, pair.runtimeAgentId].every(id => {
         const member = byId.get(id);
         return member && findProfessionFamilyForAgentIdentity(member)?.professionKey === professionKey;
       });
-    }).sort((left, right) => left.agentId.localeCompare(right.agentId, "en"));
+    }).sort((left, right) => {
+      const rank = (row: AgentRow) => family.roles.findIndex(role => [row.name, row.slugId].includes(role));
+      return rank(left) - rank(right) || left.agentId.localeCompare(right.agentId, "en");
+    });
     const candidate = candidates[0];
     if (candidate) selection.specialists.push({ professionKey, agentId: selectableCoworkerIdentityRefs(candidate.agentId).canonicalAgentId, displayName: PROFESSION_REGISTRY.families.find(family => family.professionKey === professionKey)!.label });
     else selection.unavailableProfessions.push(professionKey);

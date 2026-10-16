@@ -247,6 +247,23 @@ describe("profession-bound dispatch", () => {
     expect(branch[1]).toContain("professions/finance/controls");
     expect(branch[3]?.agentDisplayName).toBe("Finance");
   });
+  it("keeps craft findings advisory and lets the independent reviewer assess them after contribution", async () => {
+    vi.mocked(routeAndCall).mockImplementation(async (_messages, _system, _sensitivity, options) => ({ content: JSON.stringify(options?.agentId === "review-finance"
+      ? { decision: "fail", issues: [{ severity: "critical", description: "Advisory control concern" }], summary: "Proposed control change" }
+      : { decision: "pass", issues: [], summary: "The recorded implementation handles the concern" }) } as never));
+    const result = await dispatchRoutedSemanticReview("review controls", context, undefined, db, async () => true);
+    expect(result.decision).toBe("pass");
+    const core = vi.mocked(routeAndCall).mock.calls.find(call => call[3]?.agentId === "change-reviewer")!;
+    expect(core[0][0]?.content).toContain("Advisory control concern");
+    expect(result.issues[0]).toMatchObject({ advisory: true });
+  });
+  it("retains the independent reviewer's blocking finding after advisory contributions", async () => {
+    vi.mocked(routeAndCall).mockImplementation(async (_messages, _system, _sensitivity, options) => ({ content: JSON.stringify(options?.agentId === "change-reviewer"
+      ? { decision: "fail", issues: [{ severity: "critical", description: "Required verification does not cover this behavior" }], summary: "Repair required" }
+      : { decision: "pass", issues: [], summary: "Contribution complete" }) } as never));
+    const result = await dispatchRoutedSemanticReview("review controls", context, undefined, db, async () => true);
+    expect(result.decision).toBe("fail");
+  });
   it("executes all five required families in bounded batches and retains one failed contribution", async () => {
     const families = PROFESSION_REGISTRY.families.filter(family => ["finance", "security", "data-architect", "enterprise-architecture", "release-service-management"].includes(family.professionKey));
     expect(families).toHaveLength(5);
@@ -260,9 +277,22 @@ describe("profession-bound dispatch", () => {
       visited.push(id); running++; peak = Math.max(peak, running);
       try { if (id === "review-finance") throw new Error("provider unavailable"); return await execute(); } finally { running--; }
     }, craftDb, async () => true);
-    expect(visited).toHaveLength(6);
+    expect(visited).toHaveLength(5);
+    expect(visited).not.toContain("change-reviewer");
     expect(peak).toBeLessThanOrEqual(3);
     expect(result.decision).toBe("inconclusive");
+  });
+  it("consults the calibrated UX critique corpus and records an empty set as a limitation", async () => {
+    const ux = { ...selection, requiredProfessions: ["ux-design"], specialists: [{ professionKey: "ux-design", agentId: "AGT-906", displayName: "UX Design Critic" }] };
+    const uxDb = { agent: { findMany: vi.fn().mockResolvedValue([{ agentId: "AGT-906", name: "ux-design-critic", slugId: "ux-design-critic" }]) }, wikiPage: { findMany: vi.fn().mockResolvedValue([{ slug: "professions/ux-design/density", title: "Density", abstract: "Pertinent detail", body: "Keep pertinent detail visible and disclose secondary configuration progressively.", metadata: {} }]) } };
+    const lookup = vi.fn().mockResolvedValue({ success: true, data: { total: 0, grounding: "UNGROUNDED", entries: [] } });
+    vi.mocked(routeAndCall).mockResolvedValue({ content: JSON.stringify({ decision: "pass", issues: [], summary: "Reviewed surface" }) } as never);
+    const result = await dispatchRoutedSemanticReview("prototype", { ...context, specialistSelection: ux, specialistIds: ["AGT-906"] }, undefined, uxDb, async () => true, lookup);
+    expect(lookup).toHaveBeenCalledWith("user-1");
+    const branch = vi.mocked(routeAndCall).mock.calls.find(call => call[3]?.agentId === "AGT-906")!;
+    expect(branch[1]).toContain("UNGROUNDED");
+    expect(result.craftGrounding).toEqual([expect.objectContaining({ professionKey: "ux-design", corpusPages: ["professions/ux-design/density"], calibratedCritiqueCount: 0 })]);
+    expect(result.summary).toMatch(/no calibrated UX critiques/i);
   });
   it("dispatches nothing when current selection authority is refused", async () => {
     const result = await dispatchRoutedSemanticReview("private diff", context, undefined, db, async () => false);

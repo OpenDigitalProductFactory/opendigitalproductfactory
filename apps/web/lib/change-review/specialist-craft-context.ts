@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 // BI-39C7D449 — the pre-commit specialist lane consults its own craft.
 //
 // The lane already routes changed files to the right specialist
@@ -55,6 +56,8 @@ export type SpecialistCraftContext = {
   status: string;
   /** Pages actually layered into the branch prompt. */
   pages: number;
+  corpusPages?: string[];
+  corpusDigest?: string;
 };
 
 /**
@@ -123,6 +126,8 @@ export async function resolveSpecialistCraftContexts(input: {
       professionKey: corpus.professionKey,
       status: corpus.status,
       pages: corpus.promptBlock ? corpus.pages.length : 0,
+      corpusPages: corpus.promptBlock ? corpus.pages.map(page => page.slug) : [],
+      ...(corpus.promptBlock ? { corpusDigest: createHash("sha256").update(corpus.promptBlock).digest("hex") } : {}),
     });
     if (corpus.promptBlock) promptBlocks.set(agentId, corpus.promptBlock);
   }

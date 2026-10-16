@@ -213,7 +213,7 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
   let singleFlight: SemanticReviewSingleFlightClaim | null = null;
 
   try {
-    operationInput.specialistSelection = await prepareWorkroomReviewSpecialists({ userId, capsuleId, actorAgentId: context?.agentId ?? null, changedFiles });
+    operationInput.specialistSelection = await prepareWorkroomReviewSpecialists({ userId, capsuleId, actorAgentId: context?.agentId ?? null, changedFiles, artifact });
     if (operationInput.specialistSelection.unavailableProfessions.length) return { success: false, error: "required_specialists_unavailable", message: "Required specialists are unavailable. Their contributions remain outstanding.", data: { requiredProfessions: operationInput.specialistSelection.unavailableProfessions } };
     const coordination = resolveSemanticReviewCoordination(operationInput);
     const packet = createSemanticReviewRequest(operationInput, {

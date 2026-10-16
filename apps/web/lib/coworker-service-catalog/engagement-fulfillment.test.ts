@@ -190,3 +190,14 @@ describe("bounded advisory engagement fulfillment", () => {
     expect(parseEngagementTaskBinding({ ...binding, ...change })).toBeNull();
   });
 });
+
+
+it("does not treat an uncalibrated UX search as calibration evidence", () => {
+  const contribution = JSON.stringify({ summary: "Compact rows", criteria: ["Pertinent detail"], corpusRefs: ["professions/ux-design/hierarchy"], findings: [] });
+  const executions = [
+    { id: "read-1", toolName: "read_source_at_version", success: true, parameters: { repositoryFullName: artifactRef.repositoryFullName, version: artifactRef.commitSha, path: artifactRef.path, expectedBlobId: artifactRef.providerBlobId }, result: {} },
+    { id: "wiki-1", toolName: "wiki_query", success: true, parameters: {}, result: { data: { results: [{ slug: "professions/ux-design/hierarchy" }] } } },
+    { id: "critique-1", toolName: "search_ux_critique_corpus", success: true, parameters: { calibratedOnly: false }, result: { data: { total: 1, grounding: "grounded" } } },
+  ];
+  expect(validateEngagementContribution(binding, contribution, executions, "ux-design")).toBeNull();
+});

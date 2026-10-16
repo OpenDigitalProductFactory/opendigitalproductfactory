@@ -1,3 +1,4 @@
+import { splitUnifiedDiffByFile } from "@/lib/build/private-paths";
 import { resolveLiveReviewSpecialists, type LiveReviewSpecialistSelection } from "./live-specialist-selection";
 import { resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 
@@ -7,7 +8,7 @@ type Room = { id: string; capsuleId: string; archivedAt: Date | null; scopeClaim
 type PreparationDb = { workroom: { findUnique(args: unknown): Promise<Room | null> };
   agent: Parameters<typeof resolveLiveReviewSpecialists>[0]["db"]["agent"];
   taskRun: { findMany(args: unknown): Promise<Array<{ initiatingAgentId: string | null; currentAgentId: string | null }>> } };
-type PreparationInput = { userId: string; capsuleId: string; actorAgentId: string | null; changedFiles: readonly string[] };
+type PreparationInput = { userId: string; capsuleId: string; actorAgentId: string | null; changedFiles: readonly string[]; artifact?: string };
 type PreparationDeps = { db: PreparationDb; authorize(input: PreparationInput & { workroomId: string }): Promise<boolean> };
 const aliases = { select: { aliases: { where: { aliasType: "agent", issuer: "" }, select: { aliasValue: true } } } };
 
@@ -24,7 +25,7 @@ export async function prepareWorkroomReviewSpecialists(input: PreparationInput, 
     authorAgentIds.push(...tasks.flatMap(row => [row.initiatingAgentId, row.currentAgentId]).filter((id): id is string => Boolean(id)));
   }
   const shape = resolveWorkShapeClaim(room.scopeClaims);
-  return resolveLiveReviewSpecialists({ userId: input.userId, capsuleId: room.capsuleId, changedFiles: input.changedFiles, authorAgentIds,
+  return resolveLiveReviewSpecialists({ userId: input.userId, capsuleId: room.capsuleId, changedFiles: [...new Set([...input.changedFiles, ...splitUnifiedDiffByFile(input.artifact ?? "").blocks.flatMap(block => block.paths)])], authorAgentIds,
     requiredProfessions: shape?.stages.flatMap(stage => stage.requiredProfessions ?? []) ?? [], db });
 }
 

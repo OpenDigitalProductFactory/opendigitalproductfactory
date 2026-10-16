@@ -15,6 +15,11 @@ describe("server-owned specialist preparation", () => {
     expect(selection.unavailableProfessions).toContain("ux-design");
     expect(selection.specialists).toEqual([]);
   });
+  it("includes paths from the immutable diff even when the supplied file list omits the prototype", async () => {
+    const deps = fixture();
+    const result = await prepareWorkroomReviewSpecialists({ userId: "user-1", capsuleId: "WC-ONE", actorAgentId: "codex", changedFiles: ["notes.txt"], artifact: "diff --git a/docs/prototype.html b/docs/prototype.html\n+<button>Continue</button>" }, deps);
+    expect(result.requiredProfessions).toContain("ux-design");
+  });
   it("refuses room access before reading the eligible-coworker catalog", async () => {
     const deps = fixture(); deps.authorize.mockResolvedValue(false);
     await expect(prepareWorkroomReviewSpecialists({ userId: "user-1", capsuleId: "WC-ONE", actorAgentId: "codex", changedFiles: ["prototype.html"] }, deps)).rejects.toThrow(/room.*access/i);

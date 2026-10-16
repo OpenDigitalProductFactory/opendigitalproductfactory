@@ -39,7 +39,16 @@ export interface SemanticReviewIssue {
   description: string;
   location?: string;
   suggestion?: string;
+  /** Set only by the server for a craft contribution; never provider authority. */
+  advisory?: true;
 }
+
+export const semanticReviewCraftGroundingSchema = z.object({
+  agentId: z.string().min(1).max(256), professionKey: z.string().min(1).max(256),
+  corpusPages: z.array(z.string().min(1).max(2000)).max(50), corpusDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  critiqueRefs: z.array(z.string().min(1).max(2000)).max(20), calibratedCritiqueCount: z.number().int().min(0).nullable(),
+}).strict();
+export type SemanticReviewCraftGrounding = z.infer<typeof semanticReviewCraftGroundingSchema>;
 
 export interface SemanticReviewResult {
   decision: SemanticReviewDecision;
@@ -53,6 +62,8 @@ export interface SemanticReviewResult {
   /** Trusted routing diagnostics, never parsed from a provider response. */
   routingEligibility?: RoutingEligibility[];
   failureAnalysisReview?: { adequate: boolean; rationale: string };
+  /** Server-supplied material delivered to the executed specialist branch. */
+  craftGrounding?: SemanticReviewCraftGrounding[];
 }
 
 export interface SemanticReviewParseDiagnostic {
@@ -391,7 +402,9 @@ function responseStructure(raw: string): z.infer<typeof responseStructureSchema>
 /** A persisted normalized result is not a new provider response. Validate the
  * common review fields, then restore only bounded, content-free diagnostics. */
 export function restoreSemanticReviewCheckpoint(value: unknown, agentId: string): SemanticReviewResult {
-  const result = parseSemanticReviewResponse(JSON.stringify(value) ?? "");
+  let result = parseSemanticReviewResponse(JSON.stringify(value) ?? "");
+  const grounding = z.object({ craftGrounding: z.array(semanticReviewCraftGroundingSchema).max(50) }).safeParse(value);
+  if (grounding.success) result = { ...result, craftGrounding: grounding.data.craftGrounding };
   const eligibility = z.object({ decision: z.literal("inconclusive"),
     inconclusiveReason: z.literal("review-endpoint-ineligible"), routingEligibility: z.array(z.unknown()).min(1).max(5),
   }).safeParse(value);

@@ -160,6 +160,41 @@ in 28 suites; both TS7 programs, GPP freshness and style/token checks passed.
 Native specialist execution, canonical integration and live acceptance are still
 unrun. No interim decision hold has been enabled.
 
+Source hardening checkpoint, 2026-10-16: selection now prefers the registered
+acumen steward rather than alphabetically substituting a different role in the
+same family. A red case selected UX Accessibility in place of UX Design Critic.
+Required craft contributions stay advisory: the independent Change Reviewer runs
+after all contributions complete, receives their proposed findings as data, and
+retains the existing severity-based verdict contract. Missing contributions leave
+review inconclusive before that final inference. The critic gains no blocking or
+calibrated authority. An explicit regression reproduced the unwanted blocker.
+
+UX branches now read the calibrated critique corpus as well as their recorded
+profession pages. Server metadata retains page references and the exact prompt
+material fingerprint across paid-for checkpoints. An empty calibrated set is an
+explicit limitation in the combined receipt. Provider text cannot manufacture
+that metadata. Engagement projection additionally requires calibratedOnly=true
+for its UX critique lookup; the negative test reproduced false calibration before
+correction. Preparation includes paths parsed from the immutable diff, even when
+the supplied path list omits the prototype. The existing diff splitter is reused.
+The broader source run passed 530 tests in 30 suites; subsequent focused checks
+and both TS7 programs passed. Native execution and integration remain unrun.
+
+The pure resolveStepReviewNeed calculation now composes shape/stage floors with
+the shared review-authority rule and retains every required family. Four new red
+cases preceded the implementation; 75 tests in three related suites passed.
+Identical impacted paths draw core-only review in a routine small step and the
+full impacted set plus architecture in a critical large step. Stewardship narrows
+review depth without lowering criticality or the damaging human boundary. This
+calculation is not yet a runtime consumer or an enabled interim hold.
+
+Canonical DEV recovery101 is served at b3dc42544260f6afccae94bf1e767af88b45383a;
+readiness now confirms prerequisite6432 containment. The amended research receipt
+was refused because the Workroom still records historical head48ad78b7a1b3.
+Follow the supported head-sync procedure after freezing the current source; do
+not bind a review to a fabricated or rewound Workroom head. Current design and
+architecture receipts are stale, not renewed approvals.
+
 ## Phase 4: room-bound instantiation
 
 - Add `stepReviewBinding` to the external coworker task contract (`apps/web/lib/mcp/external-coworker-task-adapter.ts`), following `initiativeReviewBinding`.

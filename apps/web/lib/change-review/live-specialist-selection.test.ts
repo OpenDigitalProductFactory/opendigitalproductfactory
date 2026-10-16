@@ -1,20 +1,28 @@
+import { selectableCoworkerIdentityRefs } from "@/lib/coworker-record/selectable-coworker";
 import { describe, expect, it, vi } from "vitest";
 import { resolveLiveReviewSpecialists, isLiveReviewSpecialistSelectionCurrent, liveReviewSpecialistSelectionSchema } from "./live-specialist-selection";
 
 const agent = (agentId: string, role: string) => ({ agentId, name: role, slugId: role, status: "active", archived: false, lifecycleStage: "production" });
 describe("live profession reviewer selection", () => {
   it("retains every required registered family beyond the resident roster and the old cap", async () => {
-    const rows = [agent("review-data", "data-architect"), agent("review-ux", "ux-design-critic"), agent("review-security", "security-engineer"), agent("review-finance", "finance-controller")];
+    const rows = ["data-architect", "ux-design-critic", "security-engineer", "finance-controller"].flatMap(role => [...new Set(Object.values(selectableCoworkerIdentityRefs(role)))].map(id => agent(id, role)));
     const result = await resolveLiveReviewSpecialists({ userId: "user-1", capsuleId: "WC-TEST", changedFiles: [], requiredProfessions: ["data-architect", "ux-design", "security", "finance"], authorAgentIds: [], db: { agent: { findMany: vi.fn().mockResolvedValue(rows) } } });
     expect(result.specialists).toHaveLength(4);
     expect(result.unavailableProfessions).toEqual([]);
-    expect(result.specialists.map(row => row.agentId)).toContain("review-finance");
+    expect(result.specialists.map(row => row.professionKey)).toContain("finance");
   });
   it("binds selection to the authenticated person and exact room, using human craft labels", async () => {
     const result = await resolveLiveReviewSpecialists({ userId: "user-1", capsuleId: "WC-TEST", changedFiles: [], requiredProfessions: ["finance"], authorAgentIds: [], db: { agent: { findMany: vi.fn().mockResolvedValue([agent("review-finance", "finance-controller")]) } } });
     expect(result).toMatchObject({ userId: "user-1", capsuleId: "WC-TEST" });
     expect(result.specialists[0]?.displayName).toMatch(/finance/i);
     expect(result.specialists[0]?.displayName).not.toBe("review-finance");
+  });
+  it("uses the recorded UX design steward rather than substituting accessibility for design critique", async () => {
+    const rows = [agent("AGT-903", "ux-accessibility-agent"), agent("ux-accessibility-agent", "ux-accessibility-agent"), agent("AGT-906", "ux-design-critic"), agent("ux-design-critic", "ux-design-critic")];
+    const result = await resolveLiveReviewSpecialists({ userId: "user-1", capsuleId: "WC-TEST", changedFiles: ["prototype.html"], authorAgentIds: [], db: { agent: { findMany: vi.fn().mockResolvedValue(rows) } } });
+    expect(result.specialists[0]?.agentId).toBe("AGT-906");
+    const missing = await resolveLiveReviewSpecialists({ userId: "user-1", capsuleId: "WC-TEST", changedFiles: ["prototype.html"], authorAgentIds: [], db: { agent: { findMany: vi.fn().mockResolvedValue(rows.slice(0, 2)) } } });
+    expect(missing.unavailableProfessions).toContain("ux-design");
   });
   it("recognizes UX-bearing HTML deliverables and keeps missing providers explicitly outstanding", async () => {
     const result = await resolveLiveReviewSpecialists({ userId: "user-1", capsuleId: "WC-TEST", changedFiles: ["docs/ux-fit/prototype.html"], authorAgentIds: [], db: { agent: { findMany: vi.fn().mockResolvedValue([]) } } });
