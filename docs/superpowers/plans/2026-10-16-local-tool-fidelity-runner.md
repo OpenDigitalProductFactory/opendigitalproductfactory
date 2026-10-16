@@ -120,7 +120,7 @@ record rewrite is part of rollback.
 
 - Decision: atomic
 - Parent: BI-C2F81AB0
-- Receipt: blocked-by: The immutable plan is not yet committed and provider-resolvable; record governed plan coverage before any implementation claim.
+- Receipt: cmvaml0rz1bzw01pjoqgsh162
 - Rationale: A fixture scorer, runner adapter and readback are internal sequencing of one missing live qualification operation; none independently meets the runner acceptance criteria.
 - Dependencies: CWN-63C5BE75 / BI-CAP-FEE56611 for supported runtime operation and authority; runtime stays UNRUN until resolved.
 - runner -> BI-C2F81AB0
@@ -129,5 +129,8 @@ record rewrite is part of rollback.
 - Flow: FLOW-QUALIFY
 - Verification: VERIFY-NEGATIVES, VERIFY-LIVE
 
-Coverage remains a native pre-implementation requirement. This explicit blocked
-receipt is a planning checkpoint, not an implementation exemption.
+The native atomic receipt binds the immutable plan at commit
+190b5774220edff5f86c29905416450ad3727223, blob
+ab7d8d7cfe67adc28f19d3a5b83b64d0fd8cc563. It records the single runner mapping
+and the references above; it does not confer runtime authority or implementation
+admission. Refresh coverage if criteria or declared implementation scope change.
