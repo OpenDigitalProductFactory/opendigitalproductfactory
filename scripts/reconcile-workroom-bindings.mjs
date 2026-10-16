@@ -26,7 +26,6 @@ import { isClaimExemptBranch } from "../packages/dpf-skill-pack/hooks/lib/workro
 import { bindWorktreeToWorkroom, resolveMcpAccess } from "./lib/workroom-bind.mjs";
 import { gitText } from "./lib/git.mjs";
 
-const DEFAULT_REPO = "OpenDigitalProductFactory/opendigitalproductfactory";
 
 // ── pure ─────────────────────────────────────────────────────────────────────
 
@@ -98,7 +97,6 @@ async function main() {
   const args = process.argv.slice(2);
   const apply = args.includes("--apply");
   const asJson = args.includes("--json");
-  const repo = process.env.DPF_REPO_FULL_NAME || DEFAULT_REPO;
 
   if (apply && !resolveMcpAccess()) {
     console.error("[reconcile-workrooms] --apply needs DPF_MCP_BEARER_TOKEN; MCP is the only authority on claims.");
@@ -116,8 +114,7 @@ async function main() {
       branch: w.branch,
       worktreePath: w.path,
       gitDir: gitDirFor(w.path),
-      repositoryFullName: repo,
-      headSha: (() => { try { return git(["rev-parse", "HEAD"], w.path); } catch { return null; } })(),
+      captureSourceIdentity: true,
     });
     results.push({ ...w, ...r });
     if (r.status === "bound") bound += 1; else failed += 1;
