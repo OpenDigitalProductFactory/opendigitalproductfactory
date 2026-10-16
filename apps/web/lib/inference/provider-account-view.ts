@@ -20,6 +20,11 @@ export type ProviderAccountOverviewRow = ProviderAccountIdentity & {
   resolvesPhases: string[];
   readiness?: import("./provider-account-readiness").AccountReadiness;
   quotaRecheckAt?: string | null;
+  connectionSummary?: string;
+  eligibilitySummary?: string;
+  lastCheckedAt?: string | null;
+  lastSucceededAt?: string | null;
+  nextActionLabel?: string;
 };
 
 export function isProviderAccountVisible(

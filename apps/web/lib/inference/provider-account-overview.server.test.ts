@@ -17,6 +17,20 @@ const copy = { companyWork: "Company work", publicOnly: "Public only", workBlock
 const account = { id: "connection-db", connectionId: "provider-account-team", providerId: "codex", isDefault: false, label: "Team", status: "active", credential: null, accessibleModelIds: [], modelsVerifiedAt: null, lastReviewedAt: null, supplierContractId: null } as unknown as ProviderAccountRow;
 beforeEach(() => { vi.resetAllMocks(); mocks.capacity.mockResolvedValue(new Map()); mocks.accounts.mockResolvedValue([account]); mocks.business.mockResolvedValue({ businessContextConfigured: true }); mocks.connections.mockResolvedValue([{ ...account, provider: pw.provider, trustEvidence: [], supplierContract: null }]); mocks.evidence.mockReturnValue({ posture: { connectionId: account.connectionId } }); mocks.review.mockReturnValue({ scope: "public-only", headline: "Review terms" }); });
 describe("provider account presentation truth", () => {
+  it("shows only the selected account's successful and observed timestamps", async () => {
+    const ownTime = Date.parse("2026-10-15T12:00:00Z");
+    mocks.capacity.mockResolvedValue(new Map([
+      ["codex", { state: "available", observedAtMs: ownTime + 60000, lastSuccessAtMs: ownTime + 60000 }],
+      [`codex:account:${account.connectionId}`, { state: "available", observedAtMs: ownTime, lastSuccessAtMs: ownTime }],
+    ]));
+    const [own] = await loadProviderAccountOverview({ providers: [pw], modelSummaries: new Map(), controls: new Map(), resolvesPhases: new Map(), copy });
+    expect(own.lastCheckedAt).toBe("2026-10-15T12:00:00.000Z");
+    expect(own.lastSucceededAt).toBe("2026-10-15T12:00:00.000Z");
+    mocks.capacity.mockResolvedValue(new Map([["codex", { state: "available", observedAtMs: ownTime, lastSuccessAtMs: ownTime }]]));
+    const [unknown] = await loadProviderAccountOverview({ providers: [pw], modelSummaries: new Map(), controls: new Map(), resolvesPhases: new Map(), copy });
+    expect(unknown.lastCheckedAt).toBeNull();
+    expect(unknown.lastSucceededAt).toBeNull();
+  });
   it("shows owned recovery and shared quota without borrowing the default account's authentication failure", async () => {
     mocks.capacity.mockResolvedValue(new Map([[`codex:account:${account.connectionId}`, {
       state: "billing_action_required", safeSummary: "This account needs credits.", action: "add_credits_or_plan", isHumanActionRequired: true,

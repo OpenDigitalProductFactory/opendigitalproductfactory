@@ -64,34 +64,43 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
     if (!firstAccountByProvider.has(account.providerId)) firstAccountByProvider.set(account.providerId, account.connectionId);
   }
   const columns: Column<ProviderAccountOverviewRow>[] = [
-    { key: "account", header: copy.accountName, mobileFullWidth: true, hideMobileLabel: true, cell: row => <div>
+    { key: "account", header: copy.providerAndAccount ?? copy.accountName, mobileFullWidth: true, hideMobileLabel: true, cell: row => <div className="space-y-1">
+      <div className="text-sm font-semibold">{row.providerName}</div>
       <Link href={providerAccountHref(row)} className="font-medium text-[var(--dpf-accent)]">{row.label}</Link>
-      {row.label !== row.providerName && <div className="text-xs text-[var(--dpf-muted)]">{row.providerName}</div>}
-      {row.resolvesPhases.length > 0 && <div className="text-xs text-[var(--dpf-muted)]">{copy.resolvesPhases} {row.resolvesPhases.join(", ")}</div>}
-    </div>, sortAccessor: row => `${row.providerName} ${row.label}` },
-    { key: "status", header: copy.readiness ?? copy.capacity, mobileFullWidth: true, cell: row => <div className="space-y-2">
-      <StatusBadge domain="providerAccountReadiness" status={row.readiness?.state ?? "unverified"}
-        label={row.readiness?.label ?? row.statusLabel} variant="solid" size="md" uppercase={false} />
-      {row.readiness?.summary && <p className="m-0 text-sm text-[var(--dpf-text)]">{row.readiness.summary}</p>}
-      {row.readiness?.state === "waiting" && row.quotaRecheckAt && <p className="m-0 text-xs text-[var(--dpf-muted)]">{copy.nextCapacityCheck} <LocalTime value={row.quotaRecheckAt} /></p>}
-      {row.readiness?.providerResetAt && <p className="m-0 text-xs text-[var(--dpf-muted)]">{copy.providerResetEstimate} <LocalTime value={row.readiness.providerResetAt} /></p>}
-      <details className="text-xs text-[var(--dpf-muted)]">
-        <summary className="cursor-pointer py-2">{copy.readinessDetails ?? copy.models}</summary>
-        <p>{row.modelSummary}</p>
-        {row.capabilitySummary && <p>{row.capabilitySummary}</p>}
-        <p>{row.capacitySummary}</p>
-        {row.resetSummary && <p className="break-words">{row.resetSummary}</p>}
-      </details>
-    </div> },
-    { key: "allowed", header: copy.allowedWork, cell: row => <div>
-      <StatusBadge intent="neutral" label={row.allowedWork} />
-      <div className="mt-1 text-xs text-[var(--dpf-muted)]">{row.allowedWorkSummary}</div>
-    </div> },
-    { key: "manage", header: copy.manage, mobileFullWidth: true, hideMobileLabel: true, cell: row => <div className="flex flex-wrap gap-2">
-      <Link href={providerAccountHref(row)} data-owner-first-next-action={!canWrite && row.connectionId === visibleRows[0]?.connectionId ? "" : undefined} className="py-2 text-[var(--dpf-accent)]">{copy.manage}</Link>
+      {row.connectionSummary && <p className="m-0 text-xs text-[var(--dpf-muted)]">{row.connectionSummary}</p>}
       {canWrite && firstAccountByProvider.get(row.providerId) === row.connectionId
         && supportsAccount(catalogById.get(row.providerId)) &&
-        <button type="button" className={buttonClass} disabled={pending} onClick={event => beginAccount(catalogById.get(row.providerId)!, event.currentTarget)}>{copy.addAccount}</button>}
+        <button type="button" className="block py-2 text-xs text-[var(--dpf-accent)] disabled:opacity-50" disabled={pending} onClick={event => beginAccount(catalogById.get(row.providerId)!, event.currentTarget)}>{copy.addAccount}</button>}
+    </div>, sortAccessor: row => `${row.providerName} ${row.label}` },
+    { key: "status", header: copy.statusAndRouting ?? copy.readiness, cell: row => <div className="space-y-2">
+      <StatusBadge domain="providerAccountReadiness" status={row.readiness?.state ?? "unverified"}
+        label={row.readiness?.label ?? row.statusLabel} variant="solid" size="md" uppercase={false} />
+      {row.readiness?.summary && <p className="m-0 text-sm">{row.readiness.summary}</p>}
+      {row.eligibilitySummary && <p className="m-0 text-xs text-[var(--dpf-muted)]">{row.eligibilitySummary}</p>}
+    </div> },
+    { key: "allowed", header: copy.modelsAndWork ?? copy.allowedWork, cell: row => <div className="space-y-2">
+      <p className="m-0 text-sm">{row.modelSummary}</p>
+      <StatusBadge intent="neutral" label={row.allowedWork} />
+      <p className="m-0 text-xs text-[var(--dpf-muted)]">{row.allowedWorkSummary}</p>
+    </div> },
+    { key: "capacity", header: copy.capacityAndChecks ?? copy.capacity, mobileFullWidth: true, cell: row => <div className="space-y-2 text-xs">
+      <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-2">
+        <dt className="text-[var(--dpf-muted)]">{copy.lastCheck}</dt><dd className="m-0">{row.lastCheckedAt ? <LocalTime value={row.lastCheckedAt} /> : copy.noCheckEvidence}</dd>
+        <dt className="text-[var(--dpf-muted)]">{copy.lastSuccess}</dt><dd className="m-0">{row.lastSucceededAt ? <LocalTime value={row.lastSucceededAt} /> : copy.noSuccessEvidence}</dd>
+      </dl>
+      <p className="m-0">{copy.nextCapacityCheck} {row.quotaRecheckAt ? <LocalTime value={row.quotaRecheckAt} /> : copy.noScheduledCheck}</p>
+      {row.readiness?.providerResetAt && <p className="m-0">{copy.providerResetEstimate} <LocalTime value={row.readiness.providerResetAt} /></p>}
+      <p className="m-0 text-[var(--dpf-muted)]">{row.capacitySummary}</p>
+    </div> },
+    { key: "manage", header: copy.nextAction ?? copy.manage, mobileFullWidth: true, hideMobileLabel: true, cell: row => <div className="space-y-2">
+      <Link href={providerAccountHref(row)} data-owner-first-next-action={row.connectionId === visibleRows[0]?.connectionId ? "" : undefined} className="inline-block rounded border border-[var(--dpf-border)] px-3 py-2 text-sm text-[var(--dpf-accent)]">{row.nextActionLabel ?? copy.manage}</Link>
+      <Link href={providerAccountHref(row)} className="block py-2 text-xs text-[var(--dpf-accent)]">{copy.configureDetails}</Link>
+      <details className="text-xs text-[var(--dpf-muted)]">
+        <summary className="cursor-pointer py-2">{copy.routingDiagnostics ?? copy.readinessDetails}</summary>
+        {row.capabilitySummary && <p>{row.capabilitySummary}</p>}
+        {row.resetSummary && <p className="break-words">{row.resetSummary}</p>}
+        {row.resolvesPhases.length > 0 && <p>{copy.resolvesPhases} {row.resolvesPhases.join(", ")}</p>}
+      </details>
     </div> },
   ];
 

@@ -14,6 +14,17 @@ beforeEach(() => { vi.resetAllMocks(); mocks.add.mockResolvedValue({ ok: true, d
 afterEach(cleanup);
 
 describe("compact provider account overview", () => {
+  it("compares separate account evidence without disclosing secondary diagnostics", () => {
+    const dated = { ...row, connectionSummary: "Provider sign-in · Connection saved", eligibilitySummary: "Public work eligible", lastCheckedAt: "2026-10-15T12:00:00Z", lastSucceededAt: "2026-10-15T12:00:00Z", modelSummary: "2 verified account models", nextActionLabel: "View account" };
+    const { container } = render(<ProviderAccountsOverview rows={[dated, { ...row, connectionId: "another-account", label: "Research", connectionSummary: "Needs setup", eligibilitySummary: "Not eligible for routing", nextActionLabel: "Connect account" }]} catalog={catalog} firstRun={false} canWrite copy={{ ...copy, lastCheck: "Last check", lastSuccess: "Last success", noCheckEvidence: "Not checked", noSuccessEvidence: "No successful request recorded" }} />);
+    expect(screen.getByText("2 verified account models").closest("details")).toBeNull();
+    expect(screen.getByText("Provider sign-in · Connection saved")).toBeTruthy();
+    expect(screen.getByText("Not eligible for routing")).toBeTruthy();
+    expect(screen.getAllByText("No successful request recorded")).toHaveLength(1);
+    expect(container.querySelector("dl")?.textContent).toContain("2026");
+    expect(screen.getByRole("link", { name: "Connect account" }).getAttribute("href")).toContain("account=another-account");
+  });
+
   it.each(["row", "catalog"])("restores the exact %s Add account trigger after cancellation", source => {
     render(<ProviderAccountsOverview rows={[row]} catalog={catalog} firstRun={false} canWrite copy={copy} />);
     let opener = screen.getByRole("button", { name: "Add account" });

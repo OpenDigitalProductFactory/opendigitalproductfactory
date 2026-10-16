@@ -79,18 +79,33 @@ export async function loadProviderAccountOverview(input: {
     const catalogCount = summary?.totalModels;
     const modelSummary = account.modelsVerifiedAt ? `${accessible.length} ${input.copy.verifiedModels}`
       : catalogCount ? `${catalogCount} ${input.copy.catalogModels} · ${input.copy.notVerified}` : input.copy.notVerified;
+    const observedHealth = ownedHealth ?? (account.isDefault ? providerLimit : undefined);
+    const readiness = projectAccountReadiness({ status: account.status,
+      requiresCredential: !isLocalProviderId(account.providerId) && account.authMethod !== "none",
+      hasCredential: Boolean(account.credential?.hasUsableMaterial), credentialNeedsRenewal,
+      healthAvailable: capacity !== null && (!account.isDefault || Boolean(control)),
+      capacity: observedHealth, sharedCapacity: sharedLimit ?? undefined,
+      control, sharedRestrictions, now: now.getTime(), copy: input.copy });
+    const authLabel = isLocalProviderId(account.providerId) ? input.copy.localConnection
+      : account.authMethod === "api_key" ? input.copy.apiKeyMethod
+        : account.authMethod === "oauth2_client_credentials" ? input.copy.workloadMethod : input.copy.oauthMethod;
     return [{
       connectionId: account.connectionId, providerId: account.providerId, isDefault: account.isDefault,
       status: account.status, credential: account.credential ? { hasUsableMaterial: account.credential.hasUsableMaterial } : null,
       modelsVerifiedAt: account.modelsVerifiedAt, lastReviewedAt: account.lastReviewedAt, supplierContractId: account.supplierContractId,
       label: account.label ?? pw.provider.name, providerName: pw.provider.name,
       quotaRecheckAt: control?.quotaRecheckAt ?? null,
-      readiness: projectAccountReadiness({ status: account.status,
-        requiresCredential: !isLocalProviderId(account.providerId) && account.authMethod !== "none",
-        hasCredential: Boolean(account.credential?.hasUsableMaterial), credentialNeedsRenewal,
-        healthAvailable: capacity !== null && (!account.isDefault || Boolean(control)),
-        capacity: ownedHealth ?? (account.isDefault ? providerLimit : undefined), sharedCapacity: sharedLimit ?? undefined,
-        control, sharedRestrictions, now: now.getTime(), copy: input.copy }),
+      readiness,
+      connectionSummary: `${authLabel} · ${isLocalProviderId(account.providerId) ? input.copy.localConnection
+        : account.credential?.hasUsableMaterial ? input.copy.connectionSaved : input.copy.needsSetup}`,
+      lastCheckedAt: observedHealth?.observedAtMs ? new Date(observedHealth.observedAtMs).toISOString() : null,
+      lastSucceededAt: observedHealth?.lastSuccessAtMs ? new Date(observedHealth.lastSuccessAtMs).toISOString() : null,
+      eligibilitySummary: control?.eligibility.reason ?? (["waiting", "paused", "blocked"].includes(readiness.state)
+        ? input.copy.notRouting : input.copy.accountEligibilityUnconfirmed),
+      nextActionLabel: recoveryAction ?? (control?.healthStatus === "billing" ? input.copy.reviewAccountBilling : readiness.state === "waiting" ? input.copy.reviewAvailability
+        : readiness.state === "paused" ? input.copy.reviewPause
+          : readiness.state === "blocked" ? input.copy.reviewConnectionSettings
+            : readiness.state === "unverified" || !account.modelsVerifiedAt ? input.copy.reviewAndVerify : input.copy.viewAccount),
       statusLabel: ["paused", "disabled", "disconnected"].includes(account.status) ? statusLabels[account.status]
         : credentialNeedsRenewal || ownedRestriction ? input.copy.degraded
           : control?.eligibility.label ?? (account.isDefault ? input.copy.routingUnknown : statusLabels[account.status] ?? input.copy.unavailable),
