@@ -317,3 +317,85 @@ Proposed epic: **Workroom flow — measured, visual and improved per portfolio.*
 - The coworker queue-awareness pack prompt: mention the `wr:` key family.
 
 All of these ship with the slices that make them true, not with this spec.
+
+## 16. F8b delivery contract (2026-10-15, BI-C684AF45)
+
+The operator requested completion of systematic Workroom productivity measurement
+and improvement. This section makes the remaining section 8 behavior reviewable.
+It extends the existing telemetry, review job and report-kit views; it introduces
+no dependency, second event stream, or independent analytics service.
+
+### Observed boundary
+
+At source b338f06e581e6cc7886c334b519f098feb142865 the daily review files signals
+from counts alone. `flow-review.ts` has no baseline or review receipt;
+`shape-step-measures.ts` averages daily medians and subtracts independently
+aggregated process from dwell. Such summaries must not be described as pooled
+medians or exact waiting time. `BI-C684AF45` owns review receipts, accountable
+routing and version markers. `BI-9148060C` owns archetype-stage binding and home
+ranking; `BI-69803ACC` owns the broader delivery scorecard. These remain separate
+delivery boundaries, each with its own implementation and verification.
+
+### Objectives and acceptance
+
+- AC-F8b-1: At each shape version's `reviewPoint.everyDays`, persist an immutable,
+  replay-safe review receipt through the existing Workroom activity facility.
+  The receipt names its shape/version, observation windows, evidence provenance,
+  sample counts, baseline readiness, current measurements and accountable
+  principal. Repeated execution in the same review period adds no receipt.
+- AC-F8b-2: The first four full weeks with recorded demand form the baseline.
+  Incomplete history is explicitly unavailable; no inferred zeros or fabricated
+  historical coverage. Compare disjoint baseline/current cohorts. Compute
+  percentiles from reconstructed item timelines, using canonical duration math,
+  not averages of percentiles. Process time remains observed execution-state
+  time and does not claim to measure human touch time or customer value-add.
+- AC-F8b-3: Rank measured stage constraints by waiting time times current queue;
+  retain queue-only findings with explicit missing-measurement status. Record
+  the dominant observed hold reason as a symptom, never a proven root cause.
+  At least five completed observations are required for a duration verdict.
+- AC-F8b-4: Two consecutive due reviews naming the same stage and cause route
+  one attributable investigation through the existing improvement facility.
+  Preserve queueKey+cause identity, distinguish observation date from retry,
+  reset consecutiveness after a clear review, and never multiply backlog items
+  on concurrent or replayed filing. Bind owner resolution to canonical principals;
+  an unresolved owner is a disclosed routing hold, not a silent default.
+- AC-F8b-5: An investigation carries baseline evidence, the affected stage and
+  rooms, a countermeasure hypothesis, target measure and next review date.
+  It records before/after observations against comparable cohorts; no automatic
+  benefit or root-cause claim follows from filing a backlog item. The routing
+  classification contract remains owned by BI-B146AB6B; do not bypass that
+  dependency or implement a competing control registry.
+- AC-F8b-6: Existing area flow views disclose latest review, baseline readiness,
+  owner, leading constraint and linked improvement. Version transitions have
+  dated trend markers derived from recorded facts. Partial, stale and insufficient
+  evidence have explicit states. Use report-kit and theme tokens, keyboard-accessible
+  links and plain labels; retain the existing map and progressive disclosure.
+
+### Architecture and verification
+
+Refactor shared reconstruction and comparison into pure functions consumed by
+the review job and human/MCP projections. Keep all I/O in server adapters. Reuse
+`WorkroomActivity` for receipts and `ImprovementSignal` for investigation intake;
+validate the receipt's storage anchor and atomic deduplication before coding.
+No business-organization record is mutated from platform improvement scope, and
+paired-installation data remains read-only. This is additive to existing routes
+and schedulers, with no installation topology or public endpoint change.
+
+Behavior tests must cover missing baseline, disjoint windows, cadence boundaries,
+multiple versions, long idle intervals, holds, replay, concurrent filing,
+interrupted persistence, cause changes and unresolved owners. Served UI evidence
+must cover a measured shape and an insufficient-history shape in both themes.
+Run affected tests, package typecheck, repository gates and governed runtime
+verification before delivery. Rollback disables the added review behavior and
+projection while retaining historical receipts; it never deletes telemetry.
+
+### Research and benchmarking
+
+Section 10 remains the shared research. F8b follows the baseline and control
+discipline of [ASQ DMAIC](https://asq.org/quality-resources/dmaic) and the
+current/future-state comparison in [Lean Enterprise Institute VSM](https://www.lean.org/lexicon-terms/value-stream-mapping/).
+Adopt Camunda Optimize's duration overlay and Celonis's event-based reconstruction
+as compared in section 10; reject importing either as a second runtime/store.
+Reject queue depth alone as proof of wasted effort or an actionable remedy.
+The existing source contracts above, rather than a new metric vocabulary, own
+the calculation. A review receipt establishes observed change, not causation.
