@@ -36,6 +36,7 @@ import { OUTCOME_DISPOSITIONS } from "@/lib/shared/outcome-disposition";
 import { WORKROOM_SHAPE_KEYS } from "@/lib/work-management/room-shapes";
 import { WORK_SHAPE_EVIDENCE_KINDS } from "@/lib/work-management/work-shape-evidence-kinds";
 import { STEP_CRITICALITIES } from "@/lib/work-management/step-criticality";
+import { PROFESSION_REGISTRY } from "@/lib/decision-perspective/resolve-profession-profile";
 import {
   WORK_SHAPE_TRIGGER_CLASSES,
   type WorkShapeBinding,
@@ -202,6 +203,7 @@ const stage = named(
     accountablePrincipalRef: principalRef,
     advance,
     criticality: described(z.enum(STEP_CRITICALITIES), "Optional review-depth floor; does not grant authority or lower inferred criticality.").optional(),
+    requiredProfessions: described(uniqueArray(z.enum(PROFESSION_REGISTRY.families.map(family => family.professionKey) as [string, ...string[]])), "Required registered specialist professions for this stage. Participation does not grant tools or review authority; deliverable requirements may add professions.").optional(),
     evidence: uniqueArray(evidenceKind),
     tools: described(uniqueArray(toolName), "Capability set. Absent means undeclared, exactly as today.").optional(),
     mandatedTools: described(

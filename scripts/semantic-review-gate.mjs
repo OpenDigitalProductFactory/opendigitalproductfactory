@@ -47,6 +47,7 @@ function currentIdentity(receipt = null) {
     policyVersion: policy.policyVersion,
     reviewerVersion: policy.reviewerVersion,
     specialistIds: receipt?.specialistIds ?? [],
+    ...(receipt?.specialistSelectionDigest ? { specialistSelectionDigest: receipt.specialistSelectionDigest } : {}),
   };
 }
 

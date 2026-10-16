@@ -48,6 +48,7 @@ const IDENTITY_FIELDS = [
   "diffDigest",
   "policyVersion",
   "reviewerVersion",
+  "specialistSelectionDigest",
 ];
 
 function normalizedIds(value) {
@@ -60,6 +61,8 @@ export function validateLocalSemanticReviewGate(state, current, nowMs = Date.now
   if (!state || state.schemaVersion !== expectedVersion) {
     return { valid: false, reason: "missing-receipt" };
   }
+  if (state.receiptDisposition !== "policy-exemption" && current.reviewerVersion === "change-reviewer.v3-professions"
+    && !/^[a-f0-9]{64}$/.test(state.specialistSelectionDigest ?? "")) return { valid: false, reason: "missing-specialist-selection" };
   if (state.receiptDecision === "inconclusive") {
     return { valid: false, reason: "infrastructure-inconclusive" };
   }

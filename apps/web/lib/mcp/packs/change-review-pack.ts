@@ -1,3 +1,4 @@
+import { prepareWorkroomReviewSpecialists } from "@/lib/change-review/review-specialist-preparation";
 import { prisma, type Prisma } from "@dpf/db";
 
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
@@ -212,6 +213,8 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
   let singleFlight: SemanticReviewSingleFlightClaim | null = null;
 
   try {
+    operationInput.specialistSelection = await prepareWorkroomReviewSpecialists({ userId, capsuleId, actorAgentId: context?.agentId ?? null, changedFiles });
+    if (operationInput.specialistSelection.unavailableProfessions.length) return { success: false, error: "required_specialists_unavailable", message: "Required specialists are unavailable. Their contributions remain outstanding.", data: { requiredProfessions: operationInput.specialistSelection.unavailableProfessions } };
     const coordination = resolveSemanticReviewCoordination(operationInput);
     const packet = createSemanticReviewRequest(operationInput, {
       userId, agentId: context?.agentId ?? null, apiTokenId: context?.apiTokenId ?? null,

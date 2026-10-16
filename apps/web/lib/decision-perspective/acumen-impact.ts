@@ -33,6 +33,10 @@ function isTypeScriptPath(path: string): boolean {
  */
 const ACUMEN_PATH_RULES: readonly AcumenPathRule[] = [
   {
+    professionKey: "release-service-management",
+    matches: (p) => /(?:^|\/)(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$/.test(p),
+  },
+  {
     professionKey: "data-architect",
     matches: (p) =>
       p.includes("packages/db/prisma")
@@ -44,9 +48,14 @@ const ACUMEN_PATH_RULES: readonly AcumenPathRule[] = [
     matches: (p) =>
       p.includes("apps/web/components")
       || p.includes("app/(shell)")
-      || p.endsWith(".css")
+      || /\.(?:tsx|jsx|css|scss|html|vue|svelte)$/.test(p)
+      || p.includes("docs/ux-fit/")
       || p.includes("design-tokens")
       || p.includes("design tokens"),
+  },
+  {
+    professionKey: "enterprise-architecture",
+    matches: (p) => p.includes("/architecture/") || /(?:^|\/)(?:agents\.md|.*(?:spec|plan).*\.md)$/.test(p),
   },
   {
     professionKey: "mcp-integration",

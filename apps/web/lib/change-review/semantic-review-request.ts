@@ -6,6 +6,8 @@ import { deriveSemanticReviewGateIdentity } from "@/lib/gates/gate-run-identity"
 import { resolveSemanticReviewCoordination, type SemanticChangeReviewOperationInput } from "./semantic-change-review-operation";
 import { DELIBERATION_ARTIFACT_TYPES } from "../deliberation/external-review-activation";
 import { SEMANTIC_REVIEW_ARTIFACT_CONTRACT_VERSION } from "./semantic-change-review";
+import { liveReviewSpecialistSelectionDigest, liveReviewSpecialistSelectionSchema } from "./live-specialist-selection";
+import { PROFESSION_BOUND_CHANGE_REVIEWER_VERSION } from "./semantic-change-review-operation";
 
 export const REVIEW_ARTIFACT_TYPES = DELIBERATION_ARTIFACT_TYPES;
 export const REVIEW_RISKS = ["low", "medium", "high", "critical"] as const;
@@ -30,7 +32,8 @@ const inputSchema = z.object({
   identity: z.object({ capsuleId: ref, baseTreeHash: z.string().regex(/^[a-f0-9]{40}$/),
     artifactType: artifactTypeSchema.optional(),
     headTreeHash: z.string().regex(/^[a-f0-9]{40}$/), diffDigest: sha256,
-    policyVersion: ref, reviewerVersion: ref, specialistIds: z.array(ref).max(20), failureAnalysisDigest: sha256.optional(), sourceHeadSha: ref.optional() }).strict(),
+    policyVersion: ref, reviewerVersion: ref, specialistIds: z.array(ref).max(50), specialistSelectionDigest: sha256.optional(), failureAnalysisDigest: sha256.optional(), sourceHeadSha: ref.optional() }).strict(),
+  specialistSelection: liveReviewSpecialistSelectionSchema.optional(),
   repairRound: z.number().int().min(0).max(100).optional(), risk: z.enum(REVIEW_RISKS),
   sensitivityFloor: z.enum(REVIEW_PROFILES).optional(), mode: z.enum(["shadow", "enforce"]).optional(),
 }).strict();
@@ -59,6 +62,8 @@ export function createSemanticReviewRequest(input: SemanticChangeReviewOperation
   const { priorReceipt: _priorReceipt, ...request } = input;
   const { identity, risk } = resolveSemanticReviewCoordination(input, contractVersion === 1);
   const normalized = inputSchema.parse({ ...request, identity, risk });
+  if (normalized.specialistSelection?.userId && normalized.specialistSelection.userId !== actor.userId) throw new Error("Specialist selection actor mismatch");
+  if (normalized.specialistSelection?.capsuleId && normalized.specialistSelection.capsuleId !== identity.capsuleId) throw new Error("Specialist selection room mismatch");
   if (createHash("sha256").update(normalized.artifact, "utf8").digest("hex") !== identity.diffDigest) {
     throw new Error("Semantic review artifact digest mismatch");
   }
@@ -79,6 +84,11 @@ export function parseSemanticReviewRequest(value: unknown): SemanticReviewReques
     if (Buffer.byteLength(canonicalJson(value), "utf8") > MAX_PACKET_BYTES) return null;
     const packet = packetSchema.parse(value);
     if (!isSemanticReviewRequestRoleBinding(packet.schemaVersion, packet.input.artifactType, packet.input.identity.artifactType)) return null;
+    if (packet.input.identity.reviewerVersion === PROFESSION_BOUND_CHANGE_REVIEWER_VERSION) {
+      const selection = packet.input.specialistSelection;
+      if (packet.schemaVersion !== 2 || !selection || selection.userId !== packet.actor.userId || selection.capsuleId !== packet.input.identity.capsuleId || liveReviewSpecialistSelectionDigest(selection) !== packet.input.identity.specialistSelectionDigest || selection.unavailableProfessions.length > 0
+        || JSON.stringify([...packet.input.identity.specialistIds].sort()) !== JSON.stringify(selection.specialists.map(row => row.agentId).sort())) return null;
+    } else if (packet.input.specialistSelection) return null;
     const { digest: expected, ...body } = packet;
     if (digest(body) !== expected || Date.parse(packet.deadlineAt) - Date.parse(packet.issuedAt) !== SEMANTIC_REVIEW_DEADLINE_MS) return null;
     if (createHash("sha256").update(packet.input.artifact, "utf8").digest("hex") !== packet.input.identity.diffDigest) return null;

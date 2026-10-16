@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 
 const mocks = vi.hoisted(() => ({
+  prepareSpecialists: vi.fn(),
   prisma: {
     workroom: { findUnique: vi.fn() },
     externalEvidenceRecord: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
@@ -20,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   retryPersistedSemanticReview: vi.fn(),
 }));
 
+vi.mock("@/lib/change-review/review-specialist-preparation", () => ({ prepareWorkroomReviewSpecialists: mocks.prepareSpecialists }));
 vi.mock("@dpf/db", () => ({ prisma: mocks.prisma }));
 vi.mock("@/lib/actions/external-evidence", () => ({ recordExternalEvidence: mocks.recordExternalEvidence }));
 vi.mock("@/lib/change-review/routed-semantic-review", () => ({
@@ -59,6 +61,7 @@ describe("change-review MCP pack", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     taskRows.length = 0;
+    mocks.prepareSpecialists.mockImplementation(async ({ userId, capsuleId }) => ({ schemaVersion: 1, userId, capsuleId, registryVersion: "1.0.0", authorAgentIds: ["codex"], requiredProfessions: [], specialists: [], unavailableProfessions: [] }));
     mocks.prisma.workroom.findUnique.mockResolvedValue({ id: "capsule-row-1" });
     mocks.prisma.externalEvidenceRecord.findFirst.mockResolvedValue(null);
     mocks.prisma.externalEvidenceRecord.findUnique.mockResolvedValue(null);
@@ -215,6 +218,13 @@ describe("change-review MCP pack", () => {
     expect(packet.input.identity.failureAnalysisDigest).toBe(validateFailureAnalysis(input.failureAnalysis, input, executionEvidence).digest);
   });
 
+  it("keeps an unavailable required craft explicit and admits no review task", async () => {
+    const { input } = validReviewInput();
+    mocks.prepareSpecialists.mockResolvedValue({ schemaVersion: 1, userId: "user-1", capsuleId: input.capsuleId, registryVersion: "1.0.0", authorAgentIds: ["codex"], requiredProfessions: ["ux-design"], specialists: [], unavailableProfessions: ["ux-design"] });
+    const result = await changeReviewPack.handlers.review_semantic_change!(input, "user-1", { agentId: "codex" });
+    expect(result).toMatchObject({ success: false, error: "required_specialists_unavailable", data: { requiredProfessions: ["ux-design"] } });
+    expect(mocks.prisma.taskRun.create).not.toHaveBeenCalled();
+  });
   it.each(["missing", "malformed", "unresolved", "wrong-room", "wrong-tree", "wrong-diff", "expired", "wrong-head"])(
     "refuses %s evidence before reserving or enqueueing review work", async (kind) => {
       const { input, row } = validReviewInput();

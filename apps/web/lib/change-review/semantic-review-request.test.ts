@@ -94,3 +94,21 @@ describe("durable semantic review request", () => {
       identity: { ...input.identity, diffDigest: createHash("sha256").update(huge).digest("hex") } }, actor, now)).toThrow(/size/i);
   });
 });
+
+
+it("pins profession selection to its actor and room while retaining legacy packet readability", () => {
+  const selection = { schemaVersion: 1 as const, userId: actor.userId, capsuleId: input.identity.capsuleId, registryVersion: "1.0.0", authorAgentIds: [], requiredProfessions: ["finance"], specialists: [{ professionKey: "finance", agentId: "review-finance", displayName: "Finance" }], unavailableProfessions: [] };
+  const packet = createSemanticReviewRequest({ ...input, specialistSelection: selection }, actor, now);
+  expect(parseSemanticReviewRequest(packet)).toEqual(packet);
+  expect(packet.input.identity.reviewerVersion).toBe("change-reviewer.v3-professions");
+  expect(() => createSemanticReviewRequest({ ...input, specialistSelection: { ...selection, userId: "different-user" } }, actor, now)).toThrow(/selection.*actor|actor.*selection/i);
+  expect(() => createSemanticReviewRequest({ ...input, specialistSelection: { ...selection, capsuleId: "WC-OTHER" } }, actor, now)).toThrow(/selection.*room|room.*selection/i);
+});
+
+
+it("does not reuse the same gate when required profession provenance changes", () => {
+  const selection = { schemaVersion: 1 as const, userId: actor.userId, capsuleId: input.identity.capsuleId, registryVersion: "1.0.0", authorAgentIds: [], requiredProfessions: ["finance"], specialists: [{ professionKey: "finance", agentId: "review-finance", displayName: "Finance" }], unavailableProfessions: [] };
+  const first = createSemanticReviewRequest({ ...input, specialistSelection: selection }, actor, now);
+  const next = createSemanticReviewRequest({ ...input, specialistSelection: { ...selection, authorAgentIds: ["additional-author"] } }, actor, now);
+  expect(next.gateKey).not.toBe(first.gateKey);
+});

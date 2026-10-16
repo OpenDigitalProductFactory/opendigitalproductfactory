@@ -1,3 +1,4 @@
+import { prepareWorkroomReviewSpecialists } from "./review-specialist-preparation";
 import { createHash } from "node:crypto";
 import { resolveFailureAnalysisEvidence } from "./failure-analysis-evidence";
 import { isRecord } from "@/lib/shared/coerce";
@@ -113,6 +114,12 @@ export async function reviewBuildStudioAssembledChange(args: {
     repairRound,
     mode,
   };
+  try {
+    operationInput.specialistSelection = await prepareWorkroomReviewSpecialists({ userId: args.build.createdById, capsuleId: capsule.capsuleId, actorAgentId: null, changedFiles });
+  } catch (error) {
+    return { kind: "unavailable", reason: getErrorMessage(error), mayContinue: false };
+  }
+  if (operationInput.specialistSelection.unavailableProfessions.length) return { kind: "unavailable", reason: `Required specialist contributions remain outstanding: ${operationInput.specialistSelection.unavailableProfessions.join(", ")}.`, mayContinue: false };
   const coordination = resolveSemanticReviewCoordination(operationInput);
   const { gateKey } = deriveSemanticReviewGateIdentity({
     repository: process.env.GITHUB_REPOSITORY

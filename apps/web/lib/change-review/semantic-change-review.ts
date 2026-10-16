@@ -72,6 +72,7 @@ export interface SemanticReviewIdentity {
   policyVersion: string;
   reviewerVersion: string;
   specialistIds: readonly string[];
+  specialistSelectionDigest?: string;
   failureAnalysisDigest?: string;
   sourceHeadSha?: string;
 }
@@ -95,6 +96,7 @@ export type SemanticReviewStaleReason =
   | "diff-changed"
   | "policy-version-changed"
   | "reviewer-version-changed"
+  | "specialist-selection-changed"
   | "specialist-set-changed"
   | "failure-analysis-changed";
 
@@ -150,6 +152,7 @@ export function assessSemanticReviewReceiptFreshness(
   if (receipt.headTreeHash !== current.headTreeHash) reasons.push("head-tree-changed");
   if (receipt.sourceHeadSha !== current.sourceHeadSha) reasons.push("head-tree-changed");
   if (receipt.diffDigest !== current.diffDigest) reasons.push("diff-changed");
+  if (receipt.specialistSelectionDigest !== current.specialistSelectionDigest) reasons.push("specialist-selection-changed");
   if (receipt.failureAnalysisDigest !== current.failureAnalysisDigest) reasons.push("failure-analysis-changed");
   if (receipt.policyVersion !== current.policyVersion) reasons.push("policy-version-changed");
   if (receipt.reviewerVersion !== current.reviewerVersion) reasons.push("reviewer-version-changed");

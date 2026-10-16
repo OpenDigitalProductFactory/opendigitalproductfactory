@@ -10,6 +10,7 @@ vi.mock("@/lib/routing/local-provider-capacity", () => ({
 import { routeAndCall } from "@/lib/inference/routed-inference";
 import { buildEffectiveRequestContract, buildInitialRouteContext } from "@/lib/inference/route-contract-builder";
 import { inspectLocalProviderCapacity } from "@/lib/routing/local-provider-capacity";
+import { PROFESSION_REGISTRY } from "@/lib/decision-perspective/resolve-profession-profile";
 import { dispatchRoutedSemanticReview } from "./routed-semantic-review";
 import { screenInferencePayload } from "@/lib/inference/data-screening/screen-inference-payload";
 
@@ -229,5 +230,49 @@ describe("routed semantic review", () => {
 
     expect(result.decision).toBe("pass");
     expect(routeAndCall).toHaveBeenCalledOnce();
+  });
+});
+
+
+describe("profession-bound dispatch", () => {
+  const selection = { schemaVersion: 1 as const, userId: "user-1", capsuleId: "WC-TEST", registryVersion: "1.0.0", authorAgentIds: ["author"], requiredProfessions: ["finance"], specialists: [{ professionKey: "finance", agentId: "review-finance", displayName: "Finance" }], unavailableProfessions: [] };
+  const context = { strategyProfile: "high-assurance" as const, reviewerId: "change-reviewer" as const, specialistIds: ["review-finance"], surface: "external" as const, specialistSelection: selection };
+  const db = { agent: { findMany: vi.fn().mockResolvedValue([{ agentId: "review-finance", name: "finance-controller", slugId: "finance-controller" }]) }, wikiPage: { findMany: vi.fn().mockResolvedValue([{ slug: "professions/finance/controls", title: "Controls", abstract: "Use recorded evidence", body: "Separate authorization and reconciliation for every transaction.", metadata: {} }]) } };
+  it("executes a registered family outside the old four-persona roster using its own craft and human label", async () => {
+    vi.mocked(routeAndCall).mockResolvedValue({ content: JSON.stringify({ decision: "pass", issues: [], summary: "Reviewed financial controls." }) } as never);
+    const result = await dispatchRoutedSemanticReview("review controls", context, undefined, db, async () => true);
+    expect(result.decision).toBe("pass");
+    expect(routeAndCall).toHaveBeenCalledTimes(2);
+    const branch = vi.mocked(routeAndCall).mock.calls.find(call => call[3]?.agentId === "review-finance")!;
+    expect(branch[1]).toContain("professions/finance/controls");
+    expect(branch[3]?.agentDisplayName).toBe("Finance");
+  });
+  it("executes all five required families in bounded batches and retains one failed contribution", async () => {
+    const families = PROFESSION_REGISTRY.families.filter(family => ["finance", "security", "data-architect", "enterprise-architecture", "release-service-management"].includes(family.professionKey));
+    expect(families).toHaveLength(5);
+    const specialists = families.map(family => ({ professionKey: family.professionKey, agentId: `review-${family.professionKey}`, displayName: family.label }));
+    const selected = { ...selection, requiredProfessions: families.map(family => family.professionKey), specialists };
+    const craftDb = { agent: { findMany: vi.fn().mockResolvedValue(families.map(family => ({ agentId: `review-${family.professionKey}`, name: family.roles[0], slugId: family.roles[0] }))) }, wikiPage: { findMany: vi.fn().mockImplementation(async args => [{ slug: `${args.where.slug.startsWith}criteria`, title: "Criteria", abstract: "Recorded craft", body: "Use evidence for review controls.", metadata: {} }]) } };
+    let running = 0; let peak = 0;
+    const visited: string[] = [];
+    vi.mocked(routeAndCall).mockResolvedValue({ content: JSON.stringify({ decision: "pass", issues: [], summary: "Reviewed." }) } as never);
+    const result = await dispatchRoutedSemanticReview("review", { ...context, specialistSelection: selected, specialistIds: specialists.map(row => row.agentId) }, async (id, execute) => {
+      visited.push(id); running++; peak = Math.max(peak, running);
+      try { if (id === "review-finance") throw new Error("provider unavailable"); return await execute(); } finally { running--; }
+    }, craftDb, async () => true);
+    expect(visited).toHaveLength(6);
+    expect(peak).toBeLessThanOrEqual(3);
+    expect(result.decision).toBe("inconclusive");
+  });
+  it("dispatches nothing when current selection authority is refused", async () => {
+    const result = await dispatchRoutedSemanticReview("private diff", context, undefined, db, async () => false);
+    expect(result.decision).toBe("inconclusive");
+    expect(routeAndCall).not.toHaveBeenCalled();
+  });
+  it("does not replace a required specialist with a generic persona when its corpus is empty", async () => {
+    const empty = { ...db, wikiPage: { findMany: vi.fn().mockResolvedValue([]) } };
+    const result = await dispatchRoutedSemanticReview("review controls", context, undefined, empty, async () => true);
+    expect(result).toMatchObject({ decision: "inconclusive", inconclusiveReason: "required-specialist-corpus-unavailable" });
+    expect(routeAndCall).not.toHaveBeenCalled();
   });
 });

@@ -22,6 +22,12 @@ describe("the §8.11 conformance rules", () => {
     }
   });
 
+  it("refuses unregistered and duplicate profession requirements in programmatic shapes", () => {
+    const base = getWorkShape(OBLIGATION_ASSURANCE_WATCH_SHAPE_KEY)!;
+    const invalid = { ...base, stages: base.stages.map(stage => ({ ...stage, requiredProfessions: ["ux-design", "ux-design", "invented-craft"] })) };
+    expect(validateWorkShape(invalid).join(" ")).toContain("registered professions");
+    expect(validateWorkShape(invalid).join(" ")).toContain("duplicate profession");
+  });
   it("rejects a shape that can start itself and cannot stop itself", () => {
     const base = getWorkShape(OBLIGATION_ASSURANCE_WATCH_SHAPE_KEY)!;
     const noFailureExit: WorkShapeDefinition = {

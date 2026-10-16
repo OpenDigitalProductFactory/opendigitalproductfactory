@@ -8,6 +8,13 @@ import { PROFESSION_REGISTRY } from "./resolve-profession-profile";
 // union across paths, deduped, registry order, every key registry-validated.
 
 describe("deriveImpactedAcumens", () => {
+  it("includes UX prototypes and preserves architecture and supply-chain review coverage", () => {
+    expect(deriveImpactedAcumens(["docs/ux-fit/prototype.html"])).toEqual(["ux-design"]);
+    expect(deriveImpactedAcumens(["docs/ux-fit/review.md"])).toEqual(["ux-design"]);
+    expect(deriveImpactedAcumens(["docs/architecture/interfaces.md"])).toEqual(["enterprise-architecture"]);
+    expect(deriveImpactedAcumens(["pnpm-lock.yaml"])).toEqual(["release-service-management"]);
+    expect(deriveImpactedAcumens(["packages/db/src/package.json"])).toEqual(["release-service-management"]);
+  });
   it("recognizes a registered profession's own corpus without a resident-room entry", () => {
     expect(deriveImpactedAcumens(["docs/professions/finance/wiki/cash-position.md"])).toEqual(["finance"]);
   });

@@ -1,3 +1,4 @@
+import { PROFESSION_REGISTRY } from "@/lib/decision-perspective/resolve-profession-profile";
 import type { PermitAuthority } from "@/lib/gpp/permit-claims";
 import type { OutcomeDisposition } from "@/lib/shared/outcome-disposition";
 // apps/web/lib/work-management/work-shapes.ts
@@ -113,6 +114,8 @@ export type WorkShapeStage = {
   advance: WorkShapeAdvance;
   /** Optional review-depth floor. Never lowers inferred depth or grants authority. */
   criticality?: StepCriticality;
+  /** Required craft participation at this stage; authority and independence remain separate review obligations. */
+  requiredProfessions?: readonly string[];
   /** Evidence kinds the stage is expected to leave behind (§8.11). Typed
    *  against the vocabulary record_workroom_evidence accepts, so a stage cannot
    *  declare evidence it has no way to record. */
@@ -486,6 +489,9 @@ export function validateWorkShape(shape: WorkShapeDefinition): string[] {
   }
   if (shape.stages.length === 0) issues.push(`${shape.key}: no stages`);
   for (const stage of shape.stages) {
+    const professions = stage.requiredProfessions ?? [];
+    if (professions.some(key => !PROFESSION_REGISTRY.families.some(family => family.professionKey === key))) issues.push(`${shape.key}/${stage.key}: use registered professions`);
+    if (new Set(professions).size !== professions.length) issues.push(`${shape.key}/${stage.key}: duplicate profession requirements`);
     if (!stage.accountablePrincipalRef) {
       issues.push(`${shape.key}/${stage.key}: no accountable principal`);
     }

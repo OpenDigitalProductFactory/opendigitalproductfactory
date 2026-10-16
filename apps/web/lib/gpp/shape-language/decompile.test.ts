@@ -117,6 +117,23 @@ function ratifiedTable(scope: string, gate: GppGate): Readonly<Record<string, Ga
 }
 
 describe("declared stage review criticality", () => {
+  it("preserves required registered specialist professions through the existing shape compiler", () => {
+    const input = workedExampleWithoutGate();
+    (input.stages as JsonObject[])[0].requiredProfessions = ["ux-design", "finance"];
+    const document = gppShapeDocumentSchema.parse(input);
+    const definition = lowerToDefinition(document);
+    const roundTrip = decompile(definition, { ratification: NOTHING_RATIFIED }).document;
+    expect(definition.stages[0]).toHaveProperty("requiredProfessions", ["ux-design", "finance"]);
+    expect(roundTrip.stages[0]).toHaveProperty("requiredProfessions", ["ux-design", "finance"]);
+    expect(canonicalJson(roundTrip)).toBe(canonicalJson(document));
+  });
+  it("rejects unknown or duplicate specialist professions", () => {
+    for (const requiredProfessions of [["unknown-craft"], ["ux-design", "ux-design"]]) {
+      const input = workedExampleWithoutGate();
+      (input.stages as JsonObject[])[0].requiredProfessions = requiredProfessions;
+      expect(gppShapeDocumentSchema.safeParse(input).success).toBe(false);
+    }
+  });
   it.each(["routine", "consequential", "critical"])("preserves %s through validation, lowering and decompilation", (criticality) => {
     const input = workedExampleWithoutGate();
     (input.stages as JsonObject[])[0].criticality = criticality;

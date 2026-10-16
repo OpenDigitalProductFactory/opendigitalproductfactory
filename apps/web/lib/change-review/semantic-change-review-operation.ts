@@ -19,8 +19,10 @@ import {
   type StrategyProfile,
 } from "@/lib/deliberation/external-review-activation";
 import { validateFailureAnalysis, type FailureVerificationEvidence } from "./failure-analysis";
+import { liveReviewSpecialistSelectionDigest, liveReviewSpecialistSelectionSchema, type LiveReviewSpecialistSelection } from "./live-specialist-selection";
 
 export const SEMANTIC_CHANGE_REVIEW_MAX_REPAIR_ROUNDS = 2;
+export const PROFESSION_BOUND_CHANGE_REVIEWER_VERSION = "change-reviewer.v3-professions";
 
 export type SemanticChangeReviewSurface = "external" | "build-studio";
 export type SemanticChangeReviewMode = "shadow" | "enforce";
@@ -42,6 +44,8 @@ export interface SemanticChangeReviewOperationInput {
   risk?: SemanticReviewRisk;
   sensitivityFloor?: StrategyProfile;
   mode?: SemanticChangeReviewMode;
+  /** Server-resolved before immutable admission; absent only on the legacy dispatch contract. */
+  specialistSelection?: LiveReviewSpecialistSelection;
 }
 
 export interface SemanticChangeReviewDispatchContext {
@@ -49,6 +53,7 @@ export interface SemanticChangeReviewDispatchContext {
   reviewerId: "change-reviewer";
   specialistIds: readonly string[];
   surface: SemanticChangeReviewSurface;
+  specialistSelection?: LiveReviewSpecialistSelection;
 }
 
 export interface SemanticChangeReviewOperationDeps {
@@ -96,7 +101,11 @@ export function resolveSemanticReviewCoordination(input: SemanticChangeReviewOpe
   identity: SemanticReviewIdentity;
   risk: SemanticReviewRisk;
 } {
-  const specialistIds = [...new Set([
+  const selection = input.specialistSelection ? liveReviewSpecialistSelectionSchema.parse(input.specialistSelection) : null;
+  if (selection && (legacyContract || selection.unavailableProfessions.length > 0)) {
+    throw new Error(`Required specialist selection is unavailable: ${selection.unavailableProfessions.join(", ") || "legacy contract"}`);
+  }
+  const specialistIds = selection ? selection.specialists.map(row => row.agentId).sort() : [...new Set([
     ...input.identity.specialistIds,
     ...selectSemanticReviewSpecialists(input.changedFiles),
   ])].sort();
@@ -107,8 +116,9 @@ export function resolveSemanticReviewCoordination(input: SemanticChangeReviewOpe
     ...input.identity,
     artifactType: legacyContract ? undefined : input.artifactType,
     policyVersion: CHANGE_REVIEW_POLICY_VERSION,
-    reviewerVersion: legacyContract ? (input.identity.reviewerVersion ?? LEGACY_CHANGE_REVIEWER_VERSION) : CHANGE_REVIEWER_VERSION,
+    reviewerVersion: selection ? PROFESSION_BOUND_CHANGE_REVIEWER_VERSION : legacyContract ? (input.identity.reviewerVersion ?? LEGACY_CHANGE_REVIEWER_VERSION) : CHANGE_REVIEWER_VERSION,
     specialistIds,
+    ...(selection ? { specialistSelectionDigest: liveReviewSpecialistSelectionDigest(selection) } : {}),
     failureAnalysisDigest: validateFailureAnalysis(input.failureAnalysis, input.identity, input.resolvedFailureEvidence ?? []).digest ?? undefined,
   };
   requireStableIdentity(identity);
@@ -254,6 +264,7 @@ async function performReview(args: {
     reviewerId: "change-reviewer",
     specialistIds: args.identity.specialistIds,
     surface: args.input.surface,
+    ...(args.input.specialistSelection ? { specialistSelection: args.input.specialistSelection } : {}),
   });
   if (result.decision === "pass" && (!result.failureAnalysisReview?.adequate || result.failureAnalysisReview.rationale.trim().length < 20)) {
     result.decision = "fail";

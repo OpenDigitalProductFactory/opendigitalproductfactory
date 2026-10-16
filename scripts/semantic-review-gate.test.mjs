@@ -103,3 +103,13 @@ test("reports an exhausted diff buffer distinctly from a git exit", () => {
     /exceeded the 256 MiB safety limit/,
   );
 });
+
+
+test("profession-bound publication requires its exact saved obligation digest", () => {
+  const identity = { ...current, artifactType: "code-change", reviewerVersion: "change-reviewer.v3-professions", specialistSelectionDigest: "e".repeat(64) };
+  const receipt = { ...state, ...identity, schemaVersion: "semantic-change-review-local-gate.v2" };
+  const now = Date.parse("2026-08-01T16:30:00Z");
+  assert.equal(validateLocalSemanticReviewGate(receipt, identity, now).valid, true);
+  assert.deepEqual(validateLocalSemanticReviewGate({ ...receipt, specialistSelectionDigest: undefined }, identity, now), { valid: false, reason: "missing-specialist-selection" });
+  assert.equal(validateLocalSemanticReviewGate(receipt, { ...identity, specialistSelectionDigest: "f".repeat(64) }, now).valid, false);
+});

@@ -68,6 +68,7 @@ export type SemanticReviewGateIdentityInput = {
     policyVersion: string;
     reviewerVersion: string;
     specialistIds: readonly string[];
+    specialistSelectionDigest?: string;
     failureAnalysisDigest?: string;
     sourceHeadSha?: string;
   };
@@ -247,6 +248,7 @@ export function deriveSemanticReviewGateIdentity(input: SemanticReviewGateIdenti
     policyVersion: nonEmpty(input.identity.policyVersion, "semantic-review policy version"),
     risk: nonEmpty(input.risk, "semantic-review risk"),
     specialistIds: normalizedSpecialistIds(input.identity.specialistIds),
+    ...(input.identity.specialistSelectionDigest ? { specialistSelectionDigest: normalizeHex(input.identity.specialistSelectionDigest, SHA256, "specialist selection digest") } : {}),
   };
   const reviewToolchain = {
     dispatchContractVersion: nonEmpty(

@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import { failureAnalysisFixture } from "./failure-analysis.test-fixtures";
 
+const prepareSpecialists = vi.hoisted(() => vi.fn());
+vi.mock("./review-specialist-preparation", () => ({ prepareWorkroomReviewSpecialists: prepareSpecialists }));
 const db = vi.hoisted(() => ({
   capsuleFindFirst: vi.fn(),
   evidenceFindMany: vi.fn(),
@@ -49,6 +51,7 @@ const fixture = failureAnalysisFixture({ capsuleId: "WC-BUILD", headTreeHash: "b
 beforeEach(() => {
   vi.clearAllMocks();
   taskRows.length = 0;
+  prepareSpecialists.mockImplementation(async ({ userId, capsuleId }) => ({ schemaVersion: 1, userId, capsuleId, registryVersion: "1.0.0", authorAgentIds: ["builder"], requiredProfessions: [], specialists: [], unavailableProfessions: [] }));
   delete process.env.DPF_SEMANTIC_CHANGE_REVIEW_MODE;
   db.capsuleFindFirst.mockResolvedValue({ id: "capsule-row", capsuleId: "WC-BUILD" });
   db.evidenceFindMany.mockResolvedValue([]);

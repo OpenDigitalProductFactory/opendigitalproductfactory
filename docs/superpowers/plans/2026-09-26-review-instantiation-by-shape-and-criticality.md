@@ -131,6 +131,35 @@ cycle key; that contract regression also first failed before correction. No
 credential scopes or grants were added. Independent review and live acceptance
 are still required for this delta.
 
+Source checkpoint, live specialist selection, 2026-10-16: qualified main through
+517143a53e6 is merged at dbb6118614372b7f7266a9359561613cfe0f7015.
+Independent assessment found no blocking issue in the engagement port to the new
+shared persisted-request module. The combined task recovery/engagement run passed
+136 tests across eight suites; both TS7 programs and normal merge hooks passed.
+
+The external and Build Studio admission paths now derive required professions
+from declared shape stages and the shared classifier, resolve current selectable
+canonical/runtime pairs, and exclude the actual requester, contributor identities
+and Build Studio build-task authors. All required families remain accounted for.
+Selections bind the person, room, registered families and authors into a digest
+that also separates gate identity and receipt freshness. New reviews use the
+profession-bound reviewer version; persisted older contracts retain their old
+reader/dispatch behavior. The legacy four-persona compatibility path remains
+only for those historical inputs, rather than silently changing queued prompts.
+Programmatic and compiled shapes validate optional profession declarations.
+
+New dispatch revalidates current identity, grants and exact room content access,
+requires recorded craft material, uses human craft labels, and schedules every
+required branch in batches of at most three. Missing providers, corpus or
+contributions cannot yield a passing review. This code does not grant membership;
+room-bound assignment, stage receipts and authoring participation remain pending.
+The first missing-module run executed no preparation tests. New regressions for
+room/actor binding, missing providers, corpus, shape validation and selection
+freshness reproduced before their corrections. The broader run passed 490 tests
+in 28 suites; both TS7 programs, GPP freshness and style/token checks passed.
+Native specialist execution, canonical integration and live acceptance are still
+unrun. No interim decision hold has been enabled.
+
 ## Phase 4: room-bound instantiation
 
 - Add `stepReviewBinding` to the external coworker task contract (`apps/web/lib/mcp/external-coworker-task-adapter.ts`), following `initiativeReviewBinding`.

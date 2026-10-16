@@ -33,7 +33,7 @@ function fixture(t) {
     schemaVersion: policy.receiptSchemaVersion, artifactType: "spec", capsuleId: "WC-TEST",
     baseTreeHash: git("rev-parse", `${base}^{tree}`), headTreeHash: git("rev-parse", "HEAD^{tree}"),
     diffDigest: readGitDiffDigest(base, spawnSync, cwd), policyVersion: policy.policyVersion,
-    reviewerVersion: policy.reviewerVersion, specialistIds: [], disposition: "reviewed",
+    reviewerVersion: policy.reviewerVersion, specialistIds: [], specialistSelectionDigest: "d".repeat(64), disposition: "reviewed",
     result: { decision: "pass", issues: [], summary: "Reviewed immutable spec." },
   };
   const path = join(cwd, "receipt.json");
