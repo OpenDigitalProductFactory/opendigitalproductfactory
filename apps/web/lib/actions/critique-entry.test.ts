@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const saveWikiOverlayEdit = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/actions/wiki-edit", () => ({ saveWikiOverlayEdit }));
+vi.mock("@/lib/wiki/save-overlay-edit.server", () => ({ saveOverlayEditForAuthenticatedUser: saveWikiOverlayEdit }));
+vi.mock("@/lib/actions/shared/guards", () => ({ requireUser: vi.fn().mockResolvedValue({ id: "human-1" }) }));
 
 const organizationFindFirst = vi.hoisted(() => vi.fn());
 const mediaAssetFindFirst = vi.hoisted(() => vi.fn());

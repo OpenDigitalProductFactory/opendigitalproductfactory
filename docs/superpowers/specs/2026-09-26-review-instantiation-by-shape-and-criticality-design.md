@@ -368,3 +368,57 @@ must be exercised on the served canonical target after the containing release.
   are preserved. Do not invent its functions, switch undecided decisions to
   `hold` without an executable reviewer path, or claim this combined work ready
   while that dependency is unresolved.
+
+
+## 8. Native execution amendment, 2026-10-16 — independent assessment pending
+
+This amendment supersedes section 3.4's proposed external terminal-writer
+mechanism. Source inspection found that `record_semantic_review_outcome` records
+CI outcome correlation; it does not write the specialist's terminal verdict.
+The UX critic's existing offer is proposal-only. Neither that tool nor the
+critic gains blocking authority to satisfy this design.
+
+Use the existing semantic-review TaskRun and its fenced per-agent TaskNode
+checkpoints. One immutable request names the room, current stage, exact head,
+criticality, authority and complete required-profession selection. Each required
+craft has a distinct persisted branch obligation and attributable result; the
+independent core reviewer evaluates those advisory proposals. This replaces
+AC-4's separate TaskRun per specialist with distinct durable branches of the
+same canonical TaskRun. A request, invitation or checkpoint without a returned
+result is not a completed contribution.
+
+Participant assignment and new TaskRun admission must share one transaction,
+using the existing participant writer and existing explicit assignment source.
+Before either write, recheck the original actor's current token, consent,
+grants and room action access; legitimate invitation authority; the provider's
+current identity pair, grants, sensitivity and independence; and restrictive room
+policy. Never revive a removed participant or widen a restrictive policy. A
+refusal creates neither an assignment nor an inference request. Repeated
+admission subscribes to the original identity. Each actual model call rechecks
+current access, including the final independent core after craft completion.
+
+The server derives stage and criticality from recorded room, shape, item and
+transition facts. A caller cannot lower those facts. Missing stage, shape or
+required craft remains explicit outstanding work. Review need precedes craft
+selection; shape-required authoring contributions remain obligations even when
+review depth is routine. Authoring and independent review use separate eligible
+principals. A registry family alone does not turn a different role into the UX
+Design Critic.
+
+The executed receipt retains stage, head, criticality, authority, exact selected
+principals, corpus fingerprints and author disposition. The existing global
+calibration ceiling remains in force. `INDEPENDENT_REVIEW_INTERIM` stays unchanged
+until this amended path is executable and verified; this amendment does not
+claim its implementation or native approval.
+
+### Critique capture transport repair
+
+Observed MCP capture was refused with `Unauthorized`. Source confirms the pack
+called a browser-session action, whose wiki writer required `auth()` rather than
+the already-authenticated MCP identity. Refactor the shared server-only capture
+and overlay writer below both transports. The browser action still derives its
+user from the browser session. The governed MCP handler supplies only its
+verified user argument, pins agent authorship and draft status, and can propose
+no human calibration verdict. No public action accepts a replacement user id;
+no grant, consent or publishing authority changes. The refused live request
+remains refused until the normal containing release and a new authorized call.

@@ -112,8 +112,9 @@ const CRITIQUE_SLUG_PREFIX = "craft/ux-design/";
 
 async function captureUxCritique(
   params: Record<string, unknown>,
+  userId: string,
 ): Promise<ToolResult> {
-  const { captureCritiqueEntry } = await import("@/lib/actions/critique-entry");
+  const { captureCritiqueForAuthenticatedUser } = await import("@/lib/ux-critique/capture-entry.server");
 
   const str = (k: string): string | undefined => {
     const v = params[k];
@@ -137,7 +138,7 @@ async function captureUxCritique(
   const proposedVerdict = str("proposedVerdict");
   const colorScheme = str("colorScheme");
 
-  const result = await captureCritiqueEntry({
+  const result = await captureCritiqueForAuthenticatedUser({
     title,
     // PINNED, never read from params. See the authority note in the header.
     callerKind: "agent",
@@ -151,7 +152,7 @@ async function captureUxCritique(
     gitRef: str("gitRef") ?? str("commitSha") ?? null,
     viewportWidth: num("viewportWidth") ?? null,
     colorScheme: (colorScheme as "light" | "dark" | undefined) ?? null,
-  });
+  }, userId);
 
   if (!result.ok) {
     return { success: false, error: "capture_rejected", message: result.error };
@@ -250,7 +251,7 @@ export const uxCritiquePack: ToolPack = {
   packId: "ux-critique",
   definitions,
   handlers: {
-    capture_ux_critique: (params) => captureUxCritique(params),
+    capture_ux_critique: (params, userId) => captureUxCritique(params, userId),
     search_ux_critique_corpus: (params) => searchUxCritiqueCorpus(params),
   },
   // Mirrors TOOL_TO_GRANTS, which stays the gating source; tool-registry.test.ts

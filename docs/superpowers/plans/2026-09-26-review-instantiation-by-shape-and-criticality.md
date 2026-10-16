@@ -419,3 +419,36 @@ on rollback; never replay unknown provider effects. Disabling new admission must
 not erase existing pending work or label it complete. The containing canonical
 release and live acceptance are coordinated with the existing release owner;
 this source worktree does not build or swap the installed runtime.
+
+
+## Current source checkpoint, 2026-10-16
+
+Independent source assessment of exact `1a90d9c788ea03b7cab450e61f14efc237ca1fdf`
+closed the per-inference authority P2 and found no remaining blocking finding in
+the 1d0566f/adf3ecd/1a90 selection/corpus dispatch scope. This is a peer source
+assessment, not a native receipt or live UX acceptance. The latest native room
+head is adf3ecd; publication of this local tail is still owed.
+
+Host preflight failed on import-cycle growth and missing seed/convergence
+attestations. The cycle repair separates immutable engagement contracts from
+execution so request parsing no longer imports the fulfillment runtime. Keep
+runtime submission in the existing external coworker adapter. Do not raise the
+cycle baseline. The two affected seeded principle/craft pages express shared
+platform rules and general UX craft, so the seed-fit decision is global-default.
+Convergence uses promote.sh step 4b -> docker-entrypoint.sh -> seed.ts, including
+seedWikiKernel and idempotent seedProfessionCorpus. Existing custom overlays and
+human calibration are preserved; this is not an install-local database edit.
+
+Section 8 of the design proposes the native TaskRun/TaskNode amendment. Obtain
+independent assessment and reconcile the native baseline after publishing the
+immutable source. Participant/stage integration and the undecided hold remain
+unimplemented, and no superseding native approval is claimed.
+
+The capture regression reproduced the browser-session refusal with the old
+transport call. The repaired MCP path passed with no browser session, retained
+the actual authenticated user and forced draft/agent-proposed metadata despite
+forged user and founder fields in tool input. Missing authenticated identity
+wrote nothing. The three capture/wiki suites passed 36 tests; the focused
+engagement/capture run passed 71 tests in five suites. Both transport wrappers
+retain their own authentication boundaries. The live rejected critique was not
+saved by an alternate path.

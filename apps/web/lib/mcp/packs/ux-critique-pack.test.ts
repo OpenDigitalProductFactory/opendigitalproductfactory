@@ -1,4 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+const captureWrite = vi.hoisted(() => vi.fn().mockResolvedValue({ ok: true, pageId: "page-1", slug: "craft/ux-design/compact-table", status: "draft" }));
+vi.mock("@/lib/auth", () => ({ auth: vi.fn().mockResolvedValue(null) }));
+vi.mock("@/lib/wiki/save-overlay-edit.server", () => ({ saveOverlayEditForAuthenticatedUser: captureWrite }));
+vi.mock("@dpf/db", () => ({ prisma: {} }));
+vi.mock("@/lib/media", () => ({ attachMedia: vi.fn() }));
 
 import { uxCritiquePack } from "./ux-critique-pack";
 import { TOOL_TO_GRANTS, expandGrants } from "@/lib/tak/agent-grants";
@@ -79,5 +85,27 @@ describe("ux-critique pack — the authority boundary", () => {
     expect(props).not.toContain("verdictAuthority");
     // A verdict may only ever be PROPOSED.
     expect(props).toContain("proposedVerdict");
+  });
+});
+
+
+describe("governed MCP capture attribution", () => {
+  it("captures with the authenticated MCP user without a browser session and cannot mint a human verdict", async () => {
+    captureWrite.mockClear();
+    const result = await uxCritiquePack.handlers.capture_ux_critique!({
+      title: "Compact table", route: "/accounts", finding: "Keep the blocking reason and next action visible in each comparison row.", lens: "density",
+      proposedVerdict: "change-needed", callerKind: "human", verdictAuthority: "founder", userId: "forged-user",
+    }, "authenticated-mcp-user");
+    expect(result.success).toBe(true);
+    expect(captureWrite).toHaveBeenCalledWith(expect.objectContaining({
+      status: "draft", metadata: expect.objectContaining({ verdictAuthority: "agent-proposed" }),
+    }), "authenticated-mcp-user", "critique-draft-create");
+    expect(result.data).toMatchObject({ calibrationEligible: false });
+  });
+  it("refuses missing governed user identity before writing", async () => {
+    captureWrite.mockClear();
+    const result = await uxCritiquePack.handlers.capture_ux_critique!({ title: "Compact table", route: "/accounts", finding: "Keep the next action visible.", lens: "density" }, "");
+    expect(result.success).toBe(false);
+    expect(captureWrite).not.toHaveBeenCalled();
   });
 });

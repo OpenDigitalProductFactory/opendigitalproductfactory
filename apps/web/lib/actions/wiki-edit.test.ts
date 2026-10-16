@@ -489,3 +489,22 @@ describe("saveWikiOverlayEdit — craft-override promotion", () => {
     expect(result).toMatchObject({ ok: true, status: "published" });
   });
 });
+
+
+describe("narrow critique capture writer", () => {
+  it("never overwrites an existing calibrated entry on a capture collision", async () => {
+    const { saveOverlayEditForAuthenticatedUser } = await import("@/lib/wiki/save-overlay-edit.server");
+    (prisma.wikiPage.create as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("Unique constraint failed"));
+    const result = await saveOverlayEditForAuthenticatedUser({ slug: "craft/ux-design/existing", pageKind: "heuristic", title: "Existing", body: "An agent proposal.", status: "draft", metadata: { verdictAuthority: "agent-proposed" } }, "mcp-user", "critique-draft-create");
+    expect(result.ok).toBe(false);
+    expect(prisma.wikiPage.update).not.toHaveBeenCalled();
+    expect(prisma.wikiPageRevision.create).not.toHaveBeenCalled();
+  });
+  it("refuses publication and arbitrary overlay targets in narrow capture mode", async () => {
+    const { saveOverlayEditForAuthenticatedUser } = await import("@/lib/wiki/save-overlay-edit.server");
+    const result = await saveOverlayEditForAuthenticatedUser({ slug: "principles/example", pageKind: "principle", title: "Example", body: "Changed authority.", status: "published" }, "mcp-user", "critique-draft-create");
+    expect(result.ok).toBe(false);
+    expect(prisma.wikiPage.create).not.toHaveBeenCalled();
+    expect(prisma.wikiPage.update).not.toHaveBeenCalled();
+  });
+});
