@@ -38,7 +38,8 @@ export function readGuardInputStamp(input, fs = { realpathSync, openSync, fstatS
 
 // Include incidental changes conservatively, but not the pnpm wrapper's name:
 // standalone preflight and the identical preflight invoked by pregate must match.
-const WRAPPER_ENV = /^(?:npm_lifecycle_event|npm_lifecycle_script|npm_command|npm_execpath|npm_node_execpath|npm_config_user_agent|INIT_CWD|SHLVL|_)$/i;
+// Codex changes its tracing call id for each invocation; it is not a guard input.
+const WRAPPER_ENV = /^(?:npm_lifecycle_event|npm_lifecycle_script|npm_command|npm_execpath|npm_node_execpath|npm_config_user_agent|INIT_CWD|SHLVL|_|CODEX_TOOL_CALL_ID)$/i;
 
 export function identifyGuardExecution({ cwd = process.cwd(), plan, env = process.env } = {}) {
   try {
