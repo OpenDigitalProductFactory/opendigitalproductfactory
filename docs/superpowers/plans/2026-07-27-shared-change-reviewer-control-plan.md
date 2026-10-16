@@ -248,3 +248,20 @@ Rollback reverts this additive projection only and retains all durable records.
 Automatic safe continuation remains BI-7CCCA696; expired successor admission
 remains BI-8ECEC429. Canonical identity repair BI-CAP-437F7745 and role/room
 configuration BI-56E9CEC2 remain separate.
+
+**First-served correction, same BI-CAP-21C511CA.** Release c38edb55 contained
+PR 6423, but actual readback RV-READBACK-6423-FIRST-SERVED-20261016 failed:
+the identity SQL accepted only request schema 1 while the canonical writer
+persists schema 2. The mocked requestBound tests did not exercise that SQL.
+Keep this failure recorded. Reuse the canonical request version/role binding in
+the bounded projection, retaining actor, repository, capsule, gate and digest
+correlation and exact-head selection. Add read-only PostgreSQL fixture CTE tests
+through the actual loader query for both supported versions and unsupported,
+malformed, role-conflicting and cross-identity negatives. Run the actual old
+query against the fixture before correction; record candidate query results
+separately from the protected CI PostgreSQL suite and served acceptance.
+No packet rewrite, stopped-provider retry, new orchestration, or approval grant
+is part of this correction. Refresh coverage for the published corrective head,
+obtain independent bounded source assessment, preserve audited DEV publication
+exceptions as skipped/unrun, then use fresh protected CI and canonical deployment
+before rerunning the failed live check.
