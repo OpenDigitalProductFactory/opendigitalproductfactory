@@ -61,14 +61,16 @@ function jsonCommand(command, args, cwd) {
   if (result.exitCode !== 0 || result.outcome) throw new Error(`${command} could not read publication identity: ${result.output.slice(-1000)}`);
   return JSON.parse(result.output);
 }
-export function readPublishedContext(cwd = process.cwd()) {
+export function readPublishedContext(cwd = process.cwd(), { readJson = jsonCommand } = {}) {
   const remote = gitText(["remote", "get-url", "origin"], { cwd });
   const match = remote.match(/^(?:https:\/\/([^/]+)\/|git@([^:]+):)([^/]+)\/([^/]+?)(?:\.git)?$/);
   if (!match) throw new Error("Configured origin is not a supported GitHub repository identity.");
   const repositoryHost = match[1] ?? match[2];
   const repositoryFullName = `${match[3]}/${match[4]}`;
-  const pr = jsonCommand("gh", ["pr", "view", "--repo", `${repositoryHost}/${repositoryFullName}`, "--json", "number,state,isDraft,headRefName,headRefOid,baseRefName,url"], cwd);
-  const rules = jsonCommand("gh", ["api", "--hostname", repositoryHost, `repos/${repositoryFullName}/rules/branches/main`], cwd);
+  const branch = gitText(["branch", "--show-current"], { cwd });
+  if (!branch) throw new Error("Published correction requires a named local branch.");
+  const pr = readJson("gh", ["pr", "view", branch, "--repo", `${repositoryHost}/${repositoryFullName}`, "--json", "number,state,isDraft,headRefName,headRefOid,baseRefName,url"], cwd);
+  const rules = readJson("gh", ["api", "--hostname", repositoryHost, `repos/${repositoryFullName}/rules/branches/main`], cwd);
   return { pullRequest: { ...pr, repositoryFullName, repositoryHost }, protection: {
     repositoryFullName, branch: "main", mergeQueue: rules.some(rule => rule.type === "merge_queue"),
     requiredChecks: rules.filter(rule => rule.type === "required_status_checks")

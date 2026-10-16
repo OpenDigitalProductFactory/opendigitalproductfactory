@@ -8,7 +8,7 @@ import { evaluateReadiness, buildGatePlan } from "./pr-readiness/core.mjs";
 import { evaluatePrHealth } from "./pr-health.mjs";
 import { evaluateGateRecord, evaluateGateVerdict, decide } from "../packages/dpf-skill-pack/hooks/pregate-evidence-guard.mjs";
 import { correctionPlanDigest, classifyPublishedCorrection } from "../packages/dpf-skill-pack/hooks/lib/published-correction.mjs";
-import { verifyPublishedCorrection, chooseInitialAnchor, buildCorrectionCommands, qualifyCorrectionExecution, correctionReceiptPath, inspectCorrectionRecord } from "./published-correction.mjs";
+import { verifyPublishedCorrection, chooseInitialAnchor, buildCorrectionCommands, qualifyCorrectionExecution, correctionReceiptPath, inspectCorrectionRecord, readPublishedContext } from "./published-correction.mjs";
 import { guardShellEnv } from "./lib/guard-bash.mjs";
 import { readPublicationGateRecords } from "./pr-readiness.mjs";
 
@@ -18,6 +18,27 @@ const original = "b".repeat(40);
 const branch = "fix/example-correction";
 const repositoryFullName = "example/platform";
 const reason = "published-correction: affected checks executed; integration delegated to protected GitHub";
+
+test("GitHub context lookup supplies the actual branch with an explicit origin repository", () => {
+  const cwd = mkdtempSync(join(tmpdir(), "correction-context-"));
+  try {
+    execFileSync("git", ["init", "-b", branch], { cwd, stdio: "pipe" });
+    execFileSync("git", ["remote", "add", "origin", "https://github.com/example/platform.git"], { cwd });
+    const calls = [];
+    const result = readPublishedContext(cwd, { readJson(command, args) {
+      calls.push({ command, args });
+      if (args[0] === "pr") {
+        assert.equal(args[2], branch, "gh requires a PR number, URL or branch when --repo is supplied");
+        assert.deepEqual(args.slice(3, 5), ["--repo", "github.com/example/platform"]);
+        return { number: 7, headRefName: branch };
+      }
+      return [{ type: "merge_queue" }, { type: "required_status_checks", parameters: { required_status_checks: [{ context: "CI" }] } }];
+    } });
+    assert.equal(calls.length, 2);
+    assert.equal(result.protection.mergeQueue, true);
+    assert.deepEqual(result.protection.requiredChecks, ["CI"]);
+  } finally { rmSync(cwd, { recursive: true, force: true }); }
+});
 
 function record() {
   const value = {
