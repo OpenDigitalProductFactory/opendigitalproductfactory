@@ -44,6 +44,13 @@ describe("headless client assistant binding", () => {
     expect((await createOAuthCredentialsClient({ clientName: "CI", scopes: ["dpf.read"] })).ok).toBe(true);
     expect(mock.create).toHaveBeenCalledWith({ data: expect.objectContaining({ agentId: null }) });
   });
+  it("validates even account-only selection through server-owned binding choices before preparing credentials", async () => {
+    mock.eligible.mockResolvedValue([]);
+    expect((await createOAuthCredentialsClient({ clientName: "CI", scopes: ["dpf.read"], agentId: null })).ok).toBe(true);
+    expect(mock.eligible).toHaveBeenCalledWith("human", null, null, undefined, { agentId: undefined });
+    expect(mock.eligible.mock.invocationCallOrder[0]).toBeLessThan(mock.secret.mock.invocationCallOrder[0]);
+    expect(mock.create).toHaveBeenCalledWith({ data: expect.objectContaining({ agentId: null, ownerUserId: "human" }) });
+  });
   it("refuses an unauthorized caller before discovery or secret preparation", async () => {
     mock.can.mockReturnValue(false);
     expect((await listOAuthCredentialsAssistants()).ok).toBe(false);

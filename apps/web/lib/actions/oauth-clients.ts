@@ -139,11 +139,14 @@ export async function createOAuthCredentialsClient(input: {
   }
 
   const selectedId = input.agentId?.trim() || null;
-  const assistant = selectedId
-    ? (await eligibleOAuthCoworkers(actor.userId, null, null, undefined, { agentId: selectedId }))
-      .find((candidate) => candidate.agentId === selectedId)
-    : null;
-  if (selectedId && !assistant) return err("This assistant is no longer available. Choose an eligible assistant.");
+  const assistants = await eligibleOAuthCoworkers(actor.userId, null, null, undefined, { agentId: selectedId ?? undefined });
+  // Every selection must match a server-owned choice, including account-only.
+  const choices: Array<{ selectionId: string | null; rowId: string | null; assistant: CredentialsAssistant | null }> = [
+    { selectionId: null, rowId: null, assistant: null },
+    ...assistants.map(({ id, agentId, displayName }) => ({ selectionId: agentId, rowId: id, assistant: { agentId, displayName } })),
+  ];
+  const binding = choices.find((choice) => choice.selectionId === selectedId);
+  if (!binding) return err("This assistant is no longer available. Choose an eligible assistant.");
 
   const secret = prepareClientSecret();
   const clientId = `dpfoc_${crypto.randomUUID().replace(/-/g, "")}`;
@@ -160,14 +163,13 @@ export async function createOAuthCredentialsClient(input: {
       // The human whose authority the client acts under. Their platformRole
       // still caps every call, so this cannot escalate.
       ownerUserId: actor.userId,
-      agentId: assistant?.id ?? null,
+      agentId: binding.rowId,
       allowedScopes: scopes,
     },
   });
 
   revalidatePath(ADMIN_PATH);
-  return ok({ clientId, clientSecret: secret.plaintext, scopes,
-    assistant: assistant ? { agentId: assistant.agentId, displayName: assistant.displayName } : null });
+  return ok({ clientId, clientSecret: secret.plaintext, scopes, assistant: binding.assistant });
 }
 
 /**
