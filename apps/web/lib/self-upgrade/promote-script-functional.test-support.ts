@@ -155,6 +155,21 @@ case "$*" in
     fi
     ;;
   *"buildx imagetools inspect"*"--raw"*) case "$*" in *"@$DPF_TEST_RELEASE_PLATFORM_MANIFEST_DIGEST"*) printf '{"config":{"digest":"%s"}}' "\${DPF_TEST_RELEASE_REGISTRY_CONFIG_DIGEST:-$DPF_TEST_RELEASE_CONFIG_DIGEST}" ;; *) if [ "\${DPF_TEST_DUPLICATE_PLATFORM:-no}" = yes ]; then printf '{"manifests":[{"digest":"%s","platform":{"os":"%s","architecture":"%s"}},{"digest":"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","platform":{"os":"%s","architecture":"%s"}}]}' "$DPF_TEST_RELEASE_PLATFORM_MANIFEST_DIGEST" "$DPF_TEST_RELEASE_OS" "$DPF_TEST_RELEASE_ARCHITECTURE" "$DPF_TEST_RELEASE_OS" "$DPF_TEST_RELEASE_ARCHITECTURE"; else printf '{"manifests":[{"digest":"%s","platform":{"os":"%s","architecture":"%s"}}]}' "$DPF_TEST_RELEASE_PLATFORM_MANIFEST_DIGEST" "$DPF_TEST_RELEASE_OS" "$DPF_TEST_RELEASE_ARCHITECTURE"; fi ;; esac ;;
+  *"recover-workroom-activity-migration.mjs --verify-rolled-back"*)
+    [ "\${DPF_TEST_ACTIVITY_VERIFY_FAIL:-no}" = "yes" ] && exit 1
+    printf "verified"
+    ;;
+  *"prisma migrate resolve --rolled-back 20261014012000_workroom_activity_ingestion_hardening"*)
+    [ "\${DPF_TEST_ACTIVITY_RESOLVE_FAIL:-no}" = "yes" ] && exit 1
+    ;;
+  *"recover-workroom-activity-migration.mjs"*)
+    [ "\${DPF_TEST_ACTIVITY_RECOVERY_DECISION:-not-needed}" = "blocked" ] && exit 1
+    if [ "\${DPF_TEST_ACTIVITY_RECOVERY_DECISION:-not-needed}" = "recover" ]; then
+      printf "recover:22222222-2222-4222-8222-222222222222"
+    else
+      printf "not-needed"
+    fi
+    ;;
   *"recover-human-principal-backfill-migration.mjs --verify-rolled-back"*)
     [ "\${DPF_TEST_PRINCIPAL_VERIFY_FAIL:-no}" = "yes" ] && exit 1
     printf "verified"
@@ -229,6 +244,9 @@ export function runPromote(opts: {
   composeEnvFile?: string;
   dockerLog?: string;
   recoveryDecision?: "recover" | "not-needed" | "blocked";
+  activityRecoveryDecision?: "recover" | "not-needed" | "blocked";
+  activityResolveFails?: boolean;
+  activityVerifyFails?: boolean;
   principalRecoveryDecision?: "recover" | "not-needed" | "blocked";
   /** Services the fake install has ever created (any state), for service-reconcile. */
   existingServices?: string[];
@@ -307,6 +325,11 @@ export function runPromote(opts: {
     ...(opts.recoveryDecision
       ? [`export DPF_TEST_RECOVERY_DECISION=${shellQuote(opts.recoveryDecision)}`]
       : []),
+    ...(opts.activityRecoveryDecision
+      ? [`export DPF_TEST_ACTIVITY_RECOVERY_DECISION=${shellQuote(opts.activityRecoveryDecision)}`]
+      : []),
+    ...(opts.activityResolveFails ? ["export DPF_TEST_ACTIVITY_RESOLVE_FAIL=yes"] : []),
+    ...(opts.activityVerifyFails ? ["export DPF_TEST_ACTIVITY_VERIFY_FAIL=yes"] : []),
     ...(opts.principalRecoveryDecision
       ? [`export DPF_TEST_PRINCIPAL_RECOVERY_DECISION=${shellQuote(opts.principalRecoveryDecision)}`]
       : []),

@@ -679,6 +679,16 @@ jobs:
       # --workspace-concurrency=1 keeps @dpf/db and the other DB-touching
       # suites from racing on this job's single Postgres (BI-335D7B54);
       # --no-bail keeps every suite's pass/fail visible even if one fails.
+      - name: Verify populated Workroom migration recovery
+        if: needs.changes.outputs.heavy == 'true'
+        env:
+          DPF_INGESTION_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: >-
+          node --test
+          packages/db/scripts/workroom-activity-migration-recovery.test.mjs
+          packages/db/scripts/workroom-activity-ingestion-recovery.postgres.test.mjs
+          packages/db/scripts/workroom-activity-recovery-prisma.postgres.test.mjs
+
       - name: Run non-web unit tests
         if: needs.changes.outputs.heavy == 'true'
         run: pnpm -r --if-present --filter '!web' --filter '!dpf' --workspace-concurrency=1 --no-bail test
