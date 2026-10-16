@@ -1582,9 +1582,9 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       console.warn(`[agentic-loop] routeAndCall threw: ${msg}`);
       logTurnSummary("unknown", "unknown");
       if (params.terminalToolPolicy) {
-        // BI-8B8731EE. A THROW from routeAndCall means the model never ran, so
-        // this is not the reviewer declining its writer contract. `failure`
-        // already classifies why. An adapter capability refusal is preserved on
+        // A thrown native execution may have committed effects. Preserve that
+        // uncertainty instead of converting it into a resumable writer wait.
+        // An adapter capability refusal is also preserved on
         // every required-writer call. A RESOURCE wait is preserved as-is only
         // before any tool work, mirroring `preInferenceResourceWait`, which
         // projects a `provider-capacity` wait on the same TaskRun (rewriting it
@@ -1592,7 +1592,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         // that were correct). Once a reader runs its work is banked and the
         // resumable writer wait is kept, but BI-50B0C471: it still names the
         // deferral, so the caller waits instead of spending writer attempts.
-        if (failure.kind === "required-terminal-writer-not-enforceable" || ((failure.kind === "capacity" || failure.kind === "busy") && executedTools.length === 0)) {
+        if (failure.kind === "execution-uncertain" || failure.kind === "required-terminal-writer-not-enforceable" || ((failure.kind === "capacity" || failure.kind === "busy") && executedTools.length === 0)) {
           return completeResult(failure.message, null, { failure });
         }
         const deferred = describeBankedReaderDeferral(failure.kind, executedTools.length, params.terminalToolPolicy.writerToolName, msg);

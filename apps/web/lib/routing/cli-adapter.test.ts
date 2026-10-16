@@ -461,6 +461,34 @@ describe("cliAdapter", () => {
   // text; the CLI surfaces them as native mcp__dpf__* tool_use definitions and
   // dispatches them through the MCP server. This is the post-#516 architecture.
   describe("native-MCP mode", () => {
+    it.each(["close", "error", "structured-error", "empty-result", "malformed-result"])("holds an effect-first native execution followed by %s", async (event) => {
+      mockGetProviderBearerToken.mockResolvedValue({ token: "fake-native-token" });
+      mockCreateMcpSessionToken.mockResolvedValue("fake-native-session");
+      let effects = 0;
+      mockSpawn.mockImplementation(() => {
+        const proc = new EventEmitter() as ReturnType<typeof createMockProcess>;
+        proc.stdout = new EventEmitter(); proc.stderr = new EventEmitter(); proc.kill = vi.fn();
+        process.nextTick(() => {
+          effects++;
+          proc.emit("spawn");
+          if (event === "empty-result" || event === "malformed-result") {
+            proc.stdout.emit("data", Buffer.from(event === "empty-result" ? "" : "Lost terminal JSON"));
+            proc.emit("close", 0); return;
+          }
+          if (event === "structured-error") {
+            proc.stdout.emit("data", Buffer.from(JSON.stringify({ is_error: true, result: "Authentication failed after a native tool effect" })));
+            proc.emit("close", 0); return;
+          }
+          proc.stderr.emit("data", Buffer.from("authentication unavailable after a native tool effect"));
+          if (event === "close") proc.emit("close", 1);
+          else proc.emit("error", new Error("kill ESRCH"));
+        });
+        return proc;
+      });
+      await expect(cliAdapter.execute(makeMcpRequest())).rejects.toMatchObject({ name: "NativeCliExecutionUncertainError" });
+      expect(effects).toBe(1);
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+    });
     function makeMcpRequest(): AdapterRequest {
       return makeRequest({
         tools: [
@@ -493,7 +521,7 @@ describe("cliAdapter", () => {
     it("mints a session JWT and writes an mcp-config when mcpSession + tools present", async () => {
       mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-x" });
       mockCreateMcpSessionToken.mockResolvedValue("eyJ.test.jwt");
-      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ result: "ok", usage: {} })));
+      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "ok", usage: {} })));
 
       await cliAdapter.execute(makeMcpRequest());
 
@@ -521,7 +549,7 @@ describe("cliAdapter", () => {
     it("includes --mcp-config + --strict-mcp-config in the runner script", async () => {
       mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-x" });
       mockCreateMcpSessionToken.mockResolvedValue("eyJ.test.jwt");
-      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ result: "ok", usage: {} })));
+      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "ok", usage: {} })));
 
       await cliAdapter.execute(makeMcpRequest());
 
@@ -537,7 +565,7 @@ describe("cliAdapter", () => {
     it("does NOT inject the text-described tool list into the system prompt", async () => {
       mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-x" });
       mockCreateMcpSessionToken.mockResolvedValue("eyJ.test.jwt");
-      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ result: "ok", usage: {} })));
+      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "ok", usage: {} })));
 
       await cliAdapter.execute(makeMcpRequest());
 
@@ -552,7 +580,7 @@ describe("cliAdapter", () => {
     it("falls back to legacy text-tool mode when JWT minting fails", async () => {
       mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-x" });
       mockCreateMcpSessionToken.mockRejectedValue(new Error("AUTH_SECRET missing"));
-      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ result: "ok", usage: {} })));
+      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "ok", usage: {} })));
 
       await cliAdapter.execute(makeMcpRequest());
 
@@ -567,7 +595,7 @@ describe("cliAdapter", () => {
 
     it("falls back to legacy mode when mcpSession is absent", async () => {
       mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-x" });
-      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ result: "ok", usage: {} })));
+      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "ok", usage: {} })));
 
       // Same tools as makeMcpRequest, but no mcpSession — eval runner / non-coworker case.
       await cliAdapter.execute(
@@ -590,7 +618,7 @@ describe("cliAdapter", () => {
     it("derives capability=read when no tools require write grants", async () => {
       mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-x" });
       mockCreateMcpSessionToken.mockResolvedValue("eyJ.test.jwt");
-      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ result: "ok", usage: {} })));
+      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "ok", usage: {} })));
 
       await cliAdapter.execute(
         makeRequest({
@@ -616,7 +644,7 @@ describe("cliAdapter", () => {
     it("cleanup includes the mcp-config file", async () => {
       mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-x" });
       mockCreateMcpSessionToken.mockResolvedValue("eyJ.test.jwt");
-      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ result: "ok", usage: {} })));
+      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "ok", usage: {} })));
 
       await cliAdapter.execute(makeMcpRequest());
 
@@ -632,6 +660,7 @@ describe("cliAdapter", () => {
       // but also leaves an unresolved tool_use block in the output. The
       // adapter must NOT pass that to the agentic loop or it would re-execute.
       const cliOutput = JSON.stringify({
+        type: "result", subtype: "success", is_error: false,
         result: "Found 64 open items.",
         content: [
           { type: "text", text: "Done" },
