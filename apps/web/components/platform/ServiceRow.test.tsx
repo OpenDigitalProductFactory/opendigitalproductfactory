@@ -18,6 +18,11 @@ import { ServiceRow } from "./ServiceRow";
 
 afterEach(cleanup);
 
+it("makes ChatGPT management reachable without expanding its row", () => {
+  render(<ServiceRow pw={pw(provider({ providerId: "chatgpt", name: "ChatGPT" }))} eligibility={routable} />);
+  expect(screen.getByRole("link", { name: "Manage ChatGPT" }).getAttribute("href")).toBe("/platform/ai/providers/chatgpt");
+});
+
 function provider(overrides: Partial<ProviderRow> = {}): ProviderRow {
   return {
     id: "p1",

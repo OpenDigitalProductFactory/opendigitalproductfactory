@@ -1,4 +1,6 @@
+// @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
@@ -7,8 +9,16 @@ vi.mock("@/lib/actions/provider-connection-posture", () => ({
 }));
 
 import { ProviderAccountPostureForm } from "./ProviderAccountPostureForm";
+import { updateProviderConnectionPosture } from "@/lib/actions/provider-connection-posture";
 
 describe("ProviderAccountPostureForm", () => {
+  it("writes data terms to the explicit account instead of the provider default", async () => {
+    vi.mocked(updateProviderConnectionPosture).mockResolvedValueOnce({});
+    render(<ProviderAccountPostureForm providerId="anthropic" connectionId="provider-account-team" canWrite initial={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "Save account declaration" }));
+    await waitFor(() => expect(updateProviderConnectionPosture).toHaveBeenCalledWith({ providerId: "anthropic", connectionId: "provider-account-team", accountClass: "unknown", noTraining: null }));
+    cleanup();
+  });
   it("explains and exposes connection-scoped OpenRouter bounds", () => {
     const html = renderToStaticMarkup(
       <ProviderAccountPostureForm

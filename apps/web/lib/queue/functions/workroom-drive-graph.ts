@@ -53,6 +53,7 @@ import {
 import type { WorkroomDriveEffects, WorkroomDriveRoom } from "./workroom-drive";
 import { applySubShapeEffects } from "./workroom-drive-children";
 import { recordRaisedDeadlines, sendCommittedDeadlineNotices } from "./workroom-drive-deadlines";
+import { readWorkroomQueueHold } from "@/lib/work-capsules/workroom-queue-hold";
 
 type Outcome = "dispatched" | "attention" | "stopped" | "skipped";
 
@@ -109,6 +110,23 @@ export async function applyGraphDrivePlan(input: {
     return outcomeOf(plan.action);
   }
 
+  if (!room.ownerUserId) {
+    // BI-D13FA12A: settleTickTaskOwner already rewrote an ownerless dispatch_agent
+    // aggregate to pause / missing_task_owner; any other aggregate keeps its own
+    // action. Never re-label it dispatch_agent: nothing was dispatched.
+    const unowned = await committing({ ...snapshot, dispatchedStageKeys: [] });
+    await deactivateLeft();
+    await persist({
+      roomId: room.id,
+      snapshot: unowned,
+      activityKind,
+      summary: `Branch stage${dispatch.length === 1 ? "" : "s"} ${dispatch.map((token) => token.stageKey).join(", ")} not dispatched: no accountable person with an active user account can be named to run the task.`,
+      payload: unowned,
+    });
+    await afterCommit(unowned);
+    return "skipped";
+  }
+
   const expiresAt = new Date(now.getTime() + WORKROOM_DRIVE_LEASE_MS);
   const lease = await effects.acquireLease({
     roomId: room.id,
@@ -135,22 +153,17 @@ export async function applyGraphDrivePlan(input: {
     });
     return "skipped";
   }
-  if (!room.ownerUserId) {
-    const unowned = await committing({
-      ...snapshot,
-      action: "dispatch_agent",
-      reason: "missing_task_owner" satisfies DriveReasonFor<"dispatch_agent">,
-      dispatchedStageKeys: [],
-    });
-    await deactivateLeft();
-    await persist({
-      roomId: room.id,
-      snapshot: unowned,
-      activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
-      summary: "Agent stage is eligible but no owner user is bound for ScheduledAgentTask.",
-      payload: unowned,
-    });
-    await afterCommit(unowned);
+  if (readWorkroomQueueHold(room.workspaceState)) {
+    // BI-2B6A8A74: no provider answered the last stage; dispatching again would retry the outage.
+    // Every token the plan would dispatch stays where it was, as for a dispatch that failed.
+    const kept = plan.marking && !("raw" in plan.marking) && plan.definition
+      ? withUndispatchedTokensRestored(plan.marking, room.workspaceState, plan.definition, dispatch.map((token) => token.stageKey))
+      : null;
+    const held = await committing({ ...snapshot, ...(kept ? { marking: kept satisfies DriveMarking } : {}), action: "dispatch_agent",
+      reason: "provider_held" satisfies DriveReasonFor<"dispatch_agent">, dispatchedStageKeys: [] });
+    await persist({ roomId: room.id, snapshot: held, activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
+      summary: "Queue held after a provider failure; resume_workroom_queue releases it.", payload: held });
+    await afterCommit(held);
     return "skipped";
   }
 

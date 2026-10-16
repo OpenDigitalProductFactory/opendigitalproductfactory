@@ -147,6 +147,14 @@ describe("model-provider pack — handler behavior (delegation preserved)", () =
     expect(definition.requiredCapability).toBe("manage_provider_connections");
   });
 
+  it.each(["codex", "chatgpt"])("uses verification-only execution for the canonical %s subscription", async providerId => {
+    const connectionId = `provider-default-${providerId}`;
+    db.prisma.aiProviderConnection.findUnique.mockResolvedValue({ providerId, connectionId });
+    accountAuth.testProviderAuthInternal.mockResolvedValue({ ok: true, message: "Verified" });
+    expect(await modelProviderPack.handlers.manage_provider_account({ operation: "test", connectionId }, "u1")).toMatchObject({ success: true });
+    expect(accountAuth.testProviderAuthInternal).toHaveBeenCalledWith(providerId, false, connectionId, { verificationOnly: true });
+  });
+
   it("resolve_model_selection delegates and formats the verdict + summary", async () => {
     phaseResolution.resolveModelSelectionByPhase.mockResolvedValue({ verdict: "all-local", summary: "all phases local" });
     const res = await modelProviderPack.handlers.resolve_model_selection({}, "u1");

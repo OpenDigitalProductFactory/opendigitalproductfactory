@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "plain-subscriptions",
+  "decisionInteractionId": "DI-F11BCC3A1D74",
+  "scope": {
+    "files": ["apps/web/lib/inference/ai-provider-data.ts"]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["plain-subscriptions", "endpoint-heading"]
+  },
+  "sourceDecision": {
+    "owningProfile": "mark-dpf-platform",
+    "verdict": "proceed",
+    "confidence": "high",
+    "structuredCoverage": "strong",
+    "autonomyEligible": true,
+    "evidenceClass": "Recorded comparative choice of plain Subscriptions label versus API-derived Subscription responses. Cost features are design estimates, not served UX measurements. Existing endpoint identity and group membership stay intact. Served verification remains pending; compact account UI is owned by BI-7AA4EB6B."
+  }
+}

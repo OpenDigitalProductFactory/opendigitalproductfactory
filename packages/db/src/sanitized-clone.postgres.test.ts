@@ -1,14 +1,24 @@
 import { randomUUID } from "node:crypto";
+import { setFlagsFromString } from "node:v8";
+import { runInNewContext } from "node:vm";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { runSourceCheckedClone } from "./sanitized-clone";
+import { runSourceCheckedClone, sanitizeConfidentialRow } from "./sanitized-clone";
 import { assertSanitizedCloneSourceIntegrity } from "./sanitized-clone-source-integrity";
+import { copySanitizedCursorBatches } from "./sanitized-clone-batches";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describeDatabase = databaseUrl ? describe : describe.skip;
 const schema = `sanitized_clone_integrity_${randomUUID().replaceAll("-", "")}`;
 let client: Client;
+
+// heapUsed counts unreachable garbage until V8 chooses to collect it, so an
+// unforced sample measures GC timing rather than what the copier retains.
+// Collect first so the bound applies to live (retained) heap only.
+setFlagsFromString("--expose-gc");
+const collectGarbage = runInNewContext("gc") as () => void;
+const retainedHeap = () => { collectGarbage(); return process.memoryUsage().heapUsed; };
 
 async function destinationCount(): Promise<number> {
   const result = await client.query<{ count: string }>(
@@ -58,6 +68,55 @@ describeDatabase("sanitized clone publication with PostgreSQL", () => {
     if (!client) return;
     await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
     await client.end();
+  });
+
+  it("reads large JSON and native vector data in bounded batches without fetching vector content", async () => {
+    const table = `"${schema}"."PayloadBatch"`;
+    const destination = `"${schema}"."PayloadBatchDestination"`;
+    const writer = new Client({ connectionString: databaseUrl });
+    await writer.connect();
+    await client.query(`CREATE TABLE ${table} (id bigint PRIMARY KEY, name text, payload jsonb, embedding vector(3072))`);
+    await writer.query(`CREATE TABLE ${destination} (id bigint PRIMARY KEY, name text, payload jsonb, embedding vector(3072))`);
+    try {
+      await client.query(`INSERT INTO ${table}
+        SELECT i, 'Source person', jsonb_build_object('text', repeat('x', 32768), 'array', jsonb_build_array(i, i + 1)),
+          array_fill(0.5::real, ARRAY[3072])::vector
+        FROM generate_series(1, 2001) i`);
+      let total = 0;
+      let largestBatch = 0;
+      const heapBefore = retainedHeap();
+      let peakHeapGrowth = 0;
+      await copySanitizedCursorBatches(client,
+        `SELECT id, name, payload, NULL::text AS embedding FROM ${table} ORDER BY id`,
+        async rows => {
+          largestBatch = Math.max(largestBatch, rows.length);
+          total += rows.length;
+          expect(rows.every(row => row.embedding === null)).toBe(true);
+          expect((rows[0]?.payload as { text: string }).text).toHaveLength(32768);
+          for (let i = 0; i < rows.length; i++) rows[i] = sanitizeConfidentialRow(rows[i]!, Number(rows[i]!.id));
+          await writer.query("BEGIN");
+          try {
+            for (const row of rows) await writer.query(`INSERT INTO ${destination} VALUES ($1, $2, $3::jsonb, $4)`,
+              [row.id, row.name, JSON.stringify(row.payload), row.embedding]);
+            await writer.query("COMMIT");
+          } catch (error) { await writer.query("ROLLBACK"); throw error; }
+          peakHeapGrowth = Math.max(peakHeapGrowth, retainedHeap() - heapBefore);
+        }, 50);
+      expect(total).toBe(2001);
+      expect(largestBatch).toBe(50);
+      const copied = await writer.query(`SELECT count(*)::int AS count FROM ${destination} WHERE name LIKE 'Dev User %' AND embedding IS NULL`);
+      expect(copied.rows[0].count).toBe(2001);
+      // More than 64 MiB JSON plus 3072-element vectors is processed without a
+      // table-sized JS retention: live heap after each batch stays far below the
+      // ~63 MiB the full table would retain (one 50-row batch is ~1.6 MiB), so
+      // the bound catches cross-batch retention. Native vectors never cross the
+      // source wire.
+      expect(peakHeapGrowth).toBeLessThan(16 * 1024 * 1024);
+    } finally {
+      await client.query(`DROP TABLE ${table}`);
+      await writer.query(`DROP TABLE ${destination}`);
+      await writer.end();
+    }
   });
 
   it("empties the destination after a real unique-constraint clone failure", async () => {

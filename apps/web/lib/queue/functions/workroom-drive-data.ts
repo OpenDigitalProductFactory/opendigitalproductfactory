@@ -374,6 +374,8 @@ export async function loadStandingRoomIds(db: {
     FROM "WorkCapsule"
     WHERE "archivedAt" IS NULL
       AND "status" NOT IN ('abandoned', 'archived', 'complete')
+      -- BI-B5751303: Build Studio drives its own rooms; a drive agent there duplicates it.
+      AND "executorKind" IS DISTINCT FROM 'build-studio'
       AND EXISTS (
         SELECT 1 FROM jsonb_array_elements(
           CASE jsonb_typeof("scopeClaims")
@@ -388,4 +390,37 @@ export async function loadStandingRoomIds(db: {
     LIMIT ${STANDING_ROOM_SCAN_LIMIT}
   `;
   return rows.map((row) => row.id);
+}
+
+/**
+ * Each bound room's backlog item status, by the stored key (BI-72679FE0). A
+ * room stores its item as the semantic BI-* key or the row id, so both are
+ * mapped. The drive stands a room down when its item is no longer live work
+ * (drive-work-item-gate.ts).
+ *
+ * A failed read returns an empty map: every room then reads as active and is
+ * driven exactly as before this check existed. That fails toward the prior
+ * behaviour rather than silently parking live work.
+ */
+export async function loadWorkItemStatuses(
+  storedItemKeys: readonly string[],
+  db?: Pick<PrismaClient, "$queryRaw">,
+): Promise<Map<string, string>> {
+  const byKey = new Map<string, string>();
+  const keys = [...new Set(storedItemKeys.filter(Boolean))];
+  if (keys.length === 0) return byKey;
+  try {
+    const source = db ?? (await import("@dpf/db")).prisma;
+    const rows = await source.$queryRaw<Array<{ id: string; itemId: string; status: string }>>`
+      SELECT "id", "itemId", "status" FROM "BacklogItem"
+      WHERE "id" = ANY(${keys}::text[]) OR "itemId" = ANY(${keys}::text[])
+    `;
+    for (const row of rows) {
+      byKey.set(row.id, row.status);
+      byKey.set(row.itemId, row.status);
+    }
+  } catch (error) {
+    console.warn("[workroom-drive] work item status read failed; rooms are driven as active:", error);
+  }
+  return byKey;
 }

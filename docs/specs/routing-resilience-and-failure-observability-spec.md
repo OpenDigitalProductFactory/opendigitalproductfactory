@@ -47,6 +47,15 @@ This proves the user-visible delay is not a single slow model call. It is a chai
 
 ### 1.2 Current Repo Truth
 
+Account-aware routing adds an explicit credential owner to eligible candidates
+and attempts. Authentication, billing and model-access failures stay with that
+account; provider-wide failures and quota of uncertain ownership remain shared.
+Current health is a revision-fenced mutable projection, while usage and outcome
+`recordedProviderConnectionRef` values are immutable attribution snapshots that
+outlive account deletion. Native execution with uncertain side effects stops
+fallback and redispatch. The [capacity refactor plan](../superpowers/plans/2026-10-14-provider-account-capacity-refactor.md)
+records source qualification and served acceptance separately.
+
 The material repo anchors are:
 
 - `apps/web/lib/routing/fallback.ts`

@@ -14,6 +14,39 @@ wins and this doc is the bug — fix it.
 
 ## The contract (read this first)
 
+Host policy commands use the existing observed-process runner with a 30-minute
+command budget, bounded diagnostic tails and graceful/forced tree termination.
+The parent preflight has a 60-minute outer budget. Full source guard loops have
+exceeded ten minutes on developer hosts, so that shorter budget is unsuitable.
+Cancellation and deadline
+expiry are unrun outcomes (exit 88), including a late zero child exit. Guard
+violations, environment limitations and interrupted execution remain distinct.
+Environment-limited host checks may continue to canonical CI, but are reported
+inconclusive and cannot produce reusable passing host receipts.
+
+Progress and results live in the existing per-worktree Git directory's
+`dpf-host-guard-receipts` slot. Interrupted exceptions settle inconclusive; an
+externally killed process retains its running receipt and PID for reconciliation.
+Only complete successful results with unchanged source, policy, dependency and
+environment identity are reused. Inspect the receipt before retrying an
+interrupted command. A queued sibling cannot hide admitted progress for the
+same branch and SHA; neither queued nor admitted is a verification pass.
+
+Host resource admission shares the existing lease-call allowance: 60 seconds
+by default, tunable through `DPF_GATE_MCP_TIMEOUT_MS`, while ordinary MCP probes
+retain their 10-second default. The transport bounds the complete response,
+including a stream that continues to send bytes. A timed-out host claim gets
+one bounded lease reconciliation and at most one same-key replacement inside
+a finite elapsed deadline; an empty listing does not prove no admission exists.
+Uncertain admission returns unrun88 with the same source-bound resume pin.
+Authoritative refusal, foreign identity and active authority owned by another
+process stop recovery. A wrapped executable that cannot spawn is also unrun88;
+an executed child's nonzero exit remains a code result. Windows package-manager
+shims use the existing command resolver.
+Cleanup refusal or uncertainty is reported separately with the original
+lease/session recovery action; it cannot be presented as a verified release
+or change an executed child's nonzero result to success.
+
 Begin [failure analysis](../architecture/failure-analysis-and-recovery.md) in design, refine it during implementation, and give the independent reviewer executed evidence for the final change. Local integration reports now bind their output to the owning Workroom, source tree and diff. An empty checklist, stale report or skipped run cannot satisfy that requirement. Technical review outages follow internal recovery; they are not business-owner approval requests.
 
 Cross-session drift happens when each session reconstructs the workflow from
@@ -66,6 +99,12 @@ naming the substrate it ran on (AGENTS.md §15).
 ---
 
 ## Which gate runs where
+
+`pnpm pr:readiness` selects policy guards using the same changed-file
+classification as CI and host pregate. For documentation-only changes, it
+omits only guards explicitly declared code-only. Documentation guards and
+guards without input declarations still run. Mixed and unknown changes retain
+all guards; scope selection never substitutes for required publication proof.
 
 This is the single biggest source of drift, so it gets the decision table. A
 worktree is **source-control isolation, not a second DPF install**
@@ -818,6 +857,15 @@ the wrapper reads that exact path. This prevents the two linked worktrees'
 different gitdirs from turning a green preflight into `freshness: unknown`, and
 prevents a stale prior report from classifying a new run.
 
+The integration plan's first step merges the candidate onto the accepted base.
+If that merge stops on conflicts, the runner reads the unmerged paths from git's
+index, aborts the merge, writes them to `execution.mergeConflict` in the run
+metadata, and exits 10 (`EXIT_CANDIDATE_MERGE_CONFLICT`). The wrapper records
+the existing `conflict` status. A run that stopped at its merge graded nothing,
+so the wrapper owes no completion checkpoint and does not rewrite the result as
+infrastructure. `pregate:status` reports FAIL and names the remedy: merge
+`origin/main` into the branch and resolve the listed paths (BI-FCC1DCB2).
+
 The sandbox-freshness step checks the load-bearing runtime and gate packages,
 including the Vitest runner used by the next step. Vitest is checked for both
 locked version and runnable entrypoint imports, so an incomplete package cannot
@@ -850,12 +898,22 @@ through the platform shell. The three `local-ci-runner.mjs` unshallow tests
 skip on Windows: they stub git with a POSIX script on `PATH`, and Windows only
 ever resolves `git.exe`.
 
-**Quiescence-aware evidence recovery.** `pnpm run pregate` now preflights
-`get_quiescence_status` once before the expensive gate. If the portal is actively
-draining or swapping, the gate records `blocked_quiescence`, emits
-`local_ci_quiescence_wait`, and parks with exit 75 before claiming the lease or
-running the full local-CI command. It does not poll: rerun pregate after the
-server-owned quiescence coordinator completes. If the expensive gate already passed but
+**Quiescence-aware evidence recovery.** After checking for a reusable PASS,
+`pnpm run pregate` reads `get_quiescence_status` before running host preflight.
+Confirmed draining or swapping emits `local_ci_quiescence_wait` and exits 75
+without executing guards, claiming a lease, spawning a waiter or changing gate
+and pending-evidence files. The early probe bounds each credential exchange and
+status request to 2.5 seconds. An unavailable, refused or malformed read is
+inconclusive, not PASS or FAIL, and continues the existing preflight/admission
+path. Record-exempt invocations and an audited preflight skip do not run this
+early probe. The standalone `pregate:preflight` remains a source-only check.
+
+The gate still rechecks quiescence immediately before admission: the early read
+does not reserve capacity or authorize a later claim. That late check records
+`blocked_quiescence` for an ordinary run and parks with the same exit 75, while
+preserving existing evidence on `--finalize-evidence`. Neither check polls:
+resume after the server-owned quiescence coordinator completes.
+If the expensive gate already passed but
 `record_local_integration_result` is refused with `portal_quiescing`, the gate
 writes `.git/dpf-local-ci-pending-evidence.json`, attempts
 `release_nonprod_environment_lease`, and records
@@ -1063,6 +1121,27 @@ It does **not** run vitest/jest — that's CI's job. The hook path is auto-wired
 `postinstall` (`scripts/set-hooks-path.mjs` sets `core.hooksPath`). Emergency
 bypasses exist for verified false positives only: `DPF_SKIP_SECRET_SCAN=1` and
 `DPF_SKIP_TYPECHECK=1`. CI still gates the PR regardless of local bypass.
+
+Every package `typecheck` script goes through `scripts/run-tsc.mjs`, which
+checks with TypeScript 7, the native compiler (BI-2B8D67A9). The web production
+program takes seconds instead of minutes. TypeScript 6 remains the workspace's
+`typescript` library. `DPF_TSC=6` runs it as the checker instead, for comparing
+verdicts. The non-blocking CI job "Typecheck (TS6 reference, advisory)" does
+the same on every pull request.
+
+Updating TypeScript 7 is one PR that bumps the root `typescript7` alias
+(`pnpm add -w -D typescript7@npm:typescript@<version>`). Every surface follows
+the lockfile from there:
+- worktrees reinstall;
+- the local-CI sandbox's freshness step refuses to grade until its installed
+  `typescript7` matches the lock;
+- GitHub CI installs fresh;
+- Build Studio type-checks through `run-tsc.mjs` (BI-D2FE6931).
+
+Dependabot is not relied on to notice new releases of an `npm:`-aliased
+dependency. The weekly "TypeScript Checker Currency" workflow
+(`scripts/audit-typescript-checker-currency.mjs`) compares the pin with npm's
+latest release and keeps one tracking issue open while the pin is behind.
 
 The local feedback loop is therefore:
 

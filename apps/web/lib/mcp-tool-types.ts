@@ -20,6 +20,8 @@ export type ToolExecutionContext = AuthorizedSurfaceToolExecutionContext & {
   agentId?: string;
   threadId?: string;
   taskRunId?: string;
+  /** The calling coworker turn's mode; a delegate never runs wider (BI-FAD98137). */
+  coworkerMode?: "advise" | "act";
   /**
    * Caller attribution for the decision ledger (BI-0EEBA669). The MCP route
    * derives `callerClient` from the request User-Agent product token (e.g.
@@ -111,6 +113,12 @@ export type ToolDefinition = {
    * evidence needed to prove an immutable or otherwise bound read.
    */
   retainAuditParameters?: boolean;
+  /**
+   * Keys of `result.data` that hold a secret handed to the caller. The caller
+   * still receives them; the audit row stores "[REDACTED]" instead
+   * (BI-84C1F526, the Grok credentials client).
+   */
+  secretResultKeys?: readonly string[];
   /**
    * How far this tool's effect reaches. DECLARED, not inferred: "can this be
    * undone" is not recoverable from the name, the schema, or `sideEffect`
@@ -205,6 +213,7 @@ export type ToolDefinition = {
 };
 
 export type EndpointTestRunRequest = {
+  concurrencyOnly?: boolean;
   endpointId?: string;
   modelId?: string;
   taskType?: string;

@@ -383,7 +383,7 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
   };
 }
 
-export async function getBacklogItem(params: Record<string, unknown>, currentAgentId: string | null = null): Promise<ToolResult> {
+export async function getBacklogItem(params: Record<string, unknown>, currentAgentId: string | null = null, currentUserId?: string): Promise<ToolResult> {
   const { prisma } = await import("@dpf/db");
   const itemIdRaw = String(params["itemId"] ?? "").trim();
   if (!itemIdRaw)
@@ -478,11 +478,13 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
     ? { ...projectedReadiness, completionEvaluation: { source: "completion-gate" as const, mergeDelivery: gateCompletion.mergedThroughGates } }
     : projectedReadiness;
   const completion = readiness.decisions?.completion;
-  const needsPirRecovery = completion && completion.verdict !== "allowed"
+  const needsTerminalRecovery = completion && completion.verdict !== "allowed"
     && [...completion.blockers, ...completion.unmet]
-      .some((entry) => entry.code === "POST_IMPLEMENTATION_REVIEW_REQUIRED");
-  const recovery = needsPirRecovery
+      .some((entry) => ["POST_IMPLEMENTATION_REVIEW_REQUIRED", "PLAN_REVIEW_REQUIRED",
+        "ACCEPTANCE_EVIDENCE_REQUIRED", "OBJECTIVE_RECONCILIATION_REQUIRED"].includes(entry.code));
+  const recovery = needsTerminalRecovery
     ? await (await import("@/lib/backlog/initiative-readiness/terminal-recovery")).resolveTerminalInitiativeRecovery({
+      currentUserId,
         decision: completion, currentAgentId, refusedWorkroomId: null,
       })
     : undefined;

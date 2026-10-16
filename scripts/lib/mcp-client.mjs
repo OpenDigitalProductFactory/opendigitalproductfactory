@@ -202,6 +202,8 @@ export async function mcpPost(method, params, {
   const url = new URL(mcpUrl);
   const requestFn = url.protocol === "https:" ? httpsRequest : httpRequest;
   return new Promise((resolve, reject) => {
+    const timeoutError = () => Object.assign(
+      new Error(`mcpCall: ${callLabel} timed out after ${timeoutMs}ms`), { code: "ETIMEDOUT" });
     const req = requestFn(url, {
       method: "POST",
       agent: false,
@@ -216,9 +218,11 @@ export async function mcpPost(method, params, {
       res.on("data", (chunk) => { data += chunk; });
       res.on("end", () => resolve({ status: res.statusCode ?? 0, text: data, via: "http" }));
     });
-    req.setTimeout(timeoutMs, () => {
-      req.destroy(new Error(`mcpCall: ${callLabel} timed out after ${timeoutMs}ms`));
-    });
+    // Socket inactivity is not a whole-request bound: a trickling response
+    // resets it indefinitely. Keep the same allowance, bound wall execution.
+    const deadline = setTimeout(() => req.destroy(timeoutError()), timeoutMs);
+    req.once("close", () => clearTimeout(deadline));
+    req.setTimeout(timeoutMs, () => req.destroy(timeoutError()));
     req.on("error", reject);
     req.write(body);
     req.end();

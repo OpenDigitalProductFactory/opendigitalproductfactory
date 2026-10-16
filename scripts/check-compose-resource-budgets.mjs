@@ -95,6 +95,30 @@ export function evaluateResourceBudgets({ budget, composeText }) {
     }
   }
 
+  // BI-D6769E2F: an optional service with a memory+cpus budget must run within
+  // it once its profile is enabled, so its compose limits must equal the budget.
+  for (const [service, spec] of Object.entries(budget.optionalProfileServices ?? {})) {
+    if (!spec?.memory || !spec?.cpus) continue;
+    const block = blocks.get(service);
+    if (!block) {
+      errors.push(`optional budget lists "${service}" but docker-compose.yml has no such service`);
+      continue;
+    }
+    const memory = /limits:\s*[\s\S]*?memory:\s*["']?([^"'\s]+)/m.exec(block)?.[1];
+    const cpus = /limits:\s*[\s\S]*?cpus:\s*["']?([^"'\s]+)/m.exec(block)?.[1];
+    const matches =
+      memory !== undefined && cpus !== undefined
+      && parseMemoryBytes(memory) === parseMemoryBytes(spec.memory)
+      && Number(cpus) === Number(spec.cpus);
+    if (!matches) {
+      errors.push(
+        `optional service "${service}" limits (memory=${memory ?? "none"} cpus=${cpus ?? "none"}) do not match its budget memory=${spec.memory} cpus=${spec.cpus}`,
+      );
+    } else {
+      notes.push(`bounded: ${service} (optional, budget memory=${spec.memory} cpus=${spec.cpus})`);
+    }
+  }
+
   // Flag always-on-looking services (restart: unless-stopped, no profiles) that
   // are missing from the budget catalog — release-gate creep detection.
   for (const [name, block] of blocks.entries()) {

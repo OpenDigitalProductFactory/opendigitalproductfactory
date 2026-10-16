@@ -213,14 +213,15 @@ async function defaultOwedRoutes(itemId: string, authorAgentId: string, candidat
     return routes && routes.map((route) => ({ workroomId: route.workroomId, requestCoworker: route.requestCoworker as unknown as Record<string, unknown> }));
   }
   const { getBacklogItem } = await import("@/lib/mcp/packs/backlog-pack-read-tools");
-  const item = await getBacklogItem({ itemId }, authorAgentId);
+  const currentUserId = candidate?.room.userId ?? undefined;
+  const item = await getBacklogItem({ itemId }, authorAgentId, currentUserId);
   const decision = (item.data?.readiness as { decisions?: { completion?: unknown } } | undefined)?.decisions?.completion as
     | import("@/lib/backlog/initiative-readiness").InitiativeReadinessDecision
     | undefined;
   if (!item.success || !decision) return null;
   if (decision.verdict === "allowed") return [];
   const { resolveTerminalInitiativeRecovery } = await import("./terminal-recovery");
-  const recovery = await resolveTerminalInitiativeRecovery({ decision, currentAgentId: authorAgentId, refusedWorkroomId: null });
+  const recovery = await resolveTerminalInitiativeRecovery({ decision, currentAgentId: authorAgentId, currentUserId, refusedWorkroomId: null });
   return recovery.reviewerRoutes
     .filter((route) => route.independent)
     .map((route) => ({ workroomId: route.workroomId, requestCoworker: route.requestCoworker as unknown as Record<string, unknown> }));

@@ -11,7 +11,10 @@
 // manifest (a read has none — the caller of the transition brings one).
 
 import { prisma } from "@dpf/db";
+import { isRecord } from "@/lib/shared/coerce";
+import { sameBodyCriteriaVersion } from "./body-baseline-version";
 
+import type { CurrentEvidenceFailure } from "@/lib/backlog/completion-evidence-policy";
 import {
   resolveCompletionEvidence,
   type CompletionEvidenceRuntimeDb,
@@ -41,6 +44,7 @@ import {
 } from "./objective-reconciliation";
 import { type InheritanceDb, loadInheritedInitiativeScope } from "./parent-scope-inheritance";
 import type { InitiativeReadinessDecision, InitiativeTransitionObject } from "./types";
+import { resolveAggregateCompletion, type AggregateCompletionDb } from "./aggregate-completion";
 
 /** The shape an operational close is gated as (BI-B22E50BC). */
 const OPERATIONAL_CLOSE_WORK_SHAPE = "delivery-small@1.0.0";
@@ -113,6 +117,7 @@ export type BacklogCompletionDependencies = {
 export type BacklogCompletionEvaluation = {
   governed: boolean;
   decision: InitiativeReadinessDecision;
+  independentAcceptanceDecision: InitiativeReadinessDecision;
   reconciliation: ObjectiveReconciliationResult;
   delivery: "pass" | "fail" | "missing";
   mergedThroughGates: MergeDeliverySignal;
@@ -121,6 +126,29 @@ export type BacklogCompletionEvaluation = {
   hasDesignSpec: boolean;
   deliveryEvidenceRefs: string[];
 };
+
+/**
+ * BI-4A222439. The failures that are still the newest word in their dimension,
+ * read from the same completion-evidence verdict a person's close is held to.
+ *
+ * The acceptance sweep closed BI-1B5BE5F4 on 2026-10-13 while its newest ux
+ * evidence was a ux_fail from the installed portal: the merge through the gates
+ * passed delivery (BI-B04A0203) and, for direct-merge platform work, acceptance
+ * too, and neither consulted the item's evidence. A merge is evidence that the
+ * change landed, not that it works; a current failure outranks it on every path,
+ * with or without a manifest, and under deployment closure too.
+ */
+function currentFailuresOf(result: ResolveCompletionEvidenceResult): CurrentEvidenceFailure[] {
+  return result.kind === "evaluated" ? result.verdict.currentFailures ?? [] : [];
+}
+
+const ACCEPTANCE_FAILURE_DIMENSIONS: ReadonlySet<string> = new Set(["ux", "manual"]);
+
+function currentFailureReasons(failures: readonly CurrentEvidenceFailure[]): string[] {
+  return failures.map((failure) =>
+    `The newest ${failure.dimension} evidence on this item is a failure (${failure.evidenceKind} ${failure.evidenceActivityId}). `
+    + `Fix it and record a passing ${failure.dimension} result that supersedes it before closing; a merge does not.`);
+}
 
 function deliveryState(result: ResolveCompletionEvidenceResult) {
   if (result.kind !== "evaluated") return "missing" as const;
@@ -211,6 +239,8 @@ export async function evaluateBacklogItemCompletion(args: {
 }): Promise<BacklogCompletionEvaluation> {
   const { db, item, evaluatedAt } = args;
   const deps = args.dependencies ?? {};
+  const boundWorkShape = await readBoundWorkShapeRef(db as unknown as BoundWorkShapeDb, item.itemId);
+  const aggregate = readinessShapeFromWorkShape(boundWorkShape) === "xlarge";
   const activities = await db.backlogItemActivity.findMany({
     where: { backlogItemId: item.id, kind: { in: [...BACKLOG_COMPLETION_ACTIVITY_KINDS] } },
     orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
@@ -235,7 +265,7 @@ export async function evaluateBacklogItemCompletion(args: {
       .filter((activity) => activity.kind === "initiative_scope_baseline")
       .map((activity) => ({ id: activity.id, backlogItemId: item.id, kind: activity.kind, gateKey: activity.gateKey, recordedAt: activity.recordedAt, payload: activity.payload }))
     : [];
-  const reconciliation = (deps.reconcileObjectives ?? reconcileInitiativeObjectives)({
+  let reconciliation = (deps.reconcileObjectives ?? reconcileInitiativeObjectives)({
     itemId: item.itemId,
     itemRowId: item.id,
     activities: [...activities, ...inheritedBaselineRows],
@@ -243,8 +273,29 @@ export async function evaluateBacklogItemCompletion(args: {
       ? { baselineSubjectIds: [item.itemId, inheritedScope.parentItemId] }
       : {}),
   });
+  const reconciledBaseline = activities.find((activity) => activity.kind === "initiative_scope_baseline"
+    && isRecord(activity.payload) && activity.payload.baselineId === reconciliation.baselineId)?.payload;
+  if (isRecord(reconciledBaseline) && reconciledBaseline.origin === "item-body"
+    && (typeof reconciledBaseline.criteriaDigest !== "string"
+      || !sameBodyCriteriaVersion({ criteriaDigest: reconciledBaseline.criteriaDigest }, item.body))) {
+    reconciliation = { ...reconciliation, state: "missing", evidenceRefs: [] };
+  }
+  if (isRecord(reconciledBaseline) && reconciledBaseline.origin === "item-body") {
+    const source = isRecord(reconciledBaseline.sourceIdentity) ? reconciledBaseline.sourceIdentity : null;
+    const authority = isRecord(reconciledBaseline.authoritySnapshot) ? reconciledBaseline.authoritySnapshot : null;
+    const currentRoom = await (db as unknown as import("@dpf/db").Prisma.TransactionClient).workroom.findFirst({
+      where: { backlogItemId: { in: [item.id, item.itemId] }, archivedAt: null,
+        status: { notIn: ["abandoned", "archived", "superseded"] } },
+      orderBy: { updatedAt: "desc" }, select: { repositoryFullName: true, headSha: true },
+    });
+    if (!currentRoom || source?.headSha !== currentRoom.headSha || source?.repositoryFullName !== currentRoom.repositoryFullName
+      || authority?.organizationId !== (item.organizationId ?? "platform")) {
+      reconciliation = { ...reconciliation, state: "missing", evidenceRefs: [] };
+    }
+  }
   const acceptanceState = reconciliation.state;
-  const directMerge = isDirectMergePlatformWork(item);
+  // An initiative's own PR cannot prove its children or hypothesis outcomes.
+  const directMerge = !aggregate && isDirectMergePlatformWork(item);
   const deploymentResult = directMerge
     ? await (deps.resolveDeploymentClosure ?? resolveBacklogDeploymentClosure)({
       itemId: item.itemId, workType: item.workType, roots: mergeSignalRoots(),
@@ -279,12 +330,16 @@ export async function evaluateBacklogItemCompletion(args: {
   const mergeSignalReasons = mergeSignalBlindSpot ? [mergeSignalUnavailableReason(mergeSignalRoots())] : [];
   // A merge through branch protection is authoritative delivery evidence and
   // supersedes a missing/hand-built manifest (BI-B04A0203).
-  const delivery = mergedThroughGates === "merged" || deployment ? "pass" as const : deliveryState(completion);
+  const currentFailures = currentFailuresOf(completion);
+  const acceptanceFailures = currentFailures.filter((failure) => ACCEPTANCE_FAILURE_DIMENSIONS.has(failure.dimension));
+  const failureRefs = (failures: readonly CurrentEvidenceFailure[]) => failures.map((failure) => failure.evidenceActivityId);
+  let delivery = currentFailures.length > 0
+    ? "fail" as const
+    : mergedThroughGates === "merged" || deployment ? "pass" as const : deliveryState(completion);
   const directDocumentationAcceptance = completion.kind === "evaluated"
     && completion.verdict.allowed
     && completion.verdict.normalizedManifest?.workClass === "documentation"
     && (completion.verdict.acceptanceEvidenceRefs?.length ?? 0) > 0;
-  const boundWorkShape = await readBoundWorkShapeRef(db as unknown as BoundWorkShapeDb, item.itemId);
   // BI-B22E50BC: an operational close (a chore, tool or skill done with no code:
   // a dismissed alert, a config change, a runbook run) never claims a workroom,
   // so it has no bound shape and fell onto the v2 fix table, which owes a spec
@@ -313,12 +368,14 @@ export async function evaluateBacklogItemCompletion(args: {
   // reconciliation is not in a real conflict/malformed state (those still block).
   const mergeAccepts = !deployment && recognizeMergeThroughGates
     && reconciliation.state !== "conflict" && reconciliation.state !== "malformed";
-  const acceptancePass = reconciliation.state === "pass" || directDocumentationAcceptance || smallShapeAcceptance || mergeAccepts;
+  const acceptancePass = acceptanceFailures.length === 0
+    && (reconciliation.state === "pass" || (!aggregate && (directDocumentationAcceptance || smallShapeAcceptance || mergeAccepts)));
+  const acceptanceFailed = acceptanceFailures.length > 0 || reconciliation.state === "fail";
   const objectiveReconciliationPass = reconciliation.state === "pass" || smallShapeAcceptance || mergeAccepts;
   const deliveryEvidenceRefs = completion.kind === "evaluated"
     ? completion.verdict.normalizedManifest?.evidenceActivityIds ?? []
     : [];
-  const projected = (deps.projectReadiness ?? projectBacklogItemReadiness)({
+  const projectionInput: Parameters<typeof projectBacklogItemReadiness>[0] = {
     item: {
       ...item,
       activeBuildKind: item.activeBuild?.kind ?? null,
@@ -338,30 +395,63 @@ export async function evaluateBacklogItemCompletion(args: {
     recognizeMergeThroughGates,
     completion: {
       deliveryEvidence: delivery,
-      acceptanceEvidence: acceptancePass ? "pass" : reconciliation.state === "fail" ? "fail" : "missing",
+      acceptanceEvidence: acceptancePass ? "pass" : acceptanceFailed ? "fail" : "missing",
       objectiveReconciliation: objectiveReconciliationPass ? "pass" : reconciliation.state === "fail" ? "fail" : "missing",
       objectiveBaselineConflict: reconciliation.state === "conflict",
       projectionError: reconciliation.state === "malformed",
       evidenceRefs: {
-        DELIVERY_EVIDENCE_REQUIRED: deliveryEvidenceRefs,
-        ACCEPTANCE_EVIDENCE_REQUIRED: (directDocumentationAcceptance || smallShapeAcceptance) && completion.kind === "evaluated"
-          ? completion.verdict.acceptanceEvidenceRefs ?? []
-          : reconciliation.evidenceRefs,
+        DELIVERY_EVIDENCE_REQUIRED: currentFailures.length > 0 ? failureRefs(currentFailures) : deliveryEvidenceRefs,
+        ACCEPTANCE_EVIDENCE_REQUIRED: acceptanceFailures.length > 0
+          ? failureRefs(acceptanceFailures)
+          : (directDocumentationAcceptance || smallShapeAcceptance) && completion.kind === "evaluated"
+            ? completion.verdict.acceptanceEvidenceRefs ?? []
+            : reconciliation.evidenceRefs,
         OBJECTIVE_RECONCILIATION_REQUIRED: reconciliation.evidenceRefs,
       },
       requirementReasons: {
-        DELIVERY_EVIDENCE_REQUIRED: mergedThroughGates === "merged"
-          ? unreadManifestReasons(completion)
-          : [...mergeSignalReasons, ...deliveryReasons(completion)],
-        ACCEPTANCE_EVIDENCE_REQUIRED: [...mergeSignalReasons, ...unreadManifestReasons(completion)],
+        DELIVERY_EVIDENCE_REQUIRED: currentFailures.length > 0
+          ? currentFailureReasons(currentFailures)
+          : mergedThroughGates === "merged"
+            ? unreadManifestReasons(completion)
+            : [...mergeSignalReasons, ...deliveryReasons(completion)],
+        ACCEPTANCE_EVIDENCE_REQUIRED: acceptanceFailures.length > 0
+          ? currentFailureReasons(acceptanceFailures)
+          : [...mergeSignalReasons, ...unreadManifestReasons(completion)],
         OBJECTIVE_RECONCILIATION_REQUIRED: mergeSignalReasons,
       },
     },
     evaluatedAt,
-  });
+  };
+  const project = deps.projectReadiness ?? projectBacklogItemReadiness;
+  if (aggregate) {
+    const source = projectBacklogItemReadiness({ ...projectionInput, recognizeMergeThroughGates: false });
+    const children = await resolveAggregateCompletion({ itemId: item.itemId,
+      activities: activities as InitiativeReadinessActivity[], source, db: db as unknown as AggregateCompletionDb });
+    delivery = currentFailures.length > 0 ? "fail" : children.delivery;
+    projectionInput.completion = { ...projectionInput.completion!, decomposition: children.decomposition,
+      deliveryEvidence: delivery,
+      objectiveReconciliation: reconciliation.state === "pass" ? "pass" : reconciliation.state === "fail" ? "fail" : "missing",
+      evidenceRefs: { ...projectionInput.completion!.evidenceRefs,
+        PLAN_COVERAGE_REQUIRED: children.evidenceRefs,
+        DELIVERY_EVIDENCE_REQUIRED: currentFailures.length > 0 ? failureRefs(currentFailures) : children.evidenceRefs },
+      requirementReasons: { ...projectionInput.completion!.requirementReasons,
+        PLAN_COVERAGE_REQUIRED: children.coverageReasons,
+        DELIVERY_EVIDENCE_REQUIRED: currentFailures.length > 0 ? currentFailureReasons(currentFailures) : children.deliveryReasons },
+    };
+  }
+  const projected = project(projectionInput);
+  const independent = project({ ...projectionInput, completion: {
+    ...projectionInput.completion!,
+    acceptanceEvidence: acceptanceFailures.length === 0
+      && (reconciliation.state === "pass" || (!aggregate && (directDocumentationAcceptance || smallShapeAcceptance)))
+      ? "pass" : acceptanceFailed ? "fail" : "missing",
+    objectiveReconciliation: reconciliation.state === "pass" || smallShapeAcceptance
+      ? "pass" : reconciliation.state === "fail" ? "fail" : "missing",
+  } });
   return {
     governed: projected.governed,
     decision: deployment ? projectDeploymentClosure(projected.decision, deployment) : projected.decision,
+    independentAcceptanceDecision: independent.decision,
     reconciliation,
     delivery,
     mergedThroughGates,

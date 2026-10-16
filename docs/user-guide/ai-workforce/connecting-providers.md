@@ -11,7 +11,55 @@ relatedCode:
 
 ## Overview
 
-The platform connects to external AI providers to run inference for your AI workforce. Depending on the provider, you can authenticate using one of three methods: API Key, OAuth Sign-in, or None (for local providers). Each method is configured on the provider's detail page under External Services.
+The platform connects to external AI providers to run inference for your AI workforce. Depending on the provider, you can authenticate using one of three methods: API Key, OAuth Sign-in, or None (for local providers). Open **Platform > AI Operations > Providers & Routing**, then choose **Manage** beside a provider.
+
+### Accounts and provider setup
+
+The compact account table keeps **Allowed work**, models and capabilities,
+connection problems, and capacity/reset information together. Allowed work is a
+data-sensitivity boundary. Authentication, model access, or remaining quota does
+not grant permission to send company or customer data. Capacity that a provider
+has not reported stays **Capacity not reported**.
+
+On initial setup, the available-provider catalog is open. **Continue with Local**
+completes provider selection without requiring a hosted account. After setup,
+the overview shows configured and unfinished accounts, including disabled or
+disconnected accounts. **Add provider** opens the searchable catalog again;
+**Add account** starts another named account for the chosen provider. Removing
+the last hosted account does not restart setup.
+
+**Manage account** opens that account's connection and Allowed work controls.
+Connection checks, model refresh, sign-in, disconnect, and enable/disable actions
+apply to the selected account. Secret fields are write-only: leave them empty to
+keep the saved credential. Saving a replacement credential requires a fresh
+data-terms review. The page announces pending actions and their results.
+
+The legacy provider link opens the default account. **Shared provider settings**
+contains catalog and endpoint configuration; provider-wide emergency clearance,
+usage/billing, recipes, diagnostics, and routing operations remain reachable
+through disclosures. Local hardware and installed-model management remain on
+the Local detail page. Open **Provider settings** there to review GPU/CPU wattage
+and electricity cost. **Usage and billing** retains cost sources, finance links
+and routing recipes. Shared usage and diagnostics are identified as applying
+across accounts.
+
+An authenticated additional account is not automatically executable. Its own
+model-access proof, work permissions, capacity, and supported execution channel
+must qualify for the request. An unavailable policy read does not confirm that
+hosted AI is permitted. The global Local-only policy remains visible above the
+account table.
+
+### Routing status and temporary pauses
+
+Z.ai GLM Coding is also listed separately so you can manage its coding endpoint and traffic. It inherits the main Z.ai key unless you configure an override.
+
+Each provider's **Routing right now** panel shows its operator pause alongside current usage limits, retry times, account or health restrictions, the platform's local-only policy, and local capacity reserved for platform verification. Times display in your browser's timezone. Open **More routing details** for recent health and subscription allocation observations. Workload and model requirements are checked separately for each request.
+
+Choose **Pause now** to stop new model requests immediately. The pause lasts until you resume it. Choose **Set resume time** to add a duration in hours or days. A scheduled pause persists across refreshes and restarts. You can change the time, keep it paused indefinitely, or choose **Resume now** early. Work already running may finish.
+
+Resuming removes the operator pause. It does not reset a provider's usage limit or override an authentication, billing, health, account, or local-only restriction. The panel keeps those restrictions visible. Read-only viewers can inspect the status; provider managers can change it.
+
+**ChatGPT and Codex can share an OpenAI subscription.** Both appear in Providers & Routing. Each account keeps its own sign-in recovery unless the platform has verified a shared sign-in owner. Use the selected account's sign-in control; when the page identifies a shared owner, manage that sign-in there. Pausing one provider leaves the other's operator control unchanged. Subscription limits may affect both.
 
 Authentication proves only that a connection works. Before using company or customer data, also identify whether the connected account is personal/individual, business/team, enterprise, or unknown, and review its contract, retention, training, and processing-region terms. DPF keeps unreviewed hosted connections limited to public or synthetic work.
 
@@ -22,6 +70,16 @@ are saved. **Save & verify connection** runs a connection check; a successful
 check shows **Connection verified**. Neither label grants access to every saved
 model or overrides workload rules. Open **Advanced diagnostics** to inspect model
 history or refresh the catalog. Routine discovery runs automatically.
+
+**Sign-in saved** means DPF holds an OAuth token; it does not confirm current
+access. If verification fails, use **Sign in again** on the provider page. You
+can reconnect without disconnecting first. For ChatGPT, follow the link to Codex
+to renew their shared sign-in. **Account actions** contains Disconnect.
+
+During an upgrade, connection setup pauses. Wait for the upgrade to finish before
+trying again. If the page cannot complete setup and no upgrade is detected, reload
+it and retry. A subscription usage limit is separate from authentication: signing
+in again does not reset that limit.
 
 ### API Key
 
@@ -127,8 +185,8 @@ provider toggle. A provider whose default connection is disabled is shown with
 a connection-specific reason ("routing skips it until you reconnect") instead
 of a green active badge, on both the list and the provider detail page.
 Activating a provider brings its default connection along, and the platform
-heals a disabled-connection-behind-active-provider split automatically at
-startup — so a provider that reads active can actually route.
+preserves an intentionally disabled account during registry reconciliation.
+Enable the account explicitly when you want routing to use it again.
 
 If you choose **Skip safely** or **Review later**, DPF does not treat the provider as approved. Company and customer data stay restricted until the missing account, contract, region, or other evidence is reviewed. You can return to Providers & Routing and ask the COO again; a denied or unavailable consultation does not change provider posture.
 
@@ -213,6 +271,6 @@ After provider setup, the finance-linked surfaces are:
 
 ## Troubleshooting
 
-- **"Token expired"** — click Sign In again to re-authenticate. This is the only action required.
+- **"Token expired"** — a stored expiry date does not prove the upstream token still works. Use the selected account's sign-in control, which remains available while a token is stored; disconnecting the account is not required. A verified shared sign-in owner, when identified on the page, supplies that account's recovery instead. The bounded expired-token verification repair retries once after refreshing the owning grant; if renewal fails or the second request is still expired, a new sign-in is required.
 - **"Provider not configured"** — verify that an API key or OAuth connection has been set up for this provider.
 - **"No eligible endpoints"** — the provider needs at least one profiled model. Click "Sync Models & Profiles" on the provider detail page.

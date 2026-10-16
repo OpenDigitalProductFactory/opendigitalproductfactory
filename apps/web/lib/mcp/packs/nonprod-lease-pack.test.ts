@@ -13,11 +13,25 @@ const durableWait = vi.hoisted(() => ({
   checkpointNonprodLeaseWait: vi.fn(),
   settleNonprodLeaseWait: vi.fn(),
 }));
-vi.mock("@/lib/nonprod/durable-wait", () => durableWait);
+vi.mock("@/lib/nonprod/durable-wait", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/nonprod/durable-wait")>(),
+  ...durableWait,
+}));
+const cleanup = vi.hoisted(() => ({ readLease: vi.fn(), readWait: vi.fn(), stance: vi.fn() }));
+vi.mock("@dpf/db", () => ({ prisma: {
+  nonProductionEnvironmentLease: { findUnique: cleanup.readLease },
+  taskRun: { findUnique: cleanup.readWait },
+} }));
+vi.mock("@/lib/install/instance-stance", () => ({
+  loadInstanceStance: cleanup.stance,
+  prismaInstanceStanceStore: () => ({}),
+}));
 
 import { nonprodLeasePack } from "./nonprod-lease-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { deriveGateKey } from "@/lib/gates/gate-run-identity";
+import { resolveCallConsequence } from "@/lib/tool-consequence";
+import { deterministicNonprodWaitTaskRunId } from "@/lib/nonprod/durable-wait";
 
 const EXPECTED_TOOLS = [
   "list_nonprod_environment_leases",
@@ -37,6 +51,27 @@ beforeEach(() => {
 });
 
 describe("nonprod-lease pack — registration", () => {
+  it("does not require another authority approval for server-bound owned DEV cleanup", async () => {
+    const taskRunId = deterministicNonprodWaitTaskRunId("user-1", "NPEL-OWNED");
+    const binding = {
+      leaseId: "NPEL-OWNED", claimKey: "own-gate", environmentKey: "local-integration-ci",
+      ownerProvider: "codex", ownerSessionId: "session-1", worktreePath: "D:/DPF-worktrees/owned",
+      branchName: "fix/owned", taskRunId,
+    };
+    cleanup.stance.mockResolvedValue({ environmentClass: "development", primaryPurpose: "evolve-dpf" });
+    cleanup.readLease.mockResolvedValue({ ...binding, status: "expired", slotManifestVersion: 1,
+      ownerPid: null, ownerProcessIdentity: null });
+    cleanup.readWait.mockResolvedValue({ taskRunId, userId: "user-1", progressPayload: {
+      nonprodLeaseWait: { ...binding, schemaVersion: 1, kind: "nonprod-lease-wait", state: "terminal",
+        queuePosition: null, waitDeadlineAt: "2026-10-13T04:00:00Z", lastTransitionAt: "2026-10-13T04:00:00Z",
+        eventId: null, eventConsumed: true },
+    } });
+    const tool = nonprodLeasePack.definitions.find((d) => d.name === "release_nonprod_environment_lease")!;
+    expect(tool.consequence).toBe("authority");
+    expect((await resolveCallConsequence(tool, { toolName: tool.name, userId: "user-1",
+      params: { leaseId: "NPEL-OWNED", ownerSessionId: "session-1" } })).consequence).toBeNull();
+  });
+
   it("exposes exactly the lease + origin-lookup tools", () => {
     expect(nonprodLeasePack.definitions.map((d) => d.name).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(Object.keys(nonprodLeasePack.handlers).sort()).toEqual([...EXPECTED_TOOLS].sort());
@@ -80,6 +115,16 @@ describe("nonprod-lease pack — registration", () => {
 });
 
 describe("nonprod-lease pack — handler behavior (delegation preserved)", () => {
+  it.each(["nonprod_resume_identity_mismatch", "nonprod_resume_lease_expired"])("projects %s as a refusal, not a thrown transport error", async code => {
+    lease.claimNonprodEnvironmentLease.mockRejectedValueOnce(new Error(code));
+    const result = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
+      environmentKey: "active-candidate", ownerProvider: "codex", ownerSessionId: "s1",
+      claimKey: "fixture-claim", resumeLeaseId: "NPEL-ORIGINAL", purpose: "test",
+      url: "http://localhost:3010", ports: [3010], expiresAt: new Date(Date.now() + 60000).toISOString(),
+    }, "u1");
+    expect(result).toMatchObject({ success: false, error: code });
+    expect(durableWait.checkpointNonprodLeaseWait).not.toHaveBeenCalled();
+  });
   it("list returns admitted and queued leases from the service", async () => {
     lease.listActiveNonprodEnvironmentLeases.mockResolvedValue([{ id: "L1" }]);
     lease.listQueuedNonprodEnvironmentLeases.mockResolvedValue([{ id: "L2" }]);
@@ -113,7 +158,7 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
         url: "http://localhost:3010",
         ports: [3010],
         expiresAt: new Date(Date.now() + 60_000).toISOString(),
-        gateClientRevision: 1,
+        gateClientRevision: 2,
         worktreePath: "D:\\DPF-source-root-worktrees\\lease-terminal-retry-stop",
       },
       "u1",
@@ -186,26 +231,26 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
 
   // BI-69178E02: a gate client runs from the branch, so the server is the only
   // place a client defect fixed on main can be retired from un-rebased branches.
-  it("refuses a stale Windows gate client before touching any lease", async () => {
+  it.each(["D:/DPF-worktrees/stale", "/home/dev/dpf-worktrees/stale"])("refuses a stale gate client at %s before touching any lease", async (worktreePath) => {
     const res = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
       environmentKey: "local-integration-ci", ownerProvider: "claude", ownerSessionId: "s1",
       claimKey: "local-ci:s1:abc", purpose: "Pre-PR local-CI gate for fix/x @ abc",
       url: "http://localhost:3010", ports: [3010],
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
-      worktreePath: "D:\\DPF-source-root-worktrees\\stale",
+      worktreePath,
     }, "u1");
 
     expect(res).toMatchObject({
       success: false,
       error: "gate_client_upgrade_required",
-      data: { admission: { status: "refused" }, minimumRevision: 1, clientRevision: 0 },
+      data: { admission: { status: "refused" }, minimumRevision: 2, clientRevision: 0 },
     });
     expect(res.message).toMatch(/Rebase the branch onto main/);
     expect(res.message).toMatch(/not a verdict on the diff/);
     expect(lease.claimNonprodEnvironmentLease).not.toHaveBeenCalled();
   });
 
-  it("admits a current Windows gate client and a POSIX client of any revision", async () => {
+  it("admits revision 2 Windows and POSIX gate clients", async () => {
     lease.claimNonprodEnvironmentLease.mockResolvedValue({
       status: "admitted", lease: { leaseId: "NPEL-A1" }, slotKey: "slot-0", waitAgeMs: 0, poolPolicy: {},
     });
@@ -216,10 +261,10 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
     };
     const current = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
-      ...base, worktreePath: "D:\\DPF-source-root-worktrees\\fresh", gateClientRevision: 1,
+      ...base, worktreePath: "D:\\DPF-source-root-worktrees\\fresh", gateClientRevision: 2,
     }, "u1");
     const posix = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
-      ...base, worktreePath: "/home/dev/dpf-worktrees/any",
+      ...base, worktreePath: "/home/dev/dpf-worktrees/any", gateClientRevision: 2,
     }, "u1");
     expect(current.error).not.toBe("gate_client_upgrade_required");
     expect(posix.error).not.toBe("gate_client_upgrade_required");

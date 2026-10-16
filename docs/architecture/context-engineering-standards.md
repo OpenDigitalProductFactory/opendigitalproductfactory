@@ -18,6 +18,15 @@ DPF is **local-first by founder strategy**: cloud frontier models are disabled b
 
 ## The three laws
 
+Account-aware fallback preserves the request's context and governed account
+constraints. A selected-account change before dispatch triggers a fresh route;
+an uncertain native execution stops replay rather than sending the same action
+to another account. Saved response identifiers are reused only with their
+originating account; a different account receives the retained message context.
+The [account routing guide](../user-guide/ai-workforce/provider-account-routing.md)
+and [delivery plan](../superpowers/plans/2026-10-14-provider-account-capacity-refactor.md)
+record the contract and qualification boundary.
+
 1. **Context is a finite resource with diminishing returns.** Recall degrades as tokens grow ("context rot"). Default to *removing*, not adding.
 2. **Smallest high-signal set.** Optimize signal-to-token ratio in every block: system prompt, tool definitions, examples, history, results.
 3. **Tool-selection accuracy collapses past a threshold.** Few, consolidated, unambiguous tools beat many; keep exposed sets under the local cliff.

@@ -1,3 +1,4 @@
+import { classifyTurnMutationIntent } from "./conversation-intent";
 // apps/web/lib/tak/intent-taxonomy.ts
 //
 // EP-E431FC8A Phase 2 (BI-DF3092F4). A data-driven task-class taxonomy that
@@ -93,12 +94,37 @@ export const LIVE_STATE_CUES: readonly RegExp[] = [
 ];
 
 
-/**
- * A supplied source artifact is evidence for what that source says, not for the
- * running system. Keep quoted code out of intent matching and preserve any live
- * request outside it. This narrows classification only; it grants no tool or
- * writer authority and does not accept 'do not use tools' as an exemption.
- */
+/** Conservative single-line source recognition; trailing requests stay outside. */
+function isStandaloneSuppliedFunction(line: string): boolean {
+  const source = line.trim();
+  if (source.length > 16_384) return false;
+  const header = /^(?:async\s+)?function\s+[$\w]+\s*\([^()\r\n]*\)\s*\{/.exec(source);
+  if (!header) return false;
+  let depth = 1;
+  let quote: string | null = null;
+  let escaped = false;
+  for (let index = header[0].length; index < source.length; index++) {
+    const char = source[index]!;
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === quote) quote = null;
+      continue;
+    }
+    if (char === "'" || char === '"') { quote = char; continue; }
+    // Templates, comments and regular expressions need a real language parser.
+    // Do not infer a complete artifact from ambiguous delimiters.
+    if (char === "`" || char === "/") return false;
+    if (char === "{") depth++;
+    if (char === "}" && --depth === 0) {
+      const tail = source.slice(index + 1).trim();
+      return tail === "" || tail === ";";
+    }
+  }
+  return false;
+}
+
+/** Supplied source is evidence for its content, never live state or writer authority. */
 export function isSuppliedSourceAnalysis(message: string): boolean {
   let suppliedSource = false;
   const withoutFences: string[] = [];
@@ -119,6 +145,8 @@ export function isSuppliedSourceAnalysis(message: string): boolean {
     } else if (width >= 3) {
       fenceWidth = width;
       fenceLines = [line];
+    } else if (isStandaloneSuppliedFunction(line)) {
+      suppliedSource = true;
     } else {
       withoutFences.push(line);
     }
@@ -153,9 +181,18 @@ export function isSuppliedSourceAnalysis(message: string): boolean {
     inDiff = false;
     return true;
   }).join("\n");
-  if (!suppliedSource || !/\b(?:read|summari[sz]e|explain|review|analy[sz]e|compare)\b[^.!?\n]{0,160}\b(?:diff|patch|source code|code snippet)\b/i.test(request)) return false;
+  if (!suppliedSource || !/\b(?:read|summari[sz]e|explain|review|analy[sz]e|compare)\b[^.!?\n]{0,160}\b(?:diff|patch|source code|code snippet|function)\b/i.test(request)) return false;
   // Mixed source/live questions still owe live evidence, wherever they appear.
-  return !LIVE_STATE_CUES.some((cue) => cue.test(request));
+  // An explicitly requested verdict enum describes the answer format, not
+  // the running system. Preserve the surrounding request and any separate
+  // live claim: never remove current/provider/test-result questions.
+  const verdictFormat = /(\b(?:return|output)\b[^.!?\n]{0,160}\bjson\b[^.!?\n]{0,160}\bverdict\b[^.!?\n]{0,40})\(?\s*PASS\s+(?:or|\/|\|)\s+FAIL\s*\)?/i;
+  const hasVerdictFormat = verdictFormat.test(request);
+  const liveRequest = hasVerdictFormat
+    ? request.replace(verdictFormat, "$1<verdict-enum>").replace(/(^|[.!?\n]\s*)(?:a\s+)?PASS(?=\s+(?:(?:requires?|means?|needs?)\b[^.!?\n]{0,60}\b(?:empty|no)\b[^.!?\n]{0,40}\bissues?\b|means?\b[^.!?\n]{0,40}\bissues?\b[^.!?\n]{0,40}\bempty\b))/gi, "$1A positive verdict")
+    : request;
+  return classifyTurnMutationIntent(liveRequest) !== "authorized"
+    && !LIVE_STATE_CUES.some((cue) => cue.test(liveRequest));
 }
 
 /**

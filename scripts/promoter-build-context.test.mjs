@@ -244,24 +244,78 @@ test("candidate promoter build stages exactly the COPY sources, never the whole 
 // portal is released), only then may a staged script import it.
 const N_MINUS_ONE_CLOSURE_FILE = "scripts/promoter-closure-n-minus-one.json";
 
-test("every relative import among staged promoter scripts resolves inside the N-1 deployed closure", async () => {
+function assertImportCompatibility(staged, released, sources) {
+  const deployed = new Set(released.deployedClosure);
+  const knownGap = new Set((released.knownGaps ?? []).map(gap => `${gap.from} -> ${gap.to}`));
+  for (const source of staged.filter(file => file.endsWith(".mjs"))) {
+    for (const spec of staticRelativeImports(sources.get(source))) {
+      const target = posix.normalize(posix.join(posix.dirname(source), spec));
+      assert.ok(staged.includes(target), `${source} imports ${target}, which is not a staged promoter source`);
+      // New inactive files are absent from the old caller's staged context.
+      // Current closure completeness was checked above; only candidate bytes
+      // actually copied by the N-1 caller can introduce an N-1 import failure.
+      if (!deployed.has(source) || knownGap.has(`${source} -> ${target}`)) continue;
+      assert.ok(deployed.has(target),
+        `${source} imports ${target}, which the already-deployed (N-1) promoter closure does not stage; `
+        + `ship the staging entry in its own release before any deployed script imports it`);
+    }
+  }
+}
+
+test("every relative import resolves in current and N-1 executable closures", async () => {
   const [staged, released] = await Promise.all([
     readPromoterBuildContextSources(root),
     readFile(join(root, N_MINUS_ONE_CLOSURE_FILE), "utf8").then(JSON.parse),
   ]);
-  const deployed = new Set(released.deployedClosure);
-  const knownGap = new Set((released.knownGaps ?? []).map((gap) => `${gap.from} -> ${gap.to}`));
-  for (const source of staged.filter((file) => file.endsWith(".mjs"))) {
-    const code = await readFile(join(root, source), "utf8");
-    // The Dockerfile guard's parser, so every image check agrees on what
-    // "statically imported" means (re-exports and multi-line bindings included).
-    for (const spec of staticRelativeImports(code)) {
-      const target = posix.normalize(posix.join(posix.dirname(source), spec));
-      assert.ok(staged.includes(target), `${source} imports ${target}, which is not a staged promoter source`);
-      if (knownGap.has(`${source} -> ${target}`)) continue;
-      assert.ok(deployed.has(target),
-        `${source} imports ${target}, which the already-deployed (N-1) promoter closure does not stage; `
-        + `land the list entry in ${N_MINUS_ONE_CLOSURE_FILE} first, in its own release, before any staged script imports it`);
-    }
+  const sources = new Map(await Promise.all(staged.filter(file => file.endsWith(".mjs")).map(async file => [file, await readFile(join(root, file), "utf8")])));
+  assertImportCompatibility(staged, released, sources);
+});
+
+test("preparation may stage inactive modules with a complete new dependency closure", () => {
+  assertImportCompatibility(["old.mjs", "new.mjs", "leaf.mjs"], { deployedClosure: ["old.mjs"] }, new Map([
+    ["old.mjs", "export const ready = true;"],
+    ["new.mjs", 'import "./leaf.mjs";'], ["leaf.mjs", "export const version = 1;"],
+  ]));
+});
+
+test("preparation never permits a deployed entrypoint to import an unstaged N-1 dependency", () => {
+  assert.throws(() => assertImportCompatibility(["old.mjs", "new.mjs"], { deployedClosure: ["old.mjs"] }, new Map([
+    ["old.mjs", 'import "./new.mjs";'], ["new.mjs", "export const version = 1;"],
+  ])), /N-1.*does not stage/);
+});
+
+test("inactive new modules still require a complete current dependency closure", () => {
+  assert.throws(() => assertImportCompatibility(["old.mjs", "new.mjs"], { deployedClosure: ["old.mjs"] }, new Map([
+    ["old.mjs", "export const ready = true;"], ["new.mjs", 'import "./missing.mjs";'],
+  ])), /not a staged promoter source/);
+});
+
+test("deployed transitive modules cannot import dependencies absent from N-1", () => {
+  assert.throws(() => assertImportCompatibility(["old.mjs", "middle.mjs", "new.mjs"], { deployedClosure: ["old.mjs", "middle.mjs"] }, new Map([
+    ["old.mjs", 'import "./middle.mjs";'], ["middle.mjs", 'export * from "./new.mjs";'], ["new.mjs", "export const version = 1;"],
+  ])), /N-1.*does not stage/);
+});
+
+
+test("candidate readiness does not require files absent from old staging", async () => {
+  const released = JSON.parse(await readFile(join(root, N_MINUS_ONE_CLOSURE_FILE), "utf8"));
+  const contract = JSON.parse(await readFile(join(root, "promoter-contract.json"), "utf8"));
+  const provided = new Set(released.deployedClosure.map(file => file === "promoter-contract.json" ? "/app/promoter-contract.json"
+    : file === "Dockerfile" ? "/promoter/portal.Dockerfile" : file.replace(/^scripts\//, "/promoter/")));
+  for (const file of contract.requiredFiles) assert.ok(provided.has(file), `candidate readiness requires ${file} absent from N-1 staging`);
+});
+
+test("key initialization runs from only the historical deployed staging set", async t => {
+  const { mkdtemp, mkdir, copyFile, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { spawnSync } = await import("node:child_process");
+  const released = JSON.parse(await readFile(join(root, N_MINUS_ONE_CLOSURE_FILE), "utf8"));
+  const stage = await mkdtemp(join(tmpdir(), "dpf-old-promoter-"));
+  t.after(() => rm(stage, { recursive: true, force: true }));
+  for (const file of released.deployedClosure) {
+    await mkdir(dirname(join(stage, file)), { recursive: true });
+    await copyFile(join(root, file), join(stage, file));
   }
+  const result = spawnSync(process.execPath, [join(stage, "scripts/rotate-runtime-transition-secret.mjs"), "--initialize", "--state-dir", join(stage, "state")], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
 });

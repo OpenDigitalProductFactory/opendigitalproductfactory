@@ -1,3 +1,4 @@
+import type { DeliveryReadinessReport } from "./delivery-readiness-contract";
 /**
  * Shared types across the agent-toolchain bootstrap planning library.
  *
@@ -22,7 +23,7 @@ export type PlanWriteMode = "create" | "update" | "preserve-user-edit";
  * adapter boundary.
  */
 export type McpReadinessProbeResult =
-  | { ok: true; toolCount: number; observedAt: string }
+  | { ok: true; toolCount: number; observedAt: string; delivery?: DeliveryReadinessReport }
   | {
       ok: false;
       reason:
@@ -31,8 +32,10 @@ export type McpReadinessProbeResult =
         | "mcp-unavailable"
         | "endpoint_unreachable"
         | "scope_insufficient"
+        | "coworker_grants_insufficient"
         | "unexpected_shape";
       httpStatus: number | null;
+      delivery?: DeliveryReadinessReport;
     };
 
 /**

@@ -28,6 +28,8 @@ export type CollaborationProvenance = {
   byUserId?: string;
   /** The accepted DelegationChain link, closed when the child finishes (BI-A0BFA63E). */
   delegationLinkId?: string;
+  /** Set when the delegating turn ran in Advise mode; the child then runs in Advise (BI-FAD98137). */
+  runtimeMode?: "advise";
 };
 
 /** Narrow an unknown a2aMetadata JSON blob to its embedded provenance, if present. */
@@ -53,6 +55,7 @@ export function readCollaborationProvenance(a2aMetadata: unknown): Collaboration
     summary: typeof c["summary"] === "string" ? (c["summary"] as string) : undefined,
     byUserId: typeof c["byUserId"] === "string" ? (c["byUserId"] as string) : undefined,
     delegationLinkId: typeof c["delegationLinkId"] === "string" ? (c["delegationLinkId"] as string) : undefined,
+    runtimeMode: c["runtimeMode"] === "advise" ? "advise" : undefined,
   };
 }
 

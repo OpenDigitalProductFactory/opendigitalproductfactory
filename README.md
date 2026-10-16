@@ -124,11 +124,17 @@ bash install-dpf.sh
 
 ### Linux (native Docker) — Early access · [full guide](docs/install/linux.md)
 
-```bash
-git clone https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git
-cd opendigitalproductfactory
-bash install-dpf.sh
-```
+Start an **assisted pilot on Ubuntu Server 24.04 LTS, x86-64**, on a dedicated
+VM or physical server. Docker runs the containers directly on Linux: use
+**Docker Engine with Compose v2; Docker Desktop is not required**. The Bash
+installer is already available in the repository as `install-dpf.sh`.
+
+For provider-assisted operations, plan for **8–12 modern CPU cores, 32 GB RAM
+and a 1 TB SSD; no GPU is required**. See the [hardware guide](docs/install/hardware.md)
+for heavier or local-AI workloads. Follow the [Linux pilot guide](docs/install/linux.md)
+to select matching installer and image versions and record acceptance results.
+Source repairs and automated tests do not yet establish native customer
+readiness; HTTPS/login, AI, reboot, restore and upgrade still need pilot evidence.
 
 ### Cloud Single VM (AWS / GCP / Azure) — Early access · pilots wanted · [full guide](docs/install/cloud-single-vm.md)
 
@@ -146,7 +152,7 @@ The installer asks one question — **Ready to go** (pre-built images; source ch
 
 **AI toolchain readiness.** If you have Claude Code or Codex CLI installed on the host, the installer wires them automatically — DPF skills, MCP tools, and kernel-tier memory all available on the first turn of every new contributor session. Re-running the installer is a no-op when nothing has drifted. See [Install operations](docs/operations/install.md) for the readiness states and what each one means.
 
-**Releases & versions.** Stable versions are published on the [Releases page](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/releases) — each carries a changelog and downloadable source archives (`.zip` / `.tar.gz`). The install scripts above (which track `main`) remain the recommended path; the Releases page is where you see what changed between versions and pin a specific one. Releases are cut automatically from each `vX.Y.Z` tag.
+**Releases & versions.** Stable versions are published on the [Releases page](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/releases) — each carries a changelog and downloadable source archives (`.zip` / `.tar.gz`). The Windows and macOS commands above track `main`; Linux pilots select matching source and image versions using the Linux guide. The Releases page is where you see what changed between versions and pin a specific one. Releases are cut automatically from each `vX.Y.Z` tag.
 
 If you hit a wall — happy-path success stories and "the installer hit a wall at step X" failures are equally useful — open an issue using the [Install verification report template](.github/ISSUE_TEMPLATE/install_verification.md) and attach the bundle produced by `bash install-dpf.sh doctor`.
 

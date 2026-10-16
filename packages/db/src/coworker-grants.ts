@@ -32,6 +32,11 @@
 //   query_ontology_graph. Read-only; ea_graph_write stays off.
 // All three are already in the development token template, so a write-scoped
 // development token reaches them once the agent holds the grant.
+// - approval_probe_read (BI-129EFFD1): the read-only AC-PROBE dry run, so the
+//   coordinating session can record it as evidence. The tool still requires
+//   the human's platform-administration capability. All three external roles
+//   hold it: a grant on one only would split their authority signature and
+//   stop OAuth from resolving the external profile by client name.
 // Deliberately NOT granted: agent_control_read. establish_coworker and
 // manage_coworker_tool_grant change coworker authority, so dpf-establish-coworker
 // and dpf-add-archetype keep those steps in-portal and do not list them on
@@ -43,6 +48,8 @@ const EXTERNAL_DEVELOPMENT_GRANTS = [
   "backlog_read", "backlog_write", "file_read", "code_graph_read",
   "build_lifecycle", "sandbox_execute", "initiative_evidence_write",
   "decision_record_create", "backlog_triage", "document_write", "ea_graph_read",
+  "approval_probe_read",
+  "coworker_catalog_read", "coworker_engagement_write",
 ];
 
 export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
@@ -117,7 +124,9 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // list_mdm_steward_tasks); web_search gates the enrich_customer_account door.
   "data-steward": ["crm_read", "crm_write", "consumer_read", "registry_read", "backlog_read", "web_search", "tool_script_exec"],
   // document_write reaches create_presentation (BI-543819B1): the strategist
-  // produces branded decks. agent_registry.json AGT-WS-MARKETING carries it too.
+  // produces branded decks, and the report, letter, sheet and drawing tools
+  // (BI-012487AA) for campaign reports, sponsor letters and simple diagrams.
+  // agent_registry.json AGT-WS-MARKETING carries it too.
   "marketing-specialist": ["marketing_read", "marketing_write", "consumer_read", "registry_read", "document_write"],
   "storefront-advisor": [
     "consumer_read",
@@ -204,7 +213,12 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     "policy_read",
     "spec_plan_read",
   ],
-  "admin-assistant": ["admin_read", "admin_write", "agent_control_read", "registry_read", "web_search", "file_read"],
+  // document_write reaches create_letter and create_report (BI-012487AA): the
+  // admin assistant writes the organization's correspondence and briefing
+  // documents. It also reaches doc_save, doc_link and the other render-family
+  // tools; publishing (document_publish) stays off. agent_registry.json
+  // AGT-WS-ADMIN carries it too.
+  "admin-assistant": ["admin_read", "admin_write", "agent_control_read", "registry_read", "web_search", "file_read", "approval_probe_read", "document_write"],
   coo: ["portfolio_read", "registry_read", "backlog_read", "backlog_write", "agent_control_read", "email_config", "thread_write"],
   "doc-specialist": ["file_read", "registry_read", "portfolio_read", "document_read", "document_write", "document_publish"],
   "compliance-officer": [
@@ -237,7 +251,11 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // payables_read: payables-watch and vendor-renewal-watch read recorded bills
   // and supplier agreements (list_bills, list_supplier_contracts). Paying,
   // renewing and cancelling stay human stages.
-  "finance-controller": ["registry_read", "backlog_read", "portfolio_read", "workroom_evidence_write", "payables_read"],
+  // document_write reaches create_report, create_sheet and create_letter
+  // (BI-012487AA): the controller produces the board pack, budget workbooks and
+  // supplier or donor letters as branded managed documents. Publishing stays
+  // off. agent_registry.json AGT-WS-FINANCE carries it too.
+  "finance-controller": ["registry_read", "backlog_read", "portfolio_read", "workroom_evidence_write", "payables_read", "document_write"],
   // Bookkeeper (S-BK): the day-to-day books loop. banking_read/banking_write drive
   // the governed banking tools (S-FIN); enrichment_write resolves vendor→supplier
   // (BI-B2497DFB); crm_read/write for counterparties; document_read for

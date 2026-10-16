@@ -169,6 +169,12 @@ Derived at triage from signals already on the item; overridable with a recorded 
 
 Principles encoded in the table:
 
+Implementation correction BI-DA407BD9 restores the xlarge completion row: valid
+decomposition coverage and completed children supply aggregate delivery, while
+the parent's actual outcome reconciliation supplies acceptance. The parent
+still cannot enter implementation, and its own PR merge or deployment cannot
+stand in for unfinished children or unverified outcomes.
+
 - **Delivery evidence is the trunk, not a manifest.** For every shape, "merged SHA reachable from `main` with green required checks" satisfies `DELIVERY_EVIDENCE_REQUIRED`. The current merge-through-gates hatch becomes the primary path and must not require a Workroom: it takes the PR's merge SHA from the item's linked PR when no Workroom exists.
 - **The objective baseline scales with the shape.** Today only a spec approval can mint one, so anything without a spec cannot reconcile. `small` and `medium` mint their baseline from the item's acceptance criteria at triage. `OBJECTIVE_RECONCILIATION_REQUIRED` applies to `large` and `xlarge` only; smaller shapes reconcile through acceptance.
 - **The expedite lane is real, narrow and audited.** `break-fix` skips pre-authorisation and owes a post-implementation review receipt within 48 hours. A missed PIR flips the item to `input-required` and blocks the author's next `break-fix` declaration. The share of `break-fix` among merged work is a Right Now / governance signal; above 20% in a rolling week it is a finding, not a number.

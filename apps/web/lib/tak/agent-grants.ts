@@ -10,6 +10,7 @@ import { CHANGE_REVIEW_TOOL_GRANTS } from "./change-review-tool-grants";
 import { CONTRIBUTOR_INVENTORY_TOOL_GRANTS } from "./contributor-inventory-tool-grants";
 import { PAYABLES_TOOL_GRANTS } from "./payables-tool-grants";
 import { PROVIDER_MANAGEMENT_TOOL_GRANTS } from "./provider-management-tool-grants";
+import { PLATFORM_UPDATE_TOOL_GRANTS } from "./platform-update-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 /**
  * Implications between agent grant categories. A grant on the left of the
@@ -219,12 +220,12 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Work Capsule control harness (spec 2026-05-14)
   list_workrooms: ["work_capsule_read"],
   get_workroom: ["work_capsule_read"],
-  // EP-WORKROOM-COMMS (BI-3F21C4D5): read/post a Work Room's message feed. Room
-  // admission is enforced separately (room-agent-access); these are the coarse caps.
+  review_workroom_sensitivity: ["admin_read"],
+  correct_workroom_sensitivity: ["admin_write"],
+  // Room admission and coordinator rights are checked separately from these
+  // communication grants (EP-WORKROOM-COMMS, BI-3F21C4D5).
   read_room_messages: ["work_room_read"],
   post_room_message: ["work_room_write"],
-  // EP-WORKROOM-COMMS: invite a participant on demand (write); 360 coworker
-  // room-engagement (read). Room admission/coordinator right enforced separately.
   invite_room_participant: ["work_room_write"],
   appoint_room_coordinator: ["work_room_write"],
   plan_account_handover: ["work_room_write"],
@@ -242,6 +243,9 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   heartbeat_workroom: ["work_capsule_write"],
   update_workroom_status: ["work_capsule_write"],
   rebind_workroom_shape: ["work_capsule_write"],
+  resume_workroom_queue: ["work_capsule_write"],
+  drive_workroom_runtime: ["work_capsule_write"],
+  approve_runtime_permission: ["work_capsule_write"],
   release_workroom_scope: ["work_capsule_write"],
   reassign_workroom_executor: ["work_capsule_write"],
   get_runtime_coordination_map: ["work_capsule_read"],
@@ -268,9 +272,10 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Surface readiness (G9, multi-client governance parity, BI-6AC65187): a
   // client surface's self-reported heartbeat rides the same tier as the other
   // heartbeats; the fleet rollup is an ops read like the coordination map.
-  record_surface_readiness: ["work_capsule_write"],
-  get_fleet_readiness: ["work_capsule_read"],
+  record_surface_readiness: ["work_capsule_write"], get_fleet_readiness: ["work_capsule_read"],
+  issue_grok_credentials_client: ["sandbox_execute"], // BI-84C1F526: Grok credential carries dpf.build
   register_runtime_target: ["work_capsule_write"],
+  verify_archetype_projection: ["sandbox_execute"],
   heartbeat_runtime_target: ["work_capsule_write"],
   release_runtime_target: ["work_capsule_write"],
   record_runtime_verification: ["work_capsule_write"],
@@ -423,13 +428,13 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   search_tool_marketplace: ["registry_read"],
   get_my_coworker_profile: ["registry_read"],
   get_my_approval_status: ["registry_read"],
+  probe_pending_approval_conversion: ["approval_probe_read"], // BI-129EFFD1: read-only AC-PROBE, manage_platform
   assess_my_capabilities: ["registry_read"],
   submit_coworker_capability_need: ["registry_read"],
   list_my_capability_needs: ["registry_read"],
   // BI-F9E7B780: governance-surface variant — same grant tier (registry_read)
   // because both surfaces are read-only over the same CoworkerCapabilityNeed
-  // model; the scope difference is "your needs" vs "everyone's needs", not
-  // a privilege difference.
+  // model; the scope difference is "your needs" vs "everyone's needs", not a privilege difference.
   list_all_capability_needs: ["registry_read"],
   list_coworker_services: ["coworker_catalog_read"],
   list_coworker_offers: ["coworker_catalog_read"],
@@ -778,10 +783,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // build can complete step 4 of routing a learning to the commons.
   contribute_finding_to_hive: ["backlog_write"],
   set_change_disposition: ["backlog_write"],
-  apply_platform_update:  ["admin_write"],
-  // BI-C26F7EE1: read-only operator preview of the upstream change set —
-  // paired with apply_platform_update's admin_write as the read tier.
-  summarize_upgrade_impact: ["admin_read"],
+  ...PLATFORM_UPDATE_TOOL_GRANTS,
 
   // Contributor inventory sync: on-demand trigger so an agent need not wait for the 10-minute cron (BI-063BDF1B Phase 5).
   trigger_contributor_inventory_sync: ["admin_write"],

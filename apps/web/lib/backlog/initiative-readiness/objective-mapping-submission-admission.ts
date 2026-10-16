@@ -2,6 +2,7 @@ import { immutableArtifactIdentity, repoBlobArtifactRef } from "@/lib/mcp-task-r
 import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
 import { loadBaselineSourceForItem, type BaselineSourceDb } from "./baseline-source";
+import { bodyBaselineInputsMatch } from "./body-baseline-binding";
 
 import {
   authorizeObjectiveMappingRequestKeyEvolution,
@@ -94,7 +95,7 @@ async function loadObjectiveMappingAdmissionSnapshot(args: {
   const { db, packet } = args;
   const item = await db.backlogItem.findUnique({
     where: { itemId: packet.binding.itemId },
-    select: { id: true, itemId: true },
+    select: { id: true, itemId: true, body: true, organizationId: true },
   });
   if (!item) return { ...err("baseline-conflict"), reason: "baseline-conflict" };
 
@@ -130,9 +131,10 @@ async function loadObjectiveMappingAdmissionSnapshot(args: {
   const baseline = baselineRows ? currentBaseline(baselineRows) : null;
   const expectedBaselineId = packet.binding.expectedCurrentBaselineId ?? null;
   const packetRepoArtifact = repoBlobArtifactRef(packet.binding.artifactRef);
+  const bodyMatches = packet.binding.artifactRef.kind === "document-version" && baseline
+    && bodyBaselineInputsMatch(baseline, { ...item, binding: packet.binding });
   if (!baseline || !baseline.artifactRef || baseline.baselineId !== expectedBaselineId
-    || !packetRepoArtifact
-    || !exactArtifactRefMatches(baseline.artifactRef, packetRepoArtifact)) {
+    || (!bodyMatches && (!packetRepoArtifact || !exactArtifactRefMatches(baseline.artifactRef, packetRepoArtifact)))) {
     return { ...err("baseline-conflict"), reason: "baseline-conflict" };
   }
   const baselineRecordedAt = baselineActivities.find((entry) => {
@@ -264,6 +266,7 @@ export async function prepareObjectiveMappingSubmissionAdmission(args: {
       repositoryFullName: immutableArtifactIdentity(args.packet.binding.artifactRef).repositoryFullName,
       path: immutableArtifactIdentity(args.packet.binding.artifactRef).path,
     },
+    currentEvidenceActivityIds: args.packet.binding.eligibleEvidenceActivityIds,
     room: initial.data.room,
     verify: verifyHistoricalArtifact,
   });
@@ -275,6 +278,7 @@ export async function prepareObjectiveMappingSubmissionAdmission(args: {
     packet: args.packet,
     history: classified.data.history,
     providerProvenImpossibleTaskRunProofs: classified.data.providerProvenImpossibleTaskRunProofs,
+    serverProvenStaleBodyTaskRunProofs: classified.data.serverProvenStaleBodyTaskRunProofs,
     expectedTaskRunId: args.expectedTaskRunId,
   });
   if (!initialAuthorization.authorized) {
@@ -300,6 +304,7 @@ export async function prepareObjectiveMappingSubmissionAdmission(args: {
         packet: args.packet,
         history: current.data.history,
         providerProvenImpossibleTaskRunProofs: providerProofs,
+        serverProvenStaleBodyTaskRunProofs: classified.data.serverProvenStaleBodyTaskRunProofs,
         expectedTaskRunId: args.expectedTaskRunId,
       });
       if (!authorization.authorized) throw admissionRefusalFromAuthorization(authorization);

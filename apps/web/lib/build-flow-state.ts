@@ -295,6 +295,29 @@ export async function getBuildFlowState(buildId: string): Promise<BuildFlowState
 
 // ─── Fork derivation ────────────────────────────────────────────────────────
 
+/** The upstream fork as the room's PR delivery state reports it. */
+function forkFromRoomDelivery(
+  workspaceState: unknown,
+  prUrl: string,
+  prNumber: number | null,
+  packId: string | null,
+): UpstreamFork {
+  const delivery = readBuildPrDeliveryState(workspaceState);
+  if (delivery?.status === "awaiting-release" || delivery?.status === "deployed") {
+    return { state: "shipped", prUrl, prNumber, packId, errorMessage: null };
+  }
+  if (delivery?.status === "escalated" || delivery?.status === "closed") {
+    return {
+      state: "errored",
+      prUrl,
+      prNumber,
+      packId,
+      errorMessage: delivery.lastError ?? "Pull request delivery needs an owner decision",
+    };
+  }
+  return { state: "in_progress", prUrl, prNumber, packId, errorMessage: null };
+}
+
 async function deriveUpstreamFork(
   buildRowId: string,
   humanBuildId: string,
@@ -328,7 +351,17 @@ async function deriveUpstreamFork(
   const prNumber = pack?.prNumber ?? manifestPrNumber ?? null;
 
   if (!pack) {
-    // Ship reached but no pack yet — contribute_to_hive hasn't been called or
+    // BI-1CDA479D: the automatic create_portal_pr path writes no pack; its PR
+    // lives on the build's own room, so follow that room's delivery state.
+    const room = await prisma.workroom.findFirst({
+      where: { featureBuildId: buildRowId, pullRequestNumber: { not: null } },
+      orderBy: { updatedAt: "desc" },
+      select: { workspaceState: true, pullRequestUrl: true, pullRequestNumber: true },
+    });
+    if (room?.pullRequestUrl) {
+      return forkFromRoomDelivery(room.workspaceState, room.pullRequestUrl, room.pullRequestNumber, null);
+    }
+    // Ship reached but no PR yet — contribute_to_hive hasn't been called or
     // the user declined. Without a pack we can't tell failure from not-yet-run;
     // treat as in_progress so the UI shows the fork as pending user decision.
     return { state: "in_progress", prUrl: null, prNumber: null, packId: null, errorMessage: null };
@@ -343,20 +376,7 @@ async function deriveUpstreamFork(
       orderBy: { updatedAt: "desc" },
       select: { workspaceState: true },
     });
-    const delivery = readBuildPrDeliveryState(capsule?.workspaceState);
-    if (delivery?.status === "awaiting-release" || delivery?.status === "deployed") {
-      return { state: "shipped", prUrl, prNumber, packId: pack.packId, errorMessage: null };
-    }
-    if (delivery?.status === "escalated" || delivery?.status === "closed") {
-      return {
-        state: "errored",
-        prUrl,
-        prNumber,
-        packId: pack.packId,
-        errorMessage: delivery.lastError ?? "Pull request delivery needs an owner decision",
-      };
-    }
-    return { state: "in_progress", prUrl, prNumber, packId: pack.packId, errorMessage: null };
+    return forkFromRoomDelivery(capsule?.workspaceState, prUrl, prNumber, pack.packId);
   }
 
   // Pack exists but no prUrl — check BuildActivity for a failure record on
@@ -496,7 +516,7 @@ export async function evaluateBuildCompletionPreconditions(buildId: string): Pro
 export async function completeBuildWhenDelivered(buildId: string): Promise<ActionResult> {
   const preconditions = await evaluateBuildCompletionPreconditions(buildId);
   if (!preconditions.satisfied) return err(preconditions.message);
-  const terminal = await completeFeatureBuildTransition({ buildId, expectedPhase: "ship" });
+  const terminal = await completeFeatureBuildTransition({ buildId, expectedPhase: "ship", deliveryProven: true });
   if (!terminal.ok) {
     const codes = [...terminal.decision.blockers, ...terminal.decision.unmet].map((entry) => entry.code);
     return err(`Cannot complete this build: ${codes.join(", ")}.`);
@@ -517,7 +537,7 @@ export async function completeBuildWhenDelivered(buildId: string): Promise<Actio
 export async function reconcileBuildCompletion(buildId: string): Promise<boolean> {
   const preconditions = await evaluateBuildCompletionPreconditions(buildId);
   if (!preconditions.satisfied) return false;
-  const readiness = await completeFeatureBuildTransition({ buildId, expectedPhase: "ship" });
+  const readiness = await completeFeatureBuildTransition({ buildId, expectedPhase: "ship", deliveryProven: true });
   if (!readiness.ok) return false;
   await recordReadyDependentsAfterCompletion({ db: prisma, buildId }).catch((err) => {
     console.error("[reconcileBuildCompletion] dependency readiness check failed:", err);

@@ -30,6 +30,7 @@ import {
   isWorkCapsulePortfolioRole,
   isWorkCapsuleSource,
   isWorkCapsuleStatus,
+  SCOPE_KIND_SET,
   WORK_CAPSULE_WORKROOM_SHAPES,
   type ScopeClaim,
   type WorkCapsuleEvidenceKind,
@@ -60,6 +61,8 @@ import { invalidScopeResult, scopeClaimRefusal } from "./mcp-result-errors";
 import { claimBacklogItemForWork } from "./claim-backlog-item-handler";
 import { createWorkroomBoundToBacklogItem } from "./create-workroom-binding";
 import { workCapsuleActor as actor } from "./handler-actor";
+import { commandDb } from "./receipted-tool";
+import { parseScopeReleaseClaims, scopeReleaseWasOrdinary } from "./scope-release-authorization";
 type ToolContext = {
   routeContext?: string;
   agentId?: string;
@@ -89,8 +92,9 @@ function stringParam(params: Record<string, unknown>, key: string): string | nul
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
+// Inside a receipted command (BI-763D6E01) this is the command's transaction.
 function workCapsuleDb(): CapsuleDb {
-  return prisma as unknown as CapsuleDb;
+  return commandDb();
 }
 // An ordinary write renews the writer's own lease; it never takes another
 // principal's live lease (BI-A7601AED).
@@ -114,7 +118,6 @@ async function runAutoRenewedCapsuleWrite(args: {
   return renewLeaseAfterCapsuleWrite(args.capsuleId, currentActor);
 }
 
-const SCOPE_KINDS = new Set<ScopeClaim["kind"]>(["path", "module", "package", "route", "skill", "prompt"]);
 const SCOPE_INTENTS = new Set<ScopeClaim["intent"]>(["edit", "read"]);
 
 function parseClaimInputs(params: Record<string, unknown>): Array<Pick<ScopeClaim, "kind" | "value" | "intent">> | null {
@@ -128,27 +131,10 @@ function parseClaimInputs(params: Record<string, unknown>): Array<Pick<ScopeClai
     const kind = typeof candidate.kind === "string" ? candidate.kind : "";
     const value = typeof candidate.value === "string" ? candidate.value.trim() : "";
     const intent = typeof candidate.intent === "string" ? candidate.intent : "";
-    if (!SCOPE_KINDS.has(kind as ScopeClaim["kind"]) || !SCOPE_INTENTS.has(intent as ScopeClaim["intent"]) || !value) {
+    if (!SCOPE_KIND_SET.has(kind as ScopeClaim["kind"]) || !SCOPE_INTENTS.has(intent as ScopeClaim["intent"]) || !value) {
       return null;
     }
     parsed.push({ kind: kind as ScopeClaim["kind"], value, intent: intent as ScopeClaim["intent"] });
-  }
-
-  return parsed.length > 0 ? parsed : null;
-}
-
-function parseReleaseInputs(params: Record<string, unknown>): Array<Pick<ScopeClaim, "kind" | "value">> | null {
-  const claims = params.claims;
-  if (!Array.isArray(claims)) return null;
-
-  const parsed: Array<Pick<ScopeClaim, "kind" | "value">> = [];
-  for (const claim of claims) {
-    if (!claim || typeof claim !== "object") return null;
-    const candidate = claim as Record<string, unknown>;
-    const kind = typeof candidate.kind === "string" ? candidate.kind : "";
-    const value = typeof candidate.value === "string" ? candidate.value.trim() : "";
-    if (!SCOPE_KINDS.has(kind as ScopeClaim["kind"]) || !value) return null;
-    parsed.push({ kind: kind as ScopeClaim["kind"], value });
   }
 
   return parsed.length > 0 ? parsed : null;
@@ -193,6 +179,11 @@ export async function getWorkCapsuleTool(params: Record<string, unknown>, userId
   if (!capsuleId) {
     return { success: false, error: "missing_capsuleId", message: "capsuleId is required." };
   }
+  const { parseAfterSequence, readActivityAfter } = await import("./activity-log-read");
+  const afterSequence = parseAfterSequence(params["afterSequence"]);
+  if (afterSequence === null) {
+    return { success: false, error: "invalid_input", message: "afterSequence must be a non-negative integer." };
+  }
   const capsule = await prisma.workroom.findUnique({
     where: { capsuleId },
     include: {
@@ -220,11 +211,14 @@ export async function getWorkCapsuleTool(params: Record<string, unknown>, userId
     }).catch(() => ({ delegations: [], escalation: {
       state: "setup-required" as const, reason: "coordination-read-unavailable", steps: [],
     } })) : null;
+  // BI-62514632: the room's log from a position the caller already holds.
+  const log = afterSequence === undefined ? null
+    : { afterSequence, ...(await readActivityAfter(prisma as never, { workCapsuleId: capsule.id, afterSequence })) };
   return {
     success: true,
     entityId: capsule.capsuleId,
     message: `Loaded ${capsule.capsuleId}.`,
-    data: { capsule: { ...capsule, recovery: projectWorkroomRecovery(capsule), nestedCoordination } },
+    data: { capsule: { ...capsule, recovery: projectWorkroomRecovery(capsule), nestedCoordination }, ...(log ? { log } : {}) },
   };
 }
 
@@ -357,7 +351,7 @@ export async function updateWorkCapsuleStatusTool(
 export async function releaseCapsuleScopeTool(
   params: Record<string, unknown>,
   userId: string,
-  context: ToolContext,
+  context: ToolExecutionContext | undefined,
 ): Promise<ToolResult> {
   const capsuleId = stringParam(params, "capsuleId");
   // BI-MCP-EFF-6EBA2407: agents passed a single claim object or empty array and
@@ -373,7 +367,7 @@ export async function releaseCapsuleScopeTool(
       data: { retryable: false },
     };
   }
-  const claims = parseReleaseInputs(params);
+  const claims = parseScopeReleaseClaims(params.claims);
   if (!capsuleId || !claims) {
     return {
       success: false,
@@ -388,6 +382,7 @@ export async function releaseCapsuleScopeTool(
 
   const db = workCapsuleDb();
   try {
+    const ownScopeOnly = await scopeReleaseWasOrdinary(userId, context);
     const renewedCapsule = await runAutoRenewedCapsuleWrite({
       capsuleId,
       userId,
@@ -397,6 +392,7 @@ export async function releaseCapsuleScopeTool(
         capsuleId,
         claims,
         actor: currentActor,
+        ownScopeOnly,
       }),
     });
 

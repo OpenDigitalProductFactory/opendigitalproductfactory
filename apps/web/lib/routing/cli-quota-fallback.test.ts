@@ -91,7 +91,22 @@ afterEach(() => vi.useRealTimers());
 it("classifies the exact live org-spend banner as rate_limit even without envelope metadata", async () => {
   output({ result: quota, usage: {} });
   expect(await settle(cliAdapter.execute(request))).toMatchObject({ error: { code: "rate_limit" } });
+  // An unbound legacy request retains the shared pool, without an account scope.
+  expect(mocks.poolLimit).toHaveBeenCalledWith("claude-cli", "anthropic-sub", quota, undefined);
   expect(mocks.poolClear).not.toHaveBeenCalled();
+});
+it("records stdout quota capacity before the fallback can dispatch", async () => {
+  output({ type: "result", is_error: true, result: quota });
+  let release!: () => void;
+  mocks.poolLimit.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve; }));
+  const pending = callWithFallbackChain(decision("local"), request.messages, request.systemPrompt)
+    .then(value => ({ value }), error => ({ error }));
+  await vi.runAllTimersAsync();
+  expect(mocks.poolLimit).toHaveBeenCalledOnce();
+  expect(mocks.callProvider.mock.calls.some(call => call[0] === "local")).toBe(false);
+  release();
+  await vi.runAllTimersAsync();
+  expect(await pending).toMatchObject({ value: { providerId: "local" } });
 });
 it.each(["codex", "local"])("fails over from actual Claude adapter to eligible %s", async alternative => {
   output({ type: "result", is_error: true, result: quota, usage: {} });
@@ -115,4 +130,5 @@ it.each([
 it("preserves successful prose discussing organization limits", async () => {
   output({ type: "result", is_error: false, result: "The organization's monthly spend limit is an accounting control." });
   expect(await settle(cliAdapter.execute(request))).toMatchObject({ value: { text: "The organization's monthly spend limit is an accounting control." } });
+  expect(mocks.poolLimit).not.toHaveBeenCalled();
 });

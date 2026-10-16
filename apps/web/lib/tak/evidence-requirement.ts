@@ -47,6 +47,8 @@ export const SUBSTANTIVE_REPLY_MIN_CHARS = 80;
 
 export interface EvidenceRequirement {
   required: boolean;
+  /** Supplied source analysis; never evidence for current operational state. */
+  suppliedSourceEvidence?: boolean;
   /** The matched task class (e.g. "backlog-status"), or a route label / null. */
   taskClass: string | null;
   /** The authoritative live-state tools that verify this class, when known. A
@@ -70,7 +72,7 @@ export function classifyEvidenceRequirement(params: {
 }): EvidenceRequirement {
   const message = (params.message ?? "").trim();
   if (message.length === 0) return { required: false, taskClass: null };
-  if (isSuppliedSourceAnalysis(message)) return { required: false, taskClass: null };
+  if (isSuppliedSourceAnalysis(message)) return { required: false, taskClass: null, suppliedSourceEvidence: true };
 
   // Phase 2: data-driven task-class classification.
   const tc = classifyTaskClass({ routeContext: params.routeContext, message });

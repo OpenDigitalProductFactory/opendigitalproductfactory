@@ -602,10 +602,16 @@
     "apps/web/lib/backlog/deferral-contract.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
+    "apps/web/lib/backlog/initiative-readiness/body-baseline-persistence.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
     "apps/web/lib/backlog/initiative-readiness/delivery-sensitivity.ts": [
       "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md"
     ],
     "apps/web/lib/backlog/initiative-readiness/evaluate.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
+    "apps/web/lib/backlog/initiative-readiness/objective-mapping-repository.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
     ],
     "apps/web/lib/backlog/initiative-readiness/parent-scope-inheritance.ts": [
@@ -623,6 +629,9 @@
     "apps/web/lib/backlog/initiative-readiness/shape-requirements.ts": [
       "docs/architecture/backlog-and-planning-runbook.md",
       "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md"
+    ],
+    "apps/web/lib/backlog/initiative-readiness/terminal-recovery.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
     ],
     "apps/web/lib/backlog/initiative-readiness/types.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
@@ -679,6 +688,9 @@
     ],
     "apps/web/lib/build/sandbox/sandbox.ts": [
       "docs/triage/2026-05-20-handoff-prompt-next-session.md"
+    ],
+    "apps/web/lib/build/sandbox/test-scope-guard.ts": [
+      "docs/architecture/build-gate-runbook.md"
     ],
     "apps/web/lib/build/unified-wip-query.ts": [
       "docs/architecture/agent-client-capability-parity.md"
@@ -789,7 +801,13 @@
     "apps/web/lib/documents/generation/brand-master.ts": [
       "docs/architecture/document-generation-facility.md"
     ],
+    "apps/web/lib/documents/generation/create-family-documents.ts": [
+      "docs/architecture/document-generation-facility.md"
+    ],
     "apps/web/lib/documents/generation/create-presentation.ts": [
+      "docs/architecture/document-generation-facility.md"
+    ],
+    "apps/web/lib/documents/generation/family-document.ts": [
       "docs/architecture/document-generation-facility.md"
     ],
     "apps/web/lib/documents/generation/render-flat.ts": [
@@ -1035,6 +1053,9 @@
     "apps/web/lib/mcp/packs/deliberation-siem-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
+    "apps/web/lib/mcp/packs/document-family-tools.ts": [
+      "docs/architecture/document-generation-facility.md"
+    ],
     "apps/web/lib/mcp/packs/feedback-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
@@ -1070,6 +1091,9 @@
     "apps/web/lib/mcp/tool-tier.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md",
       "docs/architecture/context-engineering-standards.md"
+    ],
+    "apps/web/lib/mcp/toolchain-floor.ts": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
     ],
     "apps/web/lib/mdm/domain-registry.ts": [
       "docs/professions/data-architect/wiki/mdm-what-it-does-and-does-not-do.md"
@@ -1117,6 +1141,9 @@
     ],
     "apps/web/lib/operate/sole-platform-readiness.ts": [
       "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md"
+    ],
+    "apps/web/lib/operate/tool-defect-origin.ts": [
+      "docs/architecture/improvement-signal-intake.md"
     ],
     "apps/web/lib/org-locale/locale-context.ts": [
       "docs/architecture/localization-runbook.md"
@@ -1890,6 +1917,9 @@
     "packages/db/src/workforce-staffing-posture.test.ts": [
       "docs/architecture/2026-08-20-assurance-operating-loop-and-capability-completeness.md"
     ],
+    "packages/dpf-skill-pack/client-capabilities.json": [
+      "docs/architecture/agent-client-capability-parity.md"
+    ],
     "packages/dpf-skill-pack/hooks/decision-routing-guard.mjs": [
       "docs/founder-kernel/wiki/principles/consult-scopes-before-asking.md"
     ],
@@ -2006,6 +2036,9 @@
       "docs/architecture/build-gate-runbook.md",
       "docs/architecture/dependency-reduction-routine.md",
       "docs/architecture/enforced-ci-gates.md"
+    ],
+    "scripts/audit-typescript-checker-currency.mjs": [
+      "docs/testing/pre-pr-gate.md"
     ],
     "scripts/backup-postgres.sh": [
       "docs/operations/disaster-recovery.md"
@@ -2238,6 +2271,9 @@
       "docs/architecture/theme-aware-styling-runbook.md",
       "docs/design/golden-triangle-design.md"
     ],
+    "scripts/check-web-src-script-imports.mjs": [
+      "docs/architecture/enforced-ci-gates.md"
+    ],
     "scripts/ci-change-scope.mjs": [
       "docs/testing/pre-pr-gate.md"
     ],
@@ -2276,6 +2312,7 @@
       "docs/operations/install.md"
     ],
     "scripts/fresh-install.ps1": [
+      "docs/architecture/enforced-ci-gates.md",
       "docs/install/scratch-install-rehearsal.md",
       "docs/operations/disaster-recovery.md",
       "docs/testing/archetype-audit-plan.md"
@@ -2465,7 +2502,8 @@
       "docs/architecture/platform-substrate-boundaries.md"
     ],
     "scripts/portal-migrate-boot.sh": [
-      "docs/architecture/data-model-stewardship-runbook.md"
+      "docs/architecture/data-model-stewardship-runbook.md",
+      "docs/architecture/enforced-ci-gates.md"
     ],
     "scripts/pr-health.mjs": [
       "docs/maintenance/staleness-report.md",
@@ -2511,7 +2549,9 @@
       "docs/operations/disaster-recovery.md"
     ],
     "scripts/run-tsc.mjs": [
-      "docs/architecture/dependency-reduction-routine.md"
+      "docs/architecture/contributor-procedure-runbook.md",
+      "docs/architecture/dependency-reduction-routine.md",
+      "docs/testing/pre-pr-gate.md"
     ],
     "scripts/safety/transcript-snapshot.ps1": [
       "docs/operations/session-transcript-recovery.md"
@@ -2567,6 +2607,7 @@
       "docs/install/platform-support-watchlist.md"
     ],
     "scripts/setup.sh": [
+      "docs/architecture/enforced-ci-gates.md",
       "docs/install/macos.md",
       "docs/install/platform-support-watchlist.md"
     ],
@@ -2920,6 +2961,7 @@
       "apps/web/lib/deliberation/external-review-activation.ts",
       "apps/web/lib/routing/anthropic-cache.ts",
       "e2e/fixtures/evidence.ts",
+      "packages/dpf-skill-pack/client-capabilities.json",
       "packages/dpf-skill-pack/hooks/plugin-hooks-wired.test.mjs"
     ],
     "docs/architecture/agent-client-governance.md": [
@@ -3023,6 +3065,7 @@
       "apps/web/lib/build/gauntlet-repair.ts",
       "apps/web/lib/build/pr-follow-through.ts",
       "apps/web/lib/build/pull-request-merged-signal.ts",
+      "apps/web/lib/build/sandbox/test-scope-guard.ts",
       "apps/web/lib/queue/functions/build-pr-delivery-reconcile.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
       "packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs",
@@ -3088,7 +3131,8 @@
       "packages/db/src/agent-identity.test.ts",
       "packages/db/src/agent-identity.ts",
       "scripts/check-override-comments.mjs",
-      "scripts/regen-lockfile.mjs"
+      "scripts/regen-lockfile.mjs",
+      "scripts/run-tsc.mjs"
     ],
     "docs/architecture/customer-zero-and-use-case-zero.md": [
       "apps/web/lib/decision-perspective/weight-inference.ts",
@@ -3176,7 +3220,9 @@
     "docs/architecture/document-generation-facility.md": [
       "apps/web/lib/documents/document-previews.ts",
       "apps/web/lib/documents/generation/brand-master.ts",
+      "apps/web/lib/documents/generation/create-family-documents.ts",
       "apps/web/lib/documents/generation/create-presentation.ts",
+      "apps/web/lib/documents/generation/family-document.ts",
       "apps/web/lib/documents/generation/render-flat.ts",
       "apps/web/lib/documents/generation/render-store.ts",
       "apps/web/lib/documents/generation/render.ts",
@@ -3184,6 +3230,7 @@
       "apps/web/lib/documents/preview-manifest.ts",
       "apps/web/lib/ea/diagram-import/parse-flat-odg.ts",
       "apps/web/lib/ea/view-drawing.ts",
+      "apps/web/lib/mcp/packs/document-family-tools.ts",
       "tools/doctools/smoke.sh"
     ],
     "docs/architecture/dpf-patterns.md": [
@@ -3216,9 +3263,13 @@
       "scripts/check-retired-substrate.mjs",
       "scripts/check-spec-plan-doc.mjs",
       "scripts/check-stewardship-scope.mjs",
+      "scripts/check-web-src-script-imports.mjs",
+      "scripts/fresh-install.ps1",
       "scripts/lib/git-changed-files.mjs",
       "scripts/lib/mermaid-renderer.mjs",
-      "scripts/lib/published-doc-roots.mjs"
+      "scripts/lib/published-doc-roots.mjs",
+      "scripts/portal-migrate-boot.sh",
+      "scripts/setup.sh"
     ],
     "docs/architecture/failure-analysis-and-recovery.md": [
       "apps/web/lib/change-review/failure-analysis.ts",
@@ -3265,14 +3316,18 @@
       "scripts/installer/install-release-assets.mjs"
     ],
     "docs/architecture/improvement-signal-intake.md": [
-      "apps/web/lib/improvement-flywheel/signals.ts"
+      "apps/web/lib/improvement-flywheel/signals.ts",
+      "apps/web/lib/operate/tool-defect-origin.ts"
     ],
     "docs/architecture/initiative-readiness-runbook.md": [
       "apps/web/lib/backlog/acceptance-sweep/execution-evidence-owner.ts",
+      "apps/web/lib/backlog/initiative-readiness/body-baseline-persistence.ts",
       "apps/web/lib/backlog/initiative-readiness/evaluate.ts",
+      "apps/web/lib/backlog/initiative-readiness/objective-mapping-repository.ts",
       "apps/web/lib/backlog/initiative-readiness/readiness-guidance.ts",
       "apps/web/lib/backlog/initiative-readiness/receipt-schema.ts",
       "apps/web/lib/backlog/initiative-readiness/reviewer-identity.ts",
+      "apps/web/lib/backlog/initiative-readiness/terminal-recovery.ts",
       "apps/web/lib/backlog/initiative-readiness/types.ts",
       "apps/web/lib/kernel/governing-principles.ts",
       "apps/web/lib/mcp/external-coworker-task-adapter.ts",
@@ -3303,6 +3358,7 @@
       "apps/web/lib/gpp/binding-enforcement.ts",
       "apps/web/lib/gpp/permit-carriage.ts",
       "apps/web/lib/mcp/protocol-versions.ts",
+      "apps/web/lib/mcp/toolchain-floor.ts",
       "apps/web/lib/tak/mcp-tool-policy.ts",
       "apps/web/lib/tak/tool-result-budget.ts",
       "apps/web/lib/tak/tool-result-provenance.ts",
@@ -3930,6 +3986,7 @@
       "apps/web/lib/tools/integration-settings-href.ts",
       "docker-compose.local-ci.yml",
       "packages/dpf-skill-pack/hooks/pregate-evidence-guard.mjs",
+      "scripts/audit-typescript-checker-currency.mjs",
       "scripts/check-agent-principal-convergence-wired.mjs",
       "scripts/check-guard-conformance-marks.mjs",
       "scripts/check-guards.mjs",
@@ -3951,6 +4008,7 @@
       "scripts/local-ci-runner.mjs",
       "scripts/pr-health.mjs",
       "scripts/pregate-status.mjs",
+      "scripts/run-tsc.mjs",
       "scripts/set-hooks-path.mjs",
       "tests/release/local-ci-gate-contract.test.mjs"
     ],

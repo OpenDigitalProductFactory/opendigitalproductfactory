@@ -1,26 +1,34 @@
 #!/usr/bin/env node
-// Invoke the workspace's TypeScript compiler with an enlarged V8 old-space heap
-// so `tsc --noEmit` does not abort (Abort trap: 6 / OOM) on macOS under Node
-// 26.x's default heap ceiling (BI-CD7706B5). This is the narrowest complete fix:
-// baking it into the package `typecheck` script means the pre-commit hook, the
-// pregate/local-ci-runner, and a manual `pnpm --filter web typecheck` all inherit
-// it. Chosen over an inline `NODE_OPTIONS=` prefix (breaks Windows cmd.exe) and
-// over `cross-env` (a new dependency): this resolves `tsc` via Node's own module
-// resolution, so it is agnostic to how pnpm hoists `typescript`, and forwards any
-// extra args (e.g. `--noEmit`, `-p tsconfig.scripts.json`) straight through.
+// The one way DPF type-checks. Every package `typecheck` script, the pre-commit
+// hook, the pregate/local-ci-runner and CI reach the compiler through this file,
+// and forward their args (e.g. `--noEmit`, `-p tsconfig.scripts.json`) straight
+// through.
+//
+// The compiler is TypeScript 7, the Go-native checker (BI-2B8D67A9). `DPF_TSC=6`
+// runs the workspace's TypeScript 6 instead, as the parity reference; that path
+// keeps the enlarged V8 heap TS6 needs for apps/web (BI-CD7706B5). Selection and
+// resolution live in scripts/lib/tsc-compiler.mjs, because this file runs tsc on
+// import and so cannot be imported by a test.
 import { spawn, spawnSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { createInterface } from "node:readline";
-import { pathToFileURL } from "node:url";
+import { resolveTs6Entry, resolveTs7Exe, selectTscCompiler } from "./lib/tsc-compiler.mjs";
 
-// Resolve relative to the caller's cwd (the package dir) so the workspace's
-// pinned TypeScript is found whether it is hoisted to the worktree root or
-// linked locally.
-const requireFromCwd = createRequire(pathToFileURL(`${process.cwd()}/`));
-const tscEntry = requireFromCwd.resolve("typescript/bin/tsc");
-
-const tscArgs = ["--max-old-space-size=8192", tscEntry, ...process.argv.slice(2)];
+let compiler;
+try {
+  compiler = await selectTscCompiler({
+    env: process.env,
+    cwd: process.cwd(),
+    execPath: process.execPath,
+    forwardedArgs: process.argv.slice(2),
+    resolveTs6Entry,
+    resolveTs7Exe,
+  });
+} catch (error) {
+  console.error(`[run-tsc] cannot select a compiler: ${error.message}`);
+  process.exit(1);
+}
+console.error(`[run-tsc] checking with TypeScript ${compiler.version}`);
 
 // Plan 2026-09-08 M11 step 4: with DPF_TSC_PROGRAM_REPORT=<file>, the same
 // compile also records what it checked (`--listFiles --extendedDiagnostics`)
@@ -31,10 +39,10 @@ const tscArgs = ["--max-old-space-size=8192", tscEntry, ...process.argv.slice(2)
 const programReportPath = process.env.DPF_TSC_PROGRAM_REPORT;
 const result = programReportPath
   ? await runWithProgramReport(programReportPath)
-  : spawnSync(process.execPath, tscArgs, { stdio: "inherit" });
+  : spawnSync(compiler.command, compiler.args, { stdio: "inherit" });
 
 async function runWithProgramReport(reportPath) {
-  const child = spawn(process.execPath, [...tscArgs, "--listFiles", "--extendedDiagnostics"], {
+  const child = spawn(compiler.command, [...compiler.args, "--listFiles", "--extendedDiagnostics"], {
     stdio: ["inherit", "pipe", "inherit"],
   });
   const files = [];
@@ -57,7 +65,7 @@ async function runWithProgramReport(reportPath) {
   if (!error && !signal && status !== null) {
     writeFileSync(
       reportPath,
-      `${JSON.stringify({ schema: 1, cwd: process.cwd(), args: process.argv.slice(2), exitCode: status, files, output }, null, 2)}\n`,
+      `${JSON.stringify({ schema: 1, compilerVersion: compiler.version, cwd: process.cwd(), args: process.argv.slice(2), exitCode: status, files, output }, null, 2)}\n`,
     );
     process.stdout.write(`[run-tsc] program report (${files.length} files) written to ${reportPath}\n`);
   }

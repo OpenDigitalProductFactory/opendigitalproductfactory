@@ -15,6 +15,7 @@ import geographic from "./messages/en-US/geographic.json";
 import mcpTools from "./messages/en-US/mcpTools.json";
 import approvals from "./messages/en-US/approvals.json";
 import portfolio from "./messages/en-US/portfolio.json";
+import providerAccounts from "./messages/en-US/providerAccounts.json";
 import upgrade from "./messages/en-US/upgrade.json";
 import setup from "./messages/en-US/setup.json";
 import shell from "./messages/en-US/shell.json";
@@ -26,7 +27,7 @@ import { isPseudoLocale } from "./pseudo";
 import { formatSource } from "./runtime";
 
 /** The en-US source catalog, one entry per namespace. Add a namespace here and in messages/en-US/. */
-export const SOURCE_CATALOG = { admin, approvals, customerMap, deploymentSharing, errors, footprint, geographic, mcpTools, portfolio, setup, shell, storefront, upgrade, workrooms } as const;
+export const SOURCE_CATALOG = { admin, approvals, customerMap, deploymentSharing, errors, footprint, geographic, mcpTools, portfolio, providerAccounts, setup, shell, storefront, upgrade, workrooms } as const;
 
 export type Namespace = keyof typeof SOURCE_CATALOG;
 

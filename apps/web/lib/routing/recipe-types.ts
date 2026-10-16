@@ -37,6 +37,10 @@ export interface RoutedHarnessPlan {
 
 export interface RoutedExecutionPlan {
   providerId: string;
+  providerConnectionId?: string;
+  providerConnectionVersion?: string;
+  accountAuthMethod?: string;
+  executionChannel?: string;
   modelId: string;
   recipeId: string | null;
   contractFamily: string;
@@ -57,6 +61,11 @@ export interface RoutedExecutionPlan {
    */
   capabilityRequirements?: AdapterCapabilityRequirement[];
   maxTokens: number;
+  /** Explicit total, including reasoning, bound by an admitted activity. */
+  completionAllowance?: number;
+  localThinkingBudgetEvidence?: import("./types").LocalThinkingBudgetEvidence;
+  /** Original proportional decision, recompiled when the activity total becomes known. */
+  localThinkingBudgetRequest?: number;
   temperature?: number;
   providerSettings: Record<string, unknown>;
   /** Typed, fail-closed OpenRouter wire policy. Present only for OpenRouter plans. */

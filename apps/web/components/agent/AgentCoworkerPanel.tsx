@@ -13,7 +13,9 @@ import { approveProposal, rejectProposal } from "@/lib/actions/proposals";
 import { AgentPanelHeader } from "./AgentPanelHeader";
 import { ThreadSensitivityNotice } from "./ThreadSensitivityNotice";
 import { AgentSkillAttributionChip } from "./AgentSkillAttributionChip";
+import { approvalFollowUpMessage } from "@/lib/tak/approval-follow-up";
 import { AgentMessageBubble } from "./AgentMessageBubble";
+import { proposalAfterApproval } from "./ProposalNoLongerRunnable";
 import { AgentMessageInput } from "./AgentMessageInput";
 import { CoworkerProfilePanel } from "./CoworkerProfilePanel";
 import { CollaborationActivityPanel } from "./CollaborationActivityPanel";
@@ -701,7 +703,7 @@ export function AgentCoworkerPanel({
         setIsBusy(false);
       } else {
         // Stored and accepted (BI-DEFA25EE): show "sent", not "Sending..." for the whole turn.
-        completeJourney("message-ack", { serverUrl: "/api/agent/send" }); // BI-BD0B0DCC
+        completeJourney("message-ack", { serverTiming: res.headers.get("server-timing") }); // BI-BD0B0DCC
         setMessages((prev) =>
           prev.map((message) =>
             message.id === optimisticMessage.id ? { ...message, deliveryState: "sent" as const } : message,
@@ -766,26 +768,14 @@ export function AgentCoworkerPanel({
       setMessages((prev) =>
         prev.map((m) =>
           m.proposal?.proposalId === proposalId
-            ? {
-                ...m,
-                proposal: {
-                  ...m.proposal,
-                  status: result.success ? "executed" : "failed",
-                  ...(result.resultEntityId !== undefined ? { resultEntityId: result.resultEntityId } : {}),
-                  ...(result.error !== undefined ? { resultError: result.error } : {}),
-                },
-              }
+            // A monitor refusal ran nothing: the card stays pending, with why (spec D5).
+            ? { ...m, proposal: proposalAfterApproval(m.proposal, result) }
             : m,
         ),
       );
 
       // Auto-send a follow-up so the agent reacts to the result
-      if (result.success) {
-        const followUp = result.resultEntityId
-          ? `I approved ${actionType.replace(/_/g, " ")}. Result: ${result.resultEntityId}. What's next?`
-          : `I approved ${actionType.replace(/_/g, " ")}. What's next?`;
-        submitMessage(followUp);
-      }
+      if (result.success) submitMessage(approvalFollowUpMessage(actionType, result.resultEntityId));
     } catch (e) {
       console.error("[handleApprove]", e);
       setMessages((prev) =>
@@ -964,6 +954,7 @@ export function AgentCoworkerPanel({
               }) : null}
               onApprove={handleApprove}
               onReject={handleReject}
+              onApprovalAuthorized={(run) => submitMessage(approvalFollowUpMessage(run.toolName, run.entityId))}
               {...(decisionActive ? { onDecision: (value: string) => handleSend(value) } : {})}
               {...(msg.deliveryState ? { deliveryState: msg.deliveryState } : {})}
               {...(msg.deliveryState === "failed" ? { onRetry: () => handleRetry(msg.id) } : {})}

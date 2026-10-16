@@ -21,11 +21,10 @@ import { getProviderDisplayNameForSpend } from "./ai-provider-cost-view";
 import { rollUpProviderModels, type ProfileForRollup } from "./provider-routing-rollup";
 import { resolveCredentialProviderId } from "./ai-provider-internals";
 import { parseAsyncInferenceOperationStatus } from "./async-operation-contract";
-import { getLocalProviderControlState } from "./provider-operator-pause";
+import { getProviderControlState, getProviderControlStates } from "./provider-operator-pause";
 
 const getOperatorControls = cache(async (providerId: string) => {
-  if (providerId !== "local" && providerId !== "ollama") return {};
-  const state = await getLocalProviderControlState(providerId);
+  const state = await getProviderControlState(providerId);
   return {
     defaultConnectionStatus: state.connectionStatus,
     operatorPause: state.pause ? { resumeAt: state.pause.resumeAt, pausedAt: state.pause.pausedAt } : null,
@@ -43,6 +42,7 @@ function maskSecret(value: string | null): string | null {
 
 /** Strip secrets before sending credential data to the client. */
 function maskCredential(cred: {
+  providerWorkspaceId?: string | null;
   providerId: string | null;
   secretRef: string | null;
   clientId: string | null;
@@ -57,6 +57,7 @@ function maskCredential(cred: {
   return {
     providerId,
     secretHint:       maskSecret(cred.secretRef),
+    providerWorkspaceId: cred.providerWorkspaceId ?? null,
     clientId:         cred.clientId,
     clientSecretHint: maskSecret(cred.clientSecret),
     tokenEndpoint:    cred.tokenEndpoint,
@@ -81,12 +82,15 @@ export const getProviders = cache(async (opts?: { includeHidden?: boolean }): Pr
     },
   });
   const credMap = new Map(credentials.map((c) => [c.providerId, c]));
+  const controls = await getProviderControlStates(providers.map(p => p.providerId));
   return Promise.all(providers.map(async (p) => {
     const raw = credMap.get(p.providerId) ?? credMap.get(resolveCredentialProviderId(p.providerId));
+    const state = controls.get(p.providerId);
     return {
       provider: {
         ...p,
-        ...await getOperatorControls(p.providerId),
+        defaultConnectionStatus: state?.connectionStatus ?? null,
+        operatorPause: state?.pause ? { resumeAt: state.pause.resumeAt, pausedAt: state.pause.pausedAt } : null,
         families:             p.families as string[],
         enabledFamilies:      p.enabledFamilies as string[],
         supportedAuthMethods: p.supportedAuthMethods as string[],
@@ -467,7 +471,7 @@ const CATEGORY_ORDER: Record<string, number> = {
 
 function getServiceGroupDisplayName(endpointType: string, category: string): string {
   if (category === "direct") {
-    if (endpointType === "responses") return "Subscription responses";
+    if (endpointType === "responses") return "Subscriptions";
     if (endpointType === "transcription") return "Speech transcription";
     if (endpointType === "router") return "Direct routers";
   }

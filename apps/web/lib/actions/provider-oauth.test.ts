@@ -92,6 +92,14 @@ describe("provider-oauth actions", () => {
     expect(callback.exchangeOAuthCode).not.toHaveBeenCalled();
   });
 
+  it("returns an account ownership conflict to provider setup through the error redirect", async () => {
+    callback.findPendingOAuthContext.mockResolvedValue({ providerId: "codex", connectionId: null });
+    callback.exchangeOAuthCode.mockResolvedValue({ error: "account_changed" });
+    const response = await oauthCallback(new NextRequest("https://portal.example.test/api/v1/auth/provider-oauth/callback?state=state-a&code=code-a"));
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe("https://portal.example.test/platform/ai/providers/codex?oauth=error&reason=account_changed");
+  });
+
   it("starts OAuth when the admin session is valid", async () => {
     const result = await startProviderOAuth("codex");
 

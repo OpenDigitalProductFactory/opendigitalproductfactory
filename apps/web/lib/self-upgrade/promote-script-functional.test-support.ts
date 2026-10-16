@@ -1,6 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHmac } from "node:crypto";
-import { copyFileSync, existsSync, mkdtempSync, writeFileSync, chmodSync, mkdirSync, realpathSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, writeFileSync, chmodSync, mkdirSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -18,7 +18,10 @@ const gitBash = join(process.env.ProgramFiles ?? "C:\\Program Files", "Git", "bi
 export const BASH_COMMAND = process.platform === "win32" && existsSync(gitBash) ? gitBash : "bash";
 export const BASH_OK = spawnSync(BASH_COMMAND, ["--version"], { encoding: "utf8" }).status === 0;
 export const GIT_OK = spawnSync("git", ["--version"], { encoding: "utf8" }).status === 0;
-export const PROMOTE_TEST_TIMEOUT_MS = 30_000;
+// Measures a hang, not host speed (BI-F25D7E88): one case spawns Git Bash, a
+// real repo and a fake docker, which costs 11-25 s on Windows and over 30 s
+// when vitest runs two of these files side by side. A hung promote still fails.
+export const PROMOTE_TEST_TIMEOUT_MS = 120_000;
 
 let bashDrivePrefix: string | undefined;
 
@@ -93,10 +96,45 @@ for arg in "$@"; do
   if [ "$arg" = "--env-file" ]; then take_env_file=1; fi
 done
 [ -n "$DOCKER_LOG" ] && printf '%s\\n' "$*" >> "$DOCKER_LOG"
+# Operation and format are argv fields, never substrings of a temporary path.
+case "\${1-}" in
+  create) printf "candidate-container"; exit 0 ;;
+  rm) printf 'reconcile-remove %s\\n' "$*" >> "$DOCKER_LOG"; exit 0 ;;
+  cp)
+    [ "$#" = 3 ] && [ "$2" = "candidate-container:/dpf-release-assets/." ] || exit 1
+    mkdir -p "$3" && cp -R "$DPF_TEST_RELEASE_ASSETS"/. "$3/"
+    exit "$?"
+    ;;
+esac
+if [ "\${1-}" = inspect ] || { [ "\${1-}" = image ] && [ "\${2-}" = inspect ]; }; then
+  inspect_format=
+  inspect_target=
+  take_format=0
+  for arg in "$@"; do
+    if [ "$take_format" = 1 ]; then inspect_format="$arg"; take_format=0; continue; fi
+    case "$arg" in
+      --format|-f) take_format=1 ;;
+      --format=*) inspect_format="\${arg#--format=}" ;;
+      image|inspect) ;;
+      *) inspect_target="$arg" ;;
+    esac
+  done
+  case "$inspect_format" in
+    "{{.Id}}")
+      if [ "$inspect_target" = dpf-sandbox:target ]; then printf 'sha256:sandbox-target'
+      else printf "%s" "\${DPF_TEST_RELEASE_ENGINE_ID:-$DPF_TEST_RELEASE_CONFIG_DIGEST}"; fi
+      exit 0 ;;
+    "{{range .RepoDigests}}{{println .}}{{end}}")
+      printf "%s@%s\\n" "$DPF_TEST_RELEASE_REPO" "\${DPF_TEST_RELEASE_REPO_ID:-$DPF_TEST_RELEASE_ENGINE_ID}"; exit 0 ;;
+    "{{.Os}}") printf "%s" "\${DPF_TEST_RELEASE_OS:-linux}"; exit 0 ;;
+    "{{.Architecture}}") printf "%s" "\${DPF_TEST_RELEASE_ARCHITECTURE:-amd64}"; exit 0 ;;
+    *"org.opencontainers.image.version"*) printf "%s" "$DPF_TEST_RELEASE_TAG"; exit 0 ;;
+    *"org.opencontainers.image.revision"*) printf "%s" "$DPF_TEST_RELEASE_SHA"; exit 0 ;;
+  esac
+fi
 case "$*" in
   *"ps -q sandbox"*) printf 'sandbox-container' ;;
   *"config --images sandbox"*) printf 'dpf-sandbox:target\\n' ;;
-  *"image inspect --format {{.Id}} dpf-sandbox:target"*) printf 'sha256:sandbox-target' ;;
   *"{{.State.Running}} {{.Image}}"*)
     case "\${DPF_TEST_SANDBOX_STATE:-running}" in
       exited) printf 'false sha256:sandbox-target' ;;
@@ -116,20 +154,7 @@ case "$*" in
       printf 'exited 2026-09-01T00:00:00Z'
     fi
     ;;
-  "rm "*) printf 'reconcile-remove %s\\n' "$*" >> "$DOCKER_LOG" ;;
-  *".Id"*) printf "%s" "\${DPF_TEST_RELEASE_ENGINE_ID:-$DPF_TEST_RELEASE_CONFIG_DIGEST}" ;;
-  *".RepoDigests"*) printf "%s@%s\n" "$DPF_TEST_RELEASE_REPO" "\${DPF_TEST_RELEASE_REPO_ID:-$DPF_TEST_RELEASE_ENGINE_ID}" ;;
-  *".Os"*) printf "%s" "\${DPF_TEST_RELEASE_OS:-linux}" ;;
-  *".Architecture"*) printf "%s" "\${DPF_TEST_RELEASE_ARCHITECTURE:-amd64}" ;;
   *"buildx imagetools inspect"*"--raw"*) case "$*" in *"@$DPF_TEST_RELEASE_PLATFORM_MANIFEST_DIGEST"*) printf '{"config":{"digest":"%s"}}' "\${DPF_TEST_RELEASE_REGISTRY_CONFIG_DIGEST:-$DPF_TEST_RELEASE_CONFIG_DIGEST}" ;; *) if [ "\${DPF_TEST_DUPLICATE_PLATFORM:-no}" = yes ]; then printf '{"manifests":[{"digest":"%s","platform":{"os":"%s","architecture":"%s"}},{"digest":"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","platform":{"os":"%s","architecture":"%s"}}]}' "$DPF_TEST_RELEASE_PLATFORM_MANIFEST_DIGEST" "$DPF_TEST_RELEASE_OS" "$DPF_TEST_RELEASE_ARCHITECTURE" "$DPF_TEST_RELEASE_OS" "$DPF_TEST_RELEASE_ARCHITECTURE"; else printf '{"manifests":[{"digest":"%s","platform":{"os":"%s","architecture":"%s"}}]}' "$DPF_TEST_RELEASE_PLATFORM_MANIFEST_DIGEST" "$DPF_TEST_RELEASE_OS" "$DPF_TEST_RELEASE_ARCHITECTURE"; fi ;; esac ;;
-  *"org.opencontainers.image.version"*) printf "%s" "$DPF_TEST_RELEASE_TAG" ;;
-  *"org.opencontainers.image.revision"*) printf "%s" "$DPF_TEST_RELEASE_SHA" ;;
-  "create "*) printf "candidate-container" ;;
-  "cp candidate-container:/dpf-release-assets/. "*)
-    for destination in "$@"; do :; done
-    # Match Docker's directory-copy semantics on both platforms.
-    mkdir -p "$destination"; cp -R "$DPF_TEST_RELEASE_ASSETS"/. "$destination/"
-    ;;
   *"recover-human-principal-backfill-migration.mjs --verify-rolled-back"*)
     [ "\${DPF_TEST_PRINCIPAL_VERIFY_FAIL:-no}" = "yes" ] && exit 1
     printf "verified"
@@ -337,6 +362,35 @@ export function runPromote(opts: {
     encoding: "utf8",
   });
   return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+}
+
+/**
+ * Everything a failing promote run leaves behind, for the assertion message
+ * (BI-683619D9). The scratch root is deleted in `finally`, so without this a
+ * CI-only failure keeps nothing but one line of stderr: on 2026-10-07 two runs
+ * failed this way and could not be reproduced locally.
+ */
+export function promoteDiagnostics(
+  r: { status: number | null; stdout: string; stderr: string },
+  files: Record<string, string> = {},
+): string {
+  const sections = [`status=${r.status}`, `--- stderr (tail) ---\n${r.stderr.slice(-4000)}`, `--- stdout (tail) ---\n${r.stdout.slice(-4000)}`];
+  for (const [label, path] of Object.entries(files)) {
+    let body: string;
+    try {
+      // Read first and fall back to a listing: no check-then-use race on the path.
+      body = readFileSync(path, "utf8").slice(-6000);
+    } catch (error) {
+      try {
+        if ((error as NodeJS.ErrnoException).code !== "EISDIR") throw error;
+        body = (readdirSync(path, { recursive: true }) as string[]).map(String).sort().join("\n");
+      } catch (inner) {
+        body = `<unreadable: ${(inner as Error).message}>`;
+      }
+    }
+    sections.push(`--- ${label} (${path}) ---\n${body}`);
+  }
+  return sections.join("\n");
 }
 
 /** Scratch root with a clean git source dir (src/) + isolated bin/ and backup/. */

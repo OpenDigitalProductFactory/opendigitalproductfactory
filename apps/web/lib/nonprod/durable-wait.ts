@@ -49,6 +49,7 @@ type DurableWaitDb = {
     findUnique(args: unknown): Promise<TaskRunRow | null>;
     findMany(args: unknown): Promise<TaskRunRow[]>;
     update(args: unknown): Promise<unknown>;
+    updateMany?(args: unknown): Promise<{ count: number }>;
   };
   nonProductionEnvironmentLease: {
     updateMany(args: unknown): Promise<unknown>;
@@ -234,7 +235,7 @@ export async function applyNonprodCapacityEvent(input: {
   const task = await input.db.taskRun.findUnique({ where: { taskRunId: input.event.taskRunId } });
   if (!task) return { applied: false, reason: "missing" };
   const wait = parseNonprodLeaseWait(task.progressPayload);
-  if (!wait || !["waiting", "capacity-available"].includes(wait.state)) {
+  if (task.status !== "submitted" || !wait || !["waiting", "capacity-available"].includes(wait.state)) {
     return { applied: false, reason: "not-waiting" };
   }
   if (!eventMatches(wait, input.event)) return { applied: false, reason: "binding-mismatch" };
@@ -246,11 +247,15 @@ export async function applyNonprodCapacityEvent(input: {
     eventId: input.event.eventId,
     eventConsumed: false,
   };
-  await input.db.taskRun.update({
-    where: { taskRunId: input.event.taskRunId },
+  // Capacity delivery races expiry and admission outside the environment
+  // transaction. Never revive a wait from the snapshot read above.
+  if (!input.db.taskRun.updateMany) return { applied: false, reason: "not-waiting" };
+  const result = await input.db.taskRun.updateMany({
+    where: { taskRunId: input.event.taskRunId, status: "submitted",
+      progressPayload: { equals: task.progressPayload } },
     data: { status: "submitted", progressPayload: waitPayload(task.progressPayload, next) },
   });
-  return { applied: true };
+  return result.count === 1 ? { applied: true } : { applied: false, reason: "not-waiting" };
 }
 
 export async function publishNonprodCapacityForHead(input: {
@@ -319,16 +324,44 @@ export async function publishNonprodCapacityForHead(input: {
   return { notified, headLeaseId: head.leaseId };
 }
 
-export async function settleNonprodLeaseWait(input: {
+type SettleNonprodLeaseWaitInput = {
   db: DurableWaitDb & { taskRun: NonNullable<DurableWaitDb["taskRun"]> };
   taskRunId: string;
   leaseId: string;
   state: "admitted" | "terminal";
+  /** Automatic expiry validates all persisted ownership fields and uses CAS. */
+  expiredLease?: WaitLease;
   now?: Date;
-}): Promise<{ settled: boolean }> {
+};
+
+export async function settleNonprodLeaseWait(input: SettleNonprodLeaseWaitInput): Promise<{ settled: boolean }> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const result = await settleNonprodLeaseWaitOnce(input);
+    if (!result.retryable) return { settled: result.settled };
+  }
+  // Automatic expiry runs inside the lease transaction. Persistent contention
+  // must roll it back, leaving the active/queued row visible for a later pass.
+  throw new Error("nonprod_expiry_wait_settlement_contended");
+}
+
+async function settleNonprodLeaseWaitOnce(input: SettleNonprodLeaseWaitInput): Promise<{ settled: boolean; retryable?: boolean }> {
   const task = await input.db.taskRun.findUnique({ where: { taskRunId: input.taskRunId } });
   const wait = parseNonprodLeaseWait(task?.progressPayload);
   if (!task || !wait || wait.leaseId !== input.leaseId) return { settled: false };
+  if (input.expiredLease) {
+    const lease = input.expiredLease;
+    if (task.taskRunId !== lease.taskRunId
+      || wait.claimKey !== lease.claimKey
+      || wait.environmentKey !== lease.environmentKey
+      || wait.ownerProvider !== lease.ownerProvider
+      || wait.ownerSessionId !== lease.ownerSessionId
+      || wait.worktreePath !== lease.worktreePath
+      || wait.branchName !== lease.branchName) return { settled: false };
+  }
+  // A release retry closes no new wait and must not rewrite admission history
+  // or its clock. Completion here concerns the wait, never command execution.
+  if (task.status === "completed" && wait.eventConsumed
+    && (wait.state === "admitted" || wait.state === "terminal")) return { settled: true };
   const now = input.now ?? new Date();
   const next: NonprodLeaseWaitProjection = {
     ...wait,
@@ -337,15 +370,40 @@ export async function settleNonprodLeaseWait(input: {
     lastTransitionAt: now.toISOString(),
     eventConsumed: true,
   };
-  await input.db.taskRun.update({
-    where: { taskRunId: input.taskRunId },
-    data: {
+  const data = {
       status: "completed",
       completedAt: now,
       progressPayload: waitPayload(task.progressPayload, next),
-    },
-  });
+  };
+  if (input.expiredLease) {
+    if (task.status !== "submitted" || !input.db.taskRun.updateMany) return { settled: false };
+    const result = await input.db.taskRun.updateMany({
+      where: { taskRunId: input.taskRunId, status: task.status,
+        progressPayload: { equals: task.progressPayload } },
+      data,
+    });
+    return { settled: result.count === 1, retryable: result.count === 0 };
+  }
+  await input.db.taskRun.update({ where: { taskRunId: input.taskRunId }, data });
   return { settled: true };
+}
+
+/** Called only inside the transaction that expires these exact lease rows. */
+export async function settleExpiredNonprodLeaseWaits(input: {
+  db: DurableWaitDb;
+  leaseIds: string[];
+  now: Date;
+}): Promise<void> {
+  if (!input.db.taskRun || !input.db.nonProductionEnvironmentLease.findMany) return;
+  const expired = await input.db.nonProductionEnvironmentLease.findMany({
+    where: { id: { in: input.leaseIds }, status: "expired", releasedAt: input.now },
+  });
+  for (const lease of expired) {
+    if (!lease.taskRunId) continue;
+    await settleNonprodLeaseWait({ db: input.db as DurableWaitDb & { taskRun: NonNullable<DurableWaitDb["taskRun"]> },
+      taskRunId: lease.taskRunId, leaseId: lease.leaseId, state: "terminal",
+      expiredLease: lease, now: input.now });
+  }
 }
 
 export async function afterNonprodLeaseRelease(input: {
@@ -359,7 +417,9 @@ export async function afterNonprodLeaseRelease(input: {
       db: input.db as DurableWaitDb & { taskRun: NonNullable<DurableWaitDb["taskRun"]> },
       taskRunId: input.lease.taskRunId,
       leaseId: input.lease.leaseId,
-      state: input.priorStatus === "queued" ? "terminal" : "admitted",
+      // Expiry/cancellation (including a repeated release) proves no admission.
+      // A released lease previously passed through active in this lifecycle.
+      state: input.priorStatus === "active" || input.priorStatus === "released" ? "admitted" : "terminal",
       now: input.now,
     });
   }

@@ -2,13 +2,16 @@ import { callProvider, InferenceError } from "@/lib/ai-inference";
 import type { GoldenTest, ScoringMethod } from "./golden-tests";
 import { scoreExact, scorePartial, scoreSchema, scoreToolCall, scoreStructural, scoreRetrieval } from "./eval-scoring";
 import { resolveDefaultExecutionAdapter } from "./execution-plan";
+import { createRoutingTraceId } from "./routing-trace";
 export interface TestResult {
   testId: string;
   version: number;
   scoring: ScoringMethod;
-  score: number;       // 0-10
+  score: number | null; // 0-10 when measured; null for an incomplete observation
   response: string;
   error?: string;
+  traceId?: string;
+  truncated?: boolean; // absent historical/legacy evidence stays unknown
 }
 
 /** Score a single response using the appropriate scoring method. */
@@ -50,6 +53,7 @@ export async function runGoldenTest(
   modelId: string,
   test: GoldenTest,
 ): Promise<TestResult> {
+  const traceId = createRoutingTraceId();
   const attempt = async (): Promise<TestResult> => {
     const messages = [{ role: "user" as const, content: test.prompt }];
     const result = await callProvider(
@@ -69,7 +73,15 @@ export async function runGoldenTest(
         toolPolicy: test.tools?.length ? { toolChoice: "auto" } : {},
         responsePolicy: {},
       },
+      undefined,
+      undefined,
+      { traceId },
     );
+    if (result.truncated === true) {
+      return { testId: test.id, version: test.version, scoring: test.scoring,
+        score: null, response: result.content.slice(0, 500), traceId, truncated: true,
+        error: "Golden test output was truncated; quality is unverified." };
+    }
     const score = scoreResponse(test, result.content, result.toolCalls ?? []);
     return {
       testId: test.id,
@@ -77,6 +89,8 @@ export async function runGoldenTest(
       scoring: test.scoring,
       score,
       response: result.content.slice(0, 500),
+      traceId,
+      ...(result.truncated === undefined ? {} : { truncated: result.truncated }),
     };
   };
 
@@ -92,7 +106,7 @@ export async function runGoldenTest(
       } catch (e2) {
         const msg = e2 instanceof Error ? e2.message : String(e2);
         console.error(`[eval-runner] test ${test.id} failed after retry on ${endpointId}/${modelId}: ${msg}`);
-        return { testId: test.id, version: test.version, scoring: test.scoring, score: 0, response: "", error: msg || "unknown error" };
+        return { testId: test.id, version: test.version, scoring: test.scoring, score: 0, response: "", error: msg || "unknown error", traceId };
       }
     }
 
@@ -105,6 +119,7 @@ export async function runGoldenTest(
       score: 0,
       response: "",
       error: errorMessage || "unknown error",
+      traceId,
     };
   }
 }

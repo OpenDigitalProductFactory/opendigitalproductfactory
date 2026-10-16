@@ -54,14 +54,43 @@ export async function resolveDeploymentClosureProof(args: {
     targetSha: run.targetSha, servedSha, completedAt: run.completedAt.toISOString() };
 }
 
+type ClosureDb = Pick<typeof import("@dpf/db").prisma, "workroom" | "selfUpgradeRun" | "contributorInventorySnapshot">;
+
 /** Server-owned reads; a caller cannot submit a deployment assertion as proof. */
-export async function resolveBacklogDeploymentClosure(args: { itemId: string; workType: string | null; roots: string[] }): Promise<DeploymentClosureResult> {
+export async function resolveBacklogDeploymentClosure(args: {
+  itemId: string; workType: string | null; roots: string[];
+  db?: ClosureDb;
+}): Promise<DeploymentClosureResult> {
+  return resolveRoomDeploymentClosure({ ...args, roomWhere: { backlogItemId: args.itemId } });
+}
+
+/**
+ * The same proof for a Build Studio build (BI-1CDA479D), keyed on the build's
+ * own room: the PR it opened, merged, and contained in the image now served.
+ * A build's ProductVersion carries no merge commit (its gitCommitHash is the
+ * sandbox HEAD at ship, or "unknown"), so it could never prove its own
+ * delivery and no merged build reached complete.
+ */
+export async function resolveFeatureBuildDeploymentClosure(args: {
+  featureBuildRowId: string; workType: string | null; roots: string[];
+  db?: ClosureDb;
+}): Promise<DeploymentClosureResult> {
+  return resolveRoomDeploymentClosure({
+    ...args,
+    roomWhere: { featureBuildId: args.featureBuildRowId, pullRequestNumber: { not: null } },
+  });
+}
+
+async function resolveRoomDeploymentClosure(args: {
+  roomWhere: Record<string, unknown>; workType: string | null; roots: string[];
+  db?: ClosureDb;
+}): Promise<DeploymentClosureResult> {
   try {
-    const { prisma } = await import("@dpf/db");
+    const prisma = args.db ?? (await import("@dpf/db")).prisma;
     const { getDeployedSha } = await import("@/lib/self-upgrade/completion");
     const { isReachableFromTrunk, trustedGitArgs } = await import("@/lib/work-capsules/git-scanner");
     // Newest attempt wins: an old merged PR cannot close newly reopened work.
-    const room = await prisma.workroom.findFirst({ where: { backlogItemId: args.itemId },
+    const room = await prisma.workroom.findFirst({ where: args.roomWhere as never,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       select: { repositoryFullName: true, headSha: true, pullRequestNumber: true } });
     const servedSha = await getDeployedSha();

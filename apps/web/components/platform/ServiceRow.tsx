@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/ui/report-kit/StatusBadge";
 import { intentStyle, resolveIntent } from "@/lib/ui-model/statusColors";
 import { ModelClassBadges } from "./ModelClassBadge";
 import { ProviderStatusToggle } from "./ProviderStatusToggle";
+import { Button } from "@/components/ui/Button";
 
 const ROUTING_DIMS = [
   { key: "reasoning", label: "Reasoning" },
@@ -117,6 +118,7 @@ const SENSITIVITY_ABBR: Record<string, string> = {
 
 type Props = {
   pw: ProviderWithCredential;
+  canWrite?: boolean;
   modelSummary?: ProviderModelSummary;
   /**
    * The single, mutually-exclusive "can routing use this now?" answer, derived
@@ -140,7 +142,7 @@ type Props = {
   weeklyAllocationHint?: string | null;
 };
 
-export function ServiceRow({ pw, modelSummary, eligibility, resolvesPhases, weeklyAllocationHint }: Props) {
+export function ServiceRow({ pw, modelSummary, eligibility, resolvesPhases, weeklyAllocationHint, canWrite = false }: Props) {
   const { provider, credential } = pw;
   const [expanded, setExpanded] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -172,18 +174,6 @@ export function ServiceRow({ pw, modelSummary, eligibility, resolvesPhases, week
     >
       {/* Collapsed row */}
       <div
-        role="button"
-        tabIndex={0}
-        aria-expanded={expanded}
-        aria-controls={detailId}
-        aria-label={`${provider.name}: ${eligibility.label}`}
-        onClick={() => setExpanded((v) => !v)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            setExpanded((v) => !v);
-          }
-        }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{
@@ -196,6 +186,7 @@ export function ServiceRow({ pw, modelSummary, eligibility, resolvesPhases, week
           transition: "background 0.1s",
         }}
       >
+        <Button variant="ghost" size="sm" className="min-w-0 flex-1 justify-start gap-2 text-start" aria-expanded={expanded} aria-controls={detailId} aria-label={`${provider.name}: ${eligibility.label}`} onClick={() => setExpanded(v => !v)}>
         {/* Status dot — colored by routing eligibility */}
         <span
           title={eligibilityTitle}
@@ -257,24 +248,6 @@ export function ServiceRow({ pw, modelSummary, eligibility, resolvesPhases, week
           </span>
         )}
 
-        {recommendedAction && (
-          <span
-            title={recommendedAction}
-            style={{
-              color: "var(--dpf-muted)",
-              fontSize: 10,
-              flexShrink: 1,
-              minWidth: 0,
-              maxWidth: 220,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {recommendedAction}
-          </span>
-        )}
-
         {/* Type badge */}
         <span
           style={{
@@ -297,18 +270,9 @@ export function ServiceRow({ pw, modelSummary, eligibility, resolvesPhases, week
             connectivity one, and rendering it beside the toggle made every
             provider read "Not connected" (BI-1C4AAE1E). */}
 
-        {/* Status toggle */}
-        <span
-          style={{ flexShrink: 0 }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <ProviderStatusToggle
-            providerId={provider.providerId}
-            initialStatus={provider.status}
-            initialPause={provider.operatorPause}
-            initialConnectionStatus={provider.defaultConnectionStatus}
-          />
-        </span>
+        </Button>
+        {/* Management stays a separate link, outside the disclosure button. */}
+        <Link href={`/platform/ai/providers/${encodeURIComponent(provider.providerId)}`} aria-label={`Manage ${provider.name}`} onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()} className="text-xs text-[var(--dpf-accent)] underline underline-offset-2">Manage</Link>
       </div>
 
       {/* Expanded detail */}
@@ -321,6 +285,21 @@ export function ServiceRow({ pw, modelSummary, eligibility, resolvesPhases, week
             borderTop: "1px solid var(--dpf-border)",
           }}
         >
+          {canWrite && <div className="mb-3">
+<span
+          style={{ flexShrink: 0 }}
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <ProviderStatusToggle
+            providerId={provider.providerId}
+            initialStatus={provider.status}
+            initialPause={provider.operatorPause}
+            initialConnectionStatus={provider.defaultConnectionStatus}
+            endpointType={provider.endpointType}
+          />
+        </span>
+          </div>}
           {/* Detail grid */}
           <div
             style={{

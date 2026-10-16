@@ -14,6 +14,8 @@ const {
   mockClearCapacity,
 } = vi.hoisted(() => ({
   mockPrisma: {
+    $transaction: vi.fn(),
+    complianceEvidence: { updateMany: vi.fn() },
     modelProfile: { findFirst: vi.fn() },
     modelProvider: {
       findUnique: vi.fn(),
@@ -98,20 +100,8 @@ import {
   discoverModels,
   runProviderCatalogReconciliationIfDue,
   testProviderAuth,
-  toggleProviderStatus,
 } from "./ai-providers";
-import { setProviderStatusWithDefaultConnection } from "@dpf/db";
 import { updateProviderConnectionPosture } from "./provider-connection-posture";
-
-describe("operator provider toggle", () => {
-  it("disables the connection together with the provider", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "user-1", platformRole: "HR-000", isSuperuser: true } });
-    mockCan.mockReturnValue(true);
-    mockPrisma.modelProvider.findUnique.mockResolvedValue({ status: "active" });
-    await expect(toggleProviderStatus("local")).resolves.toEqual({ status: "inactive", warning: null });
-    expect(setProviderStatusWithDefaultConnection).toHaveBeenCalledWith(mockPrisma, { providerId: "local", status: "inactive" });
-  });
-});
 
 describe("updateProviderConnectionPosture", () => {
   beforeEach(() => {
@@ -649,6 +639,8 @@ describe("discoverModels", () => {
 describe("configureProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPrisma.$transaction = vi.fn(async (run) => run(mockPrisma));
+    mockPrisma.credentialEntry.findUnique.mockResolvedValue(null);
     mockAuth.mockResolvedValue({
       user: {
         id: "user-1",
@@ -683,6 +675,24 @@ describe("configureProvider", () => {
         providerId: "openai",
       }),
     );
+  });
+
+  it("persists and explicitly clears Anthropic workspace configuration", async () => {
+    mockPrisma.credentialEntry.findUnique.mockResolvedValue({ providerWorkspaceId: "wrkspc_old", providerConnection: { id: "connection-a" } });
+    mockActivateProvider.mockResolvedValue({ warning: "Discovery failed" });
+    expect(await configureProvider({ providerId: "anthropic", enabledFamilies: [], providerWorkspaceId: " wrkspc_accountA " })).toEqual({});
+    expect(mockPrisma.credentialEntry.upsert).toHaveBeenCalledWith(expect.objectContaining({ update: expect.objectContaining({ providerWorkspaceId: "wrkspc_accountA" }) }));
+    expect(await configureProvider({ providerId: "anthropic", enabledFamilies: [], providerWorkspaceId: "" })).toEqual({});
+    expect(mockPrisma.credentialEntry.upsert).toHaveBeenLastCalledWith(expect.objectContaining({ update: expect.objectContaining({ providerWorkspaceId: null }) }));
+    expect(mockPrisma.aiProviderConnection.update.mock.invocationCallOrder[0]).toBeLessThan(mockActivateProvider.mock.invocationCallOrder[0]);
+  });
+
+  it("rejects unsupported or malformed workspaces before writing configuration", async () => {
+    for (const providerId of ["openai", "anthropic"]) {
+      expect(await configureProvider({ providerId, enabledFamilies: [], providerWorkspaceId: "not-a-workspace" })).toHaveProperty("error");
+    }
+    expect(mockPrisma.credentialEntry.upsert).not.toHaveBeenCalled();
+    expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
   });
 
   it("activates the paired OpenAI provider when configuring ChatGPT OAuth", async () => {

@@ -5,7 +5,7 @@ import { remoteTaskRequestMatches } from "./mcp-task-capacity-contract";
 import type { ExistingRemoteTask } from "./mcp-task-submit-types";
 import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 import { IMMUTABLE_PAGE_READER_TOOLS, type createInitiativeReviewTerminalToolPolicy } from "./tak/terminal-tool-policy";
-import type { PersistedTerminalReaderExecution } from "./mcp-task-terminal-writer-context";
+import { needsTerminalReaderBootstrap, type PersistedTerminalReaderExecution } from "./mcp-task-terminal-writer-context";
 import { recoverTerminalWriterEscalation } from "./mcp-task-terminal-writer-escalation";
 import { parseTerminalWriterWait, type TerminalWriterWait } from "./mcp-task-replay-projection";
 function optionalString(value: unknown): string | null { return typeof value === "string" && value.trim() ? value.trim() : null; }
@@ -87,7 +87,7 @@ export async function reserveTerminalWriterReplay(input: {
     }),
   ]);
   if (successfulWriter) return null;
-  const bootstrapReaderEvidence = readerExecutions.length === 0;
+  const bootstrapReaderEvidence = needsTerminalReaderBootstrap(input.terminalToolPolicy, readerExecutions);
   if (bootstrapReaderEvidence && !isProjectedWait) return null;
 
   if (writerAttempt) {

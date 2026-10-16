@@ -6,25 +6,27 @@ vi.mock("@dpf/db", () => {
   return {
     prisma: {
       cliPoolStatus: {
-        upsert: vi.fn(async ({ where, create, update }: { where: { adapterType: string }; create: Record<string, unknown>; update: Record<string, unknown> }) => {
-          const existing = rows.get(where.adapterType);
+        upsert: vi.fn(async ({ where, create, update }: { where: { adapterType?: string; scopeKey?: string }; create: Record<string, unknown>; update: Record<string, unknown> }) => {
+          const key = where.scopeKey ?? where.adapterType!;
+          const existing = rows.get(key);
           const row = existing ? { ...existing, ...update } : { ...create };
-          rows.set(where.adapterType, row);
+          rows.set(key, row);
           return row;
         }),
-        findUnique: vi.fn(async ({ where }: { where: { adapterType: string } }) => {
-          return rows.get(where.adapterType) ?? null;
+        findUnique: vi.fn(async ({ where }: { where: { adapterType?: string; scopeKey?: string } }) => {
+          return rows.get(where.scopeKey ?? where.adapterType!) ?? null;
         }),
         findMany: vi.fn(async () => [...rows.values()]),
-        update: vi.fn(async ({ where, data }: { where: { adapterType: string }; data: Record<string, unknown> }) => {
-          const existing = rows.get(where.adapterType);
+        update: vi.fn(async ({ where, data }: { where: { adapterType?: string; scopeKey?: string }; data: Record<string, unknown> }) => {
+          const key = where.scopeKey ?? where.adapterType!;
+          const existing = rows.get(key);
           if (!existing) throw new Error("Record to update not found");
           const row = { ...existing, ...data };
-          rows.set(where.adapterType, row);
+          rows.set(key, row);
           return row;
         }),
-        deleteMany: vi.fn(async ({ where }: { where: { adapterType: string } }) => {
-          rows.delete(where.adapterType);
+        deleteMany: vi.fn(async ({ where }: { where: { adapterType?: string; scopeKey?: string } }) => {
+          rows.delete(where.scopeKey ?? where.adapterType!);
           return { count: 1 };
         }),
         _rows: rows,
@@ -46,9 +48,20 @@ import {
   getCliPoolStatus,
   getAllCliPoolStatuses,
   clearCliRateLimit,
+  indexCliPoolResetTimes,
 } from "./cli-pool-status";
 import type { WeeklyQuotaSnapshot } from "./weekly-quota";
 import { prisma } from "@dpf/db";
+import { applyCapacitySoftExclusion, capacityRoutingExclusionReason } from "./capacity-routing-exclude";
+
+it("projects typed scoped CLI cooldowns conservatively alongside legacy aliases", () => {
+  const later = new Date("2026-10-15T00:00:00Z");
+  expect(indexCliPoolResetTimes([
+    { adapterType: "codex-cli", adapterKind: null, resetAt: new Date("2026-10-14T00:00:00Z") },
+    { adapterType: null, adapterKind: "codex", resetAt: later },
+    { adapterType: null, adapterKind: null, resetAt: later },
+  ])).toEqual(new Map([["codex-cli", later.getTime()]]));
+});
 
 function snap(overrides: Partial<WeeklyQuotaSnapshot> = {}): WeeklyQuotaSnapshot {
   return {
@@ -100,9 +113,61 @@ describe("parseRetryAfterSeconds", () => {
 });
 
 describe("recordCliRateLimit", () => {
+  it("does not clear a longer legacy cooldown when a scoped pool has a shorter observation", async () => {
+    clearMockRows();
+    const identity = { providerId: "codex", providerConnectionId: "extra-account" };
+    await recordCliRateLimit("codex-cli", "codex", "Retry-After: 120");
+    await recordCliRateLimit("codex-cli", "codex", "Retry-After: 10", identity);
+    expect((await getCliPoolStatus("codex-cli", identity))?.secondsUntilReset).toBeGreaterThan(100);
+    await clearCliRateLimit("codex-cli", identity);
+    expect((await getCliPoolStatus("codex-cli"))?.isExhausted).toBe(true);
+  });
   beforeEach(() => {
     clearMockRows();
     vi.clearAllMocks();
+  });
+
+  it("records a bounded unavailable observation without inventing the missing reset date", async () => {
+    const banner = "You've hit your weekly limit · resets 4pm (UTC)";
+    await recordCliRateLimit("claude-cli", "anthropic-sub", banner);
+    expect(prisma.providerCapacityStatus.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { providerId: "anthropic-sub" },
+      create: expect.objectContaining({
+        state: "rate_limited", action: "retry_with_backoff", confidence: "heuristic",
+        retryAt: expect.any(Date), source: "cli",
+      }),
+    }));
+    expect(parseRetryAfterSeconds(banner)).toBeNull();
+    const state = await getCliPoolStatus("claude-cli");
+    expect(state?.isExhausted).toBe(true);
+    expect(state?.retryAfterSeconds).toBeNull();
+    const row = vi.mocked(prisma.providerCapacityStatus.upsert).mock.calls[0]![0].create;
+    const snapshot = { state: String(row.state), retryAtMs: new Date(row.retryAt!).getTime() };
+    const routes = [{ providerId: "anthropic-sub" }, { providerId: "local" }];
+    expect(applyCapacitySoftExclusion({ endpoints: routes,
+      capacityByProvider: new Map([["anthropic-sub", snapshot]]), nowMs: Date.now(),
+    }).eligible).toEqual([{ providerId: "local" }]);
+    expect(capacityRoutingExclusionReason(snapshot, snapshot.retryAtMs)).toBeNull();
+  });
+
+  it("waits for the provider observation before completing the quota record", async () => {
+    let release!: () => void;
+    vi.mocked(prisma.providerCapacityStatus.upsert).mockImplementationOnce(() =>
+      new Promise(resolve => { release = () => resolve({} as never); }) as never);
+    let complete = false;
+    const pending = recordCliRateLimit("claude-cli", "anthropic-sub", "Retry-After: 7200")
+      .then(() => { complete = true; });
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    expect(complete).toBe(false);
+    release();
+    await pending;
+    expect(complete).toBe(true);
+  });
+
+  it("still records the dispatch cooldown if provider capacity persistence fails", async () => {
+    vi.mocked(prisma.providerCapacityStatus.upsert).mockRejectedValueOnce(new Error("capacity store unavailable"));
+    await expect(recordCliRateLimit("claude-cli", "anthropic-sub", "429")).resolves.toBeUndefined();
+    expect((await getCliPoolStatus("claude-cli"))?.isExhausted).toBe(true);
   });
 
   it("writes a CliPoolStatus row on first call", async () => {
@@ -383,8 +448,7 @@ describe("dated subscription cap (BI-38064739)", () => {
       upsert.mock.calls.filter((c) => ((c[0] as { create: { rawSnippet?: string | null } }).create.rawSnippet ?? "").includes("Sep 26th")).length,
     ).toBeGreaterThanOrEqual(2));
     type CapUpsert = { where: { providerId: string }; create: { state: string; retryAt: Date; rawSnippet: string | null } };
-    // An earlier test's "try again in 2h" also crosses the pool cap and its
-    // fire-and-forget write can land after mockClear; select this cap's calls.
+    // Select this cap's calls so the assertions remain tied to this fixture.
     const capCalls = upsert.mock.calls
       .map((c) => c[0] as CapUpsert)
       .filter((c) => c.create.state === "quota_resets_at" && (c.create.rawSnippet ?? "").includes("Sep 26th"));

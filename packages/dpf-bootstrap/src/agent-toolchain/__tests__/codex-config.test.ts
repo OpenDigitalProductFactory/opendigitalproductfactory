@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse } from "smol-toml";
 
-import { planCodexConfig } from "../codex-config";
+import { planCodexConfig, planCodexProjectConfig } from "../codex-config";
 
 const FIXTURES = join(__dirname, "fixtures");
 const operatorRedacted = readFileSync(
@@ -312,5 +312,29 @@ describe("planCodexConfig", () => {
     expect(parsed.mcp_servers["dpf"]).toEqual({
       url: `${novelEndpoint}?tier=full`,
     });
+  });
+});
+
+
+describe("planCodexProjectConfig", () => {
+  const endpoint = "https://localhost/api/mcp/v1";
+  it("repairs the project override without installing global defaults or changing user choices", () => {
+    const before = 'model="custom"\n[mcp_servers.dpf]\nurl="http://127.0.0.1:3000/api/mcp/v1"\nenabled=false\nstartup_timeout_sec=45\nbearer_token_env_var="CUSTOM_TOKEN"\n[mcp_servers.other]\nurl="https://other.example/mcp"\n';
+    const plan = planCodexProjectConfig(before, CONFIG_PATH, endpoint);
+    expect(plan.writes).toHaveLength(1);
+    const expected = parse(before) as any;
+    expected.mcp_servers.dpf.url = endpoint + "?tier=full";
+    expect(parse(plan.writes[0].content)).toEqual(expected);
+    expect(planCodexProjectConfig(plan.writes[0].content, CONFIG_PATH, endpoint).writes).toEqual([]);
+  });
+  it("applies the managed OAuth credential policy to an existing override", () => {
+    const plan = planCodexProjectConfig('[mcp_servers.dpf]\nurl="http://localhost:3000/mcp"\nbearer_token_env_var="DPF_MCP_BEARER_TOKEN"', CONFIG_PATH, endpoint);
+    expect((parse(plan.writes[0].content) as any).mcp_servers.dpf.bearer_token_env_var).toBeUndefined();
+  });
+  it.each(["", 'model="custom"', '[mcp_servers.other]\nurl="https://other.example"'])("does not introduce a DPF override into %s", text => {
+    expect(planCodexProjectConfig(text, CONFIG_PATH, endpoint).writes).toEqual([]);
+  });
+  it("rejects malformed TOML instead of claiming convergence", () => {
+    expect(() => planCodexProjectConfig('[mcp_servers.dpf]\nurl="unfinished', CONFIG_PATH, endpoint)).toThrow(/project.*TOML/i);
   });
 });

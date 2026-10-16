@@ -153,6 +153,26 @@ describe("backlog deferral read projection", () => {
     expect(result).toMatchObject({ success: true, data: { recovery } });
   });
 
+  it.each(["OBJECTIVE_RECONCILIATION_REQUIRED", "ACCEPTANCE_EVIDENCE_REQUIRED", "PLAN_REVIEW_REQUIRED"])(
+    "exposes canonical completion recovery for %s without attempting a transition", async (code) => {
+      mocks.findUnique.mockResolvedValue({
+        ...baseItem, id: "row-bi", status: "in-progress", body: null,
+        createdAt: new Date("2026-09-21T00:00:00Z"), completedAt: null,
+        deferOwnerPrincipal: null, epic: null, digitalProduct: null, organization: null,
+        productLine: null, businessProduct: null, demandEvidenceLinks: [], activities: [],
+      });
+      const completion = { verdict: "input-required", blockers: [], unmet: [{ code }] };
+      const recovery = { reviewerRoutes: [], escalations: [{ reason: "eligible-evidence-not-found" }], unroutable: [] };
+      mocks.projectReadiness.mockReturnValue({ decisions: { completion } });
+      mocks.resolveTerminalRecovery.mockResolvedValue(recovery);
+      const result = await getBacklogItem({ itemId: baseItem.itemId }, "AGT-AUTHOR", "user-1");
+      expect(mocks.resolveTerminalRecovery).toHaveBeenCalledWith(expect.objectContaining({
+        decision: completion, currentAgentId: "AGT-AUTHOR", currentUserId: "user-1", refusedWorkroomId: null,
+      }));
+      expect(result).toMatchObject({ success: true, data: { recovery } });
+    },
+  );
+
   it("passes the persisted terminal readiness decision through the canonical item read", async () => {
     const terminalActivity = {
       id: "activity-terminal",

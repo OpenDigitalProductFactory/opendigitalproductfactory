@@ -18,6 +18,8 @@ const definitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
+        previewLeaseId: { type: "string", description: "Exact admitted preview lease; issues using that preview database and signing identity." },
+        ownerSessionId: { type: "string", description: "Owning Workroom executor session, required for preview sign-in." },
         nextPath: {
           type: "string",
           description: "Portal path to land on after sign-in, e.g. /platform/federation-links. Defaults to /.",
@@ -56,6 +58,10 @@ async function issueUxVerificationSignInTool(
   const requestedBy = `mcp:${context?.agentId?.trim() || "agent"}${reason ? `:${reason}` : ""}`;
   const actor = { userId, agentId: context?.agentId ?? "", apiTokenId: context?.apiTokenId,
     authSource: context?.authSource, taskRunId: context?.taskRunId };
+  const previewLeaseId = typeof params["previewLeaseId"] === "string" ? params["previewLeaseId"].trim() : "";
+  if (previewLeaseId && (params["fixture"] !== undefined || params["retireRunId"] !== undefined)) {
+    return { success: false, message: "Preview sign-in cannot create or retire a fixture on the canonical installation." };
+  }
   if (params["retireRunId"] !== undefined) {
     if (typeof params["retireRunId"] !== "string" || !params["retireRunId"] || params["fixture"] !== undefined) {
       return { success: false, message: "Choose either sign-in or retirement for one verification run." };
@@ -65,7 +71,12 @@ async function issueUxVerificationSignInTool(
   }
   const fixture = params["fixture"] === undefined ? undefined
     : (await import("@/lib/govern/automation-fixture")).parseFixtureRequest(params["fixture"]);
-  const result = await mintAutomationSignIn({
+  const result = previewLeaseId
+    ? await (await import("@/lib/govern/preview-automation-sign-in")).issuePreviewAutomationSignIn({
+        leaseId: previewLeaseId, ownerSessionId: typeof params["ownerSessionId"] === "string" ? params["ownerSessionId"] : "",
+        nextPath: typeof params["nextPath"] === "string" ? params["nextPath"] : undefined, userId, context,
+      })
+    : await mintAutomationSignIn({
     nextPath: typeof params["nextPath"] === "string" ? params["nextPath"] : undefined,
     baseUrl: resolveAppBaseUrl() ?? "http://localhost:3000",
     requestedBy,
@@ -85,6 +96,7 @@ async function issueUxVerificationSignInTool(
       persona: result.persona,
       permittedBecause: result.because,
       ...(result.runId ? { runId: result.runId } : {}),
+      ...("previewIdentity" in result ? { previewIdentity: result.previewIdentity } : {}),
     },
   };
 }

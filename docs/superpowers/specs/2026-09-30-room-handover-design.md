@@ -198,3 +198,25 @@ the `appoint_room_coordinator` handler, so both paths share one write rule.
   re-run completes. The digest is recomputed from what remains.
 - **Wrong portfolio attribution on a room.** The dry run shows the destination
   per room before anyone approves.
+
+## Addendum (2026-10-14, BI-858FDE5A): the handover is recorded on the account
+
+Re-homing existing items did not stop new work going to the retired account.
+The drive named a new task's owner from a room's requester/creator, which are
+history the handover rightly leaves alone. New seeded tasks went to "the oldest
+superuser". By 2026-10-14 admin@dpf.local owned 10 tasks created after its
+2026-10-01 handover.
+
+An approved apply now also writes `User.workHandedOverAt` and
+`workHandedOverById`. Rules that name an owner for new work skip a handed-over
+account:
+
+- the drive's `roomOwnerUserId` falls through to the room's accountable person;
+- every scheduled-task seed and the `resolveWorkOwner` fallback use
+  `findInstallWorkOwnerUserId` (`packages/db/src/install-work-owner.ts`).
+
+If every active superuser was handed over, the fallback still returns the
+oldest one, so a seed never stops an upgrade. Historical requester and creator
+fields are unchanged. A migration backfills the marker from the BuildActivity
+rows past applies left.
+

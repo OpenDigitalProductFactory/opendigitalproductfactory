@@ -92,6 +92,27 @@ export async function isFeatureBuildDeployed(buildId: string): Promise<boolean> 
   const deployedSha = await getDeployedSha();
   if (!deployedSha) return false;
   const mergeSha = await getBuildMergeSha(buildId);
-  if (!mergeSha) return false;
-  return shaContains(deployedSha, mergeSha);
+  if (mergeSha && shaContains(deployedSha, mergeSha)) return true;
+  return isFeatureBuildDeliveryProven(buildId);
+}
+
+/**
+ * BI-1CDA479D: an upstream build's ProductVersion never carries its merge
+ * commit, so the SHA match above is only ever true on a local install. The
+ * build's own room proves delivery instead: its PR merged, and that merge is
+ * contained in the image this runtime serves.
+ */
+async function isFeatureBuildDeliveryProven(buildId: string): Promise<boolean> {
+  const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { id: true } });
+  if (!build) return false;
+  const [{ resolveFeatureBuildDeploymentClosure }, { mergeSignalRoots }] = await Promise.all([
+    import("@/lib/backlog/initiative-readiness/deployment-closure"),
+    import("@/lib/backlog/initiative-readiness/merge-delivery-signal"),
+  ]);
+  const proof = await resolveFeatureBuildDeploymentClosure({
+    featureBuildRowId: build.id,
+    workType: null,
+    roots: mergeSignalRoots(),
+  });
+  return proof.kind === "deployed";
 }

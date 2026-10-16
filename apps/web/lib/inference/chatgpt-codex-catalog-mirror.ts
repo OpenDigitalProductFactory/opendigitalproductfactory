@@ -42,7 +42,7 @@ export async function mirrorCodexCatalogForChatgpt(input: {
 }): Promise<DiscoveryResult> {
   const consumerError = input.consumerError ?? "consumer discovery returned no models";
   try {
-    const { discoverCodexCliModels } = await import("@/lib/routing/codex-cli-model-catalog");
+    const { discoverCodexCliModels } = await import("./codex-cli-catalog-auth");
     const models = await discoverCodexCliModels("codex");
     if (models.length === 0) {
       return { discovered: 0, newCount: 0, error: `${consumerError}; Codex catalog listed no models` };

@@ -49,7 +49,7 @@ interface LoaderCacheEntry<T> {
 export type LocalContextReader = (
   fetchImpl: typeof fetch | undefined,
   selected: { modelId: string; provider: { providerId: string; baseUrl: string | null; endpoint: string | null } },
-) => Promise<number | null>;
+) => Promise<number | null | { contextTokens: number | null; thinkingBudgetEvidence?: import("./types").LocalThinkingBudgetEvidence }>;
 const unknownLocalContext: LocalContextReader = async () => null;
 let manifestsCache = new WeakMap<LocalContextReader, LoaderCacheEntry<EndpointManifest[]>>();
 let policyRulesCache: LoaderCacheEntry<PolicyRuleEval[]> | null = null;
@@ -90,6 +90,7 @@ import {
 import { MODEL_ROUTING_ENDPOINT_TYPES } from "./provider-eligibility";
 import { serializeActivityHarnessAudit } from "./activity-harness-audit";
 import { authEligibilityExclusionReason } from "./model-auth-eligibility";
+import { expandProviderAccountCandidates } from "./provider-account-candidates";
 
 /**
  * EP-MODEL-CAP-001-B: Source-priority tool use resolution.
@@ -203,9 +204,17 @@ async function queryEndpointManifests(readLocalContext: LocalContextReader): Pro
   // explicitly created one, so this is inert on a default install.
   const riskAcceptedByProvider = await loadActiveRiskAcceptedClearances();
 
-  return Promise.all(profiles
-    .filter((profile) => readiness.get(profile.providerId) === true)
-    .map((profile) => profileToManifest(profile, readLocalContext, undefined, riskAcceptedByProvider)));
+  const accounts = await prisma.aiProviderConnection.findMany({
+    where: { providerId: { in: [...providers.keys()] } },
+    select: { connectionId: true, providerId: true, status: true, authMethod: true, executionChannel: true,
+      credentialEntryId: true, updatedAt: true, credentialEntry: { select: { status: true, updatedAt: true } },
+      accessibleModelIds: true, modelsVerifiedAt: true, evidenceStatus: true, accountClass: true, supplierContractId: true, lastReviewedAt: true },
+  });
+  const candidates = await Promise.all(profiles.map(async profile => expandProviderAccountCandidates(
+    await profileToManifest(profile, readLocalContext, undefined, riskAcceptedByProvider),
+    accounts, readiness.get(profile.providerId) === true, profile.capabilityOverrides,
+  )));
+  return candidates.flat();
 }
 
 type ProfileWithProvider = Awaited<
@@ -237,10 +246,13 @@ async function profileToManifest(
 
   let maxContextTokens = mp.maxContextTokens ?? mp.provider.maxContextTokens;
   let maxOutputTokens = mp.maxOutputTokens ?? mp.provider.maxOutputTokens;
+  let localThinkingBudgetEvidence: EndpointManifest["localThinkingBudgetEvidence"];
   if (mp.providerId === "local" && ["chat", "reasoning", "code"].includes(mp.modelClass ?? "chat")) {
-    const served = await readLocalContext(undefined, {
+    const observation = await readLocalContext(undefined, {
       modelId: mp.modelId, provider: mp.provider,
     });
+    const served = typeof observation === "object" && observation !== null ? observation.contextTokens : observation;
+    localThinkingBudgetEvidence = typeof observation === "object" && observation !== null ? observation.thinkingBudgetEvidence : undefined;
     maxContextTokens = served !== null && Number.isSafeInteger(served) && served > 0 ? served : null;
     // DMR shares one window between input and completion. This is an upper
     // bound, not a requested allowance; activity admission still checks the sum.
@@ -296,6 +308,7 @@ async function profileToManifest(
     capabilities: (mp.capabilities as unknown as ModelCardCapabilities) ?? EMPTY_CAPABILITIES,
     pricing: (mp.pricing as unknown as ModelCardPricing) ?? EMPTY_PRICING,
     supportedParameters: (mp.supportedParameters as string[]) ?? [],
+    ...(localThinkingBudgetEvidence ? { localThinkingBudgetEvidence } : {}),
     deprecationDate: mp.deprecationDate ?? null,
     metadataSource: mp.metadataSource ?? "inferred",
     metadataConfidence: mp.metadataConfidence ?? "low",

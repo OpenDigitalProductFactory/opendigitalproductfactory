@@ -231,6 +231,16 @@ export function analyzeAddColumnNotNull(rawSql) {
 }
 
 // ─── driver ──────────────────────────────────────────────────────────────────
+/** Compare tracked paths with one immutable base-tree inventory. */
+export function collectNewMigrationFiles(repoRoot, baseRef, git = execFileSync) {
+  const options = { cwd: repoRoot, encoding: "utf8" };
+  const tracked = git("git", ["ls-files", "-z", `${MIGRATIONS_DIR}/**/migration.sql`], options)
+    .split("\0").filter(Boolean);
+  const base = new Set(git("git", ["ls-tree", "-r", "-z", "--name-only", baseRef, "--", MIGRATIONS_DIR], options)
+    .split("\0").filter(Boolean));
+  return tracked.filter(path => !base.has(path));
+}
+
 function main() {
   const baseRef = process.argv[2];
   if (!baseRef) {
@@ -240,24 +250,13 @@ function main() {
   const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
   // New migration.sql files = present in working tree but absent at base ref.
-  let tracked;
+  let newFiles;
   try {
-    tracked = execFileSync("git", ["ls-files", `${MIGRATIONS_DIR}/**/migration.sql`], {
-      cwd: repoRoot, encoding: "utf8",
-    }).split("\n").filter(Boolean);
+    newFiles = collectNewMigrationFiles(repoRoot, baseRef);
   } catch (err) {
-    console.error(`❌ git ls-files failed: ${err.message.split("\n")[0]}`);
+    console.error(`❌ Migration inventory failed: ${err.message.split("\n")[0]}`);
     process.exit(2);
   }
-
-  const newFiles = tracked.filter((f) => {
-    try {
-      execFileSync("git", ["cat-file", "-e", `${baseRef}:${f}`], { cwd: repoRoot, stdio: "ignore" });
-      return false; // exists at base → not new
-    } catch {
-      return true; // absent at base → new migration
-    }
-  });
 
   const flagged = [];
   for (const f of newFiles) {

@@ -6,8 +6,6 @@ import type {
   InitiativeReviewerRecovery,
 } from "@/lib/tak/initiative-readiness-tool-grants";
 
-import { projectBacklogItemReadiness } from "./entry-adapter";
-import { loadInheritedInitiativeScope } from "./parent-scope-inheritance";
 import type { TerminalRecoveryPorts } from "./terminal-recovery";
 import type { InitiativeReadinessDecision } from "./types";
 
@@ -97,6 +95,18 @@ export function decisionForIndependentReview(
     if (!decision) return null;
     const owed = designPhaseReviewDecision(decision);
     if (owed) return owed;
+    // BI-C56AE9A2: a decomposed parent cannot implement, but can still owe
+    // review of its covered plan at completion. Match that issuer's lane only;
+    // never revive unrelated design gates or change implementation admission.
+    const terminal = decisions.completion;
+    const isOwedPlanReview = (entry: InitiativeReadinessDecision["unmet"][number]) =>
+      entry.code === "PLAN_REVIEW_REQUIRED" && entry.accountableRole === "plan-reviewer"
+      && (entry.state === "missing" || entry.state === "fail");
+    if (writerToolName === "record_initiative_design_review" && terminal && terminal.verdict !== "allowed") {
+      const blockers = terminal.blockers.filter(isOwedPlanReview);
+      const unmet = terminal.unmet.filter(isOwedPlanReview);
+      if (blockers.length || unmet.length) return { ...terminal, blockers, unmet };
+    }
     // BI-EE99767C: the claim issuer sequences spec approval before plan coverage
     // when coverage needs a baseline. A fix carries only PLAN_REQUIRED here;
     // completion names its baseline owner. Route that prerequisite, not every
@@ -132,13 +142,17 @@ export async function routeDesignReviewsBeforeBaseline(args: {
   currentAgentId: string | null;
   baseSha: string;
   dispatchContext: InitiativeRecoveryDispatchContext;
-  ports: Pick<TerminalRecoveryPorts, "discoverArtifact" | "resolveRecovery" | "loadPlanArtifact">;
+  ports: Pick<TerminalRecoveryPorts, "discoverArtifact" | "resolveRecovery" | "loadPlanArtifact" | "loadBacklogBody">;
 }): Promise<InitiativeReviewerRecovery> {
   const { dispatchContext: room, ports } = args;
+  // Match the claim issuer's live declaration. An unchanged branch need not
+  // edit its already-canonical design just to survive exact packet validation.
+  const backlogBody = await ports.loadBacklogBody?.(args.designPhase.subject.id);
   const discovered = await ports.discoverArtifact({
     repositoryFullName: room.repositoryFullName,
     baseSha: args.baseSha,
     headSha: room.headSha,
+    ...(backlogBody ? { backlogBody } : {}),
   });
   return ports.resolveRecovery({
     decision: args.designPhase,
@@ -153,31 +167,4 @@ export async function routeDesignReviewsBeforeBaseline(args: {
   });
 }
 
-const PLAN_UNAVAILABLE: InitiativeRecoveryCanonicalArtifact = {
-  resolved: false,
-  nextAction: "Record valid plan coverage for the current baseline and this Workroom repository, including the immutable plan commit and blob, then retry plan review.",
-};
-
-/** The same baseline-validated plan the implementation claim hands its reviewer. */
-export async function loadPlanReviewArtifact(args: {
-  itemId: string;
-  repositoryFullName: string;
-}): Promise<InitiativeRecoveryCanonicalArtifact> {
-  const item = await prisma.backlogItem.findUnique({
-    where: { itemId: args.itemId },
-    include: { activeBuild: { select: { kind: true } }, activities: { orderBy: [{ recordedAt: "asc" }, { id: "asc" }] } },
-  });
-  if (!item) return PLAN_UNAVAILABLE;
-  const inheritedScope = await loadInheritedInitiativeScope(prisma, { childItemId: item.itemId, childRowId: item.id });
-  const { planArtifact } = projectBacklogItemReadiness({
-    item: { ...item, activeBuildKind: item.activeBuild?.kind ?? null },
-    activities: item.activities,
-    inheritedScope,
-    target: "implementation",
-    transitionObject: { kind: "backlog-item", id: item.itemId, expectedVersion: "read-projection", targetState: "implementation" },
-    authorization: "pass", capsuleIdentity: "pass", evaluatedAt: new Date().toISOString(),
-  });
-  return planArtifact && planArtifact.repositoryFullName.toLowerCase() === args.repositoryFullName.toLowerCase()
-    ? { resolved: true, path: planArtifact.path, commitSha: planArtifact.commitSha, providerBlobId: planArtifact.providerBlobId }
-    : PLAN_UNAVAILABLE;
-}
+export { loadPlanReviewArtifact } from "./canonical-plan-source";

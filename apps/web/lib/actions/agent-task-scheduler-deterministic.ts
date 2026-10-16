@@ -3,13 +3,13 @@
 // oversized module) when the acceptance sweep joined (BI-DF255666), so the
 // dispatcher stays a thin discriminator and the branches are tested alone.
 //
-// Runs after the scheduler's guarded claim (BI-D1CD3A11), which is what makes
-// each of these single-flight: only the dispatcher that advanced nextRunAt
-// reaches this function for a given due tick.
+// Acceptance claims its own fenced lease before cadence changes. Other task
+// kinds reach this function after the generic cadence claim (BI-D1CD3A11).
 
 import {
   ACCEPTANCE_SWEEP_TASK_KIND,
   BOOKKEEPING_CYCLE_TASK_KIND,
+  CLIENT_CAPABILITY_REVERIFY_TASK_KIND,
   DECISION_ENGINE_REVIEW_TASK_KIND,
   DEMAND_SCORING_STEWARD_TASK_KIND,
 } from "@/lib/operate/scheduled-jobs/agent-task-kind";
@@ -21,6 +21,8 @@ export type DeterministicScheduledTask = {
   schedule: string;
   ownerUserId: string;
   agentId: string;
+  /** Per-kind config or run state; the scheduler passes the whole task row. */
+  taskConfig?: unknown;
 };
 
 /** Runs the task when its kind is deterministic. False means the scheduler handles it. */
@@ -46,6 +48,12 @@ export async function runDeterministicScheduledTaskKind(task: DeterministicSched
   if (task.taskKind === DEMAND_SCORING_STEWARD_TASK_KIND) {
     const { executeDemandScoringStewardTask } = await import("@/lib/demand/scoring-steward-task");
     await executeDemandScoringStewardTask(task);
+    return true;
+  }
+  // BI-64795FD0: the weekly client-capability re-verification.
+  if (task.taskKind === CLIENT_CAPABILITY_REVERIFY_TASK_KIND) {
+    const { executeClientCapabilityReverifyTask } = await import("@/lib/agent-toolchain/client-capability-reverify-task");
+    await executeClientCapabilityReverifyTask(task);
     return true;
   }
   return false;

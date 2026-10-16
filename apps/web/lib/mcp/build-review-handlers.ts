@@ -302,6 +302,7 @@ export async function saveBuildEvidence(params: Record<string, unknown>, userId:
             revisionId: savedRevision.revisionId,
             authorUserId: userId,
             authorAgentId: context?.agentId ?? null,
+            attribution: { threadId: context?.threadId, taskRunId: context?.taskRunId },
           });
         } catch {
           // A missing receipt leaves the build exactly where it already was.

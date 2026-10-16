@@ -48,6 +48,26 @@ export async function loadTaskInitiativeReviewOutcome(taskRunId: string, binding
   return typeof data?.receiptId === "string" ? loadInitiativeReviewOutcome(binding, data.receiptId) : null;
 }
 
+/** The keys that name an immutable artifact. A receipt may omit the others. */
+const ARTIFACT_IDENTITY_KEYS: Record<InitiativeReviewBinding["artifactRef"]["kind"], readonly string[]> = {
+  "repo-blob-at-commit": ["kind", "commitSha", "path", "providerBlobId"],
+  "feature-build-revision": ["kind", "revisionId"],
+  "document-version": ["kind", "versionId"],
+};
+
+/**
+ * A receipt matches its binding when every identity key is equal and no key
+ * the receipt does store contradicts the binding. Revision and document receipts keep
+ * only kind + their version id, while the binding also carries
+ * repositoryFullName and valueDigest (BI-2E479619).
+ */
+function receiptArtifactMatches(bound: InitiativeReviewBinding["artifactRef"], stored: Record<string, unknown>): boolean {
+  const boundFields = bound as Record<string, unknown>;
+  const identity = ARTIFACT_IDENTITY_KEYS[bound.kind] ?? Object.keys(boundFields);
+  if (identity.some((key) => stored[key] !== boundFields[key])) return false;
+  return Object.entries(boundFields).every(([key, value]) => !(key in stored) || stored[key] === value);
+}
+
 /** Read the canonical receipt, never infer one from model prose or tool success. */
 export async function loadInitiativeReviewOutcome(binding: InitiativeReviewBinding, receiptId: string) {
   const item = await prisma.backlogItem.findUnique({
@@ -62,7 +82,7 @@ export async function loadInitiativeReviewOutcome(binding: InitiativeReviewBindi
   if (!receipt || receipt.receiptId !== receiptId || receipt.gate !== binding.gate
     || (receipt.decision !== "pass" && receipt.decision !== "fail" && receipt.decision !== "not-applicable")
     || subject?.id !== binding.itemId || subject.kind !== "backlog-item"
-    || !artifact || Object.entries(binding.artifactRef).some(([key, value]) => artifact[key] !== value)) return null;
+    || !artifact || !receiptArtifactMatches(binding.artifactRef, artifact)) return null;
   const inheritedScope = await loadInheritedInitiativeScope(prisma, { childItemId: item.itemId, childRowId: item.id });
   const readiness = projectBacklogItemReadiness({
     item: { ...item, activeBuildKind: item.activeBuild?.kind ?? null },

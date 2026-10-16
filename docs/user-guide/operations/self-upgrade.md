@@ -35,6 +35,13 @@ is unavailable and does not offer or queue an upgrade.
    (**Installing now**) and after one fails (**Update still pending**), so a
    failed or in-progress attempt never reads as being up to date.
 2. Review the pending upgrade and what it will change before triggering anything.
+   **What's in this update?** compares the running build with the resolved
+   update. Consumer installs read published source changes without needing a
+   local source checkout; source-backed installs read their configured clone.
+   If change details are temporarily unavailable, retry the summary. That
+   does not mean the known update target is missing and does not apply an update.
+   Published comparisons use commit descriptions and available PR details;
+   they do not attribute the comparison's combined file list to individual changes.
 3. Trigger the upgrade inside an approved deployment window when you can. The
    server durably admits the request and assigns its `SUR-*` run identity before
    queue dispatch begins. Normal changes respect the window; pressing
@@ -148,6 +155,28 @@ upgrade. Nothing is lost by waiting.
   `DPF_PROMOTER_TIMEOUT_MS` (milliseconds) in the environment.
 - Deployment windows and change-request lifecycle are managed from the wider
   Operations area.
+
+## Connected agent clients
+
+This section lists the AI coding tools, such as Claude Code, Codex and Grok,
+that connect to this install. For each one it shows the version of the DPF
+agent tools it loaded, how it signs in, and when it was last seen. The
+fingerprint next to a version identifies the exact files that client loaded.
+
+Each client gets one of these labels:
+
+- **Up to date**: it loaded the tools this update ships.
+- **Behind**: it loaded an older copy. It is told on its next connection and
+  asked to update itself.
+- **Too old**: its copy is older than this install accepts. It can still
+  read, but changes will be refused once the grace period ends.
+- **Version unknown**: it did not say which tools it loaded, usually because
+  its copy predates this check.
+- **Not seen this week**: it has not connected in the last 7 days.
+
+After an update that ships new agent tools, the portal posts one notification
+that names the clients still behind. Restarting the portal without an update
+posts nothing. You do not need to run anything.
 
 ## What To Watch
 

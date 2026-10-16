@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   readmitListedModels: vi.fn(), discoverCodexCliModels: vi.fn(),
 }));
 vi.mock("@/lib/inference/ai-provider-internals", () => mocks);
-vi.mock("@/lib/routing/codex-cli-model-catalog", () => mocks);
+vi.mock("./codex-cli-catalog-auth", () => mocks);
 import { discoverViaChatGptBackend } from "./chatgpt-codex-catalog-mirror";
 const input = { providerId: "chatgpt", authMethod: "oauth2_authorization_code" };
 describe("subscription catalog lifecycle (BI-59E37E39)", () => {

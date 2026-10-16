@@ -1,103 +1,69 @@
-import type { BacklogStatus } from "@/lib/backlog/transitions";
-
 import { ACCEPTANCE_OWED_ACTIVITY_KIND } from "./owed-snapshot";
 
-// Which awaiting-acceptance items one sweep run evaluates (BI-DF255666, AC-S2-2).
-// Design: docs/superpowers/specs/2026-09-24-acceptance-accountability-design.md §3.3 step 1.
-//
-// Items with no acceptance_owed snapshot come first, so a newly entered item is
-// seen on the next run. The rest of the page revisits snapshotted items.
-//
-// The design orders that second tier by "oldest snapshot". S1 writes a snapshot
-// only when the answer changed, so an unchanged item's snapshot never gets
-// newer, and ordering by it would re-select the same oldest page every day and
-// never reach the rest of the pool. The second tier is therefore a round-robin
-// by row id from a cursor the previous run recorded, which gives the design's
-// stated property: the whole pool is revisited every ceil(N / page) runs.
-
-const AWAITING_ACCEPTANCE: BacklogStatus = "awaiting-acceptance";
-
 export type AcceptanceSweepPageItem = {
-  id: string;
-  itemId: string;
-  claimedByAgentId: string | null;
-  agentId: string | null;
+  id: string; itemId: string; claimedByAgentId: string | null; agentId: string | null;
+  status?: string;
+  _count?: { activities: number };
+  activities?: Array<{ kind: string; recordedAt: Date; payload: unknown }>;
 };
 
-type ActivityFilter =
-  | { none: { kind: typeof ACCEPTANCE_OWED_ACTIVITY_KIND } }
-  | { some: { kind: typeof ACCEPTANCE_OWED_ACTIVITY_KIND } };
+/** Coarse indexed pool; the latest transition is checked after the bounded read. */
+export const ACCEPTANCE_CANDIDATE_WHERE = {
+  OR: [
+    { status: "awaiting-acceptance" },
+    { status: "done", activities: { some: { kind: "status_change",
+      payload: { path: ["closureBasis"], equals: "canonical-deployment" } } } },
+  ],
+};
+
+export function retainedDeploymentObligation(item: AcceptanceSweepPageItem): boolean {
+  if (item.status !== "done") return false;
+  const payload = item.activities?.find(row => row.kind === "status_change")?.payload;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  const row = payload as Record<string, unknown>;
+  // Unknown obligation values remain unresolved, not implicitly satisfied.
+  return row.to === "done" && row.closureBasis === "canonical-deployment"
+    && row.acceptanceObligation !== "satisfied";
+}
+
+const SELECT = {
+  id: true, itemId: true, claimedByAgentId: true, agentId: true, status: true,
+  _count: { select: { activities: { where: { kind: ACCEPTANCE_OWED_ACTIVITY_KIND } } } },
+  activities: { where: { kind: "status_change" },
+    orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
+    select: { kind: true, recordedAt: true, payload: true }, take: 1 },
+} as const;
 
 export type AcceptanceSweepPageDb = {
-  backlogItem: {
-    findMany(args: {
-      where: {
-        status: BacklogStatus;
-        activities: ActivityFilter;
-        id?: { gt: string } | { lte: string; notIn: string[] };
-      };
-      orderBy: Array<{ createdAt: "asc" } | { id: "asc" }>;
-      take: number;
-      select: { id: true; itemId: true; claimedByAgentId: true; agentId: true };
-    }): Promise<AcceptanceSweepPageItem[]>;
-  };
+  backlogItem: { findMany(args: {
+    where: typeof ACCEPTANCE_CANDIDATE_WHERE & { id?: { gt: string } | { lte: string; notIn: string[] } };
+    orderBy: { id: "asc" }[]; take: number; select: typeof SELECT;
+  }): Promise<AcceptanceSweepPageItem[]> };
 };
+export type AcceptanceSweepPage = { items: AcceptanceSweepPageItem[]; unsnapshotted: number; nextCursor: string | null };
 
-export type AcceptanceSweepPage = {
-  items: AcceptanceSweepPageItem[];
-  /** How many of the page had never been snapshotted. */
-  unsnapshotted: number;
-  /** The last snapshotted item visited; the next run continues after it. */
-  nextCursor: string | null;
-};
-
-const SELECT = { id: true, itemId: true, claimedByAgentId: true, agentId: true } as const;
-const SNAPSHOTTED: ActivityFilter = { some: { kind: ACCEPTANCE_OWED_ACTIVITY_KIND } };
-
-export async function selectAcceptanceSweepPage(
-  db: AcceptanceSweepPageDb,
-  input: { pageSize: number; cursor: string | null },
-): Promise<AcceptanceSweepPage> {
-  const pageSize = Math.max(0, Math.floor(input.pageSize));
-  if (pageSize === 0) return { items: [], unsnapshotted: 0, nextCursor: input.cursor };
-
-  const fresh = await db.backlogItem.findMany({
-    where: { status: AWAITING_ACCEPTANCE, activities: { none: { kind: ACCEPTANCE_OWED_ACTIVITY_KIND } } },
-    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    take: pageSize,
-    select: SELECT,
+/**
+ * One cursor covers fresh, revisited and retained candidates. Giving fresh work
+ * unbounded priority starves old obligations under continuous arrivals. Advance
+ * past filtered candidates too; a historical closure must not trap the cursor.
+ */
+export async function selectAcceptanceSweepPage(db: AcceptanceSweepPageDb, input: {
+  pageSize: number; cursor: string | null;
+}): Promise<AcceptanceSweepPage> {
+  const take = Math.max(0, Math.floor(input.pageSize));
+  if (!take) return { items: [], unsnapshotted: 0, nextCursor: input.cursor };
+  const rows = await db.backlogItem.findMany({
+    where: { ...ACCEPTANCE_CANDIDATE_WHERE, ...(input.cursor ? { id: { gt: input.cursor } } : {}) },
+    orderBy: [{ id: "asc" }], take, select: SELECT,
   });
-
-  const revisit: AcceptanceSweepPageItem[] = [];
-  let remaining = pageSize - fresh.length;
-  if (remaining > 0) {
-    const after = await db.backlogItem.findMany({
-      where: { status: AWAITING_ACCEPTANCE, activities: SNAPSHOTTED, ...(input.cursor ? { id: { gt: input.cursor } } : {}) },
-      orderBy: [{ id: "asc" }],
-      take: remaining,
-      select: SELECT,
-    });
-    revisit.push(...after);
-    remaining -= after.length;
-    if (remaining > 0 && input.cursor) {
-      // Wrap to the start of the pool, never past where this page began.
-      const wrapped = await db.backlogItem.findMany({
-        where: {
-          status: AWAITING_ACCEPTANCE,
-          activities: SNAPSHOTTED,
-          id: { lte: input.cursor, notIn: after.map((item) => item.id) },
-        },
-        orderBy: [{ id: "asc" }],
-        take: remaining,
-        select: SELECT,
-      });
-      revisit.push(...wrapped);
-    }
-  }
-
+  if (input.cursor && rows.length < take) rows.push(...await db.backlogItem.findMany({
+    where: { ...ACCEPTANCE_CANDIDATE_WHERE, id: { lte: input.cursor, notIn: rows.map(row => row.id) } },
+    orderBy: [{ id: "asc" }], take: take - rows.length, select: SELECT,
+  }));
   return {
-    items: [...fresh, ...revisit],
-    unsnapshotted: fresh.length,
-    nextCursor: revisit.length > 0 ? revisit[revisit.length - 1]!.id : input.cursor,
+    items: rows.filter(row => row.status === "awaiting-acceptance" || retainedDeploymentObligation(row)),
+    unsnapshotted: rows.filter(row => row._count?.activities === 0
+      && (row.status === "awaiting-acceptance" || retainedDeploymentObligation(row))).length,
+    nextCursor: rows.at(-1)?.id ?? input.cursor,
   };
 }

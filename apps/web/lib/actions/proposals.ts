@@ -3,7 +3,7 @@
 import { prisma } from "@dpf/db";
 import { can } from "@/lib/permissions";
 import { requireUser } from "@/lib/actions/shared/guards";
-import { PLATFORM_TOOLS, executeTool } from "@/lib/mcp-tools";
+import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
 import * as crypto from "crypto";
 import {
   PROACTIVITY_CHANGE_ACTION,
@@ -19,11 +19,28 @@ import {
   LEAVE_DECISION_ACTION,
   LEAVE_DECISION_VERB_REFUSAL,
 } from "@/lib/workforce/leave/leave-decision-proposal-contract";
+import { convertAndRunProposal } from "@/lib/actions/proposal-convert-and-run";
+
+/**
+ * What an approval returns to the card. `noLongerRunnable` is set when the
+ * reference monitor refused the proposed call (spec D5): nothing ran, the
+ * proposal is still `proposed`, and `error` says why, so the card offers
+ * Decline only. `retryable` is set when nothing ran for a reason that is not a
+ * settled no (a permit the call still needs, a check that could not complete):
+ * the proposal is still `proposed` and Approve stays.
+ */
+export type ProposalApprovalResult = {
+  success: boolean;
+  resultEntityId?: string;
+  error?: string;
+  noLongerRunnable?: true;
+  retryable?: true;
+};
 
 
 export async function approveProposal(
   proposalId: string,
-): Promise<{ success: boolean; resultEntityId?: string; error?: string }> {
+): Promise<ProposalApprovalResult> {
   const user = await requireUser();
 
   const proposal = await prisma.agentActionProposal.findUnique({
@@ -44,82 +61,36 @@ export async function approveProposal(
 
   // Check capability
   const tool = PLATFORM_TOOLS.find((t) => t.name === proposal.actionType);
-  if (tool?.requiredCapability && !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, tool.requiredCapability)) {
+  const userContext = { platformRole: user.platformRole, isSuperuser: user.isSuperuser };
+  if (tool?.requiredCapability && !can(userContext, tool.requiredCapability)) {
     return { success: false, error: "Insufficient permissions" };
   }
 
-  // Execute sequentially (not in a wrapping transaction) because tool handlers
+  // Convert-and-run (spec D5): the approval runs through the reference
+  // monitor. Sequential, not in a wrapping transaction, because tool handlers
   // like shipBuild/createBuildEpic use their own $transaction internally.
   try {
-    await prisma.agentActionProposal.update({
-      where: { proposalId },
-      data: { status: "approved", decidedAt: new Date(), decidedById: user.id },
-    });
+    const outcome = await convertAndRunProposal(proposal, { userId: user.id, userContext }, { threadRecord: true });
+    if (outcome.kind === "already-decided") return { success: false, error: "Proposal already decided" };
+    if (outcome.kind === "refused") return { success: false, error: outcome.message, noLongerRunnable: true };
+    if (outcome.kind === "held") return { success: false, error: outcome.message, retryable: true };
+    if (outcome.kind === "threw") return { success: false, error: outcome.error };
 
-    const result = await executeTool(
-      proposal.actionType,
-      proposal.parameters as Record<string, unknown>,
-      user.id,
-      { agentId: proposal.agentId, threadId: proposal.threadId },
-    );
-
-    if (result.success) {
-      await prisma.agentActionProposal.update({
-        where: { proposalId },
-        data: {
-          status: "executed",
-          executedAt: new Date(),
-          ...(result.entityId !== undefined ? { resultEntityId: result.entityId } : {}),
-        },
-      });
-    } else {
-      await prisma.agentActionProposal.update({
-        where: { proposalId },
-        data: {
-          status: "failed",
-          ...(result.error !== undefined ? { resultError: result.error } : {}),
-        },
-      });
-    }
-
-    // Audit log
-    await prisma.authorizationDecisionLog.create({
-      data: {
-        decisionId: `DEC-${crypto.randomUUID()}`,
-        actionKey: proposal.actionType,
-        objectRef: proposalId,
-        actorType: "user",
-        actorRef: user.id,
-        decision: "allow",
-        rationale: { proposalId, parameters: proposal.parameters, result: result.message },
-      },
-    });
-
-    // Inject tool result as a system message so the agent sees it in the next turn.
-    // Without this, the agent doesn't know the tool succeeded and re-calls it.
-    const toolResultSummary = result.success
-      ? `${proposal.actionType} completed successfully.${result.message ? ` ${result.message.slice(0, 500)}` : ""}`
-      : `${proposal.actionType} failed: ${result.error ?? result.message ?? "unknown error"}`;
-    await prisma.agentMessage.create({
-      data: {
-        threadId: proposal.threadId,
-        role: "system",
-        content: toolResultSummary,
-        agentId: proposal.agentId,
-      },
-    }).catch(() => {});
-
-    const returnVal: { success: boolean; resultEntityId?: string; error?: string } = { success: result.success };
+    const { result } = outcome;
+    const returnVal: ProposalApprovalResult = { success: result.success };
     if (result.entityId !== undefined) returnVal.resultEntityId = result.entityId;
     if (result.error !== undefined) returnVal.error = result.error;
     return returnVal;
   } catch (e) {
-    // Transaction failed — proposal stays as "proposed"
-    await prisma.agentActionProposal.update({
-      where: { proposalId },
-      data: { status: "failed", resultError: e instanceof Error ? e.message : "Execution failed" },
+    // convert-and-run settles a throw after its claim itself; this guards
+    // anything else. Only a row still `approved` (claimed, never settled) may
+    // be marked failed: an executed or reverted row keeps its status.
+    const message = e instanceof Error ? e.message : "Execution failed";
+    await prisma.agentActionProposal.updateMany({
+      where: { proposalId, status: "approved" },
+      data: { status: "failed", resultError: message },
     });
-    return { success: false, error: e instanceof Error ? e.message : "Execution failed" };
+    return { success: false, error: message };
   }
 }
 
@@ -168,7 +139,7 @@ export async function rejectProposal(
 async function approveProactivityChangeProposal(
   proposal: { proposalId: string; actionType: string; parameters: unknown; agentId: string; threadId: string },
   userId: string,
-): Promise<{ success: boolean; resultEntityId?: string; error?: string }> {
+): Promise<ProposalApprovalResult> {
   const parsed = parseProactivityChangeProposalParameters(proposal.parameters);
   if (!parsed) return { success: false, error: "Invalid proactivity proposal" };
 
