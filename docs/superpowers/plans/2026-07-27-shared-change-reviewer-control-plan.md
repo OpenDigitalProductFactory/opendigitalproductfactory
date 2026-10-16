@@ -299,7 +299,9 @@ capacity recovery; canonical identity and role/room repairs remain separate.
 5. Resolve claimed-path test impact before Red. Add loader-to-reducer regressions
    for complete old-source PASS/FAIL/inconclusive/uncertain state, missing current
    source, bounded history, source mismatch and corruption; update the existing
-   read-only PostgreSQL regression. Run related detail/liveness and Ops Map tests,
+   read-only PostgreSQL regression in
+   `apps/web/lib/work-management/semantic-review-room-projection.postgres.test.ts`.
+   Run related detail/liveness and Ops Map tests,
    both TypeScript programs and applicable guards. Database suites without a
    governed database remain explicitly skipped, not passed.
 6. Obtain independent source assessment on the frozen commit, publish a regular
