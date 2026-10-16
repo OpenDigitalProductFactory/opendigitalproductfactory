@@ -123,3 +123,60 @@ whose only unmet requirement is plan coverage with no baseline as well.
 Run the affected review/claim suites and both web TypeScript programs, obtain
 independent source assessment, publish through protected CI and the merge queue,
 then verify the original request only after a containing canonical deployment.
+
+## Exact claim Workroom selection (2026-10-16)
+
+The live BI-06AE6833 PLAN claim exposed an additional route/evaluation mismatch.
+Five active Workrooms belong to the subject. The current-design reader selects
+all subject rooms with a two-row ambiguity limit, even though the governed claim
+names one repository, branch and immutable base/head pair. It returns unavailable
+before reading the selected branch's design. Refusal IRD-861BBF5EE5B4 preserves
+this evidence; no baseline or item-body rebind is a remedy for that ambiguity.
+
+Continue `initial-design-amendment-discovery` under BI-4592CF69 and WC-2A0FAF55,
+using `AC-route-evaluation-agreement`, `exact-head-canonical-design`,
+`immutable-bytes`, `current-identity-recheck` and `governed-claim`. The following
+phases are internal sequencing of one repair, not independent deliverables.
+
+1. Integrate BI-023EF164's source-identity validation after its normal protected
+   merge and scope release. Its frozen d4497f0eb00b80902796adf706cfb56ea6078e51
+   does not implement current-design room selection. The owner normally released
+   `governed-work-claim.ts` and its test after publishing PR #6449; WC-2A0FAF55
+   normally claimed them and the reader/test pair on 2026-10-16. PR #6449 remains
+   an unmerged dependency until protected CI and the merge queue complete.
+2. Add failing regressions in `canonical-artifact-discovery.test.ts` and
+   `governed-work-claim.test.ts`. Exercise the actual persisted-binding reader:
+   multiple subject rooms plus an exact claim must read the selected room;
+   unscoped reads remain ambiguous. Missing, partial, invalid, foreign or stale
+   source tuples must remain unavailable. Verify baseline/body changes at the
+   same head, room/source changes during the provider read and before the locked
+   guard, and inherited-only scope. Assert the actual claim forwards its source
+   identity and the resulting readiness/recovery, rather than testing only a
+   caller-supplied binding stub.
+3. Extend `prepareCurrentDesignObservation` with the existing claim source tuple.
+   Resolve that tuple against the subject-bound, nonarchived persisted Workroom;
+   derive its capsule identity on the server. Carry the same selection through
+   initial read, provider recheck and locked admission guard. Reuse the existing
+   full-SHA validator after integration; syntax alone is not source authority.
+   Keep unscoped readers, provider limits, baseline/body checks and subject/room
+   locks intact. Run graph-related tests, both web TypeScript programs and the
+   required guards, obtain independent source assessment, then publish through
+   protected CI and verify the original exact PLAN claim on a containing release.
+
+Rollback remains a protected revert, with no schema or data rewrite. The main
+risk is accidentally selecting another subject's room or allowing a stale tuple;
+the negative and concurrent-read regressions are mandatory. Normal PLAN claim
+IRD-AE5997CBD8AC allowed this continuation. New immutable plan coverage and normal
+implementation admission are required before source implementation; both are
+pending. No regression, implementation or live acceptance is claimed here.
+This repair does not settle or replay the uncertain BI-C684AF45 reviewer Task.
+
+The normal scope impact contract resolved all five paths. Live source-graph
+lookup returned `canonical-artifact-discovery.test.ts`,
+`terminal-recovery.declared-design.test.ts`, `governed-work-claim.test.ts`,
+`governed-work-claim-ownership.test.ts`,
+`governed-work-claim-small-fix-research.test.ts` and
+`build-entry-gate-small-fix-research.test.ts`; include these with the existing
+claim/detail/completion amendment regressions. The declared guard obligation is
+`node scripts/check-style-drift.mjs`; documentation-index freshness is also
+required. Discovery is verification planning, not evidence that tests ran.
