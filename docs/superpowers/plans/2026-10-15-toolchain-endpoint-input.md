@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Preserve the MCP path in toolchain endpoint inputs
 
 Backlog: BI-E2CE164A. Workroom: WC-8ED077A8.
@@ -57,8 +61,11 @@ The atomic deliverable `endpoint-input` maps to BI-E2CE164A. Requirements are
 `standalone-updater`, `computeAgentToolchainPlan`; verification references are
 `update_agent_toolchain_test.py`, `bridge.test.ts`.
 
-Record immutable plan coverage before implementation and retain its receipt in
-the Workroom. Research receipt: `initiative-11f4e582-eb9b-4d54-907d-7ce950cfba89`.
+Immutable coverage: `cmvae0a1d2vy601rxgy5vmrok`, recorded before implementation
+against plan commit `41761d0be5e41a4046dd221adc14434845bc9eb6`, blob
+`fb6ffa9862faab8787fd7628f71f92cb2c0b644b`. This status/receipt annotation does
+not change that plan's scope or requirements. Research receipt:
+`initiative-11f4e582-eb9b-4d54-907d-7ce950cfba89`.
 
 ## Risks and rollback
 
