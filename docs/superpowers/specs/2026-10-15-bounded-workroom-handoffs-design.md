@@ -67,7 +67,9 @@ existing consequential direct reassignment. The new bounded flow is explicit:
    Capture requesting human and assistant, exact receiver, source/target executor,
    lease holder and expiry, room authority/scope/shape, roster, effective
    sensitivity and case policy. Bind a digest to the stored request. Return the
-   request identity and `pending-acknowledgement`; change no executor or lease.
+   request identity and `pending-acknowledgement`; transfer no executor or lease
+   holder. Any normal same-holder renewal required for this write must occur
+   before the snapshot in this transaction, never after the request is frozen.
 3. `acknowledge`: accepts only the stored request identity. The authenticated
    receiver must be the exact target assistant acting for the same human owner;
    it cannot acknowledge on another agent's behalf. Current governed token,
@@ -97,12 +99,31 @@ governor rather than a new exception.
 
 Use command receipts for retry identity and the existing room row lock for
 serialization. Store the request and terminal outcome on the existing activity
-substrate; add no table or migration. A second acknowledgement reads the terminal
+substrate; add no table. An index-only migration requires actual query-plan
+qualification and the normal data-impact/migration review. A second acknowledgement reads the terminal
 outcome and returns it without another transfer. A different payload reusing an
 identity is refused. A changed lease must be detected even if the same principal
 later holds it again: bind the executor and lease expiry as well as holder.
 Normal unrelated timeline entries must not invalidate a request merely because
 activitySequence advanced.
+
+For this bounded slice, deliberately use conservative lease-snapshot invalidation,
+not a claim that expiry is a continuous lease generation. An ordinary heartbeat
+changes leaseExpiresAt and therefore makes a pending request stale. Keep normal
+heartbeats running. Acknowledgement returns `handoff-lease-snapshot-changed`
+without a transfer; the feed explains that the room lease was renewed or changed
+and the requester must read current state and submit a fresh request for receiver
+acknowledgement. This retries the two agent phases, not human approval. Automatic
+unbounded re-requesting is prohibited. The usability cost is explicit: a renewal
+between the phases can require another exchange even with the same owner.
+
+Validate that the captured lease was live at request and is still live at
+acknowledgement using database wall time. Null, elapsed or changed expiry refuses.
+Same-holder lapse/reacquisition cannot revive the old request, even if principal
+and executor are equal. This contract does not promise acceptance across renewal;
+a future continuity optimization needs a proven acquisition identity and coverage
+of every lease writer, not a heuristic using executor equality. Tests must cover
+renewal before snapshot, renewal between phases and same-holder lapse/reacquisition.
 
 The room feed says "Handoff requested; waiting for the receiving assistant",
 "Receiving assistant acknowledged; handoff completed", or "Handoff could not
@@ -115,6 +136,211 @@ Refactoring allocation: consolidate the snapshot/predicate shared by consequence
 classification and the transactional executor writer. Keep parsing and lifecycle
 handling outside the already large tool pack. Do not duplicate room admission,
 principal identity or command-receipt logic.
+
+## Receipt adapter clarification — October 16
+
+Source inspection at `79ebe36deb8c155a208c9ded35e158cb764aeabd` found a
+material gap in the retry contract above. `command-receipts.ts` compares only
+command type and target before replaying a stored result. `receipted-tool.ts`
+can return that result before the handoff handler runs. Checking a payload
+digest only inside the handler would therefore fail to reject a changed retry.
+This clarification changes the required adapter behavior; it is DESIGN only.
+
+For the new explicit phases, require a command ID and a versioned digest of the
+complete normalized command payload. Reuse canonical JSON from
+`@dpf/integration-shared/canonical-json` and SHA-256. Parse and validate before
+receipt lookup; reject unknown phase fields rather than silently dropping an
+effect-bearing input. Include phase, room, expected source/lease, receiver,
+target executor and manifest for a request, and phase, room and stored request
+identity for acknowledgement. Bind every accepted optional field, including a
+reason. The command ID remains the lookup key, not a replacement payload hash.
+
+Extend the existing receipt adapter with an optional versioned payload binding
+used by these phases. Both accepted and rejected receipts retain that binding.
+Under the existing command and room locks, compare it BEFORE returning any
+prior result: equal normalized payload returns its original result, different
+payload refuses without effects. An old unbound receipt cannot satisfy a new
+bound command. A refusal must not replace the original receipt. Legacy tools
+and omitted-phase reassignment retain their existing replay semantics. This
+adds no table, ledger, grant or new command identity mechanism.
+
+Rollback releases both existing locks. For bound handoff commands, the separate
+rejection-publication transaction must reacquire the SAME command advisory lock,
+then the SAME room row lock, and reread the receipt before publishing anything.
+Validate its binding before replaying either an accepted or rejected result.
+If another attempt won after rollback, return/rethrow that durable winner for
+an equal payload; for a different payload return the command-identity conflict
+without replacing the winner. Do not throw the first attempt's fresh refusal
+when a committed equal-payload success has already won. Only an absent receipt
+permits publishing this attempt's bound rejection under those locks. Unknown
+transaction outcomes are not a confirmed rollback or permission to rerun effects.
+Add real PostgreSQL races covering rolled-back failure versus accepted retry,
+and rejection publication versus a different payload, checking caller outcomes
+as well as the single durable receipt and at-most-once transfer.
+
+The handler must use the receipt's existing transaction client; it must not
+pretend that client supports a nested transaction. The production bounded path
+requires a real transaction and room lock. Missing transaction support refuses
+the bounded operation; a test adapter fallback cannot become production safety.
+
+Keep accountable assistant identity separate from an executor locator. The
+current `handler-actor.ts` resolves the OAuth human and assistant and preserves
+the authenticated token reference; `toExecutorRef` is caller-supplied data.
+A different chat or a self-declared executor reference does not prove a different
+assistant. The selected contract below authenticates the receiving assistant's
+endorsement, not a particular external chat. Missing canonical assistant, surface
+or room-admission proof returns the precise boundary refusal; do not add a client
+assertion, grant or unverified session identity.
+
+### Receiver destination audit
+
+At inspected current source `81ef41a0fcffa9ed5995642446370b465d7e3ab5`,
+the existing OAuth access check establishes authenticated human/assistant action
+admission, not external-chat authentication. Having that assistant endorse the
+stored executor destination is a candidate protocol, but declaring executorRef
+to be coordination metadata alone would contradict these existing consumers:
+
+- `inference/async-operation-authority.ts` authorizes a Workroom operation when
+  executorRef matches the acting user, agent or principal, independently of its
+  participant/lease-holder alternatives.
+- `portal-context/authority-resolver.ts` uses a user/principal ref match to infer
+  canActOnCapsule and canActOnBuild. This is a permission projection, not proof
+  of enforcement by every downstream writer.
+- `govern/automation-fixture.ts` compares executorRef with a verification lease's
+  ownerSessionId, alongside branch, expiry and origin checks.
+- `change-review/semantic-review-policy-exemption.ts` pins sourceExecutorRef;
+  changing it can invalidate an existing exception and cannot be called unchanged
+  evidence. Build Studio research bindings also use executorRef as a build ID.
+- `work-capsule-store.ts` and `work-capsule-branch-identity.ts` use it in occupied
+  branch, re-adoption and scope-change fences; those protections remain required.
+
+Before accepting the endorsement option, specify and review a bounded predicate
+that proves these effective authority/evidence/lease boundaries are preserved,
+or refactor the affected authority readers onto existing canonical room admission
+without treating a newly endorsed locator as an additional grant. Audit fixture
+and exception effects explicitly and retain legacy behavior outside the admitted
+scope. External locator semantics do not cover Build Studio/native executors.
+No verified external-session registry was established by this audit, and none
+is proposed. Unsupported destination bindings retain the consequential path or
+an exact boundary refusal.
+
+### Selected authority contract
+
+Kernel consult DI-0F10A3B213D5 compared canonical room-authority refactoring with
+a transactionally proven before/after predicate over the existing ref consumers.
+It recommends `canonical-room-authority`, high confidence, margin 2.514, usable
+and autonomy eligible, with no commandment conflict or autonomy blockers. The
+agent selects that DESIGN direction. Eight-axis scores are grade-C engineering
+estimates, not measured security/performance results. This is not a native
+design approval, implementation admission or proof that any refactor is safe.
+
+Use one extracted canonical room-admission resolver for the affected async
+Workroom authority and portal authority projections. Reuse the existing
+resolveAgentWorkroomAccess/resolveHumanWorkroomAccess policy and canonical
+Principal aliases, current human capability, active assistant, actual room roles,
+explicit narrowing/removal, case policy and sensitivity checks. Preserve each
+consumer's requested read/action level and tool-specific grant intersection.
+ExecutorRef equality must not supply an additional authority branch. Missing or
+ambiguous actor/context refuses; do not manufacture a human for a service actor
+or silently widen a service's existing mandate. TaskRun-specific async authority
+is outside this Workroom refactor and keeps its existing checks.
+
+The bounded request records the exact already-admitted target assistant and
+destination kind/ref. Its authenticated acknowledgement endorses those stored
+bytes under the same owner's current delegation. Limit this flow to external
+assistant executor kinds with a server-resolved canonical assistant/surface
+mapping; unsupported mappings or Build Studio/native/human executors retain the
+existing consequential path. A locator is coordination data, not proof of a
+particular physical chat or independent reviewer. State that limitation in
+readback rather than labeling an external chat authenticated. Neither request
+nor acknowledgement admits participants or makes another chat's work independent.
+
+Before treating a particular handoff as ordinary, also resolve its real secondary
+effects under the room transaction. Preserve occupied-branch/re-adoption/scope
+fences. If source or destination ref is bound to a current verification lease,
+Build Studio association or applicable policy exemption whose qualification
+would change, refuse this bounded path with the exact owning remedy. Do not
+transfer another session's lease, silently invalidate/rewrite its evidence, or
+pretend the unchanged holder proves unchanged effects. Unavailable dependency
+reads refuse. Do not enumerate all actors or effects without a bound: use exact
+existing ref/item indexes, detect bounded overflow and keep unknown cases gated.
+
+Canonical-authority refactoring and bounded handoff must ship atomically. Review
+legacy actor cases explicitly: an actor whose only alleged permission is locator
+equality is not newly admitted or auto-migrated. It receives an actual admission
+remedy. Preserve legitimate canonical access, explicit removals and existing
+non-Workroom behavior. Independent review must assess this source scope expansion
+before implementation. The selected design closes the conceptual receiver
+boundary; exact adapter/lock/query proof, native approvals and tests remain owed.
+
+### Shared-fence implementation contract
+
+The bounded source audit found one production lease-creation writer:
+`nonprod/environment-lease.ts` claimNonprodEnvironmentLease. It takes the existing
+`dpf:nonprod-environment:<environmentKey>` transaction advisory lock before create,
+resume or admission. Release/reconciliation use that environment boundary too.
+Renewal currently updates without it, but requires an already active lease and
+does not change its owner or turn a terminal row active. Other inspected terminal
+writers only remove eligibility. Tests must protect these statements against
+every actual nonterminal transition, not assume a row-lock absence predicate.
+
+Extract the existing environment lock into a shared DB-only port. For bounded
+handoff request and acknowledgement, require real Read Committed transactions
+and acquire locks in this order: command-identity advisory lock; all canonical
+environment advisory locks in sorted key order; Workroom row; existing present
+actor/admission/policy rows in stable table/id order. The closed environment set
+currently contains active-candidate, host-heavy-resource and local-integration-ci;
+derive and validate it from one canonical registry rather than copying a list.
+No external I/O runs under these locks. Both the ordinary receipt attempt and
+its separate rejection-publication transaction use the identical lock prefix.
+
+The receipt adapter needs a server-only DB callback before its room lock; the
+new bounded phases supply the environment-lock callback there. The public tool
+cannot provide callbacks or locking claims. Existing commands need not acquire
+these locks. A lease writer that also touches Workroom state already takes its
+environment lock first; the handoff must not invert that order by adding locks
+inside its already room-locked handler. Use bounded transaction/lock timeouts.
+Read Committed ensures queries after waiting on a lock see the committed winner;
+do not import a stale pre-wait snapshot as authority.
+
+After locking, query exact source and destination refs for ALL nonterminal lease
+statuses, including queued and expired-but-not-terminal rows, regardless of TTL.
+Any such dependency refuses bounded handoff; use the actual lease owner and
+normal release/cancel remedy. This deliberately avoids relying on unfenced renewal
+or expiry as an absence proof. Unknown status/environment, overflow or missing
+registry coverage refuses. A later new lease claim serializes after the handoff;
+it is a distinct allocation under its own normal authority, not a transferred
+lease. Add a forward-only ownerSessionId/status index only after actual query
+qualification; the existing provider-prefix index is not sufficient by assertion.
+
+For semantic policy exemptions, refactor recordSemanticReviewExemption to keep
+its provider/approval preparation outside locks, then lock this same Workroom
+row and recheck the exact repository/head/executor snapshot in its real insert
+transaction. Use the existing DB-only recordExternalEvidenceInStore port; the
+outer recordExternalEvidence action cannot substitute for that transaction.
+Handoff reads exact same-room/current-source exemption candidates while holding
+the room lock. An applicable exemption that ref movement would invalidate refuses;
+malformed potentially applicable or overflowing evidence refuses too. Do not use
+the legacy latest-20 convenience scan as proof that no applicable row exists.
+Publication that wins the room lock first is visible to handoff; publication
+that loses must revalidate the changed executor and cannot insert stale evidence.
+No approval, evidence result or native-review state is modified by refusal.
+
+Bounded external rooms must have no Build Studio/build association. Reject
+non-null featureBuildId, native/build/human executor kinds and unsupported
+assistant/surface mapping. Preserve branch scope CAS and protected-state checks;
+do not rewrite those stores to infer session authentication from an endorsed ref.
+Shared authority repair, lease-lock extraction, exemption insert fencing and
+handoff phases are one atomic implementation scope. Real PostgreSQL races and
+independent exact-source review are required before this source-derived contract
+can be called qualified. Any newly discovered unfenced positive writer stops
+the bounded path until this contract is amended and reviewed.
+
+This is a genuine correction to the source adapter contract, not proof that the
+three earlier reviewer executions settled. Preserve their identities, uncertain
+effects and retry budgets. Any current artifact review must use the normal
+issuer and its actual admission decision; no new key is manufactured to evade
+an existing hold, and a client advisory is not a native approval.
 
 ## Research & Benchmarking
 
