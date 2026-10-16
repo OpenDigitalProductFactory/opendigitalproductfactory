@@ -3,7 +3,7 @@ import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { prisma } from "@dpf/db";
 import { callProvider } from "@/lib/ai-inference";
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
-import { isToolAllowedByGrants } from "@/lib/agent-grants";
+import { expandGrants, isToolAllowedByGrants } from "@/lib/agent-grants";
 import { loadPlatformVersion } from "@/lib/platform/version";
 import { getLocalThinkingBudgetEvidence } from "@/lib/inference/dmr-runtime-config";
 import { getOllamaApiRoot } from "@/lib/inference/ollama-url";
@@ -61,14 +61,15 @@ async function authoritySnapshot(userId: string, context: ToolExecutionContext) 
     const row = await prisma.mcpApiToken.findUnique({ where: { id: context.apiTokenId }, select: {
       userId: true, agentId: true, scopes: true, scope: true, kind: true, revokedAt: true, expiresAt: true,
       workroomRef: true, runRef: true } });
+    const scopes = expandGrants(row?.scopes ?? []).sort();
     if (!row || row.userId !== userId || (row.agentId && row.agentId !== context.agentId)
-      || row.revokedAt || hash([...row.scopes].sort()) !== hash([...(context.tokenGrantScopes ?? [])].sort())
+      || row.revokedAt || hash(scopes) !== hash([...new Set(context.tokenGrantScopes ?? [])].sort())
       || row.scope !== context.tokenScope || (row.workroomRef && row.workroomRef !== room?.workroomId)) return null;
     if (context.authSource !== "oauth" && row.expiresAt && row.expiresAt.getTime() <= Date.now()) return null;
     const key = await resolveMcpTaskAuthorityKey({ tokenId: context.apiTokenId, userId, source: context.authSource ?? "" });
     if (!key) return null;
     authorityKey = key;
-    token = { scopes: [...row.scopes].sort(), scope: row.scope, agentId: row.agentId,
+    token = { scopes, scope: row.scope, agentId: row.agentId,
       kind: row.kind, workroomRef: row.workroomRef, runRef: row.runRef };
   }
   return { ownerHash: hash({ userId, agentId: context.agentId, authorityKey }),

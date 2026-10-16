@@ -6,6 +6,7 @@ import { accountExecutionVersion } from "@/lib/routing/provider-account-candidat
 import { currentInferenceSignal, assertGovernedInferenceAuthority, withInferenceCancellation } from "@/lib/routing/governed-inference-deadline";
 import { admissionObservation } from "@/lib/inference/inference-admission";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+import { expandGrants } from "@/lib/agent-grants";
 
 const mocks = vi.hoisted(() => ({ call: vi.fn(), manifests: vi.fn(), tools: vi.fn(), version: vi.fn(),
   proof: vi.fn(), create: vi.fn(), update: vi.fn(), audit: vi.fn(), provider: vi.fn(), grants: vi.fn(),
@@ -20,7 +21,9 @@ vi.mock("@/lib/ai-inference", () => ({ callProvider: mocks.call }));
 vi.mock("@/lib/routing/loader", () => ({ loadEndpointManifests: mocks.manifests, invalidateRoutingLoaderCache: vi.fn() }));
 vi.mock("@/lib/platform/version", () => ({ loadPlatformVersion: mocks.version }));
 vi.mock("@/lib/inference/dmr-runtime-config", () => ({ getLocalThinkingBudgetEvidence: mocks.proof }));
-vi.mock("@/lib/agent-grants", () => ({ isToolAllowedByGrants: mocks.grants }));
+vi.mock("@/lib/agent-grants", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/agent-grants")>(), isToolAllowedByGrants: mocks.grants,
+}));
 vi.mock("@dpf/db", () => ({ prisma: { endpointTestRun: { create: mocks.create, updateMany: mocks.update, findUnique: mocks.checkpointRead },
   agent: { findUnique: mocks.agent }, mcpApiToken: { findUnique: mocks.token }, workroom: { findUnique: mocks.room },
   toolExecution: { findUnique: mocks.audit }, modelProvider: { findUnique: mocks.provider },
@@ -261,6 +264,55 @@ describe("bounded local fidelity diagnostic", () => {
     const result = await runLocalToolFidelityDiagnostic(selection, "u", { ...context(), agentId: undefined });
     expect(result.success).toBe(false);
     expect(mocks.call).not.toHaveBeenCalled(); expect(mocks.create).not.toHaveBeenCalled();
+  });
+  it.each(["backlog_write", "work_capsule_write", "browser_drive", "registry_write"])(
+    "accepts the external route's effective %s token grants for execution and readback", async grant => {
+      const scopes = ["admin_read", grant];
+      const tokenGrantScopes = expandGrants(scopes);
+      expect(tokenGrantScopes.length).toBeGreaterThan(scopes.length);
+      mocks.token.mockResolvedValue({ userId: "u", agentId: "agent", scopes, scope: "write",
+        kind: "oauth_access", revokedAt: null, expiresAt: null, workroomRef: null, runRef: null });
+      const ctx = { ...context(), apiTokenId: "original-token", authSource: "oauth",
+        tokenScope: "write" as const, tokenGrantScopes };
+      const first = await runLocalToolFidelityDiagnostic(selection, "u", ctx);
+      expect(first.data).toMatchObject({ checkpoint: { nextIndex: 1, state: "ready" } });
+      expect((first.data!.observations as Array<unknown>)[0]).toMatchObject({ status: "passed", executionPassed: true });
+      const replay = await runLocalToolFidelityDiagnostic({ ...selection, fidelityRunId: first.data!.runId as string }, "u", ctx);
+      expect(replay.data).toMatchObject({ checkpoint: { nextIndex: 1, state: "ready" } });
+      expect(mocks.call).toHaveBeenCalledTimes(1); expect(reads).toHaveBeenCalledTimes(1);
+    });
+  it.each(["revoked", "grant-removed"])("still stops an implied-grant token %s during admission", async change => {
+    const token = { userId: "u", agentId: "agent", scopes: ["admin_read", "backlog_write"], scope: "write",
+      kind: "oauth_access", revokedAt: null as Date | null, expiresAt: null, workroomRef: null, runRef: null };
+    mocks.token.mockResolvedValue(token);
+    const ctx = { ...context(), apiTokenId: "original-token", authSource: "oauth",
+      tokenScope: "write" as const, tokenGrantScopes: expandGrants(token.scopes) };
+    const dispatch = vi.fn();
+    mocks.call.mockImplementation(async () => {
+      admissionObservation("local", "interactive")("queued");
+      if (change === "revoked") token.revokedAt = new Date();
+      else token.scopes = ["admin_read"];
+      await assertGovernedInferenceAuthority();
+      dispatch();
+    });
+    const result = await runLocalToolFidelityDiagnostic(selection, "u", ctx);
+    expect(mocks.call).toHaveBeenCalledTimes(1);
+    expect(dispatch).not.toHaveBeenCalled(); expect(reads).not.toHaveBeenCalled();
+    expect(result.data).toMatchObject({ qualified: false, capChanged: false, checkpoint: { state: "held" } });
+  });
+  it.each(["revoked", "grant-removed"])("refuses an implied-grant token %s before lost-response readback", async change => {
+    const token = { userId: "u", agentId: "agent", scopes: ["admin_read", "backlog_write"], scope: "write",
+      kind: "oauth_access", revokedAt: null as Date | null, expiresAt: null, workroomRef: null, runRef: null };
+    mocks.token.mockResolvedValue(token);
+    const ctx = { ...context(), apiTokenId: "original-token", authSource: "oauth",
+      tokenScope: "write" as const, tokenGrantScopes: expandGrants(token.scopes) };
+    const first = await runLocalToolFidelityDiagnostic(selection, "u", ctx);
+    expect(first.data).toMatchObject({ checkpoint: { nextIndex: 1, state: "ready" } });
+    if (change === "revoked") token.revokedAt = new Date();
+    else token.scopes = ["admin_read"];
+    const replay = await runLocalToolFidelityDiagnostic({ ...selection, fidelityRunId: first.data!.runId as string }, "u", ctx);
+    expect(replay.success).toBe(false);
+    expect(mocks.call).toHaveBeenCalledTimes(1); expect(reads).toHaveBeenCalledTimes(1);
   });
   it("stops a different-model or unattributable response before governed reads", async () => {
     mocks.call.mockResolvedValue({ content: "", finishReason: "tool_calls",
