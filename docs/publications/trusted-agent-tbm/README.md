@@ -4,12 +4,14 @@
 
 ## Use the packet
 
-- [Two-page meeting brief](meeting-brief.pdf), with [editable text](meeting-brief.md).
-- [Architecture deck](trusted-agent-tbm.pptx) and [PDF slides](trusted-agent-tbm.pdf). Twelve editable slides; citations are in speaker notes. `deck-outline.json` contains the editable outline and notes.
+- [Two-page meeting brief](https://media.githubusercontent.com/media/OpenDigitalProductFactory/opendigitalproductfactory/4b98a1be6e34353aeaa43a699b3b7be77103de89/docs/publications/trusted-agent-tbm/meeting-brief.pdf), with [editable text](meeting-brief.md).
+- [Architecture deck](https://media.githubusercontent.com/media/OpenDigitalProductFactory/opendigitalproductfactory/4b98a1be6e34353aeaa43a699b3b7be77103de89/docs/publications/trusted-agent-tbm/trusted-agent-tbm.pptx) and [PDF slides](https://media.githubusercontent.com/media/OpenDigitalProductFactory/opendigitalproductfactory/4b98a1be6e34353aeaa43a699b3b7be77103de89/docs/publications/trusted-agent-tbm/trusted-agent-tbm.pdf). Twelve editable slides; citations are in speaker notes. `deck-outline.json` contains the editable outline and notes.
 - [Synthetic-expense demo script and static fallback](demo-script.md). The static fallback is explicitly a walkthrough. No live run or recording is claimed.
 - [Known gaps and evidence boundaries](known-gaps.md).
 - [Governance/IP options and proposed collaboration request](governance-options.md).
 - [Source register](sources.md), checked October 16, 2026.
+
+The three binary downloads use GitHub media URLs pinned to their retained asset commit; they require the normal source/LFS push and do not depend on the public documentation build fetching binary objects. The editable sources and local review artifacts remain in this directory. A green publication build is not proof that the public site has deployed.
 
 Start with the brief, use the deck for the architecture discussion, and keep the gap sheet beside it. Before external use, refresh source/runtime identities and the dated gap statements. Sharing or submission still needs explicit owner authorization.
 
