@@ -68,15 +68,17 @@ function checkSignatures(bytes, signatures, publicKeys) {
  * adapter, never from the recovery bundle. A successful result is not a lease,
  * an execution receipt or permission to skip lock/revalidation before apply.
  */
-export function verifyOfflineRecoveryAuthority({
-  manifestBytes, manifestSignatures, envelopeBytes, envelopeSignatures,
-  trustedKeyFingerprints, minimumTrustEpoch, observed, nowMs,
-}) {
-  signedBytes(manifestBytes); signedBytes(envelopeBytes);
+/** Verify a witnessed manifest against administrator-supplied pins, independent
+ * of any kit or recovery envelope. This cannot authorize runtime effects. */
+export function verifyOfflineRecoveryTrust({ manifestBytes, manifestSignatures,
+  trustedKeyFingerprints, minimumTrustEpoch, installationId, nowMs }) {
+  signedBytes(manifestBytes);
   if (!object(trustedKeyFingerprints)
+    || Object.keys(trustedKeyFingerprints).length !== 2
     || !ROLES.every(role => HASH.test(trustedKeyFingerprints[role] ?? ""))
     || trustedKeyFingerprints.operator === trustedKeyFingerprints.verifier) fail("trust_key");
-  if (!object(observed)) fail("binding");
+  if (typeof installationId !== "string" || !installationId
+    || /[\u0000-\u001f]/.test(installationId)) fail("binding");
   if (!Number.isSafeInteger(nowMs)) fail("time");
   const manifest = parseCanonical(manifestBytes);
   fields(manifest, ["version", "installationId", "epoch", "issuedAt", "expiresAt", "keys"]);
@@ -99,12 +101,31 @@ export function verifyOfflineRecoveryAuthority({
     publicKeys[role] = { key, fingerprint: entry.fingerprint };
   }
   checkSignatures(manifestBytes, manifestSignatures, publicKeys);
-  if (manifest.installationId !== observed.installationId) fail("binding");
+  if (manifest.installationId !== installationId) fail("binding");
   if (!Number.isSafeInteger(minimumTrustEpoch) || minimumTrustEpoch < 1
     || !Number.isSafeInteger(manifest.epoch) || manifest.epoch < minimumTrustEpoch) fail("trust_epoch");
   const trustExpiry = timestamp(manifest.expiresAt);
   if (timestamp(manifest.issuedAt) > nowMs) fail("time");
   if (trustExpiry <= nowMs) fail("trust_expired");
+
+  return { manifest, publicKeys, trustExpiry, trustEpoch: manifest.epoch,
+    manifestDigest: sha256(manifestBytes) };
+}
+
+export function verifyOfflineRecoveryAuthority({
+  manifestBytes, manifestSignatures, envelopeBytes, envelopeSignatures,
+  trustedKeyFingerprints, minimumTrustEpoch, observed, nowMs,
+}) {
+  signedBytes(manifestBytes); signedBytes(envelopeBytes);
+  if (!object(trustedKeyFingerprints)
+    || !ROLES.every(role => HASH.test(trustedKeyFingerprints[role] ?? ""))
+    || trustedKeyFingerprints.operator === trustedKeyFingerprints.verifier) fail("trust_key");
+  if (!object(observed)) fail("binding");
+  if (!Number.isSafeInteger(nowMs)) fail("time");
+  const { manifest, publicKeys, trustExpiry } = verifyOfflineRecoveryTrust({
+    manifestBytes, manifestSignatures, trustedKeyFingerprints, minimumTrustEpoch,
+    installationId: observed.installationId, nowMs,
+  });
 
   // Verify approval of exact bytes before interpreting the recovery plan.
   checkSignatures(envelopeBytes, envelopeSignatures, publicKeys);
