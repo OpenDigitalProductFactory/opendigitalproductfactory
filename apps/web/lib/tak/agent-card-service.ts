@@ -5,7 +5,7 @@ import { coworkerAuthorityAgentId } from "@/lib/coworker-identity";
 import { resolveAIDocForAgent, type InternalAIDoc } from "@/lib/identity/aidoc-resolver";
 import { projectActionProposalPresentation } from "@/lib/governance/action-proposal-presentation";
 
-import { getToolGrantMapping, persistedAgentToolGrants } from "./agent-grants";
+import { getToolGrantMapping, isToolAllowedByGrants, persistedAgentToolGrants } from "./agent-grants";
 import type {
   InternalAgentCard,
   InternalAgentCardSecurityScheme,
@@ -164,14 +164,10 @@ function sortedUnique(values: Array<string | null | undefined>): string[] {
 }
 
 function deriveExposedTools(grantKeys: string[], aidoc: InternalAIDoc | null): string[] {
-  if (aidoc) {
-    return [...aidoc.tool_surface].sort();
-  }
-
-  const grantSet = new Set(grantKeys);
-  return Object.entries(getToolGrantMapping())
-    .filter(([, requiredGrants]) => requiredGrants.some((grantKey) => grantSet.has(grantKey)))
-    .map(([toolName]) => toolName)
+  if (grantKeys.length === 0) return [];
+  const advertised = aidoc ? new Set(aidoc.tool_surface) : null;
+  return Object.keys(getToolGrantMapping())
+    .filter(toolName => (!advertised || advertised.has(toolName)) && isToolAllowedByGrants(toolName, grantKeys))
     .sort();
 }
 
@@ -494,14 +490,15 @@ export async function resolveInternalAgentCard(
     select: { toolGrants: { select: { grantKey: true } }, toolGrantRevocations: { select: { grantKey: true } } },
   });
 
-  const aidoc = await resolveAIDocForAgent(agent.agentId);
+  const authorityGrants = persistedAgentToolGrants(owner);
+  const aidoc = await resolveAIDocForAgent(agent.agentId, undefined, authorityGrants);
   const supervisorDecisionState = (await getSupervisorDecisionStateForAgents([agent.agentId], db)).get(
     agent.agentId,
   );
 
   return projectInternalAgentCard({
     agent,
-    authorityGrants: persistedAgentToolGrants(owner),
+    authorityGrants,
     aidoc,
     supervisorDecisionState,
     routeContext: options.routeContext,
@@ -525,16 +522,17 @@ export async function listInternalAgentCards(
   );
 
   return Promise.all(
-    agents.map(async (agent) =>
-      projectInternalAgentCard({
+    agents.map(async (agent) => {
+      const authorityGrants = persistedAgentToolGrants(byId.get(coworkerAuthorityAgentId(agent.agentId)));
+      return projectInternalAgentCard({
         agent,
-        authorityGrants: persistedAgentToolGrants(byId.get(coworkerAuthorityAgentId(agent.agentId))),
-        aidoc: await resolveAIDocForAgent(agent.agentId),
+        authorityGrants,
+        aidoc: await resolveAIDocForAgent(agent.agentId, undefined, authorityGrants),
         supervisorDecisionState: supervisorStateByAgentId.get(agent.agentId),
         routeContext: options.routeContext,
         actingPrincipalRef: options.actingPrincipalRef,
         actingPrincipalGaid: options.actingPrincipalGaid,
-      }),
-    ),
+      });
+    }),
   );
 }

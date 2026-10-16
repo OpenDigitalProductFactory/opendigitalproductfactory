@@ -82,6 +82,26 @@ describe("Agent Card canonical grant projection", () => {
     vi.mocked(prisma.agent.findMany).mockRejectedValue(new Error("authority unavailable"));
     await expect(listInternalAgentCards()).rejects.toThrow("authority unavailable");
   });
+  it("intersects a present AIDoc with current authority, including legacy implied grants", async () => {
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([
+      record("external-codex", ["admin_write"]),
+      record("AGT-EXT-CODEX", ["backlog_write"]),
+    ] as never);
+    vi.mocked(resolveAIDocForAgent).mockResolvedValue({
+      tool_surface: ["record_execution_evidence", "not_a_registered_tool", "set_agent_tool_grants"],
+      authorization_classes: [],
+    } as never);
+    const cards = await listInternalAgentCards();
+    for (const card of cards) expect(card.exposedTools).toEqual(["record_execution_evidence"]);
+    expect(resolveAIDocForAgent).toHaveBeenCalledWith("external-codex", undefined, ["backlog_write"]);
+    expect(prisma.agent.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.agent.findUnique).not.toHaveBeenCalled();
+  });
+  it("does not revive advertised tools when the canonical owner is missing", async () => {
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([record("external-codex", ["admin_write"])] as never);
+    vi.mocked(resolveAIDocForAgent).mockResolvedValue({ tool_surface: ["record_execution_evidence"], authorization_classes: [] } as never);
+    expect((await listInternalAgentCards())[0].exposedTools).toEqual([]);
+  });
 });
 
 describe("resolveInternalAgentCard", () => {
@@ -96,7 +116,7 @@ describe("resolveInternalAgentCard", () => {
 
   it("projects an internal Agent Card with TAK and GAID supervisor metadata", async () => {
     vi.mocked(prisma.agent.findUnique).mockResolvedValue({
-      agentId: "build-specialist",
+      agentId: "identity-test-agent",
       name: "Build Specialist",
       description: "Implements governed Build Studio changes.",
       status: "active",
@@ -134,7 +154,7 @@ describe("resolveInternalAgentCard", () => {
     } as never);
 
     vi.mocked(resolveAIDocForAgent).mockResolvedValue({
-      gaid: "gaid:priv:dpf.internal:build-specialist",
+      gaid: "gaid:priv:dpf.internal:identity-test-agent",
       issuer: "dpf.internal",
       subject_type: "agent",
       subject_name: "Build Specialist",
@@ -167,7 +187,7 @@ describe("resolveInternalAgentCard", () => {
       operating_profile_fingerprint: "a".repeat(64),
     } as never);
 
-    const card = await resolveInternalAgentCard("build-specialist", {
+    const card = await resolveInternalAgentCard("identity-test-agent", {
       routeContext: "/build",
       actingPrincipalRef: "PRN-HUMAN-1",
       actingPrincipalGaid: "gaid:priv:dpf.internal:mark",
@@ -175,7 +195,7 @@ describe("resolveInternalAgentCard", () => {
 
     expect(card).toMatchObject({
       schemaVersion: "dpf.agent-card.v1",
-      agentId: "build-specialist",
+      agentId: "identity-test-agent",
       name: "Build Specialist",
       description: "Implements governed Build Studio changes.",
       status: "active",
@@ -194,11 +214,11 @@ describe("resolveInternalAgentCard", () => {
           maxDelegationRiskBand: "medium",
           operatingProfileFingerprint: "a".repeat(64),
           authority: {
-            agentId: "build-specialist",
+            agentId: "identity-test-agent",
             routeContext: "/build",
             actingPrincipalRef: "PRN-HUMAN-1",
             actingPrincipalGaid: "gaid:priv:dpf.internal:mark",
-            agentGaid: "gaid:priv:dpf.internal:build-specialist",
+            agentGaid: "gaid:priv:dpf.internal:identity-test-agent",
             aidocValidationState: "validated",
             operatingProfileFingerprint: "a".repeat(64),
             hitlTier: 2,
@@ -211,8 +231,8 @@ describe("resolveInternalAgentCard", () => {
           },
         },
         gaid: {
-          gaid: "gaid:priv:dpf.internal:build-specialist",
-          aidocRef: "gaid:priv:dpf.internal:build-specialist",
+          gaid: "gaid:priv:dpf.internal:identity-test-agent",
+          aidocRef: "gaid:priv:dpf.internal:identity-test-agent",
           authorizationClasses: ["observe", "create", "update", "execute"],
           validationState: "validated",
         },
@@ -294,7 +314,7 @@ describe("resolveInternalAgentCard", () => {
   it("lists internal Agent Cards for supervisor authority surfaces", async () => {
     vi.mocked(prisma.agent.findMany).mockResolvedValue([
       {
-        agentId: "build-specialist",
+        agentId: "identity-test-agent",
         name: "Build Specialist",
         description: "Implements governed Build Studio changes.",
         status: "active",
@@ -337,9 +357,9 @@ describe("resolveInternalAgentCard", () => {
       },
     ] as never);
     vi.mocked(resolveAIDocForAgent).mockImplementation(async (agentId) =>
-      agentId === "build-specialist"
+      agentId === "identity-test-agent"
         ? ({
-            gaid: "gaid:priv:dpf.internal:build-specialist",
+            gaid: "gaid:priv:dpf.internal:identity-test-agent",
             issuer: "dpf.internal",
             subject_type: "agent",
             subject_name: "Build Specialist",
@@ -379,16 +399,16 @@ describe("resolveInternalAgentCard", () => {
       actingPrincipalRef: "PRN-HUMAN-1",
     });
 
-    expect(cards.map((card) => card.agentId)).toEqual(["build-specialist", "planner"]);
+    expect(cards.map((card) => card.agentId)).toEqual(["identity-test-agent", "planner"]);
     expect(cards[0]).toMatchObject({
-      agentId: "build-specialist",
+      agentId: "identity-test-agent",
       exposedTools: ["launch_sandbox", "run_sandbox_tests"],
       extensions: {
         tak: {
           authority: {
             routeContext: "/platform/audit/authority",
             actingPrincipalRef: "PRN-HUMAN-1",
-            agentGaid: "gaid:priv:dpf.internal:build-specialist",
+            agentGaid: "gaid:priv:dpf.internal:identity-test-agent",
             aidocValidationState: "validated",
             exposedToolCount: 2,
             authorizationClasses: ["observe", "execute"],
@@ -415,7 +435,7 @@ describe("resolveInternalAgentCard", () => {
   it("adds pending proposal and receipt state for supervisor decisions", async () => {
     vi.mocked(prisma.agent.findMany).mockResolvedValue([
       {
-        agentId: "build-specialist",
+        agentId: "identity-test-agent",
         name: "Build Specialist",
         description: "Implements governed Build Studio changes.",
         status: "active",
@@ -441,7 +461,7 @@ describe("resolveInternalAgentCard", () => {
         proposalId: "PROP-002",
         threadId: "thread-2",
         messageId: "msg-2",
-        agentId: "build-specialist",
+        agentId: "identity-test-agent",
         actionType: "register_digital_product_from_build",
         parameters: {},
         proposedAt: new Date("2026-05-20T15:00:00Z"),
@@ -451,7 +471,7 @@ describe("resolveInternalAgentCard", () => {
         proposalId: "PROP-001",
         threadId: "thread-1",
         messageId: "msg-1",
-        agentId: "build-specialist",
+        agentId: "identity-test-agent",
         actionType: "deploy_feature",
         parameters: {},
         proposedAt: new Date("2026-05-19T15:00:00Z"),
@@ -460,7 +480,7 @@ describe("resolveInternalAgentCard", () => {
     vi.mocked(prisma.toolExecution.findMany).mockResolvedValue([
       {
         id: "tool-exec-2",
-        agentId: "build-specialist",
+        agentId: "identity-test-agent",
         toolName: "run_sandbox_tests",
         createdAt: new Date("2026-05-20T16:00:00Z"),
         receipt: {
@@ -475,7 +495,7 @@ describe("resolveInternalAgentCard", () => {
       },
       {
         id: "tool-exec-1",
-        agentId: "build-specialist",
+        agentId: "identity-test-agent",
         toolName: "launch_sandbox",
         createdAt: new Date("2026-05-19T16:00:00Z"),
         receipt: {
@@ -525,7 +545,7 @@ describe("resolveInternalAgentCard", () => {
     });
     expect(prisma.agentActionProposal.findMany).toHaveBeenCalledWith({
       where: {
-        agentId: { in: ["build-specialist"] },
+        agentId: { in: ["identity-test-agent"] },
         status: "proposed",
       },
       orderBy: { proposedAt: "desc" },
@@ -543,7 +563,7 @@ describe("resolveInternalAgentCard", () => {
     expect(prisma.toolExecution.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          agentId: { in: ["build-specialist"] },
+          agentId: { in: ["identity-test-agent"] },
           receipt: { isNot: null },
         },
         orderBy: { createdAt: "desc" },
