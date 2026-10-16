@@ -36,6 +36,7 @@ import {
 import { OAuthClientPeople } from "@/components/admin/OAuthClientPeople";
 import { buildCredentialsClientSnippets } from "@/lib/auth/mcp-setup-snippets";
 import { PUBLIC_SCOPES, PUBLIC_SCOPE_COPY, type PublicScope } from "@/lib/auth/oauth-public-scopes";
+import { useT } from "@/lib/i18n/use-t";
 import { formatTimestamp } from "@/lib/datetime";
 
 type View = { kind: "idle" } | { kind: "form" } | { kind: "issued"; created: CreatedCredentialsClient };
@@ -75,6 +76,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 }
 
 export function McpOAuthClientManager() {
+  const t = useT("setup");
   const [clients, setClients] = useState<OAuthClientSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -120,7 +122,7 @@ export function McpOAuthClientManager() {
         if (result.ok) setAssistants(result.data);
         else setAssistantError(result.error);
       } catch {
-        if (current) setAssistantError("Could not load assistants. Close and try again.");
+        if (current) setAssistantError(t("sourceCredentials.discoveryUnavailable"));
       } finally {
         if (current) setAssistantLoaded(true);
       }
@@ -163,7 +165,7 @@ export function McpOAuthClientManager() {
         setView({ kind: "issued", created: result.data });
         refresh();
       } catch {
-        setFormError("Could not create this client. Try again.");
+        setFormError(t("sourceCredentials.creationUnavailable"));
       } finally {
         setCreating(false);
       }
@@ -280,22 +282,22 @@ export function McpOAuthClientManager() {
               value={formName}
               onValueChange={setFormName}
               required
-              hint="Where this client runs."
+              hint={t("sourceCredentials.clientNameHint")}
               autoComplete="off"
               maxLength={120}
             />
             <SelectField
               name="actingAssistant"
-              label="Acts as assistant"
+              label={t("sourceCredentials.assistantLabel")}
               value={assistantId}
               onValueChange={setAssistantId}
-              options={[{ value: "", label: "Your account only" }, ...assistants.map((assistant) => ({ value: assistant.agentId, label: assistant.displayName }))]}
+              options={[{ value: "", label: t("sourceCredentials.accountOnly") }, ...assistants.map((assistant) => ({ value: assistant.agentId, label: assistant.displayName }))]}
               disabled={creating || assistantLoading || !assistantLoaded || !!assistantError}
-              hint={assistantLoading || !assistantLoaded ? "Loading assistants…" : assistantId ? "Current assistant permissions still apply." : "Without an assistant, this client cannot join Workrooms."}
+              hint={assistantLoading || !assistantLoaded ? t("sourceCredentials.loading") : assistantId ? t("sourceCredentials.permissionsHint") : t("sourceCredentials.unboundHint")}
             />
             <fieldset className="mt-3">
               <legend className="text-sm font-medium text-[var(--dpf-text)]">What it may do</legend>
-              <p className="mb-2 text-xs text-[var(--dpf-muted)]">Choose needed access.</p>
+              <p className="mb-2 text-xs text-[var(--dpf-muted)]">{t("sourceCredentials.scopeHint")}</p>
               <div className="flex flex-col gap-2">
                 {PUBLIC_SCOPES.map((scope) => (
                   <CheckboxField
@@ -327,9 +329,9 @@ export function McpOAuthClientManager() {
         return (
           <Surface level={2} padding="md" rounded="md" className="mb-4" role="region" aria-label="New client key">
             <Notice variant="warn" title="Copy the secret now — it is shown only once">
-              Keep this secret private. It appears once.
+              {t("sourceCredentials.secretHint")}
             </Notice>
-            <p className="mt-3 text-sm text-[var(--dpf-text)]">Assistant: <span>{view.created.assistant?.displayName ?? "Your account only"}</span></p>
+            <p className="mt-3 text-sm text-[var(--dpf-text)]">{t("sourceCredentials.savedAssistantLabel")} <span>{view.created.assistant?.displayName ?? t("sourceCredentials.accountOnly")}</span></p>
             <dl className="mt-3 grid gap-3 md:grid-cols-[auto_1fr_auto] md:items-center">
               <dt className="text-sm font-medium text-[var(--dpf-text)]">Client id</dt>
               <dd className="break-all font-mono text-sm text-[var(--dpf-text)]">{view.created.clientId}</dd>

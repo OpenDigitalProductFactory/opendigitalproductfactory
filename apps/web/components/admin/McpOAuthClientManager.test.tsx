@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render as renderUi, screen, waitFor, within } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { DialogHost } from "@/components/ui/Dialog";
 
 vi.mock("@/lib/actions/oauth-clients", () => ({
@@ -13,6 +16,10 @@ vi.mock("@/lib/actions/oauth-clients", () => ({
 
 import { createOAuthCredentialsClient, listOAuthClients, listOAuthCredentialsAssistants, revokeOAuthClient } from "@/lib/actions/oauth-clients";
 import { McpOAuthClientManager } from "./McpOAuthClientManager";
+
+function render(ui: ReactElement) {
+  return renderUi(<MessagesProvider locale="en-US" messages={{ setup: namespaceMessages("en-US", "setup") }}>{ui}</MessagesProvider>);
+}
 
 const listMock = listOAuthClients as unknown as ReturnType<typeof vi.fn>;
 const createMock = createOAuthCredentialsClient as unknown as ReturnType<typeof vi.fn>;
