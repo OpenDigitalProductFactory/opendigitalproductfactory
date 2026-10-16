@@ -90,10 +90,13 @@ Workroom review visibility. BI-8ECEC429 owns explicit expired successors.
 Canonical identity repair BI-CAP-437F7745 and role/room configuration
 BI-56E9CEC2 remain separate dependencies, with no scope absorbed here.
 
-Initial design claim IRD-4E838A9D82AD allowed WC-82EAA947. Only this plan path
-is currently claimed. The implementation scope and impact contract are pending
-the existing owner handoff. No implementation or failing regression is claimed
-complete. Missing authority or failed planning coverage stops implementation;
+Initial design claim IRD-4E838A9D82AD allowed WC-82EAA947. A normal sequential
+handoff now permits the worker/test, recovery policy, capacity helper/test and
+canonical design paths. The existing owner still holds the policy test; do not
+edit it. Resolve all graph-linked tests and run the style-drift obligation.
+The error-name-lookalike regression failed against the current worker as
+expected; baseline three suites passed110 tests. Automatic-resume reproduction
+and implementation remain pending. Missing authority or failed planning coverage stops implementation;
 infrastructure uncertainty remains unrun/inconclusive.
 
 ## Risks and rollback
