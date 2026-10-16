@@ -26,6 +26,7 @@ import { createSemanticReviewRequest } from "./semantic-review-request";
 import { failureAnalysisFixture } from "./failure-analysis.test-fixtures";
 import { currentInferenceOrigin } from "@/lib/inference/inference-admission";
 import { NativeCliExecutionUncertainError } from "../routing/cli-owned-runner";
+import { NoEligibleEndpointsError } from "../routing/inference-error";
 
 const result = { decision: "pass", failureAnalysisReview: { adequate: true, rationale: "Challenged stale evidence and recovery paths against the executed test." }, issues: [], summary: "Exact diff reviewed." };
 let row: Record<string, unknown>;
@@ -84,6 +85,81 @@ beforeEach(() => {
 });
 
 describe("durable semantic review worker", () => {
+  const eligibility = { sensitivity: "restricted", residencyPolicy: "local_only", excludedCount: 2,
+    exclusions: [{ bucket: "output-capacity" as const, count: 2 }] };
+  function refusal(proven: boolean) {
+    const error = new NoEligibleEndpointsError("build-review", "secret provider detail", 2, undefined, undefined, eligibility);
+    if (proven) error.providerDispatch = "not-started";
+    return error;
+  }
+  it("checkpoints a proven typed eligibility refusal without raw detail or a verdict", async () => {
+    mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => branch("change-reviewer", async () => { throw refusal(true); }));
+    await executePersistedSemanticReview("TR-1");
+    expect(row.status).toBe("input-required");
+    expect(row.progressPayload).toMatchObject({ semanticReview: { reason: "review-endpoint-ineligible", routingEligibility: [eligibility] } });
+    expect(mocks.db.taskNode.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      status: "completed", outputSnapshot: expect.objectContaining({ requestDigest: packet.digest,
+        providerOutcome: "not-dispatched", routingEligibility: [eligibility] }),
+    }) }));
+    expect(JSON.stringify(row)).not.toContain("secret provider detail");
+  });
+  it.each(["wrapped", "unproven", "serialized"])("retains uncertainty for a %s eligibility error", async kind => {
+    const error = kind === "wrapped" ? new Error("wrapped refusal", { cause: refusal(true) })
+      : kind === "serialized" ? { ...refusal(true) } : refusal(false);
+    mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => branch("change-reviewer", async () => { throw error; }));
+    await expect(executePersistedSemanticReview("TR-1")).rejects.toBe(error);
+    expect(row.progressPayload).toMatchObject({ semanticReview: { reason: "provider-outcome-uncertain" } });
+    expect(mocks.evidence).not.toHaveBeenCalled();
+  });
+  it("preserves refusal and successful checkpoints beside an uncertain sibling", async () => {
+    mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => {
+      await Promise.allSettled([
+        branch("AGT-181", async () => { throw refusal(true); }),
+        branch("AGT-903", async () => { throw new Error("lost outcome"); }),
+        branch("change-reviewer", async () => result),
+      ]);
+      return { decision: "inconclusive", issues: [], summary: "Incomplete" };
+    });
+    await executePersistedSemanticReview("TR-1");
+    expect(row.progressPayload).toMatchObject({ semanticReview: { reason: "provider-outcome-uncertain" } });
+    expect(mocks.db.taskNode.update).toHaveBeenCalledWith(expect.objectContaining({ where: { taskNodeId: "semantic-review:TR-1:AGT-181" },
+      data: expect.objectContaining({ status: "completed", outputSnapshot: expect.objectContaining({ providerOutcome: "not-dispatched" }) }) }));
+    expect(mocks.db.taskNode.update).toHaveBeenCalledWith(expect.objectContaining({ where: { taskNodeId: "semantic-review:TR-1:change-reviewer" },
+      data: expect.objectContaining({ status: "completed", outputSnapshot: expect.objectContaining({ result }) }) }));
+    expect(mocks.evidence).not.toHaveBeenCalled();
+  });
+  it("refuses unchanged eligibility retry without consuming the original budget", async () => {
+    row.status = "input-required";
+    Object.assign((row.progressPayload as any).semanticReview, { reason: "review-endpoint-ineligible", routingEligibility: [eligibility] });
+    await expect(retryPersistedSemanticReview("TR-1", "user-1", true)).rejects.toThrow("eligibility-remediation-required");
+    expect((row.progressPayload as any).semanticReview.recoveryAttempt).toBeUndefined();
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+  it("resumes the same request only with fresh scoped eligibility remediation", async () => {
+    row.status = "input-required";
+    Object.assign((row.progressPayload as any).semanticReview, { reason: "review-endpoint-ineligible", routingEligibility: [eligibility] });
+    mocks.db.runtimeVerification.findUnique.mockResolvedValue({ kind: "health", status: "passed", workCapsuleId: "room-1",
+      runtimeTargetId: "runtime-1", command: "verify exact review eligibility", completedAt: new Date(),
+      result: { semanticReviewRecovery: { taskRunId: "TR-1", requestDigest: packet.digest, executionSettled: true,
+        settledNodeIds: [], eligibilityVerified: true, observation: "Exact immutable route now has an eligible endpoint." } } });
+    await retryPersistedSemanticReview("TR-1", "user-1", true, { expectedRequestDigest: packet.digest, remediationVerificationId: "RV-1" });
+    expect(row.status).toBe("submitted");
+    expect(row.progressPayload).toMatchObject({ semanticReview: { requestDigest: packet.digest,
+      deadlineAt: packet.deadlineAt, recoveryAttempt: 1, remediationVerificationId: "RV-1" } });
+  });
+  it.each(["unverified", "stale", "wrong-request"])("refuses %s eligibility remediation", async kind => {
+    row.status = "input-required";
+    Object.assign((row.progressPayload as any).semanticReview, { reason: "review-endpoint-ineligible" });
+    mocks.db.runtimeVerification.findUnique.mockResolvedValue({ kind: "health", status: "passed", workCapsuleId: "room-1",
+      runtimeTargetId: "runtime-1", command: "verify eligibility", completedAt: kind === "stale" ? new Date(0) : new Date(),
+      result: { semanticReviewRecovery: { taskRunId: kind === "wrong-request" ? "TR-OTHER" : "TR-1",
+        requestDigest: packet.digest, executionSettled: true, settledNodeIds: [], eligibilityVerified: kind !== "unverified",
+        observation: "Infrastructure was checked." } } });
+    const recovery = { expectedRequestDigest: packet.digest, remediationVerificationId: "RV-1" };
+    await expect(retryPersistedSemanticReview("TR-1", "user-1", true, recovery)).rejects.toThrow("eligibility-remediation-required");
+    expect(row.status).toBe("input-required");
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
   it("records a typed pre-dispatch capacity refusal as inconclusive, not a running provider", async () => {
     mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => branch("change-reviewer", async () => {
       throw Object.assign(new Error("private provider detail"), { name: "LocalProviderCapacityDeferredError", reason: "local-runner-busy" });
@@ -98,7 +174,6 @@ describe("durable semantic review worker", () => {
     expect(mocks.evidence).toHaveBeenCalledOnce();
     expect(JSON.stringify(row)).not.toContain("private provider detail");
   });
-
   it("settles a returned unknown provider error without claiming a verdict or leaving active execution", async () => {
     mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => branch("change-reviewer", async () => {
       throw new Error("private transport payload");
@@ -110,7 +185,6 @@ describe("durable semantic review worker", () => {
     expect(row.status).toBe("input-required");
     expect(mocks.evidence).not.toHaveBeenCalled();
   });
-
   it("allows successful siblings to checkpoint before parking a failed branch", async () => {
     mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => {
       await Promise.allSettled([
@@ -134,7 +208,6 @@ describe("durable semantic review worker", () => {
     } });
     expect(mocks.evidence).not.toHaveBeenCalled();
   });
-
   it.each([
     ["checkpoint-read", "P2028"], ["checkpoint-write", "P2028"],
     ["checkpoint-read", "P2034"], ["checkpoint-write", "P2034"],
@@ -149,7 +222,6 @@ describe("durable semantic review worker", () => {
     expect(row.status).toBe("completed");
     expect(mocks.evidence).toHaveBeenCalledOnce();
   });
-
   it("bounds checkpoint retries and leaves exhausted persistence unknown", async () => {
     const error = Object.assign(new Error("transaction closed"), {
       name: "PrismaClientKnownRequestError", code: "P2028",

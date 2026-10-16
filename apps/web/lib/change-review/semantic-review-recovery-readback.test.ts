@@ -21,6 +21,21 @@ function verification() { return { verificationId: "RV-OWN", kind: "health", sta
 const binding = { capsuleId: "room-id", taskRunId: "TR-OWN", requestDigest: digest, updatedAt };
 
 describe("owned semantic review recovery readback", () => {
+  it("exposes bound no-dispatch diagnostics while requiring eligibility-specific remediation", async () => {
+    const eligibility = { sensitivity: "restricted", residencyPolicy: "local_only", excludedCount: 2,
+      exclusions: [{ bucket: "output-capacity", count: 2 }] };
+    db.taskNode.findMany.mockResolvedValue([{ ...node, status: "completed", outputSnapshot: {
+      requestDigest: digest, providerOutcome: "not-dispatched", routingEligibility: [eligibility], rawPrompt: "private prompt" } }]);
+    db.runtimeVerification.findFirst.mockResolvedValue(verification());
+    const result = await readSemanticReviewRecovery({ ...task, progressPayload: { semanticReview: {
+      ...task.progressPayload.semanticReview, executionOutcome: undefined, reason: "review-endpoint-ineligible", routingEligibility: [eligibility],
+    } } }, "owner");
+    expect(result).toMatchObject({ classification: "routing-blocked", details: {
+      nodes: [{ providerOutcome: "not-dispatched", routingEligibility: [eligibility] }],
+      remediation: { state: "eligibility-verification-required", eligibilityVerified: false, retryAuthorized: false },
+    } });
+    expect(JSON.stringify(result)).not.toContain("private prompt");
+  });
   afterEach(() => vi.restoreAllMocks());
   beforeEach(() => { vi.clearAllMocks(); vi.spyOn(Date, "now").mockReturnValue(now.getTime());
     db.taskNode.findMany.mockResolvedValue([node]); db.runtimeVerification.findFirst.mockResolvedValue(null); });

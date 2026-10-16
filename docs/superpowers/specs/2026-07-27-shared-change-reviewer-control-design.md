@@ -460,6 +460,23 @@ unknown. A failed checkpoint write stays unknown. Unknown exclusions remain
 explicitly other. Rollback removes the additive projection without erasing stored
 requests/checkpoints; unknown recovery metadata must remain fenced.
 
+### Backlog coverage and observed routing limits
+
+Atomic coverage: `cmvaf16ny37kb01rx56n3fvt1`, implementation parent BI-DB4E6F81,
+with ELIGIBILITY-CONTRACT / ELIGIBILITY-FLOW / ELIGIBILITY-ACCEPTANCE /
+ELIGIBILITY-VERIFY mapped together and no independent delivery dependency.
+Eligibility remediation uses the existing scoped health receipt with
+`semanticReviewRecovery.eligibilityVerified=true`; a transport-only check is
+insufficient. The admission and readback predicates share this interpretation.
+
+Read-only inspection of the original stored routing decision found 44 excluded
+endpoints: 28 for residency, seven for clearance, seven for structured output,
+one for model class and one for context (40,960 available versus 72,117 required).
+These are the recorded constraints of that occurrence, not claims that every
+current review has the same prompt or route. Historical uncertain TaskNodes are
+not retroactively relabeled from logs or timestamps. Native served acceptance
+must use current exact-request evidence, with screening and provider policy intact.
+
 ## Recovery repair — BI-8ECEC429
 
 Status: implementation plan, 2026-10-02. This extends the existing request,

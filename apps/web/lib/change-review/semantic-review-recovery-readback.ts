@@ -1,5 +1,6 @@
 import { prisma } from "@dpf/db";
 import { isRecord } from "@/lib/shared/coerce";
+import { readRoutingEligibility } from "../inference/routing-exclusion-buckets";
 import { semanticReviewRecoveryObservation } from "./semantic-review-recovery-policy";
 import { readSemanticReviewRemediation, SEMANTIC_REVIEW_REMEDIATION_MAX_AGE_MS } from "./semantic-review-remediation";
 
@@ -43,20 +44,29 @@ export async function readSemanticReviewRecovery(row: OwnedTask, callerUserId: s
   const unresolvedNodeIds = visible.filter(node => node.status !== "completed" && node.status !== "superseded")
     .map(node => node.taskNodeId);
   const coverageComplete = !!proof && !truncated && unresolvedNodeIds.every(id => proof.settledNodeIds.includes(id));
+  const remediationReady = coverageComplete && (!observation.eligibilityBlocked || proof!.eligibilityVerified);
   return { ...observation, details: {
     observedAt: new Date(now).toISOString(), taskUpdatedAt: row.updatedAt.toISOString(),
     nodes: visible.map(node => {
       const output = isRecord(node.outputSnapshot) ? node.outputSnapshot : {};
       const digestMatches = !!observation.requestDigest && output.requestDigest === observation.requestDigest;
+      const routingEligibility = digestMatches && Array.isArray(output.routingEligibility)
+        ? output.routingEligibility.slice(0, 5).flatMap(value => { const safe = readRoutingEligibility(value); return safe ? [safe] : []; }) : [];
       return { taskNodeId: node.taskNodeId, status: node.status, updatedAt: node.updatedAt.toISOString(),
-        digestMatches, providerOutcome: output.providerOutcome === "inconclusive" ? "inconclusive" : "unknown",
+        digestMatches, providerOutcome: digestMatches && output.providerOutcome === "not-dispatched" ? "not-dispatched"
+          : output.providerOutcome === "inconclusive" ? "inconclusive" : "unknown",
+        ...(routingEligibility.length ? { routingEligibility } : {}),
         settlement: coverageComplete && proof!.settledNodeIds.includes(node.taskNodeId) ? "verified" : "unverified" };
     }),
     truncated, unresolvedNodeIds,
-    remediation: { state: truncated ? "node-limit-exceeded" : coverageComplete ? "recorded" : proof ? "incomplete-node-coverage" : "missing-current-proof",
+    remediation: { state: truncated ? "node-limit-exceeded" : remediationReady ? "recorded"
+        : coverageComplete ? "eligibility-verification-required" : proof ? "incomplete-node-coverage" : "missing-current-proof",
       verificationId: proof ? verification!.verificationId : null,
       executionSettled: coverageComplete, retryAuthorized: false,
-      nextAction: coverageComplete ? "Submit the recorded verification and exact request digest to retry_semantic_review; admission rechecks authority, checkpoints and lineage."
-        : "Reconcile the listed provider executions and record a fresh scoped health verification. Failed or inactive task status does not prove settlement." },
+      eligibilityVerified: proof?.eligibilityVerified === true,
+      nextAction: remediationReady ? "Submit the recorded verification and exact request digest to retry_semantic_review; admission rechecks authority, checkpoints and lineage."
+        : observation.classification === "routing-blocked"
+          ? "Verify endpoint eligibility for this immutable review and record fresh scoped remediation evidence before recovery. No unchanged inference retry is authorized."
+          : "Reconcile the listed provider executions and record a fresh scoped health verification. Failed or inactive task status does not prove settlement." },
   } };
 }
