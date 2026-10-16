@@ -63,6 +63,8 @@ const authority = {
 
 function deps(signal: MergeDeliverySignal) {
   return {
+    prepareCurrentDesign: async () => ({ evidence: { state: "not-applicable" as const },
+      admissionGuard: async () => ({ state: "not-applicable" as const }) }),
     resolveMergeDelivery: async () => signal,
     resolveDeploymentClosure: async () => ({ kind: "unavailable" as const, reason: "no deployment in this fixture" }),
   };
@@ -139,6 +141,25 @@ describe("decomposed initiative completion (BI-DA407BD9)", () => {
     expect(unmetCodes(read!.decision)).toEqual([]);
     expect(readSide.updateMany).not.toHaveBeenCalled();
     expect(readSide.resolveDeploymentClosure).not.toHaveBeenCalled();
+  });
+
+  it("keeps both terminal admission and its read blocked when source observation is unavailable", async () => {
+    const gateSide = aggregateFixture();
+    const guard = vi.fn().mockResolvedValue({ state: "unavailable" });
+    const prepareCurrentDesign = vi.fn().mockResolvedValue({ evidence: { state: "unavailable" }, admissionGuard: guard });
+    const gate = await completeBacklogItemTransition({ db: gateSide.db as never, itemId: gateSide.item.itemId,
+      expectedStatus: "awaiting-acceptance", resolution: "Must not close on historical design passes.",
+      completionEvidence: undefined, actor, authority: { ...authority, objectRef: gateSide.item.itemId }, evaluatedAt: NOW,
+      dependencies: { ...gateSide.dependencies, prepareCurrentDesign } as never });
+    const readSide = aggregateFixture();
+    const read = await readBacklogItemCompletion({ itemRowId: readSide.item.id, status: "awaiting-acceptance",
+      evaluatedAt: NOW, db: readSide.client as never, dependencies: readSide.dependencies as never,
+      currentDesign: { state: "unavailable" } });
+    expect(gate.ok).toBe(false);
+    expect(read?.decision.verdict).not.toBe("allowed");
+    expect(unmetCodes(read!.decision)).toContain("OBJECTIVE_BASELINE_REQUIRED");
+    expect(gateSide.updateMany).not.toHaveBeenCalled();
+    expect(prepareCurrentDesign).toHaveBeenCalledTimes(1); expect(guard).toHaveBeenCalledTimes(1);
   });
   it("does not let the parent's merge close an unfinished child", async () => {
     const result = await evaluate(aggregateFixture("in-progress"));

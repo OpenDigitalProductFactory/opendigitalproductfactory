@@ -14,6 +14,8 @@ import { excerptHeadAndTail } from "@/lib/shared/excerpt-head-and-tail";
 import { prisma } from "@dpf/db";
 import { parseUnifiedRateLimitHeaders, type WeeklyQuotaSnapshot } from "./weekly-quota";
 import { conservativeQuotaScope } from "./provider-capacity/scopes";
+import { loadProviderCapacitySnapshots } from "./provider-capacity/store";
+import type { CapacitySnapshot } from "./capacity-routing-exclude";
 
 export type CliAdapterType = "claude-cli" | "codex-cli";
 export type CliPoolIdentity = { providerId: string; providerConnectionId: string };
@@ -53,10 +55,8 @@ const DEFAULT_CLI_COOLDOWN_SECONDS =
   Number(process.env.DPF_CLI_RATELIMIT_DEFAULT_COOLDOWN_SECONDS) || 60;
 
 /**
- * Upper bound (seconds) on any parsed/derived cooldown, so a misparsed provider
- * message (or a genuinely multi-hour subscription reset) can never wedge a CLI
- * provider off the fallback chain for longer than this. We re-probe at the cap
- * and re-record if still limited. 1 hour.
+ * Upper bound for fallback cooldowns when no provider reset is known.
+ * Known provider resets remain authoritative, including weekly quota limits.
  */
 const MAX_CLI_COOLDOWN_SECONDS = 3_600;
 
@@ -179,18 +179,13 @@ export async function recordCliRateLimit(
   try {
     const retryAfterSeconds = parseRetryAfterSeconds(errorText);
     const now = new Date();
-    // Always back off on a recorded rate limit: use the provider's Retry-After
-    // when it gave one, otherwise a bounded default window. Capping guards
-    // against a misparse (or a genuinely long subscription reset) pinning the
-    // provider off the fallback chain indefinitely. `retryAfterSeconds` still
-    // records only what was actually parsed (may be null) for observability;
-    // `resetAt` is what the dispatch gate reads.
-    const cooldownSeconds = Math.min(
-      retryAfterSeconds ?? DEFAULT_CLI_COOLDOWN_SECONDS,
-      MAX_CLI_COOLDOWN_SECONDS,
+    // Honor known provider reset windows. Only an unknown reset uses a bounded
+    // default; an hourly probe must not consume capacity known to reset in days.
+    const cooldownSeconds = retryAfterSeconds ?? Math.min(
+      DEFAULT_CLI_COOLDOWN_SECONDS, MAX_CLI_COOLDOWN_SECONDS,
     );
     const resetAt = new Date(now.getTime() + cooldownSeconds * 1_000);
-    // BI-38064739: a reset beyond the pool cap is a subscription cap, not a
+    // BI-38064739: a reset beyond the fallback cap is a subscription cap, not a
     // throttle. Record it as the provider's capacity state so routing and the
     // provider page honor the real date instead of retrying every tick.
     const subscriptionCap = retryAfterSeconds !== null && retryAfterSeconds > MAX_CLI_COOLDOWN_SECONDS;
@@ -224,6 +219,22 @@ export async function recordCliRateLimit(
   }
 }
 
+/** Reconcile pre-fix capped rows with the canonical provider quota projection. */
+function effectivePoolReset(row: { providerId: string; resetAt: Date | null }, capacity: Map<string, CapacitySnapshot>, now: number): Date | null {
+  const known = capacity.get(row.providerId);
+  const quotaReset = known?.state === "quota_resets_at" ? known.retryAtMs : null;
+  return quotaReset != null && quotaReset > now && quotaReset > (row.resetAt?.getTime() ?? 0)
+    ? new Date(quotaReset) : row.resetAt;
+}
+
+async function poolCapacitySnapshots(): Promise<Map<string, CapacitySnapshot>> {
+  try { return await loadProviderCapacitySnapshots(); }
+  catch (error) {
+    console.warn("[cli-pool-status] Failed to read provider quota; retaining pool observation", error);
+    return new Map();
+  }
+}
+
 /**
  * Fetch the current pool state for a given CLI adapter.
  * Returns null when there is no recorded rate-limit event for this adapter.
@@ -245,7 +256,8 @@ export async function getCliPoolStatus(
     if (!row) return null;
 
     const now = Date.now();
-    const resetMs = row.resetAt ? row.resetAt.getTime() : null;
+    const resetAt = effectivePoolReset(row, await poolCapacitySnapshots(), now);
+    const resetMs = resetAt?.getTime() ?? null;
     const isExhausted = resetMs != null && resetMs > now;
     const secondsUntilReset =
       isExhausted && resetMs != null ? Math.ceil((resetMs - now) / 1_000) : null;
@@ -254,7 +266,7 @@ export async function getCliPoolStatus(
       adapterType,
       providerId: row.providerId,
       rateLimitedAt: row.rateLimitedAt,
-      resetAt: row.resetAt,
+      resetAt,
       retryAfterSeconds: row.retryAfterSeconds,
       errorSnippet: row.errorSnippet,
       isExhausted,
@@ -277,17 +289,19 @@ export async function getAllCliPoolStatuses(): Promise<CliPoolState[]> {
       orderBy: { adapterType: "asc" },
     });
     const now = Date.now();
+    const capacity = rows.length ? await poolCapacitySnapshots() : new Map<string, CapacitySnapshot>();
     return rows.flatMap((row): CliPoolState[] => {
       const adapterType: CliAdapterType | null = row.adapterType === "codex-cli" || row.adapterType === "claude-cli" ? row.adapterType
         : row.adapterKind === "codex" ? "codex-cli" : row.adapterKind === "claude_code" ? "claude-cli" : null;
       if (!adapterType) return [];
-      const resetMs = row.resetAt ? row.resetAt.getTime() : null;
+      const resetAt = effectivePoolReset(row, capacity, now);
+      const resetMs = resetAt?.getTime() ?? null;
       const isExhausted = resetMs != null && resetMs > now;
       return [{
         adapterType,
         providerId: row.providerId,
         rateLimitedAt: row.rateLimitedAt,
-        resetAt: row.resetAt,
+        resetAt,
         retryAfterSeconds: row.retryAfterSeconds,
         errorSnippet: row.errorSnippet,
         isExhausted,

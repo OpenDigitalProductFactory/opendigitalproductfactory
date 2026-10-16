@@ -43,6 +43,14 @@ function db(rows: unknown[], phases: Record<string, string> = {}) {
 }
 
 describe("shadow and moot gate verdicts stay out of the owner inbox", () => {
+  it("keeps a human-routed recommendation and excludes independent review", async () => {
+    const items = await loadAiDecisionItems(db([
+      row({ interactionId: "DI-human", outcomeType: "recommend", escalationRoute: "human", escalationReason: "damaging-threshold", buildId: null, question: "Approve this outward commitment?" }),
+      row({ interactionId: "DI-review", escalationRoute: "independent_review", buildId: null, question: "Review an uncertain finding?" }),
+    ]));
+    expect(items.map((item) => item.id)).toEqual(["ai-decision:DI-human"]);
+    expect(items[0]?.context).toContain("crosses a configured threshold");
+  });
   it("drops a verdict recorded in shadow enforcement", async () => {
     const items = await loadAiDecisionItems(db([
       row({ interactionId: "DI-shadow", outcomePayload: { enforcement: "shadow" } }),

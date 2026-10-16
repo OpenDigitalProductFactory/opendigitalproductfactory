@@ -11,7 +11,11 @@ import {
   type DecisionEvaluationSource,
   type PerspectiveMaterialFreshness,
 } from "./types";
-import type { DecisionSubjectKind } from "@dpf/db";
+import type { DecisionSubjectKind, DecisionEscalationRoute } from "@dpf/db";
+import {
+  DECISION_BASES, DECISION_ESCALATION_REASON_CODES,
+  type DecisionEscalation, type DecisionEscalationReasonCode,
+} from "@/lib/govern/authority/escalation-gate";
 import { normalizeLocator } from "@/lib/deliberation/evidence";
 import {
   syncDecisionShadowLedger,
@@ -52,7 +56,48 @@ type PersistedDecisionInteractionRow = {
   outcomePayload?: unknown;
   humanOutcome?: unknown;
   escalationCapture?: unknown;
+  escalationRoute?: DecisionEscalationRoute | null;
+  escalationReason?: string | null;
+  escalationFollowOn?: string | null;
 };
+
+/** Decode recorded facts only. Invalid non-legacy evidence cannot grant a step. */
+function recordedEscalation(row: Pick<PersistedDecisionInteractionRow, "escalationRoute" | "escalationReason" | "escalationFollowOn" | "riskTier">): DecisionEscalation | undefined {
+  if (row.escalationRoute == null) return undefined;
+  const route = row.escalationRoute === "independent_review" ? "independent-review" : row.escalationRoute;
+  const reason = row.escalationReason;
+  const followOn = row.escalationFollowOn ?? null;
+  if (!reason || !DECISION_ESCALATION_REASON_CODES.includes(reason as DecisionEscalationReasonCode)) {
+    throw new Error("Recorded escalation reason is invalid");
+  }
+  if (!DECISION_RISK_TIERS.includes(row.riskTier as DecisionRiskTier)
+    || (row.riskTier === "critical") !== (reason === "damaging-critical-risk")) {
+    throw new Error("Recorded escalation risk and reason are inconsistent");
+  }
+  if (route === "human" && reason.startsWith("damaging-") && followOn === null) {
+    return { route, reasonCode: reason as DecisionEscalationReasonCode, damaging: true, followOn: null };
+  }
+  if (route === "decided" && reason === "decided" && followOn === null) {
+    return { route, reasonCode: "decided", damaging: false, followOn: null };
+  }
+  if (route === "independent-review" && reason === "independent-review-required"
+    && followOn && DECISION_BASES.some((basis) => basis !== "decided" && basis === followOn)) {
+    return { route, reasonCode: "independent-review-required", damaging: false,
+      followOn: followOn as Exclude<DecisionEscalation["followOn"], null> };
+  }
+  throw new Error("Recorded escalation route and evidence are inconsistent");
+}
+
+function escalationFields(evaluation: Pick<DecisionPerspectiveEvaluationResult, "escalation" | "riskTier">) {
+  const escalation = evaluation.escalation;
+  const fields = {
+    escalationRoute: escalation ? (escalation.route === "independent-review" ? "independent_review" : escalation.route) : null,
+    escalationReason: escalation?.reasonCode ?? null,
+    escalationFollowOn: escalation?.followOn ?? null,
+  } satisfies Pick<PersistedDecisionInteractionRow, "escalationRoute" | "escalationReason" | "escalationFollowOn">;
+  recordedEscalation({ ...fields, riskTier: evaluation.riskTier });
+  return fields;
+}
 
 const EMPTY_FRESHNESS_DISTRIBUTION: Record<PerspectiveMaterialFreshness, number> = {
   current: 0,
@@ -149,7 +194,16 @@ export function decisionInteractionRowToEvaluation(
       ? row.confidenceAfter
       : 0;
 
+  const escalation = recordedEscalation(row);
+  const stanceAlignment = payload.stanceAlignment;
   return {
+    ...(escalation ? { escalation, heldForIndependentReview: escalation.route === "independent-review" } : {}),
+    ...(stanceAlignment === "approve" || stanceAlignment === "decline" || stanceAlignment === "mixed" || stanceAlignment === "none"
+      ? { stanceAlignment } : {}),
+    ...(payload.relevanceMethod === "semantic" || payload.relevanceMethod === "lexical" ? { relevanceMethod: payload.relevanceMethod } : {}),
+    ...(typeof payload.novelProposition === "boolean" ? { novelProposition: payload.novelProposition } : {}),
+    ...(typeof payload.evaluationFault === "boolean" ? { evaluationFault: payload.evaluationFault } : {}),
+    ...(typeof payload.policyLimitExceeded === "boolean" ? { policyLimitExceeded: payload.policyLimitExceeded } : {}),
     outcomeType: normalizeOutcomeType(row.outcomeType),
     selectedProfileId: row.profileId,
     fallbackProfileId: row.fallbackProfileId ?? null,
@@ -303,6 +357,7 @@ export async function persistDecisionInteraction(input: {
       confidenceBefore: input.evaluation.confidenceBefore,
       confidenceAfter: input.evaluation.confidenceAfter,
       outcomeType: input.evaluation.outcomeType,
+      ...escalationFields(input.evaluation),
       principleConflict: input.evaluation.principleConflict,
       gateKey: input.gateKey ?? null,
       gateFallbackUsed: input.gateFallbackUsed ?? false,
@@ -315,6 +370,8 @@ export async function persistDecisionInteraction(input: {
       chainEntryHash: input.chain?.chainEntryHash ?? null,
       sealedAt: input.chain?.sealedAt ?? null,
       outcomePayload: {
+        // Extra descriptive metadata never overrides evaluated decision facts.
+        ...(input.outcomePayloadExtra ?? {}),
         outcomeType: input.evaluation.outcomeType,
         domainClass: input.evaluation.domainClass,
         confidenceScore: input.evaluation.confidenceScore,
@@ -323,7 +380,12 @@ export async function persistDecisionInteraction(input: {
         resolvedProfileChain: input.evaluation.resolvedProfileChain,
         materialCount: input.evaluation.materialCount,
         freshnessDistribution: input.evaluation.freshnessDistribution,
-        ...(input.outcomePayloadExtra ?? {}),
+        evaluationFault: input.evaluation.evaluationFault ?? false,
+        policyLimitExceeded: input.evaluation.policyLimitExceeded ?? false,
+        novelProposition: input.evaluation.novelProposition ?? false,
+        stanceAlignment: input.evaluation.stanceAlignment ?? null,
+        relevanceMethod: input.evaluation.relevanceMethod ?? null,
+        gapReason: input.evaluation.gapReason ?? null,
       },
     },
   }) as Record<string, unknown>;
