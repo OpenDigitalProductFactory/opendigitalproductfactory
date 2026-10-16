@@ -9,7 +9,7 @@ import { evaluateReadiness, buildGatePlan } from "./pr-readiness/core.mjs";
 import { evaluatePrHealth } from "./pr-health.mjs";
 import { evaluateGateRecord, evaluateGateVerdict, decide } from "../packages/dpf-skill-pack/hooks/pregate-evidence-guard.mjs";
 import { correctionPlanDigest, classifyPublishedCorrection } from "../packages/dpf-skill-pack/hooks/lib/published-correction.mjs";
-import { verifyPublishedCorrection, chooseInitialAnchor, buildCorrectionCommands, qualifyCorrectionExecution, correctionReceiptPath, inspectCorrectionRecord, readPublishedContext, execute } from "./published-correction.mjs";
+import { verifyPublishedCorrection, chooseInitialAnchor, buildCorrectionCommands, qualifyCorrectionExecution, correctionReceiptPath, inspectCorrectionRecord, readPublishedContext, execute, readFreshTestReport } from "./published-correction.mjs";
 import { guardShellEnv } from "./lib/guard-bash.mjs";
 import { guardGitEnv } from "./lib/git-hook-env.mjs";
 import { readPublicationGateRecords } from "./pr-readiness.mjs";
@@ -328,6 +328,35 @@ test("exit zero without an executed complete test report is not affected verific
   report.numPassedTests = 2; report.numPendingTests = 0;
   assert.equal(qualifyCorrectionExecution(vitest, vitestResult(vitest, report)).outcome, null);
   assert.equal(qualifyCorrectionExecution(vitest, { exitCode: 0, stdout: JSON.stringify(report) }).outcome, "test-report-unproven");
+});
+
+test("report reading opens before classification and rejects pathname replacement using the descriptor identity", () => {
+  const bytes = Buffer.from("{}");
+  const stamp = { isFile: () => true, dev: 1, ino: 7, size: bytes.length, mtimeMs: 20, ctimeMs: 30 };
+  for (const mode of ["same", "replacement", "symlink", "modified", "unreadable"]) {
+    const events = [];
+    let reads = 0;
+    const fs = {
+      openSync: () => { events.push("open"); return 17; },
+      lstatSync: () => {
+        events.push("path");
+        if (mode === "unreadable") throw new Error("path unavailable");
+        return mode === "replacement" ? { ...stamp, ino: 8 } : mode === "symlink" ? { ...stamp, isFile: () => false } : stamp;
+      },
+      fstatSync: fd => { assert.equal(fd, 17); return mode === "modified" && reads ? { ...stamp, mtimeMs: 21 } : stamp; },
+      readSync: (fd, target, offset, length, position) => {
+        assert.equal(fd, 17); reads++;
+        const count = Math.min(length, Math.max(0, bytes.length - position));
+        bytes.copy(target, offset, position, position + count); return count;
+      },
+      closeSync: fd => { assert.equal(fd, 17); events.push("close"); },
+    };
+    if (mode === "same") assert.deepEqual(readFreshTestReport("owned-report", fs), bytes);
+    else assert.throws(() => readFreshTestReport("owned-report", fs));
+    assert.equal(events[0], "open", mode);
+    assert.equal(events.at(-1), "close", mode);
+    assert.equal(events.filter(event => event === "close").length, 1, mode);
+  }
 });
 
 test("real Vitest file output qualifies despite launcher noise and an old project report", { timeout: 60_000 }, () => {

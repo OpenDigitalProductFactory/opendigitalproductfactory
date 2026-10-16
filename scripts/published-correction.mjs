@@ -2,7 +2,7 @@
 // Existing-PR publication policy. No sandbox lease and no integration PASS.
 import { parseArgs } from "node:util";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, mkdtempSync, lstatSync, openSync, fstatSync, readSync, closeSync, unlinkSync, rmdirSync } from "node:fs";
+import { mkdirSync, readFileSync, mkdtempSync, lstatSync, openSync, fstatSync, readSync, closeSync, unlinkSync, rmdirSync, constants } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
@@ -32,18 +32,22 @@ export function readCorrectionRecord(cwd = process.cwd(), candidateGitDir = null
 
 const MAX_TEST_REPORT_BYTES = 32 * 1024 * 1024;
 const reportDigest = bytes => createHash("sha256").update(bytes).digest("hex");
-function readFreshTestReport(path) {
-  if (!lstatSync(path).isFile()) throw new Error("Report is not a regular file");
-  const fd = openSync(path, "r");
+export function readFreshTestReport(path, fs = { lstatSync, openSync, fstatSync, readSync, closeSync }) {
+  // Open once, then inspect and read that descriptor. Never use a pathname
+  // precheck to authorize a later open; reject symlinks and path replacement.
+  const fd = fs.openSync(path, constants.O_RDONLY | constants.O_NONBLOCK | (constants.O_NOFOLLOW ?? 0));
   try {
-    const initial = fstatSync(fd);
+    const initial = fs.fstatSync(fd, { bigint: true });
     if (!initial.isFile() || initial.size <= 0 || initial.size > MAX_TEST_REPORT_BYTES) throw new Error("Report size is unproven");
-    const bytes = Buffer.alloc(initial.size + 1);
+    const sameFile = stat => stat.isFile() && ["dev", "ino", "size", "mtimeNs", "ctimeNs", "mtimeMs", "ctimeMs"].every(key => stat[key] === initial[key]);
+    if (!sameFile(fs.lstatSync(path, { bigint: true }))) throw new Error("Report path changed after opening");
+    const size = Number(initial.size), bytes = Buffer.alloc(size + 1);
     let length = 0, count;
-    while (length < bytes.length && (count = readSync(fd, bytes, length, bytes.length - length, length)) > 0) length += count;
-    if (length !== initial.size || fstatSync(fd).size !== initial.size) throw new Error("Report changed while reading");
+    while (length < bytes.length && (count = fs.readSync(fd, bytes, length, bytes.length - length, length)) > 0) length += count;
+    if (length !== size || !sameFile(fs.fstatSync(fd, { bigint: true }))
+      || !sameFile(fs.lstatSync(path, { bigint: true }))) throw new Error("Report changed while reading");
     return bytes.subarray(0, length);
-  } finally { closeSync(fd); }
+  } finally { fs.closeSync(fd); }
 }
 
 export function execute(command, args, { cwd = process.cwd(), env = process.env, timeout = 30_000 } = {}) {
