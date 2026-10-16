@@ -113,7 +113,8 @@ The following is the proposed coverage reconciliation, not an accepted new
 receipt. The checked-in coverage gate allows a plan to preserve a concrete
 blocked-by condition; implementation authority still comes from live receipts.
 
-- Decision: decomposed
+- Decision: atomic
+- Rationale: the phases in this branch form one participation lifecycle: obligation selection, bounded authorization, durable dispatch and attributable completion must agree before the changed runtime behavior can be released. The isolated helper is preparation without runtime consumers. The owner requested one combined PR; independent approval/handoff and provider-page work remain outside this delivery and with their existing BIs. This supersedes the earlier proposed decomposed label, which incorrectly combined internal sequencing with independently owned related work.
 - Parent: BI-E27F3600
 - Receipt: blocked-by: expanded AC-7 through AC-10 need independently accepted revised scope and plan coverage; exact-head claims return historical passes without a new reviewer packet, while independent-review dispatch requires that packet.
 - Dependencies: BI-74B2A8CD must land before authority/decision integration; revised-scope review and delivery mapping for BI-0AABCD1F remain pending.
