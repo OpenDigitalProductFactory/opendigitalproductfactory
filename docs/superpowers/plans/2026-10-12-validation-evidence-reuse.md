@@ -296,6 +296,14 @@ open PR with no anchor, an initial permitted override, remote drift and changed
 expected commands as explicit negative/positive cases. The four classes are
 descriptive; every changed tree follows the same affected-check contract.
 
+The live item's later acceptance mapping also contains marked criteria. They
+remain part of the server-parsed medium baseline and are quoted verbatim:
+
+- AC-1: classifier and refresh-tier tests, then a live clean main-refresh push that does not wait for a full local-CI slot.
+- AC-2: tests where a hand-resolved file in the branch's diff triggers affected tests; alteration of branch-authored logic is verified against the clarified rule above.
+- AC-3: confirm protected required checks and the merge queue are unchanged and still gate the merge.
+- AC-4: test and live observation that a re-claim keeps its position.
+
 Classify against the actual published head and its branch-authored diff:
 unchanged head; identical tree with changed commit metadata; main refresh with
 unchanged authored diff; and authored correction. Record both immutable source
