@@ -365,6 +365,10 @@ export function buildWorkroomView(
         ? driveAttention
         : standingIdle
         ? "Open next cycle"
+        : input.detail.summary.state === "triage"
+          && input.detail.summary.nextAction === "Assign owner"
+          && boundary.accountablePrincipalRef
+        ? "Review the next step with the accountable owner"
         : input.detail.summary.nextAction,
       attentionRequired: processNeedsAttention || Boolean(input.executionAttentionReason) || Boolean(driveAttention) || input.detail.summary.attention.required,
       attentionReason: [processAttention, input.executionAttentionReason, driveAttention, input.detail.summary.attention.reason].filter(Boolean).join(" · ") || null,
