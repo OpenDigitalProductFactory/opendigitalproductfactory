@@ -206,3 +206,21 @@ safe outcome and recovery guidance, including execution refusals and expiry.
 - **Guessing the reviewer coworker.** The packet resolves the current grant-holder; a guessed target (e.g. an architecture agent for a design-spec gate) will not hold the grant.
 - **Binding a Workroom with a head but no base, or to a deleted/unresolvable commit.** No immutable artifact → no reviewer binding (`no-canonical-artifact`). Push the artifact; anchor base **and** head.
 - **Proxying a stranded reviewer receipt from the author principal.** If a review strands (§6), that is a defect to report, not a licence to self-approve.
+
+
+### Original review recovery across connection changes
+
+For a paused independent review whose interactive OAuth connection changed,
+read `get_backlog_item` with its exact `itemId` and `recoveryGate`. Submit the
+returned `request_coworker` packet unchanged, including its `reviewRecovery`
+target. Current paired Workroom access, human/coworker permissions and immutable
+source must still authorize that review. Recovery retains the original TaskRun,
+reader evidence and retry budget; it does not create a new assessment or transfer
+another person's work. A stale or ambiguous target requires a fresh bounded read
+and actual execution reconciliation. Never remove the locator to obtain a new
+connection's task or treat uncertain provider effects as settled.
+
+The [MCP authorization procedure](mcp-tool-authorization-runbook.md#recovering-an-original-initiative-review-after-a-connection-change)
+describes the current-authority checks, generation reservation and approval
+continuation. Completion still requires the original task's genuine governed
+writer receipt and the readiness finding it actually records.

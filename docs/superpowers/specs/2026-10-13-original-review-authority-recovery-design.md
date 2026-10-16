@@ -107,8 +107,9 @@ because inference is recoverable.
 ## Ordered correction
 
 1. Freeze this design, capture WWMD outcome, resolve native issuer/transport
-   details and obtain the independent fix-design/architecture assessment. Bind
-   current branch/head and declare exact scope before runtime-code edits.
+   details. Follow the current proportional readiness decision for this fix;
+   bind the branch/head and declare exact scope before runtime-code edits.
+   Independent committed-change assessment remains required before publication.
 2. Add failing tests for cross-family explicit recovery, invalid-target refusal
    before new-task creation, and unchanged ordinary idempotency. Test revoked or
    changed caller, wrong room, changed request/baseline, widened tools, active or
@@ -131,7 +132,8 @@ because inference is recoverable.
 Steps are internal sequencing for one atomic repair. The issuer, selection,
 authority revalidation and fencing cannot ship independently: an entry point
 without those controls would either duplicate work or admit unauthorized replay.
-Implementation plan/coverage and independent assessment are still pending.
+Implementation uses these steps as its bounded plan; publication and live
+acceptance still require their own recorded evidence.
 
 ## Acceptance criteria
 

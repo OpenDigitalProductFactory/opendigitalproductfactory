@@ -631,3 +631,52 @@ deadline. This repair changes neither token/cost budgets nor model/tool routing.
 A larger context window alone does not prove reliable native tool execution;
 provider routing, tool schema/format fidelity, multistep completion and latency
 need separate measured acceptance.
+
+
+## Recovering an original initiative review after a connection change
+
+Read `get_backlog_item` with the exact `itemId` and `recoveryGate`. For an owned,
+safely stopped review, its native `request_coworker` packet includes
+`reviewRecovery`: the original TaskRun, saved request digest and observed
+`expectedUpdatedAt`. Submit that packet unchanged. An ambiguous, active,
+execution-uncertain or exhausted predecessor requires reconciliation; readback
+returns a refusal rather than a replacement request. Dropping a recovery locator
+from a bounded native request does not authorize a new task.
+
+The locator grants no authority. Submission rechecks the current interactive
+OAuth connection, authenticated human, canonical acting coworker, live grants,
+exact Workroom action admission and current server-issued review packet. The
+original request, source, task namespace and tool/item boundaries must match.
+PAT and credentials-client substitution cannot recover this lane. A stale target
+refuses before task creation; refresh the bounded read after concurrent changes.
+
+Recovery stores current execution authority separately from immutable origin in
+the original task's existing generation reservation. Concurrent requests compete
+on status and `updatedAt`; only one reservation wins. Workers and approval
+continuations reconstruct the same immutable request and recheck current
+authority, recorded deadlines and scope before dispatch. A malformed authority
+record never falls back to the expired origin credential. Parking for capacity,
+a missing writer or a provider failure retains current authority and recorded
+windows; capacity events use the same worker reconstruction. Nested readers and
+writers retain their current governed permission and one-shot approval checks.
+Historical tasks without an absolute deadline retain their existing retry and
+execution ceilings; recovery does not invent a new lifetime.
+
+Server reconciliation checks an already-recorded, verified writer receipt before
+reconstructing credentials or checking permission for new execution. A later
+revoked token or disabled human cannot undo that recorded outcome. The existing
+healer still checks the writer/artifact binding and status/version compare-and-swap;
+it cannot revive cancellation or authorize another inference or effect.
+
+A reservation or successful reader is not a review outcome. Verify the genuine
+governed writer receipt on the original task and reconcile its actual readiness
+finding. Deployment and live recovery acceptance remain separate from source
+verification. Ordinary task submissions retain their existing connection-bound
+idempotency rules; this is an explicit independent-review recovery operation,
+not general cross-user task ownership transfer.
+
+
+Persisted request reconstruction and the execution-authority record parser have
+one home in `apps/web/lib/mcp-task-persisted-request.ts`. Workers and authorization
+guards depend on this leaf; it does not import dispatch or worker modules.
+This keeps per-tool mediation independent of the orchestration load graph.
