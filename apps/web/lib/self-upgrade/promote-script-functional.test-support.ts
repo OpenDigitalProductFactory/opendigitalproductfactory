@@ -121,8 +121,9 @@ if [ "\${1-}" = inspect ] || { [ "\${1-}" = image ] && [ "\${2-}" = inspect ]; }
   done
   case "$inspect_format" in
     "{{.Id}}")
-      if [ "$inspect_target" = dpf-sandbox:target ]; then
+      if [ "$inspect_target" = dpf-sandbox:target ] || [ "$inspect_target" = bi547-source-check-sandbox ] || [ "$inspect_target" = bi547-source-check_sandbox ]; then
         [ "\${DPF_TEST_SANDBOX_IMAGE_MODEL:-}" = uninspectable ] && exit 1
+        if [ "\${DPF_TEST_SANDBOX_IMAGE_MODEL:-}" = build-compatibility ] && [ "$inspect_target" = bi547-source-check-sandbox ]; then exit 1; fi
         printf 'sha256:sandbox-target'
       else printf "%s" "\${DPF_TEST_RELEASE_ENGINE_ID:-$DPF_TEST_RELEASE_CONFIG_DIGEST}"; fi
       exit 0 ;;
@@ -137,20 +138,28 @@ fi
 case "$*" in
   *"ps -q sandbox"*) printf 'sandbox-container' ;;
   *"config --images sandbox"*)
-    if [ "\${DPF_TEST_SANDBOX_IMAGE_MODEL:-}" = dependencies-first ]; then
-      printf 'dpf-sandbox-init:target\\ndpf-sandbox:target\\npgvector/pgvector:pg16\\n'
-    else printf 'dpf-sandbox:target\\n'; fi
+    case "\${DPF_TEST_SANDBOX_IMAGE_MODEL:-}" in
+      dependencies-first) printf 'dpf-sandbox-init:target\\ndpf-sandbox:target\\npgvector/pgvector:pg16\\n' ;;
+      build-only) printf 'example/initializer:test\\nbi547-source-check-sandbox\\nbi547-source-check-sandbox\\npgvector/pgvector:pg16\\n' ;;
+      build-compatibility) printf 'pgvector/pgvector:pg16\\nbi547-source-check_sandbox\\nexample/initializer:test\\n' ;;
+      build-ambiguous) printf 'bi547-source-check-sandbox\\nbi547-source-check_sandbox\\n' ;;
+      *) printf 'dpf-sandbox:target\\n' ;;
+    esac
     ;;
   *"config --format json sandbox"*)
     case "\${DPF_TEST_SANDBOX_IMAGE_MODEL:-}" in
       malformed) printf 'not-json' ;;
       missing) printf '{"services":{"sandbox-init":{"image":"dpf-sandbox-init:target"}}}' ;;
       blank) printf '{"services":{"sandbox":{"image":" "}}}' ;;
+      build-only|build-compatibility|build-ambiguous) printf '{"name":"bi547-source-check","services":{"sandbox":{"build":{"context":"."},"depends_on":{"sandbox-init":{"condition":"service_completed_successfully"},"sandbox-postgres":{"condition":"service_started"}}},"sandbox-init":{"image":"example/initializer:test"},"sandbox-postgres":{"image":"pgvector/pgvector:pg16"}}}' ;;
+      build-no-name) printf '{"services":{"sandbox":{"build":{"context":"."}}}}' ;;
+      build-no-context) printf '{"name":"bi547-source-check","services":{"sandbox":{"build":{}}}}' ;;
       *) printf '{"services":{"sandbox-init":{"image":"dpf-sandbox-init:target"},"sandbox":{"image":"dpf-sandbox:target","depends_on":{"sandbox-init":{"condition":"service_completed_successfully"},"sandbox-postgres":{"condition":"service_healthy"}}},"sandbox-postgres":{"image":"pgvector/pgvector:pg16"}}}' ;;
     esac
     ;;
   *"{{.State.Running}} {{.Image}}"*)
     case "\${DPF_TEST_SANDBOX_STATE:-running}" in
+      unreadable) exit 1 ;;
       exited) printf 'false sha256:sandbox-target' ;;
       stale) printf 'true sha256:sandbox-old' ;;
       *) printf 'true sha256:sandbox-target' ;;
@@ -249,11 +258,11 @@ export function runPromote(opts: {
   createdService?: string;
   inspectFailService?: string;
   /** What the sandbox reads as after its recreate (BI-547B788D). Default: running on the target image. */
-  sandboxState?: "running" | "exited" | "stale";
+  sandboxState?: "running" | "exited" | "stale" | "unreadable";
   /** Make `up -d --no-deps --force-recreate sandbox` itself fail (BI-547B788D AC-3). */
   sandboxRecreateFails?: boolean;
   /** Real Compose includes dependency images; vary the named service's readback independently. */
-  sandboxImageModel?: "dependencies-first" | "malformed" | "missing" | "blank" | "uninspectable";
+  sandboxImageModel?: "dependencies-first" | "build-only" | "build-compatibility" | "build-ambiguous" | "build-no-name" | "build-no-context" | "malformed" | "missing" | "blank" | "uninspectable";
   /** Make the reconcile `up -d --no-recreate` fail, to prove it never aborts the upgrade. */
   reconcileFails?: boolean;
   /** Make only `up` of this one service fail (its image tag no longer resolves). */
