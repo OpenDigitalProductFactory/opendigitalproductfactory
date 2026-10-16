@@ -21,10 +21,14 @@ vi.mock("@/lib/auth/oauth-tokens", async importOriginal => ({
   prepareClientSecret: () => ({ plaintext: "dpfocs_fixture", hash: "fixture-hash", enc: "encrypted-fixture" }),
 }));
 
+const stance = vi.hoisted(() => ({ loadInstanceStance: vi.fn(), prismaInstanceStanceStore: vi.fn(() => ({})) }));
+vi.mock("@/lib/install/instance-stance", () => stance);
+
 const served = vi.hoisted(() => ({ getPublishedToolchain: vi.fn() }));
 vi.mock("@/lib/agent-toolchain/served-toolchain", () => served);
 
 import { surfaceReadinessPack } from "./surface-readiness-pack";
+import { resolveCallConsequence } from "@/lib/tool-consequence";
 import { grantsForPublicScopes } from "@/lib/auth/oauth-scope-map";
 import { setGovernedToolAuditOverridesForTests, updateGovernedToolAudit, writeGovernedToolAudit } from "@/lib/governed-tool-audit";
 
@@ -185,5 +189,41 @@ describe("get_fleet_readiness", () => {
     expect(data.capabilities.unverifiedVersions).toEqual([
       expect.objectContaining({ clientKind: "codex", clientVersion: "0.160.0" }),
     ]);
+  });
+});
+
+
+describe("own source credential approval classification", () => {
+  const call = { toolName: "issue_source_credentials_client", params: {}, userId: "human", context: { agentId: "AGT-EXT-CODEX", authSource: "oauth" } };
+  const definition = surfaceReadinessPack.definitions.find(d => d.name === call.toolName)!;
+  it("removes the extra handoff only for a bound empty-input call under canonical DEV credential stance", async () => {
+    stance.loadInstanceStance.mockResolvedValueOnce({ environmentClass: "development", primaryPurpose: "evolve-dpf", credentials: "local-permitted" });
+    expect((await resolveCallConsequence(definition, call)).consequence).toBeNull();
+    expect(stance.loadInstanceStance).toHaveBeenCalled();
+    expect(definition.consequence).toBe("authority");
+  });
+  it.each([
+    { environmentClass: "production", primaryPurpose: "evolve-dpf", credentials: "local-permitted" },
+    { environmentClass: "development", primaryPurpose: "operate-business", credentials: "local-permitted" },
+    { environmentClass: "development", primaryPurpose: "evolve-dpf", credentials: "operator-only" },
+    {},
+  ])("retains authority when canonical stance is not the declared DEV credential contract: %j", async profile => {
+    stance.loadInstanceStance.mockResolvedValueOnce(profile);
+    expect((await resolveCallConsequence(definition, call)).consequence).toBe("authority");
+  });
+  it("fails closed when the stance cannot be read", async () => {
+    stance.loadInstanceStance.mockRejectedValueOnce(new Error("unavailable"));
+    expect((await resolveCallConsequence(definition, call)).consequence).toBe("authority");
+  });
+  it.each([
+    { ...call, params: { agentId: "AGT-OTHER" } },
+    { ...call, context: undefined },
+    { ...call, context: { authSource: "session-jwt", agentId: "AGT-EXT-CODEX" } },
+    { ...call, userId: "" },
+    { ...call, toolName: "issue_grok_credentials_client" },
+  ])("does not narrow an unbound or overridden call: %j", async input => {
+    stance.loadInstanceStance.mockReset();
+    expect((await resolveCallConsequence(definition, input)).consequence).toBe("authority");
+    expect(stance.loadInstanceStance).not.toHaveBeenCalled();
   });
 });

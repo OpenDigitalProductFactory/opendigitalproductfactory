@@ -1,6 +1,22 @@
 import { ensureOwnedCredentialsClient, HEADLESS_CREDENTIAL_SCOPES, type OwnedCredentialsInput } from "@/lib/auth/owned-credentials-client";
 import type { ToolResult } from "@/lib/mcp-tool-types";
+import type { ToolCallConsequenceRefiner } from "@/lib/tool-consequence";
 import { grantsBeyondCaller, type CredentialCaller } from "./credential-issue-authority";
+
+/** Remove only the extra DEV credential handoff; the handler still proves authority. */
+export const ownSourceCredentialConsequence: ToolCallConsequenceRefiner = async call => {
+  const authority = { consequence: "authority" as const, reason: "source-credential-authority-unproven" };
+  if (call.toolName !== "issue_source_credentials_client" || Object.keys(call.params).length !== 0
+    || !call.userId?.trim() || !call.context?.agentId?.trim()
+    || !["oauth", "pat"].includes(call.context.authSource ?? "")) return authority;
+  const [{ prisma }, { loadInstanceStance, prismaInstanceStanceStore }] = await Promise.all([
+    import("@dpf/db"), import("@/lib/install/instance-stance"),
+  ]);
+  const stance = await loadInstanceStance(prismaInstanceStanceStore(prisma));
+  return stance.environmentClass === "development" && stance.primaryPurpose === "evolve-dpf"
+    && stance.credentials === "local-permitted"
+    ? { consequence: null, reason: "development-own-bound-source-credential" } : authority;
+};
 
 export type SourceCredentialStore = Pick<OwnedCredentialsInput, "rows" | "create" | "decrypt" | "prepareSecret"> & {
   eligible: () => Promise<{ id: string; agentId: string } | null>;

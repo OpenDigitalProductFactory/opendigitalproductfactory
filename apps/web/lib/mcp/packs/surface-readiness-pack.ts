@@ -17,6 +17,7 @@
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { SURFACE_READINESS_TOOL_GRANTS } from "@/lib/tak/surface-readiness-tool-grants";
+import { ownSourceCredentialConsequence } from "@/lib/agent-toolchain/source-credential-issue";
 import {
   SURFACE_READINESS_STATES,
   SURFACE_CLIENT_KINDS,
@@ -109,6 +110,7 @@ const definitions: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: true,
     consequence: "authority",
+    consequenceForCall: ownSourceCredentialConsequence,
     secretResultKeys: ["credentialsClient"],
   },
 ];

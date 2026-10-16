@@ -719,3 +719,12 @@ Persisted request reconstruction and the execution-authority record parser have
 one home in `apps/web/lib/mcp-task-persisted-request.ts`. Workers and authorization
 guards depend on this leaf; it does not import dispatch or worker modules.
 This keeps per-tool mediation independent of the orchestration load graph.
+
+The source-client issuer retains its authority declaration. Its per-call
+refinement removes the extra operator handoff only for its empty-input,
+assistant-bound call on a canonically resolved development/evolve-dpf install
+with local-permitted credentials. This changes caution, never permission:
+current human, token, coworker and scope checks still run in the handler.
+Production, unreadable stance, unbound calls and supplied overrides retain
+authority approval. Other authority operations, including room invitations,
+are unaffected.

@@ -490,3 +490,27 @@ IRD-EA3A0E081006 admit this medium/high-sensitivity correction. The server noted
 unresolved funding allocation and missing legacy item size; no budget or funding
 owner was inferred. Current immutable coverage must be refreshed after the final
 source commit, rather than presenting this planning checkpoint as final evidence.
+
+Own-credential approval correction: the static authority declaration alone still
+requires an operator handoff, contradicting HCB-R3 on this declared DEV install.
+Retain that declaration and use the existing narrow-only consequenceForCall
+mechanism for this one empty-input tool, only for an authenticated assistant's
+own client when the canonical stance proves development/evolve-dpf and
+local-permitted credentials. Handler owner, token scope, eligibility, grant
+intersection and serialization checks remain mandatory. Production, unavailable
+stance, unbound callers, arbitrary parameters and all other authority actions
+keep their existing approval consequence. Prove the missing refinement RED, then
+production/unknown/refusal and eligible DEV classification GREEN. This does not
+authorize reviewer invitations or broaden the standing approval mechanism.
+
+Own-credential approval correction: the static authority declaration alone still
+requires an operator handoff, contradicting HCB-R3 on this declared DEV install.
+Retain that declaration and use the existing narrow-only consequenceForCall
+mechanism for this one empty-input tool, only for an authenticated assistant's
+own client when the canonical stance proves development/evolve-dpf and
+local-permitted credentials. Handler owner, token scope, eligibility, grant
+intersection and serialization checks remain mandatory. Production, unavailable
+stance, unbound callers, arbitrary parameters and all other authority actions
+keep their existing approval consequence. Prove the missing refinement RED, then
+production/unknown/refusal and eligible DEV classification GREEN. This does not
+authorize reviewer invitations or broaden the standing approval mechanism.
