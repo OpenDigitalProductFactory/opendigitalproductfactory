@@ -8,9 +8,8 @@ backlog: BI-C684AF45
 This is the implementation scope for BI-C684AF45, extending section 8 of
 [the Workroom flow design](2026-10-02-workroom-flow-map-and-measurement-design.md).
 The October 15 operator request authorizes completion of this work. The parent
-design remains the shared notation and measurement contract. Its section 16 is
-the detailed behavior description; this document provides the bounded objective
-and acceptance manifest for this delivery only.
+design remains the shared notation and measurement contract. This document
+provides the bounded objective and acceptance manifest for this delivery only.
 
 ## Problem and boundary
 
