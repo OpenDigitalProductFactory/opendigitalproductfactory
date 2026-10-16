@@ -105,3 +105,88 @@ sandbox refresh, missing secret or secret rotation leaves evidence unavailable.
 No retry authority follows from this artifact. Actual epoch membership for the
 original TaskRun, all effects, grants and generation fencing still require
 separate server verification before any original attempt can resume.
+
+## Prospective CLI launch binding — October 16 design amendment
+
+Design/preparation owner: BI-06AE6833 / WC-1D447592, canonical-delivery chat
+01a12c34-f7d3-74d3-8da6-01ffd0752516. Normal design admission and exact document
+scope were accepted. This amendment is DESIGN ONLY: no implementation, new
+review execution, replay admission or historical membership is established.
+
+Fresh task99B4B339F227, created after servedc38, still has no durable original
+TaskRun/requestDigest/generation/full child-container launch binding. Its safe
+diagnostics report quota error and outer process closure while retaining child
+closure and effects as unverified. This is independent of the N-1 maintenance
+digest limit. A future retirement receipt cannot supply missing membership for
+this task,941,870 or the original three handoff reviews.
+
+### Existing substrate and bounded decision
+
+The existing AsyncInferenceOp and AsyncInferenceOperationTransition models carry
+request and binding digests, TaskRun/Workroom identity, a start-claim fence,
+leases, startAttemptedAt and immutable transition history. Their shared worker
+distinguishes definite rejection from start_indeterminate and reconciles an
+ambiguous start without starting again. Inspect async-operation-contract,
+async-operation-lifecycle, async-operation-worker and async-operation-store
+before implementing a native CLI adapter. These are the preferred lifecycle
+substrate; this design does not authorize a parallel attempt table or scheduler.
+
+TaskArtifact is available for bounded evidence tied to the same TaskRun, but its
+existence is not an execution lease or fence. The existing local sandbox
+provider owns host/container execution. CLI adapters and cli-owned-runner must
+share that execution boundary instead of independently resolving a mutable
+sandbox alias for preparation, launch and cleanup.
+
+Adapter fit must be established before implementation admission. The existing
+durable worker expects a provider operation identifier; a PID, locally minted
+identifier or Docker handle must never be represented as a provider-issued ID.
+If a native process cannot satisfy the current worker interface, document the
+smallest extension to that same interface and its compatibility proof. Do not
+silently replace synchronous tool execution with a second inference or claim
+that a prospective lifecycle integration settles already-started work.
+
+### Required prospective contract
+
+- CL-1: Persist the accepted TaskRun, exact request digest, adapter/provider and
+  actual selected account/recipe version, attempt identity and current existing
+  fence before external IO. A racing duplicate joins that identity. A crash
+  after start intent retains start_indeterminate; it cannot launch again merely
+  because the client or worker lost the response.
+- CL-2: Resolve the actual full container and daemon identity once before
+  preparation. Bind the managed execution handle to that identity and the
+  accepted operation/fence. Preparation, launch, observation and cleanup use
+  that immutable target. Alias replacement must refuse or reconcile, never
+  silently move part of an attempt to the replacement container.
+- CL-3: Persist bounded authenticated launch/terminal observations using the
+  existing operation transitions and evidence primitives. Exclude prompts,
+  tokens, environment dumps, raw provider output and secret paths. Verify actual
+  emitter, identity, ordering and fence; a client success flag is not evidence.
+  Missing process evidence remains unavailable after client/portal interruption.
+- CL-4: Keep outer closure, managed child-tree closure, canonical domain receipt
+  and remote/provider effects distinct. Process closure does not settle remote
+  effects. Cancellation and current authority win at the actual effect boundary;
+  the BI-8B8731EE receipt-dedup primitive alone supplies neither a full execution
+  generation fence nor closure of other reachable effects or child operations.
+- CL-5: The same existing TaskRun observation surfaces expose attributable
+  bounded evidence or its specific absence. Unknown/future/malformed evidence
+  cannot enable Resume. No new recovery API, grant, bypass, synthesized review
+  verdict, replacement request key or reset attempt budget is introduced.
+
+### Verification and admission sequence
+
+First prove adapter fit with source-local injected process/container/store
+fixtures. Cover a lost create/start response, alias swap between preparation and
+spawn, duplicate launch, stale fence, cancellation, lease loss, portal/client
+restart, truncated/missing/tampered terminal evidence and cleanup failure. Retain
+the original result after a race; test that there is no second provider launch.
+Exercise both Claude and Codex through one shared process-observation contract.
+Do not claim a mocked process proves real child-tree or provider settlement.
+
+Then obtain independent exact-source design assessment, valid implementation
+mapping/coverage and normal implementation admission before editing runtime
+source. The normal owner must resolve graph-linked tests and impact guards for
+the actual paths. Approximately one fifth consolidates repeated adapter target,
+identity and observation handling. Protected publication and one qualified
+canonical release precede an actual safe prospective launch/observation check.
+Rollback retains historical evidence and returns unavailable/uncertain states;
+it cannot reinterpret old launches, clear uncertainty or authorize repetition.

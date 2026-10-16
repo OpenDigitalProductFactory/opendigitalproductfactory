@@ -4,6 +4,31 @@ status: active
 
 # Execution reliability and process visibility
 
+## October 16 prospective launch-evidence preparation (BI-06AE6833)
+
+WC-1D447592 owns the fresh CLI launch-binding gap identified by original
+task99B4B339F227 after servedc38. Normal DESIGN admission and two exact document
+claims are accepted. Reuse the prospective amendment in
+[maintenance evidence](../specs/2026-10-15-maintenance-epoch-recovery-evidence.md#prospective-cli-launch-binding--october-16-design-amendment).
+
+This is preparation, not an admitted implementation plan. First establish fit
+of the existing AsyncInferenceOp lifecycle and local sandbox execution boundary;
+TaskArtifact is evidence only. A native execution handle cannot be mislabeled a
+provider-issued operation ID. Map CL-1 through CL-5 to the existing canonical
+attempt/lease/start-indeterminate/transition substrate, and reject any design
+that introduces another scheduler or uses absent observations as no-start proof.
+
+The design's immutable-target, duplicate-start, crash, stale-fence, cancellation
+and evidence-integrity fixtures are required before source implementation.
+Independent assessment, live deliverable mapping/coverage and normal
+implementation admission remain outstanding. Preserve the existing original
+review99 at bf94ff7ed5f48d481b6afdff9990c3157b76735e and its request digest;
+do not submit a replacement review or claim this prospective work settles it.
+
+This preparation is separate from the admitted BI-8B8731EE canonical-verdict
+dedup primitive, BI-6BA00C83 approval-consumer correction and the approval-target
+display repair below. It does not hold the already coordinated next release cut.
+
 ## October 16 approved runtime target outcome (BI-06AE6833, WC-1D447592)
 
 Original approval cmv9vetqp01la01olbsbz684d remains unknown even though its exact
