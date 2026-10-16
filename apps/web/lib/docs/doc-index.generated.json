@@ -12273,6 +12273,7 @@
         "commit-and-push-fast",
         "worktrees-are-source-control-isolation-not-runtime-isolation",
         "heavy-local-commands-use-a-shared-host-resource-lane",
+        "recover-a-review-blocked-by-endpoint-eligibility",
         "clean-up-when-merged",
         "webhooks-closing-the-promotion-loop",
         "adhering-to-the-portals-processes",
