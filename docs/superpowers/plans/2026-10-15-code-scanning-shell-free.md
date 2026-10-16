@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Shell-free host package-manager execution
 
 Backlog: BI-263055E3. Workroom: WC-F669983A.
@@ -50,5 +54,7 @@ the installed runtime. No UI, database schema or grant changes are required.
 
 Atomic mapping: HOST-ARGV -> BI-263055E3; dependencies: none. References:
 REQ-LITERAL-ARGV, CT-HOST-COMMAND, FLOW-CI-LAUNCH, VERIFY-HOST-ARGV.
-The immutable plan commit is submitted to record_plan_backlog_coverage before
-source implementation; its governed receipt is recorded here after issuance.
+Coverage receipt: `cmvadnbp62rxa01rxmuwqzui3` (atomic), bound to immutable plan
+commit `339e45255d59b516e4cde2d40063a5073bf891b8` before implementation.
+After the shared-file scope approval, `cmvaebqmo2ztk01rx3bioyrxz` renewed
+coverage for that declared edit scope against the same immutable plan.
