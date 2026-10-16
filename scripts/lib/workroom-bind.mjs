@@ -27,6 +27,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { mcpCall } from "./mcp-client.mjs";
+import { MCP_CREDENTIAL_HELP, resolveMcpCredential } from "./mcp-credential.mjs";
 import { gitTextOrNull } from "./git.mjs";
 
 export const DEFAULT_MCP_ENDPOINT = "http://127.0.0.1:3000/api/mcp/v1";
@@ -185,11 +186,17 @@ export function markerFromAdoption(payload, branch) {
   };
 }
 
-/** Endpoint + token from the environment, or null when binding cannot run. */
+/** Reuse the gate's credential policy; never copy an interactive client token. */
 export function resolveMcpAccess(env = process.env) {
-  const bearerToken = env.DPF_MCP_BEARER_TOKEN;
-  if (!bearerToken) return null;
-  return { mcpUrl: env.DPF_MCP_ENDPOINT || DEFAULT_MCP_ENDPOINT, bearerToken };
+  const mcpUrl = env.DPF_MCP_ENDPOINT || DEFAULT_MCP_ENDPOINT;
+  try {
+    const { bearer } = resolveMcpCredential({ mcpUrl, env });
+    return { mcpUrl, bearerToken: bearer };
+  } catch {
+    // A malformed credential must not fall back to broader legacy authority.
+    // Parser exceptions can contain input bytes, so never expose them here.
+    return null;
+  }
 }
 
 // ── effectful ────────────────────────────────────────────────────────────────
@@ -223,7 +230,7 @@ export async function bindWorktreeToWorkroom({
   writeMarker = writeClaimMarker,
 }) {
   const access = resolveMcpAccess(env);
-  if (!access) return { status: "unavailable", reason: "DPF_MCP_BEARER_TOKEN is not set" };
+  if (!access) return { status: "unavailable", reason: MCP_CREDENTIAL_HELP };
 
   let sourceIdentity = null;
   if (captureSourceIdentity) {

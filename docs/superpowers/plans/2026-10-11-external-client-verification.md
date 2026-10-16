@@ -481,3 +481,12 @@ and user-bound authority; test an authorized own-room operation through its norm
 admission. Preserve the working native connector, existing credentials and peer
 limits. If the new capability is unavailable or refused, record that exact limit
 instead of borrowing a token, changing scope or claiming same-account proof.
+
+Planning checkpoint: coverage cmvashwbm0lqf01t3ld84so1u was valid against plan
+commit 742b2235269e2a8d6908d80a6a4c1e0e8e9f819e and blob
+a47e1b303e9ca81b4b500ee8594df5993fea6da2. Research receipt
+initiative-ecb71988-33d8-482a-94fa-57066661733a and implementation decision
+IRD-EA3A0E081006 admit this medium/high-sensitivity correction. The server noted
+unresolved funding allocation and missing legacy item size; no budget or funding
+owner was inferred. Current immutable coverage must be refreshed after the final
+source commit, rather than presenting this planning checkpoint as final evidence.

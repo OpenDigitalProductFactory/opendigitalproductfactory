@@ -20,16 +20,18 @@ import { useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { confirmDialog } from "@/components/ui/Dialog";
 import { Surface } from "@/components/ui/Surface";
-import { CheckboxField, FormStatus, SubmitButton, TextField } from "@/components/ui/form";
+import { CheckboxField, FormStatus, SelectField, SubmitButton, TextField } from "@/components/ui/form";
 import { DataTable, type Column } from "@/components/ui/report-kit/DataTable";
 import { Notice } from "@/components/ui/report-kit/Notice";
 import { StatusBadge } from "@/components/ui/report-kit/StatusBadge";
 import {
   createOAuthCredentialsClient,
   listOAuthClients,
+  listOAuthCredentialsAssistants,
   revokeOAuthClient,
   type CreatedCredentialsClient,
   type OAuthClientSummary,
+  type CredentialsAssistant,
 } from "@/lib/actions/oauth-clients";
 import { OAuthClientPeople } from "@/components/admin/OAuthClientPeople";
 import { buildCredentialsClientSnippets } from "@/lib/auth/mcp-setup-snippets";
@@ -81,6 +83,12 @@ export function McpOAuthClientManager() {
   const [pending, startTransition] = useTransition();
 
   const [formName, setFormName] = useState("");
+  const [assistantId, setAssistantId] = useState("");
+  const [assistants, setAssistants] = useState<CredentialsAssistant[]>([]);
+  const [assistantLoaded, setAssistantLoaded] = useState(false);
+  const [assistantError, setAssistantError] = useState<string | null>(null);
+  const [assistantLoading, loadAssistants] = useTransition();
+  const [creating, setCreating] = useState(false);
   const [formScopes, setFormScopes] = useState<Set<PublicScope>>(() => new Set<PublicScope>(["dpf.read"]));
   const [formError, setFormError] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
@@ -102,8 +110,30 @@ export function McpOAuthClientManager() {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- load once on mount
   useEffect(() => { refresh(); }, []);
 
+  useEffect(() => {
+    if (view.kind !== "form") return;
+    let current = true;
+    loadAssistants(async () => {
+      try {
+        const result = await listOAuthCredentialsAssistants();
+        if (!current) return;
+        if (result.ok) setAssistants(result.data);
+        else setAssistantError(result.error);
+      } catch {
+        if (current) setAssistantError("Could not load assistants. Close and try again.");
+      } finally {
+        if (current) setAssistantLoaded(true);
+      }
+    });
+    return () => { current = false; };
+  }, [view.kind]);
+
   function openForm() {
     setFormName("");
+    setAssistantId("");
+    setAssistants([]);
+    setAssistantLoaded(false);
+    setAssistantError(null);
     setFormScopes(new Set<PublicScope>(["dpf.read"]));
     setFormError(null);
     setNotice(null);
@@ -120,15 +150,23 @@ export function McpOAuthClientManager() {
   }
 
   function submit() {
+    if (!assistantLoaded || assistantError || creating) return;
     setFormError(null);
+    setCreating(true);
     startTransition(async () => {
-      const result = await createOAuthCredentialsClient({ clientName: formName, scopes: [...formScopes] });
-      if (!result.ok) {
-        setFormError(result.error);
-        return;
+      try {
+        const result = await createOAuthCredentialsClient({ clientName: formName, scopes: [...formScopes], agentId: assistantId || null });
+        if (!result.ok) {
+          setFormError(result.error);
+          return;
+        }
+        setView({ kind: "issued", created: result.data });
+        refresh();
+      } catch {
+        setFormError("Could not create this client. Try again.");
+      } finally {
+        setCreating(false);
       }
-      setView({ kind: "issued", created: result.data });
-      refresh();
     });
   }
 
@@ -242,13 +280,22 @@ export function McpOAuthClientManager() {
               value={formName}
               onValueChange={setFormName}
               required
-              hint="Where it runs, e.g. “CI runner” or “Mark’s laptop gate”. Shown in this list and on every token it mints."
+              hint="Where this client runs."
               autoComplete="off"
               maxLength={120}
             />
+            <SelectField
+              name="actingAssistant"
+              label="Acts as assistant"
+              value={assistantId}
+              onValueChange={setAssistantId}
+              options={[{ value: "", label: "Your account only" }, ...assistants.map((assistant) => ({ value: assistant.agentId, label: assistant.displayName }))]}
+              disabled={creating || assistantLoading || !assistantLoaded || !!assistantError}
+              hint={assistantLoading || !assistantLoaded ? "Loading assistants…" : assistantId ? "Current assistant permissions still apply." : "Without an assistant, this client cannot join Workrooms."}
+            />
             <fieldset className="mt-3">
               <legend className="text-sm font-medium text-[var(--dpf-text)]">What it may do</legend>
-              <p className="mb-2 text-xs text-[var(--dpf-muted)]">Grant only what the caller needs. The local-CI gate needs Do governed work.</p>
+              <p className="mb-2 text-xs text-[var(--dpf-muted)]">Choose needed access.</p>
               <div className="flex flex-col gap-2">
                 {PUBLIC_SCOPES.map((scope) => (
                   <CheckboxField
@@ -262,12 +309,12 @@ export function McpOAuthClientManager() {
                 ))}
               </div>
             </fieldset>
-            <FormStatus error={formError} className="mt-3" />
+            <FormStatus error={formError ?? assistantError} className="mt-3" />
             <div className="mt-3 flex gap-2">
-              <SubmitButton pending={pending} pendingLabel="Creating…" disabled={!formName.trim() || formScopes.size === 0}>
+              <SubmitButton pending={creating} pendingLabel="Creating…" disabled={!formName.trim() || formScopes.size === 0 || !assistantLoaded || !!assistantError}>
                 Create client
               </SubmitButton>
-              <Button variant="ghost" size="md" type="button" onClick={() => setView({ kind: "idle" })} disabled={pending}>
+              <Button variant="ghost" size="md" type="button" onClick={() => setView({ kind: "idle" })} disabled={creating}>
                 Cancel
               </Button>
             </div>
@@ -280,8 +327,9 @@ export function McpOAuthClientManager() {
         return (
           <Surface level={2} padding="md" rounded="md" className="mb-4" role="region" aria-label="New client key">
             <Notice variant="warn" title="Copy the secret now — it is shown only once">
-              The platform keeps only a fingerprint of it. If it is lost, revoke this client and add another.
+              Keep this secret private. It appears once.
             </Notice>
+            <p className="mt-3 text-sm text-[var(--dpf-text)]">Assistant: <span>{view.created.assistant?.displayName ?? "Your account only"}</span></p>
             <dl className="mt-3 grid gap-3 md:grid-cols-[auto_1fr_auto] md:items-center">
               <dt className="text-sm font-medium text-[var(--dpf-text)]">Client id</dt>
               <dd className="break-all font-mono text-sm text-[var(--dpf-text)]">{view.created.clientId}</dd>

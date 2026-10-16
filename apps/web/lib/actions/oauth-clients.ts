@@ -22,6 +22,7 @@ import { prepareClientSecret } from "@/lib/auth/oauth-tokens";
 import { isRegisterableRedirectUri } from "@/lib/auth/oauth-clients";
 import { isPublicScope, PUBLIC_SCOPES, type PublicScope } from "@/lib/auth/oauth-scope-map";
 import { listClientPeople, revokeClientPersonGrants, type ClientPerson } from "@/lib/auth/oauth-client-people";
+import { eligibleOAuthCoworkers } from "@/lib/auth/oauth-identity-binding";
 
 const ADMIN_PATH = "/admin/platform-development";
 
@@ -99,7 +100,18 @@ export type CreatedCredentialsClient = {
   clientId: string;
   clientSecret: string;
   scopes: PublicScope[];
+  assistant?: CredentialsAssistant | null;
 };
+
+export type CredentialsAssistant = { agentId: string; displayName: string };
+
+/** New credentials clients cannot inherit another client's delegation. */
+export async function listOAuthCredentialsAssistants(): Promise<ActionResult<CredentialsAssistant[]>> {
+  const actor = await requireOperator();
+  if (isDenied(actor)) return err(actor.denied);
+  const assistants = await eligibleOAuthCoworkers(actor.userId, null, null);
+  return ok(assistants.map(({ agentId, displayName }) => ({ agentId, displayName })));
+}
 
 /**
  * Create a `client_credentials` client — the headless replacement for a PAT.
@@ -126,6 +138,13 @@ export async function createOAuthCredentialsClient(input: {
     return err(`Grant at least one scope (${PUBLIC_SCOPES.join(", ")}).`);
   }
 
+  const selectedId = input.agentId?.trim() || null;
+  const assistant = selectedId
+    ? (await eligibleOAuthCoworkers(actor.userId, null, null, undefined, { agentId: selectedId }))
+      .find((candidate) => candidate.agentId === selectedId)
+    : null;
+  if (selectedId && !assistant) return err("This assistant is no longer available. Choose an eligible assistant.");
+
   const secret = prepareClientSecret();
   const clientId = `dpfoc_${crypto.randomUUID().replace(/-/g, "")}`;
 
@@ -141,13 +160,14 @@ export async function createOAuthCredentialsClient(input: {
       // The human whose authority the client acts under. Their platformRole
       // still caps every call, so this cannot escalate.
       ownerUserId: actor.userId,
-      agentId: input.agentId?.trim() || null,
+      agentId: assistant?.id ?? null,
       allowedScopes: scopes,
     },
   });
 
   revalidatePath(ADMIN_PATH);
-  return ok({ clientId, clientSecret: secret.plaintext, scopes });
+  return ok({ clientId, clientSecret: secret.plaintext, scopes,
+    assistant: assistant ? { agentId: assistant.agentId, displayName: assistant.displayName } : null });
 }
 
 /**

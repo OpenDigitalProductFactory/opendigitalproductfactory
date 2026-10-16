@@ -6,17 +6,27 @@ const db = vi.hoisted(() => ({
   prisma: {
     agentSurfaceReadiness: { upsert: vi.fn(), findMany: vi.fn() },
     agentToolchainObservation: { findMany: vi.fn() },
-    oAuthClient: { findMany: vi.fn(async () => []) },
+    oAuthClient: { findMany: vi.fn(async () => []), create: vi.fn() },
+    user: { findUnique: vi.fn() },
+    agent: { findMany: vi.fn() },
+    $transaction: vi.fn(),
+    $executeRaw: vi.fn(),
     scheduledAgentTask: { findUnique: vi.fn() },
     mcpApiToken: { findUnique: vi.fn(), findMany: vi.fn(async () => []) },
   },
 }));
 vi.mock("@dpf/db", () => db);
+vi.mock("@/lib/auth/oauth-tokens", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/auth/oauth-tokens")>(),
+  prepareClientSecret: () => ({ plaintext: "dpfocs_fixture", hash: "fixture-hash", enc: "encrypted-fixture" }),
+}));
 
 const served = vi.hoisted(() => ({ getPublishedToolchain: vi.fn() }));
 vi.mock("@/lib/agent-toolchain/served-toolchain", () => served);
 
 import { surfaceReadinessPack } from "./surface-readiness-pack";
+import { grantsForPublicScopes } from "@/lib/auth/oauth-scope-map";
+import { setGovernedToolAuditOverridesForTests, updateGovernedToolAudit, writeGovernedToolAudit } from "@/lib/governed-tool-audit";
 
 // BI-64795FD0: the updater's per-client CLI versions reach the store, and the
 // fleet read names clients whose capabilities are unverified.
@@ -24,6 +34,47 @@ import { surfaceReadinessPack } from "./surface-readiness-pack";
 const record = surfaceReadinessPack.handlers.record_surface_readiness!;
 const fleet = surfaceReadinessPack.handlers.get_fleet_readiness!;
 const now = new Date();
+
+it("declares source credential issuance with authority consequence, existing build grant and secret redaction", () => {
+  const definition = surfaceReadinessPack.definitions.find(d => d.name === "issue_source_credentials_client");
+  expect(definition).toMatchObject({ sideEffect: true, consequence: "authority", requiredCapability: "view_platform", secretResultKeys: ["credentialsClient"] });
+  expect(definition?.inputSchema).toMatchObject({ properties: {}, required: [], additionalProperties: false });
+  expect(surfaceReadinessPack.grants.issue_source_credentials_client).toEqual(["sandbox_execute"]);
+});
+
+it("serializes the actual source issuer and binds the authenticated actor rather than supplied overrides", async () => {
+  db.prisma.$transaction.mockImplementation(async run => run(db.prisma));
+  db.prisma.user.findUnique.mockResolvedValue({ isActive: true, isSuperuser: true, groups: [] });
+  db.prisma.agent.findMany.mockResolvedValue([{ id: "agent-row", agentId: "AGT-EXT-CODEX", displayName: "Codex" }]);
+  const result = await surfaceReadinessPack.handlers.issue_source_credentials_client!(
+    { ownerUserId: "foreign", agentId: "AGT-OTHER", scopes: ["dpf.admin"] }, "human",
+    { apiTokenId: "own-token", authSource: "oauth", tokenScope: "write", agentId: "AGT-EXT-CODEX",
+      tokenGrantScopes: grantsForPublicScopes(["dpf.read", "dpf.work", "dpf.build"]) });
+  expect(result.success).toBe(true);
+  expect(db.prisma.$transaction).toHaveBeenCalledTimes(1);
+  const lock = db.prisma.$executeRaw.mock.calls[0];
+  expect(lock[0].join("")).toContain("pg_advisory_xact_lock");
+  expect(lock[1]).toBe("source-credentials:human:AGT-EXT-CODEX");
+  expect(db.prisma.agent.findMany.mock.calls[0][0].where.agentId).toBe("AGT-EXT-CODEX");
+  expect(db.prisma.oAuthClient.create).toHaveBeenCalledWith({ data: expect.objectContaining({ ownerUserId: "human", agentId: "agent-row" }) });
+  expect(result.message).not.toContain("dpfocs_fixture");
+});
+
+it("redacts the actual source credential definition on initial and finalized audit writes", async () => {
+  const definition = surfaceReadinessPack.definitions.find(d => d.name === "issue_source_credentials_client")!;
+  const create = vi.fn(async (_row: Record<string, unknown>) => ({ id: "audit-row" }));
+  const update = vi.fn(async (_id: string, _row: Record<string, unknown>) => ({}));
+  const result = { success: true, message: "Issued fixture client.", data: { credentialsClient: { clientId: "dpfoc_fixture", clientSecret: "dpfocs_fixture" }, agentBound: true } };
+  setGovernedToolAuditOverridesForTests({ create, update });
+  try {
+    await writeGovernedToolAudit({ toolName: definition.name, tool: definition, rawParams: {}, result, userId: "human", source: "external-jsonrpc", durationMs: 1 });
+    await updateGovernedToolAudit("audit-row", result, 1, definition);
+    expect(JSON.stringify(create.mock.calls)).not.toContain("dpfocs_fixture");
+    expect(JSON.stringify(update.mock.calls)).not.toContain("dpfocs_fixture");
+    expect(create.mock.calls[0][0]).toMatchObject({ result: { data: { credentialsClient: "[REDACTED]", agentBound: true } } });
+    expect(result.data.credentialsClient.clientSecret).toBe("dpfocs_fixture");
+  } finally { setGovernedToolAuditOverridesForTests({}); }
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
