@@ -28,8 +28,10 @@
 // forces exit 0). Only Claude Code emits WorktreeCreate today; Codex/Grok get the
 // canonical base via scripts/new-dev-worktree.sh / a CLI wrapper (BI follow-up).
 
-import { readFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, mkdirSync, existsSync, realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { isAbsolute, join, relative } from "node:path";
+import { pathToFileURL } from "node:url";
 
 // ── pure planning (unit-tested) ──────────────────────────────────────────────
 
@@ -64,9 +66,10 @@ export function planWorktree({ mainRoot, worktreeName }) {
 
 // ── git helpers ──────────────────────────────────────────────────────────────
 
-function git(root, args, { allowFail = false } = {}) {
+function git(root, args, { allowFail = false, timeout } = {}) {
   try {
-    return execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim();
+    return execFileSync("git", ["-C", root, ...args], { encoding: "utf8", windowsHide: true,
+      ...(timeout ? { timeout } : {}) }).trim();
   } catch (err) {
     if (allowFail) return null;
     throw err;
@@ -116,12 +119,11 @@ function addWorktree(root, target, branch) {
  *    hook's stdout, so binding output goes to stderr only. A stray stdout write
  *    here does not make a noisy log, it corrupts the worktree path.
  *
- * 2. THE IMPORT MUST BE DYNAMIC AND GUARDED. The plugin ships without the
- *    repo's scripts/ tree, so a static import of ../../../scripts/lib would
- *    resolve at module load, throw ERR_MODULE_NOT_FOUND, and take worktree
- *    creation down with it — the same failure that broke the image build in
- *    BI-9B490215. Absent lib means binding is skipped and said out loud, not a
- *    dead hook.
+ * 2. THE IMPORT COMES FROM THE VERIFIED SOURCE CHECKOUT, never the surrounding
+ *    package layout. A copied plugin has no ../../../scripts. The checkout we
+ *    just created carries the canonical binder at its observed source version;
+ *    the read-only main checkout may be older. Foreign or unsupported source
+ *    cannot become a claim. Keep this dynamic so absent source is fail-soft.
  *
  * Binding NEVER blocks worktree creation. A tree that could not be bound is
  * still a usable tree; it is just one the claim guard will flag.
@@ -129,14 +131,18 @@ function addWorktree(root, target, branch) {
 async function bindAtBirth({ mainRoot, worktreePath, branch }) {
   let bind;
   try {
-    ({ bindWorktreeToWorkroom: bind } = await import(`${new URL("../../../scripts/lib/workroom-bind.mjs", import.meta.url)}`));
-  } catch {
-    process.stderr.write("[worktree-create] workroom binding unavailable (scripts/lib not present in this install) — claim a Workroom manually with adopt_worktree.\n");
+    const source = verifiedBindingSource({ mainRoot, worktreePath, branch });
+    const module = await import(pathToFileURL(source).href);
+    if (typeof module.bindWorktreeToWorkroom !== "function" || typeof module.resolveWorktreeSourceIdentity !== "function") {
+      throw new Error("source binder lacks the source identity contract");
+    }
+    bind = module.bindWorktreeToWorkroom;
+  } catch (error) {
+    process.stderr.write(`[worktree-create] workroom binding unavailable (${error?.message ?? "source helper unavailable"}) — claim a Workroom manually with adopt_worktree.\n`);
     return;
   }
   try {
-    const gitDir = git(mainRoot, ["-C", worktreePath, "rev-parse", "--path-format=absolute", "--git-dir"], { allowFail: true })
-      ?? git(worktreePath, ["rev-parse", "--path-format=absolute", "--git-dir"], { allowFail: true });
+    const gitDir = git(worktreePath, ["rev-parse", "--path-format=absolute", "--git-dir"], { timeout: 3000 });
     const result = await bind({
       branch,
       worktreePath,
@@ -151,6 +157,30 @@ async function bindAtBirth({ mainRoot, worktreePath, branch }) {
   } catch (err) {
     process.stderr.write(`[worktree-create] workroom binding failed: ${err?.message ?? err}\n`);
   }
+}
+
+/** Resolve only the checkout whose branch and shared Git repository we created. */
+export function verifiedBindingSource({ mainRoot, worktreePath, branch }) {
+  const real = path => realpathSync.native(path);
+  const same = (left, right) => process.platform === "win32"
+    ? real(left).toLowerCase() === real(right).toLowerCase() : real(left) === real(right);
+  const read = (root, args) => git(root, args, { timeout: 3000 });
+  const root = real(worktreePath);
+  if (!same(root, read(root, ["rev-parse", "--show-toplevel"]))
+    || read(root, ["symbolic-ref", "--quiet", "--short", "HEAD"]) !== branch
+    || !same(read(root, ["rev-parse", "--path-format=absolute", "--git-common-dir"]),
+      read(mainRoot, ["rev-parse", "--path-format=absolute", "--git-common-dir"]))) {
+    throw new Error("source checkout, branch or shared repository conflicts with worktree creation");
+  }
+  if (!existsSync(join(root, "AGENTS.md")) || !existsSync(join(root, "packages/dpf-skill-pack/toolchain-version.json"))) {
+    throw new Error("created checkout is not a DPF source checkout");
+  }
+  const source = real(join(root, "scripts/lib/workroom-bind.mjs"));
+  const inside = relative(root, source);
+  if (inside === ".." || inside.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) || isAbsolute(inside)) {
+    throw new Error("source binder escapes the verified checkout");
+  }
+  return source;
 }
 
 // ── runtime entry ────────────────────────────────────────────────────────────
