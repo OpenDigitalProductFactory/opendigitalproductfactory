@@ -1,11 +1,11 @@
 ---
 status: proposed
-backlog: BI-B22C8E02
+backlog: BI-5366EF78
 ---
 
 # Same-mandate Workroom executor handoffs
 
-This is a successor delivery for the October 15 owner observation on BI-B22C8E02.
+BI-5366EF78 is the successor delivery for the October 15 owner observation on BI-B22C8E02.
 It does not amend the frozen evidence or acceptance of PR #6202. Funding and
 purpose are shared DPF platform reliability under the owner's explicit direction
 to execute the BI. Human ownership remains with the person; executor acceptance
@@ -139,7 +139,7 @@ contracts remain authoritative. This changes no industry value-stream ordering.
 
 ## Delivery and rollback
 
-One atomic successor delivery under BI-B22C8E02: classification, request/receiver
+One atomic successor delivery under BI-5366EF78: classification, request/receiver
 workflow, transactional boundary checks, readback and regression evidence must
 ship together. The plan is [bounded handoffs](../plans/2026-10-15-bounded-workroom-handoffs.md).
 Independent review must judge this successor scope, not reuse PR #6202's approval.

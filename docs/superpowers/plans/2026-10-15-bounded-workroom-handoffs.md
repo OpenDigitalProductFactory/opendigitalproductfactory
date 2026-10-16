@@ -1,6 +1,6 @@
 # Bounded Workroom handoffs implementation plan
 
-Backlog: BI-B22C8E02. Successor scope only; PR #6202 remains frozen.
+Backlog: BI-5366EF78, successor to BI-B22C8E02. PR #6202 remains frozen.
 Design: [same-mandate handoffs](../specs/2026-10-15-bounded-workroom-handoffs-design.md).
 
 ## Sequence and verification
@@ -29,7 +29,7 @@ Design: [same-mandate handoffs](../specs/2026-10-15-bounded-workroom-handoffs-de
 
 ## Backlog coverage
 
-Atomic deliverable `bounded-executor-handoff` maps to BI-B22C8E02, with no
+Atomic deliverable `bounded-executor-handoff` maps to BI-5366EF78, with no
 dependencies. Requirements AC-1, AC-2, AC-3, AC-4, AC-5; contract
 `same-mandate-boundary`; flow `request-acknowledge-complete`; verification
 `handoff-concurrency-regressions`. The phases cannot ship independently: removing
