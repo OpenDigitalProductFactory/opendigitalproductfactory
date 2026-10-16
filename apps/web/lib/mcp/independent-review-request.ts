@@ -57,13 +57,20 @@ const deny = (message: string): RequestAuthority => ({ bounded: true, refusal: {
  * when a portal thread happens to be present in the execution context. */
 export async function authorizeCoworkerRequest(
   params: Record<string, unknown>, userId: string, context?: ToolExecutionContext,
-  options?: { sourceOnly: boolean },
+  options?: { sourceOnly?: boolean; forceBounded?: boolean },
 ): Promise<RequestAuthority> {
+  const recoveryTarget = params.reviewRecovery;
   // BI-817556D8: a personal access token has no acting coworker, so it can never
   // pass this guard. Say which connection can, instead of only what is missing.
   if (!context?.agentId) {
     return deny("A current acting coworker is required. Coworker and independent-review requests need an OAuth "
       + "connection bound to a coworker admitted to the item's Workroom; a personal access token cannot make them.");
+  }
+  if (params.reviewRecovery !== undefined) {
+    const { parseReviewTaskRecoveryTarget } = await import("@/lib/mcp-task-submit-params");
+    if (!parseReviewTaskRecoveryTarget(params.reviewRecovery)) return deny("The original review recovery target is malformed.");
+    const { reviewRecovery: _transport, ...request } = params;
+    params = request;
   }
   // Read live grants: a cached registry fallback cannot keep revoked delegation alive.
   const agent = await prisma.agent.findUnique({ where: { agentId: context.agentId },
@@ -71,7 +78,7 @@ export async function authorizeCoworkerRequest(
   if (!agent || agent.status !== "active" || agent.archived) return deny("The acting coworker is not active.");
   const grants = expandGrants(agent.toolGrants.map((grant) => grant.grantKey));
   const scopes = expandGrants(context.tokenGrantScopes ?? []);
-  if (!options?.sourceOnly && grants.includes("thread_write") && (!context.apiTokenId || scopes.includes("thread_write"))) {
+  if (!options?.sourceOnly && !options?.forceBounded && recoveryTarget === undefined && params.initiativeReviewBinding === undefined && grants.includes("thread_write") && (!context.apiTokenId || scopes.includes("thread_write"))) {
     return { bounded: false };
   }
   if (context.authSource !== "oauth" || !context.apiTokenId
@@ -158,6 +165,17 @@ export async function authorizeCoworkerRequest(
   if (!issued.some((issuedPacket) => canonicalJson(issuedPacket) === canonicalJson(params))) {
     if (!options?.sourceOnly && await hasCompletedReview(params, userId, context)) return { bounded: true };
     return deny("The review request has changed or is no longer eligible. This refusal does not deliver a replacement packet. Read get_backlog_item with itemId and recoveryGate for the current exact request or explicit recovery; never reconstruct it.");
+  }
+  // The native door must retain an issued original-task locator. Dropping it
+  // cannot turn a recovery request into a new connection's duplicate task.
+  if (!options?.sourceOnly && !options?.forceBounded) {
+    const { issueOriginalReviewRecoveryTarget } = await import("@/lib/mcp-task-review-recovery");
+    const key = await resolveMcpTaskAuthorityKey({ tokenId: context.apiTokenId, userId, source: "oauth" });
+    if (!key) return deny("The current connection's review task authority is unavailable.");
+    const recovery = await issueOriginalReviewRecoveryTarget({ packet: params, userId, actingAgentId: context.agentId, taskAuthorityKey: key });
+    if (recovery.kind === "refused" || (recovery.kind === "target"
+      ? canonicalJson(recovery.target) !== canonicalJson(recoveryTarget)
+      : recoveryTarget !== undefined)) return deny("Refresh the exact original-task recovery packet with get_backlog_item and recoveryGate; the prior review must not be duplicated.");
   }
   // Read protected bytes only after consent, grants, room access and exact
   // issuance are established. Existing requests join their recorded work;

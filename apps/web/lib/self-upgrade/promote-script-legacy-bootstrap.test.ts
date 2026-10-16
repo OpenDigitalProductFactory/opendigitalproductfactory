@@ -75,6 +75,8 @@ case "$*" in
     for destination in "$@"; do :; done
     cp -R "$DPF_TEST_RELEASE_ASSETS"/. "$destination"
     ;;
+  *"recover-workroom-activity-migration.mjs --verify-rolled-back"*) printf "verified" ;;
+  *"recover-workroom-activity-migration.mjs"*) printf "not-needed" ;;
   *"recover-human-principal-backfill-migration.mjs --verify-rolled-back"*) printf "verified" ;;
   *"recover-human-principal-backfill-migration.mjs"*) printf "not-needed" ;;
   *"recover-inventory-snapshot-migration.mjs --verify-rolled-back"*) printf "verified" ;;

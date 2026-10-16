@@ -286,6 +286,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // in CI, and drifted on every host until BI-76334D21 caught them.
         "scripts/installer/install-state-transaction.test.mjs",
         "scripts/installer/offline-recovery-authority.test.mjs",
+        "scripts/installer/offline-recovery-enrollment.test.mjs",
         "scripts/installer/offline-recovery-kit.test.mjs",
         "scripts/installer/offline-recovery-kit-prepare.test.mjs",
         "scripts/installer/runtime-apply-lock.test.mjs",
@@ -371,6 +372,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/ci-coverage-config.test.mjs",
         "scripts/ci-evidence-workflow.test.mjs",
         "scripts/ci-build-artifact-workflow.test.mjs",
+        "scripts/ci-workroom-ingestion-scale.test.mjs",
         "scripts/ci-policy-guards.test.mjs",
         "scripts/daily-checkpoint-tag.test.mjs",
       ),

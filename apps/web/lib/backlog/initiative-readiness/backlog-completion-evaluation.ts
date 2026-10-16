@@ -45,6 +45,8 @@ import {
 import { type InheritanceDb, loadInheritedInitiativeScope } from "./parent-scope-inheritance";
 import type { InitiativeReadinessDecision, InitiativeTransitionObject } from "./types";
 import { resolveAggregateCompletion, type AggregateCompletionDb } from "./aggregate-completion";
+import type { CurrentDesignEvidence } from "./judged-design-artifact";
+import type { prepareCurrentDesignObservation } from "./canonical-artifact-discovery";
 
 /** The shape an operational close is gated as (BI-B22E50BC). */
 const OPERATIONAL_CLOSE_WORK_SHAPE = "delivery-small@1.0.0";
@@ -106,6 +108,7 @@ export type ResolveHasDesignSpec = (args: { itemId: string }) => Promise<boolean
 const defaultResolveHasDesignSpec: ResolveHasDesignSpec = async () => true;
 
 export type BacklogCompletionDependencies = {
+  prepareCurrentDesign?: typeof prepareCurrentDesignObservation;
   resolveCompletionEvidence?: typeof resolveCompletionEvidence;
   reconcileObjectives?: typeof reconcileInitiativeObjectives;
   projectReadiness?: typeof projectBacklogItemReadiness;
@@ -229,6 +232,7 @@ export function isDirectMergePlatformWork(item: {
  * transition's locked transaction client, or the plain client for a read.
  */
 export async function evaluateBacklogItemCompletion(args: {
+  currentDesign?: CurrentDesignEvidence;
   db: BacklogCompletionDb;
   item: BacklogCompletionItem;
   /** The caller's completion manifest. A read passes `undefined`: it has none. */
@@ -376,6 +380,7 @@ export async function evaluateBacklogItemCompletion(args: {
     ? completion.verdict.normalizedManifest?.evidenceActivityIds ?? []
     : [];
   const projectionInput: Parameters<typeof projectBacklogItemReadiness>[0] = {
+    currentDesign: args.currentDesign,
     item: {
       ...item,
       activeBuildKind: item.activeBuild?.kind ?? null,
@@ -481,6 +486,7 @@ export type BacklogCompletionReadDb = BacklogCompletionDb & {
  * exactly as the transition would.
  */
 export async function readBacklogItemCompletion(args: {
+  currentDesign?: CurrentDesignEvidence;
   itemRowId: string;
   status: string;
   evaluatedAt: string;
@@ -493,6 +499,7 @@ export async function readBacklogItemCompletion(args: {
     const item = await db.backlogItem.findUnique({ where: { id: args.itemRowId }, select: BACKLOG_COMPLETION_ITEM_SELECT });
     if (!item || !GATE_EVALUATED_READ_STATUSES.has(item.status)) return null;
     return await evaluateBacklogItemCompletion({
+      currentDesign: args.currentDesign,
       db,
       item,
       rawManifest: undefined,
