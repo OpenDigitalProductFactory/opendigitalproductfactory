@@ -448,9 +448,13 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
   // — any other status, or an evaluation that could not run — keeps the
   // existing projection.
   const { readBacklogItemCompletion } = await import("@/lib/backlog/initiative-readiness/backlog-completion-evaluation");
-  const gateCompletion = await readBacklogItemCompletion({ itemRowId: item.id, status: item.status, evaluatedAt });
+  const { prepareCurrentDesignObservation } = await import("@/lib/backlog/initiative-readiness/canonical-artifact-discovery");
+  const currentDesign = await prepareCurrentDesignObservation({ itemId: item.itemId });
+  const gateCompletion = await readBacklogItemCompletion({ itemRowId: item.id, status: item.status, evaluatedAt,
+    currentDesign: currentDesign.evidence });
   // BI-DEDAC950: the governing principle per unmet code, beside the decisions.
   const projectedReadiness = withReadinessGoverningPrinciples(projectBacklogItemReadinessSummary({
+    currentDesign: currentDesign.evidence,
     completionDecision: gateCompletion?.decision ?? null,
     inheritedScope,
     item: {
@@ -484,7 +488,7 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
   }
   const completion = requestedGate !== undefined
     ? await recoveryReadDecision(requestedGate, readiness.decisions ?? {}) : readiness.decisions?.completion;
-  const needsTerminalRecovery = completion && completion.verdict !== "allowed"
+  const needsTerminalRecovery = currentDesign.evidence.state !== "unavailable" && completion && completion.verdict !== "allowed"
     && (requestedGate !== undefined || [...completion.blockers, ...completion.unmet]
       .some((entry) => ["POST_IMPLEMENTATION_REVIEW_REQUIRED", "PLAN_REVIEW_REQUIRED",
         "ACCEPTANCE_EVIDENCE_REQUIRED", "OBJECTIVE_RECONCILIATION_REQUIRED"].includes(entry.code)));
@@ -508,6 +512,20 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
   if (requestedGate !== undefined) {
     if (!await canReadRecoveryPacket({ gate: requestedGate, recovery, currentAgentId, currentUserId })) {
       return { success: false, error: "workroom_data_access_required", message: "The current connection cannot read this Workroom's review packet. Follow the existing room admission remedy; item visibility grants no additional access." };
+    }
+    if (recovery && currentUserId && currentAgentId && context?.authSource === "oauth") {
+      const { issueOriginalReviewRecoveryTarget } = await import("@/lib/mcp-task-review-recovery");
+      const key = taskAuthority?.taskAuthorityKey ?? (context.apiTokenId ? await (await import("@/lib/auth/oauth-task-authority"))
+        .resolveMcpTaskAuthorityKey({ tokenId: context.apiTokenId, userId: currentUserId, source: "oauth" }) : null);
+      if (!key) return { success: false, error: "review_task_authority_unavailable", message: "The current connection's review task authority could not be verified. No request was delivered." };
+      for (const route of recovery.reviewerRoutes.filter(route => route.gate === requestedGate && route.independent)) {
+        const issued = await issueOriginalReviewRecoveryTarget({ packet: route.requestCoworker,
+          userId: currentUserId, actingAgentId: currentAgentId, taskAuthorityKey: key });
+        if (issued.kind === "refused") return { success: false, error: "original_review_recovery_required",
+          message: "The existing review needs reconciliation before any new dispatch. No replacement request was delivered.",
+          data: { reason: issued.reason, itemId: item.itemId, recoveryGate: requestedGate } };
+        if (issued.kind === "target") route.requestCoworker = { ...route.requestCoworker, ...{ reviewRecovery: issued.target } };
+      }
     }
     return boundedBacklogRecoveryRead({ itemId: item.itemId, status: item.status, workShape: boundWorkShape, gate: requestedGate, recovery });
   }

@@ -20,6 +20,7 @@ import {
   type TerminalTransitionDb,
 } from "./terminal-transition-repository";
 import { refreshMergeSignalTrunk } from "./merge-delivery-signal";
+import { prepareCurrentDesignObservation } from "./canonical-artifact-discovery";
 
 type BacklogTerminalClient = BacklogCompletionDb & {
   $queryRawUnsafe(query: string, ...values: unknown[]): Promise<unknown>;
@@ -76,6 +77,9 @@ export async function completeBacklogItemTransition(args: {
   // BI-DC2758DE: refresh the trunk the merge signal reads before the
   // transaction opens; the signal itself never touches the network.
   if (!args.dependencies?.resolveMergeDelivery) await refreshMergeSignalTrunk();
+  const currentDesign = await (args.dependencies?.prepareCurrentDesign ?? prepareCurrentDesignObservation)({
+    itemId: args.itemId, db: db as never,
+  });
   return executeGovernedTerminalTransition({
     db,
     actor: args.actor,
@@ -100,6 +104,7 @@ export async function completeBacklogItemTransition(args: {
         throw new Error(`Backlog item ${lockedItem.itemId} expected status=${args.expectedStatus}, got ${lockedItem.status}.`);
       }
       let evaluated = await evaluateBacklogItemCompletion({
+        currentDesign: await currentDesign.admissionGuard(tx as never),
         db: tx,
         item: lockedItem,
         rawManifest: args.completionEvidence,
@@ -117,6 +122,7 @@ export async function completeBacklogItemTransition(args: {
           effectiveShape: evaluated.decision.shapeDecision.effective,
           actor: args.actor, authority: args.authority });
         evaluated = await evaluateBacklogItemCompletion({ db: tx, item: lockedItem,
+          currentDesign: await currentDesign.admissionGuard(tx as never),
           rawManifest: args.completionEvidence,
           transitionObject: { kind: "backlog-item", id: lockedItem.id, expectedVersion: args.expectedStatus, targetState: "done" },
           evaluatedAt, ...(args.dependencies ? { dependencies: args.dependencies } : {}) });

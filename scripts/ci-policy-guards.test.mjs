@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { describe, it } from "node:test";
 
 import {
@@ -110,15 +112,20 @@ function workflowJobBlock(workflow, jobId) {
 }
 
 describe("CI policy guard registry", () => {
-  it("launches pnpm through cmd on Windows without enabling shell mode globally", () => {
+  it("launches pnpm through Node on Windows with literal arguments", t => {
+    const root = mkdtempSync(join(tmpdir(), "dpf-policy-pnpm-"));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    writeFileSync(join(root, "pnpm.cmd"), "");
+    const script = join(root, "pnpm.cjs");
+    writeFileSync(script, "");
     assert.deepEqual(
       resolvePolicyGuardInvocation("pnpm", ["run", "check:prose-lint"], {
         platform: "win32",
-        env: { ComSpec: "C:\\Windows\\System32\\cmd.exe" },
+        env: { PATH: root },
       }),
       {
-        command: "C:\\Windows\\System32\\cmd.exe",
-        args: ["/d", "/s", "/c", "pnpm run check:prose-lint"],
+        command: process.execPath,
+        args: [script, "run", "check:prose-lint"],
       },
     );
     assert.deepEqual(
