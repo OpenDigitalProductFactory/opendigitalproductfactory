@@ -2,13 +2,13 @@ const recoveryTarget = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/mcp-task-review-recovery", () => ({ issueOriginalReviewRecoveryTarget: recoveryTarget }));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ agent: vi.fn(), token: vi.fn(), room: vi.fn(),
+const mocks = vi.hoisted(() => ({ agent: vi.fn(), token: vi.fn(), room: vi.fn(), rooms: vi.fn(), snapshots: vi.fn(),
   human: vi.fn(), currentConsent: vi.fn(), access: vi.fn(), item: vi.fn(), recovery: vi.fn(),
   task: vi.fn(), authorityKey: vi.fn(), outcome: vi.fn(), itemRow: vi.fn(), alias: vi.fn(), buildStudioRoutes: vi.fn(),
   preflight: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: {
   agent: { findUnique: mocks.agent }, mcpApiToken: { findUnique: mocks.token },
-  workroom: { findFirst: mocks.room },
+  workroom: { findFirst: mocks.room, findMany: mocks.rooms }, contributorInventorySnapshot: { findMany: mocks.snapshots },
   taskRun: { findFirst: mocks.task },
   backlogItem: { findUnique: mocks.itemRow },
   principalAlias: { findFirst: mocks.alias },
@@ -36,6 +36,7 @@ import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readine
 import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness/types";
 import { designPhaseReviewDecision } from "@/lib/backlog/initiative-readiness/design-phase-recovery";
 import { boundedBacklogRecoveryRead } from "./backlog-recovery-read";
+import { createPullRequestObservation } from "@/lib/contributor-change-lanes/pull-request-observation";
 
 const binding: InitiativeReviewBinding = { writerToolName: "record_initiative_post_implementation_review", itemId: "BI-TEST", gate: "post-implementation-review",
   expectedCurrentBaselineId: null,
@@ -68,6 +69,29 @@ beforeEach(() => {
 });
 
 describe("consent-bound independent review request", () => {
+  it.each([true, false])("requires verified source proof for the status-only archived author (valid=%s)", async validProof => {
+    const author = { id: "room-row", capsuleId: "WC-TEST", backlogItemId: "BI-TEST", executorKind: "codex-desktop",
+      requestedByPrincipalId: "prn-human", featureBuild: null, repositoryFullName: "org/repo",
+      headBranch: "fix/test", headSha: "a".repeat(40), baseSha: "b".repeat(40), createdByPrincipalId: "author",
+      status: "archived", archivedAt: null, createdAt: new Date("2026-10-15T06:00:00Z"), pullRequestNumber: 6265 };
+    mocks.room.mockImplementation(async ({ where }) => where.archivedAt === null && where.status?.not === "archived" ? null : author);
+    mocks.rooms.mockImplementation(async ({ where }) => where.archivedAt === null ? [] : [author]);
+    mocks.snapshots.mockResolvedValue([{ payload: createPullRequestObservation({ repositoryFullName: "org/repo",
+      number: 6265, url: "https://github.com/org/repo/pull/6265", title: "repair", headBranch: author.headBranch,
+      headSha: author.headSha, state: "merged", isDraft: false, mergeStateStatus: null, mergeCommitSha: "c".repeat(40),
+      mergedAt: "2026-10-16T05:00:00Z", providerUpdatedAt: "2026-10-16T05:00:00Z", observedAt: "2026-10-16T05:01:00Z" }) }]);
+    const bodyPacket = { ...packet, requiredToolNames: ["read_source_at_version", "record_initiative_evidence"],
+      initiativeReviewBinding: { ...binding, gate: "objective-mapping", writerToolName: "record_initiative_evidence",
+        expectedCurrentBaselineId: "baseline-body", eligibleEvidenceActivityIds: ["E-1"],
+        artifactRef: { kind: "document-version", repositoryFullName: "org/repo", versionId: "version-body", valueDigest: "sha256:body" } } };
+    mocks.recovery.mockResolvedValue({ reviewerRoutes: [{ independent: true, requestCoworker: bodyPacket }] });
+    if (!validProof) mocks.snapshots.mockResolvedValue([]);
+    const result = await authorizeCoworkerRequest(bodyPacket, "human", context);
+    if (validProof) expect(result).toEqual({ bounded: true });
+    else expect(result.refusal).toBeDefined();
+    mocks.access.mockResolvedValue({ decision: { level: "none" } });
+    expect((await authorizeCoworkerRequest(bodyPacket, "human", context)).refusal).toBeDefined();
+  });
   it("accepts the completion issuer's exact covered-plan packet without admitting xlarge implementation", async () => {
     const implementation: InitiativeReadinessDecision = {
       decisionId: "IRD-DECOMPOSED-PARENT", policyVersion: "initiative-readiness.v3", subject: { kind: "backlog-item", id: "BI-TEST" },
