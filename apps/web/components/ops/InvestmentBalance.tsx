@@ -15,8 +15,8 @@ export function InvestmentBalance({ views, canManage, formatLocale, nextHref, fi
   const t = useT("portfolio");
   return <section id="investment-balance" className="mt-6 space-y-4" aria-labelledby="investment-balance-heading">
     <h3 id="investment-balance-heading" className="text-dpf-title font-dpf-semibold">{t("investment.heading")}</h3>
-    <p className="text-dpf-body text-dpf-muted">{t("investment.intro")}</p>
-    {views.length === 0 ? <p className="text-dpf-body text-dpf-muted">{t("investment.empty")}</p> : null}
+    <p className="text-dpf-body text-dpf-text">{t("investment.intro")}</p>
+    {views.length === 0 ? <p className="text-dpf-body text-dpf-text">{t("investment.empty")}</p> : null}
     {views.map((view) => <ScopeBalance key={`${view.scope.organizationId}:${view.scope.purpose}:${view.report.ok ? view.report.data.revision?.revision ?? "default" : "unavailable"}`} view={view} canManage={canManage} formatLocale={formatLocale} />)}
     {nextHref || firstHref ? <nav aria-label={t("investment.pagination")} className="flex flex-wrap gap-4 text-dpf-body text-dpf-accent">
       {firstHref ? <Link href={firstHref} className="py-3 underline">{t("investment.first")}</Link> : null}
@@ -59,17 +59,17 @@ function ScopeBalance({ view, canManage, formatLocale }: { view: OwnerInvestment
   }
   return <div className="border-t border-dpf-border pt-4">
     <h4 className="text-dpf-body-lg font-dpf-semibold">{view.organizationName} · {purpose}</h4>
-    <p className="text-dpf-body text-dpf-muted">{t(report.source === "default" ? report.ownerKind === "founder" ? "investment.founderDefault" : "investment.organizationDefault" : "investment.ownerSet")}</p>
+    <p className="text-dpf-body text-dpf-text">{t(report.source === "default" ? report.ownerKind === "founder" ? "investment.founderDefault" : "investment.organizationDefault" : "investment.ownerSet")}</p>
     {!report.policyActive ? <p role="status" className="text-dpf-body text-[var(--dpf-warning)]">{t("investment.inactive")}</p> : null}
     <dl className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 text-dpf-body">
-      <div><dt className="text-dpf-muted">{t("investment.target")}</dt><dd className="font-dpf-semibold">{t("investment.targetMix", { repair: report.policy.refactorPercent, newWork: 100 - report.policy.refactorPercent })}</dd></div>
-      <div><dt className="text-dpf-muted">{t("investment.observed", { days: report.policy.windowDays })}</dt><dd>{measured.actualRefactorPercent === null ? t("investment.notMeasured") : t("investment.measured", { repair: Math.round(measured.actualRefactorPercent), tokens: number.format(measured.knownTokens) })}</dd></div>
+      <div><dt className="text-dpf-text">{t("investment.target")}</dt><dd className="font-dpf-semibold">{t("investment.targetMix", { repair: report.policy.refactorPercent, newWork: 100 - report.policy.refactorPercent })}</dd></div>
+      <div><dt className="text-dpf-text">{t("investment.observed", { days: report.policy.windowDays })}</dt><dd>{measured.actualRefactorPercent === null ? t("investment.notMeasured") : t("investment.measured", { repair: Math.round(measured.actualRefactorPercent), tokens: number.format(measured.knownTokens) })}</dd></div>
     </dl>
-    <p className="mt-2 text-dpf-caption text-dpf-muted">{t("investment.coverage", { known: number.format(measured.knownAttempts), classified: measured.classificationPercent === null ? t("investment.classificationUnknown") : t("investment.classified", { percent: Math.round(measured.classificationPercent) }), unknown: number.format(measured.unknownAttempts) })}</p>
-    <p className="mt-2 text-dpf-caption text-dpf-muted">{t("investment.gapOrganization", { count: number.format(report.attributionGap.unassignedAttempts) })} {t("investment.gapExplanation")}</p>
-    <p className="mt-2 text-dpf-body text-dpf-muted">{t(!report.policyActive || !report.policy.steeringEnabled ? "investment.preferenceOff" : measured.suppression ? "investment.preferenceWaiting" : measured.preferred ? measured.preferred === "refactor" ? "investment.preferRepair" : "investment.preferNew" : "investment.withinTolerance")}</p>
+    <p className="mt-2 text-dpf-caption text-dpf-text">{t("investment.coverage", { known: number.format(measured.knownAttempts), classified: measured.classificationPercent === null ? t("investment.classificationUnknown") : t("investment.classified", { percent: Math.round(measured.classificationPercent) }), unknown: number.format(measured.unknownAttempts) })}</p>
+    <p className="mt-2 text-dpf-caption text-dpf-text">{t("investment.gapOrganization", { count: number.format(report.attributionGap.unassignedAttempts) })} {t("investment.gapExplanation")}</p>
+    <p className="mt-2 text-dpf-body text-dpf-text">{t(!report.policyActive || !report.policy.steeringEnabled ? "investment.preferenceOff" : measured.suppression ? "investment.preferenceWaiting" : measured.preferred ? measured.preferred === "refactor" ? "investment.preferRepair" : "investment.preferNew" : "investment.withinTolerance")}</p>
     <details className="mt-2"><summary className="cursor-pointer py-3 text-dpf-body text-dpf-accent">{t("investment.details")}</summary>
-      <p className="break-words text-dpf-caption text-dpf-muted">{report.revision ? t("investment.revision", { revision: report.revision.revision, effective: report.revision.effectiveAt, expiry: report.revision.expiresAt ? t("investment.expires", { when: report.revision.expiresAt }) : t("investment.noExpiry"), reason: report.revision.reason }) : t("investment.defaultDetails")}</p>
+      <p className="break-words text-dpf-caption text-dpf-text">{report.revision ? t("investment.revision", { revision: report.revision.revision, effective: report.revision.effectiveAt, expiry: report.revision.expiresAt ? t("investment.expires", { when: report.revision.expiresAt }) : t("investment.noExpiry"), reason: report.revision.reason }) : t("investment.defaultDetails")}</p>
     </details>
     {canManage ? <>
       <details className="mt-2"><summary className="cursor-pointer py-3 text-dpf-body text-dpf-accent">{t("investment.adjust")}</summary>
@@ -82,7 +82,7 @@ function ScopeBalance({ view, canManage, formatLocale }: { view: OwnerInvestment
         </form>
       </details>
       <details className="mt-2"><summary className="cursor-pointer py-3 text-dpf-body text-dpf-accent">{t("investment.installationFunding")}</summary>
-        <p className="text-dpf-body text-dpf-muted">{t("investment.installationExplanation")}</p>
+        <p className="text-dpf-body text-dpf-text">{t("investment.installationExplanation")}</p>
         {boundHere ? <StatusBadge intent="neutral" label={t("investment.bound")} size="md" /> : binding && !report.canSucceedBinding ? <p className="text-dpf-body">{t("investment.anotherOwner")}</p> : <form className="mt-3 max-w-lg space-y-3" onSubmit={(event) => { event.preventDefault(); run(() => bindInstallationInvestmentAction({ scope: view.scope, expectedBoundAt: binding?.boundAt ?? null, reason: bindingReason })); }}>
           {report.canSucceedBinding ? <p className="text-dpf-body">{t("investment.successor")}</p> : null}
           <TextField name={`binding-reason-${view.scope.organizationId}-${view.scope.purpose}`} label={t("investment.fundingReason")} value={bindingReason} onValueChange={setBindingReason} required disabled={pending} />
@@ -90,7 +90,7 @@ function ScopeBalance({ view, canManage, formatLocale }: { view: OwnerInvestment
         </form>}
       </details>
     </> : null}
-    {pending ? <p role="status" className="text-dpf-body text-dpf-muted">{t("investment.savingStatus")}</p> : null}
+    {pending ? <p role="status" className="text-dpf-body text-dpf-text">{t("investment.savingStatus")}</p> : null}
     {message ? <p role="status" className="mt-2 text-dpf-body">{message}</p> : null}
     {error ? <p role="alert" className="mt-2 text-dpf-body text-[var(--dpf-error)]">{error}</p> : null}
   </div>;
