@@ -33,6 +33,7 @@ import { claimBacklogItemWorkspace } from "./work-capsule-store";
 import { declareWorkCapsuleIntent } from "./work-capsule-intent-store";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 import { projectWorkroomIdentityRepair } from "./workroom-recovery-projection";
+import { isFullSourceCommitSha } from "./work-capsule-branch-identity";
 import {
   describeRoomOwnership,
   establishRoomOwnership,
@@ -104,6 +105,9 @@ type ExactReadback = {
   repositoryFullName: string;
   headBranch: string;
   worktreePath: string;
+  baseSha: string | null;
+  headSha: string | null;
+  sourceIdentityComplete: boolean;
   executorKind: string | null;
   executorRef: string | null;
   leaseHolderPrincipalId: string;
@@ -320,6 +324,11 @@ function readbackMismatches(args: {
   differs("The executor ref", row.executorRef, args.input.executorRef ?? null);
   if (args.input.baseSha) differs("The recorded base commit", row.baseSha, args.input.baseSha);
   if (args.input.headSha) differs("The recorded head commit", row.headSha, args.input.headSha);
+  if (args.workIntent === "implementation") {
+    for (const field of ["baseSha", "headSha"] as const) {
+      if (!isFullSourceCommitSha(row[field])) reasons.push(`The recorded ${field} must be a full 40-character commit SHA; capture the actual local Git identity and retry claim_backlog_item_for_work with baseSha and headSha`);
+    }
+  }
   if (args.coordinatorCount !== undefined && args.coordinatorCount !== 1) {
     reasons.push(`The room has ${args.coordinatorCount} owners (Process Overseers); it needs exactly one`);
   }
@@ -391,6 +400,9 @@ function exactReadback(args: {
     repositoryFullName: String(row.repositoryFullName),
     headBranch: String(row.headBranch),
     worktreePath: String(row.worktreePath),
+    baseSha: typeof row.baseSha === "string" ? row.baseSha : null,
+    headSha: typeof row.headSha === "string" ? row.headSha : null,
+    sourceIdentityComplete: isFullSourceCommitSha(row.baseSha) && isFullSourceCommitSha(row.headSha),
     executorKind: row.executorKind == null ? null : String(row.executorKind),
     executorRef: row.executorRef == null ? null : String(row.executorRef),
     leaseHolderPrincipalId: String(row.leaseHolderPrincipalId),
