@@ -84,6 +84,11 @@ owner, supporting evidence, and affected work. Required evidence is not proof
 that the evidence has been recorded. Where a receipt cannot be linked to an
 individual step, the view reports that gap and keeps it in the room evidence.
 
+The recent activity feed shows a bounded window. A step's latest matching evidence
+remains available when newer activity pushes it outside that window, provided it
+still matches the room's current source and process definition. An observed receipt
+does not by itself establish that the step passed or completed.
+
 Stage-scoped development evidence recorded for the room's current source and
 process version can appear under that step's required evidence. A link means the
 record was observed; it does not grant approval or verify completion. After the
