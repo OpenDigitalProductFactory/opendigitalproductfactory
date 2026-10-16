@@ -26,6 +26,7 @@ import { createSemanticReviewRequest } from "./semantic-review-request";
 import { failureAnalysisFixture } from "./failure-analysis.test-fixtures";
 import { currentInferenceOrigin } from "@/lib/inference/inference-admission";
 import { NativeCliExecutionUncertainError } from "../routing/cli-owned-runner";
+import { LocalProviderCapacityDeferredError } from "@/lib/routing/local-provider-capacity";
 
 const result = { decision: "pass", failureAnalysisReview: { adequate: true, rationale: "Challenged stale evidence and recovery paths against the executed test." }, issues: [], summary: "Exact diff reviewed." };
 let row: Record<string, unknown>;
@@ -84,9 +85,20 @@ beforeEach(() => {
 });
 
 describe("durable semantic review worker", () => {
+  it("does not treat an error-name lookalike as proof no provider started", async () => {
+    mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => branch("change-reviewer", async () => {
+      throw Object.assign(new Error("counterfeit capacity refusal"), { name: "LocalProviderCapacityDeferredError", reason: "local-runner-busy" });
+    }));
+    await expect(executePersistedSemanticReview("TR-1")).rejects.toThrow("counterfeit capacity refusal");
+    expect(mocks.db.taskNode.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: "failed", outputSnapshot: expect.objectContaining({ providerOutcome: "unknown" }) }),
+    }));
+    expect(mocks.evidence).not.toHaveBeenCalled();
+  });
+
   it("records a typed pre-dispatch capacity refusal as inconclusive, not a running provider", async () => {
     mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => branch("change-reviewer", async () => {
-      throw Object.assign(new Error("private provider detail"), { name: "LocalProviderCapacityDeferredError", reason: "local-runner-busy" });
+      throw new LocalProviderCapacityDeferredError("local-runner-busy");
     }));
     await executePersistedSemanticReview("TR-1");
     expect(row.status).toBe("input-required");
