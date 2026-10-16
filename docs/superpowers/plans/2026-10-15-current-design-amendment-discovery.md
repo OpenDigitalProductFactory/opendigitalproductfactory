@@ -107,9 +107,10 @@ therefore rejected the server's own unchanged packet. Existing owned legacy
 tasks masked the defect because history resolution retained their original key.
 
 Continue the same route-agreement acceptance criterion in WC-2A0FAF55. Preserve
-PR #6430 and its pending live acceptance. Reuse the existing design-phase
-selector and trusted OAuth task-family resolver in the governed claim and the
-bounded item-read issuer for all four independent design gates. Keep exact
+PR #6430 and its pending live acceptance. Reuse the trusted OAuth task-family
+resolver in governed recovery and the bounded item-read issuer for all four
+independent design gates. Resolve history before routing, including a
+spec-approval prerequisite synthesized before missing plan coverage. Keep exact
 packet comparison, room admission, grant checks and document preflight intact.
 Do not accept a caller-supplied task-family key, reset attempts, replace uncertain
 work or approve the author's design.
@@ -117,7 +118,8 @@ work or approve the author's design.
 Regressions first: pass an actual bounded item-read packet unchanged to the
 actual admission function for each gate; reject altered keys and revoked task
 authority; preserve an owned uncertain legacy design request byte for byte.
-Exercise the normal pre-plan claim with no plan-review obligation as well.
+Exercise the normal pre-plan claim with no plan-review obligation and a fix
+whose only unmet requirement is plan coverage with no baseline as well.
 Run the affected review/claim suites and both web TypeScript programs, obtain
 independent source assessment, publish through protected CI and the merge queue,
 then verify the original request only after a containing canonical deployment.

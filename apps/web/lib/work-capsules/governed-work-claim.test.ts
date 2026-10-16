@@ -146,6 +146,30 @@ function database(activities: unknown[] = []) {
 }
 
 describe("claimGovernedBacklogWorkspace", () => {
+  it("keeps trusted task identity when coverage synthesizes spec approval for a fix", async () => {
+    taskAuthority.resolve.mockResolvedValue("oauth-family:claim");
+    const history = vi.spyOn(prisma.taskRun, "findFirst").mockResolvedValue(null);
+    try {
+      const db = database([receipt("research", "research")]);
+      const item = await db.backlogItem!.findFirst({});
+      vi.mocked(db.backlogItem!.findFirst).mockResolvedValue({ ...item, workType: "bug" } as never);
+      const result = await claimGovernedBacklogWorkspace({
+        db, input, actor: { ...actor, taskAuthorityTokenId: "access" }, workIntent: "implementation",
+        now: new Date("2026-10-16T00:00:00Z"),
+        dependencies: { claimWorkspace: vi.fn(), discoverCanonicalArtifact },
+      });
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("Missing coverage must not admit implementation");
+      expect(result.data.readiness.profile).toBe("fix");
+      expect(result.data.readiness.unmet.map(entry => entry.code)).toEqual(["PLAN_REQUIRED"]);
+      const request = result.data.recovery.reviewerRoutes.find(route => route.gate === "spec-approval")!.requestCoworker;
+      expect(request.initiativeReviewBinding?.expectedCurrentBaselineId).toBeNull();
+      expect(request.requestKey).toMatch(/:reviewer:[a-f0-9]{64}$/);
+    } finally {
+      history.mockRestore();
+    }
+  });
+
   it("issues a fresh design request with the same trusted task identity as admission", async () => {
     taskAuthority.resolve.mockResolvedValue("oauth-family:claim");
     const history = vi.spyOn(prisma.taskRun, "findFirst").mockResolvedValue(null);
