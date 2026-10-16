@@ -264,11 +264,54 @@ Each slice is its own backlog item and PR.
 
 ## 8. Open questions
 
-- **Repair worker capability.** Can the in-platform coding coworker check out
-  and push to an existing external branch through the governed sandbox, or does
-  it only work on builds it created? This needs verification against the Build
-  Studio sandbox and `start_external_work` before slice 4 is planned.
+- **Repair worker capability — source boundary verified, live proof owed.**
+  Inspection for BI-ED7CD0DD at `c38edb55c0ddf10f6db4eab4848698e2aeed7019`
+  establishes that `startExternalWorkTool` only registers ownership. The existing
+  `workroom-runtime/supervisor.ts` can start a governed CLI in a supplied sandbox
+  workspace, but `runtime-request-policy.ts` holds `git push` for a room decision.
+  Build Studio branch preparation is build-scoped; neither registration nor an
+  available CLI proves safe publication to an external branch. Therefore reuse
+  the runtime for repair computation and keep publication a separate governed
+  adapter. Do not grant an agent unrestricted remote publication to fill this gap.
+
+  The adapter resolves the repository, PR branch, expected head and owner from
+  the room, prepares an isolated sandbox workspace at that exact head, and
+  supplies the existing `PrRepairPacket` constraints. It durably reserves one
+  attempt per judged head before enqueue and never spends a second attempt on
+  redelivery. It refuses a live author lease, foreign repository, changed remote
+  head, missing grant, expired authority, edits outside the original PR scope or
+  an exhausted recovery budget. An unavailable runtime spends no attempt.
+
+  Repair output is a proposed signed commit plus scoped verification and
+  independent changed-code review, not permission to push. Publication rechecks
+  room posture, grant intersection, scope and the current remote head and makes
+  a normal non-force update to the same branch. Existing required GitHub checks
+  and the merge queue remain the only integration and merge authority. Never
+  automatically approve a generic outward runtime permission request. Complete
+  a controlled owned-branch probe before enabling this adapter for real PRs;
+  source inspection and mocked tests do not satisfy that live proof.
 - **Infra signal list.** Which job names and conclusions in this repository's
   workflows are infrastructure-only. Proposed source: the merge-queue churn
   script's existing classification, if it has one; otherwise a small checked-in
   list with a ratchet.
+
+## 9. Implementation comparison and standards (BI-ED7CD0DD)
+
+The existing Workroom model remains the chosen substrate; this comparison does
+not introduce another agent framework or permission store.
+
+| Reference | Adopt | Reject or bound |
+| --- | --- | --- |
+| [Aider Git integration](https://aider.chat/docs/git.html) | Small, attributable commits in an existing checkout make repairs inspectable and reversible. | A successful local commit is not authorization to publish. Avoid a model call solely to narrate deterministic commit metadata. |
+| [OpenHands GitHub action](https://docs.openhands.dev/openhands/usage/run-openhands/github-action) | Explicit issue/PR context and a bounded trigger rather than an always-running conversational monitor. | Do not install another resolver or give its worker general repository authority; reuse DPF's room, runtime and recovery budget. |
+| [GitHub webhook event contract](https://docs.github.com/en/webhooks/webhook-events-and-payloads) | Signed delivery identity, event/action filtering and exact repository/head binding. | A merge-group integration SHA is not an authored PR head; absent or fork PR arrays must not select a room by guesswork. |
+
+[GitHub's security guidance](https://docs.github.com/en/actions/reference/security/secure-use)
+warns that privileged event workflows must not execute untrusted PR code with
+repository secrets. DPF follows that boundary by separating sandbox repair from
+the trusted publication action. Check logs and repository content remain input
+data, never instructions to widen authority or weaken a failing test.
+
+The continuation plan is
+[PR follow-through delivery](../plans/2026-10-14-pr-follow-through-delivery.md).
+Its coverage and independent review are still required before implementation.
