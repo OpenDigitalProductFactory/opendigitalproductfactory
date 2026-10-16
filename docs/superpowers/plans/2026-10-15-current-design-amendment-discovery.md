@@ -58,11 +58,23 @@ already publishing `v2026.10.16` release.
 
 ## Acceptance mapping
 
-The existing first acceptance criterion (router/evaluator artifact agreement)
-owns this continuation. The original large-design advisory is unchanged.
-Contracts: exact-head canonical design, immutable bytes, inherited scope,
-independent supersession, current identity recheck. Verification: existing
-judged-design-artifact suite plus affected claim/detail/completion regressions.
+The existing medium acceptance criteria, quoted from the live item, are:
+
+- reviewerRoutes and readiness evaluation name the same artifact for every gate: either routes target the baselined artifact, or a manifest-identical spec change re-binds the baseline artifact, with a regression test for the shortened-spec case.
+- A design whose size exceeds the terminal-writer recovery cap is reported to the author when its design-spec review is requested (or the cap scales to the reviewed artifact), instead of surfacing only as a terminal_writer_context_oversize resume failure.
+
+The recorded design note already requires independent approval to re-bind the
+baseline. This repair preserves that rule; it never silently re-binds a baseline
+after a text change. The first criterion owns this continuation. The existing
+large-design advisory remains intact and its regression remains in validation.
+
+Atomic deliverable `initial-design-amendment-discovery` maps to BI-4592CF69.
+Requirement reference: `AC-route-evaluation-agreement` (the first criterion).
+Contracts: `exact-head-canonical-design`, `immutable-bytes`, `inherited-scope`,
+`independent-supersession`, `current-identity-recheck`.
+Flows: `governed-claim`, `exact-item-read`, `completion-evaluation`.
+Verification: `judged-design-artifact.test.ts` and
+`affected-claim-detail-completion-regressions`, plus the existing size notice test.
 No source tests or runtime acceptance have yet run for this continuation.
 
 ## Rollback and limits
