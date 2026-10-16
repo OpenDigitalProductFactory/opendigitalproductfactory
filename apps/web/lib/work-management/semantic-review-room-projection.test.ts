@@ -38,7 +38,7 @@ describe("reviewer state in its Workroom", () => {
     }, ["WC-1"], now);
     expect(view.attentionReason).toBeNull();
     expect(view.runs.find(row => row.taskRunId === "TR-OLD")).toMatchObject({ identityScope: "historical" });
-    expect(view.runs.find(row => row.taskRunId === "TR-CURRENT")).toMatchObject({ identityScope: "current" });
+    expect(view.runs.find(row => row.taskRunId === "TR-CURRENT")).toMatchObject({ capsuleId: "WC-1", identityScope: "current" });
     expect(view.runs).toHaveLength(2);
   });
 
@@ -57,9 +57,10 @@ describe("reviewer state in its Workroom", () => {
 
   it("labels missing request correlation unknown instead of claiming a current review", async () => {
     const view = await loadSemanticReviewRoomProjection({ taskRun: { findMany: async () => [run("completed")] },
-      $queryRaw: vi.fn().mockResolvedValue([{ rowId: "row-1", requestBound: false }]),
+      $queryRaw: vi.fn().mockResolvedValue([{ rowId: "row-1", requestBound: false, requesterAgentId: "unbound-agent" }]),
     }, ["WC-1"], now);
     expect(view.runs[0]).toMatchObject({ identityScope: "unknown" });
+    expect(view.runs[0].requesterAgentId).toBeNull();
     expect(view.partial).toBe(true);
   });
 
@@ -75,11 +76,12 @@ describe("reviewer state in its Workroom", () => {
     const view = await loadSemanticReviewRoomProjection({ taskRun: { findMany: async () => [run("completed")] },
       $queryRaw: vi.fn().mockResolvedValue([{ rowId: "row-1", capsuleId: "WC-1", requestBound: true,
         sourceHeadSha: "a".repeat(40), currentHeadSha: "a".repeat(40), issuedAt: "2026-09-08T19:00:00Z",
-        receiptId: "receipt-1", receiptDecision: "pass", receiptSummary: "The committed change was reviewed.",
+        requesterAgentId: "AGT-EXT-CODEX", receiptId: "receipt-1", receiptDecision: "pass", receiptSummary: "The committed change was reviewed.",
         receiptCreatedAt: now,
       }]),
     }, ["WC-1"], now);
     expect(view.runs[0]).toMatchObject({ receipt: { id: "receipt-1", decision: "pass", summary: "The committed change was reviewed." } });
+    expect(view.runs[0].requesterAgentId).toBe("AGT-EXT-CODEX");
     expect(view.receipts.every(receipt => receipt.status === "observed")).toBe(true);
     expect(view.receipts).toContainEqual(expect.objectContaining({ receiptId: "receipt-1", rawRef: { table: "ExternalEvidenceRecord", id: "receipt-1" } }));
   });
