@@ -41,6 +41,16 @@ canonical integration and live workflow proof remain outstanding.
 - Remove `SPECIALIST_SYSTEM_PROMPTS` from `apps/web/lib/change-review/routed-semantic-review.ts`; the craft corpus from `specialist-craft-context.ts` supplies the persona.
 - Tests: a craft added to the registry is selectable without a code change; identical files give identical crafts.
 
+Source checkpoint, 2026-10-16: the shared classifier now validates against
+`PROFESSION_REGISTRY`, recognizes a registered family's own corpus path without
+a resident-room entry, and normalizes path separators/case. Existing resident
+order and first-match routing remain stable; additional families follow canonical
+registry order. Four executed red cases and a separate resident-whitelist
+negative test preceded the fix. Thirty classifier, advisory-consumer and registry
+tests, both TS7 programs and style/whitespace checks passed. This is prerequisite
+work only: the semantic selector/persona roster is still present, and live
+eligible-coworker resolution and independence checks remain to be integrated.
+
 ## Phase 4: room-bound instantiation
 
 - Add `stepReviewBinding` to the external coworker task contract (`apps/web/lib/mcp/external-coworker-task-adapter.ts`), following `initiativeReviewBinding`.

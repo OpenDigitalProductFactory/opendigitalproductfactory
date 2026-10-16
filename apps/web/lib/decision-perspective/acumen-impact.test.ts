@@ -2,11 +2,39 @@ import { describe, expect, it } from "vitest";
 
 import { ACUMEN_ROOM_SHAPES } from "@/lib/work-management/acumen-room-shapes";
 import { deriveImpactedAcumens } from "./acumen-impact";
+import { PROFESSION_REGISTRY } from "./resolve-profession-profile";
 
 // W16 (BI-18519A73). Pure classifier: first matching rule wins per path,
 // union across paths, deduped, registry order, every key registry-validated.
 
 describe("deriveImpactedAcumens", () => {
+  it("recognizes a registered profession's own corpus without a resident-room entry", () => {
+    expect(deriveImpactedAcumens(["docs/professions/finance/wiki/cash-position.md"])).toEqual(["finance"]);
+  });
+
+  it("recognizes an added registry family without a new path rule", () => {
+    expect(deriveImpactedAcumens(["docs/professions/test-craft/wiki/practice.md"], [
+      ...PROFESSION_REGISTRY.families,
+      { professionKey: "test-craft" },
+    ])).toEqual(["test-craft"]);
+  });
+
+  it("validates profession paths against the registry instead of trusting a path label", () => {
+    expect(deriveImpactedAcumens(["docs/professions/unregistered-family/wiki/practice.md"])).toEqual([]);
+  });
+
+  it("does not treat a resident-room entry as proof that a profession is registered", () => {
+    expect(deriveImpactedAcumens(["apps/web/components/Button.tsx"], [])).toEqual([]);
+  });
+
+  it("keeps corpus ownership ahead of incidental security keywords", () => {
+    expect(deriveImpactedAcumens(["docs/professions/ux-design/wiki/authoring.md"])).toEqual(["ux-design"]);
+  });
+
+  it("normalizes Windows path separators and case before classifying", () => {
+    expect(deriveImpactedAcumens([String.raw`APPS\WEB\LIB\MCP\pack.ts`])).toEqual(["mcp-integration"]);
+  });
+
   it("returns [] for empty input", () => {
     expect(deriveImpactedAcumens([])).toEqual([]);
   });

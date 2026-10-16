@@ -10,14 +10,13 @@
 // Rule semantics: FIRST matching rule wins per path (rule order below is
 // load-bearing — e.g. `api/mcp` must classify as mcp-integration before the
 // broader `app/api` security rule can claim it); the result is the UNION of
-// the per-path winners. Every returned key is validated against the acumen
-// room-shape registry so a rule can never nominate a craft that has no
-// resident coworker to consult.
+// the per-path winners. A registered profession owns its own corpus path
+// before those rules run. The profession registry validates every returned
+// key; a missing resident coworker is a resolution obligation, not grounds
+// to silently discard an impacted profession.
 
-import {
-  ACUMEN_ROOM_SHAPES,
-  getAcumenRoomShape,
-} from "@/lib/work-management/acumen-room-shapes";
+import { ACUMEN_ROOM_SHAPES } from "@/lib/work-management/acumen-room-shapes";
+import { PROFESSION_REGISTRY, type ProfessionFamily } from "./resolve-profession-profile";
 
 type AcumenPathRule = {
   professionKey: string;
@@ -86,21 +85,31 @@ const ACUMEN_PATH_RULES: readonly AcumenPathRule[] = [
 
 /**
  * Derive the impacted acumens (professionKeys) for a set of planned file
- * paths. Deduped, in acumen-registry order (deterministic regardless of input
- * order). Paths matching no rule contribute nothing; empty input returns [].
+ * paths. Preserve existing resident order, then append other registered
+ * professions in canonical registry order. Input order never changes output.
+ * The optional registry projection supports pure verification of additions.
  */
-export function deriveImpactedAcumens(filePaths: readonly string[]): string[] {
+export function deriveImpactedAcumens(
+  filePaths: readonly string[],
+  families: readonly Pick<ProfessionFamily, "professionKey">[] = PROFESSION_REGISTRY.families,
+): string[] {
+  const registered = new Set(families.map((family) => family.professionKey));
   const matched = new Set<string>();
   for (const raw of filePaths) {
-    const path = raw.trim();
+    const path = raw.trim().replaceAll("\\", "/").toLowerCase();
     if (!path) continue;
+    const corpusOwner = /(?:^|\/)docs\/professions\/([^/]+)\//.exec(path)?.[1];
+    if (corpusOwner && registered.has(corpusOwner)) {
+      matched.add(corpusOwner);
+      continue;
+    }
     const rule = ACUMEN_PATH_RULES.find((r) => r.matches(path));
     if (rule) matched.add(rule.professionKey);
   }
 
-  // Registry order + registry validation in one pass: a key that is not in the
-  // acumen room-shape registry has no resident coworker and cannot be consulted.
-  return ACUMEN_ROOM_SHAPES
-    .map((entry) => entry.professionKey)
-    .filter((key) => matched.has(key) && getAcumenRoomShape(key) !== null);
+  const order = new Set([
+    ...ACUMEN_ROOM_SHAPES.map((entry) => entry.professionKey),
+    ...registered,
+  ]);
+  return [...order].filter((key) => registered.has(key) && matched.has(key));
 }
