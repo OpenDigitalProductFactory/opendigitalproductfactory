@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { getPlatformFamily, PLATFORM_FAMILIES } from "@/components/platform/platform-nav";
 import { SectionNav } from "@/components/shell/SectionNav";
 import { SHELL_TAP_TARGET_CLASS } from "@/lib/shell/shell-action-contract";
+import type { SectionNavLink } from "@/lib/navigation/section-nav-model";
 
 // EP-NAV-COHERENCE: the platform secondary nav shows ONLY platform families — it never
 // links out to /admin or /ops. Crossing to another main section is the left rail's job
@@ -15,17 +16,17 @@ import { SHELL_TAP_TARGET_CLASS } from "@/lib/shell/shell-action-contract";
 // Rendering is delegated to the shared SectionNav (BI-ARCH-SECTIONNAV); this wrapper
 // only resolves active state from the pathname.
 
-export function PlatformTabNav() {
+export function PlatformTabNav({ workspace }: { workspace?: { label: string; items: SectionNavLink[] } } = {}) {
   const pathname = usePathname();
   const router = useRouter();
   const activeFamily = getPlatformFamily(pathname);
   const isOperationsMap = pathname === "/platform/ai/operations-map";
-  const activeSubItem =
-    activeFamily.subItems.find((item) =>
-      item.href === activeFamily.href
-        ? pathname === item.href
-        : pathname === item.href || pathname.startsWith(`${item.href}/`),
-    ) ?? activeFamily.subItems[0];
+  const context = activeFamily.key === "ai" ? workspace : undefined;
+  const subItems = context?.items ?? activeFamily.subItems.map(item => ({
+    ...item,
+    active: item.href === activeFamily.href ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`),
+  }));
+  const activeSubItem = subItems.find(item => item.active) ?? subItems[0];
 
   return (
     <>
@@ -46,9 +47,9 @@ export function PlatformTabNav() {
           ))}
         </select>
 
-        {activeFamily.subItems.length > 0 && (
+        {subItems.length > 0 && (
           <select
-            aria-label={`${activeFamily.label} view`}
+            aria-label={context?.label ?? `${activeFamily.label} view`}
             value={activeSubItem?.href}
             onChange={(event) => router.push(event.target.value)}
             className={[
@@ -56,7 +57,7 @@ export function PlatformTabNav() {
               "w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 text-sm font-medium text-[var(--dpf-text)]",
             ].join(" ")}
           >
-            {activeFamily.subItems.map((item) => (
+            {subItems.map((item) => (
               <option key={item.href} value={item.href}>
                 {item.label}
               </option>
@@ -65,28 +66,21 @@ export function PlatformTabNav() {
         )}
       </div>
 
-      <div className="hidden lg:block">
+      <div className={context ? "hidden lg:block [&_a]:inline-flex [&_a]:min-h-11 [&_a]:items-center [&_a]:text-sm" : "hidden lg:block"}>
         <SectionNav
           config={{
             variant: "families",
             style: "pill",
             dataComponent: "platform-tab-nav",
-            dense: isOperationsMap,
+            dense: Boolean(context) || isOperationsMap,
             families: PLATFORM_FAMILIES.map((family) => ({
               key: family.key,
               label: family.label,
               href: family.href,
               active: family.key === activeFamily.key,
             })),
-            description: activeFamily.description,
-            subItems: activeFamily.subItems.map((item) => ({
-              label: item.label,
-              href: item.href,
-              active:
-                item.href === activeFamily.href
-                  ? pathname === item.href
-                  : pathname.startsWith(item.href),
-            })),
+            description: context ? undefined : activeFamily.description,
+            subItems,
           }}
         />
       </div>

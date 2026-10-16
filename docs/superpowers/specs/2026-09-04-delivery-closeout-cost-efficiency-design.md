@@ -351,3 +351,143 @@ The operator directed implementation of deployment-based BI closure and preparat
 Extend the existing governed completion transaction, durable activities, SelfUpgradeRun and canonical served identity. Missing proof, a mismatched repository/served identity, unmerged code, conflicting or malformed scope and denied authority cannot use this path. Product/customer acceptance retains its contract. No new lifecycle enum or parallel completion engine is introduced. The implementation plan is [deployment-based BI closure](../plans/2026-10-03-deployment-bi-closure.md).
 
 Delivery closure and source cleanup remain distinct decisions. Existing liveness, ownership, dirty-tree, pin and unmerged-work protections apply even to a closed BI. Prepare the concrete janitor report before any operator-approved removal. An unreadable ownership source means keep, never infer abandonment.
+
+## Retained acceptance binding — 2026-10-16, BI-E3B918C2
+
+DESIGN preparation only. This extends CT-DC-ACCEPTANCE, OBJ-DC-3/4 and AC-DC-6;
+it does not approve Large implementation or complete the release campaign.
+PR #6230 preserved wakeups and retained obligations. Its deliberate unresolved
+fallback still lacks a consumable independent-reviewer and deployed-revision
+binding. The live Small delivered repair BI-D33F968A demonstrates that gap.
+Medium item-body recovery from PR #6451 does not cover that Small obligation.
+
+Kernel DI-AF2BCA4787FD recommends extending RuntimeVerification instead of
+broadening initiative objective mappings into a non-baseline acceptance union.
+Signal is usable, autonomy eligible and high confidence; margin 1.624. Feature
+estimates are grade C, not measured implementation results. The agent recorded
+the choice; this is not a native design receipt.
+
+### Canonical receipt and authority
+
+Use a typed, versioned acceptance binding in the existing final-acceptance
+RuntimeVerification result. Raw observations and objective mappings remain
+references to their existing records. Add no acceptance table, scheduler,
+provider, parallel ledger or lifecycle status. Consolidate binding validation
+across the existing issuer, writer, sweep and Task Hub projection.
+
+The server retains these distinct identities:
+
+- Original obligation: item/organization, canonical-deployment closure activity,
+  acceptance contract/version/digest and acceptance-plan digest. A later
+  acceptance_owed snapshot is a projection, not a new obligation identity.
+- Delivered subject: repository, authored head, verified merge commit and current
+  delivery attempt. Archived source does not require a live authoring session.
+- Applicable runtime: installation, actual served SHA and successful canonical
+  upgrade identity, plus RuntimeTarget where genuinely registered.
+- Check context: tenant, persona, fixture/precondition and check-definition
+  digests, actual observation interval and exact evidence references. Reuse
+  requires every compatibility field to match.
+- Reviewer: authenticated canonical Principal and actual agent/human identity,
+  current effective authority decision and exclusion of criteria/source authors.
+  Reuse reviewer/GAID identity precedence; a different chat alone is not
+  independent, and an agent cannot choose another reviewer's identity.
+- Execution: existing admitted TaskRun, request digest and current ownership
+  generation. Caller-supplied locators or a claimed passed status grant no power.
+
+Exactly one primary attach point remains: the original same-item deployment
+closure backlog activity. Validate that activity's kind, subject and organization
+explicitly; backlogActivityId is presently a bare optional field. A verification
+room or shared execution is referenced inside the validated result, not attached
+as a second primary owner.
+
+### Criteria and server issuance
+
+Reuse genuine immutable criteria and acceptance-plan artifacts and existing
+baseline approval semantics. Do not fabricate a Medium/Large objective baseline
+for Small work. A legacy closure without criteria provenance stays explicit.
+A current, separately attributable acceptance plan can be prepared and
+independently approved through the owning workflow, then bound prospectively
+to this obligation and delivered source. It does not prove what an old reviewer
+saw or settle that review's effects.
+
+Extend the existing acceptance sweep's internal issuance alongside
+issueAcceptanceObjectiveMappingPacket. The retained-runtime variant freezes
+criteria/plan bytes and digest in its server-admitted TaskRun contract before
+dispatch. Keep existing baseline-mapping requests unchanged. No public read
+silently mints a snapshot or rewrites old closure data. An unavailable criteria
+artifact, independent reviewer or runtime yields an exact owning remedy;
+missing provenance cannot produce a pass or an unexplained empty gate list.
+
+Reuse the existing scheduled-task/TaskRun dispatcher and fencing. The immutable
+request includes installation, served SHA, original obligation and full check
+context. Duplicate notices join it; an old unrelated review is never its retry
+budget or execution identity. This is a new post-deployment verification only
+when its current contract genuinely requires one, not a replacement review
+invented to evade uncertainty.
+
+### Write and consume the bound result
+
+Extend record_runtime_verification through its existing server execution
+context, not a trusted public result field. The generic writer must refuse
+reserved acceptance-binding JSON without that valid context. Preserve ordinary
+health/unit/UX observations as observations; work_capsule_write alone does not
+confer independent acceptance authority.
+
+The writer re-resolves the authenticated actor, action-specific effective grants,
+subject/closure, criteria/plan, delivery containment, actual runtime and admitted
+TaskRun ownership. Reuse current acceptance-reviewer capability/independence
+checks. Prepare provider reads and actual check execution outside locks; recheck
+their immutable fingerprints and owner under the existing transaction fence.
+Revocation, drift, ambiguity, lease loss or uncertain reads refuse the write.
+
+Compare duplicate completion's entire immutable binding, verdict and evidence.
+Equal completion returns the original receipt; conflicting content refuses.
+Never overwrite a pass to fit another contract. The sweep reads validated bound
+receipts before retainedAcceptanceWithoutBinding and uses the same validator.
+Generic manual notes, unbound final-acceptance rows, old mappings and merge proof
+cannot discharge acceptance. A newer failure or changed criteria/runtime cannot
+inherit a previous pass. A valid independent pass discharges acceptance while
+the delivered original remains Done; failure uses existing deduplicated corrective
+intake. Infrastructure or incomplete execution remains pending with bounded
+existing retry. Never reopen coding merely to retain acceptance work.
+
+A receipt proves only its named checks. It cannot settle unrelated uncertain
+children or remote effects, authorize old review replay or approve a partial
+FeatureBuild panel. The original D33 fail/incomplete history remains unchanged.
+
+### Scale, compatibility and operator view
+
+Keep the existing stable cursor. Read per exact obligation with bounded,
+deterministic ordering; never scan all RuntimeVerification/history per item.
+The present schema lacks a backlogActivityId lookup index. Qualify the intended
+query plan and add a justified forward-only index on existing fields if needed.
+Verify 601 obligations under continuous arrivals and 10,000 stored receipts;
+EP-WORKROOM-CLOSEOUT retains broader campaign/fleet scale work.
+
+Legacy, malformed, forged or unknown-version objects remain observations,
+never acceptance. Mixed-version readers fail closed. Rollback disables the new
+consumer/actuator while preserving every receipt and pending obligation; no
+historical backfill of invented reviewer/revision fields or bulk status rewrite.
+
+Use the existing Task Hub/read model for delivery Done with separate acceptance
+Pending, Passed, Failed or Unresolved, applicable release and actual next owner
+or event. Details expose criteria, reviewer, check context and evidence. Reuse
+components, theme tokens, keyboard focus and narrow-screen layouts. Add no new
+dashboard, surprise approval prompt or author-session retention requirement.
+
+### Standards and verification boundary
+
+[in-toto Statement v1](https://github.com/in-toto/attestation/blob/main/spec/v1/statement.md)
+binds an immutable subject digest to a typed predicate. Adopt that separation;
+retain DPF's existing authority and persistence instead of adding a signing
+service or another wire-format dependency.
+[Argo Rollouts analysis](https://argo-rollouts.readthedocs.io/en/stable/features/analysis/)
+separates analysis definitions from executions and retains inconclusive outcomes.
+Adopt explicit release/check identity and incomplete results inside the existing
+sweep; do not introduce Kubernetes or another controller.
+
+The exact Small criteria issuer, eligible reviewer, native context propagation
+and transaction/index implementation still require independent review, normal
+Large admission, first-failing real-adapter tests and containing-release exercise.
+This design is not that evidence. See the retained-binding continuation in the
+[existing wakeup plan](../plans/2026-10-12-acceptance-upgrade-wakeup.md).

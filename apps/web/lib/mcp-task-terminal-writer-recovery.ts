@@ -1,11 +1,12 @@
 import { prisma, type Prisma } from "@dpf/db";
+import { hasExecutionUncertainty } from "./shared/execution-uncertainty";
 import { reserveTaskRunGenerationWorking } from "./observability/heartbeat";
 import { INITIATIVE_CORRECTABLE_ERRORS } from "./backlog/initiative-readiness/disposition-contract";
 import { remoteTaskRequestMatches } from "./mcp-task-capacity-contract";
 import type { ExistingRemoteTask } from "./mcp-task-submit-types";
 import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 import { IMMUTABLE_PAGE_READER_TOOLS, type createInitiativeReviewTerminalToolPolicy } from "./tak/terminal-tool-policy";
-import type { PersistedTerminalReaderExecution } from "./mcp-task-terminal-writer-context";
+import { needsTerminalReaderBootstrap, type PersistedTerminalReaderExecution } from "./mcp-task-terminal-writer-context";
 import { recoverTerminalWriterEscalation } from "./mcp-task-terminal-writer-escalation";
 import { parseTerminalWriterWait, type TerminalWriterWait } from "./mcp-task-replay-projection";
 function optionalString(value: unknown): string | null { return typeof value === "string" && value.trim() ? value.trim() : null; }
@@ -58,13 +59,15 @@ export async function reserveTerminalWriterReplay(input: {
   bootstrapReaderEvidence: boolean;
 } | null> {
   if (!remoteTaskRequestMatches(input.existing.a2aMetadata, input.parsed)) return null;
+  if (hasExecutionUncertainty(input.existing.progressPayload)) return null;
   if (recoverTerminalWriterEscalation(input.existing.progressPayload)) return null;
 
   const existingWait = parseTerminalWriterWait(input.existing.progressPayload);
   const isProjectedWait = existingWait !== null
     && ["input-required", "stalled", "failed"].includes(input.existing.status);
-  const isRecoverableCompletedExit = input.existing.status === "completed" && !existingWait;
-  if (!isProjectedWait && !isRecoverableCompletedExit) return null;
+  // A legacy completed row with no receipt/exit evidence cannot prove that a
+  // second execution is safe. Verified existing receipts settle before this lane.
+  if (!isProjectedWait) return null;
   if (existingWait && existingWait.writerToolName !== input.terminalToolPolicy.writerToolName) return null;
 
   const [readerExecutions, successfulWriter, writerAttempt] = await Promise.all([
@@ -87,8 +90,7 @@ export async function reserveTerminalWriterReplay(input: {
     }),
   ]);
   if (successfulWriter) return null;
-  const bootstrapReaderEvidence = readerExecutions.length === 0;
-  if (bootstrapReaderEvidence && !isProjectedWait) return null;
+  const bootstrapReaderEvidence = needsTerminalReaderBootstrap(input.terminalToolPolicy, readerExecutions);
 
   if (writerAttempt) {
     const proposalEnvelopeId = writerAttempt.success === false
@@ -143,7 +145,6 @@ export async function reserveTerminalWriterReplay(input: {
     progressPayload: {
       ...progress,
       terminalWriterWait: wait,
-      ...(isRecoverableCompletedExit ? { recoveredFromCompletedRouteExit: true } : {}),
       resumeReservedAt: now,
     } as Prisma.InputJsonValue,
   });

@@ -9,8 +9,47 @@ import { describe, expect, it, vi } from "vitest";
 import { completeBacklogItemTransition } from "./backlog-terminal-transition";
 import { evaluateBacklogItemCompletion, readBacklogItemCompletion } from "./backlog-completion-evaluation";
 import type { MergeDeliverySignal } from "./merge-delivery-signal";
+import { item as initiativeItem, readyActivities } from "./entry-adapter.test-fixtures";
+import { bodyCriteriaVersion } from "./body-baseline-version";
+import { createPullRequestObservation } from "@/lib/contributor-change-lanes/pull-request-observation";
 
 const NOW = "2026-10-06T12:00:00.000Z";
+
+describe("independent body acceptance survives source-author archival", () => {
+  it.each([true, false])("reconciles only the current exact verified delivered source (valid=%s)", async valid => {
+    const body = "## Acceptance\n- Verify independently accepted repair.";
+    const { item, client } = fixture({ body, digitalProductId: "product-1" });
+    const room = { id: "room-row", capsuleId: "WC-1", backlogItemId: item.itemId, repositoryFullName: "owner/repo",
+      headBranch: "fix/accepted", headSha: "a".repeat(40), baseSha: "b".repeat(40), createdByPrincipalId: "author",
+      status: "archived", pullRequestNumber: 6265, archivedAt: null,
+      createdAt: new Date("2026-10-05T06:00:00Z"), scopeClaims: [{ source: "declared", workShape: "delivery-medium@1.0.0" }] };
+    const rows = [{ id: "baseline", backlogItemId: item.id, kind: "initiative_scope_baseline", recordedAt: new Date("2026-10-06T07:00:00Z"),
+      payload: { schemaVersion: 1, baselineId: "B-1", supersedesBaselineId: null, origin: "item-body", artifactDigest: "digest",
+        subject: { kind: "backlog-item", id: item.itemId }, objectiveStatements: [],
+        acceptanceStatements: bodyCriteriaVersion(body)!.acceptanceStatements, criteriaDigest: bodyCriteriaVersion(body)!.criteriaDigest,
+        sourceIdentity: { repositoryFullName: room.repositoryFullName, headSha: room.headSha }, authoritySnapshot: { organizationId: "org-1" } } },
+      { id: "E-1", backlogItemId: item.id, kind: "evidence", recordedAt: new Date("2026-10-06T08:00:00Z"), payload: { evidenceKind: "test_pass" } },
+      { id: "mapping", backlogItemId: item.id, kind: "initiative_objective_mapping", recordedAt: new Date("2026-10-06T09:00:00Z"),
+        payload: { schemaVersion: 1, proposalId: "mapping", baselineId: "B-1", artifactDigest: "digest",
+          subject: { kind: "backlog-item", id: item.itemId }, eligibleEvidenceActivityIds: ["E-1"],
+          mappings: [{ objectiveId: "AC-BODY-001", evidenceRefs: ["E-1"] }] } }];
+    client.backlogItemActivity.findMany.mockResolvedValue(rows as never);
+    const db = { ...client, workroom: {
+      findFirst: vi.fn(async ({ where }) => where.archivedAt === null ? null : room),
+      findMany: vi.fn(async ({ where }) => where.archivedAt === null ? [] : [room]) },
+      contributorInventorySnapshot: { findMany: vi.fn().mockResolvedValue([{ payload: createPullRequestObservation({
+        repositoryFullName: room.repositoryFullName, number: 6265, url: "https://github.com/owner/repo/pull/6265", title: "repair",
+        headBranch: room.headBranch, headSha: valid ? room.headSha : "f".repeat(40), state: "merged", isDraft: false,
+        mergeStateStatus: null, mergeCommitSha: "c".repeat(40), mergedAt: "2026-10-06T05:00:00Z",
+        providerUpdatedAt: "2026-10-06T05:00:00Z", observedAt: "2026-10-06T05:01:00Z" }) }]) } };
+    const result = await evaluateBacklogItemCompletion({ db: db as never, item: item as never, rawManifest: undefined,
+      transitionObject: { kind: "backlog-item", id: item.itemId, expectedVersion: "read", targetState: "completion" }, evaluatedAt: NOW,
+      dependencies: { ...deps("merged"), resolveCompletionEvidence: async () => ({ kind: "not-provided" }) as never } });
+    const acceptance = [...result.decision.satisfied, ...result.decision.unmet, ...result.decision.blockers]
+      .find(entry => entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED");
+    expect(acceptance?.state).toBe(valid ? "pass" : "missing");
+  });
+});
 
 function fixture(itemOverrides: Record<string, unknown> = {}) {
   const item = {
@@ -62,6 +101,8 @@ const authority = {
 
 function deps(signal: MergeDeliverySignal) {
   return {
+    prepareCurrentDesign: async () => ({ evidence: { state: "not-applicable" as const },
+      admissionGuard: async () => ({ state: "not-applicable" as const }) }),
     resolveMergeDelivery: async () => signal,
     resolveDeploymentClosure: async () => ({ kind: "unavailable" as const, reason: "no deployment in this fixture" }),
   };
@@ -94,6 +135,85 @@ async function bothViews(signal: MergeDeliverySignal, itemOverrides: Record<stri
 function unmetCodes(decision: { unmet: { code: string }[]; blockers: { code: string }[] }) {
   return [...decision.unmet, ...decision.blockers].map((entry) => entry.code).sort();
 }
+
+describe("decomposed initiative completion (BI-DA407BD9)", () => {
+  function aggregateFixture(childStatus = "done", outcome = "pass", missingPlanReview = false) {
+    const f = fixture(initiativeItem);
+    const activities = readyActivities().filter(row => !missingPlanReview || row.gateKey !== "plan-review");
+    const coverage = activities.find(row => row.kind === "plan_backlog_coverage")!;
+    const coveragePayload = { ...coverage.payload, decision: "decomposed", planArtifactDigest: `sha256:${"d".repeat(64)}`,
+      planArtifactRef: { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "a".repeat(40),
+        providerBlobId: "b".repeat(40), path: "docs/superpowers/plans/plan.md" },
+      deliverables: ["BI-A", "BI-B"].map((backlogItemId, i) => ({ key: `child-${i}`, title: backlogItemId,
+        independentlyShippable: true, backlogItemId, dependsOn: [] })),
+    };
+    coverage.payload = coveragePayload as typeof coverage.payload;
+    f.client.backlogItemActivity.findMany.mockResolvedValue(activities as never);
+    Object.assign(f.client.backlogItem, { findMany: vi.fn().mockResolvedValue([
+      { itemId: "BI-A", status: "done" }, { itemId: "BI-B", status: childStatus },
+    ]) });
+    Object.assign(f.client, { workroom: { findFirst: vi.fn().mockResolvedValue({
+      scopeClaims: [{ workShape: "delivery-xlarge@1.0.0" }],
+    }) } });
+    const resolveDeploymentClosure = vi.fn(async () => ({ kind: "unavailable" as const, reason: "not needed" }));
+    const dependencies = { ...deps("merged"), resolveDeploymentClosure,
+      reconcileObjectives: () => ({ state: outcome, baselineId: "baseline-1", evidenceRefs: outcome === "pass" ? ["parent-outcome"] : [] }) };
+    return { ...f, dependencies, resolveDeploymentClosure };
+  }
+  async function evaluate(f: ReturnType<typeof aggregateFixture>) {
+    return evaluateBacklogItemCompletion({ db: f.client as never, item: f.item as never, rawManifest: undefined,
+      transitionObject: { kind: "backlog-item", id: f.item.itemId, expectedVersion: "read", targetState: "completion" },
+      evaluatedAt: NOW, dependencies: f.dependencies as never });
+  }
+  it("allows real child delivery and parent outcomes through the same gate and read evaluation", async () => {
+    const gateSide = aggregateFixture();
+    const gate = await completeBacklogItemTransition({ db: gateSide.db as never, itemId: gateSide.item.itemId,
+      expectedStatus: "awaiting-acceptance", resolution: "Children delivered and hypothesis reconciled.",
+      completionEvidence: undefined, actor, authority: { ...authority, objectRef: gateSide.item.itemId },
+      evaluatedAt: NOW, dependencies: gateSide.dependencies as never });
+    const readSide = aggregateFixture();
+    const read = await readBacklogItemCompletion({ itemRowId: readSide.item.id, status: "awaiting-acceptance",
+      evaluatedAt: NOW, db: readSide.client as never, dependencies: readSide.dependencies as never });
+    expect(gate.ok).toBe(true);
+    expect(read?.decision.verdict).toBe("allowed");
+    expect(unmetCodes(read!.decision)).toEqual([]);
+    expect(readSide.updateMany).not.toHaveBeenCalled();
+    expect(readSide.resolveDeploymentClosure).not.toHaveBeenCalled();
+  });
+
+  it("keeps both terminal admission and its read blocked when source observation is unavailable", async () => {
+    const gateSide = aggregateFixture();
+    const guard = vi.fn().mockResolvedValue({ state: "unavailable" });
+    const prepareCurrentDesign = vi.fn().mockResolvedValue({ evidence: { state: "unavailable" }, admissionGuard: guard });
+    const gate = await completeBacklogItemTransition({ db: gateSide.db as never, itemId: gateSide.item.itemId,
+      expectedStatus: "awaiting-acceptance", resolution: "Must not close on historical design passes.",
+      completionEvidence: undefined, actor, authority: { ...authority, objectRef: gateSide.item.itemId }, evaluatedAt: NOW,
+      dependencies: { ...gateSide.dependencies, prepareCurrentDesign } as never });
+    const readSide = aggregateFixture();
+    const read = await readBacklogItemCompletion({ itemRowId: readSide.item.id, status: "awaiting-acceptance",
+      evaluatedAt: NOW, db: readSide.client as never, dependencies: readSide.dependencies as never,
+      currentDesign: { state: "unavailable" } });
+    expect(gate.ok).toBe(false);
+    expect(read?.decision.verdict).not.toBe("allowed");
+    expect(unmetCodes(read!.decision)).toContain("OBJECTIVE_BASELINE_REQUIRED");
+    expect(gateSide.updateMany).not.toHaveBeenCalled();
+    expect(prepareCurrentDesign).toHaveBeenCalledTimes(1); expect(guard).toHaveBeenCalledTimes(1);
+  });
+  it("does not let the parent's merge close an unfinished child", async () => {
+    const result = await evaluate(aggregateFixture("in-progress"));
+    expect(result.decision.verdict).not.toBe("allowed");
+    expect(unmetCodes(result.decision)).toContain("DELIVERY_EVIDENCE_REQUIRED");
+    expect(result.decision.unmet.find(row => row.code === "DELIVERY_EVIDENCE_REQUIRED")?.nextAction).toContain("BI-B");
+  });
+  it("does not let the parent's merge invent outcome reconciliation", async () => {
+    const result = await evaluate(aggregateFixture("done", "missing"));
+    expect(unmetCodes(result.decision)).toContain("OBJECTIVE_RECONCILIATION_REQUIRED");
+    expect(result.independentAcceptanceDecision?.verdict).not.toBe("allowed");
+  });
+  it("does not let the parent's merge replace an independent plan review", async () => {
+    expect(unmetCodes((await evaluate(aggregateFixture("done", "pass", true))).decision)).toContain("PLAN_REVIEW_REQUIRED");
+  });
+});
 
 describe("the read projection evaluates completion as the completion gate does (BI-094B41AC)", () => {
   it("independent acceptance cannot be discharged by merge recognition", async () => {
@@ -248,5 +368,84 @@ describe("an operational close is gated as small work, not as an unshaped fix (B
       itemOverrides: { activeBuild: { kind: "fix", verificationOut: null, uxVerificationStatus: null } },
     });
     expect(unmetCodes(result.decision)).toEqual(expect.arrayContaining(["OBJECTIVE_BASELINE_REQUIRED"]));
+  });
+});
+
+// BI-4A222439, reproducing BI-1B5BE5F4: a merged direct-merge platform bug
+// whose cloud UX passed and whose installed-portal UX check then FAILED. The
+// acceptance sweep closed it at 2026-10-13 05:00Z because the merge alone
+// passed delivery and acceptance. A failure that is still the newest word in
+// its dimension now blocks done on the read, on the sweep and on a person's close.
+describe("current failing evidence blocks done on every path (BI-4A222439)", () => {
+  const UX_PASS = { id: "ux-pass", kind: "evidence", recordedAt: new Date("2026-10-06T05:29:55.000Z"),
+    payload: { evidenceKind: "ux_verified", url: "https://github.com/acme/repo/actions/runs/1", body: "cloud fixture" } };
+  const UX_FAIL = { id: "ux-fail", kind: "evidence", recordedAt: new Date("2026-10-06T05:50:36.000Z"),
+    payload: { evidenceKind: "ux_fail", url: "http://127.0.0.1:3000/ops/workrooms", body: "Do not close acceptance yet." } };
+  const UX_PASS_LATER = { ...UX_PASS, id: "ux-pass-later", recordedAt: new Date("2026-10-06T07:00:00.000Z") };
+
+  function withEvidence(rows: Array<Record<string, unknown>>, itemOverrides: Record<string, unknown> = {}) {
+    const side = fixture(itemOverrides);
+    const stored = rows.map((row) => ({ backlogItemId: "row-1", gateKey: null, ...row }));
+    side.client.backlogItemActivity.findMany.mockImplementation((async (args: unknown) =>
+      JSON.stringify(args).includes("\"evidence\"") ? stored : []) as never);
+    return side;
+  }
+
+  async function evaluate(rows: Array<Record<string, unknown>>, signal: MergeDeliverySignal = "merged") {
+    const { client, item } = withEvidence(rows);
+    return evaluateBacklogItemCompletion({
+      db: client as never, item: item as never, rawManifest: undefined,
+      transitionObject: { kind: "backlog-item", id: item.itemId, expectedVersion: "read", targetState: "completion" },
+      evaluatedAt: NOW, dependencies: deps(signal),
+    });
+  }
+
+  it("a merged item whose newest ux evidence is ux_fail is denied, naming the failing row", async () => {
+    const result = await evaluate([UX_PASS, UX_FAIL]);
+    expect(result.decision.verdict).toBe("denied");
+    const delivery = result.decision.blockers.find((entry) => entry.code === "DELIVERY_EVIDENCE_REQUIRED");
+    const acceptance = result.decision.blockers.find((entry) => entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED");
+    expect(delivery?.state).toBe("fail");
+    expect(delivery?.evidenceRefs).toContain("ux-fail");
+    expect(acceptance?.state).toBe("fail");
+    expect(acceptance?.evidenceRefs).toContain("ux-fail");
+    expect(result.independentAcceptanceDecision.verdict).toBe("denied");
+  });
+
+  it("a later ux pass supersedes the failure and the merge closes it again", async () => {
+    const result = await evaluate([UX_PASS, UX_FAIL, UX_PASS_LATER]);
+    expect(result.decision.verdict).toBe("allowed");
+  });
+
+  it("a deployment closure does not wave the current failure through", async () => {
+    const { client, item } = withEvidence([UX_FAIL]);
+    const result = await evaluateBacklogItemCompletion({
+      db: client as never, item: item as never, rawManifest: undefined,
+      transitionObject: { kind: "backlog-item", id: item.itemId, expectedVersion: "read", targetState: "completion" },
+      evaluatedAt: NOW,
+      dependencies: {
+        resolveMergeDelivery: async () => "merged" as const,
+        resolveDeploymentClosure: async () => ({ kind: "deployed", runId: "SUR-1", deployedSha: "a".repeat(40) }) as never,
+      },
+    });
+    expect(result.decision.verdict).not.toBe("allowed");
+  });
+
+  it("the sweep's close is refused and the item stays awaiting acceptance", async () => {
+    const side = withEvidence([UX_PASS, UX_FAIL]);
+    const gate = await completeBacklogItemTransition({
+      db: side.db as never,
+      itemId: "BI-1",
+      expectedStatus: "awaiting-acceptance",
+      resolution: "Closed by the acceptance sweep.",
+      // The shape sweepCompletionEvidence() sends: a readiness citation, not a manifest.
+      completionEvidence: { source: "acceptance-sweep", readinessDecisionId: "IRD-1", verdict: "allowed", satisfied: [] },
+      actor,
+      authority,
+      evaluatedAt: NOW,
+      dependencies: deps("merged"),
+    });
+    expect(gate.ok).toBe(false);
+    expect(side.updateMany).not.toHaveBeenCalled();
   });
 });

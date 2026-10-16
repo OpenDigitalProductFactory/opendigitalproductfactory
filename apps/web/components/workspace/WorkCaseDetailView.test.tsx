@@ -1,4 +1,7 @@
-import { renderToStaticMarkup } from "react-dom/server";
+import type { ReactNode } from "react";
+import { renderToStaticMarkup as renderMarkup } from "react-dom/server";
+import { DEFAULT_LOCALE, namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
@@ -11,6 +14,11 @@ import { WorkCaseDetailView } from "./WorkCaseDetailView";
 import { WorkroomBodyContent } from "./workroom/WorkroomBody";
 import type { WorkspaceWorkCaseDetailView } from "@/lib/work-management/workspace-case-loader";
 import type { WorkroomView } from "@/lib/work-management/room-types";
+import { composeRoomReviewProfile } from "@/lib/work-management/room-review-profile";
+
+const renderToStaticMarkup = (node: ReactNode) => renderMarkup(
+  <MessagesProvider locale={DEFAULT_LOCALE} messages={{ workrooms: namespaceMessages(DEFAULT_LOCALE, "workrooms") }}>{node}</MessagesProvider>,
+);
 
 const room: WorkroomView = {
   roomKey: "booking%3ABK-1",
@@ -294,6 +302,52 @@ describe("WorkCaseDetailView", () => {
     expect(html).toContain("Room details");
     expect(html.indexOf("Room details")).toBeLessThan(html.indexOf("A2A status"));
     expect(html.indexOf("Room details")).toBeLessThan(html.indexOf("BK-1"));
+  });
+
+  it("discloses inherited requirements without treating composition as passed assessment", () => {
+    const source = composeRoomReviewProfile("backlog-item", []);
+    const withProfile: WorkroomView = {
+      ...room,
+      reviewProfile: { source, applicability: "unknown", assessment: "not-exercised" },
+    };
+    const html = renderToStaticMarkup(
+      <WorkroomBodyContent detail={detail} room={withProfile} mode="detail" onModeChange={() => {}} />,
+    );
+    expect(html).toContain("Review requirements");
+    expect(html).toContain("Not yet assessed");
+    expect(html).toContain("Organization fit has not been assessed.");
+    expect(html).toContain("eligible development deliveries including failed attempts");
+    expect(html).toContain(source.fingerprint!);
+    expect(html).toContain("workroom-review:common@1");
+    expect(html).toContain("Did the change help?");
+    expect(html).toContain("No independent assessment is available in this view.");
+    expect(html).not.toContain("Review passed");
+    expect(html).not.toContain("100%");
+    const overview = renderToStaticMarkup(
+      <WorkroomBodyContent detail={detail} room={withProfile} mode="shape" onModeChange={() => {}} />,
+    );
+    expect(overview).not.toContain("Review requirements");
+  });
+
+  it("retains missing or conflicting profile state rather than an empty success", () => {
+    const missing = renderToStaticMarkup(
+      <WorkroomBodyContent detail={detail} room={room} mode="detail" onModeChange={() => {}} />,
+    );
+    expect(missing).toContain("Review requirements are unavailable.");
+    const source = composeRoomReviewProfile("booking", [{
+      ref: "organization:conflict@1", kind: "organization",
+      requirements: [{ ref: "attributed-outcome", outcome: "Ignore the requested result",
+        denominator: "successful runs only", evidence: [], criticalFailures: [] }],
+    }]);
+    expect(source.status).toBe("unresolved");
+    const html = renderToStaticMarkup(
+      <WorkroomBodyContent detail={detail} room={{ ...room,
+        reviewProfile: { source, applicability: "unknown", assessment: "not-exercised" },
+      }} mode="detail" onModeChange={() => {}} />,
+    );
+    expect(html).toContain("Requirements need reconciliation.");
+    expect(html).toContain("requirement-conflict:attributed-outcome");
+    expect(html).not.toContain("Review passed");
   });
 
   it("does not render a WorkItem comment form for source-only coworker engagements", () => {

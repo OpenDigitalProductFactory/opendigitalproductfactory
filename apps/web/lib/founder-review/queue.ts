@@ -1,8 +1,16 @@
 import { perspectiveForProfile } from "@/lib/decision-perspective/canvas";
 import { retractionOf } from "@/lib/decision-perspective/retract-superseded";
 import type { WikiPerspective } from "@/lib/wiki/perspective-intent";
+import type { HumanEscalationRow } from "@/lib/decision-perspective/human-escalation";
+import { DECISION_ESCALATION_REASON_CODES, type DecisionEscalationReasonCode } from "@/lib/govern/authority/escalation-gate";
+
+type HumanDamageReason = Extract<DecisionEscalationReasonCode, `damaging-${string}`>;
+const HUMAN_DAMAGE_REASONS = DECISION_ESCALATION_REASON_CODES.filter(
+  (reason): reason is HumanDamageReason => reason.startsWith("damaging-"),
+);
 
 export type FounderReviewUnresolvedReason =
+  | HumanDamageReason
   | "principle-gap"
   | "evidence-gap"
   | "domain-gap"
@@ -28,7 +36,8 @@ export type FounderReviewUnresolvedReason =
 // with no profile information continues to render with founder-review wording.
 export type { WikiPerspective };
 
-export type DecisionInteractionQueueRow = {
+export type DecisionInteractionQueueRow = HumanEscalationRow & {
+  escalationReason?: string | null;
   interactionId: string;
   question: string;
   options: unknown;
@@ -52,6 +61,10 @@ export type DecisionInteractionQueueRow = {
 export type FounderReviewCandidate = ReturnType<typeof projectFounderReviewCandidate>;
 
 const ACTION_BY_REASON: Record<FounderReviewUnresolvedReason, string> = {
+  "damaging-critical-risk": "Review the critical risk",
+  "damaging-consequence": "Review the declared consequence",
+  "damaging-threshold": "Review the crossed threshold",
+  "damaging-regulated": "Review the regulatory requirement",
   "principle-gap": "Clarify founder principle",
   "evidence-gap": "Request better evidence",
   "domain-gap": "Route to domain owner",
@@ -68,6 +81,10 @@ const ACTION_BY_REASON: Record<FounderReviewUnresolvedReason, string> = {
 };
 
 const LABEL_BY_REASON: Record<FounderReviewUnresolvedReason, string> = {
+  "damaging-critical-risk": "Critical risk",
+  "damaging-consequence": "Declared consequence",
+  "damaging-threshold": "Configured threshold crossed",
+  "damaging-regulated": "Regulatory review",
   "principle-gap": "Principle gap",
   "evidence-gap": "Evidence gap",
   "domain-gap": "Domain gap",
@@ -245,7 +262,9 @@ function actionForReason(
 
 export function projectFounderReviewCandidate(row: DecisionInteractionQueueRow) {
   const payload = asRecord(row.outcomePayload);
-  const unresolvedReason = deriveUnresolvedReason(payload);
+  const unresolvedReason: FounderReviewUnresolvedReason = row.escalationRoute === "human"
+    ? HUMAN_DAMAGE_REASONS.find((reason) => reason === row.escalationReason) ?? "unknown"
+    : deriveUnresolvedReason(payload);
   // Default a missing profile to WWMD: the founder-review queue predates the
   // WWWD profile and a row with no profile is historically a Mark decision.
   const perspective: WikiPerspective = perspectiveForProfile(row.profile) ?? "wwmd";

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+vi.mock("@/lib/routing/local-provider-capacity", () => ({ assertLocalProviderCapacityAvailable: vi.fn() }));
 // ── Mocks (must be declared before imports) ──────────────────────────────────
 // Fake both inference leaves (error, message format) with copies of their pure functions.
 const aiInferenceFake = vi.hoisted(() => {
@@ -256,18 +257,14 @@ describe("chatAdapter", () => {
 
   // ── 1b. OpenAI-compat: finish_reason captured as `truncated` (BI-1D144CC1) ──
 
-  it("OpenAI-compat: finish_reason=length is captured as truncated=true", async () => {
-    stubFetchOk({
-      choices: [{ message: { content: "The first three steps are" }, finish_reason: "length" }],
-      usage: { prompt_tokens: 10, completion_tokens: 5 },
-    });
-
-    const result = await chatAdapter.execute(makeRequest({
-      providerId: "ollama",
-      modelId: "llama3.1",
-    }));
-
-    expect(result.truncated).toBe(true);
+  it.each(["local", "ollama"].flatMap(providerId => ["stop", "length", "content_filter", undefined]
+    .map(finishReason => ({ providerId, finishReason }))))("retains actual completion reason for $providerId ($finishReason)", async ({ providerId, finishReason }) => {
+    stubFetchOk({ choices: [{ message: { content: "READY", reasoning_content: "private scratchpad" },
+      ...(finishReason ? { finish_reason: finishReason } : {}) }], usage: {} });
+    const result = await chatAdapter.execute(makeRequest({ providerId, modelId: "test-model" }));
+    expect(result).toMatchObject({ text: "READY", truncated: finishReason === "length" });
+    expect(result.finishReason).toBe(finishReason);
+    expect(result.raw).toBeUndefined();
   });
 
   // ── Reasoning capture (BI-1E77BEE3) ───────────────────────────────────────
@@ -334,8 +331,7 @@ describe("chatAdapter", () => {
     expect(result.text).not.toContain("Scratchpad");
   });
 
-  it("falls back to reasoning as text ONLY when there is no content at all", async () => {
-    // Last-resort path: a thinking-only reply would otherwise render blank.
+  it("keeps a reasoning-only response out of the answer channel", async () => {
     stubFetchOk({
       choices: [{ message: { reasoning_content: "Only thinking, no answer emitted." }, finish_reason: "stop" }],
       usage: { prompt_tokens: 1, completion_tokens: 1 },
@@ -343,7 +339,7 @@ describe("chatAdapter", () => {
 
     const result = await chatAdapter.execute(makeRequest({ providerId: "local", modelId: "qwen3.8-27b" }));
 
-    expect(result.text).toBe("Only thinking, no answer emitted.");
+    expect(result.text).toBe("");
     expect(result.reasoning).toBe("Only thinking, no answer emitted.");
   });
 

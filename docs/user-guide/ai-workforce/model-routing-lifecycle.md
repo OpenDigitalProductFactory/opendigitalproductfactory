@@ -52,6 +52,30 @@ successful inventories that omit a cloud model retire its profile. Local-engine
 interruptions do not retire local models. Workload restrictions, learned auth
 eligibility and routing requirements still apply to listed models.
 
+### When the connections page takes longer to load
+
+After 15 seconds, the page shows **Still loading your connections**. This means
+the page request is still pending; elapsed time alone does not establish that a
+provider or local service failed. You can keep waiting or choose **Refresh page**
+to request the page again. The loading message does not change credentials,
+connection settings, model availability, or routing eligibility.
+
+## Where AI may run
+
+The **Where AI may run** control on [AI providers](connecting-providers.md)
+applies to DPF coding and coworker tasks. It does not enable coding or configure
+an external desktop coding app.
+
+- **Local and allowed cloud providers:** DPF may select enabled providers that
+  satisfy your other routing rules, permissions and task requirements.
+- **Local only:** Cloud providers are excluded. Work stops when no suitable
+  local model is available; DPF does not relax this restriction to finish a task.
+
+The selection changes after the server confirms the save. If saving fails,
+the previous setting remains selected. If DPF cannot read the policy after its
+short cache expires, the request stops instead of assuming cloud is allowed.
+Once the policy can be read again, later requests can proceed normally.
+
 ## Quality Tiers
 
 Every model is assigned a quality tier based on its model ID prefix. The tier system replaces opaque 0-100 scores as the primary configuration surface for admins.
@@ -186,6 +210,12 @@ The rollout is cumulative and ordered: compiler shadow → admin preview → onb
 | Provider posture drifts from its attestation | The owner receives an attention item; restricted routing stays blocked until the posture or evidence is reviewed. |
 | A workload cohort is small | Provider/model totals remain available, but workload-class detail stays hidden until the privacy threshold is met. |
 
+## Local requests while background work is running
+
+Local coworker requests and background builds share one inference queue. A running request finishes before the next starts. Interactive requests normally run ahead of waiting background work; older background requests eventually advance so they are not left waiting indefinitely.
+
+Waiting has its own deadline, separate from the model's generation deadline. If that wait expires, the request is removed from the queue and will not run later. Work already queued inside DPF waits its turn; a busy signal after admission means the host or model runner is occupied outside that queue. A completed response on an idle model does not prove the queue works correctly under background load.
+
 ## Provider-Specific Notes
 
 ### Anthropic (OAuth Subscription)
@@ -208,6 +238,10 @@ The ChatGPT provider uses Server-Sent Events (SSE) for the Responses API. Known 
 Local models are automatically discovered and profiled. They are assigned the `basic` quality tier by default, which means they will only be selected for agents configured with `minimumTier: "basic"` (e.g., the onboarding assistant). To use local models more broadly, adjust agent tiers downward or improve local model dimension scores via profiling.
 
 ## Troubleshooting
+
+**Reviewing supplied code on the local model:**
+- A complete answer about code included in your message can be short, including a JSON verdict. The coworker preserves that answer without asking for a live lookup or adding a tool-unavailable warning.
+- Include multi-line code in a closed code fence; an unfenced standalone function must fit on one line. Questions about the current provider, deployment, queue or test results still require live evidence, even when code is included. A request to save or record an assessment still requires its declared tool.
 
 **Independent review reports unknown or insufficient model capacity:**
 - Unknown completion/context capacity means routing lacks usable capacity evidence; it is an infrastructure admission problem, not a failed code review or an active inference.

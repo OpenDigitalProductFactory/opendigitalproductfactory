@@ -53,6 +53,7 @@ const PUBLIC_SCOPE_TIER: Record<PublicScope, McpTokenScope> = {
 export const PUBLIC_SCOPE_TO_GRANTS: Record<PublicScope, readonly string[]> = {
   "dpf.read": [
     "agent_control_read",
+    "approval_probe_read",
     "architecture_read",
     "backlog_read",
     "banking_read",

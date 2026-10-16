@@ -61,6 +61,13 @@ vi.mock("@/lib/ai-inference", () => ({
 import { routeAndCall } from "./routed-inference";
 
 describe("routeAndCall background starts", () => {
+  it("never dispatches or queues work when the location policy cannot be read", async () => {
+    mocks.getLocalOnlyInference.mockRejectedValueOnce(new Error("policy unavailable"));
+    await expect(routeAndCall([{ role: "user", content: "Help with this code." }], "Coding task", "internal")).rejects.toThrow("policy unavailable");
+    expect(mocks.routeEndpointV2).not.toHaveBeenCalled();
+    expect(mocks.callWithFallbackChain).not.toHaveBeenCalled();
+    expect(mocks.admitDurableAsyncOperation).not.toHaveBeenCalled();
+  });
   it("does not strip a required writer when every endpoint lacks tool support", async () => {
     const baseContract = await mocks.inferContract("tool-action", []);
     mocks.inferContract.mockResolvedValue({ ...baseContract, interactionMode: "sync", requiresTools: true });

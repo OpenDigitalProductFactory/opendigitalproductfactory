@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { classifyGateExit, GATE_EXIT } from "./lib/gate-exit-classification.mjs";
-import { EXIT_SOURCE_DRIFT, EXIT_WAIT_CANCELLED } from "./lib/sandbox-freshness.mjs";
-import { delayForAttempt, waitForGate } from "./gate-wait.mjs";
+import { EXIT_CANDIDATE_MERGE_CONFLICT, EXIT_SOURCE_DRIFT, EXIT_WAIT_CANCELLED } from "./lib/sandbox-freshness.mjs";
+import { delayForAttempt, parseGateStatus, pregateSpawnOptions, waitForGate } from "./gate-wait.mjs";
 
 const noSleep = async () => {};
 
@@ -27,6 +27,52 @@ test("a plain exit 1 is a real failure and stops immediately", () => {
   const v = classifyGateExit({ code: 1, output: "FAIL lib/foo.test.ts" });
   assert.equal(v.verdict, "fail");
   assert.equal(v.retry, false);
+});
+
+// BI-2FFDBE62: spawnSync("pnpm") on Windows returns status null. That is a
+// process that never started, not a verdict about the diff.
+test("gate:wait spawns pnpm.cmd on Windows and allows captured pregate", () => {
+  const win = pregateSpawnOptions({ platform: "win32", env: { PATH: "x" }, cwd: "D:/repo" });
+  assert.equal(win.command, "pnpm.cmd");
+  assert.equal(win.options.shell, false);
+  assert.deepEqual(win.args, ["run", "pregate"]);
+  assert.equal(win.options.env.DPF_PREGATE_ALLOW_CAPTURE, "1");
+  assert.equal(win.options.env.PATH, "x");
+  const posix = pregateSpawnOptions({ platform: "linux", env: {}, cwd: "/repo" });
+  assert.equal(posix.command, "pnpm");
+  assert.equal(posix.options.shell, false);
+  assert.equal(posix.options.env.DPF_PREGATE_ALLOW_CAPTURE, "1");
+});
+
+test("a null exit means pregate did not start and is not a diff failure", () => {
+  for (const code of [null, undefined]) {
+    const v = classifyGateExit({ code });
+    assert.equal(v.kind, "spawn-failed", `code ${code}`);
+    assert.equal(v.retry, false);
+    assert.equal(v.verdict, "none");
+    assert.doesNotMatch(v.summary, /gate failed/);
+  }
+});
+
+// BI-4BCD269B: a wrapped pregate stops before it occupies the pool. The code
+// must not fall through to a product FAIL.
+test("exit 11 is a wrapped invocation, not a product failure", () => {
+  assert.equal(GATE_EXIT.WRAPPED_INVOCATION, 11);
+  const v = classifyGateExit({ code: 11 });
+  assert.equal(v.kind, "wrapped");
+  assert.equal(v.retry, false);
+  assert.equal(v.verdict, "none");
+});
+
+// BI-FCC1DCB2: a candidate that conflicts with origin/main fails the same way on
+// every retry. It is the author's to fix, so it stops and names the merge.
+test("a merge conflict with the base is a failing verdict that does not retry", () => {
+  assert.equal(GATE_EXIT.MERGE_CONFLICT_WITH_BASE, EXIT_CANDIDATE_MERGE_CONFLICT);
+  const v = classifyGateExit({ code: EXIT_CANDIDATE_MERGE_CONFLICT });
+  assert.equal(v.kind, "merge-conflict-with-base");
+  assert.equal(v.retry, false);
+  assert.equal(v.verdict, "fail");
+  assert.match(v.next, /merge origin\/main into your branch and resolve/);
 });
 
 test("sandbox drift does not spin — retrying cannot converge a sandbox", () => {
@@ -79,27 +125,46 @@ test("after a queue it WATCHES the status instead of re-claiming the gate", asyn
     readStatus: async () => ({ verdict: statuses[Math.min(i++, statuses.length - 1)] }),
     runGate: async () => { gateCalls++; return { code: GATE_EXIT.DURABLE_WAIT }; },
     sleep: noSleep,
-    watchCyclesAfterQueue: 3,
   });
   assert.equal(result.outcome, "passed");
   assert.equal(gateCalls, 1, "the gate is claimed once; the resumer is then watched, not raced");
 });
 
-test("re-claims only after the watch window elapses with still no verdict", async () => {
-  // Covers resumeOwner: "caller" — a queued row dies if no local process
-  // re-claims it, so watching forever would strand the run.
-  let gateCalls = 0;
+test("a durable queue is observed beyond the old watch window without another claim", async () => {
+  let gateCalls = 0, clock = 0;
   const result = await waitForGate({
     readStatus: noStatus,
     runGate: async () => { gateCalls++; return { code: GATE_EXIT.DURABLE_WAIT }; },
-    sleep: noSleep,
-    watchCyclesAfterQueue: 2,
-    deadlineMinutes: 1,
-    now: (() => { let t = 0; return () => (t += 15_000); })(),
+    sleep: async ms => { clock += ms; }, now: () => clock,
+    deadlineMinutes: 5, firstDelaySeconds: 1, maxDelaySeconds: 1,
   });
   assert.equal(result.outcome, "deadline");
-  assert.ok(gateCalls >= 1, "must re-claim rather than watch a dead row forever");
+  assert.equal(gateCalls, 1);
 });
+
+test("an existing admitted claim with stale metadata is watched rather than re-claimed", async () => {
+  let calls = 0, reads = 0;
+  const result = await waitForGate({
+    readStatus: async () => ++reads > 12 ? { verdict: "PASS" }
+      : { verdict: "STALE", gateStatus: "admitted", headSha: "head", boundSha: "head" },
+    runGate: async () => { calls++; return { code: GATE_EXIT.DURABLE_WAIT }; }, sleep: noSleep,
+  });
+  assert.equal(result.outcome, "passed");
+  assert.equal(calls, 0);
+});
+
+for (const gateStatus of ["cancelled", "expired", "abandoned"]) {
+  test(`a terminal ${gateStatus} claim stops without re-claiming`, async () => {
+    let calls = 0;
+    const result = await waitForGate({
+      readStatus: async () => ({ verdict: "INCONCLUSIVE", gateStatus, headSha: "head", boundSha: "head" }),
+      runGate: async () => { calls++; return { code: 0 }; }, sleep: noSleep,
+    });
+    assert.equal(result.exitCode, GATE_EXIT.ABANDONED_OR_UNRECORDED);
+    assert.equal(result.outcome, "inconclusive");
+    assert.equal(calls, 0);
+  });
+}
 
 test("surfaces a genuine failure on the first attempt without burning the queue", async () => {
   let calls = 0;
@@ -135,8 +200,8 @@ test("an unreadable status is treated as no verdict, never as a pass", async () 
     runGate: async () => { gateCalls++; return { code: 1 }; },
     sleep: noSleep,
   });
-  assert.equal(gateCalls, 1);
-  assert.equal(result.outcome, "failed");
+  assert.equal(gateCalls, 0);
+  assert.equal(result.outcome, "inconclusive");
 });
 
 test("backoff ramps and then holds", () => {
@@ -156,7 +221,7 @@ test("a cancelled wait and a drifted resume are final and never retried", () => 
   }
 });
 
-test("exit 1 whose record says INCONCLUSIVE is infrastructure, and is retried", async () => {
+test("exit 1 whose record says INCONCLUSIVE stops without retrying infrastructure", async () => {
   // Observed 2026-10-06: pregate exited 1, the record it wrote was
   // INCONCLUSIVE (blocked_wrapper_exited — "not a product verdict"), and
   // gate:wait reported "gate failed". pregate runs with inherited stdio, so the
@@ -169,7 +234,8 @@ test("exit 1 whose record says INCONCLUSIVE is infrastructure, and is retried", 
     runGate: async () => { gateCalls++; return { code: 1 }; },
     sleep: noSleep,
   });
-  assert.equal(result.outcome, "passed");
+  assert.equal(result.outcome, "inconclusive");
+  assert.equal(result.exitCode, GATE_EXIT.ABANDONED_OR_UNRECORDED);
   assert.equal(gateCalls, 1);
   assert.equal(result.attempts[0].kind, "infrastructure");
 });
@@ -195,4 +261,19 @@ test("an unavailable slot substrate is a non-verdict that is never retried", () 
   assert.equal(v.retry, false);
   assert.match(v.summary, /^BLOCKED — slot substrate unavailable/);
   assert.match(v.next, /pregate:status/);
+});
+
+test("reads the complete multiline status JSON and refuses malformed or unknown verdicts", () => {
+  const report = { verdict: "INCONCLUSIVE", gateStatus: "cancelled", headSha: "head", boundSha: "head" };
+  assert.deepEqual(parseGateStatus(JSON.stringify(report, null, 2)), report);
+  assert.equal(parseGateStatus("{"), null);
+  assert.equal(parseGateStatus('{"verdict":"invented-pass"}'), null);
+});
+
+test("pending evidence is not a reason to rerun the gate", async () => {
+  let calls = 0;
+  const result = await waitForGate({ readStatus: async () => ({ verdict: "PENDING" }),
+    runGate: async () => { calls++; return { code: 0 }; }, sleep: noSleep });
+  assert.equal(calls, 0);
+  assert.equal(result.outcome, "inconclusive");
 });

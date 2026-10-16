@@ -4,6 +4,77 @@ status: active
 
 # Local-CI Control-Plane Starvation Prevention
 
+## Supervisor-loss repair: BI-BFDB98B6 (2026-09-13)
+
+Implementation owner: `BI-BFDB98B6`, Workroom `WC-B78D15F5`, branch
+`fix/gate-supervisor-recovery`. This extends the existing process supervision,
+queue-observer identity and pending-evidence contracts. Implementation admitted
+2026-09-27 after the normal research receipt and operator executor approval.
+Independent verification and operational qualification remain outstanding.
+
+### Reproduction and boundaries
+
+On source `c40d1df994c` the injected `createProcessTreeTracker` reproduction
+remembers child PID 200 beneath root 100, then sees unrelated PID 200 beneath
+parent 999 with a later creation time. The assertion that no unrelated process
+is targeted fails: the injected termination function receives 200. No real
+process is terminated by this reproduction. Earlier evidence
+`cmtywa6kv0idc01tako7vuo6w` records the same defect and an ancestor-cycle case.
+
+This proves a cleanup defect, not the historical cause of either lost executor.
+The preserved profile run completed all twelve commands but lacks the canonical
+receipt; an expired lease alone does not establish authority to publish a pass.
+Existing `local-queue-observer.mjs` already reads process creation times, but its
+cached snapshot and ten-second liveness tolerance are unsuitable for destructive
+cleanup. Reuse the platform parsing boundary while requiring fresh exact identity
+for termination. No new table, scheduler, runtime, grant or lease status is needed.
+
+### Ordered implementation and acceptance
+
+1. Add failing tests for PID reuse, stale parentage, ancestor cycles, missing
+   creation identity, unreadable process inventory and a genuine owned descendant.
+   Capture the root identity and controller ancestry before execution. Track each
+   descendant as PID plus creation identity; accept a parent relationship only
+   when its creation ordering is possible. Unknown ownership forbids termination.
+2. Refactor process inspection and identity comparison into the existing shared
+   process boundary. Allocate at least 20% of implementation effort to that shared
+   refactoring. Do not reuse the observer's permissive liveness tolerance for kill
+   authority. Revalidate immediately before terminating each process; avoid an
+   unchecked recursive taskkill that can expand beyond validated identities.
+   Document residual platform race limits rather than claiming atomicity from two
+   separate process-table reads. Journal intent before invoking termination.
+3. Persist an execution-completed checkpoint before descendant cleanup and lease
+   release. Bind it to the original gate key, owner, lease, candidate, integration
+   tree, evidence-plan and toolchain digests, command outcomes, artifact and
+   completion time. Write atomically and retain failures as failures. A local
+   checkpoint is recovery material, not a canonical pass receipt. Product pass/failure
+   outcomes require the validated packet; typed infrastructure exits retain their
+   shared classification without claiming a completed product execution. Cleanup
+   uncertainty still fences either path. Contract success fixtures must supply
+   complete synthetic provenance and exercise real supervision, not bare exit zero.
+4. Extend the existing finalizer with explicit recovery validation. Authenticate
+   the caller and original ownership; require complete immutable evidence and
+   valid freshness, reject conflicting prior receipts and incomplete or mismatched
+   packets, and make replay idempotent. Retain the original execution history.
+   Do not simply change the recorder to accept every expired lease. If old material
+   cannot satisfy these checks, return an explicit inconclusive outcome and permit
+   one governed rerun with the repaired supervisor instead of fabricating approval.
+5. Exercise supervisor loss before completion, after checkpoint, during cleanup,
+   and after server publication but before local acknowledgement. Prove both normal
+   completion and recovery, wrong-owner rejection, changed-tree rejection and
+   duplicate suppression. Run affected source tests and required publication gates.
+6. Recover the preserved profile result only if it qualifies under the verified
+   contract; otherwise run its gate once with the repaired controller. Then obtain
+   its independent review and publish the profile PR under ordinary protections.
+
+No schema migration or product UI is proposed. Existing gate status and recovery
+output must distinguish completed execution, cleanup uncertainty, pending evidence
+and canonical receipt. Update the build-gate runbook and platform support watchlist
+with the verified recovery procedure in the implementation change. Protected PR
+checks, DCO, token grants and canonical runtime release remain mandatory. A revert
+must leave unsafe cleanup disabled or gates explicitly blocked, never restore an
+operational instruction to kill unchecked PIDs.
+
 - **Status:** accepted for implementation
 - **Date:** 2026-07-31
 - **Backlog item:** `BI-CE6E2882`

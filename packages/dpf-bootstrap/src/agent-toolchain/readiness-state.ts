@@ -87,10 +87,13 @@ export function computeReadinessState(
     if (mcp.reason === "mcp-unavailable") {
       return "mcp-unavailable";
     }
+    if (mcp.reason === "coworker_grants_insufficient") return "needs_refresh";
     if (mcp.reason === "endpoint_unreachable" || mcp.reason === "unexpected_shape") {
       return "needs_refresh";
     }
   }
+
+  if (!mcp || (mcp.ok && mcp.delivery?.ready !== true)) return "needs_refresh";
 
   if (state.smokeTest && state.smokeTest.result === "failed") {
     return "failed_smoke";

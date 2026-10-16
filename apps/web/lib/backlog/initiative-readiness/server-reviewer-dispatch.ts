@@ -27,6 +27,7 @@ import "server-only";
 // reason is recorded on the room.
 
 import { prisma } from "@dpf/db";
+import { EXECUTION_UNCERTAIN_MESSAGE } from "@/lib/shared/execution-uncertainty";
 
 import type { GovernedExecuteArgs, GovernedExecuteResult } from "@/lib/mcp-governed-execute-types";
 import { findStandingConnection, findStandingConnectionForUser, type StandingConnection } from "@/lib/mcp/standing-connection";
@@ -213,14 +214,15 @@ async function defaultOwedRoutes(itemId: string, authorAgentId: string, candidat
     return routes && routes.map((route) => ({ workroomId: route.workroomId, requestCoworker: route.requestCoworker as unknown as Record<string, unknown> }));
   }
   const { getBacklogItem } = await import("@/lib/mcp/packs/backlog-pack-read-tools");
-  const item = await getBacklogItem({ itemId }, authorAgentId);
+  const currentUserId = candidate?.room.userId ?? undefined;
+  const item = await getBacklogItem({ itemId }, authorAgentId, currentUserId);
   const decision = (item.data?.readiness as { decisions?: { completion?: unknown } } | undefined)?.decisions?.completion as
     | import("@/lib/backlog/initiative-readiness").InitiativeReadinessDecision
     | undefined;
   if (!item.success || !decision) return null;
   if (decision.verdict === "allowed") return [];
   const { resolveTerminalInitiativeRecovery } = await import("./terminal-recovery");
-  const recovery = await resolveTerminalInitiativeRecovery({ decision, currentAgentId: authorAgentId, refusedWorkroomId: null });
+  const recovery = await resolveTerminalInitiativeRecovery({ decision, currentAgentId: authorAgentId, currentUserId, refusedWorkroomId: null });
   return recovery.reviewerRoutes
     .filter((route) => route.independent)
     .map((route) => ({ workroomId: route.workroomId, requestCoworker: route.requestCoworker as unknown as Record<string, unknown> }));
@@ -340,15 +342,18 @@ export async function dispatchReviewerRequest(args: {
     context: connection.context,
     source: "external-jsonrpc",
   });
+  const executionHeld = result.data?.waitReason === "execution-uncertain";
+  const dispatched = result.success && !executionHeld;
+  const detail = executionHeld ? EXECUTION_UNCERTAIN_MESSAGE : result.error ?? result.message;
   const outcome: RouteOutcome = {
     ...at,
-    outcome: result.success ? "dispatched" : "refused",
-    ...(result.success ? {} : { detail: result.error ?? result.message }),
+    outcome: dispatched ? "dispatched" : "refused",
+    ...(dispatched ? {} : { detail }),
     ...(connection.context.agentId ? { carriedByAgentId: connection.context.agentId } : {}),
   };
-  await record(room, outcome, result.success
+  await record(room, outcome, dispatched
     ? `The platform asked ${String(requestCoworker.targetAgent)} for the independent review this work owes, on the author's connection.`
-    : `The platform could not request the independent review this work owes: ${result.message ?? result.error ?? "refused"}.`);
+    : `The platform could not request the independent review this work owes: ${detail ?? "refused"}.`);
   return outcome;
 }
 

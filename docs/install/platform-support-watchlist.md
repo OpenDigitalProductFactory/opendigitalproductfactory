@@ -1,5 +1,67 @@
 # Platform Support Watch-List (living document)
 
+## Contributor preview mount identity on Docker Desktop (BI-0ACB97B5)
+
+The Windows host records the admitted worktree as a drive-absolute path while
+Docker Desktop reports its bind source as `/run/desktop/mnt/host/<drive>/...`.
+The preview supervisor and Linux-hosted sign-in issuer share the same path
+comparison. Translation applies only to a Windows admission; another drive,
+another worktree, relative paths and traversal fail closed. Source SHA, lease,
+loopback port, environment class and current ownership checks remain required.
+Regression fixtures cover both verification adapters; a failed initialization
+or binding check never earns a served UX pass.
+
+The full local-CI runner also reuses the verified native shell adapter for its
+child environment. Windows fixtures that invoke `sh` must not inherit WSL or
+depend on an agent manually extending PATH. A missing compatible shell is an
+unavailable prerequisite (exit 88), not a failing product test. The parent
+environment, worker limits, test deadlines and lease fences stay unchanged.
+
+## Literal Windows package-manager arguments (BI-263055E3)
+
+The shared host command resolver launches pnpm/Corepack JavaScript entrypoints
+with Node and a literal argument array; native pnpm executables run directly.
+It honors the selected installation and PATH precedence, supports npm global
+and workspace bin layouts, and refuses unsupported shims without a shell
+fallback. The observed process runner uses the same boundary with shell mode
+disabled. Local-CI version pinning supplies a JavaScript forwarding entrypoint
+so percent expansion, quotes and command separators remain argument data.
+POSIX executable selection is unchanged.
+
+## Capability reconciliation on release installs (BI-5ACBAC50)
+
+The portal's Linux container is not the host platform. Explicit v2 runtime
+reconciliation filters service eligibility using the signed installation's
+Windows, macOS or Linux identity on both server and packaged actuator. Preserve
+the recorded release Compose overlays and canonical environment file through
+initial execution and signed recovery. Base-only Compose can reintroduce source
+builds on a source-free consumer install. The actuator's packaged catalog remains
+bound to the signed catalog hash. Source fixtures cover the platform matrix and
+release context; live host application requires a qualified containing release.
+
+## Host process inventory before admission (BI-6DE5A3B6)
+
+Windows process inventory uses explicit UTF-8, terminating PowerShell errors,
+and a bounded producer. Both Windows and POSIX responses must be complete and
+have valid process identities. Producer failure, timeout, output exhaustion and
+malformed responses stop before resource admission as `host_inventory_unavailable`
+(exit 88, command unrun). Diagnostics contain reason and byte count, never raw
+command lines or parser excerpts. Retry the original governed command after
+collection recovers. The intermittent live parsing cause remains unproven;
+these safeguards address independently reproduced failure handling.
+
+## Host claim transport and Windows command launch (BI-091A2DCF)
+
+Host admission uses the existing lease-call allowance rather than the generic
+10-second probe budget. Whole-response deadlines include trickling replies.
+Timeout recovery reconciles the exact immutable claim key before one bounded
+same-key replacement; a lost response is not proof no lease exists. A changed
+source or foreign/active process identity cannot inherit authority. Uncertain
+admission and missing executable return redacted unrun88; an actual nonzero
+child exit retains its code result. Windows pnpm shims use the shared command
+resolver. Reports of the original live claim latency remain reproduction leads;
+mock response-loss and native Windows launch fixtures prove these boundaries.
+
 ## Windows host guard interpreters (BI-BA5F777A)
 
 Windows may resolve `bash` to the WSL launcher while `sh` is absent. Native
@@ -13,6 +75,19 @@ not a passing test or a product validation failure. Host PATH is unchanged.
 Git isolation fixtures write files through Node instead of invoking a shell.
 PKI rejection assertions and existing POSIX permission checks remain intact.
 
+## macOS Docker memory allocation (BI-DC4352E8)
+
+An oversized Docker VM can compete with native applications and models even
+when container usage is modest. The installer now bounds local Desktop memory
+to a quarter of host RAM (8 GiB floor, 32 GiB cap), preserving valid smaller
+allocations. It verifies the running VM, backs up settings, restarts gracefully
+with consent for running containers or enabled Docker AI, and restores the
+previously running containers. Missing, malformed, symlinked or managed settings
+fail before shutdown. See [the Mac guide](macos.md#docker-memory-during-installation).
+This is installer convergence, not an automatic migration of existing installs
+or proof of the cause of historical Chatterbox growth. Native model memory is
+outside the Docker VM allocation.
+
 A running tally of **platform-specific gotchas** to watch for when supporting
 DPF's target environments. This is the operational companion to the canonical
 design docs — it tracks *symptoms and recurring traps*, not contracts:
@@ -24,6 +99,21 @@ design docs — it tracks *symptoms and recurring traps*, not contracts:
 If a rule is *universal* across deployments, it belongs in the deployment
 contracts, not here. This file is for "when you touch X on platform Y, watch
 out for Z."
+
+## Repository-local Codex endpoint overrides (BI-9F258707)
+
+A trusted project's `.codex/config.toml` overrides the user's connector settings.
+Updating only the global file can leave the root checkout on HTTP while a new
+worktree uses HTTPS. Bootstrap now converges an existing project DPF block to
+its resolved endpoint; it does not create project overrides or scan other repos.
+Both repository updater wrappers pass the project explicitly to the standalone
+fallback. Disabled connections and custom credentials remain unchanged.
+
+Malformed project TOML stops convergence. The standalone fallback validates it
+with Python 3.11's `tomllib`, or `tomli` when already available on older Python;
+without either parser it refuses the write. The normal TypeScript planner uses
+its bundled TOML parser. Windows native and certificate-renewal acceptance need
+separate runtime evidence; passing Mac source tests does not establish them.
 
 ## Target environments
 
@@ -84,6 +174,14 @@ roadmap before touching any host exporter.
 
 ## 2. Shell scripts (BSD vs GNU coreutils)
 
+Local-CI cleanup must never traverse a recycled PID tree. Revision 2 uses an
+owned Windows Job Object, process creation identity checks, and durable execution
+checkpoints. Parent-pipe loss closes the owned job; other process identities are
+never inferred from a matching command line. Windows loss and exact-handle tests
+cover the implementation. POSIX identity/signal races remain explicitly bounded
+in the [recovery procedure](../architecture/build-gate-runbook.md#recovering-an-interrupted-gate-publication).
+The admission floor retires older gate clients after the server is upgraded.
+
 macOS ships BSD userland; Linux ships GNU. The installer targets **bash 3.2**
 and **python3 3.9** (stock macOS) — no associative arrays, `mapfile`, or
 `${var^^}` in bash; no Python-3.10+-only stdlib kwargs or syntax in scripts the
@@ -131,7 +229,7 @@ bootstrap runs with the system interpreter.
 | D19 | A spatial view shows "region pack missing" even though a pack was copied onto the host | all | 📌 By design (BI-814F86E1, `DI-63D94E36B0B0`). Map packs live in the `map_data` named volume mounted at `/var/lib/dpf/maps` on the portal (override with `DPF_MAP_DATA_DIR`); the image never carries one. A pack copied to a host directory is invisible until it is placed in that volume with its `<packId>.manifest.json`, and a manifest whose `byteLength` disagrees with the file is reported as invalid (`409`). | Never bind-mount a host map directory into the shared base compose file, and never fetch tiles from a remote host as a fallback. |
 | D20 | Maps stop drawing after a Content-Security-Policy is introduced | all | ⚠️ open (watch). DPF has no app-wide CSP today. MapLibre 6 builds its worker from the same-origin module `/api/map-assets/runtime/maplibre-gl-worker.mjs` (BI-814F86E1), so any future CSP must allow `worker-src 'self' blob:`. | When adding a CSP, include the worker directive and exercise a geographic view in light and dark themes. |
 | D23 | Coworker reviews end without a receipt (`spawn docker EAGAIN`, "Sandbox file write failed") and `docker exec` fails with "resource temporarily unavailable"; `docker stats` shows a container with tens of thousands of PIDs | all Docker hosts | ✅ BI-95BB9CB1: the sandbox's PID 1 is a shell entrypoint and portal-tls's is caddy; neither reaps orphaned children, so every git a build ran and every health-check probe left a zombie (75,868 and 11,573 measured on one install) until the Docker VM's process table was nearly full. Both services now set `init: true` with a `pids_limit` (#6020), and `scripts/compose-init-reaping.test.mjs` keeps the init in place. | Any new long-running service whose PID 1 is a shell script or an app that does not reap children (most are not init systems) must set `init: true`. Check `docker exec <c> sh -c 'ps -eo stat'` for Z states when a container's PID count climbs. |
-| D24 | An agent asks the operator a platform decision it could have put to the kernel (WWMD); the decision-routing guard never fires | Claude desktop app (Code tab), all OSes | ⚠️ open (BI-271B8EEC). The desktop app renders `AskUserQuestion` itself and does not invoke the project `PreToolUse` hook for it; other `PreToolUse` hooks fire. Live probe 2026-10-07: the guard binary denies the payload, the app showed it. See the decision-routing spec §15. | The operator is asked to choose between options with no `principle_decide` record in the session. |
+| D24 | An agent asks the operator a platform decision it could have put to the kernel (WWMD), or runs a command a guard should refuse; no `PreToolUse` guard blocks anything | Claude desktop app (Code tab, Claude Code 2.1.295 / app 2.31226.1), all OSes and permission modes | ✅ BI-E5C45F61 (2026-10-13). The host runs every `PreToolUse` hook, but it validates the output and accepts a top-level `decision` only as `approve`/`block`. The guards' shared deny carried Grok's `decision: "deny"` beside Claude's `hookSpecificOutput`, so the host discarded the whole output, logged a `hook_non_blocking_error` in the transcript, and ran the tool. Claude and Codex payloads now get `hookSpecificOutput` only (`hooks/lib/hook-io.mjs`, contract in `hooks/lib/claude-hook-contract.mjs`); plugin 0.2.9. Bypass mode, an unresolved `${CLAUDE_PROJECT_DIR}` and stale plugin copies were ruled out from the same transcript. The 2026-10-07 reading (BI-271B8EEC, "the app does not invoke the hook for `AskUserQuestion`") was wrong; see the decision-routing spec §15.1. **Probes**, all harmless: `docker compose up --help` (compose-guard), `npx tsc --noEmit` (raw-tool-guard), `npx prisma migrate dev` with no `DATABASE_URL` (lease-punt-guard), a two-option architecture `AskUserQuestion` naming a BI id (decision-routing-guard). Each must be refused. | SessionStart prints "PreToolUse guards inactive in this session" when a probe is not denied in the Claude contract or a declared guard command cannot run (`hooks/pretooluse-guard-selftest.mjs`). The transcript records a discarded verdict as `hook_non_blocking_error`. Client hooks only accelerate: the client-independent backstop is BI-271B8EEC Direction 2 (a decision reaches a person only with a qualifying kernel record), not built yet. |
 
 ## 4. Git / repo hygiene
 
@@ -184,3 +282,14 @@ A bootstrap launched from a worktree may have no install PUBLIC_URL and may inhe
 | Docker Desktop and native Docker | A sibling promoter resolves relative monitoring binds beneath its own `/host-source`; the daemon cannot use that container path. A failed start leaves a Created container that an existence-only check misses. | Translate binds using the promoter's inspected host mounts. After release identity commit, release assets use the canonical install root. Retry only missing or proven never-started containers and retain failed recovery in the durable outcome. |
 | Apple Silicon macOS | The capability catalog asks for Docker speech while the macOS overlay points at the native service on port 8771. | The canonical container catalog excludes macOS for `dpf-tts`; verify native synthesis separately. A disabled `local.dpf-chatterbox-tts` LaunchAgent must be restored through the existing native setup procedure when speech is requested. |
 | All sandbox hosts | The persistent source volume contains newer package manifests but older dependency links. Next fails before its health endpoint starts. | The image-baked sandbox entrypoint performs a frozen dependency install and Prisma generation before serving the existing source. A failed install cannot fall through to a falsely ready preview. |
+
+## Linux pilot startup repairs — 2026-10-03
+
+PR #5998 merged the Docker Engine/Compose prerequisite repair. Additional source
+repairs prepare the runtime signing key and host-owned federation directories
+(BI-DFF7346E), remove the PKI host-UID assumption and suppress first-init password
+output (BI-F3AD783E), and pin pnpm plus Ollama loopback exposure (BI-5282E468).
+The [Linux guide](linux.md#source-repairs-awaiting-native-acceptance) owns release
+and acceptance caveats. Confirm the selected release contains the changes;
+customer HTTPS/login, AI, reboot, restore, upgrade and uninstall remain unrun.
+Historical root-owned directories are preserved and refused for scoped recovery.

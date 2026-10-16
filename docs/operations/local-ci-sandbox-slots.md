@@ -5,6 +5,32 @@ a versioned slot manifest. The lease decides who may run; the manifest decides
 which physical resources that admitted owner may mutate. These are separate
 safety layers.
 
+## Owned development lease cleanup
+
+On an installation proven to be `development` / `evolve-dpf`, a local-CI
+cleanup with the exact original session and a server-recorded durable wait
+belonging to the authenticated user does not need another generic authority
+approval. The classifier checks the complete lease/wait identity and version-one
+slot binding. It does not release the lease or alter its history by itself.
+
+Missing or legacy provenance, another user/session, unsupported environments,
+unknown state and live host-process reservations keep the authority gate.
+Non-development installations and explicit operator approval policies retain
+their gates. Token scope, coworker grants, user capabilities, immutable ownership,
+execution fencing and the release transaction remain enforced.
+
+Release the admitted lease after its owned work finishes. An expired or cancelled
+wait stays terminal; cleanup never implies admission, command success or completed
+verification. Reuse the exact supported request rather than creating repeated
+approval envelopes or new attempts for the same cleanup.
+
+Automatic expiry settles the lease's matching submitted durable wait in the
+same transaction. A capacity notification cannot reopen a completed wait.
+Concurrent notifications trigger a bounded re-read; sustained contention rolls
+back expiry for a later reconciliation pass. Settling a wait records only that
+waiting ended. It never proves a command ran or verification passed, and does
+not repair historical waits whose leases had already expired before this change.
+
 ## Host-wide heavyweight resource admission
 
 The local-CI slots are not the only processes capable of exhausting a
@@ -23,8 +49,26 @@ preserves the host reserve and an inference-growth reserve. Cheap Node guards
 such as documentation, policy, and change-impact checks do not enter this lane
 and remain concurrent.
 
-A full lane produces a typed `host_resource_queued` response and exits without
-leaving a waiting Node process. Stray matching processes are included as
+A full lane exits 75 with `host_resource_durable_wait`. The command does not
+start until admitted. `resumeOwner: detached-resumer` hands the wait to the
+existing background resumer; `resumeOwner: caller` means no detached owner
+started. The response includes `resumePin`: pass it as `--resume-pin <value>`
+before the child-command `--` only when resuming that exact attempt. A fresh
+invocation intentionally creates a different attempt.
+
+Retries preserve the original lease and queue age while updating process
+identity. Source, command, owner, credential, dependency or resource-budget
+changes stop the old attempt unrun (exit 82). Terminal leases stop unrun (81);
+active or foreign leases cannot be taken over. The server still evaluates
+current capacity on every retry.
+
+Diagnostics live in `<git-common-dir>/dpf-local-ci-queue-observers`, or the
+configured `DPF_LOCAL_QUEUE_OBSERVER_DIR`. Each resumer log records its actual
+PID, each gate child's PID and bounded command output. On Windows WMI launches,
+`launcherPid` names the short-lived launcher; use the log's `start` PID for the
+resumer, not the launcher. Logs do not turn a queued or unrun command into PASS.
+
+Stray matching processes are included as
 `evidence-only` diagnostics; the broker never kills a process merely because
 its command line resembles a heavy workload. Only the admitted runner's own
 descendant group may be terminated when lease authority is lost.

@@ -22,6 +22,9 @@ from typing import Any, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib.parse import urlparse
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from grok_credential import converge_grok_credential, find_grok_refresher  # noqa: E402
+
 
 PLUGIN_NAME = "dpf-platform"
 CODEX_PLUGIN_ID = f"{PLUGIN_NAME}@personal"
@@ -35,6 +38,25 @@ TOKEN_ENV_VAR = "DPF_MCP_BEARER_TOKEN"
 # The shipped plugin descriptors are generated from it, so a client with no
 # DPF_MCP_URL still lands on the one origin OAuth tokens are issued for.
 DEFAULT_MCP_URL = "https://localhost/api/mcp/v1"
+
+
+def normalize_mcp_endpoint(endpoint: str) -> str:
+    """Treat an explicit portal origin as the canonical MCP path, never a root resource."""
+    try:
+        parsed = urlsplit(endpoint)
+        credential_keys = {"access_token", "accesstoken", "refresh_token", "refreshtoken", "token", "api_key", "apikey", "key",
+                           "authorization", "client_secret", "clientsecret", "secret", "password"}
+        if (parsed.scheme not in ("http", "https") or not parsed.hostname or "\\" in endpoint
+                or parsed.username or parsed.password or any(char.isspace() for char in endpoint)
+                or any(key.lower().replace("-", "_") in credential_keys for key, _ in parse_qsl(parsed.query))):
+            raise ValueError("Unsafe endpoint")
+        _ = parsed.port  # Validate the port before any configuration is written.
+        if parsed.path in ("", "/"):
+            return urlunsplit((parsed.scheme, parsed.netloc, "/api/mcp/v1", parsed.query, parsed.fragment))
+        return endpoint
+    except ValueError:
+        # Never include an input that may contain credentials in diagnostics.
+        raise ValueError("MCP endpoint must be a credential-free HTTP(S) URL") from None
 
 
 def with_mcp_catalog_tier(mcp_url: str, tier: str) -> str:
@@ -712,25 +734,22 @@ def existing_codex_mcp_endpoint(text: str) -> Optional[str]:
         quoted = match.group(1)
         try:
             endpoint = json.loads(quoted) if quoted.startswith('"') else quoted[1:-1]
-            parsed = urlsplit(endpoint)
-            credential_keys = {"access_token", "accesstoken", "refresh_token", "refreshtoken", "token", "api_key", "apikey", "key",
-                               "authorization", "client_secret", "clientsecret", "secret", "password"}
-            if (parsed.scheme not in ("http", "https") or not parsed.hostname
-                    or parsed.username or parsed.password or any(char.isspace() for char in endpoint)
-                    or any(key.lower().replace("-", "_") in credential_keys for key, _ in parse_qsl(parsed.query))):
-                raise ValueError("Saved URL is not a credential-free HTTP endpoint")
+            normalize_mcp_endpoint(endpoint)
             return endpoint
         except ValueError as error:
             raise ValueError("Cannot preserve saved Codex URL; select an explicit MCP endpoint to repair it") from error
     return None
 
 
-def codex_mcp_body(text: str, endpoint: Optional[str]) -> list[str]:
+def codex_mcp_body(text: str, endpoint: Optional[str], declaration_header: Optional[str] = None) -> list[str]:
     """Change managed keys only; retain operator-owned options and credentials."""
     retained: list[str] = []
     active = False
     seen = False
     custom_bearer = False
+    # An operator's [mcp_servers.dpf.http_headers] table would clash with an
+    # inline http_headers key, so the declaration is then left out.
+    custom_headers = any(canonical_toml_table_header(line) == "mcp_servers.dpf.http_headers" for line in text.splitlines())
     existing_endpoint = existing_codex_mcp_endpoint(text) if not endpoint else None
     for line in text.splitlines():
         if _is_table_boundary(line):
@@ -747,14 +766,22 @@ def codex_mcp_body(text: str, endpoint: Optional[str]) -> list[str]:
             if value.strip().strip('"').strip("'") == TOKEN_ENV_VAR:
                 continue
             custom_bearer = True
+        if separator and key.strip() == "http_headers":
+            # The toolchain declaration (BI-DE1E6485) is the one header line
+            # the updater owns; an operator's own headers table is kept as is.
+            if "X-DPF-Toolchain" in value:
+                continue
+            custom_headers = True
         if line.strip():
             retained.append(line)
     # An implicit plugin refresh must not change the resource an OAuth login
     # names. Only an explicitly supplied CLI/environment URL replaces it.
-    endpoint = with_mcp_catalog_tier(endpoint or existing_endpoint or DEFAULT_MCP_URL, "full")
+    endpoint = with_mcp_catalog_tier(normalize_mcp_endpoint(endpoint) if endpoint else existing_endpoint or DEFAULT_MCP_URL, "full")
     body = [f'url = {json.dumps(endpoint)}', "enabled = true", *retained]
     if not custom_bearer and mcp_client_bearer_header_required(endpoint, "codex"):
         body.append(f'bearer_token_env_var = "{TOKEN_ENV_VAR}"')
+    if declaration_header and not custom_headers:
+        body.append(f'http_headers = {{ "X-DPF-Toolchain" = {json.dumps(declaration_header)} }}')
     return body
 
 
@@ -771,6 +798,7 @@ def ensure_codex_config(
     mcp_url: Optional[str],
     dry_run: bool,
     skill_pack: Optional[Path] = None,
+    declaration_header: Optional[str] = None,
 ) -> bool:
     # NOTE (BI-BCA162CF): the `[plugins."<id>"].enabled` toggles this function
     # writes/reads here are Codex's PERSISTED CONFIG STATE, not a non-interactive
@@ -798,11 +826,59 @@ def ensure_codex_config(
     text = upsert_toml_table(
         text,
         "[mcp_servers.dpf]",
-        codex_mcp_body(text, mcp_url),
+        codex_mcp_body(text, mcp_url, declaration_header),
     )
     if dry_run:
         return True
     return write_text_if_changed(path, text)
+
+
+def ensure_codex_project_config(project_root: Path, mcp_url: str, dry_run: bool) -> bool:
+    """Repair an explicitly scoped override, validating all preserved TOML data."""
+    path = project_root / ".codex" / "config.toml"
+    if not path.exists():
+        return False
+    try:
+        import tomllib as toml_parser
+    except ImportError:
+        try:
+            import tomli as toml_parser
+        except ImportError:
+            raise ValueError("Project Codex TOML requires Python 3.11+ or tomli; configuration unchanged") from None
+    text = path.read_text(encoding="utf-8-sig")
+    try:
+        parsed = toml_parser.loads(text)
+    except ValueError:
+        raise ValueError("Invalid project Codex TOML; configuration unchanged") from None
+    servers = parsed.get("mcp_servers", {})
+    if not isinstance(servers, dict) or "dpf" not in servers:
+        return False
+    existing = servers["dpf"]
+    if not isinstance(existing, dict):
+        raise ValueError("Invalid project Codex TOML DPF table; configuration unchanged")
+    expected = dict(existing)
+    expected["url"] = with_mcp_catalog_tier(mcp_url, "full")
+    if mcp_client_bearer_header_required(mcp_url, "codex"):
+        expected.setdefault("bearer_token_env_var", TOKEN_ENV_VAR)
+    elif expected.get("bearer_token_env_var") == TOKEN_ENV_VAR:
+        del expected["bearer_token_env_var"]
+    if existing == expected:
+        return False
+    # Reuse the standalone writer, then verify its whole semantic result.
+    # Unusual TOML spellings it cannot preserve are refused, never clobbered.
+    body = codex_mcp_body(text, mcp_url)
+    body = [line for line in body if not re.match(r"^enabled\s*=", line)]
+    if "enabled" in existing:
+        body.append("enabled = " + json.dumps(existing["enabled"]))
+    updated = upsert_toml_table(text, "[mcp_servers.dpf]", body)
+    servers["dpf"] = expected
+    try:
+        verified = toml_parser.loads(updated) == parsed
+    except ValueError:
+        verified = False
+    if not verified:
+        raise ValueError("Cannot safely preserve project Codex TOML; configuration unchanged")
+    return True if dry_run else write_text_if_changed(path, updated)
 
 
 def mcp_client_bearer_header_required(endpoint: str, client: str = "claude", auth_mode: str | None = None) -> bool:
@@ -832,8 +908,15 @@ def mcp_client_bearer_header_required(endpoint: str, client: str = "claude", aut
 # Keep the two in lockstep, like the predicate above.
 MCP_CLIENT_OAUTH_SCOPE_PIN = "dpf.read dpf.work dpf.build"
 
+# Claude's connector reads its own variable, never the shared DPF_MCP_URL that
+# Codex, Grok, gates and scripts read: any of those (and a test in stale
+# checkouts) could set the shared one to an address Claude's OAuth client
+# refuses (BI-D6A6462A). Only scripts/installer/lib/mcp-client-env.{sh,ps1}
+# write it, and only for https.
+CLAUDE_MCP_URL_ENV_VAR = "DPF_CLAUDE_MCP_URL"
 
-def ensure_claude_repo_mcp_config(skill_pack_path: Path, mcp_url: str, dry_run: bool) -> bool:
+
+def ensure_claude_repo_mcp_config(skill_pack_path: Path, mcp_url: str, dry_run: bool, declarations: Any = None) -> bool:
     """Keep the packaged Claude MCP descriptor current for standalone installs.
 
     The plugin descriptor is the one dpf connector a Claude session loads
@@ -849,7 +932,7 @@ def ensure_claude_repo_mcp_config(skill_pack_path: Path, mcp_url: str, dry_run: 
     lazy_host_mcp_url = with_mcp_catalog_tier(mcp_url, "full")
     server: dict[str, object] = {
         "type": "http",
-        "url": "${DPF_MCP_URL:-" + lazy_host_mcp_url + "}",
+        "url": "${" + CLAUDE_MCP_URL_ENV_VAR + ":-" + lazy_host_mcp_url + "}",
     }
     if mcp_client_bearer_header_required(lazy_host_mcp_url):
         server["headers"] = {"Authorization": "Bearer ${DPF_MCP_BEARER_TOKEN:-}"}
@@ -857,13 +940,15 @@ def ensure_claude_repo_mcp_config(skill_pack_path: Path, mcp_url: str, dry_run: 
         # BI-3D2FD68C: the OAuth path needs the scope pin or the consent grants
         # read only and every write tool stays out of reach.
         server["oauth"] = {"scopes": MCP_CLIENT_OAUTH_SCOPE_PIN}
+    if declarations is not None:
+        server = declarations.declare_server(server, "claude-code")
     content = json.dumps({"mcpServers": {"dpf": server}}, indent=2) + "\n"
     if dry_run:
         return True
     return write_text_if_changed(skill_pack_path / "claude.mcp.json", content)
 
 
-def ensure_antigravity_plugin_descriptor(skill_pack_path: Path, mcp_url: str, dry_run: bool) -> bool:
+def ensure_antigravity_plugin_descriptor(skill_pack_path: Path, mcp_url: str, dry_run: bool, declarations: Any = None) -> bool:
     """Keep the packaged Antigravity MCP descriptor current (BI-5201141C).
 
     Same rule as the Claude descriptor: URL-only with the DPF_MCP_URL override,
@@ -877,6 +962,8 @@ def ensure_antigravity_plugin_descriptor(skill_pack_path: Path, mcp_url: str, dr
     }
     if mcp_client_bearer_header_required(mcp_url, "antigravity"):
         server["headers"] = {"Authorization": "Bearer ${DPF_MCP_BEARER_TOKEN:-}"}
+    if declarations is not None:
+        server = declarations.declare_server(server, "antigravity")
     content = json.dumps({"mcpServers": {"dpf": server}}, indent=2) + "\n"
     if dry_run:
         return True
@@ -978,7 +1065,7 @@ def converge_claude_project_plugins(home: Path, version: str, dry_run: bool) -> 
     return result
 
 
-_MCP_URL_TEMPLATE = re.compile(r"^\$\{DPF_MCP_URL:-([^}]+)\}$")
+_MCP_URL_TEMPLATE = re.compile(r"^\$\{DPF_(?:CLAUDE_)?MCP_URL:-([^}]+)\}$")
 
 
 def _dpf_endpoint_path(url: object) -> Optional[str]:
@@ -1066,10 +1153,18 @@ def retire_user_scope_dpf_server(home: Path, dry_run: bool) -> Optional[str]:
     return f"removed (backup {backup})"
 
 
-def converge_claude_project_connectors(home: Path, version: str, dry_run: bool) -> list[str]:
-    """Converge stale project-scope plugin pins and duplicate project connectors."""
+def converge_claude_project_connectors(
+    home: Path, version: str, dry_run: bool, outcome: Optional[dict[str, Any]] = None
+) -> list[str]:
+    """Converge stale project-scope plugin pins and duplicate project connectors.
+
+    `outcome`, when given, receives the structured result for --report-json.
+    """
     version = version.split("+", 1)[0]
     plugins = converge_claude_project_plugins(home, version, dry_run)
+    if outcome is not None:
+        outcome["plugins"] = plugins
+        outcome["retired"] = []
     verb = "would update" if dry_run else "updated"
     lines = [f"  Claude project scope: {verb} {len(plugins['updated'])}, "
              f"current {len(plugins['current'])}, failed {len(plugins['failed'])}, "
@@ -1086,6 +1181,8 @@ def converge_claude_project_connectors(home: Path, version: str, dry_run: bool) 
         if not Path(project).is_dir():
             continue
         backup = retire_duplicate_project_mcp_json(Path(project), dry_run)
+        if backup and outcome is not None:
+            outcome["retired"].append((project, backup))
         if backup:
             action = "would disable" if dry_run else "disabled"
             lines.append(f"    {action} duplicate dpf connector in {Path(project) / '.mcp.json'} (backup {backup})")
@@ -1406,7 +1503,7 @@ def antigravity_mcp_config_path(home: Path) -> Path:
     return home / ".antigravity" / "mcp_config.json"
 
 
-def ensure_antigravity_mcp_config(home: Path, mcp_url: str, dry_run: bool) -> str:
+def ensure_antigravity_mcp_config(home: Path, mcp_url: str, dry_run: bool, declarations: Any = None) -> str:
     """Upsert the DPF `mcpServers.dpf` block into agy's JSON MCP config.
 
     Env-backed (no secret written): the CLI reads the token from
@@ -1428,6 +1525,8 @@ def ensure_antigravity_mcp_config(home: Path, mcp_url: str, dry_run: bool) -> st
         "url": mcp_url,
         **({"headers": {"Authorization": f"Bearer ${{{TOKEN_ENV_VAR}}}"}} if mcp_client_bearer_header_required(mcp_url, "antigravity") else {}),
     }
+    if declarations is not None:
+        servers["dpf"] = declarations.declare_server(servers["dpf"], "antigravity")
     data["mcpServers"] = servers
     if dry_run:
         return f"dry-run: would upsert dpf server into {path}"
@@ -1575,6 +1674,15 @@ GROK_STOP_SCRIPTS = ("uncommitted-work-guard.mjs",)
 GROK_SESSION_START_SCRIPT = GROK_SESSION_START_SCRIPTS[0]
 GROK_SESSION_END_SCRIPT = GROK_SESSION_END_SCRIPTS[0]
 
+# PostToolUse (BI-AB4EA033, BI-C3D3762B): re-cache the claim guard's marker from
+# each dpf claim/heartbeat answer, so a lease renewed over MCP stops the guard
+# denying edits. Non-blocking. The matcher mirrors hooks.json (drift-tested).
+CLAIM_REFRESH_SCRIPT = "workroom-claim-refresh.mjs"
+CLAIM_REFRESH_MATCHER = (
+    "^mcp__.+__(adopt_worktree|heartbeat_workroom|claim_workroom_scope"
+    "|claim_backlog_item_for_work|create_workroom)$"
+)
+
 
 def grok_hooks_file(home: Path) -> Path:
     return home / ".grok" / "hooks" / "dpf-guards.json"
@@ -1615,6 +1723,16 @@ def _grok_matched_group(
     return {"matcher": matcher, "hooks": hooks}
 
 
+def claim_refresh_post_tool_use_groups(hooks_dir: Path, *, dry_run: bool) -> list[dict[str, Any]]:
+    """The PostToolUse group that re-caches the Workroom claim marker, or none."""
+    if not (dry_run or (hooks_dir / CLAIM_REFRESH_SCRIPT).exists()):
+        return []
+    return [{
+        "matcher": CLAIM_REFRESH_MATCHER,
+        "hooks": [_managed_hook_command(hooks_dir, CLAIM_REFRESH_SCRIPT, timeout=15, event="PostToolUse")],
+    }]
+
+
 def build_grok_hooks_payload(managed: Path, dry_run: bool = False) -> dict[str, Any]:
     """Build the global Grok hooks payload (PreToolUse + SessionStart + SessionEnd/Stop)."""
     hooks_dir = managed / "hooks"
@@ -1626,6 +1744,9 @@ def build_grok_hooks_payload(managed: Path, dry_run: bool = False) -> dict[str, 
     payload: dict[str, Any] = {"hooks": {}}
     if pre_entries:
         payload["hooks"]["PreToolUse"] = pre_entries
+    post_entries = claim_refresh_post_tool_use_groups(hooks_dir, dry_run=dry_run)
+    if post_entries:
+        payload["hooks"]["PostToolUse"] = post_entries
     start = [
         _grok_command_entry(hooks_dir, script, timeout=30, event="SessionStart")
         for script in GROK_SESSION_START_SCRIPTS
@@ -1774,6 +1895,8 @@ CODEX_BASH_GUARDS = (
     "workroom-claim-guard.mjs",
 )
 CODEX_ASK_GUARDS = ("decision-routing-guard.mjs",)
+# Tool events whose DPF-owned entries the fallback copy writes and prunes.
+CODEX_DPF_TOOL_EVENTS = ("PreToolUse", "PostToolUse")
 CODEX_WRITE_GUARDS = (
     "root-clone-guard.mjs",
     "plan-backlog-coverage-guard.mjs",
@@ -1791,7 +1914,7 @@ def _dpf_hook_command(command: str, managed_hooks_dir: Path) -> bool:
     managed_prefix = str(managed_hooks_dir)
     if managed_prefix in command and ".mjs" in command:
         return True
-    return any(name in command for name in (*CODEX_BASH_GUARDS, *CODEX_ASK_GUARDS, *CODEX_WRITE_GUARDS))
+    return any(name in command for name in (*CODEX_BASH_GUARDS, *CODEX_ASK_GUARDS, *CODEX_WRITE_GUARDS, CLAIM_REFRESH_SCRIPT))
 
 
 def _build_codex_pre_tool_use_groups(managed: Path, *, dry_run: bool) -> list[dict[str, Any]]:
@@ -1822,40 +1945,36 @@ def _build_codex_pre_tool_use_groups(managed: Path, *, dry_run: bool) -> list[di
 
 
 def prune_codex_hooks_payload(existing: dict[str, Any], hooks_dir: Path) -> dict[str, Any]:
-    """Drop DPF-owned PreToolUse entries; keep foreign hooks, drop emptied groups."""
+    """Drop DPF-owned PreToolUse/PostToolUse entries; keep foreign hooks, drop emptied groups."""
     payload = dict(existing) if isinstance(existing, dict) else {}
     events = payload.get("hooks")
     events = dict(events) if isinstance(events, dict) else {}
     payload["hooks"] = events
-    pre_tool_use = events.get("PreToolUse")
-    if not isinstance(pre_tool_use, list):
-        pre_tool_use = []
-    cleaned: list[Any] = []
-    for group in pre_tool_use:
-        if not isinstance(group, dict):
-            cleaned.append(group)
-            continue
-        kept = [
-            hook
-            for hook in group.get("hooks", [])
-            if isinstance(hook, dict)
-            and not _dpf_hook_command(str(hook.get("command", "")), hooks_dir)
-        ]
-        if kept:
-            cleaned.append({**group, "hooks": kept})
-    if cleaned:
-        events["PreToolUse"] = cleaned
-    else:
-        events.pop("PreToolUse", None)
+    for event in CODEX_DPF_TOOL_EVENTS:
+        groups = events.get(event)
+        if not isinstance(groups, list):
+            groups = []
+        cleaned: list[Any] = []
+        for group in groups:
+            if not isinstance(group, dict):
+                cleaned.append(group)
+                continue
+            kept = [
+                hook
+                for hook in group.get("hooks", [])
+                if isinstance(hook, dict)
+                and not _dpf_hook_command(str(hook.get("command", "")), hooks_dir)
+            ]
+            if kept:
+                cleaned.append({**group, "hooks": kept})
+        if cleaned:
+            events[event] = cleaned
+        else:
+            events.pop(event, None)
     return payload
 
 
-def merge_codex_hooks_payload(existing: dict[str, Any], managed: Path, *, dry_run: bool) -> dict[str, Any]:
-    """Fallback: upsert DPF guards into ~/.codex/hooks.json without clobbering other hooks."""
-    payload = prune_codex_hooks_payload(existing, managed / "hooks")
-    events = payload["hooks"]
-    cleaned: list[Any] = list(events.get("PreToolUse", []))
-    dpf_groups = _build_codex_pre_tool_use_groups(managed, dry_run=dry_run)
+def _upsert_dpf_groups(cleaned: list[Any], dpf_groups: list[dict[str, Any]]) -> list[Any]:
     for dpf_group in dpf_groups:
         matcher = dpf_group.get("matcher")
         merged = False
@@ -1875,7 +1994,22 @@ def merge_codex_hooks_payload(existing: dict[str, Any], managed: Path, *, dry_ru
                 break
         if not merged:
             cleaned.insert(0, dpf_group)
-    events["PreToolUse"] = cleaned
+    return cleaned
+
+
+def merge_codex_hooks_payload(existing: dict[str, Any], managed: Path, *, dry_run: bool) -> dict[str, Any]:
+    """Fallback: upsert DPF guards into ~/.codex/hooks.json without clobbering other hooks."""
+    payload = prune_codex_hooks_payload(existing, managed / "hooks")
+    events = payload["hooks"]
+    events["PreToolUse"] = _upsert_dpf_groups(
+        list(events.get("PreToolUse", [])), _build_codex_pre_tool_use_groups(managed, dry_run=dry_run)
+    )
+    post = _upsert_dpf_groups(
+        list(events.get("PostToolUse", [])),
+        claim_refresh_post_tool_use_groups(managed / "hooks", dry_run=dry_run),
+    )
+    if post:
+        events["PostToolUse"] = post
     return payload
 
 
@@ -2174,6 +2308,7 @@ def hook_reference(skill_pack: Path) -> str:
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Update DPF Codex/Claude/Grok/Antigravity agent skills and MCP wiring.")
     parser.add_argument("--skill-pack-path", default=str(default_skill_pack_path()))
+    parser.add_argument("--project-root", type=Path, help="Explicit repository whose existing Codex override should converge")
     parser.add_argument("--mcp-url", default=os.environ.get("DPF_MCP_URL") or None)
     parser.add_argument("--auth-mode", choices=("oauth", "legacy"), default=os.environ.get("DPF_MCP_AUTH_MODE", "oauth"))
     parser.add_argument("--codex-only", action="store_true")
@@ -2195,7 +2330,23 @@ def main(argv: list[str]) -> int:
         action="store_true",
         help="Exit 2 when Codex is installed but hook trust has not been granted (BI-66EBEA06).",
     )
+    parser.add_argument(
+        "--grok-client-stdin",
+        action="store_true",
+        help="Read Grok's credentials client (from issue_grok_credentials_client) as JSON on stdin (BI-84C1F526).",
+    )
     parser.add_argument("--dry-run", action="store_true")
+    # BI-DE1E6485 (design 2026-10-07 §5.3): pull the pack from the portal,
+    # verified by the installation's signature, instead of a local directory.
+    parser.add_argument("--from-portal", metavar="ORIGIN",
+                        help="Converge from this DPF portal origin (https or loopback); see portal_source.py.")
+    parser.add_argument("--expect-installation", metavar="DID",
+                        help="Device id (did_...) from this session's authenticated DPF connection.")
+    parser.add_argument("--approve-identity-change", action="store_true",
+                        help="The user approved a portal whose identity differs from this host's pin.")
+    parser.add_argument("--report-json", metavar="PATH",
+                        help="Write the per-client, per-scope convergence report as JSON.")
+    parser.add_argument("--portal-manifest", help=argparse.SUPPRESS)
     reference_mode = parser.add_mutually_exclusive_group()
     reference_mode.add_argument("--write-hook-reference", action="store_true")
     reference_mode.add_argument("--check-hook-reference", action="store_true")
@@ -2205,6 +2356,12 @@ def main(argv: list[str]) -> int:
         text = path.read_text(encoding="utf-8-sig") if path.exists() else ""
         print(existing_codex_mcp_endpoint(text) or "")
         return 0
+    if args.mcp_url:
+        args.mcp_url = normalize_mcp_endpoint(args.mcp_url)
+    if args.from_portal:
+        import portal_source
+
+        return portal_source.run_from_portal(args, argv, home_dir(), os.environ)
     mcp_url = args.mcp_url or DEFAULT_MCP_URL
     os.environ["DPF_MCP_AUTH_MODE"] = args.auth_mode
 
@@ -2251,6 +2408,17 @@ def main(argv: list[str]) -> int:
     print(f"  home       : {home}")
     print(f"  MCP URL    : {args.mcp_url or 'preserve existing Codex endpoint; new clients use ' + mcp_url}")
 
+    # BI-DE1E6485: the declaration each connector carries, and the report's
+    # "before" state, which must be read before anything is copied.
+    import toolchain_convergence as convergence
+
+    portal_manifest = read_json(Path(args.portal_manifest), {}) if args.portal_manifest else None
+    pack_identity = convergence.Declarations(skill_pack, portal_manifest)
+    # A connector declares only a well-formed pack version (design §5.2).
+    declarations = pack_identity if pack_identity.enabled() else None
+    report = convergence.ConvergenceReport(home, pack_identity, portal_manifest) if args.report_json else None
+    codex_header = declarations.header_value("codex") if declarations and declarations.carrier("codex") == "header" else None
+
     copy_skill_pack(skill_pack, codex_managed, args.dry_run)
     copy_skill_pack(skill_pack, shared_managed, args.dry_run)
     codex_version = codex_content_version(skill_pack)
@@ -2258,6 +2426,11 @@ def main(argv: list[str]) -> int:
         write_json(codex_managed / ".codex-plugin" / "plugin.json", {**manifest, "version": codex_version})
     print(f"  Codex source : {codex_managed}")
     print(f"  shared source: {shared_managed}")
+    if declarations is not None:
+        convergence.declare_grok_descriptor(shared_managed, declarations, args.dry_run)
+        print(f"  declares   : pack {declarations.pack}, digest {declarations.digest[:16]}")
+    if report:
+        report.add("shared", "copy", "copied")
     process_spine_root = skill_pack if args.dry_run else codex_managed
     if not process_spine_contract_path(process_spine_root).exists():
         process_spine_root = skill_pack
@@ -2276,7 +2449,7 @@ def main(argv: list[str]) -> int:
 
     if not args.claude_only:
         ensure_codex_marketplace(home, codex_version, args.dry_run)
-        ensure_codex_config(home, args.mcp_url, args.dry_run, process_spine_root)
+        ensure_codex_config(home, args.mcp_url, args.dry_run, process_spine_root, codex_header)
         codex_status = "skipped by flag"
         if not args.skip_codex_cli_install:
             codex_status = install_codex_plugin(home, args.dry_run)
@@ -2285,7 +2458,12 @@ def main(argv: list[str]) -> int:
             # installing a qualified registry id. Converge again after the CLI
             # mutation so the next process does not warn that `dpf-platform`
             # lacks its `@marketplace` qualifier.
-            ensure_codex_config(home, args.mcp_url, args.dry_run, process_spine_root)
+            ensure_codex_config(home, args.mcp_url, args.dry_run, process_spine_root, codex_header)
+        if args.project_root and args.project_root.resolve() != home.resolve():
+            global_config = codex_config_path(home)
+            saved = global_config.read_text(encoding="utf-8-sig") if global_config.exists() else ""
+            endpoint = args.mcp_url or existing_codex_mcp_endpoint(saved) or DEFAULT_MCP_URL
+            ensure_codex_project_config(args.project_root, endpoint, args.dry_run)
         codex_hooks_status = install_codex_hooks(codex_managed, home, args.dry_run)
         print(
             f"  Codex      : marketplace + config converged; plugin {codex_status}; "
@@ -2306,6 +2484,21 @@ def main(argv: list[str]) -> int:
                 process_spine_root, dry_run=args.dry_run
             )
         print(f"  Grok competitive: {grok_competitive_status}")
+        # Grok's own OAuth credentials client, refreshed into bearer_token_file
+        # (BI-84C1F526, DI-4B843FAF62F9). The secret arrives on stdin only.
+        grok_credential_status = converge_grok_credential(
+            home=home, refresher=find_grok_refresher(skill_pack), mcp_url=args.mcp_url,
+            client_payload=sys.stdin.read() if args.grok_client_stdin else None,
+            dry_run=args.dry_run, default_mcp_url=mcp_url,
+            # The query carrier declare_grok_descriptor writes into grok.mcp.json, so the
+            # config.toml connector declares the pack too (design §5.2).
+            declare_url=(lambda url: declarations.query_url(url, "grok"))
+            if declarations is not None and declarations.carrier("grok") == "query" else None,
+        )
+        print(f"  Grok credential: {grok_credential_status}")
+        if report:
+            report.add("codex", "user", codex_status)
+            report.add("grok", "user", grok_status)
         # Antigravity (agy): MCP-config wiring + skill-pack sync.
         antigravity_status = "skipped by flag"
         if not args.skip_antigravity_cli_install:
@@ -2313,11 +2506,14 @@ def main(argv: list[str]) -> int:
                 shared_managed if not args.dry_run else skill_pack,
                 mcp_url,
                 args.dry_run,
+                declarations,
             )
-            mcp_st = ensure_antigravity_mcp_config(home, mcp_url, args.dry_run)
+            mcp_st = ensure_antigravity_mcp_config(home, mcp_url, args.dry_run, declarations)
             skills_st = ensure_antigravity_skills(skill_pack, home, args.dry_run)
             antigravity_status = f"MCP config {mcp_st}; skills {skills_st}"
         print(f"  Antigravity: {antigravity_status}")
+        if report:
+            report.add("antigravity", "user", antigravity_status)
 
     if not args.codex_only:
         ensure_claude_marketplace(home, version, args.dry_run)
@@ -2325,17 +2521,32 @@ def main(argv: list[str]) -> int:
             shared_managed if not args.dry_run else skill_pack,
             mcp_url,
             args.dry_run,
+            declarations,
         )
         status = "skipped by flag"
         if not args.skip_claude_cli_install:
             status = install_claude_plugin(home, args.dry_run)
         print(f"  Claude     : marketplace converged; plugin install {status}")
         if not args.skip_claude_cli_install:
-            for line in converge_claude_project_connectors(home, version, args.dry_run):
+            project_outcome: dict[str, Any] = {}
+            for line in converge_claude_project_connectors(home, version, args.dry_run, project_outcome):
                 print(line)
             user_scope_status = retire_user_scope_dpf_server(home, args.dry_run)
             if user_scope_status:
                 print(f"  Claude user-scope dpf duplicate: {user_scope_status}")
+            local_scope = convergence.retire_local_scope_dpf_servers(home, args.dry_run)
+            for row in local_scope:
+                print(f"  Claude local-scope dpf duplicate in {row['project']}: {row['action']}"
+                      + (f" (backup {row['backupPath']})" if row.get("backupPath") else ""))
+            # Until every client parses the shipped descriptor, each converged
+            # record's cached copy gets a literal endpoint (design §5.4).
+            pins = convergence.pin_record_descriptors(home, mcp_url, os.environ, args.dry_run)
+            pinned = [row["project"] for row in pins if row["action"] == "updated"]
+            if pinned:
+                print(f"  Claude connector URL pinned for {len(pinned)} project record(s)")
+            if report:
+                convergence.record_claude_scopes(
+                    report, home, status, project_outcome, user_scope_status, local_scope)
         claude_competitive_status = "skipped by flag"
         if not args.skip_claude_cli_install:
             claude_competitive_status = disable_competitive_claude_plugins(
@@ -2366,6 +2577,9 @@ def main(argv: list[str]) -> int:
         for line in hook_roster(skill_pack):
             print(line)
 
+    if report:
+        written = report.write(args.report_json, args.dry_run)
+        print(f"  Report     : {args.report_json} ({written['result']})")
     if codex_install_failed:
         print("Incomplete: Codex plugin refresh failed; resolve the error above and rerun the updater.")
     else:

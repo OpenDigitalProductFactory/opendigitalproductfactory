@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __resetInferenceAdmissionForTest,
   acquireInferenceSlot,
@@ -8,6 +8,10 @@ import {
   isAdmissionTimeout,
   resolveEngineLimit,
   withInferenceOrigin,
+  withInferenceCancellation,
+  currentInferenceSignal,
+  withInferenceAdmissionObserver,
+  type InferenceAdmissionEvent,
 } from "./inference-admission";
 
 const ENV_KEYS = [
@@ -35,7 +39,101 @@ afterEach(() => {
 // small helper: let queued microtasks/promises settle
 const tick = () => new Promise<void>(r => setTimeout(r, 0));
 
+describe("caller-scoped admission evidence", () => {
+  it("shares only caller observation across separately evaluated module caches", async () => {
+    vi.resetModules();
+    const duplicate = await import("./inference-admission");
+    const phases: string[] = [];
+    await withInferenceAdmissionObserver(e => phases.push(e.phase), async () => {
+      const release = await duplicate.acquireInferenceSlot("remote", "interactive");
+      release();
+    });
+    expect(phases).toEqual(["acquired", "released"]);
+  });
+  it("records real waiting and release in caller order without sharing observers", async () => {
+    process.env.DPF_INFERENCE_MAX_CONCURRENCY_LOCAL = "1";
+    const events: Array<{ caller: string; phase: string }> = [];
+    const observe = (caller: string) => (event: InferenceAdmissionEvent) => {
+      expect(event.engineKey).toBe("local");
+      expect(event.at).toEqual(expect.any(Number));
+      events.push({ caller, phase: event.phase });
+    };
+    const firstRelease = await withInferenceAdmissionObserver(observe("first"), () =>
+      acquireInferenceSlot("local", "interactive"));
+    const second = withInferenceAdmissionObserver(observe("second"), () =>
+      acquireInferenceSlot("local", "interactive"));
+    await tick();
+    expect(events).toEqual([{ caller: "first", phase: "acquired" }, { caller: "second", phase: "queued" }]);
+    firstRelease();
+    const secondRelease = await second;
+    secondRelease();
+    secondRelease();
+    expect(events.map(e => `${e.caller}:${e.phase}`)).toEqual([
+      "first:acquired", "second:queued", "first:released", "second:acquired", "second:released",
+    ]);
+    const unobservedRelease = await acquireInferenceSlot("local", "interactive");
+    unobservedRelease();
+    expect(events).toHaveLength(5);
+    expect(getInferenceAdmissionSnapshot().local.active).toBe(0);
+  });
+
+  it("cannot fail or leak a slot when observation throws", async () => {
+    const release = await withInferenceAdmissionObserver(() => { throw new Error("observer failed"); }, () =>
+      acquireInferenceSlot("local", "interactive"));
+    expect(() => release()).not.toThrow();
+    expect(getInferenceAdmissionSnapshot().local.active).toBe(0);
+  });
+
+  it("records cancellation without inventing acquisition or release for a queued caller", async () => {
+    process.env.DPF_INFERENCE_MAX_CONCURRENCY_LOCAL = "1";
+    const release = await acquireInferenceSlot("local", "interactive");
+    const controller = new AbortController();
+    const events: InferenceAdmissionEvent[] = [];
+    const queued = withInferenceAdmissionObserver(e => events.push(e), () =>
+      acquireInferenceSlot("local", "interactive", { signal: controller.signal }));
+    const rejected = expect(queued).rejects.toThrow("caller stopped");
+    controller.abort(new Error("caller stopped"));
+    await rejected;
+    release();
+    expect(events.map(e => e.phase)).toEqual(["queued", "canceled"]);
+    expect(getInferenceAdmissionSnapshot().local.interactiveWaiting).toBe(0);
+  });
+});
+
 describe("inference origin (AsyncLocalStorage)", () => {
+  it("preserves cancellation through nested origin scopes", async () => {
+    const controller = new AbortController();
+    const seen = await withInferenceCancellation(controller.signal, () =>
+      withInferenceOrigin("autonomous", async () => currentInferenceSignal()));
+    expect(seen).toBe(controller.signal);
+    expect(currentInferenceSignal()).toBeUndefined();
+  });
+
+  it("removes an aborted waiter without releasing a running request", async () => {
+    process.env.DPF_INFERENCE_MAX_CONCURRENCY_LOCAL = "1";
+    const release = await acquireInferenceSlot("local", "interactive");
+    const controller = new AbortController();
+    const pending = withInferenceCancellation(controller.signal, () => acquireInferenceSlot("local", "autonomous"));
+    const rejected = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    controller.abort();
+    await rejected;
+    expect(getInferenceAdmissionSnapshot().local).toMatchObject({ active: 1, autonomousWaiting: 0 });
+    release();
+    expect(getInferenceAdmissionSnapshot().local.active).toBe(0);
+  });
+
+  it("releases a handed-off slot if cancellation wins before the waiter resumes", async () => {
+    process.env.DPF_INFERENCE_MAX_CONCURRENCY_LOCAL = "1";
+    const release = await acquireInferenceSlot("local", "interactive");
+    const controller = new AbortController();
+    const pending = withInferenceCancellation(controller.signal, () => acquireInferenceSlot("local", "autonomous"));
+    const rejected = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    release();
+    controller.abort();
+    await rejected;
+    expect(getInferenceAdmissionSnapshot().local).toMatchObject({ active: 0, autonomousWaiting: 0 });
+  });
+
   it("defaults to interactive when unset", () => {
     expect(currentInferenceOrigin()).toBe("interactive");
   });
@@ -195,5 +293,41 @@ describe("acquireInferenceSlot", () => {
     const r2 = await waiting;
     expect(getInferenceAdmissionSnapshot().local.autonomousWaiting).toBe(0);
     r2();
+  });
+});
+
+describe("parent cancellation during inference admission", () => {
+  it.each(["caller", "parent"])("combines both scopes and removes a waiter canceled by %s", async source => {
+    process.env.DPF_INFERENCE_MAX_CONCURRENCY_LOCAL = "1";
+    const release = await acquireInferenceSlot("local", "autonomous");
+    const caller = new AbortController();
+    const parent = new AbortController();
+    const queued = withInferenceCancellation(caller.signal, () =>
+      acquireInferenceSlot("local", "autonomous", { signal: parent.signal }))
+      .then(free => { free(); return "dispatched"; }, error => error);
+    const canceled = source === "caller" ? caller : parent;
+    try {
+      canceled.abort(new Error(`${source} expired`));
+      expect(await queued).toBe(canceled.signal.reason);
+      expect(getInferenceAdmissionSnapshot().local).toMatchObject({ active: 1, autonomousWaiting: 0 });
+    } finally { release(); }
+    expect(getInferenceAdmissionSnapshot().local.active).toBe(0);
+  });
+
+  it("drops canceled queued work without leaking or releasing the occupied slot", async () => {
+    process.env.DPF_INFERENCE_MAX_CONCURRENCY_LOCAL = "1";
+    const release = await acquireInferenceSlot("local", "autonomous");
+    const controller = new AbortController();
+    const queued = acquireInferenceSlot("local", "autonomous", { signal: controller.signal })
+      .then(free => { free(); return "dispatched"; }, error => error);
+    try {
+      controller.abort(new Error("parent expired"));
+      await tick();
+      expect(getInferenceAdmissionSnapshot().local).toMatchObject({ active: 1, autonomousWaiting: 0 });
+    } finally {
+      release();
+    }
+    expect(await queued).toMatchObject({ message: "parent expired" });
+    expect(getInferenceAdmissionSnapshot().local.active).toBe(0);
   });
 });

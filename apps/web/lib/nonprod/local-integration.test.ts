@@ -25,12 +25,44 @@ describe("recordLocalIntegrationResult", () => {
     environmentLease.updateMany.mockResolvedValue({ count: 1 });
   });
 
+  it("replays an acknowledged result without creating a second evidence row", async () => {
+    const gateKey = "a".repeat(64);
+    const evidence = { sha: "b".repeat(40), content: { synthesizedTreeSha: "c".repeat(40) } };
+    const input = {
+      actorUserId: "user-1", provider: "codex" as const, externalSessionId: "session-1",
+      routeContext: "/build", candidateBranch: "fix/recovery", mode: "single-branch" as const,
+      status: "passed" as const, summary: "Passed", gateKey, leaseId: "NPEL-REPLAY", evidence,
+    };
+    environmentLease.findUnique.mockResolvedValue({
+      leaseId: input.leaseId, claimKey: `gate:${gateKey}`, ownerSessionId: input.externalSessionId, ownerProvider: input.provider,
+      status: "released", evidenceRecordId: "already-recorded",
+    });
+    const prior = { id: "already-recorded", actorUserId: input.actorUserId,
+      provider: input.provider, target: input.candidateBranch, operationType: "local_integration_ci",
+      details: { externalSessionId: input.externalSessionId, gateKey, leaseId: input.leaseId,
+        status: input.status, evidence } };
+    const findEvidence = vi.fn().mockResolvedValue(prior);
+    const result = await recordLocalIntegrationResult(input, { platformConfig, environmentLease, findEvidence });
+    expect(result.id).toBe(prior.id);
+    expect(mockRecordExternalEvidence).not.toHaveBeenCalled();
+    await expect(recordLocalIntegrationResult({ ...input, actorUserId: "other" }, {
+      platformConfig, environmentLease, findEvidence,
+    })).rejects.toThrow(/conflict/);
+    await expect(recordLocalIntegrationResult({ ...input, provider: "claude" }, {
+      platformConfig, environmentLease, findEvidence,
+    })).rejects.toThrow(/owner/);
+    await expect(recordLocalIntegrationResult({ ...input, evidence: { ...evidence, sha: "d".repeat(40) } }, {
+      platformConfig, environmentLease, findEvidence,
+    })).rejects.toThrow(/conflict/);
+  });
+
   it("binds immutable gate evidence only when the recording session owns the canonical lease", async () => {
     const gateKey = "a".repeat(64);
     environmentLease.findUnique.mockResolvedValue({
       leaseId: "NPEL-GATE",
       claimKey: `gate:${gateKey}`,
       ownerSessionId: "codex-session-1",
+      ownerProvider: "codex",
       status: "active",
       evidenceRecordId: null,
     });
@@ -57,6 +89,7 @@ describe("recordLocalIntegrationResult", () => {
         leaseId: "NPEL-GATE",
         claimKey: `gate:${gateKey}`,
         ownerSessionId: "codex-session-1",
+        ownerProvider: "codex",
         evidenceRecordId: null,
       },
       data: { evidenceRecordId: "external-1" },
@@ -69,6 +102,7 @@ describe("recordLocalIntegrationResult", () => {
       leaseId: "NPEL-PEAK",
       claimKey: `gate:${gateKey}`,
       ownerSessionId: "claude-session-1",
+      ownerProvider: "claude",
       status: "active",
       evidenceRecordId: null,
     });
@@ -145,6 +179,7 @@ describe("recordLocalIntegrationResult", () => {
       leaseId: "NPEL-DOWN",
       claimKey: `gate:${gateKey}`,
       ownerSessionId: "claude-session-1",
+      ownerProvider: "claude",
       status: "active",
       evidenceRecordId: null,
     });
@@ -171,6 +206,7 @@ describe("recordLocalIntegrationResult", () => {
       leaseId: "NPEL-GATE",
       claimKey: `gate:${"a".repeat(64)}`,
       ownerSessionId: "winner-session",
+      ownerProvider: "codex",
       status: "active",
       evidenceRecordId: null,
     });
@@ -504,7 +540,7 @@ describe("local-CI evidence attribution to an adopted Workroom (BI-C9912C22)", (
   beforeEach(() => {
     vi.clearAllMocks();
     environmentLease.findUnique.mockResolvedValue({
-      leaseId: "NPEL-ADOPTED", claimKey: `gate:${gateKey}`, ownerSessionId: "cab18f6e-session",
+      leaseId: "NPEL-ADOPTED", claimKey: `gate:${gateKey}`, ownerSessionId: "cab18f6e-session", ownerProvider: "claude",
       status: "active", evidenceRecordId: null,
     });
     environmentLease.updateMany.mockResolvedValue({ count: 1 });

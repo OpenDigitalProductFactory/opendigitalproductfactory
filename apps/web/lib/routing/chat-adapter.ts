@@ -24,16 +24,13 @@ import {
   formatMessageForResponses,
 } from "./provider-message-format";
 import { isAnthropic } from "./provider-utils";
+import { isLocalProviderId } from "./provider-locality";
 import { formatMessagesForGemini } from "./gemini-messages";
 import { captureAnthropicWeeklyQuota } from "./cli-pool-status";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { extractToolCalls as extractTextualToolUse } from "./extract-tool-calls";
 import { toWireSampling } from "./sampling-profile";
 import { localToolThinkingKwargs } from "./local-tool-thinking";
-// BI-98572A51: the single-GPU admission lane is canonical in resource-lane.ts so
-// chat AND the local build engine share ONE gate. Re-exported below for callers
-// (and tests) that import it from here.
-import { withLocalInferenceLock } from "@/lib/queue/resource-lane";
 import { buildAnthropicSystem } from "./anthropic-cache";
 import { parseOpenRouterRoutingEvidence } from "./provider-suitability/openrouter-policy";
 import { resolveOpenAiCompatibleApiBase } from "./openai-base";
@@ -42,34 +39,17 @@ import {
   resolveInferenceRuntimePolicy,
 } from "./local-inference-runtime-policy";
 import { isRecord } from "@/lib/shared/coerce";
+import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline,
+  currentInferenceSignal } from "./governed-inference-deadline";
+
+// Compatibility export for existing callers; callProvider now owns local
+// admission, so this adapter never acquires the lane itself.
+export { withLocalInferenceLock } from "@/lib/queue/resource-lane";
 
 // ─── Inference HTTP timeouts ──────────────────────────────────────────────────
 // The runtime-policy module separates the governed, deliberately slower 27B
 // reviewer from generic local models. Both operator overrides and defaults stay
-// bounded, while the reviewer always receives its approved ten-minute window.
-
-// A single-GPU local endpoint (Docker Model Runner / Ollama) serves ONE request
-// at a time. The platform routinely fires inference concurrently — reviewBuildPlan
-// alone dispatches 3 reviewer calls in parallel, on top of the coworker's agentic
-// loop — which makes those calls queue behind each other inside the endpoint,
-// blow past the per-call timeout while still waiting, and 502 the endpoint under
-// load. Observed live: "Both review agents failed to respond" on every local
-// build because both reviewers aborted with "operation was aborted due to timeout".
-// Serialize local inference so each call gets the full GPU and its timeout
-// (created by the caller, inside this lock) covers real inference, not queue-wait.
-// Cloud providers are unaffected — only providerId === "local" goes through it.
-//
-// This now delegates to the shared ResourceLane (EP-3516E23D Phase 2), which is
-// the same single-slot FIFO serializer with two opt-in additions: a bounded queue
-// depth (set DPF_LOCAL_INFERENCE_MAX_QUEUE_DEPTH to reject over-capacity calls with
-// a LaneBusyError — the honest busy signal, BI-6112DDE0 — instead of letting them
-// pile up and time out while waiting), and flow telemetry so lane wait/process
-// time is measurable. Both are gated on that env: UNSET ⇒ unbounded serialize with
-// no telemetry writes, byte-for-byte the prior behavior.
-// Canonical home is resource-lane.ts (shared with the local build engine,
-// BI-98572A51); re-exported so existing importers/tests of this module are
-// unaffected.
-export { withLocalInferenceLock };
+// bounded; a server-bound parent deadline supplies the governed exception.
 
 // ─── Gemini part types ───────────────────────────────────────────────────────
 
@@ -213,6 +193,18 @@ export const chatAdapter: ExecutionAdapterHandler = {
     const { providerId, modelId, plan, provider, messages, systemPrompt, tools } = request;
     const { baseUrl, headers } = provider;
     let requestHeaders = headers;
+    const total = plan.completionAllowance;
+    if (total !== undefined && (!Number.isSafeInteger(total) || total <= 0 || plan.maxTokens !== total)) {
+      throw new Error("Invalid activity total completion allowance");
+    }
+    const boundedThinking = (budget: number): number => {
+      if (total === undefined) return budget;
+      const reserve = Math.max(2048, Math.ceil(total / 4));
+      if (!Number.isSafeInteger(budget) || budget < 1024 || total - reserve < 1024) {
+        throw new Error("Activity allowance cannot accommodate provider thinking budget");
+      }
+      return Math.min(budget, total - reserve);
+    };
 
     // Build provider-specific request
     let chatUrl: string;
@@ -244,14 +236,17 @@ export const chatAdapter: ExecutionAdapterHandler = {
         (body as Record<string, unknown>).thinking = plan.providerSettings.thinking;
         // Ensure max_tokens accommodates the explicitly set budget
         const explicitBudget = (plan.providerSettings.thinking as { budget_tokens?: number }).budget_tokens ?? 0;
-        body.max_tokens = Math.max(plan.maxTokens, explicitBudget + 2_048);
+        if (total !== undefined && (plan.providerSettings.thinking as { type?: string }).type === "enabled") {
+          (body as Record<string, unknown>).thinking = { ...(plan.providerSettings.thinking as object), budget_tokens: boundedThinking(explicitBudget) };
+        }
+        body.max_tokens = total ?? Math.max(plan.maxTokens, explicitBudget + 2_048);
         // Anthropic rejects temperature when thinking is enabled
         delete (body as Record<string, unknown>).temperature;
       } else if (effort && effort !== "low" && effortBudgets[effort]) {
-        const budget = effortBudgets[effort]!;
+        const budget = boundedThinking(effortBudgets[effort]!);
         (body as Record<string, unknown>).thinking = { type: "enabled", budget_tokens: budget };
         // max_tokens must be >= budget_tokens; add 2 048 for output headroom
-        body.max_tokens = Math.max(plan.maxTokens, budget + 2_048);
+        body.max_tokens = total ?? Math.max(plan.maxTokens, budget + 2_048);
         // Anthropic rejects temperature when thinking is enabled
         delete (body as Record<string, unknown>).temperature;
       }
@@ -404,6 +399,13 @@ export const chatAdapter: ExecutionAdapterHandler = {
         max_tokens: plan.maxTokens,
         keep_alive: -1,
       };
+      if (plan.providerSettings.thinking_budget_tokens !== undefined) {
+        const budget = plan.providerSettings.thinking_budget_tokens;
+        if (typeof budget !== "number" || !Number.isSafeInteger(budget) || budget <= 0 || budget >= plan.maxTokens) {
+          throw new Error("Invalid local thinking allowance");
+        }
+        (body as Record<string, unknown>).thinking_budget_tokens = budget;
+      }
 
       if (providerId === "openrouter" && plan.openRouterPolicy) {
         // One construction point makes the typed policy load-bearing for every
@@ -478,25 +480,35 @@ export const chatAdapter: ExecutionAdapterHandler = {
     const startMs = Date.now();
     let res: Response;
     try {
-      // The AbortSignal is created inside the thunk so, for serialized local
-      // calls, the timeout clock starts when the call actually dispatches — not
-      // while it waits its turn in the local-inference lock.
-      const doFetch = () => request.fetchImpl(chatUrl, {
+      // callProvider owns admission; governed queue wait consumes the parent budget.
+      await assertGovernedInferenceAuthority(currentInferenceSignal());
+      if (plan.providerSettings.thinking_budget_tokens !== undefined) {
+        const expected = plan.localThinkingBudgetEvidence;
+        if (!isLocalProviderId(providerId) || !expected) throw new Error("Local thinking runtime evidence unavailable");
+        const root = baseUrl.replace(/\/(engines\/)?v1\/?$/, "");
+        const actual = await request.readLocalThinkingBudgetEvidence?.(root, modelId, request.fetchImpl);
+        if (!actual || ["dialect", "modelDigest", "engineIdentity", "templateDigest", "configDigest"].some(
+          key => actual[key as keyof typeof actual] !== expected[key as keyof typeof expected],
+        )) throw new Error("Local thinking runtime evidence changed or unavailable");
+        await assertGovernedInferenceAuthority(currentInferenceSignal());
+      }
+      const execution = currentGovernedInferenceDeadline();
+      const signal = currentInferenceSignal(execution?.signal);
+      const timeout = createInferenceTimeoutSignal(resolveInferenceRuntimePolicy(providerId, modelId, {
+        defaultTimeoutMs: process.env.DPF_INFERENCE_TIMEOUT_MS,
+        localTimeoutMs: process.env.DPF_LOCAL_INFERENCE_TIMEOUT_MS,
+      }, execution ? { deadlineAt: execution.deadlineAt, now: Date.now() } : undefined).effectiveTimeoutMs);
+      res = await request.fetchImpl(chatUrl, {
         method: "POST",
         headers: requestHeaders,
         body: JSON.stringify(body),
-        signal: createInferenceTimeoutSignal(resolveInferenceRuntimePolicy(providerId, modelId, {
-          defaultTimeoutMs: process.env.DPF_INFERENCE_TIMEOUT_MS,
-          localTimeoutMs: process.env.DPF_LOCAL_INFERENCE_TIMEOUT_MS,
-        }).effectiveTimeoutMs),
+        signal: signal ? AbortSignal.any([timeout, signal]) : timeout,
       });
-      res = providerId === "local"
-        ? await withLocalInferenceLock(doFetch, { modelId })
-        : await doFetch();
     } catch (e) {
+      currentInferenceSignal()?.throwIfAborted();
       // A busy GPU is a capacity deferral. Wrapping it as "network" makes the
       // fallback chain treat the local model as broken instead of waiting.
-      if (e instanceof Error && e.name === "LocalProviderCapacityDeferredError") throw e;
+      if (e instanceof Error && ["LocalProviderCapacityDeferredError", "GovernedInferenceDeadlineError"].includes(e.name)) throw e;
       throw new InferenceError(
         `Network error calling ${providerId}: ${e instanceof Error ? e.message : String(e)}`,
         "network",
@@ -577,6 +589,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
     // this to avoid returning a max_tokens-truncated fragment as a final answer
     // (BI-1D144CC1). Each branch below maps its provider-specific value.
     let truncated = false;
+    let finishReason: string | undefined;
     /** Separate thinking channel, when the provider emits one (BI-1E77BEE3). */
     let reasoning: string | undefined;
 
@@ -662,16 +675,16 @@ export const chatAdapter: ExecutionAdapterHandler = {
         };
       }>)?.[0];
       const msg = choice?.message;
+      finishReason = typeof choice?.finish_reason === "string" ? choice.finish_reason : undefined;
 
       // Capture reasoning as its OWN channel (BI-1E77BEE3). Providers disagree on
       // the field name: llama.cpp / Docker Model Runner emit `reasoning_content`,
       // other OpenAI-compatible providers emit `reasoning`.
       reasoning = msg?.reasoning_content || msg?.reasoning || undefined;
 
-      // The answer is `content`. Falling back to reasoning is a LAST resort for a
-      // provider that returns only a thinking channel — without it such a turn
-      // renders blank. When content exists, reasoning must never displace it.
-      text = msg?.content || reasoning || "";
+      // Thinking without an answer is incomplete work. Keep it available for
+      // progress disclosure, but never promote scratchpad into a conclusion.
+      text = msg?.content ?? "";
       truncated = choice?.finish_reason === "length";
 
       if (msg?.tool_calls && msg.tool_calls.length > 0) {
@@ -721,6 +734,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
       usage: { inputTokens, outputTokens, cacheCreationInputTokens, cacheReadInputTokens },
       inferenceMs,
       truncated,
+      ...(finishReason !== undefined && { finishReason }),
       ...(openRouterRoutingEvidence
         ? { raw: { openRouterRoutingEvidence } }
         : {}),

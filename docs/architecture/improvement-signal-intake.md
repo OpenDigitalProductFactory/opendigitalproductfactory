@@ -20,6 +20,14 @@ three. The signal's stable origin binds the backlog intake and backlink. A
 failed intake leaves the signal available for later projection. Critical
 MCP/A2A findings keep their direct source-specific intake paths.
 
+A repeated tool failure is the exception to "the signal's origin binds the
+intake" (BI-891E4E11). The work-pattern observer keys that signal per agent and
+route, but the defect belongs to the tool. When the signal's evidence carries
+`signal: "tool-failure"` and a `toolName`, the backlog origin is
+`tool-defect:<toolName>` (`apps/web/lib/operate/tool-defect-origin.ts`). The
+capability-need path uses the same origin. Every coworker's observation then
+becomes an occurrence of one item instead of a new item.
+
 Those observer counts still describe repeated calls, not independently
 identified observations. Retry-safe observation identity for those callers is
 remaining work under BI-64E86574. It must preserve legitimate automatic filing

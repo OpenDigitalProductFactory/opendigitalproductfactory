@@ -311,9 +311,10 @@ export type SandboxTestResult = {
   testOutput: string;
   typeCheckOutput: string;
   /**
-   * "scoped" when only the build's own feature tests ran; "none" when the build
-   * named its changed files and no test file covers them, so no suite ran;
-   * "full" for the legacy whole-suite run (no changed-file hint).
+   * "scoped" when only the build's own feature tests ran; "none" when no suite
+   * ran, because no test file covers the changed files or the changed files are
+   * unknown. "full" is the retired whole-suite run (BI-F5D4FA50): it is no
+   * longer produced, and is kept only so records written before it still type.
    */
   scope?: "scoped" | "full" | "none";
   /** Number of feature test files run when scope === "scoped". */
@@ -387,16 +388,31 @@ export function typecheckPackagesFor(changedFiles: readonly string[]): string[] 
  * first, before checking it. Best-effort: a failed install surfaces as the
  * check's own failure, with the install log tail in its output.
  */
-async function installSeparatelyLockedPackages(containerId: string, workdir: string, packages: readonly string[]): Promise<void> {
+async function installSeparatelyLockedPackages(containerId: string, workdir: string, packages: readonly string[]): Promise<Set<string>> {
+  const separatelyLocked = new Set<string>();
   for (const pkg of packages) {
     if (pkg === "apps/web") continue;
     const ownLock = await execInSandbox(containerId, `test -f "${workdir}/${pkg}/pnpm-lock.yaml" && echo __yes__ || echo __no__`).catch(() => "");
     if (!ownLock.includes("__yes__")) continue;
+    separatelyLocked.add(pkg);
     await execInSandbox(
       containerId,
       `cd ${workdir}/${pkg} && { CI=true pnpm install --offline --frozen-lockfile >/tmp/dpf-pkg-install.log 2>&1 || CI=true pnpm install --frozen-lockfile >>/tmp/dpf-pkg-install.log 2>&1 || tail -20 /tmp/dpf-pkg-install.log; }`,
     ).catch(() => "");
   }
+  return separatelyLocked;
+}
+
+/**
+ * The type-check command for one package (BI-D2FE6931). A root-workspace
+ * package goes through scripts/run-tsc.mjs, the platform's one compiler entry
+ * point (TypeScript 7, pinned once at the root), so Build Studio grades with the
+ * compiler CI uses and follows its pin. A separately-locked package (apps/mobile:
+ * its own workspace and lockfile) keeps its own tsc, exactly as CI's mobile job.
+ */
+export function typecheckCommandFor(workdir: string, pkg: string, separatelyLocked: boolean): string {
+  const compiler = separatelyLocked ? "pnpm exec tsc" : `node ${workdir}/scripts/run-tsc.mjs`;
+  return `cd ${workdir}/${pkg} && ${compiler} --noEmit 2>&1 || true`;
 }
 
 const EXIT_MARKER = "__dpf_exit=";
@@ -443,10 +459,10 @@ export async function runSandboxTests(
     // FB-0C05A927: tsc ran in apps/web only, so a mobile (or any other package)
     // change was never type-checked and review could not pass it. Check every
     // package the change touches, plus apps/web as before, through pnpm exec.
-    await installSeparatelyLockedPackages(containerId, workdir, typecheckPackagesFor(opts?.changedFiles ?? []));
+    const separatelyLocked = await installSeparatelyLockedPackages(containerId, workdir, typecheckPackagesFor(opts?.changedFiles ?? []));
     const sections: string[] = [];
     for (const pkg of typecheckPackagesFor(opts?.changedFiles ?? [])) {
-      const out = await execInSandbox(containerId, `cd ${workdir}/${pkg} && pnpm exec tsc --noEmit 2>&1 || true`);
+      const out = await execInSandbox(containerId, typecheckCommandFor(workdir, pkg, separatelyLocked.has(pkg)));
       sections.push(`# ${pkg}\n${out}`);
     }
     typeCheckOutput = sections.join("\n\n");
@@ -466,10 +482,11 @@ export async function runSandboxTests(
   // now run ONLY the feature's test files: (a) the feature's tests actually GATE
   // the build, and (b) the output stays small so a real failure is never
   // truncated behind hundreds of unrelated monorepo tests. With no changed-file
-  // hint we fall back to the legacy full-suite run, recorded but typecheck-gated.
+  // hint no suite runs (BI-F5D4FA50): the whole suite belongs to cloud CI and
+  // the merge queue, and in the sandbox it took most of the host.
   let testOutput = "";
   let testPassed = true;
-  let scope: "scoped" | "full" | "none" = "full";
+  let scope: "scoped" | "full" | "none" = "none";
   let scopedTestsRun = 0;
 
   const candidates = deriveScopedTestFiles(opts?.changedFiles ?? []);
@@ -523,18 +540,15 @@ export async function runSandboxTests(
     scope = "none";
     testOutput = "No test file covers the changed files; no tests ran.";
   } else {
-    try {
-      testOutput = await execInSandbox(containerId, `cd ${workdir} && pnpm test 2>&1 || true`);
-      testPassed = testOutput.includes("Tests  ") && !testOutput.includes("FAIL");
-    } catch (e) {
-      testOutput = getErrorMessage(e);
-      testPassed = false;
-    }
+    // BI-F5D4FA50: the changed files are unknown, so nothing can be scoped. The
+    // old fallback ran `pnpm test` (the whole suite) here; it is never run in
+    // the sandbox now, and the result says plainly that no tests ran.
+    testOutput = "The build's changed files are unknown, so no tests ran. The whole suite runs in cloud CI and the merge queue.";
   }
 
   return {
     // Gate on typecheck AND — when feature tests were scoped and run — those
-    // tests. The legacy full-suite path stays typecheck-gated (informational).
+    // tests. When none ran, typecheck alone gates, and the record says so.
     passed: typeCheckPassed && (scope === "scoped" ? testPassed : true),
     typeCheckPassed,
     testOutput,

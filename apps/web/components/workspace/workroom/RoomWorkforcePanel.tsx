@@ -1,6 +1,8 @@
 import { Surface } from "@/components/ui/Surface";
 import type { EffectiveHumanAccountability } from "@/lib/work-management/human-accountability";
 import type { WorkerGroup } from "@/lib/work-management/worker-rollup";
+import type { NestedRoomCoordination } from "@/lib/work-management/nested-room-coordination";
+import { NestedRoomCoordinationPanel } from "./NestedRoomCoordinationPanel";
 
 /**
  * Who is accountable for this room, and who is working in it (PWA-03, PWA-04, PWA-06).
@@ -84,12 +86,14 @@ export function RoomWorkforcePanel({
   groups,
   matched,
   partial,
+  coordination,
 }: {
   accountability: EffectiveHumanAccountability;
   accountableDisplayName: string | null;
   groups: readonly WorkerGroup[];
   matched: number;
   partial: boolean;
+  coordination?: NestedRoomCoordination | null;
 }) {
   const shown = groups.reduce(
     (total, group) => total + group.members.length + (group.parent ? 1 : 0),
@@ -105,9 +109,9 @@ export function RoomWorkforcePanel({
           displayName={accountableDisplayName}
         />
       </div>
-      <p className="mt-2 text-xs text-[var(--dpf-muted)]">
+      {!coordination ? <p className="mt-2 text-xs text-[var(--dpf-muted)]">
         Accountability means answering for outcomes; coordination and permissions are recorded separately.
-      </p>
+      </p> : null}
 
       <h3 className="mt-4 text-sm font-semibold text-[var(--dpf-text)]">Workers in this Workroom</h3>
       {groups.length === 0 ? (
@@ -143,6 +147,7 @@ export function RoomWorkforcePanel({
           ) : null}
         </>
       )}
+      {coordination ? <NestedRoomCoordinationPanel coordination={coordination} /> : null}
     </Surface>
   );
 }

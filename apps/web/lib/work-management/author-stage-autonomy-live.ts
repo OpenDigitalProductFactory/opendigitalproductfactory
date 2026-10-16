@@ -48,7 +48,7 @@ export async function loadAuthorStageAutonomy(rooms: readonly AuthorStageRoom[],
     const period = quarterBounds(now);
     const db = prisma as never;
     const funding = buildAuthorStageFunding({
-      items: await loadInvestmentItems(db, period),
+      items: await loadInvestmentItems(db, period, { now }),
       budgets: await loadPortfolioBudgets(db, period),
       now,
     });

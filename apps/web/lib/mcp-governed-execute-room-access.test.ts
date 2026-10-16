@@ -1,6 +1,7 @@
 // BI-F4EB23C1 — nobody is asked to approve a call the room rule will refuse.
-// An OAuth call that targets a Workroom is checked for room admission before
-// the authority gate can mint an approval, and again at execution.
+// Ordinary OAuth Workroom calls retain admission checks before approval and
+// execution. Classification recovery checks current administrator authority;
+// its correction still requires the exact authority approval.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CoworkerAuthorityInput } from "./govern/authority/coworker-authority-decision";
@@ -10,6 +11,8 @@ import type { ToolResult } from "./mcp-tool-types";
 const room = vi.hoisted(() => ({ refusal: vi.fn() }));
 vi.mock("./work-capsules/oauth-workroom-ownership", () => ({ workroomTargetAccessRefusal: room.refusal }));
 
+const recoveryGuard = vi.hoisted(() => vi.fn());
+vi.mock("./mcp-task-review-recovery", () => ({ reviewRecoveryToolRefusal: recoveryGuard }));
 const NORMAL_USER = { platformRole: "ceo", isSuperuser: true };
 type AuditRow = Record<string, unknown>;
 let auditRows: AuditRow[];
@@ -83,6 +86,7 @@ const handover = {
 };
 
 beforeEach(() => {
+  recoveryGuard.mockResolvedValue(null);
   room.refusal.mockReset().mockResolvedValue(null);
   auditRows = [];
   executeMock = vi.fn(async (): Promise<ToolResult> => ({ success: true, message: "ok" }));
@@ -121,6 +125,49 @@ afterEach(() => {
 });
 
 describe("governedExecuteTool — room access before approval", () => {
+  it("refuses revoked recovered-task authority before a writer or approval is attempted", async () => {
+    recoveryGuard.mockResolvedValue({ success: false, error: "review_execution_authority_refused", message: "Current review authority was revoked." });
+    const result = await governedExecuteTool({ toolName: "query_backlog", rawParams: {}, userId: "user-1", userContext: NORMAL_USER,
+      source: "agentic-loop", context: { taskRunId: "TR-RECOVERED", apiTokenId: "current-token", agentId: "AGT-REVIEWER" } });
+    expect(result).toMatchObject({ success: false, error: "review_execution_authority_refused" });
+    expect(executeMock).not.toHaveBeenCalled(); expect(approvalEnvelopeCreate).not.toHaveBeenCalled();
+  });
+  it("runs the masked classification read without creating an approval", async () => {
+    const toolName = "review_workroom_sensitivity";
+    const rawParams = { capsuleId: "WC-D72FAD2A" };
+    _setGovernanceForTests({
+      ...baseGovernance(),
+      resolveCoworkerAuthorityInput: async () => authorityInput({
+        authContext: { ...authorityInput().authContext, grantedCapabilities: ["manage_platform"] },
+        action: { ...authorityInput().action, toolName, requiredCapability: "manage_platform" },
+        rawParams,
+      }),
+    } as never);
+    expect(await governedExecuteTool({ ...handover, toolName, rawParams })).toMatchObject({ success: true });
+    expect(approvalEnvelopeCreate).not.toHaveBeenCalled();
+    expect(executeMock).toHaveBeenCalledOnce();
+    expect(room.refusal).toHaveBeenCalledWith(expect.objectContaining({ toolName, action: false }));
+  });
+
+  it("still requires exact approval before executing classification correction", async () => {
+    const toolName = "correct_workroom_sensitivity";
+    const rawParams = { capsuleId: "WC-D72FAD2A", expectedDigest: "1".repeat(64),
+      sensitivity: "internal", classificationReviewed: true,
+      rationale: "The administrator reviewed this synthetic classification fixture." };
+    _setGovernanceForTests({
+      ...baseGovernance(),
+      resolveCoworkerAuthorityInput: async () => authorityInput({
+        authContext: { ...authorityInput().authContext, grantedCapabilities: ["manage_platform"] },
+        action: { ...authorityInput().action, toolName, requiredCapability: "manage_platform",
+          sideEffect: true, executionMode: "proposal", approvalPolicy: "side-effects", consequence: "authority" },
+        rawParams,
+      }),
+    } as never);
+    expect(await governedExecuteTool({ ...handover, toolName, rawParams })).toMatchObject({ error: "approval_required" });
+    expect(approvalEnvelopeCreate).toHaveBeenCalledWith(expect.objectContaining({ consequence: "authority" }));
+    expect(executeMock).not.toHaveBeenCalled();
+  });
+
   it("returns the room refusal, audits it, and mints no approval", async () => {
     room.refusal.mockResolvedValue({ success: false, error: "workroom_handover_not_owner", message: "not the owner" });
     const result = await governedExecuteTool(handover);

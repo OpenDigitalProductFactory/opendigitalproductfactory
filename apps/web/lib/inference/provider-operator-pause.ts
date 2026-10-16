@@ -25,14 +25,15 @@ export type ProviderPauseState = {
   priorConnectionStatus: string;
 };
 
-function assertLocal(providerId: string) {
-  if (providerId !== "local" && providerId !== "ollama") throw new Error("Only local providers support operator pauses");
+function assertProviderId(providerId: string) {
+  if (!providerId || !/^[a-zA-Z0-9_-]+$/.test(providerId)) throw new Error("Invalid provider identity");
 }
+const isLocal = (providerId: string) => providerId === "local" || providerId === "ollama";
 export function readProviderPauseState(value: unknown): ProviderPauseState | null {
   if (!value || typeof value !== "object") return null;
   const row = value as Record<string, unknown>;
   if (row.kind !== PAUSE_KIND || row.version !== 1
-    || !["local", "ollama"].includes(String(row.providerId))
+    || typeof row.providerId !== "string" || !/^[a-zA-Z0-9_-]+$/.test(row.providerId)
     || !["operationId", "actorId", "pausedAt", "priorProviderStatus", "priorConnectionStatus"].every(key => typeof row[key] === "string" && row[key] !== "")
     || !Number.isFinite(Date.parse(String(row.pausedAt)))
     || (row.resumeAt !== null && (typeof row.resumeAt !== "string" || !Number.isFinite(Date.parse(row.resumeAt))))) return null;
@@ -66,8 +67,8 @@ async function auditPause(tx: Prisma.TransactionClient, pause: ProviderPauseStat
     summary: `${action}: ${pause.providerId}`,
   } });
 }
-export async function getLocalProviderControlState(providerId: string, db: Pick<PauseDatabase, "scheduledJob" | "aiProviderConnection"> = prisma) {
-  assertLocal(providerId);
+export async function getProviderControlState(providerId: string, db: Pick<PauseDatabase, "scheduledJob" | "aiProviderConnection"> = prisma) {
+  assertProviderId(providerId);
   const [job, connection] = await Promise.all([
     db.scheduledJob.findUnique({ where: { jobId: providerPauseJobId(providerId) } }),
     db.aiProviderConnection.findUnique({ where: { connectionId: `provider-default-${providerId}` } }),
@@ -75,8 +76,24 @@ export async function getLocalProviderControlState(providerId: string, db: Pick<
   const state = connection?.status === "paused" && job?.lastStatus === "paused" ? readProviderPauseState(job.metadata) : null;
   return { pause: state?.providerId === providerId ? state : null, connectionStatus: connection?.status ?? null };
 }
-export async function getLocalProviderPause(providerId: string, db: Pick<PauseDatabase, "scheduledJob" | "aiProviderConnection"> = prisma): Promise<ProviderPauseState | null> {
-  return (await getLocalProviderControlState(providerId, db)).pause;
+/** Catalog reads stay constant as provider count grows. Actor metadata stays server-side. */
+export async function getProviderControlStates(providerIds: string[], db: Pick<PauseDatabase, "scheduledJob" | "aiProviderConnection"> = prisma) {
+  const ids = [...new Set(providerIds)];
+  const [jobs, connections] = await Promise.all([
+    db.scheduledJob.findMany({ where: { jobId: { in: ids.map(providerPauseJobId) } }, select: { jobId: true, lastStatus: true, metadata: true } }),
+    db.aiProviderConnection.findMany({ where: { connectionId: { in: ids.map(id => `provider-default-${id}`) } }, select: { providerId: true, status: true } }),
+  ]);
+  const jobsById = new Map(jobs.map(job => [job.jobId, job]));
+  const connectionsById = new Map(connections.map(connection => [connection.providerId, connection]));
+  return new Map(ids.map(id => {
+    const job = jobsById.get(providerPauseJobId(id));
+    const connection = connectionsById.get(id);
+    const pause = connection?.status === "paused" && job?.lastStatus === "paused" ? readProviderPauseState(job.metadata) : null;
+    return [id, { pause: pause?.providerId === id ? pause : null, connectionStatus: connection?.status ?? null }] as const;
+  }));
+}
+export async function getOperatorProviderPause(providerId: string, db: Pick<PauseDatabase, "scheduledJob" | "aiProviderConnection"> = prisma): Promise<ProviderPauseState | null> {
+  return (await getProviderControlState(providerId, db)).pause;
 }
 
 /** Bounded repair for overdue persisted timers after restart or event failure. */
@@ -84,21 +101,21 @@ export async function reconcileOverdueProviderPauses(deps: PauseDependencies = {
   const db = deps.db ?? prisma;
   const now = deps.now ?? new Date();
   const rows = await db.scheduledJob.findMany({
-    where: { jobId: { in: [providerPauseJobId("local"), providerPauseJobId("ollama")] }, enabled: true, lastStatus: "paused", nextRunAt: { lte: now } },
+    where: { jobId: { startsWith: "provider-pause-" }, enabled: true, lastStatus: "paused", nextRunAt: { lte: now } },
     orderBy: { nextRunAt: "asc" }, take: 10,
   });
   let resumed = 0;
   for (const row of rows) {
     const pause = readProviderPauseState(row.metadata);
-    if (!pause?.resumeAt) continue;
-    const result = await resumeLocalProvider({ providerId: pause.providerId, operationId: pause.operationId, automatic: true }, { ...deps, now });
+    if (!pause?.resumeAt || row.jobId !== providerPauseJobId(pause.providerId)) continue;
+    const result = await resumeOperatorProvider({ providerId: pause.providerId, operationId: pause.operationId, automatic: true }, { ...deps, now });
     if (result.outcome === "resumed") resumed++;
   }
   return resumed;
 }
 
-export async function pauseLocalProvider(input: { providerId: string; actorId: string; duration?: PauseDuration }, deps: PauseDependencies = {}): Promise<{ operationId: string; resumeAt: string | null; deliveryPending: boolean }> {
-  assertLocal(input.providerId);
+export async function pauseOperatorProvider(input: { providerId: string; actorId: string; duration?: PauseDuration }, deps: PauseDependencies = {}): Promise<{ operationId: string; resumeAt: string | null; deliveryPending: boolean }> {
+  assertProviderId(input.providerId);
   if (!input.actorId) throw new Error("An operator identity is required");
   const db = deps.db ?? prisma;
   const now = deps.now ?? new Date();
@@ -110,7 +127,9 @@ export async function pauseLocalProvider(input: { providerId: string; actorId: s
     await lockProvider(tx, input.providerId);
     const provider = await tx.modelProvider.findUnique({ where: { providerId: input.providerId } });
     const connection = await tx.aiProviderConnection.findUnique({ where: { connectionId } });
-    if (!provider || !connection) throw new Error("Local provider account not found");
+    if (!provider || !connection) throw new Error("Provider account not found");
+    if (["service", "transcription"].includes(provider.endpointType)) throw new Error("This endpoint does not support model-routing pauses");
+    if (provider.status === "unconfigured") throw new Error("Set up this provider before pausing traffic");
     const priorJob = await tx.scheduledJob.findUnique({ where: { jobId } });
     const prior = connection.status === "paused" && priorJob?.lastStatus === "paused" ? readProviderPauseState(priorJob.metadata) : null;
     const metadata: ProviderPauseState = {
@@ -119,7 +138,7 @@ export async function pauseLocalProvider(input: { providerId: string; actorId: s
       priorProviderStatus: prior?.priorProviderStatus ?? provider.status,
       priorConnectionStatus: prior?.priorConnectionStatus ?? connection.status,
     };
-    if (["active", "degraded", "inactive"].includes(provider.status)) {
+    if (isLocal(input.providerId) && ["active", "degraded", "inactive"].includes(provider.status)) {
       await tx.modelProvider.update({ where: { providerId: input.providerId }, data: { status: "inactive" } });
     }
     await tx.aiProviderConnection.update({ where: { connectionId }, data: { status: "paused" } });
@@ -140,11 +159,11 @@ export async function pauseLocalProvider(input: { providerId: string; actorId: s
   return { operationId, resumeAt, deliveryPending };
 }
 
-export async function resumeLocalProvider(input: { providerId: string; operationId?: string; automatic?: boolean; actorId?: string }, deps: PauseDependencies = {}): Promise<{ outcome: "resumed" | "superseded" | "not-due"; status?: string; connectionStatus?: string }> {
-  assertLocal(input.providerId);
+export async function resumeOperatorProvider(input: { providerId: string; operationId?: string; automatic?: boolean; actorId?: string }, deps: PauseDependencies = {}): Promise<{ outcome: "resumed" | "superseded" | "not-due"; status?: string; connectionStatus?: string }> {
+  assertProviderId(input.providerId);
   const db = deps.db ?? prisma;
   const now = deps.now ?? new Date();
-  const pause = await getLocalProviderPause(input.providerId, db);
+  const pause = await getOperatorProviderPause(input.providerId, db);
   if (!pause) {
     if (input.automatic && input.operationId) await db.$transaction(async tx => {
       await lockProvider(tx, input.providerId);
@@ -170,14 +189,14 @@ export async function resumeLocalProvider(input: { providerId: string; operation
     const { resolveOpencodeProviderBaseUrl } = await import("./ollama-url");
     return probeLocalRunner(resolveOpencodeProviderBaseUrl(provider));
   });
-  const healthy = await probe(input.providerId).catch(() => false);
+  const healthy = isLocal(input.providerId) ? await probe(input.providerId).catch(() => false) : false;
   return db.$transaction(async tx => {
     await lockProvider(tx, input.providerId);
-    const current = await getLocalProviderPause(input.providerId, tx);
+    const current = await getOperatorProviderPause(input.providerId, tx);
     if (current?.operationId !== pause.operationId) return { outcome: "superseded" as const };
     const provider = await tx.modelProvider.findUnique({ where: { providerId: input.providerId } });
     if (!provider) return { outcome: "superseded" as const };
-    const connectionStatus = ["active", "degraded", "inactive"].includes(pause.priorConnectionStatus) ? "active" : pause.priorConnectionStatus;
+    const connectionStatus = isLocal(input.providerId) && ["active", "degraded", "inactive"].includes(pause.priorConnectionStatus) ? "active" : pause.priorConnectionStatus;
     const resumed = await tx.aiProviderConnection.updateMany({
       where: { connectionId: `provider-default-${input.providerId}`, status: "paused" }, data: { status: connectionStatus },
     });
@@ -186,7 +205,7 @@ export async function resumeLocalProvider(input: { providerId: string; operation
     let status = provider.status;
     // Only undo the inactive projection owned by this pause. Auth, billing,
     // unconfigured and other independent restrictions stay authoritative.
-    if (status === "inactive") {
+    if (isLocal(input.providerId) && status === "inactive") {
       const wasUsable = ["active", "degraded", "inactive"].includes(pause.priorProviderStatus);
       status = wasUsable && healthy && connectionUsable ? pause.priorProviderStatus === "degraded" ? "degraded" : "active" : pause.priorProviderStatus === "disabled" ? "disabled" : "inactive";
       await tx.modelProvider.update({ where: { providerId: input.providerId }, data: { status } });
@@ -199,3 +218,9 @@ export async function resumeLocalProvider(input: { providerId: string; operation
     return { outcome: "resumed" as const, status, connectionStatus };
   });
 }
+
+// Compatibility for the original local-provider callers; one lifecycle owns both.
+export const getLocalProviderControlState = getProviderControlState;
+export const getLocalProviderPause = getOperatorProviderPause;
+export const pauseLocalProvider = pauseOperatorProvider;
+export const resumeLocalProvider = resumeOperatorProvider;

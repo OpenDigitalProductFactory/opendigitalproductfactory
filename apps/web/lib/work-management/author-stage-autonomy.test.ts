@@ -23,7 +23,7 @@ function item(overrides: Partial<InvestmentItemRow> = {}): InvestmentItemRow {
     jobSize: null,
     estimateAgreed: null,
     activeBuildId: null,
-    hasLiveWorkroom: true,
+    hasActiveWorkroom: true, deliveredAt: null,
     deliverySurface: "external",
     traced: true,
     completedAt: null,
@@ -80,6 +80,37 @@ describe("buildAuthorStageFunding (BI-8A32EBFF AC-1: within budget)", () => {
     expect(build("BI-S")).toMatchObject({ funded: false, because: expect.stringMatching(/no size/) });
     expect(build("BI-NONE")).toMatchObject({ funded: false, because: expect.stringMatching(/not live work/) });
     expect(build(null)).toMatchObject({ funded: false, because: expect.stringMatching(/bound to no backlog item/) });
+  });
+});
+
+describe("buildAuthorStageFunding charges only this quarter's deliveries and active work (BI-77313ADD)", () => {
+  const lastQuarter = new Date("2026-09-20T00:00:00.000Z");
+  const thisQuarter = new Date("2026-10-03T00:00:00.000Z");
+
+  it("funds a parked room once prior-quarter deliveries and other parked rooms stop counting as committed", () => {
+    // The live shape: a budget equal to last quarter's delivery, most of that delivery
+    // still awaiting acceptance, and many rooms parked waiting for an author.
+    const items = [
+      item({ itemId: "BI-ROOM", status: "open", hasActiveWorkroom: false, effortSize: "medium" }),
+      item({ itemId: "BI-AWAIT-Q3", status: "awaiting-acceptance", hasActiveWorkroom: false, deliveredAt: lastQuarter, effortSize: "large" }),
+      item({ itemId: "BI-ACCEPTED-Q4-MERGED-Q3", status: "done", hasActiveWorkroom: false, deliveredAt: lastQuarter, completedAt: thisQuarter, effortSize: "large" }),
+      item({ itemId: "BI-PARKED-1", status: "open", hasActiveWorkroom: false, effortSize: "large" }),
+      item({ itemId: "BI-PARKED-2", status: "open", hasActiveWorkroom: false, effortSize: "large" }),
+      item({ itemId: "BI-DONE-Q4", status: "done", hasActiveWorkroom: false, deliveredAt: thisQuarter, completedAt: thisQuarter, effortSize: "medium" }),
+      item({ itemId: "BI-RUNNING", status: "in-progress", effortSize: "small" }),
+    ];
+    const funding = buildAuthorStageFunding({ items, budgets: [budget(8)], now: NOW })("BI-ROOM");
+    expect(funding).toMatchObject({ funded: true, summary: "Foundational: 4 of 8 points committed this quarter." });
+  });
+
+  it("still refuses when this quarter's deliveries and active work exceed the allocation", () => {
+    const items = [
+      item({ itemId: "BI-ROOM", status: "open", hasActiveWorkroom: false }),
+      item({ itemId: "BI-AWAIT-Q4", status: "awaiting-acceptance", hasActiveWorkroom: false, deliveredAt: thisQuarter, effortSize: "large" }),
+      item({ itemId: "BI-RUNNING", status: "open", hasActiveWorkroom: true, effortSize: "medium" }),
+    ];
+    const funding = buildAuthorStageFunding({ items, budgets: [budget(8)], now: NOW })("BI-ROOM");
+    expect(funding).toMatchObject({ funded: false, because: expect.stringMatching(/11 of 8 points/) });
   });
 });
 

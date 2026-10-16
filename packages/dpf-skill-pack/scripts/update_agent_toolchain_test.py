@@ -1694,7 +1694,7 @@ class OnePluginOwnedConnectorTest(unittest.TestCase):
 
     def test_claude_descriptor_is_url_only_https_with_the_scope_pin(self) -> None:
         server = self._read("claude.mcp.json")["mcpServers"]["dpf"]
-        self.assertEqual(server["url"], "${DPF_MCP_URL:-https://localhost/api/mcp/v1?tier=full}")
+        self.assertEqual(server["url"], "${DPF_CLAUDE_MCP_URL:-https://localhost/api/mcp/v1?tier=full}")
         self.assertNotIn("headers", server)
         self.assertEqual(server["oauth"], {"scopes": updater.MCP_CLIENT_OAUTH_SCOPE_PIN})
 
@@ -1726,6 +1726,45 @@ class OnePluginOwnedConnectorTest(unittest.TestCase):
 
 
 class OAuthDefaultTest(unittest.TestCase):
+    def test_explicit_portal_origin_keeps_the_canonical_mcp_path(self):
+        for endpoint in ("https://localhost", "https://localhost/", "http://127.0.0.1:3000?tenant=demo"):
+            with self.subTest(endpoint=endpoint), tempfile.TemporaryDirectory() as tmp:
+                home = Path(tmp)
+                path = updater.codex_config_path(home)
+                path.parent.mkdir(parents=True)
+                path.write_text('[mcp_servers.dpf]\nurl="https://localhost/api/mcp/v1?tier=full"\nstartup_timeout_sec=45\n')
+                updater.ensure_codex_config(home, endpoint, False)
+                value = updater.existing_codex_mcp_endpoint(path.read_text())
+                self.assertEqual(updater.urlsplit(value).path, "/api/mcp/v1")
+                self.assertIn("startup_timeout_sec=45", path.read_text())
+                if "tenant=demo" in endpoint:
+                    self.assertIn("tenant=demo", value)
+
+    def test_explicit_proxy_endpoint_preserves_path_and_query(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            updater.ensure_codex_config(home, "https://proxy.example/tenant/mcp/?tenant=demo&empty=", False)
+            self.assertEqual(updater.existing_codex_mcp_endpoint(updater.codex_config_path(home).read_text()),
+                             "https://proxy.example/tenant/mcp/?tenant=demo&empty=&tier=full")
+
+    def test_unsafe_explicit_endpoint_refuses_before_any_host_write(self):
+        for endpoint in ("not-an-endpoint", "ftp://localhost", "https:localhost", "https:///localhost", "https://localhost\\evil",
+                         "https://localhost:invalid", "https://u:p@example.test", "https://localhost?api_key=synthetic-secret"):
+            with self.subTest(endpoint=endpoint), tempfile.TemporaryDirectory() as tmp:
+                home = Path(tmp)
+                path = updater.codex_config_path(home)
+                path.parent.mkdir(parents=True)
+                original = '[mcp_servers.dpf]\nurl="https://localhost/api/mcp/v1"\n'
+                path.write_text(original)
+                with patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}), patch("builtins.print") as output, \
+                        patch.object(updater, "resolve_codex_binary", return_value=None):
+                    with self.assertRaisesRegex(ValueError, "MCP endpoint"):
+                        updater.main(["--mcp-url", endpoint, "--codex-only", "--skip-codex-cli-install",
+                                      "--skip-grok-cli-install", "--skip-antigravity-cli-install"])
+                output.assert_not_called()
+                self.assertEqual(path.read_text(), original)
+                self.assertFalse(updater.codex_managed_plugin_path(home).exists())
+
     def test_saved_endpoint_read_mode_does_not_echo_query_credentials(self):
         for key in ("access_token", "api_key", "API-Key", "client_secret"):
             with self.subTest(key=key), tempfile.TemporaryDirectory() as tmp:
@@ -1931,9 +1970,11 @@ class WrapperEndpointParityTest(unittest.TestCase):
         self.assertIn('--mcp-url "$MCP_ENDPOINT_NAMED"', sh)
         self.assertNotRegex(ps1, r"-McpUrl \$McpEndpoint\b(?!Named)")
         self.assertIn("-McpUrl $McpEndpointNamed", ps1)
-        # Persisting a non-https endpoint keys on the operator naming one, not
-        # on a comparison with a hard-coded default.
-        self.assertIn('if [ -n "$MCP_ENDPOINT_NAMED" ]; then', sh)
+        # A named non-https endpoint reaches the clients only through
+        # --mcp-url; it is never written to the env file or launchd that
+        # Claude's OAuth connector reads (BI-8FD7C0C9).
+        self.assertNotIn('dpf_launchd_setenv DPF_MCP_URL "$MCP_ENDPOINT"', sh)
+        self.assertNotIn('dpf_set_client_env_export DPF_MCP_URL "$MCP_ENDPOINT"', sh)
 
     def test_python_default_is_canonical_https_oauth(self):
         self.assertEqual(updater.DEFAULT_MCP_URL, "https://localhost/api/mcp/v1")
@@ -2166,6 +2207,158 @@ class CodexRegistrationConvergenceTest(unittest.TestCase):
             version = updater.codex_content_version(copied)
             (copied / logo).write_text("changed brand asset", encoding="utf-8")
             self.assertNotEqual(updater.codex_content_version(copied), version)
+
+
+
+class CodexProjectConfigTest(unittest.TestCase):
+    def test_missing_file_stays_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.assertFalse(updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False))
+            self.assertFalse((root / ".codex" / "config.toml").exists())
+
+    @unittest.skipIf(tomllib is None, "project TOML validation requires a TOML parser")
+    def test_preserves_other_settings_disabled_state_and_custom_credentials(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir()
+            original = 'model="custom"\n[mcp_servers.dpf]\nurl="http://127.0.0.1:3000/api/mcp/v1"\nenabled=false\nbearer_token_env_var="CUSTOM_TOKEN"\nstartup_timeout_sec=45\n[mcp_servers.other]\nurl="https://other.example/mcp"\n'
+            config.write_text(original)
+            self.assertTrue(updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False))
+            expected = tomllib.loads(original)
+            expected["mcp_servers"]["dpf"]["url"] = "https://localhost/api/mcp/v1?tier=full"
+            self.assertEqual(tomllib.loads(config.read_text()), expected)
+            self.assertFalse(updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False))
+
+    @unittest.skipIf(tomllib is None, "project TOML validation requires a TOML parser")
+    def test_no_override_does_not_create_one(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir()
+            config.write_text('model="custom"\n')
+            self.assertFalse(updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False))
+            self.assertEqual(config.read_text(), 'model="custom"\n')
+
+    @unittest.skipIf(tomllib is None, "project TOML validation requires a TOML parser")
+    def test_malformed_toml_is_unchanged_and_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir()
+            original = '[mcp_servers.dpf]\nurl="unfinished'
+            config.write_text(original)
+            with self.assertRaisesRegex(ValueError, "project.*TOML"):
+                updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False)
+            self.assertEqual(config.read_text(), original)
+
+
+    def test_missing_parser_refuses_an_existing_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir()
+            original = '[mcp_servers.dpf]\nurl="http://localhost:3000/mcp"'
+            config.write_text(original)
+            with patch.dict(sys.modules, {"tomllib": None, "tomli": None}):
+                with self.assertRaisesRegex(ValueError, "Python 3.11"):
+                    updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False)
+            self.assertEqual(config.read_text(), original)
+
+    @unittest.skipIf(tomllib is None, "project TOML validation requires a TOML parser")
+    def test_dry_run_and_managed_oauth_policy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir()
+            original = '[mcp_servers.dpf]\nurl="http://localhost:3000/mcp"\nbearer_token_env_var="DPF_MCP_BEARER_TOKEN"\n'
+            config.write_text(original)
+            with patch.dict(os.environ, {"DPF_MCP_AUTH_MODE": "oauth"}):
+                self.assertTrue(updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", True))
+                self.assertEqual(config.read_text(), original)
+                updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False)
+            parsed = tomllib.loads(config.read_text())
+            self.assertNotIn("bearer_token_env_var", parsed["mcp_servers"]["dpf"])
+            self.assertNotIn("enabled", parsed["mcp_servers"]["dpf"])
+
+    def test_main_forwards_explicit_project_and_endpoint_even_on_dry_run(self):
+        import contextlib
+        import io
+        skill_pack = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory) / "home"
+            home.mkdir()
+            project = Path(directory) / "repo"
+            with patch.object(updater, "home_dir", return_value=home), patch.object(updater, "ensure_codex_project_config", return_value=False) as converge, contextlib.redirect_stdout(io.StringIO()):
+                code = updater.main(["--skill-pack-path", str(skill_pack), "--project-root", str(project), "--mcp-url", "https://selected.example/mcp", "--dry-run", "--codex-only", "--skip-codex-cli-install", "--skip-grok-cli-install", "--skip-antigravity-cli-install"])
+            self.assertEqual(code, 0)
+            converge.assert_called_once_with(project, "https://selected.example/mcp", True)
+
+
+class ClaimRefreshParityTest(unittest.TestCase):
+    """BI-C3D3762B: the claim-marker refresh reaches Grok and the Codex fallback copy."""
+
+    SKILL_PACK = Path(__file__).resolve().parents[1]
+
+    def _plugin_refresh_group(self) -> dict[str, Any]:
+        data = json.loads((self.SKILL_PACK / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+        return next(
+            g for g in data["hooks"]["PostToolUse"]
+            if any(updater.CLAIM_REFRESH_SCRIPT in h["command"] for h in g["hooks"])
+        )
+
+    def test_matcher_mirrors_the_plugin_hooks_json(self) -> None:
+        self.assertEqual(updater.CLAIM_REFRESH_MATCHER, self._plugin_refresh_group()["matcher"])
+        self.assertTrue((self.SKILL_PACK / "hooks" / updater.CLAIM_REFRESH_SCRIPT).exists())
+
+    def test_matcher_covers_each_surface_tool_name_form(self) -> None:
+        matcher = re.compile(updater.CLAIM_REFRESH_MATCHER)
+        for name in ("mcp__plugin_dpf-platform_dpf__heartbeat_workroom", "mcp__dpf__adopt_worktree", "mcp__dpf__claim_backlog_item_for_work"):
+            self.assertTrue(matcher.search(name), name)
+        for name in ("Shell", "mcp__dpf__get_workroom", "mcp__dpf__heartbeat_workroom_v2"):
+            self.assertFalse(matcher.search(name), name)
+
+    def test_grok_payload_runs_the_refresh_after_claim_tools(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            managed = home / ".agents" / "plugins" / "plugins" / "dpf-platform"
+            updater.copy_skill_pack(self.SKILL_PACK, managed, dry_run=False)
+            updater.install_grok_hooks(managed, home, dry_run=False)
+            data = json.loads(updater.grok_hooks_file(home).read_text())
+            post = data["hooks"]["PostToolUse"]
+            self.assertEqual(len(post), 1)
+            self.assertEqual(post[0]["matcher"], updater.CLAIM_REFRESH_MATCHER)
+            self.assertIn(str(managed / "hooks" / updater.CLAIM_REFRESH_SCRIPT), post[0]["hooks"][0]["command"])
+
+    def test_codex_fallback_copy_carries_the_refresh_and_keeps_foreign_post_hooks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            managed = home / "managed"
+            hooks_dir = managed / "hooks"
+            hooks_dir.mkdir(parents=True)
+            for script in (*updater.CODEX_BASH_GUARDS, *updater.CODEX_ASK_GUARDS, updater.CLAIM_REFRESH_SCRIPT):
+                (hooks_dir / script).write_text("// stub\n", encoding="utf-8")
+            (home / ".codex").mkdir()
+            foreign = {"hooks": {"PostToolUse": [{"matcher": ".*", "hooks": [{"type": "command", "command": "node /foreign/audit.js"}]}]}}
+            (home / ".codex" / "hooks.json").write_text(json.dumps(foreign), encoding="utf-8")
+
+            updater.install_codex_hooks(managed, home, dry_run=False)
+            merged = json.loads((home / ".codex" / "hooks.json").read_text())
+            post_cmds = [h["command"] for g in merged["hooks"]["PostToolUse"] for h in g["hooks"]]
+            self.assertIn("node /foreign/audit.js", post_cmds)
+            self.assertTrue(any(updater.CLAIM_REFRESH_SCRIPT in c for c in post_cmds))
+
+            # rerun is idempotent: one refresh entry, not two
+            updater.install_codex_hooks(managed, home, dry_run=False)
+            again = json.loads((home / ".codex" / "hooks.json").read_text())
+            refresh = [h for g in again["hooks"]["PostToolUse"] for h in g["hooks"] if updater.CLAIM_REFRESH_SCRIPT in h["command"]]
+            self.assertEqual(len(refresh), 1)
+
+            # pruning (plugin plane proven) removes the DPF refresh and keeps the foreign hook
+            pruned = updater.prune_codex_hooks_payload(again, hooks_dir)
+            pruned_cmds = [h["command"] for g in pruned["hooks"].get("PostToolUse", []) for h in g["hooks"]]
+            self.assertEqual(pruned_cmds, ["node /foreign/audit.js"])
 
 
 if __name__ == "__main__":

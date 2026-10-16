@@ -29,6 +29,7 @@ vi.mock("@/lib/inference/ai-provider-internals", () => ({
 vi.mock("./execution-adapter-registry", () => ({
   registerExecutionAdapter: vi.fn(),
 }));
+vi.mock("./cli-pool-status", () => ({ recordCliRateLimit: vi.fn(), clearCliRateLimit: vi.fn() }));
 
 vi.mock("./extract-tool-calls", () => ({
   extractToolCalls: vi.fn().mockReturnValue([]),
@@ -273,7 +274,7 @@ describe("codexCliAdapter — E2BIG spawn error classification", () => {
     mockSpawn.mockImplementation(() => {
       spawnCallCount++;
       const proc = makeMockProcess();
-      if (spawnCallCount <= 2) {
+      if (spawnCallCount <= 3) {
         // Prompt + runner file writes — succeed synchronously on nextTick
         process.nextTick(() => proc.emit("close", 0));
       } else {
@@ -312,7 +313,69 @@ describe("codexCliAdapter — E2BIG spawn error classification", () => {
   });
 });
 
+describe("Codex native effect replay fence", () => {
+  it.each(["close", "error", "structured-error", "empty-result"])("holds an effect-first execution followed by %s", async (event) => {
+    vi.clearAllMocks();
+    const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
+    vi.mocked(getDecryptedCredential).mockResolvedValue({ secretRef: "fake-test-key", cachedToken: null } as never);
+    mockExecAsync.mockResolvedValue({ stdout: "", stderr: "" });
+    let calls = 0, effects = 0;
+    mockSpawn.mockImplementation(() => {
+      const proc = makeMockProcess();
+      const isExecution = ++calls === 4;
+      process.nextTick(() => {
+        if (!isExecution) { proc.emit("close", 0); return; }
+        effects++;
+        proc.emit("spawn");
+        if (event === "empty-result") { proc.emit("close", 0); return; }
+        if (event === "structured-error") {
+          proc.stdout.emit("data", Buffer.from("Invalid API key · Fix external API key"));
+          proc.emit("close", 0); return;
+        }
+        proc.stderr.emit("data", Buffer.from("ERROR: authentication failed after native effect"));
+        if (event === "close") proc.emit("close", 1);
+        else proc.emit("error", new Error("kill ESRCH"));
+      });
+      return proc;
+    });
+    const { codexCliAdapter } = await import("./codex-cli-adapter");
+    await expect(codexCliAdapter.execute(makeRequest())).rejects.toMatchObject({ name: "NativeCliExecutionUncertainError" });
+    expect(effects).toBe(1);
+    expect(calls).toBe(4);
+  });
+});
+
 describe("Codex inference context isolation", () => {
+  it("keeps simultaneous account credentials in distinct private homes", async () => {
+    vi.clearAllMocks();
+    const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
+    vi.mocked(getDecryptedCredential).mockImplementation(async (_provider, connectionId) => ({ secretRef: connectionId === "account-a" ? "test-key-a" : "test-key-b", cachedToken: null } as never));
+    mockExecAsync.mockResolvedValue({ stdout: "", stderr: "" });
+    const writes: Array<{ path: string; content: string }> = [];
+    mockSpawn.mockImplementation((_command: string, args: string[]) => {
+      const proc = makeMockProcess();
+      if (args.includes("-i")) {
+        proc.stdin.write.mockImplementation((data: string, cb?: () => void) => {
+          writes.push({ path: args.at(-1)!, content: Buffer.from(data, "base64").toString("utf8") }); cb?.(); return true;
+        });
+        proc.stdin.end.mockImplementation(() => process.nextTick(() => proc.emit("close", 0)));
+      } else {
+        process.nextTick(() => { proc.stdout.emit("data", Buffer.from("Completed")); proc.emit("close", 0); });
+      }
+      return proc;
+    });
+    const { codexCliAdapter } = await import("./codex-cli-adapter");
+    await Promise.all(["account-a", "account-b"].map(providerConnectionId => codexCliAdapter.execute(makeRequest({ plan: makePlan({ providerConnectionId }) }))));
+    expect(getDecryptedCredential).toHaveBeenCalledWith("codex", "account-a");
+    expect(getDecryptedCredential).toHaveBeenCalledWith("codex", "account-b");
+    const homes = writes.filter(write => write.content.includes("const config =")).map(write => JSON.parse(write.content.match(/const config = (.+);/)![1]!).env.CODEX_HOME as string);
+    expect(new Set(homes).size).toBe(2);
+    for (const key of ["test-key-a", "test-key-b"]) {
+      const staged = writes.find(write => write.path.endsWith("auth.json") && JSON.parse(write.content).OPENAI_API_KEY === key)!;
+      expect(homes.some(home => staged.path.includes(`${home}/auth.json`))).toBe(true);
+      expect(mockExecAsync.mock.calls.some(([command]) => command.includes(key))).toBe(false);
+    }
+  });
   it("runs outside the shared checkout and cleans up its own context directory", async () => {
     vi.clearAllMocks();
     const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
@@ -338,12 +401,13 @@ describe("Codex inference context isolation", () => {
     });
     const { codexCliAdapter } = await import("./codex-cli-adapter");
     await codexCliAdapter.execute(makeRequest());
-    const runner = writes.find(value => value.startsWith("#!/bin/sh"))!;
-    const directory = runner.match(/cd (\/tmp\/codex-cwd-[\w-]+) \|\| exit 1/)?.[1];
-    expect(directory).toBeDefined();
-    expect(runner).not.toContain("cd /workspace");
-    expect(runner).toContain(`mkdir -p ${directory} || exit 1`);
-    expect(mockExecAsync.mock.calls.some(([command]) => command.includes(`rmdir ${directory}`))).toBe(true);
+    const runner = writes.find(value => value.includes("const config ="))!;
+    const config = JSON.parse(runner.match(/const config = (.+);/)![1]!);
+    expect(config.env.CODEX_HOME).toMatch(/^\/tmp\/dpf-codex-auth-/);
+    expect(runner).not.toContain("sk-test");
+    expect(config.cwd).toBe(config.env.CODEX_HOME);
+    expect(config.cwd).not.toContain("/workspace");
+    expect(mockSpawn.mock.calls.some(([, args]) => args.includes("node"))).toBe(true);
   });
 });
 
@@ -435,6 +499,37 @@ describe("cliFailureSignal — classify the CLI's own error, not the echoed prom
   it("still classifies the CLI's own auth error as auth", () => {
     const expired = stderr.replace(/ERROR: You've hit[^\n]*/, "ERROR: unexpected status 401 Unauthorized: Missing bearer");
     expect(looksLikeCliAuthFailure(cliFailureSignal(expired))).toBe(true);
+  });
+
+  // BI-07EC0FB4 (live, 2026-10-14 00:07–00:20Z): a revoked OpenAI sign-in. The 401s
+  // sit only on timestamped `... ERROR codex_models_manager` lines, which the
+  // signal drops; the CLI's own ERROR: line says "sign in again", which no
+  // pattern matched, so 39 Workroom turns failed as provider_error and the
+  // provider was never disabled or flagged for re-auth.
+  it("classifies a refresh-token failure that asks to sign in again as auth", () => {
+    const revoked = [
+      "Reading prompt from stdin...",
+      "2026-10-14T00:16:54.477268Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized: Your authentication token has expired. Please try refreshing it.",
+      "OpenAI Codex v0.162.1",
+      "--------",
+      "model: gpt-5.6-luna",
+      "--------",
+      "user",
+      "You are executing one stage of a standing Workroom activity.",
+      "ERROR: Your access token could not be refreshed because you have since logged out or signed in to another account. Please sign in again.",
+      "ERROR: Your access token could not be refreshed because you have since logged out or signed in to another account. Please sign in again.",
+    ].join("\n");
+    const signal = cliFailureSignal(revoked);
+    expect(looksLikeCliAuthFailure(signal)).toBe(true);
+    expect(looksLikeCliRateLimit(signal)).toBe(false);
+  });
+
+  it.each([
+    "ERROR: Please sign in again.",
+    "ERROR: please sign in to continue",
+    "ERROR: Your access token could not be refreshed.",
+  ])("classifies sign-in phrasing %j as auth", (text) => {
+    expect(looksLikeCliAuthFailure(cliFailureSignal(text))).toBe(true);
   });
 
   it("falls back to the tail when the CLI printed no ERROR line", () => {

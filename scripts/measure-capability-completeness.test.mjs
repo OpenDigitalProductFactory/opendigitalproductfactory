@@ -26,6 +26,7 @@ import {
   normalizeGeneratedPath,
   parseSkillFrontmatter,
   parseStringArrayMap,
+  resolveStringArrayMap,
   parseTopLevelKeys,
   stripLineComments,
   SHAPE_SOURCE_FILES,
@@ -150,6 +151,59 @@ test("grantsSatisfy: an empty requirement is universal, as at runtime", () => {
 test("canCall reports an unknown tool as unreachable, never as allowed", () => {
   const r = canCall("no_such_tool", new Set(["registry_read"]), new Map());
   assert.equal(r.reachable, false);
+});
+
+test("shared platform-update grant mappings retain administrator and read-only boundaries", () => {
+  const substrate = loadSubstrate();
+  for (const [name, grant] of [["apply_platform_update", "admin_write"], ["summarize_upgrade_impact", "admin_read"],
+    ["preview_runtime_capability_reconciliation", "admin_read"], ["reconcile_runtime_capabilities", "admin_write"]]) {
+    assert.deepEqual(substrate.toolToGrants.get(name), [grant]);
+    assert.equal(canCall(name, new Set([grant]), substrate.toolToGrants).reachable, true);
+    assert.equal(canCall(name, new Set(), substrate.toolToGrants).reachable, false);
+  }
+});
+
+test("governance reachability never treats an unmapped tool as an empty grant requirement", () => {
+  const substrate = loadSubstrate();
+  substrate.heldGrants.set("report-fixture", []);
+  substrate.toolDefs = new Map([["missing-grant-mapping", { sideEffect: true }]]);
+  substrate.consequentialTools = new Set(["missing-grant-mapping"]);
+  const result = scoreIdentity({ key: "report-fixture", handles: new Set(["report-fixture"]), registry: null,
+    onRoster: false, rosterSlug: null, identityClass: "declared-only", displayName: "Report fixture" }, substrate);
+  assert.equal(result.planes.governance.reachableSideEffectingTools, 0);
+  assert.equal(result.planes.governance.reachableGatedTools, 0);
+});
+
+test("grant-map imports support aliases and local spreads in JavaScript member order", () => {
+  const source = `import { SHARED as ALIAS } from "./shared";
+    const LOCAL = { probe: ["local"] };
+    export const ROOT = { before: ["initial"], ...ALIAS, probe: ["literal"], ...LOCAL };`;
+  const readModule = (specifier, from) => {
+    assert.equal(specifier, "./shared"); assert.equal(from, "root.ts");
+    return { modulePath: "shared.ts", source: `export const SHARED = { probe: ["imported"], extra: ["read"] };` };
+  };
+  assert.deepEqual(Object.fromEntries(resolveStringArrayMap(source, "ROOT", { modulePath: "root.ts", readModule })),
+    { before: ["initial"], probe: ["local"], extra: ["read"] });
+});
+
+test("unresolved and cyclic grant-map spreads fail closed instead of producing a partial report", () => {
+  const options = { modulePath: "root.ts", readModule: () => { throw new Error("missing source"); } };
+  assert.throws(() => resolveStringArrayMap(`const ROOT = { ...MISSING };`, "ROOT", options), /unresolved_grant_map/);
+  assert.throws(() => resolveStringArrayMap(`const ROOT = { ...ROOT };`, "ROOT", options), /cyclic_grant_map/);
+});
+
+test("reported side-effecting platform-update reachability follows the administrator grant boundary", () => {
+  const substrate = loadSubstrate();
+  substrate.toolDefs = new Map([["apply_platform_update", { sideEffect: true }],
+    ["reconcile_runtime_capabilities", { sideEffect: true }], ["preview_runtime_capability_reconciliation", { sideEffect: false }]]);
+  substrate.consequentialTools = new Set(["apply_platform_update", "reconcile_runtime_capabilities"]);
+  for (const [grants, expected] of [[[], 0], [["admin_read"], 0], [["admin_write"], 2]]) {
+    substrate.heldGrants.set("report-fixture", grants);
+    const result = scoreIdentity({ key: "report-fixture", handles: new Set(["report-fixture"]), registry: null,
+      onRoster: false, rosterSlug: null, identityClass: "declared-only", displayName: "Report fixture" }, substrate);
+    assert.equal(result.planes.governance.reachableSideEffectingTools, expected);
+    assert.equal(result.planes.governance.reachableGatedTools, expected);
+  }
 });
 
 // ── v2: the inventory join and the scoring contract ──────────────────────

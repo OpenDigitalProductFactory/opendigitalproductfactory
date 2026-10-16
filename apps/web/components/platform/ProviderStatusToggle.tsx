@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { toggleProviderStatus } from "@/lib/actions/ai-providers";
 import { useRouter } from "next/navigation";
-import { LocalProviderPauseControl } from "./LocalProviderPauseControl";
+import { ProviderPauseControl } from "./ProviderPauseControl";
 
 const STATUS_COLOURS: Record<string, string> = {
   active: "var(--dpf-success)",
@@ -16,11 +16,12 @@ type Props = {
   initialStatus: string;
   initialPause?: { resumeAt: string | null; pausedAt?: string } | null;
   initialConnectionStatus?: string | null;
+  endpointType?: string;
 };
 
 export function ProviderStatusToggle(props: Props) {
-  return props.providerId === "local" || props.providerId === "ollama"
-    ? <LocalProviderPauseControl key={props.providerId} {...props} />
+  return !["service", "transcription"].includes(props.endpointType ?? "llm")
+    ? <ProviderPauseControl key={props.providerId} {...props} />
     : <ProviderStatusControl {...props} />;
 }
 

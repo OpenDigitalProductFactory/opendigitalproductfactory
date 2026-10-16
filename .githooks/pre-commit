@@ -30,6 +30,10 @@
 #
 # Set up: `git config core.hooksPath .githooks` (done automatically at repo setup).
 
+# Each invocation owns its diagnostics, including concurrent sibling worktrees.
+DPF_PRECOMMIT_LOG_DIR=$(mktemp -d "${TMPDIR:-/tmp}/dpf-precommit.XXXXXX") || exit 1
+trap 'rm -f "$DPF_PRECOMMIT_LOG_DIR/prisma.log" "$DPF_PRECOMMIT_LOG_DIR/typecheck.log"; rmdir "$DPF_PRECOMMIT_LOG_DIR" 2>/dev/null || true' EXIT
+
 # ─── Guard 0: root clone is read-only for feature work ──────────────────────
 # Refuse feature-branch commits in the primary (non-linked) working tree so two
 # concurrent sessions never share one clone (the EP-F7E35344 collision vector).
@@ -89,10 +93,10 @@ fi
 
 if [ -n "$SCHEMA_NEWER" ]; then
   echo "[pre-commit] Prisma schema is newer than generated client — regenerating..."
-  if ! pnpm --filter @dpf/db exec prisma generate >/tmp/pre-commit-prisma.log 2>&1; then
+  if ! pnpm --filter @dpf/db exec prisma generate >"$DPF_PRECOMMIT_LOG_DIR/prisma.log" 2>&1; then
     echo ""
-    echo "ERROR: prisma generate failed. Check /tmp/pre-commit-prisma.log."
-    cat /tmp/pre-commit-prisma.log | tail -20
+    echo "ERROR: prisma generate failed. Diagnostic tail follows:"
+    tail -20 "$DPF_PRECOMMIT_LOG_DIR/prisma.log"
     echo ""
     exit 1
   fi
@@ -355,11 +359,11 @@ run_typecheck() {
   label="$2"
   script="${3:-typecheck}"
   echo "  → $label"
-  if ! pnpm --filter "$filter" "$script" >/tmp/pre-commit-tc.log 2>&1; then
+  if ! pnpm --filter "$filter" "$script" >"$DPF_PRECOMMIT_LOG_DIR/typecheck.log" 2>&1; then
     echo ""
     echo "ERROR: typecheck failed for $label"
     echo ""
-    cat /tmp/pre-commit-tc.log | tail -40
+    tail -40 "$DPF_PRECOMMIT_LOG_DIR/typecheck.log"
     echo ""
     # BI-1C1483C6: "'next' is not recognized" and "Cannot find package 'react'"
     # look exactly like real breakage. When the readiness probe corroborates that
@@ -367,7 +371,7 @@ run_typecheck() {
     # to lose a stash-and-re-run cycle discovering it. Silent otherwise; never
     # changes the verdict.
     if command -v node >/dev/null 2>&1 && [ -f scripts/lib/bootstrap-worktree-deps.mjs ]; then
-      diagnosis="$(node scripts/lib/bootstrap-worktree-deps.mjs . --diagnose-failure </tmp/pre-commit-tc.log 2>/dev/null || true)"
+      diagnosis="$(node scripts/lib/bootstrap-worktree-deps.mjs . --diagnose-failure <"$DPF_PRECOMMIT_LOG_DIR/typecheck.log" 2>/dev/null || true)"
       if [ -n "$diagnosis" ]; then
         echo "$diagnosis"
         echo ""

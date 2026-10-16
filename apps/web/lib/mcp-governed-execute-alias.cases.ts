@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
   buildCoworkerApprovalBinding,
   type CoworkerAuthorityInput,
@@ -199,7 +199,12 @@ export function registerWorkroomAliasCases(evidence: {
       }),
     });
 
-    const result = await governedExecuteTool({
+    // This is a legacy task with no transferred execution authority.
+    const taskLookup = vi.spyOn((await import("@dpf/db")).prisma.taskRun, "findUnique")
+      .mockResolvedValue({ progressPayload: {} } as never);
+    let result;
+    try {
+      result = await governedExecuteTool({
       toolName: "create_backlog_item",
       rawParams: { title: "approved title" },
       userId: "user-1",
@@ -212,6 +217,7 @@ export function registerWorkroomAliasCases(evidence: {
       source: "external-jsonrpc",
     });
 
+    } finally { taskLookup.mockRestore(); }
     expect(result).toMatchObject({ success: false, error: "workroom_access_denied" });
     expect(evidence.oauthRefusalCalls()).toHaveLength(2);
     expect(evidence.executeMock()).not.toHaveBeenCalled();

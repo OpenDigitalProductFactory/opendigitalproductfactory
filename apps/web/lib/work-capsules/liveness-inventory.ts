@@ -15,6 +15,9 @@ import { projectWorkroomRecovery } from "./workroom-recovery-projection";
 import { readBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
 import { projectPrFollowThroughStatus } from "@/lib/build/pr-follow-through";
 import { projectInvocationAttribution, recordedDriveTask } from "./invocation-attribution";
+import { readStoredWorkroomDriveState, projectStoredWorkroomDriveObservation } from "@/lib/work-management/workroom-drive-state";
+import { loadWorkroomDisplayTitles, workroomDisplayTitle, type WorkroomTitleDb } from "./workroom-display-titles.server";
+import { loadSemanticReviewRoomProjection, type ReviewerRoomClient } from "@/lib/work-management/semantic-review-room-projection";
 
 const INVENTORY_SELECT = {
   capsuleId: true,
@@ -45,11 +48,22 @@ const INVENTORY_SELECT = {
   updatedAt: true,
   featureBuildId: true,
   workspaceState: true,
-  activities: { orderBy: { recordedAt: "desc" }, take: 1, where: { kind: { in: ["concierge-sweep", "embedding-coverage"] } }, select: { kind: true } },
+  activities: {
+    orderBy: { recordedAt: "desc" }, take: 1,
+    where: { OR: [
+      { kind: { in: ["concierge-sweep", "embedding-coverage"] } },
+      { kind: "workroom-drive", AND: [
+        { payload: { path: ["action"], equals: "dispatch_agent" } },
+        { payload: { path: ["reason"], equals: "agent_stage" } },
+      ] },
+    ] },
+    select: { kind: true, payload: true },
+  },
   taskRun: { select: { taskRunId: true, status: true, updatedAt: true, source: true, initiatingAgentId: true, currentAgentId: true, parentTaskRunId: true } },
 } as const satisfies Prisma.WorkroomSelect;
 
-export type InventoryDb = {
+export type InventoryDb = ReviewerRoomClient & {
+  backlogItem?: WorkroomTitleDb["backlogItem"];
   workroom: { findMany(args: unknown): Promise<any[]> };
   featureBuild: { findMany(args: unknown): Promise<any[]> };
   scheduledAgentTask?: { findMany(args: unknown): Promise<Array<{ taskId: string; agentId: string }>> };
@@ -80,15 +94,21 @@ export type CapsuleLivenessSummary = {
  */
 export async function loadCapsuleLivenessInventory(
   db: InventoryDb,
-  args: { where: Record<string, unknown>; take: number; compact?: boolean },
+  args: { where: Record<string, unknown>; take: number; compact?: boolean; portalSummary?: boolean },
   now: Date = new Date(),
 ): Promise<{ capsulesAll: Array<Record<string, unknown>>; livenessSummary: CapsuleLivenessSummary }> {
   const rows = await db.workroom.findMany({
     where: args.where,
     orderBy: [{ updatedAt: "desc" }, { capsuleId: "asc" }],
     take: args.take,
-    select: args.compact ? { ...INVENTORY_SELECT, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false } : INVENTORY_SELECT,
+    select: args.portalSummary
+      ? { ...INVENTORY_SELECT, id: true, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false }
+      : args.compact ? { ...INVENTORY_SELECT, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false } : INVENTORY_SELECT,
   });
+  const titles = args.portalSummary ? await loadWorkroomDisplayTitles(db, rows) : null;
+  // One bounded review read for the page, never one query per room. A truncated
+  // history stays unknown; the detail action narrows the observation to a room.
+  const reviews = await loadSemanticReviewRoomProjection(db, rows.map(row => row.capsuleId), now);
 
   const taskIds = rows.map((row) => recordedDriveTask(row)?.taskId).filter((id): id is string => Boolean(id));
   const tasks = taskIds.length && db.scheduledAgentTask ? await db.scheduledAgentTask.findMany({
@@ -125,6 +145,7 @@ export async function loadCapsuleLivenessInventory(
     || (normalize(row.headBranch) && normalize(lease.branchName) === normalize(row.headBranch)));
 
   const capsulesAll = rows.map((row) => {
+    const drive = args.portalSummary ? readStoredWorkroomDriveState(row.workspaceState) : null;
     const featureBuild = row.featureBuildId ? buildsById.get(row.featureBuildId) ?? null : null;
     const lease = leaseFor(row);
     const verdict = classifyWorkCapsuleLiveness({
@@ -139,8 +160,11 @@ export async function loadCapsuleLivenessInventory(
     const { featureBuildId: _omit, taskRun: _taskRun, workspaceState: _workspace, activities: _activities, ...rest } = row;
     return {
       ...rest,
+      ...(titles ? { title: workroomDisplayTitle(row, titles) } : {}),
+      ...(drive ? { drive: { action: drive.lastAction, reason: drive.lastReason,
+        attentionRecorded: Boolean(projectStoredWorkroomDriveObservation(row.workspaceState).attentionReason) } } : {}),
       attribution: projectInvocationAttribution(row, tasksById.get(recordedDriveTask(row)?.taskId ?? "")),
-      recovery: projectWorkroomRecovery({ ...row, taskRun: row.taskRun }),
+      recovery: projectWorkroomRecovery({ ...row, taskRun: row.taskRun }, reviews),
       liveness: verdict.liveness,
       isLive: verdict.isLive,
       isReapable: verdict.isReapable,

@@ -9,7 +9,7 @@ const url = process.env.DPF_SQL_TEST_DATABASE_URL
   ?? (process.env.CI === "true" ? process.env.DATABASE_URL : undefined);
 const databaseSuite = url ? describe : describe.skip;
 
-databaseSuite("portfolio investment read model on PostgreSQL (BI-298A7202)", () => {
+databaseSuite("portfolio investment read model on PostgreSQL (BI-298A7202, BI-77313ADD)", () => {
   let client: Client;
   const now = new Date();
   const period = quarterBounds(now);
@@ -27,11 +27,22 @@ databaseSuite("portfolio investment read model on PostgreSQL (BI-298A7202)", () 
   afterAll(async () => { await client?.end(); });
 
   it("reconciles every row to the live-item and delivered-this-quarter counts (AC-2)", async () => {
-    const summary = summarizePortfolioInvestment(await loadInvestmentItems(db, period), now);
+    const summary = summarizePortfolioInvestment(await loadInvestmentItems(db, period, { now }), now);
+    // The spend rule (BI-77313ADD): delivered = done or awaiting-acceptance with a
+    // delivery date in the quarter; an earlier quarter's delivery is outside it.
     const { rows: [counts] } = await client.query<{ live: string; delivered: string }>(
-      `SELECT count(*) FILTER (WHERE status NOT IN ('done', 'retired')) AS live,
-              count(*) FILTER (WHERE status = 'done' AND "completedAt" >= $1 AND "completedAt" < $2) AS delivered
-         FROM "BacklogItem"`,
+      `WITH d AS (
+         SELECT b.status, CASE
+                  WHEN b.status = 'awaiting-acceptance' THEN COALESCE(t.at, b."updatedAt")
+                  WHEN b.status = 'done' THEN COALESCE(t.at, b."completedAt")
+                END AS delivered_at
+           FROM "BacklogItem" b
+           LEFT JOIN (SELECT "backlogItemId", MAX("recordedAt") AS at FROM "BacklogItemActivity"
+                       WHERE kind = 'status_change' AND payload->>'to' = 'awaiting-acceptance'
+                       GROUP BY 1) t ON t."backlogItemId" = b.id)
+       SELECT count(*) FILTER (WHERE status NOT IN ('done', 'retired', 'awaiting-acceptance')) AS live,
+              count(*) FILTER (WHERE status IN ('done', 'awaiting-acceptance') AND delivered_at >= $1 AND delivered_at < $2) AS delivered
+         FROM d`,
       [period.start, period.end],
     );
 

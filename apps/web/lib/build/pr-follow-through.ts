@@ -75,7 +75,9 @@ export type PrRepairPacket = {
 };
 
 export const PR_REPAIR_CONSTRAINTS = [
-  "Push a new DCO-signed commit to the same branch, after the local gate passes.",
+  "Preserve valid evidence for an unchanged published head; queue delays or infrastructure failures do not require repeating the whole local gate.",
+  "For source corrections, run affected tests, reproduce the named failure, and obtain independent review of changed code.",
+  "Push a new DCO-signed commit to the same branch; final main-plus-PR integration belongs to required GitHub checks and the protected merge queue.",
   "Never merge, force-push, dismiss a check or edit required-check configuration.",
   "Never weaken a test to make it pass.",
   "Stay inside the pull request's existing diff scope; otherwise stop and raise attention.",

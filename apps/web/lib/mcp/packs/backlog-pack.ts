@@ -672,7 +672,7 @@ const handlers: Record<string, ToolPackHandler> = {
   update_epic: (params, userId, context) => updateEpic(params, userId, context),
   list_epics: (params) => listEpics(params),
   list_backlog_items: (params) => listBacklogItems(params),
-  get_backlog_item: (params, _userId, context) => getBacklogItem(params, context?.agentId ?? null),
+    get_backlog_item: (params, userId, context) => getBacklogItem(params, context?.agentId ?? null, userId, context),
   update_backlog_item_status: (params, userId, context) =>
     settleReservationsAfter(params, updateBacklogItemStatus(params, userId, context)),
   link_backlog_item_to_epic: (params, userId, context) => linkBacklogItemToEpic(params, userId, context),

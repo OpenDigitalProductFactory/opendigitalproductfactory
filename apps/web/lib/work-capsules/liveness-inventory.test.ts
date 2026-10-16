@@ -3,6 +3,45 @@ import { describe, expect, it, vi } from "vitest";
 import { loadCapsuleLivenessInventory } from "./liveness-inventory";
 
 describe("loadCapsuleLivenessInventory", () => {
+  it("batches metadata-linked reviews and uses the same current-source recovery view", async () => {
+    const now = new Date("2026-10-16T00:00:00Z");
+    const rooms = ["WC-1", "WC-2"].map(capsuleId => ({ capsuleId, status: "working", updatedAt: now,
+      repositoryFullName: "owner/repo", headBranch: "fix/readback", worktreePath: "D:/readback",
+      baseSha: "0".repeat(40), headSha: "1".repeat(40), taskRun: null }));
+    const findMany = vi.fn().mockResolvedValue([{ id: "review-row", taskRunId: "TR-REVIEW", userId: "requester-1",
+      status: "working", updatedAt: now, lastHeartbeatAt: now, progressPayload: {}, nodes: [] }]);
+    const db = { workroom: { findMany: vi.fn().mockResolvedValue(rooms) }, featureBuild: { findMany: vi.fn() },
+      taskRun: { findMany }, $queryRaw: vi.fn().mockResolvedValue([{ rowId: "review-row", capsuleId: "WC-1", requestBound: true, requestSchemaVersion: 2, requestArtifactType: "code-change", identityArtifactType: "code-change", identityArtifactTypePresent: true,
+        sourceHeadSha: "1".repeat(40), currentHeadSha: "1".repeat(40), issuedAt: "2026-10-15T23:59:00Z" }]) };
+    const result = await loadCapsuleLivenessInventory(db, { where: {}, take: 10 }, now);
+    expect(findMany).toHaveBeenCalledTimes(1);
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 21 }));
+    expect(result.capsulesAll[0].recovery).toMatchObject({ state: "working", reviewerExecution: { taskRunId: "TR-REVIEW" } });
+    expect(result.capsulesAll[1].recovery).toMatchObject({ state: "actionable", reviewerExecution: null });
+  });
+
+  it("does not label an unreadable review source actionable", async () => {
+    const now = new Date("2026-10-16T00:00:00Z");
+    const db = { workroom: { findMany: vi.fn().mockResolvedValue([{ capsuleId: "WC-1", status: "working", updatedAt: now,
+      repositoryFullName: "owner/repo", headBranch: "fix/readback", worktreePath: "D:/readback",
+      baseSha: "0".repeat(40), headSha: "1".repeat(40), taskRun: null }]) }, featureBuild: { findMany: vi.fn() },
+      taskRun: { findMany: vi.fn().mockRejectedValue(new Error("unavailable")) } };
+    const result = await loadCapsuleLivenessInventory(db, { where: {}, take: 10 }, now);
+    expect(result.capsulesAll[0].recovery).toMatchObject({ state: "unknown", blocker: { reason: "review-observation-incomplete" } });
+  });
+  it("uses a bounded portal read without fetching scope or activity history and preserves hold facts", async () => {
+    const now = new Date("2026-10-13T00:00:00Z");
+    const db = { workroom: { findMany: vi.fn().mockResolvedValue([{
+      id: "row-1", capsuleId: "WC-1", status: "working", source: "manual", updatedAt: now,
+      taskRun: null, workspaceState: { privateNote: "private", workroomDrive: { action: "pause", reason: "executor_writeback_unavailable" } },
+    }]) }, featureBuild: { findMany: vi.fn().mockResolvedValue([]) } };
+    const result = await loadCapsuleLivenessInventory(db, { where: {}, take: 200, portalSummary: true }, now);
+    expect(db.workroom.findMany).toHaveBeenCalledTimes(1);
+    expect(db.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 200,
+      select: expect.objectContaining({ id: true, scopeClaims: false, outcomeAnchor: false, activities: expect.objectContaining({ take: 1 }) }) }));
+    expect(result.capsulesAll[0]).toMatchObject({ id: "row-1", drive: { action: "pause", reason: "executor_writeback_unavailable" } });
+    expect(JSON.stringify(result)).not.toContain("privateNote");
+  });
   it("batches scheduled targets and strips private workspace state in compact results", async () => {
     const now = new Date("2026-10-01T00:00:00Z");
     const db = {
@@ -23,6 +62,33 @@ describe("loadCapsuleLivenessInventory", () => {
     expect(result.capsulesAll[0]).not.toHaveProperty("activities");
     expect(JSON.stringify(result)).not.toContain("secret");
   });
+  it("selects successful history behind a paused snapshot and excludes private activity payloads", async () => {
+    const now = new Date("2026-10-02T00:00:00Z");
+    const db = {
+      workroom: { findMany: vi.fn().mockResolvedValue([{
+        capsuleId: "WC-PAUSED", status: "draft", updatedAt: now, featureBuildId: null,
+        workspaceState: { workroomDrive: { action: "pause" } },
+        activities: [{ kind: "workroom-drive", payload: { action: "dispatch_agent", reason: "agent_stage", agentId: "original-agent", taskId: "task", stageKey: "read", privateNote: "private-history" } }],
+      }]) },
+      featureBuild: { findMany: vi.fn().mockResolvedValue([]) },
+      scheduledAgentTask: { findMany: vi.fn().mockResolvedValue([{ taskId: "task", agentId: "reassigned-agent" }]) },
+    };
+    const result = await loadCapsuleLivenessInventory(db, { where: {}, take: 10 }, now);
+    expect(result.capsulesAll[0]!.attribution).toEqual({ executor: "original-agent", invocation: "Scheduled · original-agent · task · stage read" });
+    expect(JSON.stringify(result)).not.toContain("private-history");
+    expect(result.capsulesAll[0]).not.toHaveProperty("activities");
+    expect(db.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({ select: expect.objectContaining({ activities: {
+      orderBy: { recordedAt: "desc" }, take: 1,
+      where: { OR: [
+        { kind: { in: ["concierge-sweep", "embedding-coverage"] } },
+        { kind: "workroom-drive", AND: [
+          { payload: { path: ["action"], equals: "dispatch_agent" } },
+          { payload: { path: ["reason"], equals: "agent_stage" } },
+        ] },
+      ] },
+      select: { kind: true, payload: true },
+    } }) }));
+  });
   it("loads the linked TaskRun independently and projects a terminal turn over a stale session", async () => {
     const now = new Date("2026-08-24T18:00:00.000Z");
     const db = {
@@ -39,6 +105,7 @@ describe("loadCapsuleLivenessInventory", () => {
         updatedAt: now, featureBuildId: null,
         taskRun: { taskRunId: "TR-TERMINAL", status: "completed", updatedAt: new Date("2026-08-24T17:55:00.000Z") },
       }]) },
+      taskRun: { findMany: vi.fn().mockResolvedValue([]) },
       featureBuild: { findMany: vi.fn().mockResolvedValue([]) },
       nonProductionEnvironmentLease: { findMany: vi.fn().mockResolvedValue([]) },
     };

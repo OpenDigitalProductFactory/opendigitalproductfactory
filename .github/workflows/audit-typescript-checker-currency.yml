@@ -1,0 +1,89 @@
+name: TypeScript Checker Currency
+
+# Is the TypeScript 7 checker pin current? (BI-D2FE6931)
+#
+# scripts/run-tsc.mjs type-checks with TypeScript 7, pinned once at the root as
+# the npm alias "typescript7": "npm:typescript@<version>" (BI-2B8D67A9). Nothing
+# documents Dependabot updating an `npm:`-aliased dependency, so this weekly
+# audit compares the pin with npm's `latest` dist-tag. When the pin is behind
+# (or npm has a new major), it opens or comments on ONE tracking issue. It
+# never edits package.json: a bump lands as an ordinary PR, which the
+# "Typecheck (TS6 reference, advisory)" CI job checks for parity.
+
+on:
+  schedule:
+    - cron: "37 6 * * 2" # Tuesdays: TypeScript patch releases are infrequent
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/audit-typescript-checker-currency.mjs"
+      - "scripts/audit-typescript-checker-currency.test.mjs"
+      - ".github/workflows/audit-typescript-checker-currency.yml"
+
+permissions:
+  contents: read
+  issues: write # open/update the bump tracking issue
+
+concurrency:
+  group: typescript-checker-currency-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: TypeScript checker currency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Unit tests
+        run: node --test scripts/audit-typescript-checker-currency.test.mjs
+
+      - name: Check the pin against npm
+        # Scheduled/manual runs must reach the registry (a silent skip would hide
+        # that the audit did not run). On PRs an outage only degrades the report.
+        run: |
+          set -euo pipefail
+          FLAGS=""
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            FLAGS="--require-online"
+          fi
+          node scripts/audit-typescript-checker-currency.mjs $FLAGS
+
+      - name: Publish report to the run summary
+        if: always()
+        run: |
+          { test -f sbom/typescript-checker-currency.md && cat sbom/typescript-checker-currency.md; } >> "$GITHUB_STEP_SUMMARY" || echo "No currency report produced." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: File bump tracking issue
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          STATUS=$(node -e "console.log(JSON.parse(require('fs').readFileSync('sbom/typescript-checker-currency.json','utf8')).status)")
+          if [ "$STATUS" != "behind" ] && [ "$STATUS" != "new-major" ]; then
+            echo "Pin is $STATUS; nothing to file."
+            exit 0
+          fi
+          TITLE="chore(deps): TypeScript 7 checker pin is behind npm"
+          BODY_FILE="$(mktemp)"
+          {
+            cat sbom/typescript-checker-currency.md
+            echo ""
+            echo "Triage into the DPF backlog, bump the root \`typescript7\` alias in one PR, and check the TS6 reference CI job's verdict before merging."
+            echo ""
+            echo "_Filed by .github/workflows/audit-typescript-checker-currency.yml, run ${{ github.run_id }}._"
+          } > "$BODY_FILE"
+          EXISTING=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file "$BODY_FILE"
+            echo "Commented on existing issue #$EXISTING."
+          else
+            gh issue create --title "$TITLE" --body-file "$BODY_FILE"
+          fi

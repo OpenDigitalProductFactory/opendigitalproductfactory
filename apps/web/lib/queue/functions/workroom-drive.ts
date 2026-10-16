@@ -16,6 +16,7 @@ import {
 import type { EffectiveHumanAccountability } from "@/lib/work-management/human-accountability";
 
 import { NOT_ASKED_ACCOUNTABILITY, resolveAccountabilityForConclusion } from "./workroom-drive-accountability";
+import { activeUserIdForHumanPrincipal, MISSING_TASK_OWNER_REASON, settleTickTaskOwner } from "./workroom-drive-task-owner";
 import type { PrismaClient } from "@dpf/db";
 import { jobs } from "@/lib/jobs";
 import {
@@ -26,6 +27,7 @@ import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-
 import { buildStageBrief, stageBriefInputFromDefinition, stageEvidenceKinds } from "@/lib/work-management/stage-briefing";
 import { type WorkroomStageTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
 import { driveTickIsNews, nextDriveHold, readDriveHold, stallNoticeDue, type WorkroomDriveHold } from "@/lib/work-management/workroom-drive-hold";
+import { readWorkroomQueueHold } from "@/lib/work-capsules/workroom-queue-hold";
 
 import {
   loadCoordinationBindings,
@@ -33,6 +35,7 @@ import {
   loadStageDispatchTimes,
   loadStageDispatchTimesByStage,
   loadStandingRoomIds,
+  loadWorkItemStatuses,
   reconcileCoordinationBindings,
   reconcileStandingRoomNesting,
 } from "./workroom-drive-data";
@@ -65,6 +68,7 @@ import { readWorkroomPostureClaim } from "@/lib/work-management/workroom-posture
 import { readWorkShapeDefinitionContract } from "@/lib/work-management/work-shapes";
 import { readWorkShapeRoleBindings, resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 import { loadAuthorStageAutonomy, NO_AUTHOR_STAGE_AUTONOMY, type AuthorStageAutonomyFor } from "@/lib/work-management/author-stage-autonomy-live";
+import { gateDrivePlanOnWorkItem } from "@/lib/work-management/drive-work-item-gate";
 import {
   EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
   resolveDrivePlan,
@@ -80,13 +84,15 @@ import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workr
 import { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
 import { scheduleWorkroomAgentTask } from "./workroom-drive-scheduling";
 export { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
-import { repairUnownedDeliveryRooms, ROOM_OWNER_USER_INCLUDE, roomOwnerUserId } from "@/lib/work-management/delivery-room-ownership";
+import { loadHandedOverUserIds, repairUnownedDeliveryRooms, ROOM_OWNER_USER_INCLUDE, roomOwnerUserId } from "@/lib/work-management/delivery-room-ownership";
 
 export type WorkroomDriveRoom = {
   id: string;
   capsuleId: string;
   /** BI-8A32EBFF: the item the room delivers, for the author-stage budget check. */
   backlogItemId?: string | null;
+  /** BI-72679FE0: that item's status; a room whose item is not live work stands down. */
+  workItemStatus?: string | null;
   scopeClaims: unknown;
   workspaceState: unknown;
   leaseExpiresAt: Date | null;
@@ -126,6 +132,8 @@ export type WorkroomDriveEffects = SubShapeChildEffects & {
    * answer: nobody was asked, so nobody is named.
    */
   resolveAccountability?: (roomId: string) => Promise<EffectiveHumanAccountability>;
+  /** BI-D13FA12A: the active user an accountable human principal maps to, for a room that records no owner user. */
+  resolvePrincipalUserId?: (principalId: string) => Promise<string | null>;
   persist: (input: {
     roomId: string;
     snapshot: Record<string, unknown>;
@@ -207,9 +215,15 @@ export async function applyDrivePlan(input: {
   runKey?: string;
   review?: ReviewStageOverlay | null; // set when the stage was rebound to its readiness reviewer
 }): Promise<"dispatched" | "attention" | "stopped" | "skipped"> {
-  const { room, plan, now, effects, runKey } = input;
+  const { now, effects, runKey } = input;
   // Graph shapes only (Phase 3c): marking carry-forward and the marked keys. Null for every sequential room.
-  const graph = graphSnapshotFields(plan, room.workspaceState);
+  const graph = graphSnapshotFields(input.plan, input.room.workspaceState);
+  // BI-D13FA12A: settle who the task runs for before anything is recorded; an ownerless dispatch becomes a pause.
+  const reviewerBound = Boolean(input.review?.binding.requestCoworker && input.review.binding.stageKey === input.plan.stageKey);
+  const owner = await settleTickTaskOwner({ room: input.room, plan: input.plan, effects, dispatches: graph
+    ? graph.dispatching : input.plan.action === "dispatch_agent" && Boolean(input.plan.taskId && input.plan.agentId) && !reviewerBound });
+  const plan = owner.plan;
+  const room = { ...input.room, ownerUserId: owner.ownerUserId };
   const receipts = graph ? withLatchedBlockedReceipts(plan, room.receipts) : [...room.receipts];
   if (
     !graph
@@ -232,7 +246,7 @@ export async function applyDrivePlan(input: {
     attentionPrincipalRef: plan.attentionPrincipalRef,
   });
   const accountability: EffectiveHumanAccountability = needsOwner
-    ? await resolveAccountabilityForConclusion(room.id, effects.resolveAccountability)
+    ? owner.accountability ?? await resolveAccountabilityForConclusion(room.id, effects.resolveAccountability)
     : NOT_ASKED_ACCOUNTABILITY;
   const conclusion = resolveDriveConclusion({
     action: plan.action,
@@ -248,7 +262,8 @@ export async function applyDrivePlan(input: {
     await effects.notifyStall({ room, hold, reason: plan.reason, conformance: plan.conformance })
       .then(() => { hold.notifiedAt = now.toISOString(); }, () => undefined);
   }
-  const quiet = !driveTickIsNews(priorHold, hold, plan.action, graph ? graph.iterationChanged || graph.dispatching : undefined);
+  const quiet = !driveTickIsNews(priorHold, hold, plan.action,
+    graph ? graph.iterationChanged || (graph.dispatching && room.ownerUserId !== null) : undefined);
   const persist: WorkroomDriveEffects["persist"] = (args) =>
     effects.persist({ ...args, quiet: quiet && !args.observationOnly, ...(graph ? { graphShape: true } : {}) });
 
@@ -277,6 +292,7 @@ export async function applyDrivePlan(input: {
     conformance: plan.conformance,
     ledger: plan.ledger,
     hold,
+    ...(owner.taskOwner ? { taskOwner: owner.taskOwner } : {}),
     ...graph?.fields,
   };
   // A graph room dispatches one task per branch (PR-3c-2); a sequential room never takes this branch.
@@ -309,6 +325,13 @@ export async function applyDrivePlan(input: {
 
   if (plan.action === "dispatch_agent") {
     if (!plan.taskId || !plan.agentId) return "skipped";
+    if (readWorkroomQueueHold(room.workspaceState)) {
+      // BI-2B6A8A74: no provider answered the last stage; dispatching again would retry the outage.
+      const held = { ...snapshot, reason: "provider_held" satisfies DriveReasonFor<"dispatch_agent"> };
+      await persist({ roomId: room.id, snapshot: held, activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
+        summary: "Queue held after a provider failure; resume_workroom_queue releases it.", payload: held });
+      return "skipped";
+    }
     const expiresAt = new Date(now.getTime() + WORKROOM_DRIVE_LEASE_MS);
     const lease = await effects.acquireLease({
       roomId: room.id,
@@ -331,16 +354,8 @@ export async function applyDrivePlan(input: {
     }
     if (input.review?.binding.requestCoworker && input.review.binding.stageKey === plan.stageKey) return applyReviewerDispatch({
       room, plan, overlay: input.review, snapshot, now, persist, lease: { expiresAt, holderPrincipalId: room.leaseHolderPrincipalId }, dispatch: effects.dispatchReviewer });
-    if (!room.ownerUserId) {
-      await persist({
-        roomId: room.id,
-        snapshot: { ...snapshot, reason: "missing_task_owner" satisfies DriveReasonFor<"dispatch_agent"> },
-        activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
-        summary: "Agent stage is eligible but no owner user is bound for ScheduledAgentTask.",
-        payload: { ...snapshot, reason: "missing_task_owner" satisfies DriveReasonFor<"dispatch_agent"> },
-      });
-      return "skipped";
-    }
+    // Unreachable: settleTickTaskOwner rewrote an ownerless dispatch to a pause above.
+    if (!room.ownerUserId) return "skipped";
     // GPP element 2 "Attachment" + element 5 "Capability set": the brief and the
     // task carry the stage's declared tools; the scheduler pins them (BI-43C3E914).
     const brief = stageBriefInputFromDefinition({ capsuleId: room.capsuleId, roomObjective: room.objective ?? null,
@@ -365,7 +380,7 @@ export async function applyDrivePlan(input: {
       roomId: room.id,
       snapshot,
       activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
-      summary: `Dispatched ${plan.taskId} for stage ${plan.stageKey}`,
+      summary: `Dispatched ${plan.taskId} for stage ${plan.stageKey}${owner.taskOwner ? ` for the accountable person (${String(owner.taskOwner.source)})` : ""}`,
       payload: snapshot,
       lease: { expiresAt, holderPrincipalId: room.leaseHolderPrincipalId },
     });
@@ -376,7 +391,9 @@ export async function applyDrivePlan(input: {
     roomId: room.id,
     snapshot,
     activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
-    summary: `Drive ${plan.action}: ${plan.reason}`,
+    summary: plan.reason === MISSING_TASK_OWNER_REASON
+      ? `Stage ${plan.stageKey ?? "unknown"} not dispatched: ${String(owner.taskOwner?.missing ?? "no task owner")}`
+      : `Drive ${plan.action}: ${plan.reason}`,
     payload: snapshot,
   });
   if (plan.shapeKey) {
@@ -422,12 +439,14 @@ export async function runWorkroomDriveJob(
     // Stage-scoped evidence (a review stage's: its readiness receipts, BI-80738C08) is
     // the ONLY thing a completing receipt is earned from; without it a room never advances.
     const evidenceByRoom = await loadRecordedEvidence(rooms.map((room) => room.capsuleId));
+    const statusByItem = await loadWorkItemStatuses(rooms.map((room) => room.backlogItemId ?? ""));
     const dispatchByRoom = await loadStageDispatchTimes(rooms.map((room) => room.capsuleId));
     const dispatchByStage = await loadStageDispatchTimesByStage(
       rooms.filter((room) => hasStoredDriveMarking(room.workspaceState)).map((room) => room.capsuleId));
     rooms = await withSubShapeChildren(await withReviewReceiptEvidence(rooms.map((room) => ({
       ...room,
       recordedEvidence: evidenceByRoom.get(room.capsuleId) ?? [],
+      workItemStatus: room.backlogItemId ? statusByItem.get(room.backlogItemId) ?? null : null,
       stageDispatchedAt: dispatchByRoom.get(room.capsuleId) ?? null,
       ...(dispatchByStage.has(room.capsuleId) ? { stageDispatchedAtByStage: dispatchByStage.get(room.capsuleId) } : {}),
     }))));
@@ -486,7 +505,10 @@ export async function runWorkroomDriveJob(
       roleBindings: { ...author.roleBindings, ...readWorkShapeRoleBindings(room.scopeClaims) },
       authorStageWithheldBecause: author.withheldBecause,
     };
-    const { plan, review } = await resolveWithReview(room, driveInput);
+    const resolved = await resolveWithReview(room, driveInput);
+    // BI-72679FE0: a room whose item is done, deferred or delivered gets no agent and raises no stall.
+    const plan = gateDrivePlanOnWorkItem(resolved.plan, room.workItemStatus);
+    const review = plan === resolved.plan ? resolved.review : null;
     plans.push({
       roomId: room.capsuleId,
       action: plan.action,
@@ -560,6 +582,8 @@ async function loadStandingRooms(
       ...ROOM_OWNER_USER_INCLUDE,
     },
   });
+  // BI-858FDE5A: a handed-over requester/creator no longer names a new task's owner.
+  const handedOverUserIds = await loadHandedOverUserIds(prisma as never);
 
   return rows.flatMap((row) => {
     const shapeRef = resolveWorkShapeClaim(row.scopeClaims);
@@ -579,7 +603,7 @@ async function loadStandingRooms(
       workspaceState: row.workspaceState,
       leaseExpiresAt: row.leaseExpiresAt,
       leaseHolderPrincipalId: row.leaseHolderPrincipalId,
-      ownerUserId: roomOwnerUserId(row),
+      ownerUserId: roomOwnerUserId(row, handedOverUserIds),
       participants: row.participants.map((participant) => {
         const kind = participant.principal.kind === "agent"
           ? "agent" as const
@@ -629,6 +653,9 @@ export function createWorkroomDriveEffects(
         prisma as unknown as Parameters<typeof resolveRoomAccountabilityFromDb>[0],
         { workroomId: roomId },
       );
+    },
+    async resolvePrincipalUserId(principalId) {
+      return activeUserIdForHumanPrincipal((await loadDb()) as never, principalId);
     },
     notifyStall: async (input) => (await import("@/lib/work-management/workroom-stall-notice")).notifyWorkroomStall(input),
     revokeStagePermits: async (input) => (await import("@/lib/gpp/stage-permit-revocation")).revokeStagePermits(input),

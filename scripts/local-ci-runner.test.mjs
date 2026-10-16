@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { test } from "node:test";
@@ -106,10 +106,11 @@ test("child local-integration invocation uses only the runner-owned test databas
   const withOwnedDb = createLocalIntegrationChildInvocation({
     ...base,
     testDatabaseUrl: "postgresql://dpf:dpf_dev@127.0.0.1:15432/dpf_local_ci_slot_0",
-    env: { DATABASE_URL: "postgresql://dpf:dpf_dev@127.0.0.1:5432/root" },
+    env: { DATABASE_URL: "postgresql://dpf:dpf_dev@127.0.0.1:5432/root", DPF_LOCAL_CI_TEST_WORKERS: "2" },
   });
 
   assert.ok(withOwnedDb.args.includes("--migrate-deploy"));
+  assert.equal(withOwnedDb.env.DPF_LOCAL_CI_TEST_WORKERS, "2");
   assert.equal(
     withOwnedDb.env.DATABASE_URL,
     "postgresql://dpf:dpf_dev@127.0.0.1:15432/dpf_local_ci_slot_0",
@@ -229,7 +230,7 @@ const PNPM_PINNED_VERSION = "10.33.2";
  * Mirrors that script's contract: a bare `--version` reports the host version,
  * and `with <pinned> --version` reports the pinned one. Matches on the joined
  * argv so it answers both the POSIX shape (pnpm ...) and the Windows shape
- * (cmd.exe /d /s /c "pnpm ...").
+ * (node pnpm.cjs ...).
  */
 function fakePnpmSpawn({ hostVersion = PNPM_HOST_VERSION, pinnedVersion = PNPM_PINNED_VERSION } = {}) {
   return (command, args = []) => {
@@ -296,13 +297,15 @@ test("the generated POSIX shim executes and reports the pinned version", {
 // The branch a Windows host actually takes had no coverage at all, which is how
 // the POSIX-only fixtures went unnoticed: every pinning test exercised the
 // other side.
-test("on Windows the pinned shim is a pnpm.cmd that forwards to the host pnpm", () => {
+test("on Windows the pinned JS shim forwards to the exact host pnpm without a shell", () => {
   const fixture = mkdtempSync(join(tmpdir(), "dpf-local-ci-pnpm-win-"));
   const hostBin = join(fixture, "host-bin");
   const toolchainDir = join(fixture, "toolchain");
   mkdirSync(hostBin, { recursive: true });
   const hostPnpm = join(hostBin, "pnpm.CMD");
   writeFileSync(hostPnpm, "@echo off\r\n");
+  mkdirSync(join(hostBin, "node_modules/pnpm/bin"), { recursive: true });
+  writeFileSync(join(hostBin, "node_modules/pnpm/bin/pnpm.cjs"), "console.log(JSON.stringify(process.argv.slice(2)));\n");
 
   const prepared = preparePinnedPnpmEnvironment({
     packageManager: "pnpm@10.33.2+sha512.fixture",
@@ -318,8 +321,17 @@ test("on Windows the pinned shim is a pnpm.cmd that forwards to the host pnpm", 
   // No `pnpm` extensionless shim on Windows — cmd.exe would not run it.
   assert.equal(existsSync(join(toolchainDir, "pnpm")), false);
   const cmdShim = readFileSync(join(toolchainDir, "pnpm.cmd"), "utf8");
-  assert.match(cmdShim, /with 10\.33\.2/);
-  assert.ok(cmdShim.includes(hostPnpm), "the shim must forward to the resolved host pnpm");
+  assert.ok(cmdShim.includes("pnpm.cjs"));
+  const jsShim = readFileSync(join(toolchainDir, "pnpm.cjs"), "utf8");
+  assert.match(jsShim, /"with","10\.33\.2"/);
+  assert.ok(jsShim.includes(JSON.stringify(join(hostBin, "node_modules/pnpm/bin/pnpm.cjs"))));
+  assert.match(jsShim, /shell: false/);
+  const literals = ["space here", "%PATH%", "!NAME!", "a&b", '\"|echo injected', ""];
+  const invocation = resolveLocalCiPnpmInvocation(join(toolchainDir, "pnpm.cmd"), literals, { platform: "win32" });
+  const forwarded = spawnSync(invocation.command, invocation.args, { encoding: "utf8", shell: false });
+  assert.equal(forwarded.status, 0, forwarded.stderr);
+  assert.deepEqual(JSON.parse(forwarded.stdout), ["with", "10.33.2", ...literals]);
+
 });
 
 test("Windows executable lookup accepts the canonical Path environment key", () => {
@@ -336,21 +348,16 @@ test("Windows executable lookup accepts the canonical Path environment key", () 
   );
 });
 
-test("Windows pnpm execution uses ComSpec without reparsing a spaced profile path", () => {
-  assert.deepEqual(
-    resolveLocalCiPnpmInvocation(
-      "C:\\Users\\Mark Bodman\\AppData\\Roaming\\npm\\pnpm.CMD",
-      ["--version"],
-      {
-        platform: "win32",
-        env: { ComSpec: "C:\\Windows\\System32\\cmd.exe" },
-      },
-    ),
-    {
-      command: "C:\\Windows\\System32\\cmd.exe",
-      args: ["/d", "/s", "/c", "pnpm --version"],
-    },
-  );
+test("Windows pnpm execution honors the selected spaced installation path", () => {
+  const fixture = mkdtempSync(join(tmpdir(), "dpf pnpm spaced-"));
+  const script = join(fixture, "pnpm.cjs");
+  writeFileSync(script, "");
+  writeFileSync(join(fixture, "pnpm.cmd"), "");
+  try {
+    assert.deepEqual(resolveLocalCiPnpmInvocation(join(fixture, "pnpm.cmd"), ["--version", "%PATH%"], {
+      platform: "win32", env: {},
+    }), { command: process.execPath, args: [script, "--version", "%PATH%"] });
+  } finally { rmSync(fixture, { recursive: true, force: true }); }
 });
 
 test("local CI keeps an already-matching pnpm without a shim", () => {

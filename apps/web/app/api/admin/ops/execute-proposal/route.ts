@@ -1,88 +1,40 @@
-// Superuser-only: force-execute a pending AgentActionProposal via the same
-// code path approveProposal uses. This exists for operational recovery when
-// an autonomous build cycle emits a proposal-mode tool call that has no
-// interactive UI to approve it (e.g. the overnight autonomous E2E mission
-// emitting contribute_to_hive under contributionMode=contribute_all).
+// Superuser-only: force-execute a pending AgentActionProposal through the same
+// convert-and-run core approveProposal uses (lib/actions/proposal-convert-and-run.ts).
+// It exists for operational recovery when an autonomous run emitted a
+// proposal-mode tool call that has no interactive UI to approve it.
 //
-// In normal interactive builds, users click Approve in the coworker panel
-// and this endpoint is unused. The tool-definition-level `autoApproveWhen`
-// predicate (see contribute_to_hive in mcp-tools.ts) eliminates the need for
-// this endpoint on new runs; it remains for draining proposals that were
-// created BEFORE that predicate landed.
+// Approval convergence PR-C (BI-04E5A511, spec D5/D6): the call runs through
+// the reference monitor, never a direct executeTool, so the proposal's own
+// coworker grants, room, hooks and audit apply exactly as for any coworker
+// call; a refusal leaves the proposal `proposed`. The route keeps its own
+// { ok, result } response and status codes, adds `refused: true` for a settled
+// no and answers 500 when the run threw (the row is then `failed`, never left
+// `approved`), and writes no system message or decision log of its own. The shared-secret X-Ops-Token path, which acted as
+// a resolved user with a synthetic role, is removed (waiver W3, WWMD
+// DI-587137D2BB72): a superuser session is the only way in.
 
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import { NextResponse } from "next/server";
-import { PLATFORM_TOOLS, executeTool } from "@/lib/mcp-tools";
+import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
 import { can } from "@/lib/permissions";
+import { convertAndRunProposal } from "@/lib/actions/proposal-convert-and-run";
 
 export async function POST(req: Request): Promise<NextResponse> {
-  // Two auth paths:
-  //  1. Superuser session (interactive admin)
-  //  2. Shared-secret header `X-Ops-Token` matching HIVE_OPS_TOKEN env var
-  //     (for recovery of stuck proposals when no session cookie is available,
-  //     e.g. during autonomous operator runs). Header path requires the secret
-  //     AND a `userId` field in the body naming which user to attribute the
-  //     execution to — typically the original build creator.
-  const opsToken = process.env.HIVE_OPS_TOKEN;
-  const providedToken = req.headers.get("x-ops-token");
-  const headerAuth = opsToken && providedToken && providedToken === opsToken;
-
-  let actingUserId: string | null = null;
-  let actingUserSuperuser = false;
-  let actingUserPlatformRole: string | null = null;
-
-  if (!headerAuth) {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    if (!session.user.isSuperuser) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-    actingUserId = session.user.id;
-    actingUserSuperuser = session.user.isSuperuser;
-    actingUserPlatformRole = session.user.platformRole;
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (!session.user.isSuperuser) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  const actingUserId = session.user.id;
+  const userContext = { platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser };
 
-  const body = (await req.json().catch(() => ({}))) as { proposalId?: string; userId?: string };
+  const body = (await req.json().catch(() => ({}))) as { proposalId?: string };
   const proposalId = typeof body.proposalId === "string" ? body.proposalId : null;
   if (!proposalId) {
     return NextResponse.json({ error: "proposalId required" }, { status: 400 });
-  }
-
-  // Header-auth path: resolve userId from body, default to build creator
-  if (headerAuth) {
-    if (typeof body.userId !== "string") {
-      // Fallback: resolve from the proposal's build creator
-      const proposalLookup = await prisma.agentActionProposal.findUnique({
-        where: { proposalId },
-        select: { threadId: true },
-      });
-      if (!proposalLookup) return NextResponse.json({ error: "Proposal not found" }, { status: 404 });
-      const build = await prisma.featureBuild.findFirst({
-        where: { threadId: proposalLookup.threadId },
-        select: { createdById: true },
-      });
-      if (!build?.createdById) {
-        return NextResponse.json({ error: "Could not resolve userId for header-auth execution. Provide userId in body." }, { status: 400 });
-      }
-      actingUserId = build.createdById;
-    } else {
-      actingUserId = body.userId;
-    }
-    // Header-auth is a shared-secret bypass — the caller is already authorized
-    // to execute ops tasks. We skip the per-user capability check below and
-    // treat the acting user as having full platform role for audit purposes.
-    const u = await prisma.user.findUnique({
-      where: { id: actingUserId },
-      select: { isSuperuser: true },
-    });
-    actingUserSuperuser = !!u?.isSuperuser;
-    actingUserPlatformRole = "HR-000";
-  }
-  if (!actingUserId) {
-    return NextResponse.json({ error: "Could not resolve acting user" }, { status: 500 });
   }
 
   const proposal = await prisma.agentActionProposal.findUnique({ where: { proposalId } });
@@ -94,38 +46,26 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
 
   const tool = PLATFORM_TOOLS.find((t) => t.name === proposal.actionType);
-  if (tool?.requiredCapability && !can(
-    { platformRole: actingUserPlatformRole, isSuperuser: actingUserSuperuser },
-    tool.requiredCapability,
-  )) {
+  if (tool?.requiredCapability && !can(userContext, tool.requiredCapability)) {
     return NextResponse.json({ error: "Insufficient capability for tool" }, { status: 403 });
   }
 
-  await prisma.agentActionProposal.update({
-    where: { proposalId },
-    data: { status: "approved", decidedAt: new Date(), decidedById: actingUserId },
-  });
-
-  const result = await executeTool(
-    proposal.actionType,
-    proposal.parameters as Record<string, unknown>,
-    actingUserId,
-    { agentId: proposal.agentId, threadId: proposal.threadId },
+  const outcome = await convertAndRunProposal(
+    proposal,
+    { userId: actingUserId, userContext },
+    { threadRecord: false },
   );
-
-  await prisma.agentActionProposal.update({
-    where: { proposalId },
-    data: result.success
-      ? {
-          status: "executed",
-          executedAt: new Date(),
-          ...(result.entityId !== undefined ? { resultEntityId: result.entityId } : {}),
-        }
-      : {
-          status: "failed",
-          ...(result.error !== undefined ? { resultError: result.error } : {}),
-        },
-  });
-
-  return NextResponse.json({ ok: result.success, result });
+  if (outcome.kind === "already-decided") {
+    // Another decision won the compare-and-set between the read above and now.
+    return NextResponse.json({ error: "Proposal already decided" }, { status: 409 });
+  }
+  if (outcome.kind === "threw") {
+    // The core already moved the claimed row from approved to failed.
+    return NextResponse.json({ ok: false, error: outcome.error }, { status: 500 });
+  }
+  if (outcome.kind === "refused") {
+    // A settled no, told apart from a run that failed so recovery scripts can branch.
+    return NextResponse.json({ ok: false, refused: true, result: outcome.result });
+  }
+  return NextResponse.json({ ok: outcome.kind === "ran" && outcome.result.success, result: outcome.result });
 }

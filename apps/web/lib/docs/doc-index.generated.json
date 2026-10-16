@@ -1,7 +1,6 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 741,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -10,6 +9,7 @@
       "publishedPortal": false,
       "anchors": [
         "documentation",
+        "install-and-host-selection",
         "user-guide",
         "market-proof",
         "source-of-truth-boundaries",
@@ -617,6 +617,7 @@
       "anchors": [
         "agent-client-capability-parity-tracker",
         "why-this-exists",
+        "client-capability-profile-generated-bi-64795fd0",
         "capability-matrix-verified-2026-06-20",
         "2026-06-26-refresh-delivery-surface-sweep",
         "2026-07-24-refresh-bi-14e9f7ce-closeout-grok-hook-portability",
@@ -1185,8 +1186,10 @@
       "publishedPortal": false,
       "anchors": [
         "build-gate-runbook",
+        "recovering-an-interrupted-gate-publication",
         "isolated-verification-users",
         "semantic-review-publication-and-infrastructure-recovery",
+        "published-corrections-and-host-guard-reuse",
         "auto-merge-armed-is-not-auto-merge-happening-bi-53be1c77",
         "the-room-follows-its-pr-through-ci-bi-88341b5d",
         "a-merged-pull-request-is-delivered-not-discovered-bi-a6e4d205",
@@ -1264,6 +1267,8 @@
         "backup-and-health-semantics",
         "observation-and-diagnostics-boundary",
         "diagnosing-capability-drift-bi-5acbac50",
+        "existing-install-reconciliation-bi-5acbac50",
+        "historical-implementation-evidence",
         "safe-operating-rules",
         "how-self-upgrade-may-recreate-a-service"
       ]
@@ -1499,7 +1504,8 @@
       "publishedPortal": false,
       "anchors": [
         "delivery-surfaces-runbook",
-        "task-specific-operating-rules"
+        "task-specific-operating-rules",
+        "contributor-preview-binding-and-cleanup"
       ]
     },
     "docs/architecture/dependency-reduction-routine.md": {
@@ -1541,7 +1547,8 @@
       "publishedPortal": false,
       "anchors": [
         "design-research-runbook",
-        "task-specific-operating-rules"
+        "task-specific-operating-rules",
+        "research-receipt-recovery"
       ]
     },
     "docs/architecture/document-generation-facility.md": {
@@ -2010,6 +2017,7 @@
       "anchors": [
         "initiative-readiness-runbook-who-does-what-when-through-the-gates",
         "0-two-shapes-do-not-conflate-them",
+        "medium-body-criteria-and-independent-acceptance",
         "1-the-lifecycle-sequence",
         "2-the-gates-role-actor-evidence-feature-profile",
         "3-how-a-gate-is-handed-to-the-right-coworker-the-recovery-packet",
@@ -2018,7 +2026,8 @@
         "6-known-limitation-reviewer-dispatch-can-complete-without-writing-a-receipt",
         "7-closing-a-small-or-medium-item-the-baseline-is-the-body-bi-0f8e39d5",
         "approval-outcome-readback",
-        "anti-patterns-observed"
+        "anti-patterns-observed",
+        "original-review-recovery-across-connection-changes"
       ]
     },
     "docs/architecture/job-specific-intelligence.md": {
@@ -2153,7 +2162,11 @@
         "diagnosing-an-empty-loadtools-result",
         "task-specific-operating-rules",
         "disclosure-measurement-and-recovery",
-        "recovering-an-interrupted-independent-review"
+        "administrator-classification-recovery",
+        "approval-convergence-probe",
+        "recovering-an-interrupted-independent-review",
+        "parent-bounded-local-review-execution-bi-03ac2fd9",
+        "recovering-an-original-initiative-review-after-a-connection-change"
       ]
     },
     "docs/architecture/mcp-tool-packs.md": {
@@ -2164,6 +2177,7 @@
       "anchors": [
         "scoped-mcp-tool-packs",
         "the-shape",
+        "per-call-effects-under-existing-policy",
         "read-packs-for-standing-stages",
         "migration-discipline-parity-first",
         "first-pack",
@@ -2196,6 +2210,19 @@
         "worked-example-fail",
         "related-tooling",
         "change-control"
+      ]
+    },
+    "docs/architecture/offline-recovery-preparation.md": {
+      "publicHref": "/architecture/offline-recovery-preparation/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "offline-recovery-preparation-and-compatible-rollout",
+        "available-source-primitives",
+        "release-sequence",
+        "observed-staging-release",
+        "remaining-acceptance"
       ]
     },
     "docs/architecture/operational-precedent-corpus.md": {
@@ -2365,7 +2392,9 @@
         "provider-account-identity",
         "governed-controls",
         "provider-ui-preservation-contract",
-        "migration-and-verification"
+        "account-presentation-boundaries",
+        "migration-and-verification",
+        "measured-route-integration"
       ]
     },
     "docs/architecture/review-reliability-recovery.md": {
@@ -2758,6 +2787,7 @@
         "the-brief-and-what-advances-a-stage",
         "failing-closed-is-not-the-same-as-locking",
         "every-reason-the-drive-emits-is-in-its-vocabulary-by-type",
+        "an-undispatched-stage-is-a-pause-and-its-task-owner-is-the-accountable-person",
         "every-stage-is-a-queue",
         "a-named-governed-writer-must-be-attached-not-discovered",
         "a-stage-names-the-tools-it-needs",
@@ -2794,6 +2824,15 @@
         "verification-and-rollback-boundary"
       ]
     },
+    "docs/architecture/workroom-ingestion-scale-qualification.md": {
+      "publicHref": "/architecture/workroom-ingestion-scale-qualification/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "workroom-ingestion-scale-qualification"
+      ]
+    },
     "docs/architecture/workroom-review-profile-contract.md": {
       "publicHref": "/architecture/workroom-review-profile-contract/",
       "portalHref": null,
@@ -2801,6 +2840,7 @@
       "publishedPortal": false,
       "anchors": [
         "workroom-review-profile-read-contract",
+        "operator-disclosure",
         "common-requirements-and-extensions",
         "coverage-and-representative-domains",
         "verification-and-recovery"
@@ -4244,6 +4284,7 @@
       "publishedPortal": false,
       "anchors": [
         "rule",
+        "decision-outcomes",
         "why",
         "how-to-apply"
       ]
@@ -5615,14 +5656,17 @@
       "publishedPortal": false,
       "anchors": [
         "choosing-hardware-for-dpf",
+        "linux-pilot-target",
         "the-short-recommendation",
+        "a-mac-mini-for-everyday-business-operations",
+        "local-ai-for-professional-firms",
         "machines-available-now",
         "provider-assisted-operations",
         "local-first-windows-with-nvidia",
         "local-first-apple-unified-memory",
         "why-unified-memory-changes-the-calculation",
         "model-and-context-sizing",
-        "shared-memory-systems-not-yet-in-the-standard-profile",
+        "compact-linux-candidates-qualification-required",
         "before-ordering"
       ]
     },
@@ -5636,7 +5680,8 @@
         "recommended-first-deployment",
         "compatibility-and-prerequisites",
         "prerequisites",
-        "quick-start",
+        "pilot-installation-handoff",
+        "source-repairs-awaiting-native-acceptance",
         "contributor-office-document-conversion",
         "contributor-separate-dev-workspace-from-install-recommended-bi-0856a4ce-phase-1",
         "what-the-installer-does",
@@ -5653,7 +5698,7 @@
         "uninstall",
         "help-us-graduate-to-ga",
         "going-further",
-        "connecting-claude-code-or-vs-code-via-mcp"
+        "connecting-an-agent-through-mcp"
       ]
     },
     "docs/install/macos.md": {
@@ -5666,6 +5711,7 @@
         "supported-environment",
         "recommended-hardware",
         "prerequisites",
+        "docker-memory-during-installation",
         "quick-start",
         "contributor-separate-dev-workspace-from-install-recommended-bi-0856a4ce-phase-1",
         "what-the-installer-does",
@@ -5690,7 +5736,14 @@
       "publishedPortal": false,
       "anchors": [
         "platform-support-watch-list-living-document",
+        "contributor-preview-mount-identity-on-docker-desktop-bi-0acb97b5",
+        "literal-windows-package-manager-arguments-bi-263055e3",
+        "capability-reconciliation-on-release-installs-bi-5acbac50",
+        "host-process-inventory-before-admission-bi-6de5a3b6",
+        "host-claim-transport-and-windows-command-launch-bi-091a2dcf",
         "windows-host-guard-interpreters-bi-ba5f777a",
+        "macos-docker-memory-allocation-bi-dc4352e8",
+        "repository-local-codex-endpoint-overrides-bi-9f258707",
         "target-environments",
         "how-to-use-this-file",
         "1-monitoring-telemetry",
@@ -5700,7 +5753,8 @@
         "room-route-guard-on-windows",
         "recurring-meta-pattern",
         "persisted-mcp-endpoint-recovery-bi-9f258707",
-        "required-services-after-container-driven-upgrades-bi-fffea4ed"
+        "required-services-after-container-driven-upgrades-bi-fffea4ed",
+        "linux-pilot-startup-repairs-2026-10-03"
       ]
     },
     "docs/install/scratch-install-rehearsal.md": {
@@ -5742,6 +5796,7 @@
       "publishedPortal": false,
       "anchors": [
         "dpf-install-verification-runbook",
+        "linux-customer-handoff",
         "verification-matrix",
         "fastest-path-one-command-for-the-whole-sweep",
         "linux-macos",
@@ -5793,6 +5848,16 @@
         "uninstall",
         "going-further",
         "connecting-claude-code-or-vs-code-via-mcp"
+      ]
+    },
+    "docs/install/workroom-activity-migration-recovery.md": {
+      "publicHref": "/install/workroom-activity-migration-recovery/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "workroom-activity-migration-recovery",
+        "verification"
       ]
     },
     "docs/install/worktree-janitor-schedule.md": {
@@ -5997,6 +6062,7 @@
       "publishedPortal": false,
       "anchors": [
         "acceptance-sweep-operator-runbook",
+        "medium-work-whose-criteria-are-in-its-body",
         "closing-items-the-gate-already-allows-off-by-default",
         "what-the-summary-tells-you",
         "who-verifies-an-item-that-is-not-closable",
@@ -6156,6 +6222,7 @@
       "anchors": [
         "dpf-install-operations",
         "quick-start",
+        "linux-pilot-and-private-startup-state",
         "capability-resolved-runtime-profiles",
         "consumer-release-assets",
         "fresh-install-runtime-and-recovery",
@@ -6213,6 +6280,7 @@
       "publishedPortal": false,
       "anchors": [
         "local-ci-sandbox-slots",
+        "owned-development-lease-cleanup",
         "host-wide-heavyweight-resource-admission",
         "current-operating-mode",
         "peer-slot-host-fencing",
@@ -11370,6 +11438,7 @@
         "observation-versus-merge-authority",
         "know-the-constraints-before-you-write-pnpm-gatecontext",
         "before-a-pr-exists-pnpm-prready",
+        "corrections-after-publication",
         "local-ci-infrastructure-outcomes",
         "tests-ci"
       ]
@@ -11601,6 +11670,8 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "accounts-and-provider-setup",
+        "routing-status-and-temporary-pauses",
         "authentication-methods",
         "api-key",
         "oauth-sign-in",
@@ -11705,7 +11776,8 @@
         "6-the-receipt-is-what-you-review",
         "known-limits",
         "related",
-        "the-pace-a-room-runs-at"
+        "the-pace-a-room-runs-at",
+        "continuing-a-review-after-a-connection-changes"
       ]
     },
     "docs/user-guide/ai-workforce/index.md": {
@@ -11723,6 +11795,7 @@
         "reading-the-skills-catalog",
         "related-routes",
         "reading-runtime-health",
+        "turning-monitoring-on-or-off",
         "coworker-routing",
         "context-budget-what-recent-turns-were-given",
         "capability-completeness",
@@ -11748,6 +11821,8 @@
         "how-models-enter-the-system",
         "path-1-static-seed-install-time",
         "path-2-dynamic-discovery-runtime",
+        "when-the-connections-page-takes-longer-to-load",
+        "where-ai-may-run",
         "quality-tiers",
         "agent-model-configuration",
         "default-agent-tiers",
@@ -11756,6 +11831,7 @@
         "evidence-belongs-to-the-connected-account",
         "continuous-review-and-rollout",
         "how-routing-adapts-over-time",
+        "local-requests-while-background-work-is-running",
         "provider-specific-notes",
         "anthropic-oauth-subscription",
         "chatgpt-openai-subscription",
@@ -11778,6 +11854,17 @@
         "honest-limits",
         "related",
         "how-work-rooms-behave"
+      ]
+    },
+    "docs/user-guide/ai-workforce/provider-account-routing.md": {
+      "publicHref": "/user-guide/ai-workforce/provider-account-routing/",
+      "portalHref": "/docs/ai-workforce/provider-account-routing",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "choose-accounts-for-the-work",
+        "capacity-and-recovery",
+        "usage-records"
       ]
     },
     "docs/user-guide/ai-workforce/provider-anthropic.md": {
@@ -11809,6 +11896,7 @@
         "api-key-pay-per-token",
         "setting-up-oauth",
         "agent-provider-vs-standard-provider",
+        "coworker-verification-on-development-deployments",
         "linked-mcp-service",
         "chatgpt-provider-automatic",
         "technical-notes-provider-integration",
@@ -11937,6 +12025,7 @@
         "pull-requests-and-security-gates",
         "pre-pr-security-gates",
         "autonomous-merge-queue-delivery",
+        "when-the-platform-moved-on-before-the-pull-request-opened",
         "configuration",
         "safety-guarantees"
       ]
@@ -12186,6 +12275,7 @@
         "commit-and-push-fast",
         "worktrees-are-source-control-isolation-not-runtime-isolation",
         "heavy-local-commands-use-a-shared-host-resource-lane",
+        "recover-a-review-blocked-by-endpoint-eligibility",
         "clean-up-when-merged",
         "webhooks-closing-the-promotion-loop",
         "adhering-to-the-portals-processes",
@@ -12474,6 +12564,7 @@
         "close-readiness-workflow",
         "what-to-watch",
         "recovery-and-evidence",
+        "ask-for-a-branded-report-workbook-or-letter",
         "related-help"
       ]
     },
@@ -12533,6 +12624,7 @@
       "publishedPortal": true,
       "anchors": [
         "use-this-doc-for",
+        "before-first-login-on-linux",
         "workflow",
         "help-visibility-policy"
       ]
@@ -12583,6 +12675,15 @@
         "architecture-and-standards",
         "specifications-and-plans",
         "documentation-freshness"
+      ]
+    },
+    "docs/user-guide/investment-allocation.md": {
+      "publicHref": "/user-guide/investment-allocation/",
+      "portalHref": "/docs/investment-allocation",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "investment-allocation"
       ]
     },
     "docs/user-guide/market-archetypes.md": {
@@ -12691,6 +12792,7 @@
         "use-this-doc-for",
         "overview",
         "reading-the-panel",
+        "what-a-quarter-is-charged-for",
         "which-portfolio-an-item-counts-against",
         "setting-a-budget",
         "choosing-who-answers-for-each-portfolio",
@@ -12712,6 +12814,7 @@
         "what-happens-if-you-do-nothing",
         "what-is-reversible",
         "recovery-and-help",
+        "connected-agent-clients",
         "what-to-watch",
         "when-required-services-are-degraded"
       ]
@@ -12742,10 +12845,16 @@
         "use-this-doc-for",
         "workflow",
         "read-the-routing-picture",
+        "follow-traffic",
+        "investigate-stops-and-provider-setup",
+        "evaluate-outcomes",
+        "technical-architecture-and-replay",
+        "confirm-a-routing-override",
         "architecture-and-evidence",
         "understanding-background-inference",
         "when-a-coworker-says-it-used-the-backup-model",
         "what-to-watch",
+        "repair-disagreement-in-installed-runtime-capabilities",
         "defaults-for-work-rooms"
       ]
     },
@@ -13152,6 +13261,7 @@
         "overview",
         "what-you-see-first",
         "activity-and-participants",
+        "delegation-and-recovery",
         "inspecting-the-process",
         "reading-the-flow-map",
         "how-work-flows-in-each-area",
@@ -13168,6 +13278,7 @@
         "a-shape-is-a-model-the-platform-checks",
         "incomplete-or-unavailable-rooms",
         "who-is-accountable-and-who-is-working",
+        "who-an-ai-coworkers-stage-runs-for",
         "when-an-account-stops-being-used",
         "opening-a-workroom-that-has-no-work-item"
       ]

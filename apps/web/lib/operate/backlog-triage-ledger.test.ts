@@ -47,6 +47,8 @@ describe("recordTriageDecision", () => {
     expect(data.routeContext).toBe(TRIAGE_LEDGER_ROUTE_CONTEXT);
     // The drain applies the decision, so it arbitrates rather than advises.
     expect(data.outcomeType).toBe("arbitrate");
+    expect(data.escalationRoute).toBe("decided");
+    expect(data.escalationReason).toBe("decided");
     expect(data.question).toContain("BI-XYZ");
     // BI-01F8F06D: the item must be a COLUMN, not only prose in the question.
     // It lived only in that prose and in the payload blob, so no outcome could

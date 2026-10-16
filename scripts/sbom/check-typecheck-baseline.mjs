@@ -62,6 +62,8 @@ export const TOLERANCE = { dependencyLines: 0.01, excludedLines: 0 };
 /** `--extendedDiagnostics` keys recorded for reference. None is gated. */
 export const RECORDED_DIAGNOSTICS = [
   "Files",
+  // TS7 prints one `Lines:` total instead of TS6's `Lines of …` breakdown.
+  "Lines",
   "Lines of Library",
   "Lines of Definitions",
   "Lines of TypeScript",
@@ -152,7 +154,9 @@ export function analyzeProgram({ files, linesOf, excludePatterns = [], programDi
       totals.external += n;
       externalPackages["(outside the repository)"] = (externalPackages["(outside the repository)"] ?? 0) + n;
     } else if (file.includes("node_modules/")) {
-      if (/(^|\/)node_modules\/typescript\/lib\/lib\.[^/]*\.d\.ts$/.test(file)) {
+      // TS6 ships its lib in typescript/lib; TS7's native build ships it in the
+      // platform package @typescript/typescript-<platform>-<arch>/lib (BI-2B8D67A9).
+      if (/(^|\/)node_modules\/(?:typescript|@typescript\/typescript-[^/]+)\/lib\/lib\.[^/]*\.d\.ts$/.test(file)) {
         totals.library += n;
       } else {
         totals.external += n;

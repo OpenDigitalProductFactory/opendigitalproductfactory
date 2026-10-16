@@ -10,6 +10,32 @@ Runtime topology is capability-driven. See [Capability-driven runtime profiles](
 
 That sentence is the whole contract for non-technical contributors. Everything below is for operators who need to diagnose a degraded state.
 
+## Linux pilot and private startup state
+
+The [Linux guide](../install/linux.md) owns the recommended host, prerequisites
+and acceptance status. The first target is Ubuntu Server 24.04 LTS x86-64 with
+native Docker Engine and Compose v2. Keep source verification, released assets
+and a successful customer installation as separate evidence.
+
+Both customer installers prepare the actual Compose-mounted runtime state
+before starting PKI or the portal. They reuse the canonical runtime-transition
+key initializer, preserve an existing valid key and stop on malformed material
+or an active transition. Compose resolves the mount, including process and
+`.env` overrides; the lifecycle/XDG directory is not assumed to be that mount.
+Fresh federation directories are created privately by the host user, including
+`federation/pki`, so Docker does not create root-owned directories that prevent
+later authorized cleanup. Unsafe existing ownership stops preparation; it does
+not trigger recursive ownership changes or data deletion. Back up and review
+that specific directory under the installation's recovery procedure.
+
+The PKI bootstrap transfers its private password over stdin into the existing
+CA volume as the image's non-root user. It preserves matching material and
+refuses mismatch. First initialization captures the upstream password-bearing
+output; normal service startup uses the resulting configuration. POSIX
+certificate clients use the host user's UID/GID when writing private host files.
+Rerun the updated bootstrap under the operating procedure to converge an
+existing install; a source merge alone does not change its host state.
+
 ## Capability-resolved runtime profiles
 
 Every install, restart, autostart, setup, and governed promotion resolves its
@@ -17,6 +43,31 @@ Compose profiles through `scripts/lib/resolve-capability-compose-profiles.mjs`.
 The persisted snapshot uses the canonical fields `enabledRuntimeCapabilities`,
 `capabilityCatalogHash`, and `capabilityStateVersion`; an unknown capability or
 a mismatched catalog/state hash fails closed before Compose changes the stack.
+
+The snapshot also records, in the optional `runtimeCapabilityDecisions` map,
+whether a person chose each operator-controlled capability: `decision`
+(`enabled`, `disabled` or `undecided`), `source` and `decidedAt`. Monitoring
+(`runtime:deep-observability`) is the first such capability. A state without a
+recorded decision is written as `undecided` / `upgrade-carried` the next time
+the installer or `dpf-start` resolves profiles, and its enabled capabilities
+are left exactly as they were, so the portal can offer the choice instead of
+silently changing the install (BI-83260BB3). A self-upgrade does not add the
+record: its install-state migration must stay byte-deterministic for the signed
+handoff. Until the record exists, Settings → Monitoring treats it as undecided.
+
+On a fresh install, and on a re-run where no choice is recorded yet, both
+installers ask one question before the platform first starts: turn monitoring
+(Prometheus + Grafana) on? The prompt states the memory and CPU monitoring
+uses, summed from `config/install-resource-budgets.json`, and defaults to no.
+`-Monitoring On|Off` (`install-dpf.ps1`) or `--monitoring on|off`
+(`install-dpf.sh`) answers it without a prompt, recorded with source
+`installer-flag`; an answered prompt is recorded as `installer-prompt`. A
+headless run without the flag does not ask: monitoring stays off and the
+decision is `undecided` / `headless-default`, so the portal offers the choice.
+The answer is written before the capability profiles resolve, so the first
+`compose up` already includes or omits monitoring. A recorded `enabled` or
+`disabled` decision is never asked again or overwritten by the installer; change
+it in Settings → Monitoring (BI-31F11C37).
 
 When upgrading a previous-release state that predates these fields, the adapter
 preserves the capabilities that were active in that release: core, build,
@@ -99,6 +150,17 @@ simple prompts measure the selected model, so another provider cannot substitute
 for it. The exact
 bundled Qwen 3.8 27B model carries a low-confidence provisional routing floor;
 smaller generic Qwen models do not inherit it.
+
+Local inference waits in the shared admission queue before checking host GPU and
+lease availability. Contention from another host process still defers dispatch.
+Deliberation jobs retain completed branch answers across capacity waits; after a
+bounded retry window, owned tasks request intervention rather than inventing a
+verdict. Empty or truncated answers are failed branch evidence, and a model's
+reasoning channel is never substituted for its answer.
+
+Build Studio's Automatic engine policy considers eligible alternative providers
+when a saved preference is unavailable. Explicit provider and engine pins retain
+their restrictions, and all alternatives must meet the phase capability floor.
 
 Decision Concierge records why it skips a case in the standing governance room.
 An empty action question, an unfinished panel or an unchanged completed case does

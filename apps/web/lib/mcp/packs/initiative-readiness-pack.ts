@@ -1,6 +1,7 @@
 import type { InitiativeArtifactRef, InitiativeGateKey } from "@/lib/backlog/initiative-readiness";
 import { INITIATIVE_DISPOSITION_GUIDANCE, validateInitiativeDisposition, findingEvidenceMatchesRead, type InitiativeFindingEvidence } from "@/lib/backlog/initiative-readiness/disposition-contract";
 import { prisma } from "@dpf/db";
+import { parseInitiativeReviewBinding, type InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import {
   RESEARCH_DEFINITIONS,
   READINESS_PROFILES,
@@ -242,6 +243,8 @@ async function resolveExternalInitiativeReviewBinding(
   expectedCurrentBaselineId?: string | null;
   eligibleEvidenceActivityIds?: string[];
   artifactRef: InitiativeArtifactRef;
+  workroomRef?: InitiativeReviewBinding["workroomRef"] | null;
+  boundReviewTask?: { taskRunId: string; requestDigest: string };
 } | null> {
   if (!taskRunId) return null;
   const run = await prisma.taskRun.findUnique({
@@ -272,6 +275,10 @@ async function resolveExternalInitiativeReviewBinding(
     return null;
   }
   const artifact = rawArtifact as Record<string, unknown>;
+  // Reuse the issued-packet parser. Invalid context fails closed below; an
+  // absent legacy reference keeps the exact-artifact-head resolver unchanged.
+  const workroomRef = binding["workroomRef"] === undefined ? undefined
+    : parseInitiativeReviewBinding(binding)?.workroomRef ?? null;
   const isRepoBlob = artifact["kind"] === "repo-blob-at-commit"
     && typeof artifact["repositoryFullName"] === "string"
     && typeof artifact["commitSha"] === "string"
@@ -281,8 +288,10 @@ async function resolveExternalInitiativeReviewBinding(
   // receipt schema's artifactRef for this kind carries only the revision id.
   const isRevision = artifact["kind"] === "feature-build-revision"
     && typeof artifact["revisionId"] === "string" && artifact["revisionId"].trim().length > 0;
+  const isDocument = artifact["kind"] === "document-version"
+    && typeof artifact["versionId"] === "string" && artifact["versionId"].trim().length > 0;
   if (
-    (!isRepoBlob && !isRevision)
+    (!isRepoBlob && !isRevision && !isDocument)
     || (expectedCurrentBaselineId !== undefined
       && expectedCurrentBaselineId !== null
       && typeof expectedCurrentBaselineId !== "string")
@@ -292,11 +301,14 @@ async function resolveExternalInitiativeReviewBinding(
   return {
     itemId,
     gate,
+    boundReviewTask: { taskRunId, requestDigest: typeof record.requestDigest === "string" ? record.requestDigest : "" },
+    ...(workroomRef !== undefined ? { workroomRef } : {}),
     ...(expectedCurrentBaselineId !== undefined
       ? { expectedCurrentBaselineId: expectedCurrentBaselineId as string | null }
       : {}),
     ...(eligibleEvidenceActivityIds ? { eligibleEvidenceActivityIds } : {}),
-    artifactRef: isRevision
+    artifactRef: isDocument ? { kind: "document-version", versionId: (artifact["versionId"] as string).trim() }
+      : isRevision
       ? { kind: "feature-build-revision", revisionId: (artifact["revisionId"] as string).trim() }
       : {
         kind: "repo-blob-at-commit",
@@ -335,6 +347,8 @@ async function resolveStewardRoomBinding(
 function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
   return async (params, userId, context): Promise<ToolResult> => {
     let binding = await resolveExternalInitiativeReviewBinding(actionKey, context?.taskRunId);
+    if (binding?.workroomRef === null) return { success: false, error: "CANONICAL_DESIGN_AMBIGUOUS",
+      message: "The accepted review's workroom binding is malformed. Reconcile the server-issued packet before retrying." };
     if (!binding) {
       const steward = await resolveStewardRoomBinding(actionKey, params, context?.taskRunId);
       if (steward && "refusal" in steward) return steward.refusal;
@@ -446,6 +460,8 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
         profile,
         artifactRole,
         artifactRef: params.artifactRef as InitiativeArtifactRef,
+        boundReviewTask: binding?.boundReviewTask,
+        workroomRef: binding?.workroomRef ?? undefined,
         expectedCurrentBaselineId: typeof params.expectedCurrentBaselineId === "string" ? params.expectedCurrentBaselineId : null,
         supersessionDispositions: Array.isArray(params.supersessionDispositions)
           ? params.supersessionDispositions.flatMap((value) => value && typeof value === "object" && !Array.isArray(value)
@@ -464,8 +480,13 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
         authorityDecisionId: context?.authorityDecisionId ?? null,
         tokenScope: context?.tokenScope ?? null,
       });
+      if (approval.ok && "deduplicated" in approval && approval.deduplicated) {
+        return { success: true, entityId: approval.baselineId ?? approval.receiptId,
+          message: `Existing spec-approval verdict retained for ${String(params.itemId)}.`,
+          data: { ...approval, decision: approval.receipt.decision, idempotentReplay: true } };
+      }
       return approval.ok
-        ? { success: true, entityId: approval.baselineId, message: `spec-approval receipt and canonical baseline recorded for ${String(params.itemId)}.`, data: approval }
+        ? { success: true, entityId: approval.baselineId ?? approval.receiptId, message: `spec-approval receipt and canonical baseline recorded for ${String(params.itemId)}.`, data: approval }
         : { success: false, error: approval.code, message: approval.error };
     }
     const result = await recordInitiativeGateReceipt({
@@ -477,6 +498,9 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
       gate: gate as InitiativeGateKey,
       decision,
       artifactRef: params.artifactRef as InitiativeArtifactRef,
+      boundReviewTask: lane.independent ? binding?.boundReviewTask : undefined,
+      workroomRef: binding?.workroomRef ?? undefined,
+      expectedCurrentBaselineId: binding?.expectedCurrentBaselineId,
       reason: String(params.reason ?? ""),
       findings,
       resolvedFindingRefs,
@@ -485,10 +509,13 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
       authorityDecisionId: context?.authorityDecisionId ?? null,
       tokenScope: context?.tokenScope ?? null,
       requiresIndependentReviewer: lane.independent,
+      authorizationParams: params,
       selectedProfile: gate === "classification" && decision === "pass" ? selectedProfile as never : undefined,
     });
     return result.ok
-      ? { success: true, entityId: result.receiptId, message: `${gate} receipt recorded for ${String(params.itemId)}.`, data: { receiptId: result.receiptId } }
+      ? { success: true, entityId: result.receiptId,
+          message: result.deduplicated ? `Existing ${gate} verdict retained for ${String(params.itemId)}.` : `${gate} receipt recorded for ${String(params.itemId)}.`,
+          data: { receiptId: result.receiptId, ...(result.deduplicated ? { decision: result.receipt.decision, idempotentReplay: true } : {}) } }
       : { success: false, error: result.code, message: result.error };
   };
 }

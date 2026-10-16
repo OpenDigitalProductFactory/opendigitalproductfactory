@@ -369,8 +369,8 @@ export function proposeBoundaryAuthority(
  * Resolve the server-owned inputs for the pure authority evaluator. Model
  * output and caller-provided policy claims never enter this function.
  */
-export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
-  async ({ execution, tool, agentGrantAllowed }, db: AuthorityDb = prisma as unknown as AuthorityDb) => {
+export const resolveCoworkerToolAuthorityInput =
+  (async ({ execution, tool, agentGrantAllowed }, db: AuthorityDb = prisma as unknown as AuthorityDb) => {
     const actingAgentId = execution.context?.agentId;
     if (!actingAgentId) {
       throw new Error("Coworker authority resolution requires an agent identity.");
@@ -481,6 +481,11 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
     ].filter((value): value is string => Boolean(value));
 
     const roomAuthority = execution.context?.roomAuthority ?? null;
+    const authorResearchBinding = execution.toolName === "record_initiative_evidence" && !initiativeReviewBinding && initiativeAuthority.subject.kind === "backlog-item"
+      ? await (await import("@/lib/build/author-research-policy-binding")).resolveAuthorResearchPolicyBinding({ toolName: execution.toolName, params: execution.rawParams,
+          userId: execution.userId, agentId: agent.agentId, itemId: initiativeAuthority.subject.id,
+          routeContext: execution.context?.routeContext ?? null }, db as never)
+      : null;
     const callConsequence = await resolveCallConsequence(tool, {
       toolName: execution.toolName,
       params: execution.rawParams,
@@ -489,6 +494,7 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
     });
     const input: CoworkerAuthorityInput = {
       authContext: effectiveAuth,
+      ...(authorResearchBinding ? { authorResearchBinding } : {}),
       organizationId: initiativeAuthority.organizationId,
       action: {
         toolName: execution.toolName,
@@ -582,4 +588,6 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
       ...input,
       approval,
     };
-  };
+  // `satisfies`, not an annotation: the optional `db` stays callable, so the
+  // AC-PROBE runner can evaluate on a read-only transaction (BI-129EFFD1).
+  }) satisfies CoworkerAuthorityInputResolver;

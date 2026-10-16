@@ -22,9 +22,11 @@ function mergeReviewResults(results: SemanticReviewResult[]): SemanticReviewResu
   const criticals = issues.filter((issue) => issue.severity === "critical").length;
   const inconclusive = results.filter((result) => result.decision === "inconclusive");
   const parseDiagnostics = results.flatMap((result) => result.parseDiagnostics ?? []);
+  const routingEligibility = results.flatMap(result => result.routingEligibility ?? []).slice(0, 5);
   return {
     decision: inconclusive.length > 0 ? "inconclusive" : criticals > 0 ? "fail" : "pass",
     issues,
+    ...(routingEligibility.length ? { routingEligibility } : {}),
     ...(results[0]?.failureAnalysisReview ? { failureAnalysisReview: results[0].failureAnalysisReview } : {}),
     summary: inconclusive.length > 0
       ? `${inconclusive.length} required semantic review branch${inconclusive.length === 1 ? " was" : "es were"} inconclusive: ${inconclusive.map(result => result.summary.slice(0, 1_000)).join("; ")}`
@@ -118,7 +120,7 @@ export async function dispatchRoutedSemanticReview(
           title: "Review committed change",
           distributionShape: "edge",
           riskClass: "high",
-          successShape: "decision",
+          successShape: "json",
           contextPolicy: "work-case-packet",
           tokenEnvelope: {
             maxInputTokens: minimumContext - SEMANTIC_REVIEW_RESPONSE_RESERVE_TOKENS,

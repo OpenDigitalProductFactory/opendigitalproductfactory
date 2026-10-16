@@ -1,4 +1,10 @@
+---
+status: active
+---
+
 # Local-MSP Channel Readiness Path — sell TO the MSP, sell THROUGH the MSP
+
+**2026-10-12 scope continuation:** Customer setup, external technician consent, DPF administration, edge/endpoint access and revocation now have a researched [delegated-support design](2026-10-12-msp-customer-setup-delegated-support-design.md). Its live delivery ledger is the current intake mapping. Historical statuses below remain dated context, not runtime verification.
 
 Date: 2026-07-22
 Backlog: BI-53D48861 (EP-PARTNER-CHANNEL) · Vertical: EP-VERTICAL-IT-MSP

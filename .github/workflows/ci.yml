@@ -21,7 +21,13 @@ on:
   # STT Digest Watch re-pin PR) never trigger pull_request workflows, so the
   # bot dispatches this workflow onto its branch to post the required checks.
   # The `changes` fail-safe above applies here too: heavy jobs run.
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      workroom_ingestion_scale:
+        description: Qualify Workroom ingestion at 10000 rooms and 100000 events on the CI-owned database
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -316,6 +322,58 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=8192
         run: pnpm --filter web typecheck:tests
 
+  # Advisory parity reference while TypeScript 7 settles in as the checker
+  # (BI-2B8D67A9). The Typecheck jobs above run TS7 through scripts/run-tsc.mjs;
+  # this job runs the same programs on TypeScript 6 (DPF_TSC=6), the version
+  # the workspace still depends on as a library. A difference between the two
+  # verdicts is reported as a warning and never blocks a merge. Remove this job
+  # once the follow-up that retires TS6 as a checker lands.
+  typecheck-ts6-reference:
+    name: Typecheck (TS6 reference, advisory)
+    runs-on: ubuntu-latest
+    needs: [changes]
+    if: >-
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.heavy == 'true' &&
+      github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup pnpm with cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Generate Prisma client
+        run: pnpm --filter @dpf/db exec prisma generate
+
+      - name: Typecheck all workspaces on TypeScript 6
+        id: ts6
+        continue-on-error: true
+        env:
+          DPF_TSC: "6"
+        run: pnpm typecheck
+
+      - name: Typecheck the web test program on TypeScript 6
+        id: ts6tests
+        continue-on-error: true
+        env:
+          DPF_TSC: "6"
+        run: pnpm --filter web typecheck:tests
+
+      - name: Report the TS6 reference verdict
+        env:
+          TS6: ${{ steps.ts6.outcome }}
+          TS6_TESTS: ${{ steps.ts6tests.outcome }}
+        run: |
+          {
+            echo "### TypeScript 6 reference (advisory)"
+            echo "- workspaces: ${TS6}"
+            echo "- web test program: ${TS6_TESTS}"
+            echo "Compare with the Typecheck jobs (TypeScript 7). Different verdicts are a TS7 parity finding for BI-2B8D67A9."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$TS6" != "success" ] || [ "$TS6_TESTS" != "success" ]; then
+            echo "::warning title=TS6 reference::TypeScript 6 failed where the TypeScript 7 Typecheck jobs decide merge. If those passed, this is a parity divergence."
+          fi
+
   # The single writer of the web tsbuildinfo warm-start cache (spec
   # 2026-09-30 web-runtime-import-cycle §6 PR-1). Every push to main saves an
   # entry keyed on its own SHA; PR and merge_group runs of the two Typecheck
@@ -578,6 +636,56 @@ jobs:
         if: needs.changes.outputs.heavy == 'true'
         run: pnpm --filter web exec vitest run --shard=${{ matrix.shard }}/4
 
+      # Reuse this job's service and normal migration chain. This is isolated
+      # SQL/Prisma data-path evidence, not native actor or installed acceptance.
+      # Ordinary PRs and merge candidates never opt into the scale workload.
+      - name: Qualify Workroom ingestion on the CI-owned PostgreSQL fixture
+        id: workroom-ingestion-scale
+        if: github.event_name == 'workflow_dispatch' && inputs.workroom_ingestion_scale == true && matrix.shard == 1
+        timeout-minutes: 35
+        env:
+          DPF_INGESTION_SCALE_QUALIFICATION: '1'
+          DPF_INGESTION_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          import { writeFileSync } from 'node:fs';
+          import { join } from 'node:path';
+          const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
+          writeFileSync(join(process.env.RUNNER_TEMP, 'workroom-ingestion-scale-source.json'), JSON.stringify({
+            sourceSha: git('rev-parse', 'HEAD'), tree: git('rev-parse', 'HEAD^{tree}'),
+            runId: process.env.GITHUB_RUN_ID, attempt: process.env.GITHUB_RUN_ATTEMPT,
+            event: process.env.GITHUB_EVENT_NAME, databaseOwner: 'this-job-postgres-service',
+            rooms: 10000, events: 100000, pageCap: 200, cycleCap: 1000,
+            experimentalDeadlineMinutes: 30, installedAcceptance: false, nativeAuthorityAcceptance: false,
+          }, null, 2));
+          NODE
+          pnpm --filter web exec vitest run lib/work-management/room-review-ingestion.scale.postgres.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile="$RUNNER_TEMP/workroom-ingestion-scale.json" 2>&1 | tee "$RUNNER_TEMP/workroom-ingestion-scale.log"
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          import { join } from 'node:path';
+          const report = JSON.parse(readFileSync(join(process.env.RUNNER_TEMP, 'workroom-ingestion-scale.json'), 'utf8'));
+          const scale = report.testResults.flatMap(suite => suite.assertionResults).find(result =>
+            result.fullName === 'admitted PostgreSQL ingestion scale qualification preserves bounded SQL pages, sparse turns and durable cursor/output effects at the declared load');
+          if (scale?.status !== 'passed' || report.numPendingTests !== 0 || report.numFailedTests !== 0) {
+            throw new Error('The actual PostgreSQL scale case did not execute and pass; auditor-only or skipped results cannot qualify scale');
+          }
+          NODE
+
+      - name: Retain Workroom scale qualification evidence
+        if: always() && steps.workroom-ingestion-scale.outcome != 'skipped'
+        uses: actions/upload-artifact@v7
+        with:
+          name: workroom-ingestion-scale-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/workroom-ingestion-scale-source.json
+            ${{ runner.temp }}/workroom-ingestion-scale.json
+            ${{ runner.temp }}/workroom-ingestion-scale.log
+          if-no-files-found: error
+          retention-days: 30
+
   test-packages:
     name: Unit Tests (packages)
     runs-on: ubuntu-latest
@@ -627,6 +735,16 @@ jobs:
       # --workspace-concurrency=1 keeps @dpf/db and the other DB-touching
       # suites from racing on this job's single Postgres (BI-335D7B54);
       # --no-bail keeps every suite's pass/fail visible even if one fails.
+      - name: Verify populated Workroom migration recovery
+        if: needs.changes.outputs.heavy == 'true'
+        env:
+          DPF_INGESTION_TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: >-
+          node --test
+          packages/db/scripts/workroom-activity-migration-recovery.test.mjs
+          packages/db/scripts/workroom-activity-ingestion-recovery.postgres.test.mjs
+          packages/db/scripts/workroom-activity-recovery-prisma.postgres.test.mjs
+
       - name: Run non-web unit tests
         if: needs.changes.outputs.heavy == 'true'
         run: pnpm -r --if-present --filter '!web' --filter '!dpf' --workspace-concurrency=1 --no-bail test
@@ -956,6 +1074,7 @@ jobs:
       - exact-tree-evidence-shadow
       - typecheck
       - typecheck-tests
+      - typecheck-ts6-reference
       - typecheck-cache
       - policy-guards-source
       - policy-guards-workspace

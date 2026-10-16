@@ -128,6 +128,8 @@ export interface RouteAndCallOptions {
   routeContext?: string;
   effort?: "low" | "medium" | "high" | "max";
   previousResponseId?: string;
+  /** Store with responseId to prevent transferring provider context across accounts. */
+  previousResponseProviderConnectionId?: string;
   activityContract?: ActivityContract;
   agentDisplayName?: string;
   mcpSession?: import("@/lib/routing/adapter-types").AdapterMcpSession;

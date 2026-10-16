@@ -2,6 +2,8 @@ import { immutableArtifactIdentity, repoBlobArtifactRef } from "@/lib/mcp-task-r
 import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
 import { loadBaselineSourceForItem, type BaselineSourceDb } from "./baseline-source";
+import { bodyBaselineInputsMatch } from "./body-baseline-binding";
+import { isArchivedBodyAuthorRoom, isCurrentDeliveredBodyAuthor } from "./body-baseline-author-room";
 
 import {
   authorizeObjectiveMappingRequestKeyEvolution,
@@ -67,7 +69,7 @@ type ObjectiveMappingSubmissionPacket = Parameters<typeof authorizeObjectiveMapp
 type ObjectiveMappingAdmissionDb = Pick<
   Prisma.TransactionClient,
   "backlogItem" | "backlogItemActivity" | "workroom" | "taskRun" | "toolExecution"
-  | "featureBuild" | "nonProductionEnvironmentLease"
+  | "featureBuild" | "nonProductionEnvironmentLease" | "contributorInventorySnapshot"
 >;
 
 type WorkroomLivenessReader = (
@@ -94,7 +96,7 @@ async function loadObjectiveMappingAdmissionSnapshot(args: {
   const { db, packet } = args;
   const item = await db.backlogItem.findUnique({
     where: { itemId: packet.binding.itemId },
-    select: { id: true, itemId: true },
+    select: { id: true, itemId: true, body: true, organizationId: true },
   });
   if (!item) return { ...err("baseline-conflict"), reason: "baseline-conflict" };
 
@@ -108,17 +110,21 @@ async function loadObjectiveMappingAdmissionSnapshot(args: {
       headBranch: true,
       headSha: true,
       archivedAt: true,
+      status: true,
     },
   });
   const expectedRoom = packet.binding.workroomRef;
-  if (!room || room.archivedAt !== null
+  if (!room
     || (room.backlogItemId !== item.itemId && room.backlogItemId !== item.id)
     || room.repositoryFullName?.toLocaleLowerCase("en-US") !== expectedRoom.repositoryFullName.toLocaleLowerCase("en-US")
     || room.headBranch !== expectedRoom.branchName
     || room.headSha?.toLocaleLowerCase("en-US") !== expectedRoom.headSha.toLocaleLowerCase("en-US")) {
     return { ...err("workroom-identity-conflict"), reason: "workroom-identity-conflict" };
   }
-  if (!await args.workroomIsLive(db, room.capsuleId)) {
+  const archived = isArchivedBodyAuthorRoom(room);
+  const deliveredBodyAuthor = archived && packet.binding.artifactRef.kind === "document-version"
+    && await isCurrentDeliveredBodyAuthor(db, item, expectedRoom);
+  if (!deliveredBodyAuthor && (archived || !await args.workroomIsLive(db, room.capsuleId))) {
     return { ...err("workroom-identity-conflict"), reason: "workroom-identity-conflict" };
   }
 
@@ -130,9 +136,10 @@ async function loadObjectiveMappingAdmissionSnapshot(args: {
   const baseline = baselineRows ? currentBaseline(baselineRows) : null;
   const expectedBaselineId = packet.binding.expectedCurrentBaselineId ?? null;
   const packetRepoArtifact = repoBlobArtifactRef(packet.binding.artifactRef);
+  const bodyMatches = packet.binding.artifactRef.kind === "document-version" && baseline
+    && bodyBaselineInputsMatch(baseline, { ...item, binding: packet.binding });
   if (!baseline || !baseline.artifactRef || baseline.baselineId !== expectedBaselineId
-    || !packetRepoArtifact
-    || !exactArtifactRefMatches(baseline.artifactRef, packetRepoArtifact)) {
+    || (!bodyMatches && (!packetRepoArtifact || !exactArtifactRefMatches(baseline.artifactRef, packetRepoArtifact)))) {
     return { ...err("baseline-conflict"), reason: "baseline-conflict" };
   }
   const baselineRecordedAt = baselineActivities.find((entry) => {
@@ -195,7 +202,7 @@ async function loadObjectiveMappingAdmissionSnapshot(args: {
         baseSha: room.baseSha,
         headBranch: room.headBranch,
         headSha: room.headSha!,
-        isLive: true,
+        isLive: !deliveredBodyAuthor,
       },
       baselineRows: baselineRows!,
       baseline: baseline as ObjectiveMappingAdmissionSnapshot["baseline"],
@@ -264,6 +271,7 @@ export async function prepareObjectiveMappingSubmissionAdmission(args: {
       repositoryFullName: immutableArtifactIdentity(args.packet.binding.artifactRef).repositoryFullName,
       path: immutableArtifactIdentity(args.packet.binding.artifactRef).path,
     },
+    currentEvidenceActivityIds: args.packet.binding.eligibleEvidenceActivityIds,
     room: initial.data.room,
     verify: verifyHistoricalArtifact,
   });
@@ -275,6 +283,7 @@ export async function prepareObjectiveMappingSubmissionAdmission(args: {
     packet: args.packet,
     history: classified.data.history,
     providerProvenImpossibleTaskRunProofs: classified.data.providerProvenImpossibleTaskRunProofs,
+    serverProvenStaleBodyTaskRunProofs: classified.data.serverProvenStaleBodyTaskRunProofs,
     expectedTaskRunId: args.expectedTaskRunId,
   });
   if (!initialAuthorization.authorized) {
@@ -300,6 +309,7 @@ export async function prepareObjectiveMappingSubmissionAdmission(args: {
         packet: args.packet,
         history: current.data.history,
         providerProvenImpossibleTaskRunProofs: providerProofs,
+        serverProvenStaleBodyTaskRunProofs: classified.data.serverProvenStaleBodyTaskRunProofs,
         expectedTaskRunId: args.expectedTaskRunId,
       });
       if (!authorization.authorized) throw admissionRefusalFromAuthorization(authorization);

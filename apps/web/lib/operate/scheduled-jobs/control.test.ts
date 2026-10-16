@@ -2,7 +2,14 @@
 //
 // Guard paths short-circuit before DB/Inngest I/O, so no mocks are needed.
 
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const db = vi.hoisted(() => ({
+  scheduledAgentTask: { findUnique: vi.fn(), update: vi.fn() },
+  scheduledJob: { findUnique: vi.fn(), upsert: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+}));
+vi.mock("@dpf/db", () => ({ prisma: db }));
+vi.mock("@/lib/jobs", () => ({ jobs: { send: vi.fn() } }));
 
 import {
   isSupportedCron,
@@ -10,7 +17,13 @@ import {
   projectNextRun,
   retuneCron,
 } from "./cadence";
-import { updateWorkSchedule } from "./control";
+import { setWorkEnabled, updateWorkSchedule } from "./control";
+import {
+  INTAKE_CONTROLLER_COMMISSION_KEY,
+  INTAKE_CONTROLLER_JOB_ID,
+  INTAKE_CONTROLLER_WORK_SHAPE,
+  parseIntakeControllerCommission,
+} from "./intake-controller-commission";
 
 describe("schedule validation", () => {
   it("accepts a cron expression as a first-class cadence", () => {
@@ -99,5 +112,59 @@ describe("invalid schedule", () => {
     const res = await updateWorkSchedule("issue-report-triage", "every-3000-years", "test");
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/Invalid schedule/);
+  });
+});
+
+describe("metadata preservation (BI-FD40397B)", () => {
+  // The intake controller's commission reference lives in ScheduledJob.metadata.
+  // An operator retuning or toggling the job must not silently uncommission it.
+  const commission = {
+    workroomCapsuleId: "WC-CONTROLLER",
+    repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+    workShape: INTAKE_CONTROLLER_WORK_SHAPE,
+    commissionedByPrincipalId: "principal-row-owner",
+    commissionedAt: "2026-10-13T09:00:00.000Z",
+  };
+  const stored = { lastEditedBy: "earlier", [INTAKE_CONTROLLER_COMMISSION_KEY]: commission };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db.scheduledAgentTask.findUnique.mockResolvedValue(null);
+    db.scheduledJob.findUnique.mockResolvedValue({ schedule: "17 6 * * 1", metadata: stored, locked: false, category: "editable" });
+    db.scheduledJob.upsert.mockResolvedValue({});
+  });
+
+  const writtenMetadata = () => {
+    const args = db.scheduledJob.upsert.mock.calls[0]![0] as { update: { metadata: unknown }; create: { metadata: unknown } };
+    return args;
+  };
+
+  it("keeps the commission when the schedule is edited", async () => {
+    const res = await updateWorkSchedule(INTAKE_CONTROLLER_JOB_ID, "0 * * * *", "operator@example.test");
+    expect(res.ok).toBe(true);
+    const { update } = writtenMetadata();
+    expect(parseIntakeControllerCommission(update.metadata)).toEqual(commission);
+    expect(update.metadata).toMatchObject({ lastEditedBy: "operator@example.test", lastAction: "update-schedule" });
+  });
+
+  it("keeps the commission when the job is disabled and re-enabled", async () => {
+    expect((await setWorkEnabled(INTAKE_CONTROLLER_JOB_ID, false, "operator@example.test")).ok).toBe(true);
+    expect(parseIntakeControllerCommission(writtenMetadata().update.metadata)).toEqual(commission);
+
+    db.scheduledJob.upsert.mockClear();
+    expect((await setWorkEnabled(INTAKE_CONTROLLER_JOB_ID, true, "operator@example.test")).ok).toBe(true);
+    const { update } = writtenMetadata();
+    expect(parseIntakeControllerCommission(update.metadata)).toEqual(commission);
+    expect(update.metadata).toMatchObject({ lastAction: "enable" });
+  });
+
+  it("keeps other metadata on an agent-backed job's mirror row too", async () => {
+    db.scheduledAgentTask.findUnique.mockResolvedValue({ schedule: "0 9 * * *" });
+    db.scheduledAgentTask.update.mockResolvedValue({});
+    await setWorkEnabled("agent-backed-job", false, "operator@example.test");
+    expect(parseIntakeControllerCommission(writtenMetadata().update.metadata)).toEqual(commission);
+    db.scheduledJob.upsert.mockClear();
+    await updateWorkSchedule("agent-backed-job", "weekly", "operator@example.test");
+    expect(parseIntakeControllerCommission(writtenMetadata().update.metadata)).toEqual(commission);
   });
 });

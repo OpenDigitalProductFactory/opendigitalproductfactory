@@ -17,10 +17,11 @@ with `rawMetadata.source=known_catalog`. Codex CLI 0.153.4 rejected forced
 selected `gpt-6-astra`. Build Specialist and Change Reviewer remained pinned
 to `codex/gpt-5.4`, so the stale fallback became a repeated runtime failure.
 
-The installed CLI exposes the account-authoritative inventory through its
-app-server JSON-RPC `model/list` method. A live probe returned six visible
+The installed CLI exposes inventory through its app-server JSON-RPC
+`model/list` method. A live probe returned six visible
 models, their default marker, modalities, descriptions, and reasoning efforts.
-That is the existing adapter's true serving boundary; the ChatGPT/OpenAI HTTP
+Admission additionally requires the remote provenance check below. The CLI is
+the existing adapter's serving boundary; the ChatGPT/OpenAI HTTP
 catalog and DPF's known-model registry are not equivalent entitlement sources.
 
 The source baseline for this diagnosis is repository ref
@@ -51,8 +52,9 @@ and the same authenticated sandbox returned `gpt-6-astra`, `gpt-5.6-sol`,
 
 For the `codex` provider running through `codex-cli`, discovery SHALL query
 `codex app-server` inside the same sandbox and with the same injected account
-credential used for inference. The returned `model/list` page is authoritative
-for that connection. Static known-model fallback remains available to providers
+credential used for inference. A returned `model/list` page is authoritative
+only when its private invocation also establishes corresponding remote catalog
+evidence. Static known-model fallback remains available to providers
 whose contract is catalog-based, but it SHALL NOT refresh, reactivate, or report
 success for Codex subscription inventory.
 
@@ -60,7 +62,7 @@ The result flows through the existing `DiscoveredModel`, `ModelProfile`,
 missed-discovery retirement, preference-finalization, and `ScheduledJob`
 contracts:
 
-1. A successful CLI list upserts returned models and reconciles absence.
+1. A remotely verified, nonempty CLI list upserts returned models and reconciles absence.
 2. Two absent authoritative cycles retire a model using the existing counter.
 3. An explicit CLI unsupported-model response is classified as
    `model_not_found`, causing immediate model retirement through the existing
@@ -73,9 +75,9 @@ contracts:
 6. The Providers page's catalog freshness reads `model-discovery-refresh`,
    rather than the unrelated provider-registry timestamp.
 
-The model-list call is the reachability proof for catalog admission: it is
-served by the installed CLI after account initialization and identifies the
-models that CLI will accept. Daily paid inference smoke calls are deliberately
+RPC success and initialized account state alone are not remote reachability
+proof. The private invocation must establish remote provenance before its
+catalog reaches admission. Daily paid inference smoke calls are deliberately
 rejected because they spend capacity and can mutate provider limits merely to
 reconfirm the catalog.
 
@@ -175,7 +177,8 @@ this sandbox connection. The cause of that upstream difference is unresolved;
 do not insert model IDs or upgrade the shared sandbox to manufacture parity.
 
 OpenAI's [app-server contract](https://learn.chatgpt.com/docs/app-server)
-describes account/client-specific model availability; use the returned catalog.
+describes account/client-specific model availability; use a remotely verified
+returned catalog.
 Local installed inventories retain their existing non-retirement exception
 ([Ollama tags](https://docs.ollama.com/api/tags)). No new persistence is needed.
 
@@ -234,3 +237,90 @@ models without turning catalog history into availability claims.
 | AC-REPAIR-3: misses preserve sighting time and established retirement policies | inventory lifecycle | two misses, permanent refusal, local exception, pin regression tests |
 | AC-REPAIR-4: refresh counts and profiling describe this refresh | discovery action/result → UI | existing/new count, fresh-ID-only and pricing tests |
 | AC-REPAIR-5: overview hides technical catalog and avoids availability claims | provider overview → diagnostics | UI regressions and measured served UX evidence |
+
+### Background phase forecast contract — 2026-10-12
+
+The Build Studio phase forecast must compose its preview options through the
+shared `backgroundRouteOptions` helper. The existing `buildPhaseRouteOptions`
+module re-exports this helper for background plan and review callers, preserving
+their imports while keeping inference independent of build orchestration. These
+phases consume a completed response and do not require
+token streaming. Leaving the preview on the interactive default incorrectly
+excludes otherwise eligible endpoints whose streaming capability is unknown or
+false, then reports a blocked phase that differs from the actual caller.
+
+This reuses the existing background contract; it does not assign streaming
+capability to a model or change provider clearance. Internal sensitivity and all
+other routing requirements remain enforced. Interactive requests still require
+streaming unless their own contract says otherwise. Regression verification
+uses real contract inference and endpoint exclusion logic for both unknown and
+false streaming, plus a public-only endpoint that remains excluded from internal
+reviews. Forecast correctness does not establish settlement of an earlier
+provider call or successful execution on the served runtime.
+
+### Startup capability reconciliation and lifecycle ownership — 2026-10-12
+
+`packages/db/scripts/reconcile-catalog-capabilities.ts` applies static capability
+metadata at portal startup. Catalog lifecycle defaults apply only when creating
+a missing profile. Existing active, degraded, retired and disabled states belong
+to discovery, runtime refusal and operator decisions; a capability repair must
+preserve those states and their retirement timestamps and reasons. A static
+catalog entry also cannot retire an existing active profile. This extends AC-2
+through the startup path as well as the authoritative inventory refresh path.
+
+Live evidence on October 12 confirmed that startup catalog writes changed the
+status of historical retired rows while retaining their retirement timestamps.
+The routing loader still excludes rows with a retirement timestamp, so this
+evidence establishes inconsistent lifecycle presentation rather than routing
+readmission. The earlier qualification above concerned historical profiling;
+this later startup finding is separate and now reproduced by regression tests.
+
+Every field compared by the reconciler must be selected from the persisted row.
+The typed selection covers the complete mapping, preventing missing reads from
+being mistaken for null drift or logged as false previous values. A stable
+profile and catalog hash produce no profile update or change-log append; a
+changed hash alone advances provenance once. The existing capability drift
+comparison remains necessary even when the catalog hash matches. Discovery and
+evaluated ownership, full admin protection and field-level overrides remain
+intact. Ninety-day change-log pruning retains its existing maintenance contract.
+
+Regression tests execute the real reconciliation loop with a select-aware DB
+fixture, covering lifecycle preservation during capability repair, metadata
+change logging, repeated boots, protected ownership, overrides, hash-only
+changes and all creation defaults. This source repair does not establish live
+discovery success, endpoint capacity evidence or completed model execution.
+
+### CLI bundled fallback and remote provenance — 2026-10-13
+
+BI-59E37E39 extends the authority boundary after version-matched research.
+Codex CLI 0.157.0's
+[models manager](https://github.com/openai/codex/blob/rust-v0.157.0/codex-rs/models-manager/src/manager.rs)
+initializes bundled metadata and can log a remote-refresh failure while still
+returning a successful model/list response. A new private home and ephemeral
+selected-account login prevent credential reuse but do not remove that fallback.
+The earlier six-model observation establishes a returned CLI inventory; it does
+not independently prove a successful remote fetch or explain desktop parity.
+
+The existing CLI models_cache.json artifact records successful remote
+fetch/revalidation metadata under the upstream
+[cache contract](https://github.com/openai/codex/blob/rust-v0.157.0/codex-rs/models-manager/src/cache.rs).
+The container-owned runner reads that artifact only inside its private home,
+requires freshness after selected login starts, nonempty opaque scope and client
+version, and correspondence between the remote model IDs and the response page.
+Only bounded public provenance is relayed before the matching response; opaque
+identity and raw errors stay private. No DPF cache or persistence concept is added.
+
+The consumer admits a page only after matching provenance. Missing, malformed,
+stale, mismatched or unsupported evidence fails discovery; complete empty or
+hidden-only catalogs also fail. Those outcomes preserve last-known inventory,
+account verification, sighting times and pins through the existing failure paths.
+API-key discovery is not presumed remote merely because login succeeds.
+Pagination, response correlation, byte limits, selected-account boundaries,
+private-home cleanup and timeout ownership remain intact. Proof timestamps are
+not added to model metadata hashes, so routine verification does not create
+capability drift.
+
+This correction does not inject GPT-6.1 Sol, borrow API capacities for CLI models,
+upgrade a shared worker, or prove that a previous response used bundled fallback.
+See the [atomic implementation plan](../plans/2026-10-13-codex-catalog-provenance.md)
+for the existing BI's acceptance, source and served verification boundaries.

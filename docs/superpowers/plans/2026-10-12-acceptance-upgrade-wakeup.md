@@ -329,3 +329,70 @@ terminal CAS-conflict audit retry, with simulated transaction rollback and
 expiry/takeover between attempts. Removing ownership checks made both stale
 retry tests fail; restoring them made the tests pass. This source-local
 coverage does not replace the still-unrun PostgreSQL qualification.
+
+## Retained reviewer/runtime binding continuation — October 16
+
+Continue EXISTING BI-E3B918C2 / WC-DC780E03 after the inactive author's explicit
+handoff. Preserve branch fix/acceptance-upgrade-wakeup, original source37a75a5,
+merged PR6230/dfa821e and its evidence. Normal Large DESIGN claim
+IRD-F897407D4838 allowed preparation only. Implementation remains unadmitted;
+old exhausted reviews and generic PortfolioAgent notes are not approvals.
+
+The canonical contract is the October 16 retained acceptance binding addendum in
+[delivery closeout](../specs/2026-09-04-delivery-closeout-cost-efficiency-design.md).
+It retains CT-DC-ACCEPTANCE, OBJ-DC-3/4 and AC-DC-6. Kernel decision
+DI-AF2BCA4787FD chose RuntimeVerification with server-owned typed binding;
+usable/autonomyEligible true, estimates grade C, agent outcome recorded. This
+slice does not claim equivalent-check batching or full E3 acceptance.
+
+### Source evidence and sequence
+
+At inspected ca812ae29d364fff864ae8271532a4a8f5a45090:
+retained-acceptance.ts explicitly names the missing contract;
+acceptance-sweep-evaluate.ts sends Done work to that fallback before owner
+selection; objective-mapping-repository.ts validates the request but persists
+no applicable runtime binding; runtime-targets.ts records general result JSON.
+D33 is Small/Done, so the Medium-only6451 criteria/archived-author route does
+not repair its retained obligation. These are read-only findings, not a pass.
+
+1. Complete the concrete server-issued criteria/plan and TaskRun binding contract
+   for legacy Small and existing governed baselines. Keep their semantics
+   distinct. Audit the actual issuer-to-tool-context path, authority exclusions
+   and one-primary-attach validation. Resolve missing immutable criteria through
+   a prospective independently approved plan; never invent historical provenance.
+   Obtain native design/spec/architecture approval and exact plan coverage/review
+   before normal Large implementation admission. Reuse existing records; do not
+   reconstruct or replay an exhausted review packet.
+2. After admission and exact path/impact claims, write failing issuer/writer and
+   persistence regressions. Reject same author/agent, ambiguous identity, revoked
+   authority, foreign subject/tenant/install, missing criteria, forged result
+   binding, generic manual notes, stale authored/merge/served identity, rollback,
+   changed body/plan, expired TaskRun generation and unknown schema versions.
+   Verify duplicate equality versus conflicting completion and later failures.
+3. Extend the existing sweep/runtime-verification path and one shared binding
+   validator. Keep network/check execution outside transactions and revalidate
+   immutable prepared proof and current owner inside. Resolve receipt lookups by
+   original closure activity; justify any forward-only index on existing fields.
+   Use the real database transaction and existing scheduler ownership fence.
+4. Consume the same validated receipts in retained acceptance and Task Hub
+   projection. Preserve original Done delivery, partial-panel fail, review rounds
+   and old Task records. Missing proof gives the actual next owning action;
+   delivery or a prose claim cannot become acceptance. Check keyboard, themes,
+   narrow screens and unavailable/partial/failed states on a containing install.
+5. Run affected tests and official package types, native issuer-to-writer and
+   real PostgreSQL tests, 601 continuously arriving obligations and a10,000-receipt
+   lookup fixture. Obtain independent exact-source review, the governed gate,
+   DCO/protected CI/queue and canonical deployment. Then independently exercise
+   D33's actual delivered behavior and verify its typed acceptance is consumed.
+   Preserve every original row; no unknown review becomes settled by this test.
+
+Reserve roughly20% of implementation effort for consolidating identity,
+criteria/runtime binding and eligibility across issuer, writer, sweep and read
+model. Do not clone objective-mapping baseline semantics or create a table,
+scheduler, reviewer override or result ledger. Rollback preserves all receipts
+and pending obligations while disabling the new consumer/actuator.
+
+Native approval, coverage, implementation admission, code, tests, index migration
+and live acceptance for this continuation are UNRUN. This documentation does not
+change that status. The earlier wakeup/fencing delivery and its historical gates
+remain separately attributed.

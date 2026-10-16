@@ -58,6 +58,24 @@ the work.
 
 ## Activity and Participants
 
+### Delegation and recovery
+
+The workforce panel's **Delegation and recovery** disclosure shows recorded parent
+and child responsibility links, their coordinators, and the route to a named person.
+Opening it keeps you in the selected room. The route does not grant access, approve
+work or establish that someone received a notification; check the activity timeline
+for actual events and decisions.
+
+**Recovery path needs attention** means the route cannot be resolved. Open it for
+the missing assignment, conflicting links or access guidance. A parent's contents
+remain private unless you are admitted with sufficient clearance. Dependency links
+do not make another room responsible for this one.
+
+A room held for an hour uses the recorded recovery route for its stall notice.
+Missing recipient bindings or a failed notification write leave the notice unsent
+for retry. A recorded notice does not mean the blockage is resolved or the room
+has completed; the room keeps its existing stage and closure rules.
+
 ### Inspecting the process
 
 The process view separates the versioned **Intended process** from **Observed
@@ -65,6 +83,18 @@ execution** records. Select a step to see its position, reason, next action,
 owner, supporting evidence, and affected work. Required evidence is not proof
 that the evidence has been recorded. Where a receipt cannot be linked to an
 individual step, the view reports that gap and keeps it in the room evidence.
+
+The recent activity feed shows a bounded window. A step's latest matching evidence
+remains available when newer activity pushes it outside that window, provided it
+still matches the room's current source and process definition. An observed receipt
+does not by itself establish that the step passed or completed.
+
+Stage-scoped development evidence recorded for the room's current source and
+process version can appear under that step's required evidence. A link means the
+record was observed; it does not grant approval or verify completion. After the
+room changes source or process version, older records remain in its history and
+do not satisfy the current step's evidence binding. Earlier records without a
+source binding remain uncorrelated.
 
 **Observed execution** counts activity events and receipts separately. Expand a
 record for its source identity, actor and timestamp. An event records what was
@@ -98,6 +128,12 @@ After a minute, the process snapshot is marked stale. **Refresh state** reads
 the room again while keeping your selected step and filters. The warning clears
 only when a newer server read arrives. Refreshing does not resume work, approve
 a transition, or prove progress. A missing or future read time remains unknown.
+
+If your browser reports offline, **Refresh state** keeps the displayed snapshot
+and announces that you need to reconnect. When the browser reports a restored
+connection, refresh manually to check for changes. Reconnecting alone does not
+refresh the page or establish that the server is reachable. A connection lost
+during a request may still require a browser reload after reconnection.
 
 Native reviews submitted through OAuth use the same current permission checks as other authenticated reviews. Before dispatch or recovery, the worker checks token expiry, token and client revocation, tool grants, and task ownership. A failed authority check pauses the review before a provider call; it does not grant permission or silently switch credentials.
 
@@ -169,10 +205,12 @@ Each area's **Work** view opens with the same five measures, so the four portfol
 | Measure | What it means |
 |---|---|
 | **In flow now** | Rooms being worked, waiting on a person, or blocked. |
-| **Flow time** | How long a run takes, from its first step to its stop. This is the median over the last four weeks, with the change from the four weeks before and a weekly trend line. |
+| **Flow time** | How long a run takes, from its first step to its stop. This is the median over the last four weeks, with the change from the four weeks before and a weekly trend line. A delivery room is one run however many days it takes. For a recurring room, each cycle is a run. A cycle that is still open when the next one starts did not finish, so it counts as abandoned and never as a finished run. |
 | **Flow efficiency** | The share of step time spent working rather than waiting. |
 | **Finished per week** | Runs that reached a success stop. |
-| **Cost** | Points in flight, points delivered this quarter, and the AI spend on this area's rooms over the last four weeks. AI spend is counted only from conversations and dispatched work that name a room, so it is never guessed. |
+| **Cost** | Points in flight, points delivered this quarter, and the AI used by this area's rooms over the last four weeks. AI use is counted only from conversations and dispatched work that name a room, so it is never guessed. Recorded dollars are shown when a provider records a cost. Work on a subscription records no per-call cost, so it shows as subscription tokens (for example *subscription: $0 recorded, 832.3k tokens*) and never as a bare $0. |
+
+**Flow time**, **flow efficiency** and **finished per week** each have a small trend line for the last eight weeks, and their change against the four weeks before. **In flow now** shows today's count only, with no trend yet: a room that ends without a recorded stop does not yet close its history, so a past count would overstate it.
 
 Below the measures:
 
@@ -184,6 +222,12 @@ Choose a shape to see it drawn across all of its rooms:
 - Each step shows how many rooms are there and how many are waiting.
 - A version picker lets you compare the same shape before and after a change.
 - Choose a step to list the rooms at that step, then open any room.
+
+Under the picture, **Where the time goes, step by step** puts the numbers on each step:
+
+- **A box per step** shows how many rooms are waiting there (▽) and how many are in the step. It also shows the step's usual **dwell** (how long a room stays), **process** time (how long it is actually worked) and **first pass** (how often it finished without being sent back). A step that has finished fewer than five times says *too few to measure* instead of showing a number.
+- **Slower lately** or **Faster lately** appears on a step whose last seven days differ from its usual time by a quarter or more, with both times shown.
+- **The timeline** lays the measured steps side by side, with process time on the upper line and waiting time on the lower line. Below it is the total of each and the shape's **flow efficiency**: the share of the time the work was actually being worked.
 
 **Products** (`/portfolio`) shows the four portfolios side by side on the same measures. Rooms with no portfolio are shown in their own **Unplaced** column and never counted in another.
 
@@ -436,6 +480,21 @@ shows the stages, decisions and tool permissions of a delivery room end to end.
 
 ## Incomplete or Unavailable Rooms
 
+In **Define this room > More room details**, **Sensitivity limit** offers public,
+internal, confidential and restricted classifications, or an explicit unset value.
+An older declaration outside those classifications shows **Needs classification
+review**. Editing the room's purpose or outcome preserves that declaration and
+does not restore access automatically.
+
+A platform administrator can ask their assistant to review the classification
+state of that exact room. This administrative check returns no room contents.
+After the administrator verifies the actual information classification, the
+assistant can propose a correction with the current review reference and a reason.
+The normal approval applies; if the room changed meanwhile, it must be reviewed
+again. Correction retains the original declaration in the room's audit and changes
+no coworker's global clearance. Existing valid classifications cannot be lowered
+through this recovery operation.
+
 If a room boundary is incomplete, the page identifies the missing elements instead of inventing them. If the source is unavailable, the last available projection is marked clearly and the page gives one recovery direction. If an AI coworker's current status is unavailable, the participant panel says so and directs you back to the room's next action instead of implying that the coworker is still working.
 
 If you do not have access, the internal room title, participants, source references, and sensitivity details are not shown. External customer case pages remain customer-safe case summaries; they do not expose internal Workroom controls or participants.
@@ -462,6 +521,20 @@ lease are all available, and all of them would be a guess presented as a decisio
 Accountability is answerability for the work. It is deliberately separate from who coordinates
 the room and from what any AI coworker is permitted to do — a coworker doing the work does not
 become accountable for it.
+
+### Who an AI coworker's stage runs for
+
+When a room reaches a stage an AI coworker carries out, the platform schedules that work under a
+person's account. It uses the person the room was requested by or created by. Some rooms record
+neither, for example rooms started from Build Studio. For those, the work runs for the room's
+accountable person, found the same way as above: recorded on the room, inherited from a room
+further up, or the organization's recorded owner. The room's activity says which of those it used.
+
+If no accountable person with an active account can be named, nothing is scheduled. The room
+shows as paused at that stage, with the reason that no accountable person can be named. It does
+not show as dispatched. After an hour it is reported as stuck like any other paused room. Record an
+accountable person on the room, or set the organization's owner, and the next drive cycle schedules
+the work.
 
 ### When an account stops being used
 
@@ -555,3 +628,15 @@ room status. **Next rooms** continues through open rooms; the count is for the
 displayed page. Selecting **Operation** from a room's process returns to the
 same filters and page. Recorded stage waits are shown when the drive has named
 the stage and responsible role.
+
+In **Details**, expand **Review requirements** to see what this source of work
+requires. Each requirement names its expected outcome, comparison population,
+evidence fields and inherited sources. Technical profile identity and unresolved
+references stay in a second disclosure. A profile that composes correctly has
+not necessarily been assessed; organization fit and missing evidence remain
+explicit. Conflicting or unsupported requirements need reconciliation.
+
+**Did the change help?** explains when no independent assessment is available
+in this view. A receipt, completed cycle or deployed change alone does not prove
+improvement. Assessment requires an applied version, a comparison window and an
+independent reviewer. An unknown result is not a success percentage.

@@ -30,6 +30,9 @@ export const CRITICAL_PACKAGES = [
   { name: "react", importers: ["apps/web"] },
   { name: "react-dom", importers: ["apps/web"] },
   { name: "typescript", importers: ["apps/web", "."] },
+  // The checker scripts/run-tsc.mjs runs (BI-2B8D67A9), pinned once at the root
+  // under an npm alias. A TS7 bump must reach the sandbox before it grades a diff.
+  { name: "typescript7", importers: ["."] },
   { name: "prisma", importers: ["packages/db", "."] },
   {
     name: "vitest",
@@ -50,7 +53,18 @@ export { baseVersion };
 export function parseLockedVersion(lockfileText, importerPath, packageName) {
   if (!lockfileText) return "";
   const hit = findImporterDependency(parseImporters(lockfileText), importerPath, packageName);
-  return hit ? baseVersion(hit.version) : "";
+  return hit ? aliasTargetVersion(baseVersion(hit.version)) : "";
+}
+
+/**
+ * An npm-aliased dependency ("typescript7": "npm:typescript@7.0.2") is recorded
+ * as "<target>@<version>", while its installed package.json carries only the
+ * version. Return the version so both sides compare (BI-D2FE6931). Plain
+ * versions and link:/file: specifiers pass through unchanged.
+ */
+function aliasTargetVersion(version) {
+  const match = /^(?:@[^/@\s]+\/)?[^/@\s]+@(\d[^\s]*)$/.exec(version);
+  return match ? match[1] : version;
 }
 
 /**
@@ -465,6 +479,19 @@ export const EXIT_RUNNER_PREREQUISITE_UNAVAILABLE = 8;
  * way until the container runs, so the status names the container and remedy.
  */
 export const EXIT_SLOT_SUBSTRATE_UNAVAILABLE = 9;
+/**
+ * BI-FCC1DCB2: the candidate does not merge cleanly onto the accepted base, so
+ * the integration tree was never built and nothing was graded. Unlike every
+ * other non-pass code here, this one is about the author's branch, and the
+ * remedy is the author's: merge origin/main into the branch and resolve the
+ * named paths. Re-running fails identically until they do.
+ *
+ * It used to leave the runner as git's raw exit 1. The wrapper read 1 as a
+ * product run, demanded a completion checkpoint a run stopped at its merge
+ * cannot have, and rewrote the result to blocked_control_plane_starvation.
+ * Authors then retried for hours a gate that needed a merge.
+ */
+export const EXIT_CANDIDATE_MERGE_CONFLICT = 10;
 export const EXIT_VITEST_RUNNER_TERMINATION = 86;
 /**
  * The local-CI child was killed by a SIGNAL rather than exiting (BI-F22B4EEE).
@@ -496,6 +523,19 @@ export const EXIT_WAIT_CANCELLED = 81;
  */
 export const EXIT_SOURCE_DRIFT = 82;
 
+/**
+ * The one sentence that tells an author what to do about a candidate merge
+ * conflict (BI-FCC1DCB2). Shared by the gate's summary and pregate:status so
+ * they cannot word the remedy differently.
+ */
+export function mergeConflictRemedy(mergeConflict) {
+  const paths = Array.isArray(mergeConflict?.paths) ? mergeConflict.paths.filter(Boolean) : [];
+  const base = mergeConflict?.baseRef || "origin/main";
+  return paths.length > 0
+    ? `merge ${base} into your branch and resolve: ${paths.join(", ")}`
+    : `merge ${base} into your branch and resolve the conflicts git reports`;
+}
+
 export function exitCodeForVerdict(verdict) {
   if (verdict === "green") return EXIT_GREEN;
   if (verdict === "sandbox_not_ready") return EXIT_SANDBOX_NOT_READY;
@@ -507,7 +547,36 @@ export function exitCodeForVerdict(verdict) {
  * evidence. `freshnessVerdict` is the verdict that applied when the product
  * command ran (or the preflight verdict when the product command never ran).
  */
-export function classifyGateOutcome({ freshnessVerdict, gateExitCode }) {
+/**
+ * BI-B62A6686. `prisma migrate deploy` exits 1 with P1001 when the slot
+ * database is not listening. That used to be stored as a reusable product
+ * FAIL. A log that merely mentions P1001, without the migrate command, is
+ * not this case.
+ */
+export function isSlotDatabaseUnreachable(output) {
+  const text = String(output ?? "");
+  if (!/prisma migrate deploy/i.test(text)) return false;
+  return /\bP1001\b/.test(text)
+    || /can't reach database server/i.test(text)
+    || /\bECONNREFUSED\b/.test(text)
+    || /\bETIMEDOUT\b/.test(text);
+}
+
+export function classifyGateOutcome({ freshnessVerdict, gateExitCode, mergeConflict = null, gateOutput = "" }) {
+  // BI-FCC1DCB2: decided before freshness. The merge is the first thing the
+  // runner does and freshness runs after it, so any freshness report beside a
+  // merge conflict belongs to an earlier run.
+  if (gateExitCode === EXIT_CANDIDATE_MERGE_CONFLICT) {
+    return {
+      status: "conflict",
+      gatePassed: false,
+      // Nothing was graded, so there is no completion checkpoint to demand.
+      // Demanding one is what used to turn this into control-plane starvation.
+      productEvidence: false,
+      mergeConflict,
+      summary: `local-CI gate stopped before grading: the candidate does not merge cleanly onto ${mergeConflict?.baseRef || "origin/main"}. Re-running cannot change this. ${mergeConflictRemedy(mergeConflict)}.`,
+    };
+  }
   if (freshnessVerdict && freshnessVerdict !== "green") {
     return {
       status: "blocked_sandbox_drift",
@@ -580,6 +649,14 @@ export function classifyGateOutcome({ freshnessVerdict, gateExitCode }) {
   }
   if (gateExitCode === 0) {
     return { status: "passed", gatePassed: true, productEvidence: true, summary: "local-CI lease gate passed." };
+  }
+  if (isSlotDatabaseUnreachable(gateOutput)) {
+    return {
+      status: "blocked_control_plane_starvation",
+      gatePassed: false,
+      productEvidence: false,
+      summary: "local-CI gate blocked: prisma migrate deploy could not reach the slot database (P1001). This is infrastructure evidence, NOT a product build failure. Re-run on the same SHA once the slot database answers.",
+    };
   }
   return { status: "failed", gatePassed: false, productEvidence: true, summary: "local-CI lease gate failed." };
 }

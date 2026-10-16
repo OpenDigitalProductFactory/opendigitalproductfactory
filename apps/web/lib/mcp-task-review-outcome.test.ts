@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { projectRemoteTaskReplay } from "./mcp-task-replay-projection";
 const db = vi.hoisted(() => ({ item: vi.fn(), execution: vi.fn(), update: vi.fn(), updateMany: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: { backlogItem: { findUnique: db.item }, toolExecution: { findFirst: db.execution }, taskRun: { update: db.update, updateMany: db.updateMany } } }));
 vi.mock("./backlog/initiative-readiness/parent-scope-inheritance", () => ({ loadInheritedInitiativeScope: vi.fn(async () => null) }));
@@ -17,6 +18,20 @@ function item(payload: unknown = receipt) {
 const snapshot = { taskRunId: "TR-1", status: "input-required", updatedAt: new Date("2026-10-11T12:00:00Z"), progressPayload: { auditMarker: "retain", terminalWriterWait: {}, approvalEnvelopeId: "stale" } };
 beforeEach(() => { vi.resetAllMocks(); db.item.mockResolvedValue(item()); db.updateMany.mockResolvedValue({ count: 1 }); });
 describe("persisted initiative review outcome", () => {
+  it("archives uncertainty when the exact receipt settles, so a concurrent loser reads completion", async () => {
+    const uncertainty = { schemaVersion: 1, kind: "execution-uncertain", settlement: "unknown" };
+    const progress = { ...snapshot.progressPayload, executionUncertainty: uncertainty };
+    const outcome = await loadInitiativeReviewOutcome(binding, "receipt");
+    await reconcilePersistedReviewStatus(snapshot.taskRunId, progress, outcome!, snapshot);
+    const data = db.updateMany.mock.calls[0][0].data;
+    expect(data.progressPayload).not.toHaveProperty("executionUncertainty");
+    expect(data.progressPayload.executionUncertaintyResolution).toMatchObject({ reviewReceiptId: "receipt",
+      prior: { executionUncertainty: uncertainty } });
+    const replay = projectRemoteTaskReplay({ existing: { taskRunId: snapshot.taskRunId, status: data.status,
+      progressPayload: data.progressPayload, a2aMetadata: {} }, requestMatches: true });
+    expect(replay.result.waitReason).toBeUndefined();
+    expect(progress.executionUncertainty.settlement).toBe("unknown");
+  });
   it("reconciles stale status from a verified receipt while preserving unrelated progress", async () => {
     const outcome = await loadInitiativeReviewOutcome(binding, "receipt");
     expect(await reconcilePersistedReviewStatus(snapshot.taskRunId, snapshot.progressPayload, outcome!, snapshot)).toBe(true);
@@ -59,5 +74,37 @@ describe("persisted initiative review outcome", () => {
   it("does not manufacture a receipt from successful tool execution without its persisted row", async () => {
     db.execution.mockResolvedValue({ result: { success: true, data: { receiptId: "absent" } } });
     expect(await loadTaskInitiativeReviewOutcome("TR-1", binding)).toBeNull();
+  });
+});
+
+describe("receipt artifact identity (BI-2E479619 follow-up)", () => {
+  // A feature-build revision binding carries repositoryFullName and valueDigest;
+  // the persisted receipt keeps only the identity (kind + revisionId). Live, 245
+  // parked reviewer runs held exactly this pair and never healed.
+  const revisionRef = { kind: "feature-build-revision" as const, repositoryFullName: "owner/repo", revisionId: "rev-1", valueDigest: "sha256:abc" };
+  const revisionBinding = { ...binding, artifactRef: revisionRef };
+  const storedRevision = { kind: "feature-build-revision", revisionId: "rev-1" };
+
+  it("matches a revision receipt that stores only the revision identity", async () => {
+    db.item.mockResolvedValue(item({ ...receipt, artifactRef: storedRevision }));
+    expect((await loadInitiativeReviewOutcome(revisionBinding, "receipt"))?.receiptId).toBe("receipt");
+  });
+  it("does not match a different revision", async () => {
+    db.item.mockResolvedValue(item({ ...receipt, artifactRef: { ...storedRevision, revisionId: "rev-2" } }));
+    expect(await loadInitiativeReviewOutcome(revisionBinding, "receipt")).toBeNull();
+  });
+  it("does not match when a stored non-identity field contradicts the binding", async () => {
+    db.item.mockResolvedValue(item({ ...receipt, artifactRef: { ...storedRevision, valueDigest: "sha256:other" } }));
+    expect(await loadInitiativeReviewOutcome(revisionBinding, "receipt")).toBeNull();
+  });
+  it("matches a document-version receipt that stores only the version identity", async () => {
+    const documentBinding = { ...binding, artifactRef: { kind: "document-version" as const, repositoryFullName: "owner/repo", versionId: "ver-1", valueDigest: "sha256:abc" } };
+    db.item.mockResolvedValue(item({ ...receipt, artifactRef: { kind: "document-version", versionId: "ver-1" } }));
+    expect((await loadInitiativeReviewOutcome(documentBinding, "receipt"))?.receiptId).toBe("receipt");
+  });
+  it("still requires every identity key of a repo blob", async () => {
+    const { path: _omitted, ...withoutPath } = artifactRef;
+    db.item.mockResolvedValue(item({ ...receipt, artifactRef: withoutPath }));
+    expect(await loadInitiativeReviewOutcome(binding, "receipt")).toBeNull();
   });
 });

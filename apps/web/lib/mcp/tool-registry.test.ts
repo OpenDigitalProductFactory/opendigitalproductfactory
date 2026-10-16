@@ -58,13 +58,14 @@ describe("deliberation-siem tool pack", () => {
 });
 
 describe("runtime-coordination tool pack", () => {
-  it("bundles its five runtime tools, each with a (lazy) handler", () => {
+  it("bundles its runtime tools, each with a (lazy) handler", () => {
     expect(runtimeCoordinationPack.definitions.map((t) => t.name).sort()).toEqual([
       "get_runtime_coordination_map",
       "heartbeat_runtime_target",
       "record_runtime_verification",
       "register_runtime_target",
       "release_runtime_target",
+      "verify_archetype_projection",
     ]);
     for (const def of runtimeCoordinationPack.definitions) {
       expect(runtimeCoordinationPack.handlers[def.name], def.name).toBeTypeOf("function");
@@ -284,6 +285,7 @@ describe("coworker memory pack", () => {
 describe("portfolio-budget tool pack", () => {
   it("bundles the epic attribution doors with handlers", () => {
     expect(portfolioBudgetPack.definitions.map((t) => t.name)).toEqual([
+      "get_investment_balance", "set_investment_balance", "bind_investment_funding",
       "propose_epic_portfolios",
       "confirm_epic_portfolios",
       "propose_portfolio_budgets",

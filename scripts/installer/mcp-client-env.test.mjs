@@ -24,6 +24,8 @@ const hasBash = spawnSync("bash", ["-c", "true"]).status === 0;
 const hasOpenssl = spawnSync("openssl", ["version"]).status === 0;
 const NEEDS_BASH = { skip: hasBash ? false : "no bash on this machine" };
 const NEEDS_TRUST_TOOLS = { skip: hasBash && hasOpenssl ? false : "needs bash and openssl to mint a fixture root" };
+const pythonProbe = spawnSync(process.platform === "win32" ? "python" : "python3", ["-c", "import sys; print(sys.executable)"], { encoding: "utf8" });
+const pythonExe = pythonProbe.status === 0 ? pythonProbe.stdout.trim() : null;
 
 function powershellHost() {
   for (const candidate of ["pwsh", "powershell"]) {
@@ -48,12 +50,19 @@ function withHome(run) {
 }
 
 function bash(script, { home, env = {} }) {
-  return spawnSync("bash", ["-c", script], {
+  // Git Bash rewrites HOME on startup. Restore the exact temporary fixture
+  // path so persistence assertions exercise the same input on every host.
+  return spawnSync("bash", ["-c", `HOME="$DPF_FIXTURE_HOME"; export HOME; ${script}`], {
     encoding: "utf8",
     env: {
       PATH: process.env.PATH, HOME: posix(home), ENV_LIB: envLib, TRUST_LIB: trustLib,
+      DPF_FIXTURE_HOME: posix(home),
       // Never inherit the operator's own client environment into a test.
       DPF_MCP_URL: "", DPF_PKI_TRUST_BUNDLE: "", NODE_EXTRA_CA_CERTS: "",
+      // Never reach the operator's launchd either: on macOS a case that named
+      // no seam ran the real `launchctl setenv DPF_MCP_URL` and left the
+      // desktop app dialing http://[::1]:3000 (BI-8FD7C0C9).
+      DPF_LAUNCHCTL: fakeLaunchctl(home),
       ...env,
     },
   });
@@ -129,7 +138,7 @@ test("macOS: both variables land in ~/.dpf/agent-toolchain.env and launchd; a re
     // An earlier token line is kept: the transport writer owns only its own lines.
     mkdirSync(join(home, ".dpf"), { recursive: true });
     writeFileSync(join(home, ".dpf", "agent-toolchain.env"), "# managed\nexport DPF_MCP_BEARER_TOKEN='dpfmcp_fixture'\nexport DPF_MCP_URL='http://127.0.0.1:3000/api/mcp/v1'\n");
-    const env = { INSTALL: posix(install), DPF_CLIENT_ENV_PLATFORM: "Darwin", DPF_LAUNCHCTL: fakeLaunchctl(home) };
+    const env = { INSTALL: posix(install), DPF_CLIENT_ENV_PLATFORM: "Darwin", DPF_LAUNCHCTL: fakeLaunchctl(home), DPF_MCP_URL: "https://desk.lan/api/mcp/v1?tier=full" };
 
     const first = bash(persistScript, { home, env });
     assert.equal(first.status, 0, first.stderr);
@@ -142,8 +151,12 @@ test("macOS: both variables land in ~/.dpf/agent-toolchain.env and launchd; a re
     for (const profile of [".zshenv", ".profile"]) {
       assert.match(readFileSync(join(home, profile), "utf8"), /agent-toolchain\.env.*# dpf-mcp-token/);
     }
+    // Claude's connector reads its own variable (BI-D6A6462A), written beside
+    // the shared one under the same https-only rule.
+    assert.match(file, /^export DPF_CLAUDE_MCP_URL='https:\/\/desk\.lan\/api\/mcp\/v1\?tier=full'$/m);
     const log = readFileSync(join(home, "launchctl.log"), "utf8");
     assert.match(log, /^setenv DPF_MCP_URL https:\/\/desk\.lan\/api\/mcp\/v1\?tier=full$/m);
+    assert.match(log, /^setenv DPF_CLAUDE_MCP_URL https:\/\/desk\.lan\/api\/mcp\/v1\?tier=full$/m);
     assert.match(log, /^setenv NODE_EXTRA_CA_CERTS /m);
 
     const second = bash(persistScript, { home, env });
@@ -267,7 +280,10 @@ function writeEndpointReaderFixture(install, extension) {
 }
 
 for (const adapter of ["sh", "ps1"]) {
-  test(`${adapter}: bootstrap selects saved operator endpoint before install defaults and keeps explicit selection`, adapter === "sh" ? NEEDS_BASH : NEEDS_POWERSHELL, () => {
+  // BI-BFDB0A42: this case runs the bootstrap's python block. The Build Studio
+  // sandbox has no python, so skip there as the PowerShell twin does without pwsh.
+  const NEEDS_PYTHON = pythonExe ? null : { skip: "no python on this machine; the bootstrap's endpoint block cannot run" };
+  test(`${adapter}: bootstrap keeps the saved Codex endpoint out of the shared selection and keeps explicit selection`, NEEDS_PYTHON ?? (adapter === "sh" ? NEEDS_BASH : NEEDS_POWERSHELL), () => {
     withHome(({ home, install }) => {
       writeFileSync(join(install, ".env"), "PUBLIC_URL=https://desk.lan\n");
       writeEndpointReaderFixture(install, adapter);
@@ -275,9 +291,7 @@ for (const adapter of ["sh", "ps1"]) {
       // Keep the real shell wrapper, but bind its interpreter inside this fixture.
       const bin = join(home, "bin");
       mkdirSync(bin);
-      const python = spawnSync(process.platform === "win32" ? "python" : "python3", ["-c", "import sys; print(sys.executable)"], { encoding: "utf8" });
-      assert.equal(python.status, 0, python.stderr);
-      writeFileSync(join(bin, "python3"), `#!/bin/sh\nexec '${posix(python.stdout.trim()).replaceAll("'", "'\\''")}' "$@"\n`);
+      writeFileSync(join(bin, "python3"), `#!/bin/sh\nexec '${posix(pythonExe).replaceAll("'", "'\\''")}' "$@"\n`);
       chmodSync(join(bin, "python3"), 0o755);
       const config = join(home, ".codex/config.toml");
       mkdirSync(dirname(config), { recursive: true });
@@ -305,7 +319,9 @@ for (const adapter of ["sh", "ps1"]) {
       };
       assert.equal(run(), "https://desk.lan/api/mcp/v1?tier=full|");
       writeFileSync(config, '[mcp_servers.dpf]\nurl="http://127.0.0.1:3000/api/mcp/v1?tier=full"\n');
-      assert.equal(run(), "http://127.0.0.1:3000/api/mcp/v1?tier=full|");
+      // Codex keeps its loopback choice in its own config (the updater
+      // preserves it); it is not the endpoint every other client is given.
+      assert.equal(run(), "https://desk.lan/api/mcp/v1?tier=full|");
       assert.equal(run("https://explicit.lan/api/mcp/v1"), "https://explicit.lan/api/mcp/v1|");
       assert.equal(readFileSync(config, "utf8"), '[mcp_servers.dpf]\nurl="http://127.0.0.1:3000/api/mcp/v1?tier=full"\n');
     });
@@ -325,8 +341,8 @@ test("Windows: DPF_MCP_URL and NODE_EXTRA_CA_CERTS go to the User env once; a re
       $first = Set-DpfMcpClientEnv -ClientEnv $clientEnv -GetUserEnv $get -SetUserEnv $set
       $firstWrites = $script:writes
       $second = Set-DpfMcpClientEnv -ClientEnv $clientEnv -GetUserEnv $get -SetUserEnv $set
-      "$first|$firstWrites|$second|$($script:writes)|$($store['DPF_MCP_URL'])|$($store['NODE_EXTRA_CA_CERTS'])"`);
-    assert.equal(out, `persisted|2|unchanged|2|https://desk.lan/api/mcp/v1?tier=full|${cert}`);
+      "$first|$firstWrites|$second|$($script:writes)|$($store['DPF_MCP_URL'])|$($store['DPF_CLAUDE_MCP_URL'])|$($store['NODE_EXTRA_CA_CERTS'])"`);
+    assert.equal(out, `persisted|3|unchanged|3|https://desk.lan/api/mcp/v1?tier=full|https://desk.lan/api/mcp/v1?tier=full|${cert}`);
   });
 });
 
@@ -391,7 +407,7 @@ test("worktree recovers saved HTTPS endpoint and quoted CA without executing sav
   });
 });
 
-test("saved endpoint is below explicit process URL and canonical install origin", NEEDS_BASH, () => {
+test("saved endpoint follows explicit process URL and precedes the install default", NEEDS_BASH, () => {
   withHome(({ home, install }) => {
     const prepare = `. "$ENV_LIB"; dpf_set_client_env_export DPF_MCP_URL 'https://saved.lan/api/mcp/v1'; `;
     const out = bash(prepare + resolveScript, { home, env: { INSTALL: posix(install), DPF_MCP_URL: "http://explicit.lan/mcp" } });
@@ -400,7 +416,7 @@ test("saved endpoint is below explicit process URL and canonical install origin"
     const canonical = bash(resolveScript, { home, env: { INSTALL: posix(install), DPF_MCP_URL: "https://explicit.lan/mcp" } });
     assert.equal(canonical.stdout, "https://explicit.lan/mcp|");
     const implicit = bash(resolveScript, { home, env: { INSTALL: posix(install) } });
-    assert.equal(implicit.stdout, "https://install.lan/api/mcp/v1?tier=full|");
+    assert.equal(implicit.stdout, "https://saved.lan/api/mcp/v1|");
   });
 });
 
@@ -430,4 +446,84 @@ test("saved export parsing rejects executable assignments and leaves credential 
     assert.equal(secret.status, 64);
     assert.equal(secret.stdout, "");
   });
+});
+
+
+// The shared DPF_MCP_URL is what Claude desktop and Claude Code read for their
+// OAuth connector, and OAuth refuses plain http (BI-46B636B0). A plain-http
+// value there can only be a leftover leak, so it never outranks the HTTPS
+// install default and is never written (BI-8FD7C0C9).
+test("a saved plain-http endpoint does not outrank the HTTPS install default", NEEDS_BASH, () => {
+  withHome(({home, install}) => {
+    writeRoot(home);
+    writeFileSync(join(install, ".env"), "PUBLIC_URL=https://localhost\n");
+    for (const endpoint of ["http://127.0.0.1:3000/api/mcp/v1?tier=full", "http://[::1]:3000/api/mcp/v1?tier=full"]) {
+      const out = bash(`. "$ENV_LIB"; dpf_set_client_env_export DPF_MCP_URL '${endpoint}'; dpf_resolve_mcp_client_env "$INSTALL"; printf '%s|%s' "$DPF_MCP_CLIENT_URL" "$DPF_MCP_CLIENT_CA_BUNDLE"`, {home, env:{INSTALL:posix(install)}});
+      assert.equal(out.status, 0, out.stderr);
+      assert.equal(out.stdout, `https://localhost/api/mcp/v1?tier=full|${defaultShellBundle(home)}`);
+    }
+  });
+});
+
+test("Windows: a saved plain-http endpoint does not outrank the HTTPS install default", NEEDS_POWERSHELL, () => {
+  withHome(({home, install}) => {
+    writeRoot(home);
+    writeFileSync(join(install, ".env"), "PUBLIC_URL=https://localhost\n");
+    const endpoint = "http://127.0.0.1:3000/api/mcp/v1?tier=full";
+    const out = powershell(`. '${q(envLibPs)}'
+      $r = Resolve-DpfMcpClientEnv -InstallDir '${q(install)}' -ExplicitUrl '' -HomeDir '${q(home)}' -GetUserEnv {param($n) if($n -eq 'DPF_MCP_URL') {'${endpoint}'}}
+      "$($r.McpUrl)"`);
+    assert.equal(out, "https://localhost/api/mcp/v1?tier=full");
+  });
+});
+
+const REFUSED_SHARED_ENDPOINTS = [
+  "http://localhost:3000/api/mcp/v1?tier=full",
+  "http://127.0.0.1:3000/api/mcp/v1?tier=full",
+  "http://[::1]:3000/api/mcp/v1?tier=full",
+  // Docker publishes the portal on IPv4 only; localhost reaches it either way.
+  "https://[::1]/api/mcp/v1?tier=full",
+  "http://192.168.1.5:3000/api/mcp/v1",
+  "http://127.0.0.1:3000@evil.test/api/mcp/v1",
+];
+
+test("plain-http and IPv6-literal endpoints never reach the shared env file or launchd", NEEDS_BASH, () => {
+  for (const endpoint of REFUSED_SHARED_ENDPOINTS) {
+    withHome(({home}) => {
+      mkdirSync(join(home, ".dpf"), { recursive: true });
+      const saved = "# managed\nexport DPF_MCP_BEARER_TOKEN='fixture-secret'\nexport DPF_MCP_URL='https://localhost/api/mcp/v1?tier=full'\nexport NODE_EXTRA_CA_CERTS='operator-root'\n";
+      writeFileSync(join(home, ".dpf", "agent-toolchain.env"), saved);
+      const out = bash(`. "$ENV_LIB"; DPF_MCP_CLIENT_URL='${endpoint}'; DPF_MCP_CLIENT_CA_BUNDLE='unused'; dpf_persist_mcp_client_env; printf '%s' "$?"`,
+        { home, env: { DPF_CLIENT_ENV_PLATFORM: "Darwin" } });
+      assert.equal(out.stdout, "1", endpoint);
+      assert.doesNotMatch(readFileSync(join(home, ".dpf", "agent-toolchain.env"), "utf8"), /DPF_CLAUDE_MCP_URL/, endpoint);
+      assert.equal(readFileSync(join(home, ".dpf", "agent-toolchain.env"), "utf8"), saved, endpoint);
+      assert.equal(existsSync(join(home, "launchctl.log")), false, `launchd untouched for ${endpoint}`);
+    });
+  }
+});
+
+// The exact leak: a case that names no launchctl seam on a Mac. The spy is the
+// first `launchctl` on PATH, standing in for the operator's real one.
+test("persisting a loopback http endpoint on macOS never calls the real launchctl", NEEDS_BASH, () => {
+  withHome(({home}) => {
+    const spyDir = join(home, "spy-bin");
+    mkdirSync(spyDir);
+    writeFileSync(join(spyDir, "launchctl"), `#!/bin/sh\nprintf '%s\\n' "$*" >> "${posix(home)}/real-launchctl.log"\n`);
+    chmodSync(join(spyDir, "launchctl"), 0o755);
+    const out = spawnSync("bash", ["-c", `HOME="$DPF_FIXTURE_HOME"; export HOME; . "$ENV_LIB"; DPF_MCP_CLIENT_URL='http://[::1]:3000/api/mcp/v1?tier=full'; dpf_persist_mcp_client_env; printf '%s' "$?"`], {
+      encoding: "utf8",
+      env: { PATH: `${posix(spyDir)}${delimiter}${process.env.PATH}`, HOME: posix(home), DPF_FIXTURE_HOME: posix(home), ENV_LIB: envLib, DPF_CLIENT_ENV_PLATFORM: "Darwin", DPF_MCP_URL: "" },
+    });
+    assert.equal(out.stdout, "1");
+    assert.equal(existsSync(join(home, "real-launchctl.log")), false, "the operator's launchd was written");
+  });
+});
+
+test("Windows: plain-http and IPv6-literal endpoints never reach the User environment", NEEDS_POWERSHELL, () => {
+  for (const endpoint of REFUSED_SHARED_ENDPOINTS) {
+    const out = powershell(`. '${q(envLibPs)}'; $script:writes=0
+      $r=Set-DpfMcpClientEnv -ClientEnv ([pscustomobject]@{McpUrl='${endpoint}';CaBundle=''}) -GetUserEnv {param($n) ''} -SetUserEnv {param($n,$v) $script:writes++}; "$r|$($script:writes)"`);
+    assert.equal(out, "not-https|0", endpoint);
+  }
 });

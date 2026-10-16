@@ -274,6 +274,8 @@ DPF relies on local guardrails — the pre-commit secret scan + typecheck hook (
 
 **Point the client at the MCP URL and approve it once in your browser.** The client gets a `401` that tells it where to look, discovers this installation's authorization server, and runs the standard OAuth flow. A portal page opens naming the client, this installation, and what it is asking to do; you approve, and the client refreshes its own access from then on. **No environment variable, no copy-paste, no client restart.**
 
+Setup keeps your selected https connection address for later sessions. An explicit `DPF_MCP_URL` overrides it; otherwise setup uses the saved https preference, then the installation's HTTPS default. A plain-http address is never saved for every client, because Claude's sign-in refuses plain http. Codex and Grok keep their own address in their own settings. A saved address does not grant access or prove sign-in works. If the client still uses an older address, verify its saved connection before starting another sign-in.
+
 The approval page names the assistant role this connection will act as and
 has one **Connect** button; you do not pick the role. The server chooses it
 from the roles you are allowed to authorize, after checking that they carry
@@ -403,6 +405,27 @@ Full TypeScript and Vitest runs, Next builds, Docker builds, previews, local inf
 When capacity is unavailable, the command records its queue position and exits with code `75` instead of leaving a waiting Node process alive. Retry after the active heavyweight command releases its lease. Do not start duplicate copies to race the queue, and do not kill processes based only on a familiar executable name; the runner supervises only the child whose PID and process-start identity it owns.
 
 If memory cannot be measured, heavyweight admission fails closed. Cheap repository guards still run without claiming the lane. For current resource classes, memory floors, queue inspection, and recovery, see [Local CI and host-resource lanes](../../operations/local-ci-sandbox-slots.md).
+
+#### Recover a review blocked by endpoint eligibility
+
+An endpoint eligibility refusal means no model met the review's requirements.
+Tasks and the Workroom show the effective data class, residency and grouped
+exclusion counts. A proven refusal stops before provider dispatch and produces
+no review verdict. An uncertain or partially dispatched execution retains that
+uncertainty and its checkpoint history.
+
+The existing **Resume review** action stays disabled for an unchanged eligibility
+refusal. Have the platform verify an eligible route for the complete immutable
+review, preserving screening and the required data boundary. Record fresh scoped
+runtime health evidence for the same Workroom, task and request digest, including
+`semanticReviewRecovery.eligibilityVerified=true` and settlement of any uncertain
+executions. General provider health does not prove this review is eligible.
+
+The requester can then use the existing `retry_semantic_review` operation with
+the verification reference, exact request digest and confirmation. Within the
+original window it retains the request, deadline and remaining attempts. After
+expiry, only the existing qualified bounded-successor contract applies. Neither
+task completion nor successful source tests substitute for an independent verdict.
 
 #### Clean up when merged
 

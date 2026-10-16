@@ -30,6 +30,7 @@ import {
   retuneCron,
   type MutationResult,
 } from "./cadence";
+import { existingMetadataRecord } from "./intake-controller-commission";
 import { describeSchedule, deriveKind } from "./work-model";
 
 export * from "./cadence";
@@ -75,6 +76,18 @@ async function resolveTarget(jobId: string): Promise<{
 
 function auditMeta(actor: string, action: string, now: Date) {
   return { lastEditedBy: actor, lastEditedAt: now.toISOString(), lastAction: action };
+}
+
+/**
+ * Audit stamp MERGED over the row's existing metadata. Writing auditMeta alone
+ * replaced the whole blob, so a schedule edit or enable toggle silently dropped
+ * every other key — including the intake controller's commission reference
+ * (BI-FD40397B) and staleness-escalation state. Prisma cannot merge JSON in an
+ * upsert, so the current value is read first.
+ */
+async function mergedAuditMeta(jobId: string, actor: string, action: string, now: Date) {
+  const row = await prisma.scheduledJob.findUnique({ where: { jobId }, select: { metadata: true } });
+  return { ...existingMetadataRecord(row?.metadata), ...auditMeta(actor, action, now) };
 }
 
 /**
@@ -128,6 +141,9 @@ export async function updateWorkSchedule(
       where: { taskId: jobId },
       data: { schedule: agentCron, isActive: active, nextRunAt },
     });
+    // Best-effort mirror: if the current metadata cannot be read, leave it untouched
+    // on update rather than overwrite a commission reference with the bare stamp.
+    const merged = await mergedAuditMeta(jobId, actor, "update-schedule", now).catch(() => null);
     await prisma.scheduledJob
       .upsert({
         where: { jobId },
@@ -137,13 +153,13 @@ export async function updateWorkSchedule(
           schedule: agentCron,
           nextRunAt,
           enabled: active,
-          metadata: auditMeta(actor, "update-schedule", now),
+          metadata: merged ?? auditMeta(actor, "update-schedule", now),
         },
         update: {
           schedule: agentCron,
           nextRunAt,
           enabled: active,
-          metadata: auditMeta(actor, "update-schedule", now),
+          ...(merged ? { metadata: merged } : {}),
         },
       })
       .catch(() => {});
@@ -157,6 +173,7 @@ export async function updateWorkSchedule(
 
   // ── Cron-backed or unregistered: the ScheduledJob row is the record. ──
   const nextRunAt = projectNextRun(schedule, now);
+  const metadata = await mergedAuditMeta(jobId, actor, "update-schedule", now);
   await prisma.scheduledJob.upsert({
     where: { jobId },
     create: {
@@ -167,13 +184,13 @@ export async function updateWorkSchedule(
       category: entry?.category ?? "editable",
       locked: false,
       enabled: schedule !== "disabled",
-      metadata: auditMeta(actor, "update-schedule", now),
+      metadata,
     },
     update: {
       schedule,
       nextRunAt,
       enabled: schedule !== "disabled",
-      metadata: auditMeta(actor, "update-schedule", now),
+      metadata,
     },
   });
 
@@ -210,6 +227,8 @@ export async function setWorkEnabled(
       where: { taskId: jobId },
       data: { isActive: enabled, nextRunAt },
     });
+    const action = enabled ? "enable" : "disable";
+    const merged = await mergedAuditMeta(jobId, actor, action, now).catch(() => null);
     await prisma.scheduledJob
       .upsert({
         where: { jobId },
@@ -219,9 +238,9 @@ export async function setWorkEnabled(
           schedule,
           enabled,
           nextRunAt,
-          metadata: auditMeta(actor, enabled ? "enable" : "disable", now),
+          metadata: merged ?? auditMeta(actor, action, now),
         },
-        update: { enabled, nextRunAt, metadata: auditMeta(actor, enabled ? "enable" : "disable", now) },
+        update: { enabled, nextRunAt, ...(merged ? { metadata: merged } : {}) },
       })
       .catch(() => {});
     return ok(`'${jobId}' ${enabled ? "enabled" : "disabled"}.`);
@@ -229,10 +248,14 @@ export async function setWorkEnabled(
 
   const existing = await prisma.scheduledJob.findUnique({
     where: { jobId },
-    select: { schedule: true },
+    select: { schedule: true, metadata: true },
   });
   const schedule = existing?.schedule ?? entry?.cron ?? "disabled";
   const nextRunAt = enabled ? projectNextRun(schedule, now) : null;
+  const metadata = {
+    ...existingMetadataRecord(existing?.metadata),
+    ...auditMeta(actor, enabled ? "enable" : "disable", now),
+  };
 
   await prisma.scheduledJob.upsert({
     where: { jobId },
@@ -244,9 +267,9 @@ export async function setWorkEnabled(
       nextRunAt,
       category: entry?.category ?? "editable",
       locked: false,
-      metadata: auditMeta(actor, enabled ? "enable" : "disable", now),
+      metadata,
     },
-    update: { enabled, nextRunAt, metadata: auditMeta(actor, enabled ? "enable" : "disable", now) },
+    update: { enabled, nextRunAt, metadata },
   });
 
   return ok(`'${jobId}' ${enabled ? "enabled" : "disabled"}.`);
@@ -315,7 +338,7 @@ export async function retireWork(jobId: string, actor: string): Promise<Mutation
   }
 
   const now = new Date();
-  const base = row?.metadata && typeof row.metadata === "object" ? { ...(row.metadata as Record<string, unknown>) } : {};
+  const base = existingMetadataRecord(row?.metadata);
 
   if (task) {
     await prisma.scheduledAgentTask.update({

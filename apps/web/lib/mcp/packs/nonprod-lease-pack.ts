@@ -16,6 +16,7 @@ import type { LocalCiHostPressure } from "@/lib/nonprod/local-ci-pool-policy";
 import type { HostResourceLeaseEvidence } from "@/lib/nonprod/environment-lease-pool-policy";
 import { HEAVY_RESOURCE_CLASSES, isHeavyResourceClass } from "@/lib/nonprod/host-resource-policy";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { isRecord } from "@/lib/shared/coerce";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 // Per-key trimmed string coercer — a copy of the inline helper the former switch
@@ -25,11 +26,7 @@ function stringValueFor(params: Record<string, unknown>) {
   return (key: string) => (typeof params[key] === "string" ? String(params[key]).trim() : "");
 }
 
-function objectValue(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : undefined;
-}
+const objectValue = (value: unknown) => isRecord(value) ? value : undefined;
 
 function positivePorts(value: unknown): number[] {
   return Array.isArray(value)
@@ -271,6 +268,8 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
     // changes identity or authority → consult-gated (TAK §8.4.1).
     consequence: "authority",
+    consequenceForCall: async (call) =>
+      (await import("@/lib/nonprod/lease-cleanup-consequence")).leaseCleanupConsequenceForCall(call),
     buildPhases: ["ideate", "plan", "build", "review", "ship"],
   },
   {
@@ -279,7 +278,7 @@ const definitions: ToolDefinition[] = [
       "Heartbeat an active shared nonproduction environment lease, optionally binding its assigned slot before host mutation. " +
       "Only the owning session can renew, and a lapsed lease is not revivable. " +
       "Renew on a human-scale cadence (on gate stages / ~minutes), not every few seconds. " +
-      "On owner mismatch or not_found: stop retrying; re-claim with claimKey if work continues.",
+      "On owner mismatch, not_found or lease_terminal: stop; never automatically re-claim or scan replacement keys. A new explicitly wanted admission needs a new claimKey; queued claims resume through their durable TaskRun.",
     inputSchema: {
       type: "object",
       properties: {
@@ -552,7 +551,7 @@ async function claimNonprodEnvironmentLeaseHandler(
   }).catch((error: unknown) => {
     // BI-D35B85BF: a resume that would cancel a running or foreign lease is refused, not thrown.
     const code = getErrorMessage(error);
-    if (code === "nonprod_resume_lease_active" || code === "nonprod_resume_not_owner") return { refused: code } as const;
+    if (/^nonprod_resume_(?:lease_active|not_owner|identity_mismatch|lease_expired)$/.test(code)) return { refused: code } as const;
     throw error;
   });
   if ("refused" in result) {

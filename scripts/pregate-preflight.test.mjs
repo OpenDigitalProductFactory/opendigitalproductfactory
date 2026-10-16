@@ -609,7 +609,7 @@ test("createDefaultExecute hands guards an environment without git's repository-
     GIT_INDEX_FILE: "/definitely/not/a/repo/.git/index",
   });
   const probe = 'const bad=["GIT_DIR","GIT_WORK_TREE","GIT_INDEX_FILE"].filter((k)=>k in process.env);process.stdout.write(JSON.stringify(bad));';
-  const result = execute("node", ["-e", probe]);
+  const result = await execute("node", ["-e", probe]);
   assert.equal(result.exitCode, 0, result.output);
   assert.equal(result.output.trim(), "[]");
 });
@@ -619,7 +619,45 @@ test("createDefaultExecute runs guards with git's automatic maintenance off (BI-
   const execute = createDefaultExecute({ ...process.env });
   // --show-origin: a repository or global config that already says false must
   // not satisfy this; the runner itself has to set it for every guard.
-  const result = execute("git", ["config", "--show-origin", "--get", "maintenance.auto"]);
+  const result = await execute("git", ["config", "--show-origin", "--get", "maintenance.auto"]);
   assert.equal(result.exitCode, 0, result.output);
   assert.match(result.output.trim(), /^command line:\s+false$/);
+});
+
+test("host command deadline is distinct from violation and never becomes a pass", async () => {
+  const { createDefaultExecute } = await import("./lib/pregate-preflight.mjs");
+  const progress = [];
+  const execute = createDefaultExecute(process.env, { maxDurationMs: 100,
+    terminationGraceMs: 100, closeGraceMs: 100, progress: event => progress.push(event) });
+  const result = await execute(process.execPath, ["-e", "setInterval(()=>{},1000)"], { guardId: "hanging" });
+  assert.equal(result.outcome, "timed_out");
+  assert.notEqual(result.exitCode, 0);
+  assert.ok(progress.some(event => event.guardId === "hanging"));
+});
+
+test("preflight awaits asynchronous guard failures instead of inventing a clean result", async () => {
+  const result = await runPreflight({ env: {}, plan: PLAN.slice(0, 1),
+    execute: async () => ({ exitCode: 1, output: "actual violation", runnerFailure: false }) });
+  assert.equal(result.ok, false);
+  assert.equal(result.entries[0].status, "failed");
+});
+
+test("a zero-exit guard with failed progress recording cannot supply PASS", async () => {
+  const { createDefaultExecute } = await import("./lib/pregate-preflight.mjs");
+  let observations = 0;
+  const execute = createDefaultExecute(process.env,{progress:() => {
+    if (++observations === 2) throw new Error("receipt persistence unavailable");
+  }});
+  const result = await execute(process.execPath,["-e","process.exit(0)"]);
+  assert.equal(result.outcome,"runner_failed");
+  assert.notEqual(result.exitCode,0);
+});
+
+test("preflight receipt exceptions report unrun without leaking exception contents", async () => {
+  const {runPreflightEntrypoint} = await import("./pregate-preflight.mjs");
+  let output="";
+  const status=await runPreflightEntrypoint(async () => {throw Object.assign(new Error("fixture-secret"),{code:"ENOSPC"});},text=>{output+=text;});
+  assert.equal(status,88);
+  assert.match(output,/inconclusive.*ENOSPC/);
+  assert.doesNotMatch(output,/fixture-secret/);
 });

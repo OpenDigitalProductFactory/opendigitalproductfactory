@@ -256,3 +256,8 @@ export function renderMarkdown(source: string, options: RenderMarkdownOptions = 
   const env: Env = { options };
   return md.render(source ?? "", env);
 }
+
+/** Source tokens and line maps, using the same grammar as every rendered surface. */
+export function parseMarkdown(source: string): Token[] {
+  return md.parse(source, { options: {} });
+}
