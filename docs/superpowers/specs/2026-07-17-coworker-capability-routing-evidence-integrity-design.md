@@ -370,7 +370,8 @@ rather than the actual selected model; writing a new cohort into that path
 would risk transferring one model's evidence to another. Model-specific cap
 consumption remains a separate explicitly designed change.
 
-CWN-63C5BE75 / BI-CAP-FEE56611 records the supported operation/authority question.
+CWN-63C5BE75 / BI-CAP-FEE56611 retains the historical operation/authority question;
+bounded discovery resolved it as source work under existing diagnostic authority.
 Discovery showed missing coworker `tool_evaluation_create`; no denied action
 was invoked. That tool evaluates external dependencies, not model fidelity;
 granting it is not this runner's remedy. The already authorized
@@ -380,6 +381,11 @@ it does not implement the requested surface matrix or governed-read execution.
 Extend that existing contract only after reconciling its owned source and the
 scoped observational mode. Neither diagnostic was executed during planning.
 Neither this design nor its tests grant capabilities.
+Preserve WC-35B59F09's claimed diagnostic files. A distinct fidelity leaf can
+be reached through the existing diagnostic handler without changing that runner.
+Nested reads reuse the server-provided governedDispatch closure so original
+token, human, agent and room authority is retained. A plain successful return
+does not supply the required positive ToolExecution identity/readback.
 The historical 870/941 executions remain outside the runner and cannot be
 retried, settled or replaced by its results.
 

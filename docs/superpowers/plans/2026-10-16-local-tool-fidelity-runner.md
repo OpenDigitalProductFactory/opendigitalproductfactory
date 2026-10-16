@@ -62,12 +62,18 @@ BI-0169B7D7 and BI-A472354E own broader routing/profile work, outside this runne
 
 1. **Admission and test contract.** Before source implementation, reconcile
    current workroom/source, research, body acceptance and immutable plan coverage.
-   Resolve CWN-63C5BE75 through its owning authority. Discovery's missing
-   tool_evaluation_create remains stopped; no direct inference fallback.
+   CWN-63C5BE75 is a historical misclassification, not a grant dependency.
+   Discovery's missing tool_evaluation_create remains stopped; no direct inference fallback.
    Its external dependency-evaluation semantics do not fit this runner.
    Reuse the callable run_endpoint_tests diagnostic contract for a scoped
    observational mode, after coordinating the endpoint runner's existing owner;
    current fixed stub-tool probes and rating writes do not meet this contract.
+   Preserve WC-35B59F09's five existing claims. A separate fidelity leaf reached
+   from the existing diagnostic handler can avoid editing its runner. Reuse
+   the server-provided governedDispatch closure for nested reads; never rebuild
+   a context that drops original token, room, human or agent restrictions.
+   Positive audit identity/readback is required before reporting execution
+   success; a successful handler response without that proof stays unverified.
    Claim exact implementation files and consume the change-impact contract.
 2. **RED source regressions.** Extend the existing scorer tests with real-call
    shaped evidence fixtures, keeping fixtures labeled source-only. Cover all
@@ -126,7 +132,7 @@ record rewrite is part of rollback.
 - Parent: BI-C2F81AB0
 - Receipt: cmvaml0rz1bzw01pjoqgsh162
 - Rationale: A fixture scorer, runner adapter and readback are internal sequencing of one missing live qualification operation; none independently meets the runner acceptance criteria.
-- Dependencies: CWN-63C5BE75 / BI-CAP-FEE56611 for supported runtime operation and authority; runtime stays UNRUN until resolved.
+- Dependencies: Existing diagnostic-mode implementation and positive execution readback; coordinate WC-35B59F09 claims. CWN-63C5BE75 / BI-CAP-FEE56611 is historical intake, not a new-grant requirement.
 - runner -> BI-C2F81AB0
 - Requirements: AC-1, AC-2, AC-3, AC-4, AC-5, AC-6
 - Contracts: CONTRACT-IDENTITY, CONTRACT-EXECUTION, CONTRACT-ISOLATION
