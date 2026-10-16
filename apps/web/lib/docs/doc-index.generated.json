@@ -2821,6 +2821,15 @@
         "verification-and-rollback-boundary"
       ]
     },
+    "docs/architecture/workroom-ingestion-scale-qualification.md": {
+      "publicHref": "/architecture/workroom-ingestion-scale-qualification/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "workroom-ingestion-scale-qualification"
+      ]
+    },
     "docs/architecture/workroom-review-profile-contract.md": {
       "publicHref": "/architecture/workroom-review-profile-contract/",
       "portalHref": null,
