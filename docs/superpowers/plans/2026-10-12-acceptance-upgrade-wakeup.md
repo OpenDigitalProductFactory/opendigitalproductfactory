@@ -333,66 +333,86 @@ coverage does not replace the still-unrun PostgreSQL qualification.
 ## Retained reviewer/runtime binding continuation — October 16
 
 Continue EXISTING BI-E3B918C2 / WC-DC780E03 after the inactive author's explicit
-handoff. Preserve branch fix/acceptance-upgrade-wakeup, original source37a75a5,
-merged PR6230/dfa821e and its evidence. Normal Large DESIGN claim
-IRD-F897407D4838 allowed preparation only. Implementation remains unadmitted;
-old exhausted reviews and generic PortfolioAgent notes are not approvals.
+handoff, preserving branch fix/acceptance-upgrade-wakeup, original 37a75a5 source,
+merged 6230/dfa821e and evidence. Normal Large DESIGN IRD-F897407D4838 permits
+preparation only. Implementation is unadmitted. Old exhausted reviews and
+generic PortfolioAgent notes are not approvals.
 
-The canonical contract is the October 16 retained acceptance binding addendum in
-[delivery closeout](../specs/2026-09-04-delivery-closeout-cost-efficiency-design.md).
-It retains CT-DC-ACCEPTANCE, OBJ-DC-3/4 and AC-DC-6. Kernel decision
-DI-AF2BCA4787FD chose RuntimeVerification with server-owned typed binding;
-usable/autonomyEligible true, estimates grade C, agent outcome recorded. This
-slice does not claim equivalent-check batching or full E3 acceptance.
+The authoritative interface is the October 16 addendum in
+[delivery closeout](../specs/2026-09-04-delivery-closeout-cost-efficiency-design.md),
+CT-DC-ACCEPTANCE, OBJ-DC-3/4 and AC-DC-6. Kernel DI-AF2BCA4787FD chose the existing
+RuntimeVerification home; DI-CC29314E6113 chose independent final criteria adoption
+instead of a separate Small plan approval. Both are autonomous DESIGN choices
+with grade-C estimates, not Large approval or acceptance. Grouped check execution
+and full E3 campaign acceptance remain outside this slice.
 
-### Source evidence and sequence
+At inspected ca812ae29d364fff864ae8271532a4a8f5a45090, Done work reaches
+retainedAcceptanceWithoutBinding before owner selection. Objective mappings omit
+applicable runtime binding; general runtime results have none. Small D33 cannot
+use 6451's Medium criteria route. The first two-document draft 997d3710 received
+seven concrete client advisory findings; the canonical addendum now specifies
+the interfaces to resolve them, pending reassessment.
 
-At inspected ca812ae29d364fff864ae8271532a4a8f5a45090:
-retained-acceptance.ts explicitly names the missing contract;
-acceptance-sweep-evaluate.ts sends Done work to that fallback before owner
-selection; objective-mapping-repository.ts validates the request but persists
-no applicable runtime binding; runtime-targets.ts records general result JSON.
-D33 is Small/Done, so the Medium-only6451 criteria/archived-author route does
-not repair its retained obligation. These are read-only findings, not a pass.
+1. Obtain normal canonical design/spec/architecture approval, exact plan coverage
+   and review, then Large implementation admission. Resolve graph-related tests
+   and precise source claims first. No borrowed Small/Medium classification,
+   native receipt from a client advisory, exhausted review replay or new key.
+2. Implement immutable managed DocumentVersion preparation through a typed
+   acceptance-plan operation on existing record_initiative_evidence. Extract the
+   shared DB-only append port from saveManagedDocument; preserve author/version
+   history, idempotency and post-commit projections. Small's final independent
+   verifier adopts adequate frozen criteria AND observes behavior in one receipt.
+   Missing original provenance has an owning remedy, not fabricated history or
+   a new Small plan-approval gate. E3's own Large gates remain separate.
+3. Implement the explicit acceptance-verification 1.2.0 successor, exact effective
+   grant ceiling, normal pinned-room remedy and retained-runtime packet. Reuse
+   steward identity/latest sweep packet/HMAC/sourceRef/role checks, extend the
+   actual scheduled-run authority resolver and propagate ToolContext.taskRunId
+   into the runtime writer. Existing baseline mapping stays unchanged. Prove
+   missing grants, old shapes and public result-field forgery refuse.
+4. Extract shared reviewer scheduled-task ownership from the current acceptance
+   lease protocol without using the finished global sweep's token. Require the
+   real serializable writer transaction and the specified lock order. Fence
+   canonical swaps through portal.quiescence and actual upgrade generation;
+   check exact authority rows, expiry and canonical human/agent author exclusions.
+   Test stale writers, live revocation and preparation-to-commit swap races.
+   Serialize packet replacement/withdrawal/completion on the same steward room
+   row; test real PostgreSQL races and global-sweep/reviewer lock ordering.
+5. Add the authenticated closure-only attachment path, server-owned deterministic
+   verification identity, semantic equal/conflicting completion and atomic
+   fulfillment pointer. Keep canonical results in RuntimeVerification. Preserve
+   accepted history after later revocation/key rotation; unrelated N+1 does not
+   reopen N's fulfilled obligation or certify N+1.
+6. Implement exact-ID reads and indexed bounded closure history with strict tuple
+   cursors, continuation and generation recheck. Qualify the forward-only index
+   and real query plan at 10,000 receipts/equal timestamps. New unrelated rows or
+   an incomplete page must not hide relevant outcomes. Preserve the existing 601
+   obligation/continuous-arrival cursor behavior and name unresolved overflow.
+   Fence current-through projections with the steward activitySequence, updated
+   by all relevant typed writers. Test a known pointer plus new relevant failure,
+   delayed older observations, concurrent projection/result and interrupted scan.
+7. Use the same validator in the retained sweep and Task Hub projection. Show
+   Verified on N versus current applicability, genuine pending/failed/unresolved
+   states, actual owner/event, themes, keyboard and narrow layouts. Preserve
+   original Done delivery, panel fail/incomplete, rounds and old Task identities.
+8. Run affected suites, official types, real PostgreSQL/issuer/native adapters,
+   concurrency/revocation/rollback/unknown-version cases, 601 obligations and the
+   10,000-receipt fixture. Obtain independent exact-source assessment, governed
+   gate, DCO/protected CI/queue and one canonical containing release. Independently
+   verify D33 behavior and typed result consumption; code, docs, merge or deploy
+   alone are not that acceptance.
 
-1. Complete the concrete server-issued criteria/plan and TaskRun binding contract
-   for legacy Small and existing governed baselines. Keep their semantics
-   distinct. Audit the actual issuer-to-tool-context path, authority exclusions
-   and one-primary-attach validation. Resolve missing immutable criteria through
-   a prospective independently approved plan; never invent historical provenance.
-   Obtain native design/spec/architecture approval and exact plan coverage/review
-   before normal Large implementation admission. Reuse existing records; do not
-   reconstruct or replay an exhausted review packet.
-2. After admission and exact path/impact claims, write failing issuer/writer and
-   persistence regressions. Reject same author/agent, ambiguous identity, revoked
-   authority, foreign subject/tenant/install, missing criteria, forged result
-   binding, generic manual notes, stale authored/merge/served identity, rollback,
-   changed body/plan, expired TaskRun generation and unknown schema versions.
-   Verify duplicate equality versus conflicting completion and later failures.
-3. Extend the existing sweep/runtime-verification path and one shared binding
-   validator. Keep network/check execution outside transactions and revalidate
-   immutable prepared proof and current owner inside. Resolve receipt lookups by
-   original closure activity; justify any forward-only index on existing fields.
-   Use the real database transaction and existing scheduler ownership fence.
-4. Consume the same validated receipts in retained acceptance and Task Hub
-   projection. Preserve original Done delivery, partial-panel fail, review rounds
-   and old Task records. Missing proof gives the actual next owning action;
-   delivery or a prose claim cannot become acceptance. Check keyboard, themes,
-   narrow screens and unavailable/partial/failed states on a containing install.
-5. Run affected tests and official package types, native issuer-to-writer and
-   real PostgreSQL tests, 601 continuously arriving obligations and a10,000-receipt
-   lookup fixture. Obtain independent exact-source review, the governed gate,
-   DCO/protected CI/queue and canonical deployment. Then independently exercise
-   D33's actual delivered behavior and verify its typed acceptance is consumed.
-   Preserve every original row; no unknown review becomes settled by this test.
+Reserve roughly 20% of implementation effort for shared identity, ownership,
+criteria/runtime binding, transaction ports and read-model eligibility instead
+of cloned baseline semantics. No new table, scheduler, reviewer override or
+parallel ledger. Rollback preserves receipts and pending obligations.
 
-Reserve roughly20% of implementation effort for consolidating identity,
-criteria/runtime binding and eligibility across issuer, writer, sweep and read
-model. Do not clone objective-mapping baseline semantics or create a table,
-scheduler, reviewer override or result ledger. Rollback preserves all receipts
-and pending obligations while disabling the new consumer/actuator.
+The initial source refresh required the official locked dependency bootstrap
+after TypeScript7 was missing; that infrastructure failure was not a product
+type error. Normal retry then passed web/both programs, database and bootstrap
+types plus secret/private-identity/schema/migration guards. Those checks qualify
+documentation/source reconciliation only; no new runtime implementation exists.
 
-Native approval, coverage, implementation admission, code, tests, index migration
-and live acceptance for this continuation are UNRUN. This documentation does not
-change that status. The earlier wakeup/fencing delivery and its historical gates
-remain separately attributed.
+Native approvals, coverage receipt, implementation admission, new code/tests,
+index migration and live acceptance for this continuation remain UNRUN. Earlier
+wakeup/fencing delivery and historical gates retain their original attribution.
