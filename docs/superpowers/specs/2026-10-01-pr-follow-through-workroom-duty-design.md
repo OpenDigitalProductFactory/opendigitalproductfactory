@@ -9,6 +9,27 @@ status: draft
 [Recoverable delivery process](2026-09-24-recoverable-delivery-process-design.md) §3.8–3.9.
 **Decision of record:** WWMD `DI-8A0408D0DE21` (write this design now).
 
+## 0. Remaining delivery scope — BI-ED7CD0DD
+
+The observation and decision slices remain owned by BI-88341B5D. The following
+manifest makes the existing continuation's four outcomes explicit for review;
+it does not claim those outcomes have been delivered.
+
+**OBJ-1:** Deliver a signed CI event to its exact Workroom without waiting for the safety-net poll.
+
+**OBJ-2:** Repair an eligible failed PR within its existing authority, scope and recovery budget.
+
+**OBJ-3:** Keep alarms and client readback on the room's canonical follow-through record.
+
+**OBJ-4:** Enable autonomous follow-through only after measured decisions and a successful bounded delivery pilot.
+
+| ID | Objectives | Criterion |
+| --- | --- | --- |
+| AC-1 | OBJ-1 | A supported CI event reaches the matching repository and current-head Workroom within one minute; duplicates, stale heads and ambiguous identity cannot dispatch another repair. |
+| AC-2 | OBJ-2 | A preauthorized eligible room produces a new DCO commit on the same PR branch after scoped verification and independent review, at most twice per recovery lineage and never twice for one judged head; missing grants, foreign ownership or remote-head movement stop publication. |
+| AC-3 | OBJ-3 | The three existing PR alarm scripts report to the room, and every client reads the same persisted next action without creating another recurring model monitor. |
+| AC-4 | OBJ-4 | A recorded shadow soak justifies live enablement through its authorized configuration path, and one Build Studio pilot produces a source change, scoped verification, ready PR and protected merge with measured model calls and elapsed time. |
+
 ## 1. Problem
 
 Opening a pull request is DPF's "ready to merge" signal
