@@ -32,8 +32,30 @@ export function clampLeaseExpiry(
 }
 
 export function requestedTtlMs(now: Date, requested: Date): number {
-  return Math.max(
-    1,
-    Math.min(MAX_LEASE_TTL_MS, requested.getTime() - now.getTime()),
-  );
+  const remaining = requested.getTime() - now.getTime();
+  if (!Number.isFinite(remaining)) throw new Error("nonprod_lease_expiry_invalid");
+  if (remaining <= 0) throw new Error("nonprod_lease_request_expired");
+  return Math.min(MAX_LEASE_TTL_MS, remaining);
+}
+
+/** Approval preserves arguments. Only an explicit duration selects relative timing. */
+export function resolveLeaseRequestTiming(now: Date, input: {
+  expiresAt: Date;
+  requestedTtlMs?: number;
+  waitDeadlineAt?: Date;
+}): { ttlMs: number; queueExpiresAt: Date } {
+  if (!Number.isFinite(input.expiresAt.getTime())) throw new Error("nonprod_lease_expiry_invalid");
+  if (input.requestedTtlMs === undefined) {
+    const ttlMs = requestedTtlMs(now, input.expiresAt);
+    return { ttlMs, queueExpiresAt: new Date(now.getTime() + ttlMs) };
+  }
+  const duration = input.requestedTtlMs;
+  if (!Number.isFinite(duration) || duration <= 0 || duration > MAX_LEASE_TTL_MS) {
+    throw new Error("nonprod_lease_duration_invalid");
+  }
+  const deadline = input.waitDeadlineAt?.getTime();
+  if (deadline === undefined || !Number.isFinite(deadline) || deadline <= now.getTime()) {
+    throw new Error("nonprod_lease_wait_deadline_invalid");
+  }
+  return { ttlMs: duration, queueExpiresAt: new Date(deadline) };
 }

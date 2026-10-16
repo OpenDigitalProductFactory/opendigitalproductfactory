@@ -570,6 +570,8 @@ test("builds one typed durable claim with host and inference evidence", () => {
     url: "host://localhost",
     ports: [],
     expiresAt: "2026-08-25T10:10:00.000Z",
+    requestedTtlMs: 600_000,
+    waitDeadlineAt: "2026-08-25T10:10:00.000Z",
     worktreePath: "D:/wt",
     branchName: "feat/x",
     resourceClass: "next-build",

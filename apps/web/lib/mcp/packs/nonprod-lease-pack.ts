@@ -17,6 +17,7 @@ import type { HostResourceLeaseEvidence } from "@/lib/nonprod/environment-lease-
 import { HEAVY_RESOURCE_CLASSES, isHeavyResourceClass } from "@/lib/nonprod/host-resource-policy";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { isRecord } from "@/lib/shared/coerce";
+import { resolveLeaseRequestTiming } from "@/lib/nonprod/environment-lease-timing";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 // Per-key trimmed string coercer — a copy of the inline helper the former switch
@@ -27,6 +28,16 @@ function stringValueFor(params: Record<string, unknown>) {
 }
 
 const objectValue = (value: unknown) => isRecord(value) ? value : undefined;
+
+function leaseTimingRefusal(code: string): ToolResult {
+  return {
+    success: false, disposition: "refused", error: code,
+    message: code === "nonprod_lease_request_expired"
+      ? "This resource request expired before admission. Nothing was allocated. Submit a new request if the work is still needed."
+      : "This resource request needs a bounded duration and a future admission deadline. Nothing was allocated. Submit a new request with valid timing.",
+    data: { admission: { status: "refused" }, retryable: false },
+  };
+}
 
 function positivePorts(value: unknown): number[] {
   return Array.isArray(value)
@@ -193,7 +204,9 @@ const definitions: ToolDefinition[] = [
         purpose: { type: "string" },
         url: { type: "string" },
         ports: { type: "array", items: { type: "number" } },
-        expiresAt: { type: "string", description: "ISO timestamp when the lease expires" },
+        expiresAt: { type: "string", description: "Absolute request expiry for legacy callers; compatibility fallback when requestedTtlMs is explicit. Never rebased after approval." },
+        requestedTtlMs: { type: "number", minimum: 1, maximum: 1_200_000,
+          description: "Explicit bounded lease duration starting at admission. Requires an independent future waitDeadlineAt. Does not change old approved arguments." },
         waitDeadlineAt: {
           type: "string",
           description: "Optional ISO deadline for a server-owned durable wait. Defaults to expiresAt. Queued clients should stop polling and resume from the returned TaskRun.",
@@ -407,6 +420,18 @@ async function claimNonprodEnvironmentLeaseHandler(
       message: "waitDeadlineAt must be a future ISO timestamp when supplied",
     };
   }
+  const explicitDuration = params["requestedTtlMs"];
+  if (explicitDuration !== undefined) {
+    if (typeof explicitDuration !== "number") return leaseTimingRefusal("nonprod_lease_duration_invalid");
+    try {
+      resolveLeaseRequestTiming(new Date(), {
+        expiresAt, requestedTtlMs: explicitDuration,
+        waitDeadlineAt: stringValue("waitDeadlineAt") ? waitDeadlineAt : undefined,
+      });
+    } catch (error) {
+      return leaseTimingRefusal(getErrorMessage(error));
+    }
+  }
   const slotManifestVersion = params["slotManifestVersion"];
   if (
     slotManifestVersion !== undefined
@@ -535,6 +560,8 @@ async function claimNonprodEnvironmentLeaseHandler(
     url: url || "host://localhost",
     ports,
     expiresAt,
+    ...(explicitDuration !== undefined ? { requestedTtlMs: explicitDuration as number } : {}),
+    waitDeadlineAt,
     worktreePath: stringValue("worktreePath") || undefined,
     branchName: stringValue("branchName") || undefined,
     buildId: stringValue("buildId") || undefined,
@@ -551,10 +578,12 @@ async function claimNonprodEnvironmentLeaseHandler(
   }).catch((error: unknown) => {
     // BI-D35B85BF: a resume that would cancel a running or foreign lease is refused, not thrown.
     const code = getErrorMessage(error);
+    if (/^nonprod_lease_(?:request_expired|expiry_invalid|duration_invalid|wait_deadline_invalid)$/.test(code)) return { refused: code } as const;
     if (/^nonprod_resume_(?:lease_active|not_owner|identity_mismatch|lease_expired)$/.test(code)) return { refused: code } as const;
     throw error;
   });
   if ("refused" in result) {
+    if (result.refused.startsWith("nonprod_lease_")) return leaseTimingRefusal(result.refused);
     return { success: false, error: result.refused, message: "This claim resumes a lease it may not replace; nothing was changed." };
   }
   const toolLease = toolSafeLease(result.lease as unknown as Record<string, unknown>);

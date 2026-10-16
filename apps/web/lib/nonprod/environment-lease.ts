@@ -22,7 +22,7 @@ import type { NonprodOwnerProvider } from "./nonprod-owner-provider";
 import { isImmutableGateClaimKey, type LocalCiEvidenceValidity } from "@/lib/gates/gate-run-identity";
 import { settleTerminalGateLease } from "./environment-lease-terminal-evidence";
 import { resolveResumeClaim, validateHostResourceClaim } from "./environment-lease-resume";
-import { admittedLeaseTtlMs, DEFAULT_LEASE_TTL_MS, requestedTtlMs } from "./environment-lease-timing";
+import { admittedLeaseTtlMs, DEFAULT_LEASE_TTL_MS, resolveLeaseRequestTiming } from "./environment-lease-timing";
 import { afterNonprodLeaseRelease, publishNonprodCapacityForHead, settleExpiredNonprodLeaseWaits } from "./durable-wait";
 export { NONPROD_OWNER_PROVIDERS, type NonprodOwnerProvider } from "./nonprod-owner-provider";
 export {
@@ -257,6 +257,8 @@ export async function claimNonprodEnvironmentLease(input: {
   url: string;
   ports: number[];
   expiresAt: Date;
+  requestedTtlMs?: number;
+  waitDeadlineAt?: Date;
   worktreePath?: string;
   branchName?: string;
   buildId?: string;
@@ -274,7 +276,7 @@ export async function claimNonprodEnvironmentLease(input: {
   now?: Date;
 }): Promise<ClaimNonprodEnvironmentLeaseResult> {
   const db = input.db ?? prisma;
-  const now = input.now ?? new Date();
+  let now = input.now ?? new Date();
   const sharedPoolPolicy = input.environmentKey === "host-heavy-resource"
     ? null
     : await resolveNonprodPoolPolicy({
@@ -303,7 +305,6 @@ export async function claimNonprodEnvironmentLease(input: {
   ) {
     throw new Error("host_resource_contract_wrong_environment");
   }
-  const ttlMs = requestedTtlMs(now, input.expiresAt);
   let created = false, admittedNow = false, queueDepth = 0;
   let superseded = null as LeaseRow | null; // assigned inside the transaction callback
 
@@ -314,6 +315,11 @@ export async function claimNonprodEnvironmentLease(input: {
     admittedNow = false;
     queueDepth = 0;
     await lockEnvironment(tx, input.environmentKey);
+
+    // The environment lock may outlive the approved proposal. Refuse before
+    // resume reconciliation, terminal-row revival or any capacity mutation.
+    now = input.now ?? new Date();
+    const { ttlMs, queueExpiresAt } = resolveLeaseRequestTiming(now, input);
 
     let lease = input.claimKey
       ? await tx.nonProductionEnvironmentLease.findUnique({
@@ -401,7 +407,7 @@ export async function claimNonprodEnvironmentLease(input: {
             ...(hostResume ? { ownerPid: input.ownerProcessId, ownerProcessIdentity: input.ownerProcessIdentity } : {}),
             requestedTtlMs: ttlMs,
             heartbeatAt: now,
-            expiresAt: new Date(now.getTime() + ttlMs),
+            expiresAt: queueExpiresAt,
             phase: "waiting",
             ...(lease.slotManifestVersion === null
               && input.environmentKey === "local-integration-ci"
@@ -426,7 +432,7 @@ export async function claimNonprodEnvironmentLease(input: {
           url: input.url,
           ports: input.ports,
           requestedTtlMs: ttlMs,
-          expiresAt: new Date(now.getTime() + ttlMs),
+          expiresAt: queueExpiresAt,
           queuedAt: now,
           heartbeatAt: now,
           phase: "waiting",

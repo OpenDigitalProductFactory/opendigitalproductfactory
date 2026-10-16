@@ -149,6 +149,68 @@ describe("NONPROD_OWNER_PROVIDERS", () => {
 });
 
 describe("durable nonproduction admission", () => {
+  it("uses relative duration after approval but preserves the independent queued deadline", async () => {
+    const mockDb = db();
+    const deadline = new Date(NOW.getTime() + 600_000);
+    const queued = lease({ requestedTtlMs: 120_000, expiresAt: deadline });
+    mockDb.nonProductionEnvironmentLease.findUnique
+      .mockResolvedValueOnce(null).mockResolvedValueOnce(admitted());
+    mockDb.nonProductionEnvironmentLease.create.mockResolvedValue(queued);
+    mockDb.nonProductionEnvironmentLease.findMany.mockResolvedValueOnce([queued]);
+    const result = await claim(mockDb, {
+      expiresAt: new Date(NOW.getTime() - 60_000), requestedTtlMs: 120_000, waitDeadlineAt: deadline,
+    });
+    expect(result.status).toBe("admitted");
+    expect(mockDb.nonProductionEnvironmentLease.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ requestedTtlMs: 120_000, expiresAt: deadline }),
+    });
+    expect(mockDb.nonProductionEnvironmentLease.update).toHaveBeenCalledWith({
+      where: { id: "row-1" },
+      data: expect.objectContaining({ status: "active", expiresAt: new Date(NOW.getTime() + 120_000) }),
+    });
+  });
+
+  it("does not revive a cancelled identity when new relative timing is valid", async () => {
+    const mockDb = db();
+    mockDb.nonProductionEnvironmentLease.findUnique.mockResolvedValueOnce(lease({ status: "cancelled" }));
+    const result = await claim(mockDb, {
+      claimKey: "plain-request", requestedTtlMs: 120_000, waitDeadlineAt: new Date(NOW.getTime() + 600_000),
+    });
+    expect(result.status).toBe("terminal");
+    expect(mockDb.nonProductionEnvironmentLease.create).not.toHaveBeenCalled();
+    expect(mockDb.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();
+  });
+
+  it("refuses an expired absolute proposal without lease or queue mutations", async () => {
+    const mockDb = db();
+    await expect(claim(mockDb, { expiresAt: NOW }))
+      .rejects.toThrow("nonprod_lease_request_expired");
+    expect(mockDb.nonProductionEnvironmentLease.create).not.toHaveBeenCalled();
+    expect(mockDb.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();
+    expect(mockDb.nonProductionEnvironmentLease.updateMany).not.toHaveBeenCalled();
+    expect(recordQueueTransition).not.toHaveBeenCalled();
+  });
+
+  it("rechecks expiry after waiting for the environment lock", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    try {
+      const mockDb = db();
+      mockDb.$executeRaw.mockImplementation(async () => {
+        vi.setSystemTime(new Date(NOW.getTime() + 2_000));
+        return 1;
+      });
+      await expect(claim(mockDb, {
+        now: undefined, expiresAt: new Date(NOW.getTime() + 1_000),
+      })).rejects.toThrow("nonprod_lease_request_expired");
+      expect(mockDb.nonProductionEnvironmentLease.create).not.toHaveBeenCalled();
+      expect(mockDb.nonProductionEnvironmentLease.update).not.toHaveBeenCalled();
+      expect(mockDb.nonProductionEnvironmentLease.updateMany).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("lists admitted and queued leases without changing the legacy admitted list", async () => {
     const mockDb = db();
     await listActiveNonprodEnvironmentLeases({ db: mockDb as never, now: NOW });
