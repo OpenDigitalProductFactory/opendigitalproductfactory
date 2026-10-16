@@ -364,6 +364,8 @@ export default async function DecisionRecordPage({ params }: { params: Params })
           (() => {
             const help = buildDecisionHelp({
               outcomeType: row.outcomeType,
+              escalationRoute: row.escalationRoute,
+              escalationFollowOn: row.escalationFollowOn,
               tier,
               riskTier: row.riskTier,
               principleConflict: row.principleConflict,

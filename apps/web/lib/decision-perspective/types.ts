@@ -1,3 +1,5 @@
+import type { DecisionEscalationRoute } from "@dpf/db";
+
 export const DECISION_PROFILE_KINDS = [
   "platform",
   "organization",
@@ -336,6 +338,9 @@ export type DecisionEvaluationSource = {
 };
 
 export type DecisionInteractionGateView = {
+  escalationRoute?: DecisionEscalationRoute | null;
+  escalationReason?: string | null;
+  escalationFollowOn?: string | null;
   interactionId: string;
   profileId: string;
   profileVersionId: string;

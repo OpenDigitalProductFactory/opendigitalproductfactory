@@ -38,13 +38,13 @@ type SearchParams = Promise<{
   status?: string;
 }>;
 
-const UNRESOLVED = ["defer", "escalate"];
+import { humanEscalationWhere } from "@/lib/decision-perspective/human-escalation";
 
 function openDecisionReviewWhere(
   profileId?: Prisma.DecisionInteractionWhereInput["profileId"],
 ): Prisma.DecisionInteractionWhereInput {
   return {
-    outcomeType: { in: UNRESOLVED },
+    AND: [humanEscalationWhere()],
     humanOutcome: { equals: Prisma.DbNull },
     question: { not: "" },
     NOT: [
@@ -66,6 +66,7 @@ const openDecisionReviewSelect = {
   question: true,
   options: true,
   outcomeType: true,
+  escalationRoute: true,
   outcomePayload: true,
   buildId: true,
   taskRunId: true,

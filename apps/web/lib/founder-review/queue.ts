@@ -1,6 +1,7 @@
 import { perspectiveForProfile } from "@/lib/decision-perspective/canvas";
 import { retractionOf } from "@/lib/decision-perspective/retract-superseded";
 import type { WikiPerspective } from "@/lib/wiki/perspective-intent";
+import type { HumanEscalationRow } from "@/lib/decision-perspective/human-escalation";
 
 export type FounderReviewUnresolvedReason =
   | "principle-gap"
@@ -28,7 +29,7 @@ export type FounderReviewUnresolvedReason =
 // with no profile information continues to render with founder-review wording.
 export type { WikiPerspective };
 
-export type DecisionInteractionQueueRow = {
+export type DecisionInteractionQueueRow = HumanEscalationRow & {
   interactionId: string;
   question: string;
   options: unknown;

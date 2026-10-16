@@ -9,6 +9,8 @@
 // decision-audit.ts.
 
 import type { DecisionAuditTierOrOther, DecisionTierStats } from "./decision-audit";
+import { isHumanEscalation, type HumanEscalationRow } from "@/lib/decision-perspective/human-escalation";
+import { INDEPENDENT_REVIEW_INTERIM } from "@/lib/decision-perspective/decision-escalation";
 
 export type DecisionHelpStep = {
   label: string;
@@ -25,7 +27,8 @@ export type DecisionHelp = {
   steps: DecisionHelpStep[];
 };
 
-export type DecisionHelpInput = {
+export type DecisionHelpInput = HumanEscalationRow & {
+  escalationFollowOn?: string | null;
   outcomeType: string;
   tier: DecisionAuditTierOrOther;
   riskTier: string | null;
@@ -147,7 +150,7 @@ function unresolvedSteps(input: DecisionHelpInput): DecisionHelpStep[] {
  * the panel never leaves the reader guessing whether silence means action.
  */
 export function buildDecisionHelp(input: DecisionHelpInput): DecisionHelp {
-  const unresolvedAsk = input.outcomeType === "escalate" || input.outcomeType === "defer";
+  const unresolvedAsk = isHumanEscalation(input);
 
   if (input.contextMissing) {
     return {
@@ -159,7 +162,17 @@ export function buildDecisionHelp(input: DecisionHelpInput): DecisionHelp {
     };
   }
 
-  if (input.outcomeType === "recommend") {
+  if (input.escalationRoute === "independent_review") {
+    return {
+      meaning: "Independent review is required by the recorded decision route. This does not request an owner answer.",
+      urgency: INDEPENDENT_REVIEW_INTERIM === "proceed" && input.outcomeType !== "decline"
+        ? "The current interim permits work to continue within its existing authority; independent review remains outstanding."
+        : "This step remains held; independent review is outstanding.",
+      steps: [],
+    };
+  }
+
+  if (!unresolvedAsk && input.outcomeType === "recommend") {
     return {
       meaning:
         "Your AI weighed the options and recommends one. The recommendation went back to whoever asked; this row is the audit record of it.",
@@ -167,7 +180,7 @@ export function buildDecisionHelp(input: DecisionHelpInput): DecisionHelp {
       steps: [],
     };
   }
-  if (input.outcomeType === "arbitrate") {
+  if (!unresolvedAsk && input.outcomeType === "arbitrate") {
     return {
       meaning:
         "Your AI was confident enough — and allowed by your autonomy settings — to settle this itself and keep working. It is recorded here so you can audit the call.",
@@ -176,8 +189,9 @@ export function buildDecisionHelp(input: DecisionHelpInput): DecisionHelp {
     };
   }
 
-  const meaning =
-    input.outcomeType === "defer" ? deferMeaning(input) : escalateMeaning(input);
+  const meaning = input.escalationRoute === "human"
+    ? "The recorded decision route requires human approval because of its risk, consequences, or a declared limit. The recommendation alone does not authorize the work."
+    : input.outcomeType === "defer" ? deferMeaning(input) : escalateMeaning(input);
 
   if (!unresolvedAsk) {
     return {
@@ -208,7 +222,9 @@ export function buildDecisionHelp(input: DecisionHelpInput): DecisionHelp {
 
   return {
     meaning,
-    urgency: input.hasBuild
+    urgency: input.escalationRoute === "human"
+      ? "Human approval is required before this work may continue. Review the recorded evidence and capture your direction."
+      : input.hasBuild
       ? "A build is waiting: the Build Studio build that asked is paused at this gate until someone answers."
       : "Nothing is stuck. The coworker that asked handled the moment — typically by taking the safest option or asking in its own session — and moved on. Answering teaches your AI, so this question stops piling up here.",
     steps: unresolvedSteps(input),

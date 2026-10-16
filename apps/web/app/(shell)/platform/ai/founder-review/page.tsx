@@ -1,4 +1,5 @@
 import { Prisma, prisma } from "@dpf/db";
+import { humanEscalationWhere } from "@/lib/decision-perspective/human-escalation";
 import Link from "next/link";
 import {
   dedupeFounderReviewCandidates,
@@ -60,7 +61,7 @@ export default async function FounderReviewPage({ searchParams }: PageProps) {
   const profileFilter = resolvedSearchParams.profile?.trim() || null;
   const rows = await prisma.decisionInteraction.findMany({
     where: {
-      outcomeType: { in: ["defer", "escalate"] },
+      AND: [humanEscalationWhere()],
       humanOutcome: { equals: Prisma.DbNull },
       ...(profileFilter ? { profileId: profileFilter } : {}),
     },
@@ -71,6 +72,7 @@ export default async function FounderReviewPage({ searchParams }: PageProps) {
       question: true,
       options: true,
       outcomeType: true,
+      escalationRoute: true,
       outcomePayload: true,
       buildId: true,
       taskRunId: true,

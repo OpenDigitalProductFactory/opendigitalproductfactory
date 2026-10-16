@@ -18,6 +18,18 @@ function input(overrides: Partial<DecisionHelpInput> = {}): DecisionHelpInput {
 }
 
 describe("buildDecisionHelp", () => {
+  it("explains independent review without requesting an owner answer", () => {
+    const help = buildDecisionHelp(input({ escalationRoute: "independent_review", escalationFollowOn: "corpus-gap" }));
+    expect(help.meaning).toContain("Independent review");
+    expect(help.urgency).toContain("continue");
+    expect(help.steps).toEqual([]);
+  });
+
+  it("keeps a damaging recommendation waiting for human approval", () => {
+    const help = buildDecisionHelp(input({ outcomeType: "recommend", escalationRoute: "human", riskTier: "critical", hasBuild: true }));
+    expect(help.urgency).not.toContain("Nothing is needed");
+    expect(help.steps.length).toBeGreaterThan(0);
+  });
   it("explains an insufficient-signal escalation without decision-engine jargon", () => {
     const help = buildDecisionHelp(input({ insufficientSignal: true }));
     expect(help.meaning).toContain("without scoreable options");
