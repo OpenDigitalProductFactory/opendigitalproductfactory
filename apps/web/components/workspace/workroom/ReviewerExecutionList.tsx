@@ -21,7 +21,7 @@ function ReviewerExecutionItem({ run }: { run: ReviewerExecutionObservation }) {
   const historical = run.identityScope === "historical";
   const identity = run.identityScope === "current" ? "Current request" : historical ? "Historical request" : "Version unknown";
   const next = historical ? "Inspect the current request; this history remains available."
-    : run.recoveryWait ? semanticReviewRecoveryPresentation(budgetState).nextAction : semanticReviewActionLabel(run.nextAction);
+    : run.recoveryWait ? semanticReviewRecoveryPresentation(budgetState, run.budget.eligibilityBlocked).nextAction : semanticReviewActionLabel(run.nextAction);
   return <li>
       <details className="rounded border border-[var(--dpf-border)] p-3">
         <summary className="min-h-11 cursor-pointer break-words py-2">{run.taskRunId} · {run.status} · {identity}</summary>

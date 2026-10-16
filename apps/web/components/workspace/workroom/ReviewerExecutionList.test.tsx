@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import "@testing-library/jest-dom/vitest";
+import * as matchers from "@testing-library/jest-dom/matchers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { ReviewerExecutionList } from "./ReviewerExecutionList";
@@ -9,7 +9,7 @@ vi.mock("@/components/platform/StalledTaskRecoveryActions", () => ({
   StalledTaskRecoveryActions: ({ taskRunId, reviewBudget }: { taskRunId: string; reviewBudget: unknown }) =>
     <div data-testid="recovery">{taskRunId} {JSON.stringify(reviewBudget)}</div>,
 }));
-beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-21T07:00:00Z")); });
+beforeEach(() => { expect.extend(matchers); vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-21T07:00:00Z")); });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 const run: ReviewerExecutionObservation = {
   taskRunId: "TR-1", recordId: "row-1", status: "input-required", requesterId: "requester-1",
@@ -39,6 +39,13 @@ describe("reviewer execution inside a Workroom", () => {
     expect(screen.getByRole("link", { name: "Request history" })).toHaveAttribute("href", "/api/internal/tasks/TR-1");
   });
 
+  it("names the eligibility wait and retains expiry instead of generic retry advice", () => {
+    render(<ReviewerExecutionList runs={[{ ...run, reason: "review-endpoint-ineligible",
+      budget: { ...run.budget, deadlineAt: "2026-09-21T06:59:00Z", eligibilityBlocked: true } }]} />);
+    expect(screen.getByText(/affected branches stopped before provider dispatch/)).toBeInTheDocument();
+    expect(screen.getByText(/unchanged retry will not help.*This request cannot resume/)).toBeInTheDocument();
+    expect(screen.queryByText(/original requester can confirm recovery/)).not.toBeInTheDocument();
+  });
   it("shows the correlated receipt's verdict and summary without claiming the room is complete", () => {
     render(<ReviewerExecutionList runs={[{ ...run, receipt: { id: "receipt-1", decision: "inconclusive", summary: "A required branch could not finish." } }]} />);
     expect(screen.getByText(/A required branch could not finish/)).toBeInTheDocument();

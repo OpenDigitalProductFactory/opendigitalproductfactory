@@ -62,6 +62,11 @@ function deps(overrides: Partial<ConductorDeps> = {}): ConductorDeps & { created
 }
 
 describe("isPanelWorthy", () => {
+  it("uses the recorded route for human-panel eligibility", () => {
+    expect(isPanelWorthy({ ...SUBJECT, outcomeType: "recommend", escalationRoute: "human" }).eligible).toBe(true);
+    expect(isPanelWorthy({ ...SUBJECT, escalationRoute: "independent_review" }).eligible).toBe(false);
+    expect(isPanelWorthy({ ...SUBJECT, escalationRoute: "decided" }).eligible).toBe(false);
+  });
   it("spends a panel on an unresolved, consequential, answerable decision", () => {
     expect(isPanelWorthy(SUBJECT).eligible).toBe(true);
   });

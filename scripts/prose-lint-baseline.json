@@ -9662,5 +9662,21 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 0
+  },
+  "apps/web/app/(shell)/ops/installation/page.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 0
+  },
+  "apps/web/components/ops/InvestmentBalance.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
   }
 }

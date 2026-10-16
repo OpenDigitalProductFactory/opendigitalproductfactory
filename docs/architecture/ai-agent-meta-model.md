@@ -367,3 +367,11 @@ empty result as an unknown name, known-but-ungranted tool, intent miss, or
 reviewer-route requirement. Reviewer-only initiative writers remain separate
 principals and are entered through the server-issued route returned by
 `get_backlog_item`; discovery never delegates their authority to the author.
+
+
+Explicit original-review recovery preserves immutable task identity and records
+current execution authority separately. Governed tool preflight rechecks that
+authority before each recovered review call; approved calls recheck at execution
+so refusal closes the approval correctly. Discovery supplies the exact locator,
+never an authority grant. See the [original-review recovery procedure](mcp-tool-authorization-runbook.md#recovering-an-original-initiative-review-after-a-connection-change)
+for eligibility, refusal and receipt requirements.

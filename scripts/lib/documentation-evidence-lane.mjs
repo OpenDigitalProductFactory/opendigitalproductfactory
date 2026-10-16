@@ -10,6 +10,7 @@ import {
 import {
   collectToolchainFingerprint,
   defaultBuildStrategy,
+  resolveLocalCiTestProfile,
 } from "./local-integration-ci.mjs";
 
 const WORKSPACE_REQUIRED_DOCS = new Set([
@@ -139,6 +140,7 @@ export async function runPreAdmissionDocumentationLane({
   plannerPath,
   env = process.env,
 }) {
+  resolveLocalCiTestProfile(env);
   if (!exactCandidateIsEligible({ gitBin, worktreePath, sha })) return { handled: false };
   const integrationRef = integrationTreeRef(gitBin, worktreePath, sha);
   if (!integrationRef) return { handled: false };
@@ -165,8 +167,9 @@ export async function runPreAdmissionDocumentationLane({
     gitOutput(gitBin, ["remote", "get-url", "origin"], worktreePath),
   );
   const toolchain = collectToolchainFingerprint({
-    buildStrategy: defaultBuildStrategy(process.platform),
+    buildStrategy: defaultBuildStrategy(process.platform, env),
     cwd: worktreePath,
+    env,
   });
   const gateIdentity = repository
     ? createPreAdmissionGateIdentity({

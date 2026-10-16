@@ -21,7 +21,7 @@ export function boundWorkroomRecoveryReadback(data: WorkroomReadback, fits: (val
   const retainedKeys = ["id", "capsuleId", "status", "backlogItemId", "repositoryFullName", "baseBranch", "baseSha",
     "headBranch", "headSha", "worktreePath", "executorKind", "executorRef", "leaseHolderPrincipalId", "leaseExpiresAt",
     "updatedAt", "createdByPrincipalId", "requestedByPrincipalId", "activitySequence", "taskRunId", "featureBuildId",
-    "pullRequestUrl", "pullRequestNumber", "recovery"];
+    "pullRequestUrl", "pullRequestNumber", "recovery", "investment"];
   const capsule = Object.fromEntries(retainedKeys.filter(key => key in data.capsule).map(key => [key, data.capsule[key]]));
   const omittedFields = Object.keys(data.capsule).filter(key => !retainedKeys.includes(key)).map(key => `capsule.${key}`);
   const compact = { ...data, capsule, omittedFields,

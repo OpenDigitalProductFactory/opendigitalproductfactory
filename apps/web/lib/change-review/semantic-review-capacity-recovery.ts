@@ -81,4 +81,3 @@ export function capacityRecoveryMarker(requestDigest: string, now: number, check
   return { schemaVersion: 1, requestDigest, checks,
     nextCheckAt: new Date(now + Math.min(30_000 * 2 ** Math.min(checks, 4), 300_000)).toISOString() };
 }
-

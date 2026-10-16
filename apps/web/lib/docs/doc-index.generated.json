@@ -2026,7 +2026,8 @@
         "6-known-limitation-reviewer-dispatch-can-complete-without-writing-a-receipt",
         "7-closing-a-small-or-medium-item-the-baseline-is-the-body-bi-0f8e39d5",
         "approval-outcome-readback",
-        "anti-patterns-observed"
+        "anti-patterns-observed",
+        "original-review-recovery-across-connection-changes"
       ]
     },
     "docs/architecture/job-specific-intelligence.md": {
@@ -2164,7 +2165,8 @@
         "administrator-classification-recovery",
         "approval-convergence-probe",
         "recovering-an-interrupted-independent-review",
-        "parent-bounded-local-review-execution-bi-03ac2fd9"
+        "parent-bounded-local-review-execution-bi-03ac2fd9",
+        "recovering-an-original-initiative-review-after-a-connection-change"
       ]
     },
     "docs/architecture/mcp-tool-packs.md": {
@@ -2819,6 +2821,15 @@
         "existing-persistence-and-bounded-reads",
         "recovery-integration-still-required",
         "verification-and-rollback-boundary"
+      ]
+    },
+    "docs/architecture/workroom-ingestion-scale-qualification.md": {
+      "publicHref": "/architecture/workroom-ingestion-scale-qualification/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "workroom-ingestion-scale-qualification"
       ]
     },
     "docs/architecture/workroom-review-profile-contract.md": {
@@ -4272,6 +4283,7 @@
       "publishedPortal": false,
       "anchors": [
         "rule",
+        "decision-outcomes",
         "why",
         "how-to-apply"
       ]
@@ -5723,6 +5735,7 @@
       "publishedPortal": false,
       "anchors": [
         "platform-support-watch-list-living-document",
+        "contributor-preview-mount-identity-on-docker-desktop-bi-0acb97b5",
         "literal-windows-package-manager-arguments-bi-263055e3",
         "capability-reconciliation-on-release-installs-bi-5acbac50",
         "host-process-inventory-before-admission-bi-6de5a3b6",
@@ -5834,6 +5847,16 @@
         "uninstall",
         "going-further",
         "connecting-claude-code-or-vs-code-via-mcp"
+      ]
+    },
+    "docs/install/workroom-activity-migration-recovery.md": {
+      "publicHref": "/install/workroom-activity-migration-recovery/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "workroom-activity-migration-recovery",
+        "verification"
       ]
     },
     "docs/install/worktree-janitor-schedule.md": {
@@ -11751,7 +11774,8 @@
         "6-the-receipt-is-what-you-review",
         "known-limits",
         "related",
-        "the-pace-a-room-runs-at"
+        "the-pace-a-room-runs-at",
+        "continuing-a-review-after-a-connection-changes"
       ]
     },
     "docs/user-guide/ai-workforce/index.md": {
@@ -12249,6 +12273,7 @@
         "commit-and-push-fast",
         "worktrees-are-source-control-isolation-not-runtime-isolation",
         "heavy-local-commands-use-a-shared-host-resource-lane",
+        "recover-a-review-blocked-by-endpoint-eligibility",
         "clean-up-when-merged",
         "webhooks-closing-the-promotion-loop",
         "adhering-to-the-portals-processes",
@@ -12648,6 +12673,15 @@
         "architecture-and-standards",
         "specifications-and-plans",
         "documentation-freshness"
+      ]
+    },
+    "docs/user-guide/investment-allocation.md": {
+      "publicHref": "/user-guide/investment-allocation/",
+      "portalHref": "/docs/investment-allocation",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "investment-allocation"
       ]
     },
     "docs/user-guide/market-archetypes.md": {

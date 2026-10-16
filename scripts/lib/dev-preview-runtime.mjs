@@ -1,11 +1,12 @@
 import { DELIVERY_WORKFLOW_TOOLS, deliveryReadinessFromDiscovery } from '../../packages/integration-shared/src/delivery-readiness-contract.cjs';
+import { previewMountMatches } from '../../packages/integration-shared/src/preview-mount-identity.cjs';
 export const REQUIRED_PREVIEW_DELIVERY_TOOLS = DELIVERY_WORKFLOW_TOOLS;
 import { gitText } from './git.mjs';
 import { spawn } from 'node:child_process';
 import { readFile, writeFile, mkdir, rm, realpath } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { homedir } from 'node:os';
-import { dirname, resolve } from 'node:path';
+import { dirname, resolve, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveDpfStatePath } from './resolve-compose-install-context.mjs';
 import { validateComposeSafety } from './compose-safety.mjs';
@@ -18,6 +19,16 @@ export function assertToolReadiness(response) {
   const report = deliveryReadinessFromDiscovery(response);
   const denied = [...new Set([...report.missingTokenTools, ...report.missingCoworkerTools, ...report.unavailableTools])];
   if (!report.ready) throw new Error(`preview_delivery_permissions_incomplete:${denied.join(',')}; platform administrator must reconcile approved permissions; client cannot self-grant`);
+}
+
+export async function assertAdmittedWorktreePath(admittedPath, worktree) {
+  if (typeof admittedPath !== 'string' || !admittedPath.trim() || !isAbsolute(admittedPath)) {
+    throw new Error('preview_admission_binding_mismatch');
+  }
+  let canonicalPath;
+  try { canonicalPath = await realpath(admittedPath); }
+  catch { throw new Error('preview_admission_binding_mismatch'); }
+  if (canonicalPath !== worktree) throw new Error('preview_admission_binding_mismatch');
 }
 
 export function previewOverride({ worktree, sha, leaseId, cloneImage }) {
@@ -55,7 +66,7 @@ export function assertPreviewConfig(config, { worktree, sha, leaseId }) {
 
 export function assertPreviewContainer(container, { worktree, sha, leaseId }) {
   const mount = container.Mounts?.find(volume => volume.Destination === '/workspace');
-  if (mount?.Type !== 'bind' || resolve(mount.Source) !== worktree) throw new Error('preview_actual_mount_mismatch');
+  if (mount?.Type !== 'bind' || !previewMountMatches(mount.Source, worktree)) throw new Error('preview_actual_mount_mismatch');
   if (!container.Config?.Env?.includes('DPF_ENVIRONMENT_CLASS=development')
       || !container.Config?.Env?.includes(`DPF_PREVIEW_SOURCE_SHA=${sha}`)
       || !container.Config?.Env?.includes(`DPF_PREVIEW_LEASE_ID=${leaseId}`)) throw new Error('preview_actual_environment_mismatch');
@@ -64,7 +75,7 @@ export function assertPreviewContainer(container, { worktree, sha, leaseId }) {
 }
 
 // Output from config/inspect may contain secrets. Capture it privately and report
-// only the operation name on failure; never echo command arguments or stderr.
+// only the exit code on failure; never echo command arguments or child output.
 export function commandRunner({ docker = 'docker', env = process.env } = {}) {
   const children = new Set();
   return {
@@ -76,11 +87,24 @@ export function commandRunner({ docker = 'docker', env = process.env } = {}) {
         child.stdout.on('data', chunk => { if (capture) output += chunk; });
         child.stderr.resume();
         child.once('error', () => { children.delete(child); fail(new Error('preview_process_unavailable')); });
-        child.once('close', code => { children.delete(child); code === 0 ? done(output.trim()) : fail(new Error('preview_operation_failed')); });
+        child.once('close', code => { children.delete(child); code === 0 ? done(output.trim()) : fail(new Error(`preview_operation_failed:${Number.isInteger(code) ? `exit-${code}` : 'terminated'}`)); });
       });
     },
     terminate() { for (const child of children) child.kill('SIGKILL'); },
   };
+}
+
+/** Low-cardinality diagnostics: transport messages may contain secrets. */
+export function previewLeaseEventSummary(event) {
+  if (!['authority-deadline', 'heartbeat-lost', 'heartbeat-uncertain', 'fence-termination-failed', 'release-failed'].includes(event.type)) return null;
+  const reason = typeof event.reason === 'string' ? event.reason : '';
+  let category = 'unclassified';
+  if (reason === 'lease-authority-deadline') category = 'authority-deadline';
+  else if (reason === 'preview_binding_changed') category = 'source-binding';
+  else if (/timed out|ETIMEDOUT/i.test(reason)) category = 'transport-timeout';
+  else if (/ECONNRESET|ECONNREFUSED/i.test(reason)) category = 'transport-connection';
+  else if (/invalid JSON/i.test(reason)) category = 'transport-response';
+  return { type: event.type, category };
 }
 
 export function protectedServiceIdentity(containers) {
@@ -198,7 +222,7 @@ async function runAdmittedPreview(env, cleanupState) {
   };
   const terminate = async () => { runner.terminate(); try { await stopOwned(); } finally { finish(); } };
   const mcpUrl = env.DPF_MCP_URL || 'http://127.0.0.1:3000/api/mcp/v1';
-  const call = (tool, args) => mcpCall(tool, args, { mcpUrl, bearerToken: resolveMcpCredential({ mcpUrl, env }).bearer });
+  const call = (tool, args) => callPreviewMcp(tool, args, { mcpUrl, bearerToken: resolveMcpCredential({ mcpUrl, env }).bearer });
 
   const release = async () => {
     const result = await call('release_nonprod_environment_lease', { leaseId, ownerSessionId });
@@ -209,9 +233,10 @@ async function runAdmittedPreview(env, cleanupState) {
     const leases = await call('list_nonprod_environment_leases', {});
     const admitted = leases.data?.leases?.find(lease => lease.leaseId === leaseId);
     if (!admitted || admitted.status !== 'active' || admitted.ownerSessionId !== ownerSessionId
-        || admitted.worktreePath !== worktree || admitted.branchName !== branch
+        || admitted.branchName !== branch
         || !(Date.parse(admitted.expiresAt) > Date.now())
         || admitted.url !== 'http://localhost:3001' || !admitted.purpose?.includes(`(${sha})`)) throw new Error('preview_admission_binding_mismatch');
+    await assertAdmittedWorktreePath(admitted.worktreePath, worktree);
     const config = JSON.parse(await compose(['config', '--format', 'json']));
     assertPreviewConfig(config, identity);
     protectedBefore = await protectedSnapshot();
@@ -263,7 +288,7 @@ async function runAdmittedPreview(env, cleanupState) {
             hostPressure: await sampleLocalCiHostPressure({ rootPath: worktree, evidenceIsolationHealthy: true }) });
         }, terminate,
         release,
-        onEvent: event => { if (event.type === 'release-failed') console.error(event.reason); },
+        onEvent: event => { const summary = previewLeaseEventSummary(event); if (summary) console.error(JSON.stringify(summary)); },
       });
       if (outcome.status !== 'completed') throw new Error(`preview_fenced:${outcome.reason}`);
     } finally { process.off('SIGINT', signal); process.off('SIGTERM', signal); }
@@ -271,6 +296,16 @@ async function runAdmittedPreview(env, cleanupState) {
     await rm(overridePath, { force: true });
 
   }
+}
+
+export function callPreviewMcp(tool, args, options) {
+  // Renewal can succeed before the governed transport finishes responding.
+  // Keep this request bounded inside the unchanged two-minute authority window;
+  // the supervisor still terminates at its last acknowledged expiry.
+  return mcpCall(tool, args, {
+    ...options,
+    ...(tool === 'renew_nonprod_environment_lease' ? { timeoutMs: 30_000 } : {}),
+  });
 }
 
 export async function main(env = process.env) {
