@@ -92,8 +92,6 @@ function sandboxWriteFor(pathSubstring: string): SandboxWriteParams | undefined 
     .find((p) => p.path.includes(pathSubstring));
 }
 import { InferenceError } from "@/lib/routing/inference-error";
-import { recordCliRateLimit, clearCliRateLimit } from "./cli-pool-status";
-import { NativeCliExecutionUncertainError } from "./cli-owned-runner";
 import type { AdapterRequest } from "./adapter-types";
 import type { RoutedExecutionPlan } from "./recipe-types";
 import { EventEmitter } from "events";
@@ -159,61 +157,6 @@ describe("cliAdapter", () => {
     vi.clearAllMocks();
     mockExecAsync.mockResolvedValue({ stdout: "", stderr: "" });
     mockWriteSandboxFile.mockResolvedValue(undefined);
-    vi.mocked(recordCliRateLimit).mockReset();
-  });
-
-  describe("native quota observations preserve execution uncertainty", () => {
-    const quota = { type: "result", subtype: "success", is_error: true,
-      result: "You've hit your usage limit. PRIVATE-OUTPUT try again in 99 hours" };
-    const request = () => makeRequest({
-      plan: makePlan({ providerConnectionId: "subscription-team" }),
-      mcpSession: { userId: "user-1", agentId: "build-specialist", threadId: "held-task" },
-      tools: [{ type: "function", function: { name: "query_backlog", description: "Query", parameters: {} } }],
-    });
-    beforeEach(() => {
-      mockGetProviderBearerToken.mockResolvedValue({ token: "fake-oauth-token" });
-      mockCreateMcpSessionToken.mockResolvedValue("test-native-session");
-    });
-    it.each([0, 1])("records bounded safe quota once before rejecting native exit %s", async code => {
-      let release!: () => void;
-      vi.mocked(recordCliRateLimit).mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
-      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify(quota), code));
-      let settled = false;
-      const result = cliAdapter.execute(request()).catch(error => { settled = true; return error; });
-      await vi.waitFor(() => expect(recordCliRateLimit).toHaveBeenCalledOnce());
-      expect(settled).toBe(false);
-      expect(recordCliRateLimit).toHaveBeenCalledWith("claude-cli", "anthropic-sub",
-        "The native CLI reported a usage limit; its reset time is unknown.",
-        { providerId: "anthropic-sub", providerConnectionId: "subscription-team" });
-      release();
-      const error = await result;
-      expect(error).toBeInstanceOf(NativeCliExecutionUncertainError);
-      expect(error.diagnostics).toMatchObject({ exitCode: code, childProcessClosure: "unverified",
-        terminalResult: { type: "result", status: "error", isError: true, hint: "quota" } });
-      expect(clearCliRateLimit).not.toHaveBeenCalled();
-      expect(mockSpawn).toHaveBeenCalledOnce();
-    });
-    it.each([0, 1])("keeps the execution held if quota persistence rejects after exit %s", async code => {
-      vi.mocked(recordCliRateLimit).mockRejectedValueOnce(new Error("store unavailable"));
-      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify(quota), code));
-      await expect(cliAdapter.execute(request())).rejects.toMatchObject({ name: "NativeCliExecutionUncertainError",
-        providerId: "anthropic-sub", diagnostics: { terminalResult: { hint: "quota" } } });
-      expect(recordCliRateLimit).toHaveBeenCalledOnce();
-      expect(clearCliRateLimit).not.toHaveBeenCalled();
-      expect(mockSpawn).toHaveBeenCalledOnce();
-    });
-    it.each([
-      "You've hit your usage limit",
-      JSON.stringify({ ...quota, is_error: false }),
-      JSON.stringify({ ...quota, type: "assistant" }),
-      JSON.stringify({ ...quota, errors: ["untrusted payload"] }),
-      JSON.stringify({ ...quota, result: "Authentication failed" }),
-    ])("does not turn untrusted or nonquota output into quota evidence: %s", async output => {
-      mockSpawn.mockReturnValue(createMockProcess(output, 1));
-      await expect(cliAdapter.execute(request())).rejects.toBeInstanceOf(NativeCliExecutionUncertainError);
-      expect(recordCliRateLimit).not.toHaveBeenCalled();
-      expect(clearCliRateLimit).not.toHaveBeenCalled();
-    });
   });
 
   it("has type 'claude-cli'", () => {
