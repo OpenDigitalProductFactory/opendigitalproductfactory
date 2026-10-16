@@ -4,6 +4,7 @@ import type { Prisma } from "@dpf/db";
 import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import type { InitiativeArtifactRef, InitiativeGateKey, InitiativeGateReceipt } from "./receipt-schema";
 import { validInitiativeGateReceipt } from "./receipt-validation";
+import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 
 /** Internal context only: never accepted from tool arguments. This identifies an
  * effect; it does not settle a provider execution or authorize its replay. */
@@ -97,9 +98,9 @@ export function boundReviewReceiptId(scope: BoundReviewScope, artifactDigest: st
 export async function findBoundReviewWinner(tx: Prisma.TransactionClient, scope: BoundReviewScope,
   artifact: { digest: string; authorPrincipalId: string | null; authorAgentId: string | null },
   subjectRowId: string, organizationId: string | null, reviewerPrincipalId: string,
-): Promise<{ ok: true; receipt: InitiativeGateReceipt | null } | Refusal> {
+): Promise<(ActionSuccess & { receipt: InitiativeGateReceipt | null }) | Refusal> {
   const stableId = boundReviewReceiptId(scope, artifact.digest);
-  if (!stableId) return { ok: true, receipt: null };
+  if (!stableId) return { ...ok(), receipt: null };
   const select = { id: true, backlogItemId: true, kind: true, gateKey: true, payload: true } as const;
   const stable = await tx.backlogItemActivity.findUnique({ where: { id: stableId }, select });
   const rows = await tx.backlogItemActivity.findMany({ where: { backlogItemId: subjectRowId,
@@ -129,7 +130,7 @@ export async function findBoundReviewWinner(tx: Prisma.TransactionClient, scope:
     winners.push(payload as unknown as InitiativeGateReceipt);
   }
   if (winners.length > 1) return refuse("Multiple canonical verdicts already identify this review effect; reconcile them before continuing.");
-  return { ok: true, receipt: winners[0] ?? null };
+  return { ...ok(), receipt: winners[0] ?? null };
 }
 
 /** A serialization/unique-key loser gets one fresh winner read, never another

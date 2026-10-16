@@ -22,6 +22,7 @@ import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import type { InitiativeGateReceipt } from "./receipt-schema";
 import { boundReviewReceiptId, findBoundReviewWinner, lockBoundReviewEffect, publishBoundReviewEffect,
   type BoundReviewTask } from "./bound-review-effect";
+import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 
 export type InitiativeBaselineChainEntry = {
   baselineId: string;
@@ -213,7 +214,7 @@ export function validateInitiativeSupersessionDispositions(
 
 export type RecordInitiativeSpecApprovalResult =
   | { ok: true; receiptId: string; baselineId: string; artifactDigest: string }
-  | { ok: true; receiptId: string; baselineId: string | null; artifactDigest: string; deduplicated: true; receipt: InitiativeGateReceipt }
+  | (ActionSuccess & { receiptId: string; baselineId: string | null; artifactDigest: string; deduplicated: true; receipt: InitiativeGateReceipt })
   | { ok: false; code: string; error: string };
 
 class InitiativeApprovalRollback extends Error {
@@ -377,7 +378,7 @@ export async function recordInitiativeSpecApproval(args: {
     if (!winner.ok) return winner;
     if (winner.receipt) {
       const receipt = winner.receipt;
-      if (receipt.decision !== "pass") return { ok: true, receiptId: receipt.receiptId, baselineId: null,
+      if (receipt.decision !== "pass") return { ...ok(), receiptId: receipt.receiptId, baselineId: null,
         artifactDigest: receipt.artifactDigest, deduplicated: true, receipt };
       const matching = priorRows.filter((row) => (row.payload as Record<string, unknown>)?.approvalReceiptId === receipt.receiptId);
       const baseline = matching[0]?.payload as unknown as InitiativeScopeBaseline | undefined;
@@ -401,7 +402,7 @@ export async function recordInitiativeSpecApproval(args: {
         || !retained || pin!.artifactDigest !== artifact.artifact.digest || !same(pin!.artifactLocator, args.artifactRef)) {
         return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "The prior approval no longer has one matching current baseline and retention pin. No replacement was created." };
       }
-      return { ok: true, receiptId: receipt.receiptId, baselineId: baseline.baselineId,
+      return { ...ok(), receiptId: receipt.receiptId, baselineId: baseline.baselineId,
         artifactDigest: receipt.artifactDigest, deduplicated: true, receipt };
     }
     if (winnerOnly) return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",

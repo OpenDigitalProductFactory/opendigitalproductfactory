@@ -17,6 +17,7 @@ import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-author
 import { canonicalPlanMatchesArtifact, loadCanonicalPlanSource, sameCanonicalPlanSource } from "./canonical-plan-source";
 import { boundReviewReceiptId, findBoundReviewWinner, lockBoundReviewEffect, publishBoundReviewEffect,
   type BoundReviewTask } from "./bound-review-effect";
+import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 
 type ReceiptHistoryRow = { payload: unknown };
 
@@ -37,7 +38,7 @@ function currentOpenFindings(rows: ReceiptHistoryRow[], artifactDigest: string):
 }
 
 export type RecordInitiativeGateReceiptResult =
-  | { ok: true; receiptId: string; receipt: Record<string, unknown>; deduplicated?: true }
+  | (ActionSuccess & { receiptId: string; receipt: Record<string, unknown>; deduplicated?: true })
   | { ok: false; code: string; error: string };
 
 export async function recordInitiativeGateReceipt(args: {
@@ -250,7 +251,7 @@ export async function recordInitiativeGateReceipt(args: {
     }
     const winner = await findBoundReviewWinner(tx, args, artifact.artifact, item.id, item.organizationId, reviewerPrincipalId);
     if (!winner.ok) return winner;
-    if (winner.receipt) return { ok: true, receiptId: winner.receipt.receiptId,
+    if (winner.receipt) return { ...ok(), receiptId: winner.receipt.receiptId,
       receipt: winner.receipt as unknown as Record<string, unknown>, deduplicated: true };
     if (winnerOnly) return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
       error: "Concurrent publication did not leave a qualified canonical winner. No write was retried." };
