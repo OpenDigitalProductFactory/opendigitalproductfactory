@@ -35,9 +35,9 @@ export async function runLocalToolFidelityDiagnostic(
     || selection.modelId === "default" || !selection.providerConnectionId?.trim()) {
     return refusal("Fidelity requires one explicit local provider, account and model.");
   }
-  if (!context?.agentId || !context.threadId || !context.userContext || !context.governedDispatch || !context.governedReadToolCatalog
+  if (!context?.agentId || !context.userContext || !context.governedDispatch || !context.governedReadToolCatalog
     || (context.apiTokenId && !context.tokenGrantScopes)) {
-    return refusal("Fidelity requires the original governed actor, thread, catalog and dispatch authority.");
+    return refusal("Fidelity requires the original governed actor, catalog and dispatch authority.");
   }
   const { agentId, threadId, governedDispatch, governedReadToolCatalog } = context;
   const deadline = Date.now() + 240_000;
@@ -87,8 +87,12 @@ export async function runLocalToolFidelityDiagnostic(
   const executions = new Set<string>();
   let stopped = false;
   for (const surfaceSize of SURFACES) {
-    // At least one known-correct authorized read per class; never pad with unauthorized stubs.
-    const pinned = new Set(GOLDEN_CASES.map(golden => catalog.find(tool => golden.correctToolNames.includes(tool.name))?.name));
+    // Prefer a correct read that needs no target identifiers absent from the prompt.
+    // Every entry still comes from the original authorized catalog; no stub padding.
+    const pinned = new Set(GOLDEN_CASES.map(golden => {
+      const matches = catalog.filter(tool => golden.correctToolNames.includes(tool.name));
+      return (matches.find(tool => !Array.isArray(tool.inputSchema.required) || tool.inputSchema.required.length === 0) ?? matches[0])?.name;
+    }));
     const surface: ToolDefinition[] = [...catalog.filter(tool => pinned.has(tool.name)), ...catalog.filter(tool => !pinned.has(tool.name))].slice(0, surfaceSize);
     const validSurface = surface.length === surfaceSize && new Set(surface.map(tool => tool.name)).size === surfaceSize
       && GOLDEN_CASES.every(golden => surface.some(tool => golden.correctToolNames.includes(tool.name)));
@@ -127,7 +131,7 @@ export async function runLocalToolFidelityDiagnostic(
             || canonicalLocalModelKey(actualModel) !== canonicalLocalModelKey(selection.modelId)) {
             stopped = true; observation.status = "incomplete"; observation.reason = "model_identity_unverified"; continue;
           }
-          if (Date.now() >= deadline || outerSignal?.aborted) { stopped = true; observation.status = "incomplete"; observation.reason = "budget_or_cancellation"; continue; }
+          if (controller.signal.aborted || Date.now() >= deadline || outerSignal?.aborted) { stopped = true; observation.status = "incomplete"; observation.reason = "budget_or_cancellation"; continue; }
           const scored = scoreToolFidelitySelection(golden, surface, answer);
           observation.status = scored.status;
           observation.reason = scored.status === "passed" ? "execution_unverified" : "selection_not_verified";
@@ -141,11 +145,12 @@ export async function runLocalToolFidelityDiagnostic(
               taskRunId: true, success: true, durationMs: true, result: true, auditClass: true } }) : null;
           if (id) { observation.toolExecutionId = id; executions.add(id); }
           observation.executionPassed = executed.success && scoreToolFidelityExecution({ toolName: scored.call.name,
-            parameters: scored.call.arguments, userId, agentId, threadId, taskRunId: context.taskRunId ?? null }, id, row, executed);
+            parameters: scored.call.arguments, userId, agentId, threadId: threadId ?? "", taskRunId: context.taskRunId ?? null }, id, row, executed);
           observation.status = observation.executionPassed ? "passed" : "failed";
           observation.reason = observation.executionPassed ? "verified_governed_read" : "execution_not_verified";
-          if (Date.now() >= deadline || outerSignal?.aborted) {
+          if (controller.signal.aborted || Date.now() >= deadline || outerSignal?.aborted) {
             stopped = true; observation.status = "incomplete"; observation.reason = "budget_or_cancellation";
+            observation.executionPassed = false;
           }
         } finally { clearTimeout(timer); }
       } catch {

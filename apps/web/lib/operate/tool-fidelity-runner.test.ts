@@ -79,6 +79,25 @@ describe("bounded local fidelity diagnostic", () => {
     await runLocalToolFidelityDiagnostic(selection, "u", context());
     expect(mocks.call.mock.calls.every(call => (call[2] as unknown[]).length === 1)).toBe(true);
   });
+  it("keeps a correct context-free read available when the first alternative needs an unknown target", async () => {
+    const tools = await mocks.tools();
+    mocks.tools.mockResolvedValue([...tools.map((tool: { name: string }) => tool.name === "get_workroom"
+      ? { ...tool, inputSchema: { type: "object", properties: { capsuleId: { type: "string" } }, required: ["capsuleId"] } } : tool),
+      { name: "list_workrooms", description: "List visible workrooms", sideEffect: false, requiredCapability: null,
+        inputSchema: { type: "object", properties: {} } },
+      ...Array.from({ length: 8 }, (_, i) => ({ name: `get_a${i}`, description: "Read-only fixture", sideEffect: false,
+        requiredCapability: null, inputSchema: { type: "object", properties: {} } }))]);
+    mocks.call.mockImplementation(async (_provider: string, _model: string, messages: Array<{ content: string }>) => {
+      const golden = GOLDEN_CASES.find(c => c.prompt === messages[0]?.content)!;
+      return { content: "", finishReason: "tool_calls", toolCalls: [{ name: golden.taskClass === "capsule-status"
+        ? "list_workrooms" : golden.correctToolNames[0], arguments: {} }], raw: { model: "ai/test" } };
+    });
+    const result = await runLocalToolFidelityDiagnostic(selection, "u", context());
+    expect(result.data).toMatchObject({ qualified: true });
+    const firstSurface = mocks.call.mock.calls[0]![4] as Array<{ function: { name: string } }>;
+    expect(firstSurface.map(tool => tool.function.name)).toContain("list_workrooms");
+    expect(firstSurface).toHaveLength(8);
+  });
   it("rejects a cloud selection before inference or test-run creation", async () => {
     const result = await runLocalToolFidelityDiagnostic({ ...selection, endpointId: "openai" }, "u", context());
     expect(result.success).toBe(false);
@@ -123,6 +142,48 @@ describe("bounded local fidelity diagnostic", () => {
     mocks.call.mockImplementation(async () => { vi.setSystemTime(300_000); throw new Error("timed out"); });
     expect((await runLocalToolFidelityDiagnostic(selection, "u", context())).data).toMatchObject({ qualified: false });
     expect(mocks.call).toHaveBeenCalledTimes(1);
+  });
+  it("starts no read when identity verification outlasts the turn deadline", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(0);
+    mocks.proof.mockResolvedValueOnce(identity).mockResolvedValueOnce(identity).mockImplementationOnce(async () => {
+      await vi.advanceTimersByTimeAsync(30_001);
+      return identity;
+    });
+    const result = await runLocalToolFidelityDiagnostic(selection, "u", context());
+    expect(result.data).toMatchObject({ qualified: false });
+    expect(mocks.call).toHaveBeenCalledTimes(1);
+    expect(reads).not.toHaveBeenCalled();
+    expect((result.data!.observations as Array<{ status: string }>)[0]!.status).toBe("incomplete");
+  });
+  it("cannot score a pass when audit verification outlasts the turn deadline", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(0);
+    mocks.audit.mockImplementationOnce(async ({ where }: { where: { id: string } }) => {
+      await vi.advanceTimersByTimeAsync(30_001);
+      return rows.get(where.id);
+    });
+    const result = await runLocalToolFidelityDiagnostic(selection, "u", context());
+    expect(result.data).toMatchObject({ qualified: false });
+    expect(mocks.call).toHaveBeenCalledTimes(1); expect(reads).toHaveBeenCalledTimes(1);
+    expect((result.data!.observations as Array<{ status: string; executionPassed: boolean }>)[0])
+      .toMatchObject({ status: "incomplete", executionPassed: false });
+  });
+  it("supports the original OAuth actor without inventing a conversation thread", async () => {
+    reads.mockImplementation(async (name: string, parameters: Record<string, unknown>) => {
+      const id = `oauth-read-${rows.size}`;
+      rows.set(id, { id, toolName: name, parameters, userId: "u", agentId: "agent", threadId: "",
+        taskRunId: null, success: true, durationMs: 1, result: {}, auditClass: "metrics_only" });
+      return { success: true, message: "ok", governance: { toolExecutionId: id } };
+    });
+    const result = await runLocalToolFidelityDiagnostic(selection, "u", { ...context(), threadId: undefined,
+      authSource: "oauth", apiTokenId: "original-token", tokenGrantScopes: ["admin_read"] });
+    expect(result.data).toMatchObject({ qualified: true, capChanged: false });
+    expect(reads).toHaveBeenCalledTimes(45);
+    expect(mocks.call.mock.calls.every(call => call[8]?.agentId === "agent" && call[8]?.threadId === undefined)).toBe(true);
+  });
+  it("still refuses a caller without its original actor before inference", async () => {
+    const result = await runLocalToolFidelityDiagnostic(selection, "u", { ...context(), agentId: undefined });
+    expect(result.success).toBe(false);
+    expect(mocks.call).not.toHaveBeenCalled(); expect(mocks.create).not.toHaveBeenCalled();
   });
   it("stops a different-model or unattributable response before governed reads", async () => {
     mocks.call.mockResolvedValue({ content: "", finishReason: "tool_calls",

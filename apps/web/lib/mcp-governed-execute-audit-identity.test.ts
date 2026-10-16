@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { _setGovernanceForTests, governedExecuteTool } from "./mcp-governed-execute";
 import * as mcpTools from "./mcp-tools";
+import { writeGovernedToolAudit } from "./governed-tool-audit";
+import { scoreToolFidelityExecution } from "./routing/tool-fidelity-harness";
 
 const userContext = { platformRole: "ceo", isSuperuser: true };
 const call = () => governedExecuteTool({ toolName: "query_backlog", rawParams: {},
@@ -22,6 +24,17 @@ afterEach(() => {
 });
 
 describe("governed result audit identity", () => {
+  it("binds an ordinary OAuth read to the real writer's absent-thread representation", async () => {
+    let saved: Record<string, unknown> | undefined;
+    createAudit.mockImplementation(async data => { saved = data; return { id: "oauth-execution" }; });
+    const invocation = { success: true, message: "read completed" };
+    const id = await writeGovernedToolAudit({ toolName: "query_backlog", rawParams: {}, result: invocation,
+      userId: "oauth-user", source: "external-jsonrpc", context: { agentId: "original-agent", apiTokenId: "original-token" }, durationMs: 1 });
+    expect(saved?.threadId).toBe("");
+    const expected = { toolName: "query_backlog", parameters: {}, userId: "oauth-user", agentId: "original-agent", threadId: "", taskRunId: null };
+    expect(scoreToolFidelityExecution(expected, id?.id, { ...saved, id: id?.id }, invocation)).toBe(true);
+    expect(scoreToolFidelityExecution(expected, id?.id, { ...saved, id: id?.id, threadId: "another-thread" }, invocation)).toBe(false);
+  });
   it("returns the actual persisted execution ID rather than a handler assertion", async () => {
     execute.mockResolvedValue({ success: true, message: "read completed",
       governance: { toolExecutionId: "handler-forged-id" } });

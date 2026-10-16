@@ -90,6 +90,14 @@ Compile fresh catalogs through an original server-owned context closure, beside
 governedDispatch, using the original user/agent/room restrictions. The runner
 must not import the MCP registry hub or accept a caller-provided catalog. Keep
 the existing import-cycle budget; no baseline increase is part of this repair.
+Ordinary OAuth callers have no conversation thread. Preserve absent inference
+attribution and compare the canonical audit writer's existing empty-string
+thread value exactly; never invent a thread or accept a foreign nonempty one.
+Recheck the turn abort before starting a read and after audit verification.
+Late verification is incomplete, even when the global run budget remains.
+When composing a small surface, prefer a correct authorized read that does not
+require target identifiers missing from the golden prompt, such as list_workrooms
+instead of a required-ID get_workroom. Never invent a target or pad the catalog.
 
 Impact contract: normal source claims resolved. Resolve graph-linked tests for
 all six implementation/type entries before RED; if the graph is unavailable,
