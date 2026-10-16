@@ -521,6 +521,40 @@ Coverage refresh: `cmut5p46zbh2c01jz92q7uyn8`, BI-8ECEC429, atomic recovery
 outcome; this remediation completes the acceptance workflow, not a new review
 identity or an expansion of its authority or budget.
 
+Workroom readback successor, BI-CAP-21C511CA (2026-10-16): the canonical
+`tasks/result` method already returns the owning caller's durable native
+receipt. Actual execution on served `b338f06e581e` returned the completed
+review and receipt for `TR-GATE-3256136A0BEA51AB05122665`. The remaining defect
+is that `get_workroom` projects only the optional direct `taskRun` relation;
+semantic reviews linked by capsule metadata disappear from its recovery view.
+
+Extend the existing `loadSemanticReviewRoomProjection` read model and
+`projectWorkroomRecovery`, rather than adding a status ledger, task reader,
+review scheduler or permission. The current immutable source's review must
+show its recorded state, heartbeat freshness, requester, budget, precise wait
+reason, canonical next action and final receipt summary. Historical requests
+cannot become the current verdict. Partial or unreadable review evidence stays
+explicitly unknown; it cannot produce an actionable or passing readiness claim.
+Missing source identity retains the existing repair packet and priority.
+
+Full receipts continue through `tasks/result` under its existing requester
+auth-context check. A Workroom summary never confers access to another caller's
+task details, provider payloads or failure analysis. This is an additive read
+projection over existing records, with no migration or authority change; rollback
+reverts that projection while preserving every request and receipt. Shared
+liveness and detail readbacks must use the same reducer. BI-7CCCA696 separately
+owns automatic continuation of proven pre-dispatch capacity waits; this successor
+does not retry inference or alter expired-review replacement BI-8ECEC429.
+
+The recovery view must survive the MCP route's existing result budget. Keep
+ordinary detail responses unchanged. For an oversized room, retain exact source,
+ownership/CAS fields and the recovery view, and explicitly list omitted bulk
+fields instead of allowing the route to replace the entire room with a preview.
+Never shorten a commit, owner, path or lease identity. If even those exact facts
+cannot fit, return a bounded refusal. An oversized activity page is explicitly
+incomplete and cannot advance its cursor; full large-activity detail remains
+BI-3CE72645, not a fabricated empty or completed page.
+
 ## Non-goals
 
 - Replacing GitHub review.

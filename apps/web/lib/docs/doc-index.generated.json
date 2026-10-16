@@ -2828,6 +2828,7 @@
       "publishedPortal": false,
       "anchors": [
         "workroom-review-profile-read-contract",
+        "operator-disclosure",
         "common-requirements-and-extensions",
         "coverage-and-representative-domains",
         "verification-and-recovery"
