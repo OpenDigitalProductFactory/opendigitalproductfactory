@@ -1,7 +1,7 @@
 import { prisma } from "@dpf/db";
 import { isRecord } from "@/lib/shared/coerce";
 import { readRoutingEligibility } from "../inference/routing-exclusion-buckets";
-import { semanticReviewRecoveryObservation } from "./semantic-review-recovery-policy";
+import { semanticReviewRecoveryObservation, semanticReviewNodeEligibility } from "./semantic-review-recovery-policy";
 import { readSemanticReviewRemediation, SEMANTIC_REVIEW_REMEDIATION_MAX_AGE_MS } from "./semantic-review-remediation";
 
 const NODE_LIMIT = 100;
@@ -13,7 +13,7 @@ type OwnedTask = {
 /** Called only after task admission; also bind every detail query to its admitted owner. */
 export async function readSemanticReviewRecovery(row: OwnedTask, callerUserId: string) {
   if (row.userId !== callerUserId) throw new Error("semantic-review-recovery-not-owned");
-  const observation = semanticReviewRecoveryObservation(row.status, row.progressPayload);
+  let observation = semanticReviewRecoveryObservation(row.status, row.progressPayload);
   const metadata = isRecord(row.a2aMetadata) ? row.a2aMetadata : {};
   const capsuleId = typeof metadata.capsuleId === "string" ? metadata.capsuleId : null;
   const now = Date.now();
@@ -24,6 +24,12 @@ export async function readSemanticReviewRecovery(row: OwnedTask, callerUserId: s
   });
   const truncated = nodes.length > NODE_LIMIT;
   const visible = nodes.slice(0, NODE_LIMIT);
+  const routingEligibility = semanticReviewNodeEligibility(visible, observation.requestDigest ?? "");
+  if (routingEligibility.length) {
+    const payload = isRecord(row.progressPayload) ? row.progressPayload : {};
+    observation = semanticReviewRecoveryObservation(row.status, { ...payload,
+      semanticReview: { ...(isRecord(payload.semanticReview) ? payload.semanticReview : {}), routingEligibility } });
+  }
   // Scope before reading: never expose another task's proof, free text, or raw provider output.
   const verification = capsuleId && observation.requestDigest ? await prisma.runtimeVerification.findFirst({
     where: { kind: "health", status: "passed", workCapsule: { capsuleId },

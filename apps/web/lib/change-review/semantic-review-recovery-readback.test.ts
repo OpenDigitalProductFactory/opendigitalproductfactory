@@ -21,16 +21,17 @@ function verification() { return { verificationId: "RV-OWN", kind: "health", sta
 const binding = { capsuleId: "room-id", taskRunId: "TR-OWN", requestDigest: digest, updatedAt };
 
 describe("owned semantic review recovery readback", () => {
-  it("exposes bound no-dispatch diagnostics while requiring eligibility-specific remediation", async () => {
+  it.each([false, true])("recovers durable eligibility diagnostics beside uncertain=%s task state", async uncertain => {
     const eligibility = { sensitivity: "restricted", residencyPolicy: "local_only", excludedCount: 2,
       exclusions: [{ bucket: "output-capacity", count: 2 }] };
     db.taskNode.findMany.mockResolvedValue([{ ...node, status: "completed", outputSnapshot: {
       requestDigest: digest, providerOutcome: "not-dispatched", routingEligibility: [eligibility], rawPrompt: "private prompt" } }]);
     db.runtimeVerification.findFirst.mockResolvedValue(verification());
     const result = await readSemanticReviewRecovery({ ...task, progressPayload: { semanticReview: {
-      ...task.progressPayload.semanticReview, executionOutcome: undefined, reason: "review-endpoint-ineligible", routingEligibility: [eligibility],
+      ...task.progressPayload.semanticReview, executionOutcome: uncertain ? "unknown" : undefined,
+      reason: uncertain ? "provider-outcome-uncertain" : "review-endpoint-ineligible",
     } } }, "owner");
-    expect(result).toMatchObject({ classification: "routing-blocked", details: {
+    expect(result).toMatchObject({ classification: uncertain ? "execution-uncertain" : "routing-blocked", eligibilityBlocked: true, details: {
       nodes: [{ providerOutcome: "not-dispatched", routingEligibility: [eligibility] }],
       remediation: { state: "eligibility-verification-required", eligibilityVerified: false, retryAuthorized: false },
     } });

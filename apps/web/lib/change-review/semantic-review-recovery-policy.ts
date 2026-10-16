@@ -12,6 +12,18 @@ export type SemanticReviewBudgetSnapshot = { deadlineAt: string | null; recovery
 export function semanticReviewEligibilityBlocked(reason: unknown): boolean {
   return typeof reason === "string" && reason.split(",").includes("review-endpoint-ineligible");
 }
+/** Read bound durable branches, including mixed-outcome runs and executor loss. */
+export function semanticReviewNodeEligibility(nodes: readonly { status: string; outputSnapshot: unknown }[], requestDigest: string): RoutingEligibility[] {
+  return nodes.flatMap(node => {
+    const output = isRecord(node.outputSnapshot) ? node.outputSnapshot : {};
+    if (node.status === "superseded" || output.requestDigest !== requestDigest) return [];
+    const result = isRecord(output.result) ? output.result : {};
+    const failure = isRecord(output.failure) ? output.failure : {};
+    const candidates = Array.isArray(output.routingEligibility) ? output.routingEligibility
+      : Array.isArray(result.routingEligibility) ? result.routingEligibility : [failure.routingEligibility];
+    return candidates.slice(0, 5).flatMap(value => { const safe = readRoutingEligibility(value); return safe ? [safe] : []; });
+  }).slice(0, 5);
+}
 /** Both execution views read the same versioned payload; this is not authorization. */
 export function readSemanticReviewBudget(payload: unknown): SemanticReviewBudgetSnapshot {
   const progress = isRecord(payload) ? payload.semanticReview : null;

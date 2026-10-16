@@ -20,7 +20,7 @@ import { withInferenceOrigin } from "@/lib/inference/inference-admission";
 import { withGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
 
 import { SEMANTIC_REVIEW_HEARTBEAT_STALE_MS as STALE_MS } from "./semantic-review-request";
-import { SEMANTIC_REVIEW_MAX_ATTEMPTS as MAX_DISPATCH_ATTEMPTS, semanticReviewRecoveryBudget, isSemanticReviewRecoveryWait, readSemanticReviewBudget } from "./semantic-review-recovery-policy";
+import { SEMANTIC_REVIEW_MAX_ATTEMPTS as MAX_DISPATCH_ATTEMPTS, semanticReviewRecoveryBudget, isSemanticReviewRecoveryWait, readSemanticReviewBudget, semanticReviewNodeEligibility } from "./semantic-review-recovery-policy";
 import { readSemanticReviewRemediation } from "./semantic-review-remediation";
 import { NoEligibleEndpointsError } from "../routing/inference-error";
 import { readRoutingEligibility } from "../inference/routing-exclusion-buckets";
@@ -245,8 +245,11 @@ export async function retryPersistedSemanticReview(taskRunId: string, operatorUs
   if (!packet) throw new Error("semantic-review-request-unavailable");
   const previousAttempt = state(row).recoveryAttempt ?? 0;
   const budget = semanticReviewRecoveryBudget(packet.deadlineAt, previousAttempt);
-  const eligibilityBlocked = readSemanticReviewBudget(row.progressPayload).eligibilityBlocked === true;
-  if (budget === "expired" && successor) return admitReviewSuccessor(row, packet, operatorUserId, successor);
+  const recordedNodes = await prisma.taskNode.findMany({ where: { taskRunId: row.id }, take: 101 });
+  if (recordedNodes.length > 100) throw new Error("semantic-review-checkpoint-limit-exceeded");
+  const eligibilityBlocked = readSemanticReviewBudget(row.progressPayload).eligibilityBlocked === true
+    || semanticReviewNodeEligibility(recordedNodes, packet.digest).length > 0;
+  if (budget === "expired" && successor) return admitReviewSuccessor(row, packet, operatorUserId, successor, eligibilityBlocked);
   if (successor && !eligibilityBlocked) throw new Error("semantic-review-successor-requires-expired-request");
   if (budget === "expired") throw new Error("semantic-review-deadline-exhausted");
   if (budget !== "available" || typeof previousAttempt !== "number") throw new Error("semantic-review-recovery-exhausted");
@@ -288,7 +291,7 @@ export async function retryPersistedSemanticReview(taskRunId: string, operatorUs
 
 /** One successor per lineage, admitted by fresh scoped runtime evidence, never by a replay. */
 async function admitReviewSuccessor(row: Run, packet: SemanticReviewRequest, operatorUserId: string,
-  recovery: { remediationVerificationId: string; expectedRequestDigest: string }) {
+  recovery: { remediationVerificationId: string; expectedRequestDigest: string }, eligibilityBlocked = false) {
   if (object(row.progressPayload).resultClass === "fail") throw new Error("semantic-review-failed-verdict-requires-repair");
   if (recovery.expectedRequestDigest !== packet.digest) throw new Error("semantic-review-recovery-digest-mismatch");
   if (state(row).successorAttempt !== undefined || state(row).predecessorTaskRunId !== undefined) {
@@ -316,7 +319,7 @@ async function admitReviewSuccessor(row: Run, packet: SemanticReviewRequest, ope
     const verification = await tx.runtimeVerification.findUnique({ where: { verificationId: recovery.remediationVerificationId } });
     const proof = readSemanticReviewRemediation(verification, { capsuleId: capsule.id,
       taskRunId: row.taskRunId, requestDigest: packet.digest, updatedAt: row.updatedAt });
-    if (!proof || (readSemanticReviewBudget(row.progressPayload).eligibilityBlocked && !proof.eligibilityVerified)) {
+    if (!proof || (eligibilityBlocked && !proof.eligibilityVerified)) {
       throw new Error("semantic-review-remediation-evidence-required");
     }
     // CAS fences every old writer before inspecting checkpoints in this transaction.
@@ -407,18 +410,20 @@ export async function executePersistedSemanticReview(taskRunId: string) {
         if (branchFailure) {
           const authorityValid = await verifySemanticReviewAuthority(packet, taskRunId).catch(() => null);
           await prisma.$transaction(async tx => {
+            const nodes = await tx.taskNode.findMany({ where: { taskRunId: row.id }, take: 101 });
+            if (nodes.length > 100) throw new Error("semantic-review-checkpoint-limit-exceeded");
+            const routingEligibility = [...semanticReviewNodeEligibility(nodes, packet.digest),
+              ...(branchFailure?.routingEligibility ? [branchFailure.routingEligibility] : [])].slice(0, 5);
             const changed = await tx.taskRun.updateMany({ where: fence(taskRunId, generation),
               data: { status: authorityValid === false ? "auth-required" : "input-required",
                 progressPayload: progress(row, { state: authorityValid === false ? "auth-required" : "input-required", generation,
                 reason: authorityValid === null ? "review-authority-unavailable"
                   : authorityValid ? "provider-outcome-uncertain" : "submitting-authority-no-longer-valid", branchFailure,
-                ...(branchFailure?.routingEligibility ? { routingEligibility: [branchFailure.routingEligibility] } : {}),
+                ...(routingEligibility.length ? { routingEligibility } : {}),
                 action: authorityValid !== false ? "Reconcile recorded execution and authority availability before recovery."
                   : "Restore the submitting authority and reconcile recorded execution before recovery." }) } });
             if (changed.count !== 1) return;
-            const nodes = await tx.taskNode.findMany({ where: { taskRunId: row.id, status: "running" }, take: 101 });
-            if (nodes.length > 100) throw new Error("semantic-review-checkpoint-limit-exceeded");
-            for (const node of nodes) await tx.taskNode.update({ where: { taskNodeId: node.taskNodeId }, data: {
+            for (const node of nodes.filter(node => node.status === "running")) await tx.taskNode.update({ where: { taskNodeId: node.taskNodeId }, data: {
               status: "failed", completedAt: new Date(), outputSnapshot: json({ ...object(node.outputSnapshot),
                 requestDigest: packet.digest, providerOutcome: "unknown", failure: branchFailure }),
             } });
@@ -500,12 +505,14 @@ export async function executePersistedSemanticReview(taskRunId: string) {
 
 async function parkLostReview(row: Run, reason: string) {
   return prisma.$transaction(async tx => {
-    const changed = await tx.taskRun.updateMany({ where: { taskRunId: row.taskRunId, status: row.status, updatedAt: row.updatedAt },
-      data: { status: "input-required", progressPayload: progress(row, { state: "input-required", reason, executionOutcome: "unknown" }) } });
-    if (changed.count !== 1) return { changed: false };
-    const nodes = await tx.taskNode.findMany({ where: { taskRunId: row.id, status: "running" }, take: 101 });
+    const nodes = await tx.taskNode.findMany({ where: { taskRunId: row.id }, take: 101 });
     if (nodes.length > 100) throw new Error("semantic-review-checkpoint-limit-exceeded");
-    for (const node of nodes) await tx.taskNode.update({ where: { taskNodeId: node.taskNodeId }, data: {
+    const routingEligibility = semanticReviewNodeEligibility(nodes, String(state(row).requestDigest ?? ""));
+    const changed = await tx.taskRun.updateMany({ where: { taskRunId: row.taskRunId, status: row.status, updatedAt: row.updatedAt },
+      data: { status: "input-required", progressPayload: progress(row, { state: "input-required", reason, executionOutcome: "unknown",
+        ...(routingEligibility.length ? { routingEligibility } : {}) }) } });
+    if (changed.count !== 1) return { changed: false };
+    for (const node of nodes.filter(node => node.status === "running")) await tx.taskNode.update({ where: { taskNodeId: node.taskNodeId }, data: {
       status: "failed", completedAt: new Date(), outputSnapshot: json({ ...object(node.outputSnapshot),
         requestDigest: state(row).requestDigest, providerOutcome: "unknown", failure: { phase: "executor-loss", reason } }),
     } });
