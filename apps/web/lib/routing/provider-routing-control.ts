@@ -11,6 +11,8 @@ export type ProviderRoutingControlView = {
   restrictions: RoutingRestriction[];
   weeklyHint: string | null;
   healthSummary: string;
+  healthStatus?: ProviderHealth["status"];
+  quotaRecheckAt?: string | null;
 };
 
 /** Keep simultaneous vetoes visible; lifting one never claims the others cleared. */
@@ -28,6 +30,7 @@ export function projectProviderRoutingControl(input: {
   capacity?: CapacitySnapshot & { safeSummary: string };
   recovery?: { summary: string; nextRunAt: string | null };
   quotaRecovery?: { nextRunAt: string | null };
+  quotaRecheckAt?: string | null;
   weeklyHint?: string | null;
 }): ProviderRoutingControlView {
   const { provider: p, credential } = input.pw;
@@ -62,5 +65,5 @@ export function projectProviderRoutingControl(input: {
       : restrictions.length && (eligibility.eligible || eligibility.state === "disabled")
         ? { ...eligibility, eligible: false, recommendedAction: null, state: "disabled" as const, label: "Routing restricted", reason: restrictions[0]!.summary }
       : eligibility;
-  return { eligibility: effectiveEligibility, restrictions, weeklyHint: input.weeklyHint ?? null, healthSummary: input.health?.safeSummary ?? "No recent health observation." };
+  return { eligibility: effectiveEligibility, restrictions, weeklyHint: input.weeklyHint ?? null, healthSummary: input.health?.safeSummary ?? "No recent health observation.", healthStatus: input.health?.status, quotaRecheckAt: input.quotaRecheckAt ?? null };
 }

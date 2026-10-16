@@ -44,7 +44,7 @@ import { WATCH_JOB_CATALOG_ENTRIES } from "./catalog-watches";
 import { COMMONS_JOB_CATALOG_ENTRIES } from "./catalog-commons";
 import { HYGIENE_JOB_CATALOG_ENTRIES } from "./catalog-hygiene";
 import { ECOSYSTEM_JOB_CATALOG_ENTRIES } from "./catalog-ecosystem";
-import { PROVIDER_PAUSE_JOB_CATALOG_ENTRY } from "./catalog-provider-pause";
+import { PROVIDER_PAUSE_JOB_CATALOG_ENTRY, SUBSCRIPTION_QUOTA_JOB_CATALOG_ENTRY } from "./catalog-provider-pause";
 
 // Re-exported so existing importers of the catalog keep working; the types are
 // owned by ./catalog-types (BI-ED117C82).
@@ -53,6 +53,7 @@ export type { JobCategory, ScheduledJobCatalogEntry };
 // Ordered roughly by operational prominence. core-locked jobs first.
 export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   PROVIDER_PAUSE_JOB_CATALOG_ENTRY,
+  SUBSCRIPTION_QUOTA_JOB_CATALOG_ENTRY,
   ...ECOSYSTEM_JOB_CATALOG_ENTRIES,
   ...DECISION_GOVERNANCE_JOBS,
   ...FLOW_JOB_CATALOG_ENTRIES,

@@ -14,6 +14,8 @@ import { loadProviderCapacitySnapshots } from "@/lib/routing/provider-capacity/s
 import { capacityRoutingExclusionReason } from "@/lib/routing/capacity-routing-exclude";
 import { accountRuntimeKey } from "@/lib/routing/provider-account-candidates";
 import { isAccountCapacityState } from "@/lib/routing/provider-capacity/scopes";
+import { projectAccountReadiness } from "./provider-account-readiness";
+import { isLocalProviderId } from "@/lib/routing/provider-locality";
 
 export async function getProviderAccountCopy(): Promise<Record<string, string>> {
   const [t, setup] = await Promise.all([getT("providerAccounts"), getT("setup")]);
@@ -82,6 +84,13 @@ export async function loadProviderAccountOverview(input: {
       status: account.status, credential: account.credential ? { hasUsableMaterial: account.credential.hasUsableMaterial } : null,
       modelsVerifiedAt: account.modelsVerifiedAt, lastReviewedAt: account.lastReviewedAt, supplierContractId: account.supplierContractId,
       label: account.label ?? pw.provider.name, providerName: pw.provider.name,
+      quotaRecheckAt: control?.quotaRecheckAt ?? null,
+      readiness: projectAccountReadiness({ status: account.status,
+        requiresCredential: !isLocalProviderId(account.providerId) && account.authMethod !== "none",
+        hasCredential: Boolean(account.credential?.hasUsableMaterial), credentialNeedsRenewal,
+        healthAvailable: capacity !== null && (!account.isDefault || Boolean(control)),
+        capacity: ownedHealth ?? (account.isDefault ? providerLimit : undefined), sharedCapacity: sharedLimit ?? undefined,
+        control, sharedRestrictions, now: now.getTime(), copy: input.copy }),
       statusLabel: ["paused", "disabled", "disconnected"].includes(account.status) ? statusLabels[account.status]
         : credentialNeedsRenewal || ownedRestriction ? input.copy.degraded
           : control?.eligibility.label ?? (account.isDefault ? input.copy.routingUnknown : statusLabels[account.status] ?? input.copy.unavailable),

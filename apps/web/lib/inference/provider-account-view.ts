@@ -18,6 +18,8 @@ export type ProviderAccountOverviewRow = ProviderAccountIdentity & {
   modelSummary: string; capacitySummary: string; resetSummary: string | null;
   capabilitySummary?: string;
   resolvesPhases: string[];
+  readiness?: import("./provider-account-readiness").AccountReadiness;
+  quotaRecheckAt?: string | null;
 };
 
 export function isProviderAccountVisible(

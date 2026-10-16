@@ -85,5 +85,22 @@
   "sharedProviderLimits": "Provider-wide limits",
   "reviewAccountBilling": "Review account billing",
   "tokenNeedsRenewal": "Token needs renewal",
-  "reviewConnectionSettings": "Review connection settings"
+  "reviewConnectionSettings": "Review connection settings",
+  "readiness": "Account status",
+  "readinessBlocked": "Needs attention",
+  "readinessConnection": "Connection needs attention",
+  "readinessWaiting": "Waiting for capacity",
+  "readinessWaitingSummary": "Usage limit reported. Access may return before the provider's estimate.",
+  "readinessPausedSummary": "Paused by you. Resume when you are ready.",
+  "readinessRestricted": "Routing paused",
+  "readinessUnverified": "Status unconfirmed",
+  "readinessWorking": "Working",
+  "readinessWorkingSummary": "A request succeeded within the last hour.",
+  "readinessEnabled": "Enabled",
+  "readinessEnabledSummary": "Configured and enabled. No recent successful check.",
+  "readinessDetails": "Models and routing details",
+  "nextCapacityCheck": "Next availability check:",
+  "providerResetEstimate": "Provider reset estimate:",
+  "allAccountStates": "All accounts",
+  "waitingOrPaused": "Waiting or paused"
 }

@@ -14,6 +14,7 @@ export type CapacitySnapshot = {
   retryAtMs?: number | null;
   /** Epoch ms when this snapshot was last observed; null/undefined = unknown. */
   observedAtMs?: number | null;
+  lastSuccessAtMs?: number | null;
   /** Safe operator-facing recovery facts from the same validated observation. */
   safeSummary?: string | null;
   action?: string | null;

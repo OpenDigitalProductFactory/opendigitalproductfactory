@@ -105,6 +105,9 @@ describe("startProviderComplianceConsultation", () => {
       childThreadId: "child-1",
       taskRunId: "task-1",
     });
+    expect(prismaMock.agentMessage.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      role: "assistant", content: expect.stringContaining("The review is pending"),
+    }) });
   });
 
   it("rejects unknown packet fields before writing or dispatching", async () => {

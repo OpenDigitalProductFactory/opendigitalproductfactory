@@ -117,6 +117,13 @@ export async function startProviderComplianceConsultation(input: {
       },
       user.id,
     );
+    await prisma.agentMessage.create({
+      data: {
+        threadId: parent.id, role: "assistant", agentId: caller.agentId,
+        routeContext: input.routeContext,
+        content: "Your provider review has been requested. Your COO will coordinate the specialist review and return the next step here. The review is pending; provider settings have not changed.",
+      },
+    });
     return {
       success: true,
       childThreadId: result.childThreadId,

@@ -11,6 +11,7 @@ import { cliAdapterTypeForProvider } from "@/lib/routing/provider-routing-eligib
 import { getAllCliPoolStatuses, formatWeeklyAllocationHint } from "@/lib/routing/cli-pool-status";
 import { capacityProviderIds, indexProviderCapacityByProvider } from "@/lib/routing/provider-capacity/store";
 import { readRecoveryState, providerRecoveryJobId } from "@/lib/routing/provider-auto-disable";
+import { nextSubscriptionQuotaCheck, subscriptionQuotaJobId } from "@/lib/routing/subscription-quota-policy";
 
 /** Shared catalog/detail read model; no status mutation or page-driven recovery. */
 export async function loadProviderRoutingControls(providers: ProviderWithCredential[], modelCounts: ReadonlyMap<string, number>, now = new Date()) {
@@ -20,7 +21,10 @@ export async function loadProviderRoutingControls(providers: ProviderWithCredent
     loadProviderHealthBatch(ids, { now: now.getTime(), runtimeState: getEndpointRuntimeState }),
     getAllCliPoolStatuses(), getLocalOnlyInference(),
     prisma.providerCapacityStatus.findMany({ where: { providerId: { in: capacityProviderIds(ids) } } }),
-    prisma.scheduledJob.findMany({ where: { jobId: { in: ids.flatMap(id => [providerRecoveryJobId(id), `provider-reenable-${id}`]) }, lastStatus: "scheduled", schedule: { not: "disabled" } } }),
+    prisma.scheduledJob.findMany({ where: { OR: [
+      { jobId: { in: ids.flatMap(id => [providerRecoveryJobId(id), `provider-reenable-${id}`]) }, lastStatus: "scheduled", schedule: { not: "disabled" } },
+      { jobId: { in: ids.map(subscriptionQuotaJobId) } },
+    ] } }),
     ids.some(isLocalProviderId) ? inspectLocalProviderCapacity() : Promise.resolve(null),
     getT("setup"),
   ]);
@@ -40,6 +44,9 @@ export async function loadProviderRoutingControls(providers: ProviderWithCredent
       capacity: capacity ? { state: capacity.state, retryAtMs: capacity.retryAt?.getTime(), observedAtMs: capacity.lastObservedAt?.getTime(), safeSummary: capacity.safeSummary } : undefined,
       recovery: recovery && state && pw.provider.status === "disabled" ? { summary: `Automatic recovery after an ${state.cause === "auth" ? "authentication" : "account billing"} error.`, nextRunAt: recovery.nextRunAt?.toISOString() ?? null } : undefined,
       quotaRecovery: quotaJob ? { nextRunAt: quotaJob.nextRunAt?.toISOString() ?? null } : undefined,
+      quotaRecheckAt: ["chatgpt", "codex"].includes(id) && capacity && ["rate_limited", "quota_resets_at"].includes(capacity.state)
+        && ["active", "degraded"].includes(pw.provider.status) && pw.provider.defaultConnectionStatus === "active"
+        ? nextSubscriptionQuotaCheck(capacity.lastObservedAt, recoveryById.get(subscriptionQuotaJobId(id))?.lastRunAt ?? null)?.toISOString() ?? null : null,
       hostRestriction: isLocalProviderId(id) && hostCapacity && !hostCapacity.available ? t(hostCapacity.reason === "local-ci-capacity-reservation-unavailable" ? "providerRouting.hostUnavailable" : "providerRouting.hostReserved") : null,
       weeklyHint: pool ? formatWeeklyAllocationHint(pool, now) : null,
     })] as const;

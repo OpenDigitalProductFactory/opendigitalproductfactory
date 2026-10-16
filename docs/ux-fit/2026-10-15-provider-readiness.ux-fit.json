@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "status-first",
+  "decisionInteractionId": "DI-BDCAE2635809",
+  "scope": {
+    "files": [
+      "apps/web/components/agent/AgentCoworkerShell.tsx",
+      "apps/web/components/platform/ProviderAccountsOverview.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["status-first", "new-dashboard"]
+  },
+  "sourceDecision": {
+    "owningProfile": "mark-dpf-platform",
+    "evidenceClass": "Recorded MCDA comparison and agent outcome under the operator's explicit green/yellow/red status requirements. Existing account overview and shared report-kit win over duplicate dashboard. Unknown health is explicit; allowed work and account identity remain separate. Prototype exercised in browser; served implementation and viewport verification remain required after governed deployment. Advisory UX engagement CE-9A18E31A requested, not represented as completed."
+  }
+}

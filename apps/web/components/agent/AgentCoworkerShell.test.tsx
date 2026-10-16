@@ -481,6 +481,10 @@ describe("AgentCoworkerShell support entry", () => {
 
   it("starts a provider consultation once the routed COO thread is ready without auto-sending a duplicate model turn", async () => {
     pathname = "/workspace";
+    let complete!: () => void;
+    startProviderComplianceConsultationMock.mockImplementationOnce(() => new Promise(resolve => {
+      complete = () => resolve({ success: true, childThreadId: "child-1", taskRunId: "task-1" });
+    }));
     renderShell();
     await settleShellThread();
     const packet = {
@@ -522,6 +526,12 @@ describe("AgentCoworkerShell support entry", () => {
         packet,
       });
     });
+    act(() => {
+      document.dispatchEvent(new CustomEvent("open-agent-panel", { detail: {
+        autoMessage: "Review provider setup", routeContext: "/workspace", providerReviewPacket: packet,
+      } }));
+      complete();
+    });
     await waitFor(() => {
       expect(screen.getByText("Provider review requested")).toBeInTheDocument();
     });
@@ -532,7 +542,7 @@ describe("AgentCoworkerShell support entry", () => {
 
   it("keeps posture unchanged and offers retry or qualified review when consultation is denied", async () => {
     pathname = "/workspace";
-    startProviderComplianceConsultationMock.mockRejectedValueOnce(new Error("delegation denied"));
+    startProviderComplianceConsultationMock.mockResolvedValueOnce({ success: false, error: "provider_consultation_unavailable" });
     renderShell();
     await settleShellThread();
     const packet = {

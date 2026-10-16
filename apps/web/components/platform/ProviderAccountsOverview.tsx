@@ -7,6 +7,7 @@ import { DataTable, FilterBar, StatusBadge, type Column } from "@/components/ui/
 import { FormStatus } from "@/components/ui/form/FormStatus";
 import { SubmitButton } from "@/components/ui/form/SubmitButton";
 import { Surface } from "@/components/ui/Surface";
+import { LocalTime } from "@/components/ui/LocalTime";
 import { fieldControlClass } from "@/components/ui/form/styles";
 import { addProviderAccount } from "@/lib/actions/provider-accounts";
 import { completeProviderAccountSetup } from "@/lib/actions/provider-account-setup";
@@ -30,6 +31,7 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
   const id = useId();
   const router = useRouter();
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [catalogSearch, setCatalogSearch] = useState("");
   const [showCatalog, setShowCatalog] = useState(firstRun);
   const [newProvider, setNewProvider] = useState<ProviderAccountCatalogRow | null>(null);
@@ -50,7 +52,12 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
     if (trigger) (trigger.isConnected ? trigger : addProviderRef.current)?.focus();
   }, [newProvider]);
   const normalized = search.trim().toLocaleLowerCase();
-  const visibleRows = rows.filter(row => `${row.label} ${row.providerName} ${row.allowedWork} ${row.statusLabel}`.toLocaleLowerCase().includes(normalized));
+  const visibleRows = rows.filter(row => {
+    const state = row.readiness?.state ?? "unverified";
+    const matchesStatus = !statusFilter || (statusFilter === "enabled" ? ["enabled", "working"].includes(state)
+      : statusFilter === "waiting" ? ["waiting", "paused"].includes(state) : ["blocked", "unverified"].includes(state));
+    return matchesStatus && `${row.label} ${row.providerName} ${row.allowedWork} ${row.readiness?.label ?? row.statusLabel} ${row.readiness?.summary ?? ""}`.toLocaleLowerCase().includes(normalized);
+  });
   const catalogById = new Map(catalog.map(provider => [provider.providerId, provider]));
   const firstAccountByProvider = new Map<string, string>();
   for (const account of visibleRows) {
@@ -59,18 +66,26 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
   const columns: Column<ProviderAccountOverviewRow>[] = [
     { key: "account", header: copy.accountName, mobileFullWidth: true, hideMobileLabel: true, cell: row => <div>
       <Link href={providerAccountHref(row)} className="font-medium text-[var(--dpf-accent)]">{row.label}</Link>
-      <div className="text-xs text-[var(--dpf-muted)]">{row.providerName} · {row.statusLabel}</div>
+      {row.label !== row.providerName && <div className="text-xs text-[var(--dpf-muted)]">{row.providerName}</div>}
       {row.resolvesPhases.length > 0 && <div className="text-xs text-[var(--dpf-muted)]">{copy.resolvesPhases} {row.resolvesPhases.join(", ")}</div>}
     </div>, sortAccessor: row => `${row.providerName} ${row.label}` },
+    { key: "status", header: copy.readiness ?? copy.capacity, mobileFullWidth: true, cell: row => <div className="space-y-2">
+      <StatusBadge domain="providerAccountReadiness" status={row.readiness?.state ?? "unverified"}
+        label={row.readiness?.label ?? row.statusLabel} variant="solid" size="md" uppercase={false} />
+      {row.readiness?.summary && <p className="m-0 text-sm text-[var(--dpf-text)]">{row.readiness.summary}</p>}
+      {row.readiness?.state === "waiting" && row.quotaRecheckAt && <p className="m-0 text-xs text-[var(--dpf-muted)]">{copy.nextCapacityCheck} <LocalTime value={row.quotaRecheckAt} /></p>}
+      {row.readiness?.providerResetAt && <p className="m-0 text-xs text-[var(--dpf-muted)]">{copy.providerResetEstimate} <LocalTime value={row.readiness.providerResetAt} /></p>}
+      <details className="text-xs text-[var(--dpf-muted)]">
+        <summary className="cursor-pointer py-2">{copy.readinessDetails ?? copy.models}</summary>
+        <p>{row.modelSummary}</p>
+        {row.capabilitySummary && <p>{row.capabilitySummary}</p>}
+        <p>{row.capacitySummary}</p>
+        {row.resetSummary && <p className="break-words">{row.resetSummary}</p>}
+      </details>
+    </div> },
     { key: "allowed", header: copy.allowedWork, cell: row => <div>
       <StatusBadge intent="neutral" label={row.allowedWork} />
       <div className="mt-1 text-xs text-[var(--dpf-muted)]">{row.allowedWorkSummary}</div>
-    </div> },
-    { key: "models", header: copy.models, cell: row => <div>{row.modelSummary}
-      {row.capabilitySummary && <div className="text-xs text-[var(--dpf-muted)]">{row.capabilitySummary}</div>}
-    </div> },
-    { key: "capacity", header: copy.capacity, mobileFullWidth: true, cell: row => <div>{row.capacitySummary}
-      {row.resetSummary && <div className="text-xs text-[var(--dpf-muted)]">{row.resetSummary}</div>}
     </div> },
     { key: "manage", header: copy.manage, mobileFullWidth: true, hideMobileLabel: true, cell: row => <div className="flex flex-wrap gap-2">
       <Link href={providerAccountHref(row)} data-owner-first-next-action={!canWrite && row.connectionId === visibleRows[0]?.connectionId ? "" : undefined} className="py-2 text-[var(--dpf-accent)]">{copy.manage}</Link>
@@ -92,7 +107,13 @@ export function ProviderAccountsOverview({ rows, catalog, firstRun, canWrite, co
 
   return <section className="space-y-3" aria-label={copy.connection} aria-busy={pending}>
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <FilterBar facets={[{ kind: "search", key: "query", placeholder: copy.searchAccounts }]} value={{ query: search }} onChange={next => setSearch(next.query ?? "")} resultCount={visibleRows.length} />
+      <FilterBar facets={[{ kind: "search", key: "query", placeholder: copy.searchAccounts },
+        { kind: "select", key: "status", label: copy.readiness ?? copy.capacity, options: [
+          { value: "", label: copy.allAccountStates ?? "All accounts" },
+          { value: "enabled", label: copy.readinessEnabled ?? "Enabled" },
+          { value: "waiting", label: copy.waitingOrPaused ?? "Waiting or paused" },
+          { value: "attention", label: copy.readinessBlocked ?? "Needs attention" },
+        ] }]} value={{ query: search, status: statusFilter }} onChange={next => { setSearch(next.query ?? ""); setStatusFilter(next.status ?? ""); }} resultCount={visibleRows.length} />
       {canWrite && <button ref={addProviderRef} type="button" data-owner-first-next-action className={buttonClass} disabled={pending} aria-expanded={showCatalog} aria-controls={`${id}-catalog`} onClick={() => setShowCatalog(!showCatalog)}>{copy.addProvider}</button>}
     </div>
     <DataTable columns={columns} rows={visibleRows} getRowKey={row => row.connectionId} empty={copy.noAccounts} dense responsive ariaLabel={copy.connection} />

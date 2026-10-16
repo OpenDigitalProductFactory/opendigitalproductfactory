@@ -11,6 +11,8 @@ import { resolveResponsesProbeBaseUrl } from "@/lib/routing/responses-provider";
 import { refreshOAuthToken } from "@/lib/provider-oauth";
 import { captureProviderQuotaObservation } from "./provider-quota-revalidation";
 import type { ProviderQuotaObservation, ProviderQuotaReconciliation } from "@/lib/routing/provider-capacity/types";
+import { classifyProviderCapacity } from "@/lib/routing/provider-capacity";
+import type { ProviderCapacityClassification } from "@/lib/routing/provider-capacity/types";
 import { ACCOUNT_CHANGED, assertActiveAccountSnapshot, getActiveAccountBearerToken, isActiveDefaultSubscription, type ActiveAccountSnapshot } from "@/lib/inference/active-provider-account-verification";
 
 const OPENAI_OAUTH_LINKED_PROVIDERS = new Set(["codex", "chatgpt"]);
@@ -49,7 +51,7 @@ function signInRecoveryMessage(providerId: string, connectionId?: string): strin
     : "Session expired. Sign in again to this account, then retry verification.";
 }
 
-export async function testProviderAuthInternal(providerId: string, refreshCatalog = true, connectionId?: string, options: { verificationOnly?: boolean } = {}): Promise<{ ok: boolean; message: string }> {
+export async function testProviderAuthInternal(providerId: string, refreshCatalog = true, connectionId?: string, options: { verificationOnly?: boolean } = {}): Promise<{ ok: boolean; message: string; capacityFailure?: ProviderCapacityClassification }> {
 
   const catalog = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!catalog) return { ok: false, message: "Provider not found" };
@@ -225,7 +227,8 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
       if (scopeError) {
         return { ok: false, message: scopeError };
       }
-      return { ok: false, message: `HTTP ${res.status} — ${body.slice(0, 200)} — tried ${attemptedUrl}` };
+      return { ok: false, message: `HTTP ${res.status} — ${body.slice(0, 200)} — tried ${attemptedUrl}`,
+        capacityFailure: classifyProviderCapacity({ providerId, statusCode: res.status, bodyText: body, now: new Date() }) };
     }
 
     // Anthropic subscription tokens (OAuth) can't access /models — test with a minimal /messages call instead

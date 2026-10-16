@@ -173,7 +173,7 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
   const [pendingAutoMessageDisplay, setPendingAutoMessageDisplay] = useState<string | null>(null);
   const [pendingProviderConsultation, setPendingProviderConsultation] =
     useState<PendingProviderConsultation | null>(null);
-  const providerConsultationInFlightRef = useRef<string | null>(null);
+  const providerConsultationInFlightRef = useRef<{ signature: string; request: ReturnType<typeof startProviderComplianceConsultation> } | null>(null);
   const [guidedRouteContext, setGuidedRouteContext] = useState<string | null>(null);
   const [dockedFrame, setDockedFrame] = useState<DockedPanelFrame | null>(null);
   const [isMobile, setIsMobile] = useState(false);
@@ -391,15 +391,13 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
     }
 
     const signature = `${threadId}:${JSON.stringify(pendingProviderConsultation.packet)}`;
-    if (providerConsultationInFlightRef.current === signature) return;
-    providerConsultationInFlightRef.current = signature;
+    if (providerConsultationInFlightRef.current?.signature !== signature) providerConsultationInFlightRef.current = { signature, request: startProviderComplianceConsultation({
+      parentThreadId: threadId, routeContext: pendingProviderConsultation.routeContext, packet: pendingProviderConsultation.packet,
+    }) };
     let active = true;
 
-    void startProviderComplianceConsultation({
-      parentThreadId: threadId,
-      routeContext: pendingProviderConsultation.routeContext,
-      packet: pendingProviderConsultation.packet,
-    }).then(async () => {
+    void providerConsultationInFlightRef.current.request.then(async (result) => {
+      if (!result.success && result.error !== "provider_consultation_fallback_delivered") throw new Error("Provider consultation could not start");
       const snapshot = await getThreadSnapshotById({ threadId });
       if (active && snapshot?.threadId === threadId) {
         setInitialMessages(snapshot.messages ?? []);
@@ -419,7 +417,7 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
         },
       ]);
     }).finally(() => {
-      if (active) setPendingProviderConsultation(null);
+      if (active) { providerConsultationInFlightRef.current = null; setPendingProviderConsultation(null); }
     });
 
     return () => {
