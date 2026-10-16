@@ -267,7 +267,7 @@ GPP also makes the model checkable. Its completeness checks include:
 
 Reach reconciliation is the most important. A model the runtime does not match is documentation, not governance.
 
-GPP adopts the Agents Rule of Two as a model constraint. An envelope that combines untrusted input, sensitive access and state-changing or outbound ability for one actor requires a gate that includes an accountable human or independent validator. GPP owns no runtime control, so it composes with sandboxing, egress control and data-flow techniques rather than replacing them.
+GPP uses the Agents Rule of Two to flag an envelope combining untrusted input, sensitive access and state-changing or outbound ability for one actor. The pinned 0.18 prose mentions an accountable human or independent validator, but its binding schema has no validator-only mode. That is an unresolved representation, not a functioning alternative authority path. The [proposed 0.19 correction](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/c0b47d1eaffee39fb14237e095e08d39c71e5fec/docs/architecture/gated-permissions-process.md), frozen at commit `c0b47d1eaffee39fb14237e095e08d39c71e5fec`, requires an accountable human decision for that complete combination and leaves validator-only authorization unsupported until specified. It preserves ordinary lower-risk doctrine modes. This pending source correction is not evidence of adoption or runtime enforcement. GPP composes with sandboxing, egress control and data-flow techniques; it does not replace them.
 
 ### 4.4 TAK: may it act now?
 
@@ -615,7 +615,7 @@ The proposed hybrid approach keeps normative requirements with GAID:
 
 - private identity stays directory-bound
 - public identity is issuer-accredited and verifier-friendly
-- transparency is mandatory
+- proposed public verification needs current issuer/status evidence; GAID §13.2 recommends (SHOULD) a transparency log rather than requiring one universally, and private material is not automatically public
 - decentralized portability is optional
 
 AP2, the Agent Payments Protocol, is strong prior art for signed consequential-action evidence and bounded delegated authority.
