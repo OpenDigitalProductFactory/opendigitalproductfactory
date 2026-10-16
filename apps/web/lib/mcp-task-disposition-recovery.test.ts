@@ -158,7 +158,7 @@ describe("disposition correction", () => {
       status: "input-required", updatedAt: new Date("2026-09-06T10:00:00Z"), a2aMetadata: metadata,
       progressPayload: { terminalWriterWait: {
         schemaVersion: 1, kind: "missing-terminal-writer", writerToolName: "record_initiative_evidence",
-        resumeMode: "same-taskrun", attempt: 2, observedAt: "2026-09-06T10:00:00Z",
+        resumeMode: "same-taskrun", dispatchContract: "required-tool-call", attempt: 2, observedAt: "2026-09-06T10:00:00Z",
       } },
     });
     db.findToolExecutions.mockResolvedValue([persistedReaderExecution]);
