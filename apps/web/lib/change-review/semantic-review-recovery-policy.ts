@@ -60,6 +60,7 @@ export function semanticReviewRecoveryObservation(status: string, payload: unkno
     : (recorded.executionOutcome === "unknown" || reason?.startsWith("provider-outcome-uncertain")) ? "execution-uncertain"
     : capacityRecovery ? "capacity-wait" : "infrastructure-inconclusive";
   return { ...snapshot, budget, executing, classification, reason, successorTaskRunId, capacityRecovery,
+    manualRecoveryWait: isSemanticReviewRecoveryWait(status) && !capacityRecovery,
     requestDigest: typeof recorded.requestDigest === "string" && /^[a-f0-9]{64}$/.test(recorded.requestDigest) ? recorded.requestDigest : null,
     remainingAttempts: snapshot.recoveryAttempt === null || !Number.isSafeInteger(snapshot.recoveryAttempt) || snapshot.recoveryAttempt < 0 ? null : Math.max(0, SEMANTIC_REVIEW_MAX_ATTEMPTS - snapshot.recoveryAttempt),
     pollUseful: executing || Boolean(capacityRecovery),

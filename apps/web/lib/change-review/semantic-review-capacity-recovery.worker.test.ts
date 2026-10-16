@@ -246,6 +246,34 @@ describe("automatic semantic-review capacity recovery", () => {
     expect(mocks.evidence).toHaveBeenCalledOnce();
   });
 
+  it("resumes once after DRAIN races admission without renewing budget or repeating a passing sibling", async () => {
+    const nodes = await persistedCapacityWait(true);
+    const now = new Date(Date.now() + 4 * 60_000);
+    await reconcileSemanticReviews(now);
+    expect(mocks.send).toHaveBeenCalledOnce();
+    mocks.send.mockClear();
+    vi.mocked(getQuiescenceLevel).mockResolvedValue("draining");
+    await executePersistedSemanticReview("TR-1");
+    expect(row.status).toBe("input-required");
+    expect(providerCalls).toBe(1); // Only the original passing sibling has executed.
+    expect(nodes.has("semantic-review:TR-1:change-reviewer:recovery-1")).toBe(false);
+    expect(row.progressPayload).toMatchObject({ semanticReview: {
+      deadlineAt: packet.deadlineAt, dispatchAttempt: 2, recoveryAttempt: 1,
+      capacityWaitReason: "portal-quiescing", capacityRecovery: { schemaVersion: 1, requestDigest: packet.digest },
+    } });
+    vi.mocked(getQuiescenceLevel).mockResolvedValue("normal");
+    await Promise.all([reconcileSemanticReviews(new Date(now.getTime() + 60_000)),
+      reconcileSemanticReviews(new Date(now.getTime() + 60_000))]);
+    expect(mocks.send).toHaveBeenCalledOnce();
+    await executePersistedSemanticReview("TR-1");
+    expect(providerCalls).toBe(2);
+    expect(row.status).toBe("completed");
+    expect(row.progressPayload).toMatchObject({ semanticReview: {
+      deadlineAt: packet.deadlineAt, dispatchAttempt: 3, recoveryAttempt: 2,
+    } });
+    expect(nodes.has("semantic-review:TR-1:AGT-903:recovery-2")).toBe(false);
+  });
+
   it("recovers proven branch checkpoints after executor loss without resetting attempts", async () => {
     await persistedCapacityWait();
     row.status = "working";

@@ -363,8 +363,21 @@ export async function executePersistedSemanticReview(taskRunId: string) {
     if (!currentReviewSource(packet, reviewRoom)) return settle(row, "failed", "review-source-changed", {
       action: "Submit a refreshed immutable review request for the current source.", capacityRecovery: null });
     const { getQuiescenceLevel } = await import("@/lib/self-upgrade/quiescence");
-    if (await getQuiescenceLevel() !== "normal") return settle(row, "input-required", "review-recovery-quiescing", {
-      action: "Reconcile the unchanged review after the canonical upgrade completes.", capacityRecovery: null });
+    if (await getQuiescenceLevel() !== "normal") {
+      // This generation has not started. Reuse only complete predecessor proof,
+      // without inventing a completed checkpoint or refunding consumed attempts.
+      const provenWait = hasProvenCapacityCheckpointSet({
+        nodes: await prisma.taskNode.findMany({ where: { taskRunId: row.id }, take: 101 }),
+        taskRunId, requestDigest: packet.digest, recoveryAttempt: state(row).recoveryAttempt ?? 0,
+        specialistIds: packet.input.identity.specialistIds,
+      });
+      return settle(row, "input-required", provenWait ? "review-capacity-deferred" : "review-recovery-quiescing", {
+        capacityRecovery: provenWait ? capacityRecoveryMarker(packet.digest, Date.now()) : null,
+        capacityWaitReason: "portal-quiescing",
+        action: provenWait ? "Canonical upgrade in progress; the server will recheck the proven pre-dispatch wait within its original budget."
+          : "Reconcile the unchanged review after the canonical upgrade completes.",
+      });
+    }
   }
   const currentEvidence = reviewRoom ? await resolveFailureAnalysisEvidence(packet.input.failureAnalysis, reviewRoom.id) : [];
   const currentAnalysis = validateFailureAnalysis(packet.input.failureAnalysis, packet.input.identity, currentEvidence);
