@@ -25,7 +25,7 @@ header,section,form{display:grid;gap:.75rem}nav{display:flex;flex-wrap:wrap;gap:
 <script>
 const states={
 human:{status:"Human review required",question:"Release the customer export?",meaning:"This decision requires a person because it carries critical risk.",evidence:"The recorded evaluation recommends proceeding. Critical risk still requires a person's direction.",action:"Capture owner direction"},
-independent:{status:"Independent review outstanding",question:"Use the proposed compatibility view?",meaning:"Independent review is outstanding because the recorded guidance is insufficient. The current interim permits this step within its existing authority.",evidence:"The recorded evaluation is unresolved. An improvement investigation is separate from proving the proposed action is correct.",action:null},
+independent:{status:"Independent review outstanding",question:"Use the proposed compatibility view?",meaning:"Independent review is needed because the recorded guidance is insufficient.",evidence:"The recorded evaluation is unresolved. The current interim permits this step within its existing authority. An improvement investigation is separate from proving the proposed action is correct.",action:null},
 earlier:{status:"Missing evidence",question:"Which source supports the rollout decision?",meaning:"Capture the missing evidence for this recorded decision.",evidence:"This earlier item retains its existing evidence-capture workflow.",action:"Capture missing evidence"},
 unavailable:{status:"Review status unavailable",question:"Decision review",meaning:"The review status could not be loaded. Check the decision record before continuing.",evidence:"No review status or permission is inferred from missing information.",action:null}
 };

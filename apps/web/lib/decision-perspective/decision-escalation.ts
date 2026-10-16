@@ -44,19 +44,22 @@ export function decisionAllowsStep(evaluation: Evaluation): boolean {
   return previouslyAllowed;
 }
 
+/** Shared display copy for a recorded human route; this grants no permission. */
+export function humanDecisionReviewMessage(reasonCode: string | null | undefined): string {
+  const reasons = {
+    "damaging-critical-risk": "it carries critical risk",
+    "damaging-consequence": "it declares an outward, irreversible or authority consequence",
+    "damaging-threshold": "it crosses a configured threshold",
+    "damaging-regulated": "a declared regulation requires human review",
+  };
+  return `This decision requires a person because ${reasons[reasonCode as keyof typeof reasons] ?? "its recorded route requires human review"}.`;
+}
+
 /** New routed results explain the actual next action; callers retain legacy copy. */
 export function decisionEscalationMessage(evaluation: Evaluation): string | null {
   const escalation = evaluation.escalation;
   if (!escalation) return null;
-  if (escalation.route === "human") {
-    const reasons = {
-      "damaging-critical-risk": "it carries critical risk",
-      "damaging-consequence": "it declares an outward, irreversible or authority consequence",
-      "damaging-threshold": "it crosses a configured threshold",
-      "damaging-regulated": "a declared regulation requires human review",
-    };
-    return `This decision requires a person because ${reasons[escalation.reasonCode as keyof typeof reasons] ?? "its recorded route requires human review"}.`;
-  }
+  if (escalation.route === "human") return humanDecisionReviewMessage(escalation.reasonCode);
   if (escalation.route === "independent-review") {
     const causes = { "corpus-gap": "insufficient corpus", "vector-gap": "conflicting guidance",
       "capability-gap": "a capability is unavailable", "policy-limit": "the delegated policy limit",

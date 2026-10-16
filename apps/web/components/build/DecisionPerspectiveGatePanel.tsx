@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import type { DecisionGateCaptureDraft } from "@/lib/decision-perspective/capture-types";
 import type { DecisionInteractionGateView } from "@/lib/decision-perspective/types";
+import { humanCaptureOutcome } from "@/lib/decision-perspective/human-escalation";
+import { humanDecisionReviewMessage } from "@/lib/decision-perspective/decision-escalation";
 import { VoiceRationalePlayer } from "./VoiceRationalePlayer";
 
 type Props = {
@@ -46,12 +48,18 @@ function captureLabel(outcomeType: DecisionInteractionGateView["outcomeType"]): 
 }
 
 function actionPrompt(interaction: DecisionInteractionGateView): string | null {
-  if (interaction.outcomeType === "escalate") {
+  if (interaction.escalationRoute === "independent_review") return "Independent review is needed. No owner answer is requested here.";
+  if (interaction.escalationRoute === "human") {
+    return interaction.escalationCaptured ? "Owner direction has been captured for this gate."
+      : humanDecisionReviewMessage(interaction.escalationReason);
+  }
+  const captureOutcome = humanCaptureOutcome(interaction);
+  if (captureOutcome === "escalate") {
     return interaction.escalationCaptured
       ? "Owner direction has been captured for this gate."
       : "The accountable owner should resolve the ambiguity before this build advances.";
   }
-  if (interaction.outcomeType === "defer") {
+  if (captureOutcome === "defer") {
     return interaction.deferralCaptured
       ? "The coverage gap has been captured for future material improvement."
       : "Capture the missing evidence so this decision class can earn autonomy later.";
@@ -80,6 +88,7 @@ function SourceList({ sources }: { sources: DecisionInteractionGateView["sources
 }
 
 export function DecisionPerspectiveGatePanel({ interaction, onCapture, voiceOutput }: Props) {
+  const captureTrigger = useRef<HTMLButtonElement>(null);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [answer, setAnswer] = useState("");
   const [criteriaText, setCriteriaText] = useState("");
@@ -99,31 +108,31 @@ export function DecisionPerspectiveGatePanel({ interaction, onCapture, voiceOutp
   }
 
   const activeInteraction = interaction;
-  const label = OUTCOME_LABEL[activeInteraction.outcomeType];
+  const captureOutcomeType = humanCaptureOutcome(activeInteraction);
+  const label = activeInteraction.escalationRoute === "human" ? "Human review required"
+    : activeInteraction.escalationRoute === "independent_review" ? "Independent review outstanding"
+      : OUTCOME_LABEL[activeInteraction.outcomeType];
   const tier = confidenceTier(activeInteraction.confidenceScore);
   const prompt = actionPrompt(activeInteraction);
-  const buttonLabel = captureLabel(activeInteraction.outcomeType);
+  const buttonLabel = captureOutcomeType ? captureLabel(captureOutcomeType) : null;
   const captured =
-    (activeInteraction.outcomeType === "escalate" && activeInteraction.escalationCaptured)
-    || (activeInteraction.outcomeType === "defer" && activeInteraction.deferralCaptured)
+    (captureOutcomeType === "escalate" && activeInteraction.escalationCaptured)
+    || (captureOutcomeType === "defer" && activeInteraction.deferralCaptured)
     || captureSaved;
   const statusLabel =
-    activeInteraction.outcomeType === "escalate"
+    captureOutcomeType === "escalate"
       ? captured ? "Escalation captured" : "Escalation open"
-      : activeInteraction.outcomeType === "defer"
+      : captureOutcomeType === "defer"
         ? captured ? "Deferral captured" : "Deferral open"
         : null;
-  const Icon = activeInteraction.outcomeType === "recommend" || activeInteraction.outcomeType === "arbitrate"
+  const needsReview = captureOutcomeType !== null || activeInteraction.escalationRoute === "independent_review";
+  const Icon = !needsReview && (activeInteraction.outcomeType === "recommend" || activeInteraction.outcomeType === "arbitrate")
     ? CheckCircle2
     : AlertTriangle;
-  const captureOutcomeType =
-    activeInteraction.outcomeType === "escalate" || activeInteraction.outcomeType === "defer"
-      ? activeInteraction.outcomeType
-      : null;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!captureOutcomeType) return;
+    if (!captureOutcomeType || !onCapture) return;
 
     const trimmedAnswer = answer.trim();
     if (!trimmedAnswer) {
@@ -138,7 +147,7 @@ export function DecisionPerspectiveGatePanel({ interaction, onCapture, voiceOutp
     setPendingCapture(true);
     setCaptureError(null);
     try {
-      await onCapture?.({
+      await onCapture({
         interactionId: activeInteraction.interactionId,
         outcomeType: captureOutcomeType,
         answer: trimmedAnswer,
@@ -231,15 +240,17 @@ export function DecisionPerspectiveGatePanel({ interaction, onCapture, voiceOutp
           </div>
         </div>
 
+        {prompt && !buttonLabel && <p className="text-xs leading-relaxed text-[var(--dpf-muted)]">{prompt}</p>}
         {prompt && buttonLabel && (
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--dpf-border)] pt-3">
             <p className="max-w-[34rem] text-xs leading-relaxed text-[var(--dpf-muted)]">
-              {prompt}
+              {prompt}{!onCapture && !captured ? " Capturing a response is unavailable on this surface." : ""}
             </p>
             <button
               type="button"
               data-testid="wwmd-gate-capture"
-              disabled={captured}
+              ref={captureTrigger}
+              disabled={captured || !onCapture}
               onClick={() => {
                 setCaptureError(null);
                 setCaptureOpen(true);
@@ -286,6 +297,7 @@ export function DecisionPerspectiveGatePanel({ interaction, onCapture, voiceOutp
               <label className="grid gap-1 text-xs font-semibold text-[var(--dpf-text)]">
                 {captureOutcomeType === "escalate" ? "Owner direction" : "Missing evidence"}
                 <textarea
+                  autoFocus
                   value={answer}
                   onChange={(event) => setAnswer(event.target.value)}
                   rows={3}
@@ -363,7 +375,10 @@ export function DecisionPerspectiveGatePanel({ interaction, onCapture, voiceOutp
                 <button
                   type="button"
                   disabled={pendingCapture}
-                  onClick={() => setCaptureOpen(false)}
+                  onClick={() => {
+                    setCaptureOpen(false);
+                    captureTrigger.current?.focus();
+                  }}
                   className="inline-flex items-center rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-xs font-semibold text-[var(--dpf-text)] transition-colors hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-accent)] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Cancel
