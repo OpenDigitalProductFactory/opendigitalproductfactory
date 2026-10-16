@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({
-  agent: { findFirst: vi.fn() },
+  agent: { findFirst: vi.fn(), findMany: vi.fn() },
   agentToolGrant: { upsert: vi.fn(), deleteMany: vi.fn() },
   agentToolGrantRevocation: { upsert: vi.fn(), deleteMany: vi.fn() },
   toolExecution: { create: vi.fn() },
@@ -8,7 +8,7 @@ const db = vi.hoisted(() => ({
 }));
 vi.mock("@dpf/db", () => ({ prisma: db }));
 import { resolveCoworkerAgent, manageCoworkerToolGrant } from "./coworker-tool-grant-core";
-import { getAgentToolGrantsAsync, isToolAllowedByGrants } from "./agent-grants";
+import { getAgentGrantSummaries, getAgentToolGrantsAsync, isToolAllowedByGrants } from "./agent-grants";
 import { previewCoworkerGrantReconciliation, reconcileCoworkerGrants } from "./coworker-grant-reconciliation";
 const canonical = { id: "canonical", agentId: "AGT-EXT-CODEX", slugId: null, displayName: "Codex",
   toolGrants: [{ id: "g1", agentId: "canonical", grantKey: "registry_read", grantedBy: "u1", grantedAt: new Date(0) }],
@@ -27,6 +27,22 @@ beforeEach(() => {
 });
 
 describe("canonical authority across references and requests", () => {
+  it("projects saved canonical grants and revocations for both summary identities", async () => {
+    db.agent.findMany.mockResolvedValue([
+      { ...canonical, toolGrants: alias.toolGrants }, alias,
+    ]);
+    const summaries = await getAgentGrantSummaries();
+    expect(summaries.map(row => row.agentId)).toEqual([canonical.agentId, alias.agentId]);
+    for (const row of summaries) expect(row.grants).toEqual(["registry_read"]);
+  });
+  it("never reports a granted alias as authority when its canonical record is missing", async () => {
+    db.agent.findMany.mockResolvedValue([alias]);
+    expect((await getAgentGrantSummaries())[0].grants).toEqual([]);
+  });
+  it("surfaces an unavailable summary read instead of reporting seeded grants", async () => {
+    db.agent.findMany.mockRejectedValue(new Error("authority unavailable"));
+    await expect(getAgentGrantSummaries()).rejects.toThrow("authority unavailable");
+  });
   it.each(["AGT-EXT-CODEX", "external-codex", "alias"])("%s resolves only the canonical authority owner", async (ref) => {
     expect((await resolveCoworkerAgent(ref))?.id).toBe("canonical");
   });

@@ -31,6 +31,59 @@ import { resolveAIDocForAgent } from "@/lib/identity/aidoc-resolver";
 
 import { listInternalAgentCards, resolveInternalAgentCard } from "./agent-card-service";
 
+describe("Agent Card canonical grant projection", () => {
+  const record = (agentId: string, grants: string[], revoked: string[] = []) => ({
+    agentId, name: agentId, description: null, status: "active", lifecycleStage: "production",
+    sensitivity: "internal", hitlTierDefault: 1, executionConfig: null, governanceProfile: null,
+    skills: [], toolGrants: grants.map(grantKey => ({ grantKey })),
+    toolGrantRevocations: revoked.map(grantKey => ({ grantKey })),
+  });
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(prisma.agentActionProposal.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.coworkerActionEnvelope.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.coworkerActionEnvelope.groupBy).mockResolvedValue([] as never);
+    vi.mocked(prisma.user.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.toolExecution.findMany).mockResolvedValue([]);
+    vi.mocked(resolveAIDocForAgent).mockResolvedValue(null);
+  });
+  it("preserves alias identities while projecting only their canonical persisted authority in one batch", async () => {
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([
+      record("external-codex", ["admin_write"]),
+      record("AGT-EXT-CODEX", ["registry_read", "release_plan_read"], ["release_plan_read"]),
+    ] as never);
+    const cards = await listInternalAgentCards();
+    expect(cards.map(card => card.agentId)).toEqual(["external-codex", "AGT-EXT-CODEX"]);
+    for (const card of cards) {
+      expect(card.toolGrants).toEqual(["registry_read"]);
+      expect(card.extensions.tak.authority.toolGrantCount).toBe(1);
+      expect(card.exposedTools.length).toBeGreaterThan(0);
+    }
+    expect(prisma.agent.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.agent.findUnique).not.toHaveBeenCalled();
+  });
+  it("resolves a single alias card through the same canonical grant and revocation state", async () => {
+    vi.mocked(prisma.agent.findUnique).mockImplementation((async (input: { where: { agentId?: string } }) => (
+      input.where.agentId === "AGT-EXT-CODEX"
+        ? record("AGT-EXT-CODEX", ["registry_read", "admin_write"], ["admin_write"])
+        : record("external-codex", ["admin_write"])
+    )) as never);
+    const card = await resolveInternalAgentCard("external-codex");
+    expect(card?.agentId).toBe("external-codex");
+    expect(card?.toolGrants).toEqual(["registry_read"]);
+  });
+  it("never uses a granted alias as the missing canonical owner's authority", async () => {
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([record("external-codex", ["admin_write"])] as never);
+    const [card] = await listInternalAgentCards();
+    expect(card.toolGrants).toEqual([]);
+    expect(card.exposedTools).toEqual([]);
+  });
+  it("surfaces a failed authoritative card read", async () => {
+    vi.mocked(prisma.agent.findMany).mockRejectedValue(new Error("authority unavailable"));
+    await expect(listInternalAgentCards()).rejects.toThrow("authority unavailable");
+  });
+});
+
 describe("resolveInternalAgentCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -72,6 +125,7 @@ describe("resolveInternalAgentCard", () => {
           capability: "file_read",
         },
       ],
+      toolGrantRevocations: [],
       toolGrants: [
         { grantKey: "sandbox_execute" },
         { grantKey: "backlog_write" },
@@ -198,6 +252,7 @@ describe("resolveInternalAgentCard", () => {
       executionConfig: null,
       governanceProfile: null,
       skills: [],
+      toolGrantRevocations: [],
       toolGrants: [{ grantKey: "registry_read" }],
     } as never);
     vi.mocked(resolveAIDocForAgent).mockResolvedValue(null);
@@ -263,6 +318,7 @@ describe("resolveInternalAgentCard", () => {
             capability: "build_promote",
           },
         ],
+        toolGrantRevocations: [],
         toolGrants: [{ grantKey: "sandbox_execute" }],
       },
       {
@@ -276,6 +332,7 @@ describe("resolveInternalAgentCard", () => {
         executionConfig: null,
         governanceProfile: null,
         skills: [],
+        toolGrantRevocations: [],
         toolGrants: [{ grantKey: "registry_read" }],
       },
     ] as never);
@@ -373,6 +430,7 @@ describe("resolveInternalAgentCard", () => {
           maxDelegationRiskBand: "medium",
         },
         skills: [],
+        toolGrantRevocations: [],
         toolGrants: [{ grantKey: "sandbox_execute" }],
       },
     ] as never);
@@ -506,6 +564,7 @@ describe("resolveInternalAgentCard", () => {
         executionConfig: null,
         governanceProfile: null,
         skills: [],
+        toolGrantRevocations: [],
         toolGrants: [],
       },
     ] as never);

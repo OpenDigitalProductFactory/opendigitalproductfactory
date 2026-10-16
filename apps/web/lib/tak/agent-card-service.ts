@@ -1,10 +1,11 @@
 import { envelopeApproveRoute, envelopeDeclineRoute } from "@/lib/coworker/envelope-routes";
 import { prisma } from "@dpf/db";
+import { coworkerAuthorityAgentId } from "@/lib/coworker-identity";
 
 import { resolveAIDocForAgent, type InternalAIDoc } from "@/lib/identity/aidoc-resolver";
 import { projectActionProposalPresentation } from "@/lib/governance/action-proposal-presentation";
 
-import { getToolGrantMapping } from "./agent-grants";
+import { getToolGrantMapping, persistedAgentToolGrants } from "./agent-grants";
 import type {
   InternalAgentCard,
   InternalAgentCardSecurityScheme,
@@ -35,6 +36,7 @@ type AgentCardAgent = {
   } | null;
   skills: InternalAgentCardSkill[];
   toolGrants: Array<{ grantKey: string }>;
+  toolGrantRevocations: Array<{ grantKey: string }>;
 };
 
 export type ResolveInternalAgentCardOptions = {
@@ -50,6 +52,7 @@ export type ListInternalAgentCardsOptions = Omit<ResolveInternalAgentCardOptions
 
 export type InternalAgentCardProjectionSource = {
   agent: AgentCardAgent;
+  authorityGrants?: string[];
   aidoc: InternalAIDoc | null;
   supervisorDecisionState?: RuntimeSupervisorDecisionState;
   routeContext?: string | null;
@@ -153,6 +156,7 @@ const AGENT_CARD_SELECT = {
       grantKey: true,
     },
   },
+  toolGrantRevocations: { select: { grantKey: true } },
 };
 
 function sortedUnique(values: Array<string | null | undefined>): string[] {
@@ -242,7 +246,10 @@ function buildAuthoritySnapshot(params: {
 export function projectInternalAgentCard(
   source: InternalAgentCardProjectionSource,
 ): InternalAgentCard {
-  const grantKeys = sortedUnique(source.agent.toolGrants.map((grant) => grant.grantKey));
+  const grantKeys = sortedUnique(source.authorityGrants ?? (
+    coworkerAuthorityAgentId(source.agent.agentId) === source.agent.agentId
+      ? persistedAgentToolGrants(source.agent) : []
+  ));
   const capabilities = sortedUnique(source.agent.skills.map((skill) => skill.capability));
   const exposedTools = deriveExposedTools(grantKeys, source.aidoc);
   const authorizationClasses = source.aidoc?.authorization_classes ?? [];
@@ -481,6 +488,12 @@ export async function resolveInternalAgentCard(
     return null;
   }
 
+  const ownerId = coworkerAuthorityAgentId(agent.agentId);
+  const owner = ownerId === agent.agentId ? agent : await db.agent.findUnique({
+    where: { agentId: ownerId },
+    select: { toolGrants: { select: { grantKey: true } }, toolGrantRevocations: { select: { grantKey: true } } },
+  });
+
   const aidoc = await resolveAIDocForAgent(agent.agentId);
   const supervisorDecisionState = (await getSupervisorDecisionStateForAgents([agent.agentId], db)).get(
     agent.agentId,
@@ -488,6 +501,7 @@ export async function resolveInternalAgentCard(
 
   return projectInternalAgentCard({
     agent,
+    authorityGrants: persistedAgentToolGrants(owner),
     aidoc,
     supervisorDecisionState,
     routeContext: options.routeContext,
@@ -504,6 +518,7 @@ export async function listInternalAgentCards(
     orderBy: { name: "asc" },
     select: AGENT_CARD_SELECT,
   });
+  const byId = new Map(agents.map(agent => [agent.agentId, agent]));
   const supervisorStateByAgentId = await getSupervisorDecisionStateForAgents(
     agents.map((agent) => agent.agentId),
     db,
@@ -513,6 +528,7 @@ export async function listInternalAgentCards(
     agents.map(async (agent) =>
       projectInternalAgentCard({
         agent,
+        authorityGrants: persistedAgentToolGrants(byId.get(coworkerAuthorityAgentId(agent.agentId))),
         aidoc: await resolveAIDocForAgent(agent.agentId),
         supervisorDecisionState: supervisorStateByAgentId.get(agent.agentId),
         routeContext: options.routeContext,

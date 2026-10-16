@@ -30,6 +30,9 @@ A saved grant alone does not guarantee access: token scope, human role, room
 permissions and execution policy also apply. The assistant's diagnostic profile
 reports its canonical identity and grant eligibility for its connection.
 
+The authority audit and agent cards read the same saved permissions, including
+removals. A failed read shows a load error rather than setup defaults.
+
 Permission changes require administrator authority. An assistant cannot change
 its own grants through the MCP grant manager. The identity repair does not add
 diagnostic or administrative grants automatically.
