@@ -142,8 +142,9 @@ phases are internal sequencing of one repair, not independent deliverables.
    merge and scope release. Its frozen d4497f0eb00b80902796adf706cfb56ea6078e51
    does not implement current-design room selection. The owner normally released
    `governed-work-claim.ts` and its test after publishing PR #6449; WC-2A0FAF55
-   normally claimed them and the reader/test pair on 2026-10-16. PR #6449 remains
-   an unmerged dependency until protected CI and the merge queue complete.
+   normally claimed them and the reader/test pair on 2026-10-16. PR #6449 merged
+   as 203c62de7794a2074f952cb40d513d175786ffc8; normal integration uses current
+   main 1feeb7e27f3f807c5b1d8dff56a8209f66a4d66a and preserves its validation.
 2. Add failing regressions in `canonical-artifact-discovery.test.ts` and
    `governed-work-claim.test.ts`. Exercise the actual persisted-binding reader:
    multiple subject rooms plus an exact claim must read the selected room;
@@ -167,8 +168,11 @@ Rollback remains a protected revert, with no schema or data rewrite. The main
 risk is accidentally selecting another subject's room or allowing a stale tuple;
 the negative and concurrent-read regressions are mandatory. Normal PLAN claim
 IRD-AE5997CBD8AC allowed this continuation. New immutable plan coverage and normal
-implementation admission are required before source implementation; both are
-pending. No regression, implementation or live acceptance is claimed here.
+implementation admission were required before source implementation. Coverage
+cmvaq65oa0eu501pd97tqrjtw was checked valid at published plan commit
+37d39a6fc8f5809f74653320006564eb5e98b1d5. After the supported lease renewal,
+IRD-8D609D2B5376 allowed implementation. Final-head coverage must be refreshed
+before handoff; live acceptance remains pending.
 This repair does not settle or replay the uncertain BI-C684AF45 reviewer Task.
 
 The normal scope impact contract resolved all five paths. Live source-graph
@@ -180,3 +184,14 @@ lookup returned `canonical-artifact-discovery.test.ts`,
 claim/detail/completion amendment regressions. The declared guard obligation is
 `node scripts/check-style-drift.mjs`; documentation-index freshness is also
 required. Discovery is verification planning, not evidence that tests ran.
+
+## Exact claim verification to date
+
+Eight reader regressions and the actual claim integration regression failed
+before the fix. With the scoped persisted-room selection and unchanged guard,
+1,369 affected tests pass in 118 suites; 10 PostgreSQL-dependent tests in two
+suites are skipped. This includes all Workroom and initiative-readiness suites,
+the graph-linked build-entry test, bounded item-read tests and the actual packet
+admission roundtrip. Style, diff and both web TypeScript programs pass.
+Independent source assessment, protected publication and containing-release
+verification remain required; a test pass is not live acceptance.

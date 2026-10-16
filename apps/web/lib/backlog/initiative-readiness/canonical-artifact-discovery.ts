@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import type { CurrentDesignEvidence } from "./judged-design-artifact";
 import type { InitiativeArtifactRef } from "./receipt-schema";
+import { isFullSourceCommitSha } from "@/lib/work-capsules/work-capsule-branch-identity";
 
 import {
   cancelGithubResponseBody,
@@ -27,8 +28,12 @@ type BoundDesign = {
   room: { capsuleId: string; repositoryFullName: string; baseSha: string; headSha: string; headBranch: string };
 };
 type CurrentDesignBinding = BoundDesign | { kind: "not-applicable" | "unavailable" };
+type ClaimSource = {
+  repositoryFullName: string; headBranch: string;
+  baseSha?: string | null; headSha?: string | null;
+};
 
-async function loadCurrentDesignBinding(itemId: string, db: CurrentDesignDb): Promise<CurrentDesignBinding> {
+async function loadCurrentDesignBinding(itemId: string, db: CurrentDesignDb, claimSource?: ClaimSource): Promise<CurrentDesignBinding> {
   const item = await db.backlogItem.findFirst({ where: { OR: [{ itemId }, { id: itemId }] },
     select: { id: true, itemId: true, body: true } });
   if (!item) return { kind: "unavailable" };
@@ -41,9 +46,17 @@ async function loadCurrentDesignBinding(itemId: string, db: CurrentDesignDb): Pr
   if (!baseline.current || baseline.current.origin === "item-body") return { kind: "not-applicable" };
   if (!baseline.current.artifactRef) return { kind: "unavailable" };
   if (baseline.current.artifactRef.kind !== "repo-blob-at-commit") return { kind: "not-applicable" };
+  // A claim tuple narrows the persisted subject binding; it supplies neither
+  // authority nor an artifact digest. Unscoped reads retain their ambiguity check.
+  if (claimSource && (!claimSource.repositoryFullName || !claimSource.headBranch
+    || !isFullSourceCommitSha(claimSource.baseSha) || !isFullSourceCommitSha(claimSource.headSha))) {
+    return { kind: "unavailable" };
+  }
   const rooms = await db.workroom.findMany({
     where: { backlogItemId: { in: [item.id, item.itemId] }, archivedAt: null,
-      status: { notIn: ["abandoned", "archived", "superseded"] } }, take: 2,
+      status: { notIn: ["abandoned", "archived", "superseded"] },
+      ...(claimSource ? { repositoryFullName: claimSource.repositoryFullName, headBranch: claimSource.headBranch,
+        baseSha: claimSource.baseSha, headSha: claimSource.headSha } : {}) }, take: 2,
     select: { capsuleId: true, repositoryFullName: true, baseSha: true, headSha: true, headBranch: true },
   });
   const room = rooms.length === 1 ? rooms[0] : null;
@@ -78,22 +91,27 @@ export async function readCurrentDesignArtifact(binding: BoundDesign, ports?: {
 /** Provider work stays outside transactions; only this server closure crosses admission. */
 export async function prepareCurrentDesignObservation(args: {
   itemId: string; db?: CurrentDesignDb;
+  /** Actual governed claim input; the reader verifies its persisted subject/room binding. */
+  claimSource?: ClaimSource;
   ports?: Partial<{
-    loadBinding: (itemId: string, db: CurrentDesignDb) => Promise<CurrentDesignBinding>;
+    loadBinding: (itemId: string, db: CurrentDesignDb, claimSource?: ClaimSource) => Promise<CurrentDesignBinding>;
     readCurrentArtifact: (binding: BoundDesign) => Promise<CurrentDesignEvidence>;
     lockBinding: (binding: BoundDesign, db: CurrentDesignDb) => Promise<void>;
   }>;
 }): Promise<{ evidence: CurrentDesignEvidence; admissionGuard: (tx: CurrentDesignDb) => Promise<CurrentDesignEvidence> }> {
   const db = args.db ?? prisma;
   const load = args.ports?.loadBinding ?? loadCurrentDesignBinding;
+  // Capture the selection once, including across the provider await and guard.
+  const claimSource = args.claimSource ? { repositoryFullName: args.claimSource.repositoryFullName,
+    headBranch: args.claimSource.headBranch, baseSha: args.claimSource.baseSha, headSha: args.claimSource.headSha } : undefined;
   const read = args.ports?.readCurrentArtifact ?? readCurrentDesignArtifact;
   const unavailable = { state: "unavailable" } as const;
   let initial: CurrentDesignBinding;
   let evidence: CurrentDesignEvidence;
   try {
-    initial = await load(args.itemId, db);
+    initial = await load(args.itemId, db, claimSource);
     evidence = initial.kind === "bound" ? await read(initial) : { state: initial.kind };
-    if (canonicalJson(await load(args.itemId, db)) !== canonicalJson(initial)) evidence = unavailable;
+    if (canonicalJson(await load(args.itemId, db, claimSource)) !== canonicalJson(initial)) evidence = unavailable;
   } catch {
     initial = { kind: "unavailable" }; evidence = unavailable;
   }
@@ -108,7 +126,7 @@ export async function prepareCurrentDesignObservation(args: {
           await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "capsuleId" = ${initial.room.capsuleId} FOR SHARE`;
         }
       }
-      return canonicalJson(await load(args.itemId, tx)) === canonicalJson(initial) ? evidence : unavailable;
+      return canonicalJson(await load(args.itemId, tx, claimSource)) === canonicalJson(initial) ? evidence : unavailable;
     } catch { return unavailable; }
   } };
 }
