@@ -4,6 +4,47 @@ status: active
 
 # Execution reliability and process visibility
 
+## October 16 approved runtime target outcome (BI-06AE6833, WC-1D447592)
+
+Original approval cmv9vetqp01la01olbsbz684d remains unknown even though its exact
+target RCT-BI5-RECOVERY95-20261015 committed succeeded with a verified host
+receipt and one terminal event. The v2026.10.16 advance preserves its original
+receipt, completion time and event count. Recover the observation, not execution.
+
+1. Extend the existing approval outcome store and shared pure projection. Keep
+   native user-and-assistant isolation and history's owner predicate. Resolve
+   only an approved reconcile_runtime_capabilities request whose original
+   parameters match its stored input fingerprint, tool and actor binding.
+2. Read the exact transition, bound to the requesting actor and full immutable
+   reconciliation packet. Require trusted request/decision chronology, terminal
+   succeeded state and completion, a structurally valid applied signed receipt,
+   exact envelope identity and the identical committed succeeded event receipt.
+   Missing, conflicting, unsigned, malformed, pending or failed evidence cannot
+   produce success. Preserve existing terminal-envelope and explicit receipt
+   precedence; never use current enabled settings or another transition.
+3. Trust the established server-only verified completion transaction as durable
+   historical evidence. Do not depend on today's signing secret, host filesystem
+   or actuator for history reads: legitimate key rotation does not erase a
+   previously verified outcome. This adds no execution authority, reservation,
+   receipt, target mutation, table, workflow or retry. Share the resolver between
+   native exact reads and browser history, and reuse original parameter rules.
+4. First reproduce the exact unknown-to-executed defect. Cover mismatched actor,
+   request fingerprint, target, packet, envelope, receipt, event and chronology;
+   absent/nonterminal/failed/rollback evidence; unrelated actions; caller
+   isolation; existing outcome precedence; malformed-row isolation; and readable
+   historical outcomes without current secret access. Run affected tests,
+   typechecks, impact guards, governed verification and independent assessment.
+5. Publish through protected PR/queue, qualify the next canonical containing
+   release, then verify the SAME original approval through native read and its
+   deep-linked Inbox. Compare the SAME target receipt, timestamps and event count
+   before/after. Never reapply the host action to make the display pass.
+
+This is one atomic observation repair under the existing execution-reliability
+objective. Approximately one fifth consolidates parameter and outcome resolution
+across readers. It does not settle original uncertain provider executions,
+authorize retries or satisfy the remaining seven-scenario, nested or OAuth
+acceptance. Current source/release delivery and those obligations stay separate.
+
 ## October 11 owned review recovery readback (BI-CAP-3147C64B)
 
 WC-502E167E repairs the missing observation path for expired semantic reviews.
