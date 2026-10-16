@@ -43,3 +43,29 @@ export function decisionAllowsStep(evaluation: Evaluation): boolean {
   if (evaluation.escalation.route === "independent-review") return INDEPENDENT_REVIEW_INTERIM === "proceed";
   return previouslyAllowed;
 }
+
+/** New routed results explain the actual next action; callers retain legacy copy. */
+export function decisionEscalationMessage(evaluation: Evaluation): string | null {
+  const escalation = evaluation.escalation;
+  if (!escalation) return null;
+  if (escalation.route === "human") {
+    const reasons = {
+      "damaging-critical-risk": "it carries critical risk",
+      "damaging-consequence": "it declares an outward, irreversible or authority consequence",
+      "damaging-threshold": "it crosses a configured threshold",
+      "damaging-regulated": "a declared regulation requires human review",
+    };
+    return `This decision requires a person because ${reasons[escalation.reasonCode as keyof typeof reasons] ?? "its recorded route requires human review"}.`;
+  }
+  if (escalation.route === "independent-review") {
+    const causes = { "corpus-gap": "insufficient corpus", "vector-gap": "conflicting guidance",
+      "capability-gap": "a capability is unavailable", "policy-limit": "the delegated policy limit",
+      "evaluation-fault": "evaluation is unavailable" };
+    const cause = escalation.followOn ? causes[escalation.followOn] : "recorded cause unavailable";
+    return `Independent review is outstanding (${cause}). ${decisionAllowsStep(evaluation)
+      ? "The recorded interim permits this step within its existing authority."
+      : "This step remains held."}`;
+  }
+  if (!decisionAllowsStep(evaluation)) return "The recorded decision is to decline; this step is not allowed.";
+  return null;
+}
