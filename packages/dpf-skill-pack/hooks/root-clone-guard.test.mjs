@@ -318,6 +318,36 @@ test("leaves a read-only interpreter one-liner alone — a guard that blocks rea
   assert.equal(shellIn("node -e 'console.log(1)'", MAIN).block, false);
 });
 
+test("read-only heredoc operators and quoted text are data, not shell redirections", () => {
+  for (const command of [
+    "python3 - <<'PY'\nprint(3 >= 2)\nPY",
+    "python3 - <<'PY'\nprint('<html>read only</html>')\nPY",
+    "node - <<'JS'\nconsole.log(3 > 2);\nJS",
+    `python3 -c 'print(3 > 2); print("<html>")'`,
+    `echo 'diagnostic > text; git reset --hard'`,
+    `echo "sh -c 'git reset --hard'"`,
+  ]) assert.equal(shellIn(command, MAIN).block, false, command);
+});
+
+test("heredoc data does not hide real shell writes or following commands", () => {
+  for (const command of [
+    "python3 - <<'PY' > 'apps/web/lib/output.txt'\nprint(3 >= 2)\nPY",
+    "python3 - <<'PY'\nprint(3 >= 2)\nPY\necho x > 'apps/web/lib/output file.txt'",
+    "python3 - <<'PY'\nprint(3 >= 2)\nPY\ngit reset --hard",
+    "python3 - <<'PY'\nopen('apps/web/lib/output.txt', 'w').write('x')\nPY",
+    `echo 'diagnostic > text' > 'apps/web/lib/output file.txt'`,
+  ]) assert.equal(shellIn(command, MAIN).block, true, command);
+});
+
+test("shell input stays executable when supplied through heredocs or quoted -c payloads", () => {
+  for (const command of [
+    "bash <<'SH'\nrm -rf packages\nSH",
+    "cat <<'SH' | sh\ngit reset --hard\nSH",
+    `bash -c 'echo diagnostic; git reset --hard'`,
+    `sh -c 'echo x > "apps/web/lib/output file.txt"'`,
+  ]) assert.equal(shellIn(command, MAIN).block, true, command);
+});
+
 test("does not touch writes inside a session's own worktree", () => {
   const inWorktree = (command) =>
     decide({ command, cwd: SIBLING, env: {}, isSymlink: noSym, isDir: noGit });

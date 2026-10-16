@@ -76,8 +76,9 @@ describe("MCP progressive-disclosure bootstrap contract", () => {
     });
     expect(reviewerOnly.structuredContent.noMatch).toMatchObject({
       reason: "reviewer-route-required",
-      supportedEntryPoint: { toolName: "get_backlog_item" },
+      supportedEntryPoint: { toolName: "claim_backlog_item_for_work" },
     });
+    expect(JSON.stringify(reviewerOnly.structuredContent.noMatch)).toContain("recovery.reviewerRoutes");
   });
 
   // BI-7876699F: the author-satisfiable writer must not be classified as
@@ -178,7 +179,7 @@ describe("load_tools per-name status", () => {
     });
     expect(status[1]).toMatchObject({ reason: "reviewer-route-required", callableByName: false });
     expect(status[1].recovery).toBe(
-      "The author dispatches the reviewer route from get_backlog_item; this tool is for the independent reviewer.",
+      "This tool is for the independent reviewer. For design, architecture or plan review, refresh the exact Workroom with claim_backlog_item_for_work (workIntent plan or implementation) and submit recovery.reviewerRoutes[].requestCoworker unchanged. For terminal review, read get_backlog_item recovery. If a large response did not deliver the packet, call get_backlog_item with itemId and recoveryGate for one exact bounded request or finite recovery. Research belongs to its author.",
     );
     expect(status[2]).toMatchObject({ reason: "reviewer-route-required" });
     expect(status[3]).toMatchObject({

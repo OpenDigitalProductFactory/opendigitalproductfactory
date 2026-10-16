@@ -1,6 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHmac } from "node:crypto";
-import { copyFileSync, existsSync, mkdtempSync, writeFileSync, chmodSync, mkdirSync, realpathSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, writeFileSync, chmodSync, mkdirSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -18,7 +18,10 @@ const gitBash = join(process.env.ProgramFiles ?? "C:\\Program Files", "Git", "bi
 export const BASH_COMMAND = process.platform === "win32" && existsSync(gitBash) ? gitBash : "bash";
 export const BASH_OK = spawnSync(BASH_COMMAND, ["--version"], { encoding: "utf8" }).status === 0;
 export const GIT_OK = spawnSync("git", ["--version"], { encoding: "utf8" }).status === 0;
-export const PROMOTE_TEST_TIMEOUT_MS = 30_000;
+// Measures a hang, not host speed (BI-F25D7E88): one case spawns Git Bash, a
+// real repo and a fake docker, which costs 11-25 s on Windows and over 30 s
+// when vitest runs two of these files side by side. A hung promote still fails.
+export const PROMOTE_TEST_TIMEOUT_MS = 120_000;
 
 let bashDrivePrefix: string | undefined;
 
@@ -359,6 +362,35 @@ export function runPromote(opts: {
     encoding: "utf8",
   });
   return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+}
+
+/**
+ * Everything a failing promote run leaves behind, for the assertion message
+ * (BI-683619D9). The scratch root is deleted in `finally`, so without this a
+ * CI-only failure keeps nothing but one line of stderr: on 2026-10-07 two runs
+ * failed this way and could not be reproduced locally.
+ */
+export function promoteDiagnostics(
+  r: { status: number | null; stdout: string; stderr: string },
+  files: Record<string, string> = {},
+): string {
+  const sections = [`status=${r.status}`, `--- stderr (tail) ---\n${r.stderr.slice(-4000)}`, `--- stdout (tail) ---\n${r.stdout.slice(-4000)}`];
+  for (const [label, path] of Object.entries(files)) {
+    let body: string;
+    try {
+      // Read first and fall back to a listing: no check-then-use race on the path.
+      body = readFileSync(path, "utf8").slice(-6000);
+    } catch (error) {
+      try {
+        if ((error as NodeJS.ErrnoException).code !== "EISDIR") throw error;
+        body = (readdirSync(path, { recursive: true }) as string[]).map(String).sort().join("\n");
+      } catch (inner) {
+        body = `<unreadable: ${(inner as Error).message}>`;
+      }
+    }
+    sections.push(`--- ${label} (${path}) ---\n${body}`);
+  }
+  return sections.join("\n");
 }
 
 /** Scratch root with a clean git source dir (src/) + isolated bin/ and backup/. */

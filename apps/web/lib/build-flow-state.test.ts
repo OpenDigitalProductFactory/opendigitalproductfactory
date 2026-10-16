@@ -232,6 +232,31 @@ describe("getBuildFlowState — upstream PR fork", () => {
     expect(state!.allApplicableForksTerminal).toBe(false);
   });
 
+  // BI-1CDA479D: create_portal_pr writes no FeaturePack; the PR is on the room.
+  it("follows the build room's PR delivery when there is no FeaturePack", async () => {
+    mockBuild({ phase: "ship" });
+    mockPack(null);
+    const prUrl = "https://github.com/org/repo/pull/77";
+    vi.mocked(prisma.workroom.findFirst).mockResolvedValue({
+      pullRequestUrl: prUrl,
+      pullRequestNumber: 77,
+      workspaceState: writeBuildPrDeliveryState({}, {
+        ...createBuildPrDeliveryState({ repository: "org/repo", prNumber: 77, prUrl }),
+        status: "awaiting-release",
+      }),
+    } as never);
+    const state = await getBuildFlowState("FB-TEST-001");
+    expect(state!.upstream).toMatchObject({ state: "shipped", prUrl, prNumber: 77, packId: null });
+  });
+
+  it("stays in progress with no FeaturePack and no room PR", async () => {
+    mockBuild({ phase: "ship" });
+    mockPack(null);
+    vi.mocked(prisma.workroom.findFirst).mockResolvedValue(null);
+    const state = await getBuildFlowState("FB-TEST-001");
+    expect(state!.upstream.state).toBe("in_progress");
+  });
+
   it("reads prUrl from manifest when the top-level column is null (post-A2)", async () => {
     mockBuild({ phase: "ship" });
     mockPack({
@@ -414,6 +439,7 @@ describe("reconcileBuildCompletion", () => {
     expect(terminalTransition.completeFeatureBuildTransition).toHaveBeenCalledWith({
       buildId: "FB-TEST-001",
       expectedPhase: "ship",
+      deliveryProven: true,
     });
   });
 
@@ -453,6 +479,7 @@ describe("reconcileBuildCompletion", () => {
     expect(terminalTransition.completeFeatureBuildTransition).toHaveBeenCalledWith({
       buildId: "FB-TEST-001",
       expectedPhase: "ship",
+      deliveryProven: true,
     });
   });
 });
@@ -505,7 +532,7 @@ describe("completeBuildWhenDelivered", () => {
     mockPack({ packId: "FP-1", prUrl: "https://github.com/org/repo/pull/42", prNumber: 42 });
     terminalTransition.completeFeatureBuildTransition.mockResolvedValueOnce({ ok: true });
     await expect(completeBuildWhenDelivered("FB-TEST-001")).resolves.toEqual({ ok: true });
-    expect(terminalTransition.completeFeatureBuildTransition).toHaveBeenCalledWith({ buildId: "FB-TEST-001", expectedPhase: "ship" });
+    expect(terminalTransition.completeFeatureBuildTransition).toHaveBeenCalledWith({ buildId: "FB-TEST-001", expectedPhase: "ship", deliveryProven: true });
   });
 });
 
@@ -531,6 +558,7 @@ describe("completeLocalDeliveryBuild", () => {
     expect(terminalTransition.completeFeatureBuildTransition).toHaveBeenCalledWith({
       buildId: "FB-TEST-001",
       expectedPhase: "ship",
+      deliveryProven: true,
     });
   });
 

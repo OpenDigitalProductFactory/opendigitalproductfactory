@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 const mocks = vi.hoisted(() => ({
   prisma: {
     workroom: { findUnique: vi.fn() },
-    externalEvidenceRecord: { findFirst: vi.fn(), findUnique: vi.fn() },
+    externalEvidenceRecord: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
     taskRun: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
@@ -30,8 +30,30 @@ vi.mock("@/lib/change-review/semantic-review-background", () => ({ enqueueSemant
 
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { changeReviewPack } from "./change-review-pack";
+import { failureAnalysisFixture } from "@/lib/change-review/failure-analysis.test-fixtures";
+import { validateFailureAnalysis } from "@/lib/change-review/failure-analysis";
+import { resolveFailureAnalysisEvidence } from "@/lib/change-review/failure-analysis-evidence";
 
 const taskRows: Array<Record<string, unknown>> = [];
+
+function validReviewInput() {
+  const artifact = "diff --git a/file.ts b/file.ts\n";
+  const identity = { capsuleId: "WC-SINGLE-FLIGHT", baseTreeHash: "a".repeat(40),
+    headTreeHash: "b".repeat(40), diffDigest: createHash("sha256").update(artifact).digest("hex") };
+  const fixture = failureAnalysisFixture(identity);
+  mocks.prisma.workroom.findUnique.mockResolvedValue({ id: "capsule-row-1", capsuleId: identity.capsuleId,
+    headSha: "c".repeat(40), executorKind: "codex-desktop" });
+  const row = { id: "executed-test", workCapsuleId: "capsule-row-1", operationType: "local_integration_ci",
+    createdAt: new Date(), details: { gateKey: "gate-1", leaseId: "lease-1", status: "passed",
+      evidenceValidity: { expiresAt: new Date(Date.now() + 60_000).toISOString() },
+      evidence: { gatePassed: true, sha: "c".repeat(40), headTreeHash: identity.headTreeHash,
+        diffDigest: identity.diffDigest, output: "Exact identity verified", completedAt: new Date().toISOString(),
+        commands: ["verify exact identity"] } } };
+  mocks.prisma.externalEvidenceRecord.findMany.mockImplementation(async ({ where }) =>
+    where.workCapsuleId === row.workCapsuleId && where.id.in.includes(row.id) ? [row] : []);
+  return { row, input: { ...identity, authorSurface: "codex-desktop", artifactType: "code-change", title: "Immutable gate coordination",
+    artifact, verificationEvidence: "Focused tests passed.", changedFiles: ["apps/web/lib/file.ts"], failureAnalysis: fixture.failureAnalysis } };
+}
 
 describe("change-review MCP pack", () => {
   beforeEach(() => {
@@ -172,18 +194,7 @@ describe("change-review MCP pack", () => {
   });
 
   it("persists one review before queueing and subscribes a concurrent caller without inline inference", async () => {
-    const input = {
-      capsuleId: "WC-SINGLE-FLIGHT",
-      authorSurface: "codex-desktop",
-      artifactType: "code-change",
-      title: "Immutable gate coordination",
-      artifact: "diff --git a/file.ts b/file.ts\n",
-      verificationEvidence: "Focused tests passed.",
-      changedFiles: ["apps/web/lib/file.ts"],
-      baseTreeHash: "a".repeat(40),
-      headTreeHash: "b".repeat(40),
-      diffDigest: createHash("sha256").update("diff --git a/file.ts b/file.ts\n").digest("hex"),
-    };
+    const { input } = validReviewInput();
 
     const [left, right] = await Promise.all([
       changeReviewPack.handlers.review_semantic_change!(input, "user-1", { agentId: "codex" }),
@@ -199,7 +210,30 @@ describe("change-review MCP pack", () => {
     expect(taskRows[0]).toMatchObject({ status: "submitted", artifacts: { create: {
       parts: [{ kind: "data", data: { input: { artifact: input.artifact } } }],
     } } });
+    const packet = (taskRows[0]!.artifacts as { create: { parts: Array<{ data: { input: { identity: { failureAnalysisDigest: string } } } }> } }).create.parts[0]!.data;
+    const executionEvidence = await resolveFailureAnalysisEvidence(input.failureAnalysis, "capsule-row-1");
+    expect(packet.input.identity.failureAnalysisDigest).toBe(validateFailureAnalysis(input.failureAnalysis, input, executionEvidence).digest);
   });
+
+  it.each(["missing", "malformed", "unresolved", "wrong-room", "wrong-tree", "wrong-diff", "expired", "wrong-head"])(
+    "refuses %s evidence before reserving or enqueueing review work", async (kind) => {
+      const { input, row } = validReviewInput();
+      const submitted: Record<string, unknown> = { ...input };
+      if (kind === "missing") delete submitted.failureAnalysis;
+      if (kind === "malformed") submitted.failureAnalysis = {};
+      if (kind === "unresolved") mocks.prisma.externalEvidenceRecord.findMany.mockResolvedValue([]);
+      if (kind === "wrong-room") row.workCapsuleId = "other-room";
+      if (kind === "wrong-tree") row.details.evidence.headTreeHash = "d".repeat(40);
+      if (kind === "wrong-diff") row.details.evidence.diffDigest = "d".repeat(64);
+      if (kind === "expired") row.details.evidenceValidity.expiresAt = new Date(Date.now() - 60_000).toISOString();
+      if (kind === "wrong-head") row.details.evidence.sha = "d".repeat(40);
+      const out = await changeReviewPack.handlers.review_semantic_change!(submitted, "user-1", { agentId: "codex" });
+      expect(out).toMatchObject({ success: false, error: "invalid_failure_analysis", data: { reasons: expect.any(Array) } });
+      expect(mocks.prisma.taskRun.findMany).not.toHaveBeenCalled();
+      expect(mocks.prisma.taskRun.create).not.toHaveBeenCalled();
+      expect(mocks.enqueueSemanticReview).not.toHaveBeenCalled();
+      expect(taskRows).toHaveLength(0);
+    });
 
   it("records infrastructure-inconclusive correlation without semantic quality counts", async () => {
     mocks.prisma.externalEvidenceRecord.findFirst
@@ -249,11 +283,14 @@ describe("change-review MCP pack", () => {
     expect(mocks.recordWorkCapsuleEvidence).toHaveBeenCalledTimes(1);
   });
 
-  it("reuses an existing correlation for the same receipt", async () => {
+  it.each([
+    { schemaVersion: "semantic-change-review-receipt.v2" },
+    { schemaVersion: "semantic-change-review-receipt.v3", artifactType: "code-change" },
+  ])("reuses an existing correlation for $schemaVersion", async (contract) => {
     mocks.prisma.externalEvidenceRecord.findFirst
       .mockResolvedValueOnce({
         details: {
-          schemaVersion: "semantic-change-review-receipt.v2",
+          ...contract,
           result: { decision: "pass", issues: [], summary: "Passed." },
         },
       })

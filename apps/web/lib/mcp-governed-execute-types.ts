@@ -52,6 +52,8 @@ export type GovernedExecuteContext = {
    * (BI-F4A30FCB, Dale dogfood 2026-05-24).
    */
   featureBuildId?: string;
+  /** BI-FAD98137: the delegating turn's coworker mode, so a delegated child runs no wider. */
+  coworkerMode?: "advise" | "act";
   /**
    * Governed Hermes learning Slice 1: active coworker skill for this call.
    * Set by runAgenticLoop when the parent run is attributed to a specific

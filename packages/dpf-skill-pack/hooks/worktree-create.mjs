@@ -137,15 +137,11 @@ async function bindAtBirth({ mainRoot, worktreePath, branch }) {
   try {
     const gitDir = git(mainRoot, ["-C", worktreePath, "rev-parse", "--path-format=absolute", "--git-dir"], { allowFail: true })
       ?? git(worktreePath, ["rev-parse", "--path-format=absolute", "--git-dir"], { allowFail: true });
-    const headSha = git(worktreePath, ["rev-parse", "HEAD"], { allowFail: true });
-    const remote = git(mainRoot, ["config", "--get", "remote.origin.url"], { allowFail: true }) ?? "";
-    const m = remote.match(/[:/]([^/:]+\/[^/]+?)(?:\.git)?$/);
     const result = await bind({
       branch,
       worktreePath,
       gitDir,
-      repositoryFullName: m ? m[1] : "OpenDigitalProductFactory/opendigitalproductfactory",
-      headSha,
+      captureSourceIdentity: true,
     });
     if (result.status === "bound") {
       process.stderr.write(`[worktree-create] Workroom claimed for ${branch}: ${result.capsuleId}\n`);

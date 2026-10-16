@@ -64,22 +64,14 @@ $GrokConfigPath         = Join-Path $HOME ".grok\config.toml"  # platform-specif
 $KernelPrinciplesDir    = Join-Path $RepoRoot "docs\founder-kernel\wiki\principles"
 $ContributorMemoryDir   = Join-Path $HOME ".claude\projects"
 $ProjectSlug            = ($RepoRoot -replace '[:\\\/]+', '-').TrimStart('-')
-# BI-2D545A0C (design 12.4.3): an explicit process DPF_MCP_URL
-# selects the endpoint before the saved Codex choice and install defaults.
-# On HTTPS, Node clients trust the organization CA (BI-FA2C46D7).
-# The shared installer/lib/mcp-client-env module owns resolution.
+# BI-2D545A0C (design 12.4.3): an explicit process DPF_MCP_URL selects the
+# endpoint before the saved https preference and install defaults. On HTTPS,
+# Node clients trust the organization CA (BI-FA2C46D7). The shared
+# installer/lib/mcp-client-env module owns resolution. Codex's saved endpoint
+# is not a selection for every client: the updater keeps it in Codex's own
+# config when no endpoint is named (BI-8FD7C0C9).
 . (Join-Path $ScriptDir "installer\lib\mcp-client-env.ps1")
-$SelectedMcpUrl = $env:DPF_MCP_URL
-if (-not $SelectedMcpUrl -and (Test-Path -LiteralPath $CodexConfigPath)) {
-    $endpointReader = Join-Path $RepoRoot "packages\dpf-skill-pack\scripts\update-agent-toolchain.ps1"
-    $SelectedMcpUrl = & $endpointReader -PrintExistingCodexMcpUrl
-    if ($LASTEXITCODE -ne 0) {
-        Write-Fail2 "Cannot read the saved Codex endpoint. Set DPF_MCP_URL explicitly to repair it."
-        exit 1
-    }
-    $SelectedMcpUrl = [string]$SelectedMcpUrl
-}
-$McpClientEnv           = Resolve-DpfMcpClientEnv -InstallDir $RepoRoot -ExplicitUrl $SelectedMcpUrl
+$McpClientEnv           = Resolve-DpfMcpClientEnv -InstallDir $RepoRoot
 # $McpEndpointNamed is the endpoint the install or operator named (may be
 # empty); only it is forwarded to the updater, whose canonical https/OAuth
 # default governs otherwise (BI-772023BC). The probes and the plan bridge need
@@ -280,9 +272,9 @@ exit 127
     }
 }
 
-# Persist the selected HTTPS or loopback HTTP endpoint for new processes.
-# HTTPS may also carry the organization CA; credential setup is separate.
-# Save the preference even while OAuth is pending. Never at dry-run time.
+# Persist the selected https endpoint (and the organization CA) for new
+# processes, even while OAuth is pending; a plain-http endpoint is never
+# written to the User environment Claude reads (BI-8FD7C0C9). Never at dry-run.
 if (-not $DryRun) {
     $transport = Set-DpfMcpClientEnv -ClientEnv $McpClientEnv
     if ($transport -eq "persisted") {
@@ -326,11 +318,15 @@ if node -e "require.resolve(\"tsx\")" >/dev/null 2>&1; then exec node --import t
 echo "issue-grok-credentials-client: no tsx runtime found in the portal image" >&2
 exit 127
 '@ -replace "`r`n", "`n"
-                $clientOut = & docker exec $portal sh -c $grokIssuer issuer 2>$grokErr
-                if ($LASTEXITCODE -eq 0) {
-                    $clientOut | & node (Join-Path $RepoRoot "scripts\refresh-grok-mcp-credential.mjs") write-client --config $GrokConfigPath
+                # Feed the script on stdin (sh -s), as the link step above does.
+                # Passed as a native `sh -c` argument it arrived truncated, the
+                # issuer never ran, docker exited 0 with no output, and
+                # write-client failed on empty input (BI-8D152751).
+                $clientOut = ($grokIssuer | & docker exec -i $portal sh -s 2>$grokErr)
+                if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace("$clientOut")) {
+                    $clientOut | & node (Join-Path $RepoRoot "packages\dpf-skill-pack\scripts\refresh-grok-mcp-credential.mjs") write-client --config $GrokConfigPath
                     if ($LASTEXITCODE -eq 0) {
-                        & node (Join-Path $RepoRoot "scripts\refresh-grok-mcp-credential.mjs") refresh --mcp-url $McpEndpoint --config $GrokConfigPath
+                        & node (Join-Path $RepoRoot "packages\dpf-skill-pack\scripts\refresh-grok-mcp-credential.mjs") refresh --mcp-url $McpEndpoint --config $GrokConfigPath
                         if ($LASTEXITCODE -eq 0) {
                             Write-Ok "Grok credential refreshed into bearer_token_file."
                         } else {
@@ -404,7 +400,7 @@ if ($ReconcileStaleEntries.IsPresent) { $nodeArgs += "--reconcile-stale-entries"
 $planJson = & pnpm @nodeArgs 2>$null
 if ($LASTEXITCODE -ne 0 -or -not $planJson) {
     Write-Warn2 "compute-plan failed; using standalone skill-pack updater fallback."
-    & $PluginUpdater -SkillPackPath (Join-Path $RepoRoot "packages\dpf-skill-pack") -McpUrl $McpEndpointNamed -DryRun:$DryRun
+    & $PluginUpdater -SkillPackPath (Join-Path $RepoRoot "packages\dpf-skill-pack") -McpUrl $McpEndpointNamed -ProjectRoot $RepoRoot -DryRun:$DryRun
     exit $LASTEXITCODE
 }
 
@@ -649,7 +645,7 @@ if (-not $claudeWired -and -not $codexWired -and -not $grokWired -and -not $agyW
     $state.readinessState = "missing_cli"
 } elseif ($AuthMode -eq "oauth") {
     $state.readinessState = "authorization_pending"
-} elseif (-not $mcpReadiness.ok) {
+} elseif ((-not $mcpReadiness.ok -or -not $mcpReadiness.delivery -or -not $mcpReadiness.delivery.ready)) {
     if ($mcpReadiness.reason -in @("no_token", "scope_insufficient")) {
         $state.readinessState = "missing_token"
     } elseif ($mcpReadiness.reason -in @("endpoint_unreachable", "unexpected_shape")) {
@@ -681,6 +677,9 @@ $copyTable = @{
     "failed_smoke"   = @{ message = "The agent is installed but did not apply a DPF kernel principle.";                  primaryAction = "View evidence" }
 }
 $copy = $copyTable[$state.readinessState]
+if ($mcpReadiness.reason -eq "coworker_grants_insufficient") {
+    $copy = @{ message = "The acting coworker lacks approved delivery permissions. Platform install or upgrade must reconcile them."; primaryAction = "Open readiness" }
+}
 
 $upstreamAdvisory = $null
 if ($plan.upstreamDrift -and $plan.upstreamDrift.advisory) {

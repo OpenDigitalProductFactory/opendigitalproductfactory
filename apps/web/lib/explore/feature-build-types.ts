@@ -706,7 +706,9 @@ const ALLOWED_TRANSITIONS: Record<BuildPhase, BuildPhase[]> = {
   plan:     ["build", "failed"],
   build:    ["review", "failed"],
   review:   ["ship", "failed", "build"],
-  ship:     ["complete", "failed"],
+  // ship→review: a build rebased onto main at ship re-earns its review on the
+  // new tree before its PR opens (BI-76BD65E6).
+  ship:     ["complete", "failed", "review"],
   complete: [],
   failed:   [],
   // Terminal: an escalated build is handed to a human; the work resumes by

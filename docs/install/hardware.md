@@ -21,6 +21,19 @@ After choosing the host, continue with the [Windows](windows.md),
 [macOS](macos.md), [Linux early-access](linux.md), or
 [single-VM cloud](cloud-single-vm.md) installation guide.
 
+## Linux pilot target
+
+For the first Linux deployment, choose **Ubuntu Server 24.04 LTS, x86-64,
+systemd and native Docker Engine with Compose v2**, on a dedicated VM or
+physical server. Use the provider-assisted row below unless local inference is
+required. A GPU is optional for that profile. Docker Desktop is not needed.
+
+This is a recommended pilot configuration, not a completed certification.
+Debian, Fedora, ARM64 and GPU configurations require their own acceptance
+results. The [Linux guide](linux.md) tracks source fixes, release contents and
+the customer's outstanding native checks separately. Avoid buying a GPU for
+this pilot before confirming the model, driver and container runtime together.
+
 ## The short recommendation
 
 | Profile | Recommended configuration and use |

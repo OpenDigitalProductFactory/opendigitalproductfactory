@@ -8,6 +8,13 @@ import {
 const NOW = Date.parse("2026-07-17T12:00:00.000Z");
 
 describe("capacityRoutingExclusionReason", () => {
+  it("isolates account health while retaining shared quota restrictions", () => {
+    const endpoints = [{ providerId: "openai", providerConnectionId: "a" }, { providerId: "openai", providerConnectionId: "b" }];
+    const result = applyCapacitySoftExclusion({ endpoints, capacityByProvider: new Map([["openai:account:a", { state: "reauth_required" }]]), nowMs: NOW });
+    expect(result.eligible).toEqual([endpoints[1]]);
+    const quota = applyCapacitySoftExclusion({ endpoints: [...endpoints, { providerId: "local", providerConnectionId: "local" }], capacityByProvider: new Map([["openai", { state: "quota_resets_at", retryAtMs: NOW + 60000 }]]), nowMs: NOW });
+    expect(quota.eligible).toEqual([{ providerId: "local", providerConnectionId: "local" }]);
+  });
   it("allows available / unknown / missing", () => {
     expect(capacityRoutingExclusionReason(null, NOW)).toBeNull();
     expect(capacityRoutingExclusionReason({ state: "available" }, NOW)).toBeNull();

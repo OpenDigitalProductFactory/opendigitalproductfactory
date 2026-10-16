@@ -21,7 +21,7 @@ import {
   type JobWaitForEventOptions,
 } from "../types";
 import { durationMs, retryBackoffMs } from "./durations";
-import type { RegisteredFunction } from "./registry";
+import { recoveryFor, type RegisteredFunction } from "./registry";
 import * as store from "./store";
 import type { JobRunRow } from "./store";
 
@@ -134,6 +134,11 @@ async function invoke(
 /** Execute one claimed run to its next durable state. */
 export async function executeRun(pool: Pool, fn: RegisteredFunction, run: JobRunRow, options: ExecuteOptions): Promise<RunOutcome> {
   const steps = await store.loadSteps(pool, run.id);
+  if (run.error === store.LEASE_EXPIRED_ERROR && recoveryFor(fn) === "process-bound") {
+    // BI-4FA0EFEB: its worker died mid-step, and the step must not run twice.
+    if (fn.options.onFailure) await runOnFailure(pool, fn, run, options, new Error(store.PROCESS_LOSS_ERROR), steps);
+    return (await store.failRun(pool, run.id, options.owner, store.PROCESS_LOSS_ERROR)) ? { kind: "failed", error: store.PROCESS_LOSS_ERROR } : { kind: "lost" };
+  }
   if (run.attempt >= run.maxAttempts) {
     // Every attempt was lost to an expired lease (BI-6BB830E4): fail it once, as a final thrown error would.
     const error = `lease_expired_exhausted: no attempt finished in ${run.maxAttempts} (${store.LEASE_EXPIRED_ERROR})`;

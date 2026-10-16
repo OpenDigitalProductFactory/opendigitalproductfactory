@@ -58,6 +58,9 @@ export async function GET() {
     await prisma.$queryRaw`SELECT 1`;
     return Response.json({
       status: "ok",
+      ...(process.env["DPF_ENVIRONMENT_CLASS"] === "development" && process.env["DPF_PREVIEW_LEASE_ID"] ? {
+        preview: { sourceSha: process.env["DPF_PREVIEW_SOURCE_SHA"], leaseId: process.env["DPF_PREVIEW_LEASE_ID"] },
+      } : {}),
       checks: { database: "ok", eventLoop: "ok" },
       lagMs,
       timestamp,

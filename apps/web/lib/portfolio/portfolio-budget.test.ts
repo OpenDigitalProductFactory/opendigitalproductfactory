@@ -87,7 +87,7 @@ describe("proposePortfolioBudgets (AC-2)", () => {
   it("proposes the previous quarter's delivered points per portfolio and states the unplaced share", async () => {
     const done = (itemId: string, stored: string | null, effortSize: string) => ({
       itemId, status: "done", effortSize, jobSize: null, estimateAgreed: null, storedPortfolioId: stored, storedPortfolioDangling: false,
-      productPortfolioId: null, taxonomyPortfolioId: null, coworkerNeedPortfolioId: null, epicPortfolioId: null, activeBuildId: null, hasLiveWorkroom: false, deliverySurface: "other", traced: false,
+      productPortfolioId: null, taxonomyPortfolioId: null, coworkerNeedPortfolioId: null, epicPortfolioId: null, activeBuildId: null, hasActiveWorkroom: false, deliveredAt: null, deliverySurface: "other", traced: false,
       completedAt: new Date("2026-08-10T00:00:00Z"),
     });
     const db = {
@@ -134,7 +134,7 @@ describe("proposal from a trailing window of delivered points (operator decision
   it("counts only items done inside the window and scales them to the quarter", async () => {
     const done = (itemId: string, stored: string | null, effortSize: string, completedAt: string) => ({
       itemId, status: "done", effortSize, jobSize: null, estimateAgreed: null, storedPortfolioId: stored, storedPortfolioDangling: false,
-      productPortfolioId: null, taxonomyPortfolioId: null, coworkerNeedPortfolioId: null, epicPortfolioId: null, activeBuildId: null, hasLiveWorkroom: false, deliverySurface: "other", traced: false,
+      productPortfolioId: null, taxonomyPortfolioId: null, coworkerNeedPortfolioId: null, epicPortfolioId: null, activeBuildId: null, hasActiveWorkroom: false, deliveredAt: null, deliverySurface: "other", traced: false,
       completedAt: new Date(completedAt),
     });
     const db = {
@@ -179,7 +179,7 @@ describe("proposal reports what the platform-default rule attributed (BI-291F745
   it("attributes platform work to Foundational, says how much came from the rule, and keeps unattributable points reported", async () => {
     const done = (itemId: string, extra: Record<string, unknown>) => ({
       itemId, status: "done", effortSize: "large", jobSize: null, estimateAgreed: null, storedPortfolioId: null, storedPortfolioDangling: false,
-      productPortfolioId: null, taxonomyPortfolioId: null, coworkerNeedPortfolioId: null, epicPortfolioId: null, activeBuildId: null, hasLiveWorkroom: false,
+      productPortfolioId: null, taxonomyPortfolioId: null, coworkerNeedPortfolioId: null, epicPortfolioId: null, activeBuildId: null, hasActiveWorkroom: false, deliveredAt: null,
       deliverySurface: "other", traced: false, completedAt: new Date("2026-08-10T00:00:00Z"), scopeKind: null, platformDefaultPortfolioId: "pf", ...extra,
     });
     const db = {

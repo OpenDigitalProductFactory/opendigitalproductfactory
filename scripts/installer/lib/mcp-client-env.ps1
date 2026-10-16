@@ -4,10 +4,17 @@
 #
 # The rule, in one place for the installer and the agent-toolchain bootstrap:
 #   DPF_MCP_URL         = an explicit DPF_MCP_URL already in the environment;
-#                         then the saved user endpoint; then
+#                         then a saved https user endpoint; then
 #                         <PUBLIC_URL>/api/mcp/v1?tier=full when the install's
 #                         .env names an https PUBLIC_URL; otherwise none
-#                         (the client plugin's loopback default applies).
+#                         (the client plugin's https default applies).
+#   DPF_CLAUDE_MCP_URL  = the same endpoint, for Claude's connector only
+#                         (BI-D6A6462A); this module is its only writer.
+#   Only an https endpoint whose host is a name or IPv4 address is ever
+#   persisted: Claude clients expand DPF_MCP_URL into their OAuth connector,
+#   OAuth refuses plain http (BI-46B636B0), and Docker publishes the portal on
+#   IPv4 only. A loopback-http choice for Codex or Grok lives in that client's
+#   own config, never here (BI-8FD7C0C9).
 #   NODE_EXTRA_CA_CERTS = the organization root bundle, for an https endpoint
 #                         only: DPF_PKI_TRUST_BUNDLE, then the install's .env,
 #                         then saved NODE_EXTRA_CA_CERTS, then ~/.dpf/pki/root_ca.crt.
@@ -30,6 +37,15 @@ function Get-DpfInstallEnvValue {
     return ($line.Substring($Name.Length + 1)).Trim().Trim('"')
 }
 
+# True only for an https URL with no userinfo whose host is a name or IPv4
+# address. Checks the transport only.
+function Test-DpfMcpClientEndpointPersistable {
+    param([AllowEmptyString()][string]$Url)
+    $parsed = $null
+    if (-not [Uri]::TryCreate($Url, [UriKind]::Absolute, [ref]$parsed)) { return $false }
+    return ($parsed.Scheme -eq 'https' -and -not $parsed.UserInfo -and $parsed.HostNameType -ne [UriHostNameType]::IPv6)
+}
+
 # Returns @{ McpUrl; CaBundle } (either may be empty).
 function Resolve-DpfMcpClientEnv {
     param(
@@ -41,6 +57,8 @@ function Resolve-DpfMcpClientEnv {
     )
     $publicUrl = Get-DpfInstallEnvValue -InstallDir $InstallDir -Name "PUBLIC_URL"
     $savedUrl = if (-not $ExplicitUrl) { [string](& $GetUserEnv "DPF_MCP_URL") } else { "" }
+    # A saved value this module would refuse to write is a leftover leak.
+    if (-not (Test-DpfMcpClientEndpointPersistable $savedUrl)) { $savedUrl = "" }
     $mcpUrl = if ($ExplicitUrl) { $ExplicitUrl } elseif ($savedUrl) { $savedUrl } elseif ($publicUrl -like "https://*") { "$($publicUrl.TrimEnd('/'))/api/mcp/v1?tier=full" } else { "" }
     $bundle = ""
     if ($mcpUrl -like "https://*") {
@@ -61,15 +79,13 @@ function Set-DpfMcpClientEnv {
         [scriptblock]$GetUserEnv = { param($name) [System.Environment]::GetEnvironmentVariable($name, 'User') },
         [scriptblock]$SetUserEnv = { param($name, $value) [System.Environment]::SetEnvironmentVariable($name, $value, 'User') }
     )
-    $isHttps = $ClientEnv.McpUrl -like "https://*"
-    $parsedEndpoint = $null
-    $isLoopbackHttp = [Uri]::TryCreate([string]$ClientEnv.McpUrl, [UriKind]::Absolute, [ref]$parsedEndpoint) `
-        -and $parsedEndpoint.Scheme -eq 'http' -and $parsedEndpoint.Host -in @('localhost', '127.0.0.1', '[::1]') -and -not $parsedEndpoint.UserInfo
-    if (-not $isHttps -and -not $isLoopbackHttp) { return "not-https" }
-    $wanted = [ordered]@{ DPF_MCP_URL = $ClientEnv.McpUrl }
+    if (-not (Test-DpfMcpClientEndpointPersistable ([string]$ClientEnv.McpUrl))) { return "not-https" }
+    # DPF_CLAUDE_MCP_URL is Claude's connector's own name for the same endpoint
+    # (BI-D6A6462A); this module is its only writer.
+    $wanted = [ordered]@{ DPF_MCP_URL = $ClientEnv.McpUrl; DPF_CLAUDE_MCP_URL = $ClientEnv.McpUrl }
     # An empty bundle (a publicly trusted certificate) leaves NODE_EXTRA_CA_CERTS
     # alone: the variable may carry the operator's own bundle.
-    if ($isHttps -and $ClientEnv.CaBundle) { $wanted["NODE_EXTRA_CA_CERTS"] = $ClientEnv.CaBundle }
+    if ($ClientEnv.CaBundle) { $wanted["NODE_EXTRA_CA_CERTS"] = $ClientEnv.CaBundle }
     $changed = $false
     foreach ($name in $wanted.Keys) {
         $value = [string]$wanted[$name]

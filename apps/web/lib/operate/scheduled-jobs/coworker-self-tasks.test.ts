@@ -346,6 +346,53 @@ describe("reconcileAllCoworkerSelfTasks (toggle ⇆ task convergence)", () => {
     expect(prisma.scheduledAgentTask.upsert as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
   });
 
+  // BI-4B643D89: an active task kept the prompt it was created with, so a
+  // registry prompt fix (#6109) never reached an existing install.
+  it("Direction A: refreshes an active task's stale title and prompt without touching its schedule", async () => {
+    const { prisma } = await import("@dpf/db");
+    (prisma.userFact.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      factRow("u1", MKT, "assertive"),
+    ]);
+    (prisma.scheduledAgentTask.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      isActive: true,
+      title: "Refresh the acquisition campaign brief",
+      prompt: "old prompt naming create_marketing_campaign_brief",
+      routeContext: "/customer/marketing",
+    });
+
+    const r = await reconcileAllCoworkerSelfTasks();
+
+    expect(r.created).toBe(0);
+    expect(r.refreshed).toBe(1);
+    expect(prisma.scheduledAgentTask.upsert as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+    expect(prisma.scheduledAgentTask.updateMany as ReturnType<typeof vi.fn>).toHaveBeenCalledWith({
+      where: { taskId: coworkerSelfTaskId(MKT, "u1") },
+      data: {
+        title: COWORKER_SELF_TASKS[MKT]!.title,
+        prompt: COWORKER_SELF_TASKS[MKT]!.prompt,
+        routeContext: COWORKER_SELF_TASKS[MKT]!.routeContext,
+      },
+    });
+  });
+
+  it("Direction A: leaves an active task whose prompt already matches the registry untouched", async () => {
+    const { prisma } = await import("@dpf/db");
+    (prisma.userFact.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      factRow("u1", MKT, "assertive"),
+    ]);
+    (prisma.scheduledAgentTask.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      isActive: true,
+      title: COWORKER_SELF_TASKS[MKT]!.title,
+      prompt: COWORKER_SELF_TASKS[MKT]!.prompt,
+      routeContext: COWORKER_SELF_TASKS[MKT]!.routeContext,
+    });
+
+    const r = await reconcileAllCoworkerSelfTasks();
+
+    expect(r.refreshed).toBe(0);
+    expect(prisma.scheduledAgentTask.updateMany as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+  });
+
   it("Direction A: deactivates a live task whose toggle is now quiet", async () => {
     const { prisma } = await import("@dpf/db");
     (prisma.userFact.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([

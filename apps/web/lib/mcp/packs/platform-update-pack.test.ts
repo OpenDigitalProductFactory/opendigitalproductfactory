@@ -2,9 +2,72 @@ import { describe, expect, it, vi } from "vitest";
 import { platformUpdatePack } from "./platform-update-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 
-const ALL_TOOLS = ["apply_platform_update", "summarize_upgrade_impact"] as const;
+const ALL_TOOLS = ["apply_platform_update", "summarize_upgrade_impact", "preview_runtime_capability_reconciliation", "reconcile_runtime_capabilities"] as const;
 
 describe("platform-update pack", () => {
+  it("previews for the authenticated MCP user without requiring a browser cookie", async () => {
+    vi.resetModules();
+    const auth = vi.fn(async () => null);
+    const preview = vi.fn(async () => ({ observedDatabaseStates: {} }));
+    vi.doMock("@/lib/auth", () => ({ auth }));
+    vi.doMock("@/lib/platform-runtime/runtime-capability-executor", () => ({
+      readProductionRuntimeCapabilityReconciliationPreview: preview,
+      executeProductionRuntimeCapabilityTransition: vi.fn(),
+      rotateProductionRuntimeTransitionSecret: vi.fn(),
+    }));
+    const { platformUpdatePack: freshPack } = await import("./platform-update-pack");
+    const result = await freshPack.handlers.preview_runtime_capability_reconciliation({}, "verified-mcp-user");
+    expect(result.success, JSON.stringify(result)).toBe(true);
+    expect(preview).toHaveBeenCalledOnce();
+    expect(auth).not.toHaveBeenCalled();
+    vi.doUnmock("@/lib/auth");
+    vi.doUnmock("@/lib/platform-runtime/runtime-capability-executor");
+    vi.resetModules();
+  });
+
+  it("binds the verified MCP actor without requiring a browser cookie", async () => {
+    vi.resetModules();
+    const auth = vi.fn(async () => null);
+    const execute = vi.fn(async () => ({ status: "succeeded" }));
+    vi.doMock("@/lib/auth", () => ({ auth }));
+    vi.doMock("@/lib/platform-runtime/runtime-capability-executor", () => ({
+      readProductionRuntimeCapabilityReconciliationPreview: vi.fn(),
+      executeProductionRuntimeCapabilityTransition: execute,
+      rotateProductionRuntimeTransitionSecret: vi.fn(),
+    }));
+    vi.doMock("@/lib/platform-runtime/transition-recovery", () => ({ assertRuntimeCapabilityTransitionAdmission: vi.fn() }));
+    const { platformUpdatePack: freshPack } = await import("./platform-update-pack");
+    const intent = { observedHost: {}, observedDatabaseStates: {}, desiredHostEnabledKeys: ["runtime:core"], desiredDatabaseStates: {}, touchedKeys: [] };
+    const result = await freshPack.handlers.reconcile_runtime_capabilities({ transitionId: "RCT-cookie-free", reconciliation: intent, requestedById: "forged-user" }, "verified-mcp-user");
+    expect(result.success, JSON.stringify(result)).toBe(true);
+    expect(execute).toHaveBeenCalledWith(expect.objectContaining({ requestedById: "verified-mcp-user", transitionId: "RCT-cookie-free" }));
+    expect(auth).not.toHaveBeenCalled();
+    vi.doUnmock("@/lib/auth");
+    vi.doUnmock("@/lib/platform-runtime/runtime-capability-executor");
+    vi.doUnmock("@/lib/platform-runtime/transition-recovery");
+    vi.resetModules();
+  });
+
+  it("keeps runtime preview read-only and reconciliation under existing administrator grants", () => {
+    const preview = platformUpdatePack.definitions.find(d => d.name === "preview_runtime_capability_reconciliation")!;
+    const apply = platformUpdatePack.definitions.find(d => d.name === "reconcile_runtime_capabilities")!;
+    expect(preview.sideEffect).toBe(false); expect(preview.requiredCapability).toBe("manage_platform");
+    expect(apply.sideEffect).toBe(true); expect(apply.requiredCapability).toBe("manage_platform");
+    expect(apply.consequence).toBe("authority"); expect(apply.consequenceScope).toBe("platform");
+    expect(isToolAllowedByGrants(preview.name, ["admin_read"])).toBe(true);
+    expect(isToolAllowedByGrants(apply.name, ["admin_read"])).toBe(false);
+    expect(isToolAllowedByGrants(apply.name, ["admin_write"])).toBe(true);
+  });
+
+  it("delegates explicit runtime intent without forwarding a forged actor or mode", async () => {
+    const request = vi.fn(async () => ({ status: "succeeded" }));
+    vi.doMock("@/lib/platform-runtime/runtime-capability-commands", () => ({ requestRuntimeCapabilityTransitionForActor: request }));
+    const intent = { observedHost: {}, observedDatabaseStates: {}, desiredHostEnabledKeys: ["runtime:core"], desiredDatabaseStates: {}, touchedKeys: [] };
+    const result = await platformUpdatePack.handlers.reconcile_runtime_capabilities({ transitionId: "RCT-1", reconciliation: intent, requestedById: "forged-user", mode: "transition" }, "verified-user");
+    expect(request).toHaveBeenCalledWith({ transitionId: "RCT-1", desiredKeys: ["runtime:core"], mode: "reconciliation", reconciliation: intent }, "verified-user");
+    expect(result.success, JSON.stringify(result)).toBe(true);
+    vi.doUnmock("@/lib/platform-runtime/runtime-capability-commands");
+  });
   it("registers both platform-update tools with handlers", () => {
     const names = platformUpdatePack.definitions.map((d) => d.name).sort();
     expect(names).toEqual([...ALL_TOOLS].sort());

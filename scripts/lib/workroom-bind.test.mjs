@@ -11,7 +11,8 @@
 // Run: node --test scripts/lib/workroom-bind.test.mjs
 
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -23,10 +24,98 @@ import {
   planAdoption,
   resolveMcpAccess,
   resolveSessionRef,
+  resolveWorktreeSourceIdentity,
   toPosixPath,
 } from "./workroom-bind.mjs";
 
 const REPO = "OpenDigitalProductFactory/opendigitalproductfactory";
+
+test("automatic adoption retains both observed full commit identities", () => {
+  const baseSha = "1".repeat(40);
+  const headSha = "2".repeat(40);
+  const result = planAdoption({ branch: "fix/a", worktreePath: "/wt/a", repositoryFullName: REPO, baseSha, headSha });
+  assert.equal(result.baseSha, baseSha);
+  assert.equal(result.headSha, headSha);
+});
+
+test("local identity capture uses the actual Git merge base, not the current base tip or head", async () => {
+  const root = mkdtempSync(join(tmpdir(), "dpf-source-identity-"));
+  const git = (...args) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8", timeout: 10000 }).trim();
+  try {
+    git("init", "--quiet", "--initial-branch=main");
+    git("config", "user.name", "Fixture"); git("config", "user.email", "fixture@example.invalid");
+    git("remote", "add", "origin", `https://github.com/${REPO}.git`);
+    writeFileSync(join(root, "base.txt"), "base"); git("add", "."); git("commit", "--quiet", "-m", "base");
+    const baseSha = git("rev-parse", "HEAD");
+    git("switch", "--quiet", "-c", "fix/fixture");
+    writeFileSync(join(root, "topic.txt"), "topic"); git("add", "."); git("commit", "--quiet", "-m", "topic");
+    const headSha = git("rev-parse", "HEAD");
+    git("switch", "--quiet", "main");
+    writeFileSync(join(root, "main.txt"), "main"); git("add", "."); git("commit", "--quiet", "-m", "advanced main");
+    git("update-ref", "refs/remotes/origin/main", git("rev-parse", "HEAD"));
+    git("switch", "--quiet", "fix/fixture");
+    const observed = resolveWorktreeSourceIdentity(root);
+    assert.equal(observed.ok, true, observed.reason);
+    assert.equal(observed.identity.baseSha, baseSha);
+    assert.equal(observed.identity.headSha, headSha);
+    assert.equal(observed.identity.branch, "fix/fixture");
+    assert.equal(observed.identity.repositoryFullName, REPO);
+    assert.equal(observed.identity.worktreePath, toPosixPath(git("rev-parse", "--show-toplevel")));
+    let sent;
+    const binding = await bindWorktreeToWorkroom({ branch: "fix/fixture", worktreePath: root,
+      captureSourceIdentity: true, env: { DPF_MCP_BEARER_TOKEN: "fixture" },
+      call: async (_tool, args) => { sent = args; return capsule({ ...args, leaseExpiresAt: new Date(Date.now() + 60000).toISOString() }); } });
+    assert.equal(binding.status, "bound", binding.reason);
+    assert.equal(sent.baseSha, baseSha);
+    assert.equal(sent.headSha, headSha);
+    git("update-ref", "-d", "refs/remotes/origin/main");
+    assert.equal(resolveWorktreeSourceIdentity(root).ok, false, "missing remote base history must not substitute HEAD");
+    git("switch", "--quiet", "--detach", headSha);
+    assert.equal(resolveWorktreeSourceIdentity(root).ok, false, "detached HEAD has no claim branch");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("identity observation stops at its total deadline and rejects late complete data", () => {
+  let elapsed = 0, calls = 0;
+  const result = resolveWorktreeSourceIdentity("/wt/a", { now: () => elapsed,
+    readGit: (_args, opts) => { calls++; assert.equal(opts.timeout, 10000); elapsed = 10000; return "fix/a"; } });
+  assert.equal(result.ok, false); assert.equal(calls, 1);
+});
+
+const observedIdentity = { repositoryFullName: REPO, branch: "fix/a", worktreePath: "/wt/a", baseBranch: "main", baseSha: "1".repeat(40), headSha: "2".repeat(40) };
+
+test("source movement during admission prevents caching an old authoritative identity", async () => {
+  let observations = 0, writes = 0;
+  const result = await bindWorktreeToWorkroom({ branch: "fix/a", worktreePath: "/wt/a", gitDir: "/git", captureSourceIdentity: true,
+    observeIdentity: () => ({ ok: true, identity: { ...observedIdentity, headSha: ++observations === 1 ? observedIdentity.headSha : "3".repeat(40) } }),
+    env: { DPF_MCP_BEARER_TOKEN: "fixture" }, call: async () => capsule({ ...observedIdentity, headBranch: observedIdentity.branch }),
+    writeMarker: () => { writes++; } });
+  assert.equal(result.status, "error"); assert.equal(writes, 0); assert.equal(observations, 2);
+});
+
+test("automatic binding stops before admission when local identity is unavailable or the branch conflicts", async () => {
+  for (const observation of [{ ok: false, reason: "base history unavailable" }, { ok: true, identity: { ...observedIdentity, branch: "fix/other" } }]) {
+    let calls = 0, writes = 0;
+    const result = await bindWorktreeToWorkroom({ branch: "fix/a", worktreePath: "/wt/a", captureSourceIdentity: true,
+      observeIdentity: () => observation, env: { DPF_MCP_BEARER_TOKEN: "fixture" },
+      call: async () => { calls++; return capsule(); }, writeMarker: () => { writes++; } });
+    assert.equal(result.status, "unavailable"); assert.equal(calls, 0); assert.equal(writes, 0);
+  }
+});
+
+test("automatic binding validates the authoritative full source identity before caching", async () => {
+  const returned = { ...observedIdentity, headBranch: observedIdentity.branch };
+  for (const patch of [{}, { baseSha: null }, { headSha: "3".repeat(40) }, { repositoryFullName: "other/repo" }, { headBranch: "fix/other" }, { worktreePath: "/wt/other" }, { baseBranch: "other" }]) {
+    let writes = 0;
+    const result = await bindWorktreeToWorkroom({ branch: "fix/a", worktreePath: "/wt/a", gitDir: "/git", captureSourceIdentity: true,
+      observeIdentity: () => ({ ok: true, identity: observedIdentity }), env: { DPF_MCP_BEARER_TOKEN: "fixture" },
+      call: async (_tool, args) => { assert.equal(args.baseSha, observedIdentity.baseSha); assert.equal(args.headSha, observedIdentity.headSha); return capsule({ ...returned, ...patch }); },
+      writeMarker: () => { writes++; } });
+    const exact = Object.keys(patch).length === 0;
+    assert.equal(result.status, exact ? "bound" : "error", JSON.stringify(patch));
+    assert.equal(writes, exact ? 1 : 0);
+  }
+});
 
 // The REAL wire shape returned by mcpCall for adopt_worktree:
 // {success, message, entityId, data:{capsule}}. Tests originally used the
@@ -209,7 +298,7 @@ test("a claim that succeeded but could not be cached still reports bound", async
 // required sessionRef for exactly this reason; adopt_worktree omitted it.
 
 test("a host-provided session id is preferred over the fallback", () => {
-  for (const key of ["DPF_SESSION_REF", "CLAUDE_SESSION_ID", "CODEX_SESSION_ID", "GROK_SESSION_ID"]) {
+  for (const key of ["DPF_SESSION_REF", "CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID", "CODEX_SESSION_ID", "GROK_SESSION_ID"]) {
     assert.equal(resolveSessionRef({ worktreePath: "/wt/a", env: { [key]: "sess-1" } }), "sess-1", key);
   }
 });
@@ -239,4 +328,123 @@ test("binding threads the resolved session ref through to adopt_worktree", async
     call: async (_tool, args) => { sent = args; return capsule(); },
   });
   assert.equal(sent.sessionRef, "sess-xyz");
+});
+
+// ── BI-144E4F92 / BI-4BEEC539: re-caching the caller's own claim ─────────────
+//
+// Claude Code exports CLAUDE_CODE_SESSION_ID, not CLAUDE_SESSION_ID. The bind
+// sent `worktree:<path>` as the session, so adopt_worktree saw a different
+// session from the one that claimed the branch (claim_backlog_item_for_work
+// stores the real session id) and refused it as occupied. A correctly claimed
+// worktree, or one whose lease heartbeat_workroom renewed, could not be
+// re-cached, and the claim guard denied every edit.
+
+/** adopt_worktree as the server decides it: reuse a live capsule for the same session. */
+function serverWithCapsuleOwnedBy(ownerSession) {
+  return async (_tool, args) => {
+    if (args.sessionRef !== ownerSession) {
+      return {
+        success: false,
+        error: "branch_occupied",
+        message: `Branch ${args.headBranch} is already bound to Work Capsule WC-OWNED1 (ready, BI-OWNED1). Resume BI-OWNED1 on that capsule, or use a different branch.`,
+      };
+    }
+    return capsule({ capsuleId: "WC-OWNED1" });
+  };
+}
+
+test("a Claude session re-caches the claim it already holds, so the guard can allow", async () => {
+  const gitDir = mkdtempSync(join(tmpdir(), "dpf-bind-own-"));
+  try {
+    const r = await bindWorktreeToWorkroom({
+      branch: "fix/a", worktreePath: "/wt/a", gitDir, repositoryFullName: REPO,
+      env: { DPF_MCP_BEARER_TOKEN: "t", CLAUDE_CODE_SESSION_ID: "sess-claude" },
+      call: serverWithCapsuleOwnedBy("sess-claude"),
+    });
+    assert.equal(r.status, "bound", r.reason);
+    assert.equal(JSON.parse(readFileSync(join(gitDir, "dpf-workroom-claim.json"), "utf8")).capsuleId, "WC-OWNED1");
+  } finally {
+    rmSync(gitDir, { recursive: true, force: true });
+  }
+});
+
+test("another session's claim is still refused and no marker is written", async () => {
+  const gitDir = mkdtempSync(join(tmpdir(), "dpf-bind-foreign-"));
+  try {
+    const r = await bindWorktreeToWorkroom({
+      branch: "fix/a", worktreePath: "/wt/a", gitDir, repositoryFullName: REPO,
+      env: { DPF_MCP_BEARER_TOKEN: "t", CLAUDE_CODE_SESSION_ID: "sess-other" },
+      call: serverWithCapsuleOwnedBy("sess-claude"),
+    });
+    assert.equal(r.status, "refused");
+    assert.throws(() => readFileSync(join(gitDir, "dpf-workroom-claim.json"), "utf8"));
+  } finally {
+    rmSync(gitDir, { recursive: true, force: true });
+  }
+});
+
+// ── BI-EFCDE989: the claim's identity and the CLI's identity can differ ──────
+//
+// claim_backlog_item_for_work is often called with sessionRef
+// `worktree:<path>` (the form its refusals suggest). Inside Claude Code the CLI
+// then sends CLAUDE_CODE_SESSION_ID, the server sees another session, and the
+// caller's own claim is refused. The CLI now tries each identity it can
+// truthfully present, host session first, and stops at the first acceptance.
+
+test("a claim recorded under the worktree identity is re-cached from inside a Claude session", async () => {
+  const gitDir = mkdtempSync(join(tmpdir(), "dpf-bind-wtref-"));
+  const sent = [];
+  try {
+    const owner = serverWithCapsuleOwnedBy("worktree:/wt/a");
+    const r = await bindWorktreeToWorkroom({
+      branch: "fix/a", worktreePath: "/wt/a", gitDir, repositoryFullName: REPO,
+      env: { DPF_MCP_BEARER_TOKEN: "t", CLAUDE_CODE_SESSION_ID: "sess-claude" },
+      call: async (tool, args) => { sent.push(args.sessionRef); return owner(tool, args); },
+    });
+    assert.equal(r.status, "bound", r.reason);
+    assert.deepEqual(sent, ["sess-claude", "worktree:/wt/a"], "host identity first, worktree identity second");
+    assert.equal(JSON.parse(readFileSync(join(gitDir, "dpf-workroom-claim.json"), "utf8")).capsuleId, "WC-OWNED1");
+  } finally {
+    rmSync(gitDir, { recursive: true, force: true });
+  }
+});
+
+test("a claim held under neither of this session's identities is still refused", async () => {
+  const gitDir = mkdtempSync(join(tmpdir(), "dpf-bind-neither-"));
+  const sent = [];
+  try {
+    const owner = serverWithCapsuleOwnedBy("sess-someone-else");
+    const r = await bindWorktreeToWorkroom({
+      branch: "fix/a", worktreePath: "/wt/a", gitDir, repositoryFullName: REPO,
+      env: { DPF_MCP_BEARER_TOKEN: "t", CLAUDE_CODE_SESSION_ID: "sess-claude" },
+      call: async (tool, args) => { sent.push(args.sessionRef); return owner(tool, args); },
+    });
+    assert.equal(r.status, "refused");
+    assert.match(r.reason, /already bound/);
+    assert.equal(sent.length, 2, "both identities tried, nothing more");
+    assert.throws(() => readFileSync(join(gitDir, "dpf-workroom-claim.json"), "utf8"));
+  } finally {
+    rmSync(gitDir, { recursive: true, force: true });
+  }
+});
+
+test("a refusal that is not about occupancy is not retried under another identity", async () => {
+  const sent = [];
+  const r = await bindWorktreeToWorkroom({
+    branch: "fix/a", worktreePath: "/wt/a", gitDir: null, repositoryFullName: REPO,
+    env: { DPF_MCP_BEARER_TOKEN: "t", CLAUDE_CODE_SESSION_ID: "sess-claude" },
+    call: async (_tool, args) => { sent.push(args.sessionRef); return { success: false, error: "portal_quiescing", message: "writes refused" }; },
+  });
+  assert.equal(r.status, "refused");
+  assert.deepEqual(sent, ["sess-claude"]);
+});
+
+test("with only one identity available, exactly one call is made", async () => {
+  const sent = [];
+  await bindWorktreeToWorkroom({
+    branch: "fix/a", worktreePath: "/wt/a", gitDir: null, repositoryFullName: REPO,
+    env: { DPF_MCP_BEARER_TOKEN: "t" },
+    call: async (_tool, args) => { sent.push(args.sessionRef); return { success: false, error: "branch_occupied", message: "already bound" }; },
+  });
+  assert.deepEqual(sent, ["worktree:/wt/a"]);
 });

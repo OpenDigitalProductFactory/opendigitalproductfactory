@@ -236,6 +236,46 @@ describe("build-ops pack — handler behavior (delegation preserved)", () => {
     );
   });
 
+  it("reports an unverified sign-in probe without inventing a capacity hold", async () => {
+    endpointRunner.runEndpointTests.mockResolvedValue([
+      { endpointId: "chatgpt", probes: [{ name: "p", outcome: "deferred", reason: "Deferred: Auth failed" }], scenarios: [], instructionFollowing: null },
+    ]);
+    const res = await buildOpsPack.handlers.run_endpoint_tests({ endpointId: "chatgpt", modelId: "selected" }, "u1", {});
+    expect(res.message).toContain("unverified");
+    expect(res.message).toContain("Auth failed");
+    expect(res.message).not.toContain("capacity held");
+  });
+
+  it.each([
+    { modelId: "selected" }, { endpointId: "local" },
+    { endpointId: "openai", modelId: "selected" },
+    { endpointId: "local", modelId: "default" },
+    { endpointId: "local", modelId: "selected", allModels: true },
+    { endpointId: "local", modelId: "selected", allEndpoints: true },
+    { endpointId: "local", modelId: "selected", taskType: "code-gen" },
+    { endpointId: "local", modelId: "selected", probesOnly: true },
+  ])("refuses incompatible concurrency mode without calls: %j", async selection => {
+    const res = await buildOpsPack.handlers.run_endpoint_tests({ ...selection, concurrencyOnly: true }, "u1", { routeContext: "/operate/ai/providers/local" });
+    expect(res.success).toBe(false);
+    expect(res.message).toContain("Concurrency diagnostics");
+    expect(endpointRunner.runEndpointTests).not.toHaveBeenCalled();
+    expect(db.modelProfileFindFirst).not.toHaveBeenCalled();
+  });
+
+  it("passes explicit concurrency selection and reports deferred evidence without ordinary probe claims", async () => {
+    endpointRunner.runEndpointTests.mockResolvedValue([{ endpointId: "local", modelId: "selected",
+      probes: [], scenarios: [], instructionFollowing: null, codingCapability: null,
+      concurrency: { outcome: "deferred", reason: "Contention unverified", contentionObserved: false, callers: [], events: [] },
+    }]);
+    const res = await buildOpsPack.handlers.run_endpoint_tests({ endpointId: "local", modelId: "selected", concurrencyOnly: true }, "u1", {});
+    expect(res.success).toBe(true);
+    expect(endpointRunner.runEndpointTests).toHaveBeenCalledWith({ endpointId: "local", modelId: "selected", concurrencyOnly: true, triggeredBy: "u1" });
+    expect(res.message).toContain("Concurrency: deferred");
+    expect(res.message).toContain("Contention unverified");
+    expect(res.message).not.toContain("Probes 0/0 passed");
+    expect(db.modelProfileFindFirst).not.toHaveBeenCalled();
+  });
+
   it("promote_to_build_studio promotes a triaged item through the transaction", async () => {
     db.platformDevConfigFindUnique.mockResolvedValue({ governedBacklogEnabled: false });
     db.backlogItemFindFirst.mockResolvedValue({

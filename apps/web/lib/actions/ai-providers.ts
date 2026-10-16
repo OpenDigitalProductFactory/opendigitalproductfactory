@@ -10,6 +10,8 @@ import {
   type RegistryProviderEntry,
 } from "@/lib/ai-provider-types";
 import { encryptSecret } from "@/lib/credential-crypto";
+import { normalizeProviderWorkspaceId } from "@/lib/inference/provider-workspace";
+import { configureDefaultProviderWorkspace } from "@/lib/inference/provider-account-management";
 import {
   autoDiscoverAndProfile,
   profileModelsInternal,
@@ -165,6 +167,7 @@ export async function syncProviderRegistry(): Promise<{ added: number; updated: 
 // ─── Configure provider ───────────────────────────────────────────────────────
 
 export async function configureProvider(input: {
+  providerWorkspaceId?: string;
   providerId: string;
   enabledFamilies: string[];
   authMethod?: string;
@@ -179,6 +182,11 @@ export async function configureProvider(input: {
 }): Promise<{ error?: string }> {
   await requireManageProviders();
 
+  let providerWorkspaceId: string | null | undefined;
+  try { providerWorkspaceId = normalizeProviderWorkspaceId(input.providerId, input.providerWorkspaceId); }
+  catch (error) { return { error: error instanceof Error ? error.message : "Invalid workspace ID" }; }
+  if (providerWorkspaceId && input.authMethod && input.authMethod !== "api_key") return { error: "Workspace selection requires an Anthropic API key" };
+
   // Validate OAuth fields: if any OAuth field is provided, require the essential ones
   // (skip for oauth2_authorization_code — those fields are stored on the provider row, not credentials)
   if (input.authMethod !== "oauth2_authorization_code") {
@@ -188,6 +196,7 @@ export async function configureProvider(input: {
     }
   }
 
+  if (providerWorkspaceId !== undefined) await configureDefaultProviderWorkspace(input.providerId, providerWorkspaceId);
   // Clear credential fields from previous auth method when switching
   if (input.authMethod) {
     const clearFields: Record<string, null> = {};

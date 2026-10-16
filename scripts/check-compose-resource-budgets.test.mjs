@@ -110,6 +110,79 @@ services:
     assert.equal(result.ok, false);
     assert.match(result.errors[0], /mystery/);
   });
+
+  // BI-D6769E2F: an optional service with a full budget runs within it when its
+  // profile is enabled, so compose must carry the same limits.
+  const monitoringBudget = {
+    alwaysOnServices: {},
+    optionalProfileServices: {
+      prometheus: { memory: "1g", cpus: "1.0", profiles: ["runtime-deep-observability"] },
+    },
+  };
+
+  it("fails when a budgeted optional service has no limits", () => {
+    const result = evaluateResourceBudgets({
+      budget: monitoringBudget,
+      composeText: `
+services:
+  prometheus:
+    profiles: ["runtime-deep-observability"]
+    image: prom
+`,
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.errors[0], /optional service "prometheus".*memory=1g cpus=1\.0/);
+  });
+
+  it("fails when a budgeted optional service's limits differ from its budget", () => {
+    const result = evaluateResourceBudgets({
+      budget: monitoringBudget,
+      composeText: `
+services:
+  prometheus:
+    profiles: ["runtime-deep-observability"]
+    image: prom
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: "1.0"
+`,
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.errors[0], /prometheus.*memory=2g/);
+  });
+
+  it("passes when a budgeted optional service's limits match its budget", () => {
+    const result = evaluateResourceBudgets({
+      budget: monitoringBudget,
+      composeText: `
+services:
+  prometheus:
+    profiles: ["runtime-deep-observability"]
+    image: prom
+    deploy:
+      resources:
+        limits:
+          memory: 1024m
+          cpus: "1"
+`,
+    });
+    assert.deepEqual(result.errors, []);
+  });
+
+  it("does not require limits for an optional entry without a memory budget", () => {
+    const result = evaluateResourceBudgets({
+      budget: { alwaysOnServices: {}, optionalProfileServices: { sandbox: { cpus: "4.0", profiles: ["runtime-build"] } } },
+      composeText: `
+services:
+  sandbox:
+    profiles: ["runtime-build"]
+    image: s
+`,
+    });
+    assert.equal(result.ok, true);
+  });
 });
 
 describe("sizeWslCeilings", () => {

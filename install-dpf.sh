@@ -55,6 +55,8 @@ LIB_DIR="$REPO_ROOT/scripts/installer/lib"
 . "$LIB_DIR/doctor.sh"
 # shellcheck source=scripts/installer/lib/docker.sh
 . "$LIB_DIR/docker.sh"
+# shellcheck source=scripts/installer/lib/pnpm.sh
+. "$LIB_DIR/pnpm.sh"
 # shellcheck source=scripts/installer/lib/autostart.sh
 . "$LIB_DIR/autostart.sh"
 # shellcheck source=scripts/installer/lib/canonical-origin.sh
@@ -114,6 +116,9 @@ Flags:
   --headless    Non-interactive (no prompts). Defaults are used (install
                 mode defaults to "customer"); required for CI / unattended
                 installs.
+  --allow-docker-restart
+                Permit macOS Docker memory setup to interrupt existing Docker
+                workloads. Headless mode alone does not grant this permission.
   --customer    Ready-to-go install: run the pre-built release images and
                 skip contributor tooling. Skips the interactive mode prompt.
   --contributor Customizable install: build the full stack from local source,
@@ -153,6 +158,12 @@ Flags:
                 (docker-compose.edge-standalone.yml).
   --no-edge     Force-skip the local Edge Node even if a prior install
                 enabled it (Edge is already off by default).
+  --monitoring <on|off>
+                Answer the monitoring question without a prompt. Monitoring
+                (Prometheus + Grafana) watches this platform and its host;
+                change it later in Settings → Monitoring. --headless without
+                this flag leaves monitoring off and undecided. A choice
+                already recorded on this install is kept and never re-asked.
   --organization-join-package <file.dpfjoin>
                 Join an existing organization trust domain during install.
                 The private package is validated, consumed, and deleted on
@@ -170,6 +181,7 @@ EOF
 }
 
 DPF_DRY_RUN=0
+DPF_ALLOW_DOCKER_RESTART=0
 DPF_MODE="dev"          # dev | release — compose chain. Derived from the
                         # install mode below unless set explicitly via a flag.
 DPF_MODE_EXPLICIT=0     # 1 once --dev/--release is passed, so the install-mode
@@ -182,12 +194,14 @@ DPF_INCLUDE_EDGE="${DPF_INCLUDE_EDGE:-}"    # opt-in; resolved after state init 
 # behavior). Future phases will turn this into a hard install/dev separation.
 DPF_DEV_WORKSPACE_PATH_ARG=""
 DPF_ORGANIZATION_JOIN_PACKAGE=""
+DPF_MONITORING=""       # on | off — answers the monitoring question (BI-31F11C37).
 DPF_INSTALL_CALLER_DIR="$PWD"
 SUBCOMMAND=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run)              DPF_DRY_RUN=1 ;;
+    --allow-docker-restart)  DPF_ALLOW_DOCKER_RESTART=1 ;;
     --headless)             DPF_HEADLESS=1; export DPF_HEADLESS ;;
     --release)              DPF_MODE="release"; DPF_MODE_EXPLICIT=1 ;;
     --dev)                  DPF_MODE="dev"; DPF_MODE_EXPLICIT=1 ;;
@@ -200,6 +214,8 @@ while [ $# -gt 0 ]; do
     --no-autostart)         DPF_AUTOSTART=0 ;;
     --with-edge)            DPF_INCLUDE_EDGE=1 ;;
     --no-edge)              DPF_INCLUDE_EDGE=0 ;;
+    --monitoring)           shift; DPF_MONITORING="${1:-}" ;;
+    --monitoring=*)         DPF_MONITORING="${1#*=}" ;;
     --organization-join-package)
                             shift
                             [ -n "${1:-}" ] || { echo "--organization-join-package requires a file" >&2; exit 64; }
@@ -217,6 +233,14 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+
+case "$DPF_MONITORING" in
+  ""|on|off) ;;
+  *)
+    echo "install-dpf.sh: --monitoring must be 'on' or 'off' (got '$DPF_MONITORING')" >&2
+    exit 64
+    ;;
+esac
 
 if [ -n "$DPF_ORGANIZATION_JOIN_PACKAGE" ]; then
   case "$DPF_ORGANIZATION_JOIN_PACKAGE" in
@@ -370,6 +394,52 @@ else
   warn "No environment class declared; this install is treated as production until one is set."
 fi
 
+# Monitoring question (BI-31F11C37; design 2026-10-13 §5). Recorded BEFORE the
+# compose chain resolves capability profiles (dpf_compose_files ->
+# dpf_compose_profiles), so the first compose up starts monitoring when chosen.
+# A recorded enabled/disabled decision is never re-asked.
+step "Monitoring"
+monitoring_rc=0
+dpf_monitoring_prompt_needed "$REPO_ROOT" || monitoring_rc=$?
+if [ "$monitoring_rc" -eq 0 ]; then
+  if [ -n "$DPF_MONITORING" ]; then
+    monitoring_choice="$DPF_MONITORING"; monitoring_source="installer-flag"
+  elif [ "${DPF_HEADLESS:-0}" = "1" ] || [ "$DPF_DRY_RUN" = "1" ]; then
+    monitoring_choice="none"; monitoring_source="headless-default"
+  else
+    monitoring_cost="$(dpf_monitoring_cost_text "$REPO_ROOT")" || fail "Could not read the monitoring cost from config/install-resource-budgets.json"
+    echo ""
+    echo "  Monitoring (Prometheus + Grafana) watches this platform and its host."
+    echo "  It uses $monitoring_cost when on. You can change this later in Settings → Monitoring."
+    printf "  Turn monitoring on? [y/N]: "
+    read -r monitoring_answer || monitoring_answer=""
+    case "$monitoring_answer" in
+      y|Y|yes|YES|Yes) monitoring_choice="on" ;;
+      *) monitoring_choice="off" ;;
+    esac
+    monitoring_source="installer-prompt"
+  fi
+  if [ "$DPF_DRY_RUN" = "1" ]; then
+    info "Dry-run: would record monitoring choice '$monitoring_choice' ($monitoring_source)"
+  else
+    dpf_monitoring_choice_apply "$REPO_ROOT" "$monitoring_choice" "$monitoring_source" \
+      || fail "Could not record the monitoring choice in $(dpf_state_path) (see message above)"
+    case "$monitoring_choice" in
+      on)  ok "Monitoring: on" ;;
+      off) ok "Monitoring: off (turn it on later in Settings → Monitoring)" ;;
+      *)   warn "Monitoring: off and undecided; the portal will offer the choice." ;;
+    esac
+  fi
+elif [ "$monitoring_rc" -eq 1 ]; then
+  if [ -n "$DPF_MONITORING" ]; then
+    warn "Monitoring was already chosen on this install; --monitoring $DPF_MONITORING is ignored. Change it in Settings → Monitoring."
+  else
+    ok "Monitoring: keeping the choice already recorded on this install"
+  fi
+else
+  fail "Could not read the monitoring decision from $(dpf_state_path) (see message above)"
+fi
+
 # Edge Node deploy gate (opt-in; BI-72CFF89D / edge-topology design §5).
 # Resolve whether to bundle the local Edge Node BEFORE assembling the chain:
 # explicit --with-edge/--no-edge wins, else the recorded choice in
@@ -389,6 +459,10 @@ if [ "$DPF_DRY_RUN" = "1" ]; then
   echo ""
   step "Dry-run plan"
   echo "  Would run:"
+  if [ "$(uname -s)" = "Darwin" ]; then
+    echo "    Size local Docker Desktop memory to a quarter of host RAM (8-32 GiB);"
+    echo "    preserve a valid smaller allocation and request restart consent for active workloads."
+  fi
   echo "    docker compose ${DPF_COMPOSE_FILES[*]} up -d"
   echo ""
   echo "  Install state file: $(dpf_state_path)"
@@ -416,7 +490,7 @@ case "$rc" in
      else
        dpf_state_write_json edge '{"enabled":false,"mode":null}' 2>/dev/null || true
      fi
-     dpf_preflight_docker_memory ;;
+     ;;
   75) # Docker was just installed; operator must log out / newgrp
       echo ""
       warn "Re-run install-dpf.sh after logging out and back in (or 'newgrp docker')."
@@ -448,10 +522,14 @@ if [ "$NODE_MAJOR" -lt 20 ] 2>/dev/null; then
 fi
 ok "Node.js $(node -v)"
 
-if ! command -v pnpm >/dev/null 2>&1; then
-  info "pnpm not found; installing via npm..."
-  npm install -g pnpm
-fi
+# Size Desktop before dependency/image work. A running VM must agree with
+# its saved allocation; restart alone does not correct the persisted limit.
+. "$REPO_ROOT/scripts/installer/lib/macos-memory.sh"
+step "Docker memory"
+dpf_converge_macos_memory
+dpf_preflight_docker_memory
+
+dpf_ensure_pnpm "$REPO_ROOT" || fail "The pinned pnpm prerequisite is not ready."
 ok "pnpm $(pnpm -v)"
 
 # 7. Install workspace dependencies (so scripts/detect-hardware-host.ts
@@ -1018,6 +1096,9 @@ fi
 # 12): Claude refuses OAuth over plain http, and one origin keeps OAuth token
 # audiences, cookies and the MCP address whole. A member install gets its
 # certificate from the organization join; a standalone install is its own CA.
+step "Private runtime state"
+node "$REPO_ROOT/scripts/installer/prepare-runtime-state.mjs" "${DPF_COMPOSE_FILES[@]}"
+
 DPF_PORTAL_URL="http://localhost:3000"
 if [ -n "$DPF_ORGANIZATION_JOIN_PACKAGE" ]; then
   step "Organization trust"

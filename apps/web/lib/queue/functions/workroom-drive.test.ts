@@ -164,6 +164,14 @@ describe("runWorkroomDriveJob (BI-FCD639D9)", () => {
     expect(fx.persist.mock.calls[0]?.[0]?.summary).toMatch(/lease held/i);
   });
 
+  it("pauses a room whose queue a provider failure held, and dispatches nothing (BI-2B6A8A74)", async () => {
+    const fx = effects();
+    const result = await runWorkroomDriveJob(new Date(), { listRooms: async () => [room({ workspaceState: { queueHold: { since: "2026-03-02T08:00:00.000Z", kind: "rate-limit", taskId: "t-held", error: "busy" } } })], effects: fx });
+    expect(result.dispatched).toBe(0);
+    expect(fx.upsertAgentTask).not.toHaveBeenCalled();
+    expect(fx.persist.mock.calls[0]?.[0]?.snapshot).toMatchObject({ reason: "provider_held" });
+  });
+
   it("records attention for a human stage and never schedules an agent task", async () => {
     const fx = effects();
     const human = room({
@@ -632,6 +640,14 @@ describe("parallel branches: one task per branch under one lease (PR-3c-2)", () 
     // The real table: parallel split/join is executable since PR-3c-2.
     Object.assign(flags.table, flags.original);
     expect(flags.table["parallel-split-join"]).toBe(true);
+  });
+
+  it("a held queue dispatches no branch and keeps the token, which dispatches once resumed (BI-2B6A8A74)", async () => {
+    const h = harness({ queueHold: { since: "2026-03-02T08:00:00.000Z", kind: "rate-limit", taskId: "t-held", error: "busy" } });
+    const held = await tick(h, at(0));
+    expect([held.upserts, drive(h).reason]).toEqual([[], "provider_held"]);
+    delete h.workspaceState["queueHold"];
+    expect((await tick(h, at(1))).upserts).toEqual([`${PRIMARY}@a`]);
   });
 
   it("two concurrent agent branches get two upserts with distinct ids fixed on their tokens, under one lease", async () => {

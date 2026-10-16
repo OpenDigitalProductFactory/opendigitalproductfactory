@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 677,
+  "routeCount": 678,
   "routes": [
     {
       "routePath": "/",
@@ -302,6 +302,17 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/admin/settings/page.tsx"
+    },
+    {
+      "routePath": "/admin/settings/monitoring",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "settings",
+        "monitoring"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/settings/monitoring/page.tsx"
     },
     {
       "routePath": "/admin/skills",

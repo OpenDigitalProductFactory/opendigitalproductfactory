@@ -274,7 +274,7 @@ DPF relies on local guardrails — the pre-commit secret scan + typecheck hook (
 
 **Point the client at the MCP URL and approve it once in your browser.** The client gets a `401` that tells it where to look, discovers this installation's authorization server, and runs the standard OAuth flow. A portal page opens naming the client, this installation, and what it is asking to do; you approve, and the client refreshes its own access from then on. **No environment variable, no copy-paste, no client restart.**
 
-Setup keeps your selected connection address for later sessions, including loopback HTTP. An explicit `DPF_MCP_URL` overrides it; otherwise setup uses the saved Codex address, then the saved user preference, then the installation's HTTPS default. A saved address does not grant access or prove sign-in works. HTTP setup preserves certificate and credential settings. If the client still uses an older address, verify its saved connection before starting another sign-in.
+Setup keeps your selected https connection address for later sessions. An explicit `DPF_MCP_URL` overrides it; otherwise setup uses the saved https preference, then the installation's HTTPS default. A plain-http address is never saved for every client, because Claude's sign-in refuses plain http. Codex and Grok keep their own address in their own settings. A saved address does not grant access or prove sign-in works. If the client still uses an older address, verify its saved connection before starting another sign-in.
 
 The approval page names the assistant role this connection will act as and
 has one **Connect** button; you do not pick the role. The server chooses it

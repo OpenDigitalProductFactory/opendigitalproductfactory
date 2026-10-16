@@ -39,6 +39,28 @@ describe("parseUpstreamIssue", () => {
 });
 
 describe("readUpstreamIssues", () => {
+  it("reports incomplete coverage when a full final page exhausts the bound", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(
+      Array.from({ length: 100 }, (_, i) => raw({ number: i + 1, pull_request: {} })),
+    ));
+    const result = await readUpstreamIssues({ token: "t", repo: { owner: "o", name: "r" }, fetchImpl, maxPages: 1 });
+    expect(result).toMatchObject({ ok: false, state: "incomplete" });
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it.each([0, -1, 1.5, NaN, Infinity])("rejects invalid page bound %s without reading", async (maxPages) => {
+    const fetchImpl = vi.fn();
+    const result = await readUpstreamIssues({ token: "t", repo: { owner: "o", name: "r" }, fetchImpl, maxPages });
+    expect(result).toMatchObject({ ok: false, state: "error" });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("returns a failure verdict when the transport throws", async () => {
+    const fetchImpl = vi.fn().mockRejectedValue(new Error("connection reset"));
+    await expect(readUpstreamIssues({ token: "t", repo: { owner: "o", name: "r" }, fetchImpl }))
+      .resolves.toMatchObject({ ok: false, state: "error" });
+  });
+
   it("reports not-configured when the install holds no token, instead of failing", async () => {
     const result = await readUpstreamIssues({ token: null, fetchImpl: vi.fn() });
     expect(result).toMatchObject({ ok: false, state: "not-configured" });

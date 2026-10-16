@@ -97,7 +97,8 @@
     "./portfolio-sources/absorption-posture": "./src/portfolio-sources/absorption-posture.ts",
     "./portfolio-sources/incumbent-coverage": "./src/portfolio-sources/incumbent-coverage.ts",
     "./patch": "./src/patch/index.ts",
-    "./coworker-job-definition": "./src/coworker-job-definition.ts"
+    "./coworker-job-definition": "./src/coworker-job-definition.ts",
+    "./install-work-owner": "./src/install-work-owner.ts"
   },
   "scripts": {
     "postinstall": "prisma generate",
@@ -118,7 +119,7 @@
     "studio": "prisma studio",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "typecheck": "prisma generate && tsc --noEmit && tsc -p tsconfig.scripts.json --noEmit"
+    "typecheck": "prisma generate && node ../../scripts/run-tsc.mjs --noEmit && node ../../scripts/run-tsc.mjs -p tsconfig.scripts.json --noEmit"
   },
   "dependencies": {
     "@dpf/integration-shared": "workspace:*",

@@ -1,6 +1,7 @@
 import { SOURCE_CATALOG, type MessageKey } from "@dpf/i18n";
 import { isRecord } from "@/lib/shared/coerce";
 import { envelopeResultRoute } from "./envelope-routes";
+import { readOnBehalfDecision, type OnBehalfDecision } from "./on-behalf-decision";
 
 /** A read model, not an authority or execution state machine. */
 export type ApprovalOutcomeState = "waiting" | "executed" | "failed" | "not-run" | "expired" | "declined" | "cancelled" | "unknown";
@@ -12,12 +13,15 @@ export type ApprovalOutcome = {
   nextActionKey: MessageKey<"approvals">;
   inboxHref: string;
   createdAtIso: string;
+  /** BI-7BCC87BB: an admin decided this request on the owner's behalf. */
+  decidedOnBehalf?: OnBehalfDecision;
 };
 export type ApprovalOutcomeRow = {
   id: string;
   status: string;
   expiresAt: Date | null;
   createdAt: Date;
+  argsJson?: unknown;
   toolExecutions: Array<{ executionMode: string; success: boolean; result: unknown }>;
 };
 
@@ -42,6 +46,7 @@ export function projectApprovalOutcome(row: ApprovalOutcomeRow, now: Date): Appr
   const { label, next: nextAction } = COPY[state];
   const reason = typeof saved.reason === "string" && Object.hasOwn(RECOVERY, saved.reason)
     ? saved.reason as keyof typeof RECOVERY : null;
+  const onBehalf = readOnBehalfDecision(row.argsJson);
   const nextActionKey: MessageKey<"approvals"> = state === "not-run" && reason ? `recovery.${reason}` : `states.${state}.next`;
   return {
     envelopeId: row.id, state, label,
@@ -49,5 +54,6 @@ export function projectApprovalOutcome(row: ApprovalOutcomeRow, now: Date): Appr
     nextActionKey,
     inboxHref: envelopeResultRoute(row.id),
     createdAtIso: row.createdAt.toISOString(),
+    ...(onBehalf ? { decidedOnBehalf: onBehalf } : {}),
   };
 }

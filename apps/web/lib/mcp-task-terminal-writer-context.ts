@@ -14,7 +14,12 @@ import {
 
 // The reader's own page ceiling (BI-E8237EAE): a page it served is never "oversize".
 const MAX_PAGE_CHARS = SOURCE_READ_MAX_CHARS;
-const MAX_HYDRATED_CHARS = 64_000;
+/**
+ * The most source a resumed terminal writer can re-read. Exported so a review
+ * request can tell the author up front when a design is larger (BI-4592CF69).
+ */
+export const TERMINAL_WRITER_RECOVERY_MAX_CHARS = 64_000;
+const MAX_HYDRATED_CHARS = TERMINAL_WRITER_RECOVERY_MAX_CHARS;
 // A page COUNT, not derived from the page size: persisted histories read at the
 // historical 3,200-char page still need 20 pages to cover 64k, and a larger
 // reader page must never shrink how much of that history can be rehydrated.
@@ -202,6 +207,7 @@ function validateReaderExecutions(
 
   const ids: string[] = [];
   const contentfulAttempts: HydrationPageEvidence[][] = [];
+  let requiresFreshRead = false;
   const seenIds = new Set<string>();
   let priorCreatedAt = Number.NEGATIVE_INFINITY;
   for (const execution of executions) {
@@ -221,7 +227,19 @@ function validateReaderExecutions(
         "Persisted immutable reader parameters are unavailable.",
       );
     }
-    const normalized = normalizeTerminalToolArguments(policy, execution.toolName, parameters);
+    // Historical audit records contain the provider's requested page controls,
+    // which can exceed a later reader ceiling. They never authorize a fresh read
+    // at that size or make cached source reusable. Validate a narrowed copy and
+    // require a complete current-bound reread; preserve identity and audit bytes.
+    const historicalParameters = { ...parameters };
+    for (const [name, ceiling] of [["maxChars", SOURCE_READ_MAX_CHARS], ["maxLines", SOURCE_READ_MAX_LINES]] as const) {
+      const value = parameters[name];
+      if (execution.success && typeof value === "number" && Number.isSafeInteger(value) && value > ceiling) {
+        historicalParameters[name] = ceiling;
+        requiresFreshRead = true;
+      }
+    }
+    const normalized = normalizeTerminalToolArguments(policy, execution.toolName, historicalParameters);
     if (normalized.kind === "refuse") {
       return hydrationFailure(normalized.result.error, normalized.result.message);
     }
@@ -292,7 +310,7 @@ function validateReaderExecutions(
       "No successful exact-bound immutable reader execution is available for terminal-writer hydration.",
     );
   }
-  return ok({ ids, contentfulAttempts });
+  return ok({ ids, contentfulAttempts: requiresFreshRead ? [] : contentfulAttempts });
 }
 
 /** Failed cursors permit a new governed read, never writer evidence. */

@@ -16,6 +16,9 @@ param(
     # production install from a disposable one. Recorded in installer state as the
     # canonical local host fact; an undeclared install is treated as production.
     [ValidateSet("production", "development", "test")][string]$EnvironmentClass,
+    # Answers the installer monitoring question (Prometheus + Grafana). Without it an
+    # interactive install asks; -Headless leaves monitoring off and undecided.
+    [ValidateSet("On", "Off")][string]$Monitoring,
     [ValidateNotNullOrEmpty()][string]$OrganizationJoinPackage,
     [switch]$Help
 )
@@ -51,6 +54,12 @@ Flags:
                 agents may do -- teardown, credential handling, and writes to a
                 paired installation. An undeclared install is treated as
                 production.
+  -Monitoring <On|Off>
+                Answer the monitoring question without a prompt. Monitoring
+                (Prometheus + Grafana) watches this platform and its host;
+                change it later in Settings > Monitoring. -Headless without
+                this flag leaves monitoring off and undecided. A choice already
+                recorded on this install is kept and never re-asked.
   -OrganizationJoinPackage <file.dpfjoin>
                 Join an existing organization trust domain during install. The
                 private package is validated, consumed, and deleted on success;
@@ -1467,10 +1476,8 @@ if ($InstallMode -eq "customizer" -and -not (Test-StepDone "dev_setup")) {
         Write-Warn "Node.js v20+ required. Current: $(node -v)"
         exit 1
     }
-    if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
-        Write-Action "Installing pnpm..."
-        npm install -g pnpm
-    }
+    . (Join-Path $DPF_DIR "scripts/installer/lib/pnpm.ps1")
+    Initialize-DpfPnpm -InstallDir $DPF_DIR
 
     # Hoisted layout avoids symlink permission issues on Windows (no Developer Mode needed)
     if (-not (Test-Path "$DPF_DIR\.npmrc")) {
@@ -1859,6 +1866,14 @@ Write-Action "Open a new terminal for the PATH change to take effect in other wi
 
 # --- Step 6: Start Platform ---------------------------------------------------
 
+. (Resolve-DPFComposeChainModule -InstallDir $DPF_DIR)
+$runtimeComposeArgs = Get-DPFComposeArgs -InstallDir $DPF_DIR -IncludeEdge:$false -IncludeRelease:($InstallMode -eq "consumer")
+Push-Location $DPF_DIR
+try {
+    & node (Join-Path $DPF_DIR "scripts/installer/prepare-runtime-state.mjs") @runtimeComposeArgs
+    if ($LASTEXITCODE -ne 0) { throw "runtime_state_preparation_failed" }
+} finally { Pop-Location }
+
 # Every install is https at one canonical origin (BI-6DC1CD5B, design section
 # 12): Claude refuses OAuth over plain http, and one origin keeps OAuth token
 # audiences, cookies and the MCP address whole. A member install gets its
@@ -1947,6 +1962,34 @@ if (-not (Test-StepDone "started")) {
         Write-OK "Installation environment class: $EnvironmentClass"
     } else {
         Write-Host "  No environment class declared; this install is treated as production until one is set." -ForegroundColor Yellow
+    }
+    # Monitoring question (BI-31F11C37). Recorded BEFORE the capability profiles
+    # resolve, so the first compose up starts monitoring when it was chosen. A
+    # recorded enabled/disabled decision is never re-asked.
+    if (Test-DpfMonitoringPromptNeeded -InstallDir $DPF_DIR) {
+        if ($Monitoring) {
+            $monitoringChoice = $Monitoring.ToLowerInvariant()
+            $monitoringSource = "installer-flag"
+        } elseif ($Headless) {
+            $monitoringChoice = "none"
+            $monitoringSource = "headless-default"
+        } else {
+            $monitoringCost = Get-DpfMonitoringCost -InstallDir $DPF_DIR
+            Write-Host ""
+            Write-Host "  Monitoring (Prometheus + Grafana) watches this platform and its host." -ForegroundColor Cyan
+            Write-Host "  It uses $monitoringCost when on. You can change this later in Settings > Monitoring." -ForegroundColor White
+            $monitoringAnswer = Read-DPFInstallerInput "  Turn monitoring on? [y/N]"
+            $monitoringChoice = if ("$monitoringAnswer".Trim() -match '^(?i)y(es)?$') { "on" } else { "off" }
+            $monitoringSource = "installer-prompt"
+        }
+        Set-DpfMonitoringChoice -InstallDir $DPF_DIR -Choice $monitoringChoice -Source $monitoringSource
+        switch ($monitoringChoice) {
+            "on" { Write-OK "Monitoring: on" }
+            "off" { Write-OK "Monitoring: off (turn it on later in Settings > Monitoring)" }
+            default { Write-Host "  Monitoring: off and undecided; the portal will offer the choice." -ForegroundColor Yellow }
+        }
+    } elseif ($Monitoring) {
+        Write-Host "  Monitoring was already chosen on this install; -Monitoring $Monitoring is ignored. Change it in Settings > Monitoring." -ForegroundColor Yellow
     }
     $capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir $DPF_DIR
     $env:COMPOSE_PROFILES = (@($capabilityProjection.composeProfiles) -join ',')

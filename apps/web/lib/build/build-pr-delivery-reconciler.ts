@@ -332,6 +332,8 @@ export async function initializeAndReconcileBuildPrDelivery(input: {
   prNumber: number;
   prUrl: string;
   token: string;
+  /** The commit the PR was published at; binds the room's head to the PR. */
+  publishedHeadSha?: string | null;
   eligible?: boolean;
   mode?: BuildPrReconcilerMode;
   fetchImpl?: typeof fetch;
@@ -353,6 +355,7 @@ export async function initializeAndReconcileBuildPrDelivery(input: {
     repository,
     prNumber: input.prNumber,
     prUrl: input.prUrl,
+    headSha: input.publishedHeadSha,
   });
   if (capture.captured === 0) {
     return {
@@ -373,6 +376,7 @@ export async function initializeAndReconcileBuildPrDelivery(input: {
       db: input.db,
       featureBuildId: input.featureBuildId,
       delivery: stopped,
+      publishedHeadSha: input.publishedHeadSha,
     });
     return { captured: capture.captured, state: stopped, action: null, actuated: false };
   }
@@ -398,6 +402,7 @@ export async function initializeAndReconcileBuildPrDelivery(input: {
     db: input.db,
     featureBuildId: input.featureBuildId,
     delivery: outcome.state,
+    publishedHeadSha: input.publishedHeadSha,
   });
   return { captured: capture.captured, ...outcome };
 }

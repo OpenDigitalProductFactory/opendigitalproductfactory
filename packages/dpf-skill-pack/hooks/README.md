@@ -35,16 +35,22 @@ A purpose in this file is not proof that an approval row displays it.
 
 - Hook 1: [worktree-create.mjs](worktree-create.mjs) — Create an isolated worktree in the shared worktree directory
 
+## PostToolUse
+
+- Hook 1 [^mcp__.+__(adopt_worktree\|heartbeat_workroom\|claim_workroom_scope\|claim_backlog_item_for_work\|create_workroom)$]: [workroom-claim-refresh.mjs](workroom-claim-refresh.mjs) — Cache the renewed Workroom claim for this worktree
+
 ## SessionStart
 
 - Hook 1: [install-folder-contract.mjs](install-folder-contract.mjs) — Load the source contract when the session opens in the install folder
 - Hook 2: [uncommitted-work-guard.mjs](uncommitted-work-guard.mjs) — Note work that was already uncommitted when the session started
 - Hook 3: [process-spine-health-check.mjs](process-spine-health-check.mjs) — Check required DPF skills are installed and exposed
-- Hook 4: [governance-freshness-check.mjs](governance-freshness-check.mjs) — Check this checkout has current process guards
-- Hook 5: [worktree-session-hygiene.mjs](worktree-session-hygiene.mjs) — Check worktree location and unused checkout inventory
-- Hook 6: [worktree-session-heartbeat.mjs](worktree-session-heartbeat.mjs) — Refresh this session heartbeat to protect active work
-- Hook 7: [root-clone-freshness.mjs](root-clone-freshness.mjs) — Safely fast-forward the clean shared source checkout
-- Hook 8: [worktree-readiness-banner.mjs](worktree-readiness-banner.mjs) — Report which checks this worktree is ready to run
+- Hook 4: [pretooluse-guard-selftest.mjs](pretooluse-guard-selftest.mjs) — Check the safety guards can block in this session
+- Hook 5: [governance-freshness-check.mjs](governance-freshness-check.mjs) — Check this checkout has current process guards
+- Hook 6: [worktree-session-hygiene.mjs](worktree-session-hygiene.mjs) — Check worktree location and unused checkout inventory
+- Hook 7: [worktree-session-heartbeat.mjs](worktree-session-heartbeat.mjs) — Refresh this session heartbeat to protect active work
+- Hook 8: [root-clone-freshness.mjs](root-clone-freshness.mjs) — Safely fast-forward the clean shared source checkout
+- Hook 9: [worktree-readiness-banner.mjs](worktree-readiness-banner.mjs) — Report which checks this worktree is ready to run
+- Hook 10: [toolchain-freshness.mjs](toolchain-freshness.mjs) — Check the installed DPF tools match the portal's release
 
 ## SessionEnd
 

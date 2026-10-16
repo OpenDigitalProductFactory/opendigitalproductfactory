@@ -48,10 +48,26 @@ export type SensitivityLevel = PrincipalSensitivity | "development";
  */
 export type ProviderTier = "bundled" | "user_configured";
 
+export type LocalThinkingBudgetEvidence = {
+  dialect: "llama.cpp-b9879";
+  modelDigest: string;
+  engineIdentity: string;
+  templateDigest: string;
+  configDigest: string;
+  observedAt: number;
+};
+
 export interface EndpointManifest {
   // Identity
   id: string;
   providerId: string;
+  /** Explicit account identity; absent only for legacy caller-built manifests. */
+  providerConnectionId?: string;
+  providerConnectionVersion?: string;
+  /** Catalog profile identity remains shared across account candidates. */
+  modelProfileId?: string;
+  accountAuthMethod?: string;
+  executionChannel?: string;
   modelId: string;     // from ModelProfile
   name: string;
   endpointType: string;
@@ -130,6 +146,7 @@ export interface EndpointManifest {
   capabilities: import("./model-card-types").ModelCardCapabilities;
   pricing: import("./model-card-types").ModelCardPricing;
   supportedParameters: string[];
+  localThinkingBudgetEvidence?: LocalThinkingBudgetEvidence;
   deprecationDate: Date | null;
   metadataSource: string;
   metadataConfidence: string;
@@ -173,6 +190,11 @@ export interface PolicyCondition {
 export interface CandidateTrace {
   endpointId: string;
   providerId: string;
+  providerConnectionId?: string;
+  providerConnectionVersion?: string;
+  modelProfileId?: string;
+  accountAuthMethod?: string;
+  executionChannel?: string;
   modelId: string;
   endpointName: string;
   fitnessScore: number;

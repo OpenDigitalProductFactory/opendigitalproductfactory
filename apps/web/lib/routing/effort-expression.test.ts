@@ -99,6 +99,16 @@ describe("expressEffort — one decision, each provider's dialect", () => {
     expect(e.thinking).toBe(true);
   });
 
+  it("expresses a local numeric allowance only with current runtime evidence", () => {
+    const evidence = { dialect: "llama.cpp-b9879" as const, modelDigest: "digest", engineIdentity: "engine", templateDigest: "template", configDigest: "config", observedAt: Date.now() };
+    const e = expressEffort("local", high, thinkingCaps, { isLocalNative: true, localThinkingBudgetEvidence: evidence });
+    expect(e.settings).toEqual({ thinking_budget_tokens: high.budgetTokens });
+    expect(e.effortUnexpressed).toBe(false);
+    expect(expressEffort("local", high, thinkingCaps, { isLocalNative: true,
+      localThinkingBudgetEvidence: { ...evidence, observedAt: Date.now() - 31000 },
+    }).effortUnexpressed).toBe(true);
+  });
+
   it("records effortUnexpressed when a provider cannot say it, instead of going quiet", () => {
     const e = expressEffort("some-plain-provider", high, EMPTY_CAPABILITIES);
     expect(e.settings).toEqual({});

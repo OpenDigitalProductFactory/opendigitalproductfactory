@@ -9,9 +9,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   buildSandboxBuildCloneCommand,
+  buildSandboxBuildCloneRebaseCommand,
   buildSandboxBuildCloneRemoveCommand,
   buildSandboxBuildCloneSyncCommand,
   buildWorkspaceMode,
+  parseBuildCloneRebaseOutput,
 } from "./build-clone";
 
 // These are POSIX commands for the Linux sandbox. On a Windows host, hand `sh`
@@ -62,7 +64,12 @@ beforeEach(() => {
 
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
-describe("build clone (W1, M1)", () => {
+// Each case runs real git (clone, rebase, hooks) through sh: 9-14 s on a
+// Windows host, so the default 15 s budget times out under a parallel gate run.
+// The budget measures a hang, not host speed (BI-F25D7E88).
+const GIT_FIXTURE_TIMEOUT_MS = 60_000;
+
+describe("build clone (W1, M1)", { timeout: GIT_FIXTURE_TIMEOUT_MS }, () => {
   it("creates an independent repository on the build branch, with the shared refs builds resolve", () => {
     sh(cloneCommand());
     expect(statSync(join(path, ".git")).isDirectory()).toBe(true);
@@ -136,6 +143,67 @@ describe("build clone (W1, M1)", () => {
 
   it("is a no-op sync for a path that is not a clone on the branch", () => {
     expect(() => sh(buildSandboxBuildCloneSyncCommand(join(root, "missing"), branch))).not.toThrow();
+  });
+});
+
+// BI-76BD65E6: a build that waited at ship while main moved on is rebased onto
+// the refreshed client branch before its PR is published.
+describe("build clone rebase onto a moved client branch", { timeout: GIT_FIXTURE_TIMEOUT_MS }, () => {
+  function moveClient(file: string, content: string) {
+    git(shared, "checkout", "-q", "client/abc");
+    writeFileSync(join(shared, file), content);
+    git(shared, "add", "-A");
+    git(shared, "commit", "-qm", `upstream ${file}`);
+  }
+  function commitInClone(file: string, content: string) {
+    writeFileSync(join(path, file), content);
+    git(path, "add", "-A");
+    git(path, "commit", "-qm", `build ${file}`);
+  }
+
+  it("replays the build's commits on top of the client branch and reports the new head", () => {
+    sh(cloneCommand());
+    commitInClone("feature.txt", "work\n");
+    moveClient("upstream.txt", "moved on\n");
+    sh(cloneCommand()); // re-ensure: the clone sees the moved client/abc
+
+    const out = parseBuildCloneRebaseOutput(sh(buildSandboxBuildCloneRebaseCommand(posix(path), "client/abc")));
+    expect(out).toEqual({ status: "ok", headSha: git(path, "rev-parse", "HEAD") });
+    expect(git(path, "merge-base", "HEAD", "client/abc")).toBe(git(path, "rev-parse", "client/abc"));
+    expect(git(path, "show", "HEAD:feature.txt")).toBe("work");
+    expect(git(path, "show", "HEAD:upstream.txt")).toBe("moved on");
+  });
+
+  it("aborts on a conflict, names the files and leaves the branch exactly as it was", () => {
+    sh(cloneCommand());
+    commitInClone("a.txt", "build edit\n");
+    const before = git(path, "rev-parse", "HEAD");
+    moveClient("a.txt", "upstream edit\n");
+    sh(cloneCommand());
+
+    const out = parseBuildCloneRebaseOutput(sh(buildSandboxBuildCloneRebaseCommand(posix(path), "client/abc")));
+    expect(out).toEqual({ status: "conflict", files: ["a.txt"] });
+    expect(git(path, "rev-parse", "HEAD")).toBe(before);
+    expect(git(path, "rev-parse", "--abbrev-ref", "HEAD")).toBe(branch);
+    expect(git(path, "status", "--porcelain")).toBe("");
+  });
+
+  it("is not stopped by a refusing hook the install re-pointed the clone at", () => {
+    sh(cloneCommand());
+    commitInClone("feature.txt", "work\n");
+    moveClient("upstream.txt", "moved on\n");
+    sh(cloneCommand());
+    const hooks = join(root, "hooks");
+    execFileSync("mkdir", ["-p", hooks]);
+    writeFileSync(join(hooks, "pre-rebase"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
+    git(path, "config", "core.hooksPath", hooks);
+
+    expect(parseBuildCloneRebaseOutput(sh(buildSandboxBuildCloneRebaseCommand(posix(path), "client/abc"))).status).toBe("ok");
+  });
+
+  it("reads an unrecognised output as unknown rather than success", () => {
+    expect(parseBuildCloneRebaseOutput("rebase=ok\nhead=\n").status).toBe("unknown");
+    expect(parseBuildCloneRebaseOutput("").status).toBe("unknown");
   });
 });
 

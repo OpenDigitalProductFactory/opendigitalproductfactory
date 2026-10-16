@@ -91,6 +91,15 @@ safe source, authority, state, and timing detail. Activity routing and
 deliberation detail remain under **Technical diagnostics**. There are no
 separate provider or A2A diagrams to reconcile with this map.
 
+### Confirm a routing override
+
+When the activity routing workbench recommends a different confidence for an
+activity's harness, **Confirm override** applies it. It is your own decision,
+so there is no separate approval step: the platform checks your access, records
+the change in the audit log, and keeps the override until someone confirms a
+different one for the same activity and recipe. Routing uses it from the next
+request. Overrides approved before this change keep applying.
+
 ## Architecture and evidence
 
 - [Model Routing & Lifecycle](../ai-workforce/model-routing-lifecycle.md) — current
@@ -116,10 +125,36 @@ They measure the model named in the request, so routing them to another provider
 would measure the wrong model. Chat probes run only on text-generating models and
 use bounded output limits; embedding models are excluded.
 
+Selected endpoint diagnostics also support Responses providers such as ChatGPT.
+They use the selected discovered model and report unavailable targets without
+substituting a default. Each probe allows 512 output tokens and waits at most
+30 seconds; scenarios allow 1,024 output tokens with the same waiting limit.
+That allowance includes prompt assembly and any required scenario grading.
+A failed sign-in, capacity hold, timeout or truncated response leaves the run
+incomplete and does not lower the model's capability rating. The runner stops
+that model's remaining tests after an incomplete call. A provider may continue
+computing after client cancellation if its transport cannot stop the operation.
+Probe and scenario traces link adapter telemetry to the recorded test run;
+older runs without those traces remain unattributed at the individual-call level.
+Scenario quality updates are recorded after the selected run finishes completely;
+a missing required grader score leaves it unverified.
+
+For a local concurrency check, an authorized coworker can select
+`concurrencyOnly=true` in `run_endpoint_tests` with an explicit local `endpointId`
+and discovered `modelId`. This runs exactly two ordinary calls in one 30-second
+observation, instead of capability probes or scenarios. It cannot be combined
+with exhaustive options, a task type, or `probesOnly=true`. The recorded run
+preserves each answer, completion reason, token counts, trace and admission
+events. A pass requires an observed queued handoff, release and two nonempty,
+complete answers. Missing contention, cancellation, capacity holds and truncated
+answers leave the check unverified. This check never changes capability ratings.
+Missing admission or completion metadata also leaves the check unverified when
+answer text is present. An unobserved release is not evidence of a leaked slot.
+
 Background evaluations and endpoint probes use the background admission lane,
 so queued interactive requests take priority. A concurrent first-time evaluation
 must acquire its model's reservation before it performs inference. Docker Model
-Runner and Ollama both use the local engine's concurrency limit.
+Runner and Ollama share the single local-compute admission lane.
 
 The server checks production coworkers' route readiness every six hours. It
 raises a critical health issue when ordinary requests have no eligible route and
@@ -180,6 +215,31 @@ the wording of that message matches the same cause.
 - assignment changes that solve one route but weaken another
 - capacity work that produces token spend without durable evidence, backlog movement, or reviewable output
 - capability needs without submitter context, route context, or a clear backlog follow-up
+
+## Repair disagreement in installed runtime capabilities
+
+When runtime health reports that installed services and saved capability settings
+disagree, ask your platform coworker to inspect the runtime reconciliation preview.
+The preview changes nothing. It reports the validated installation snapshot,
+saved settings, disagreement and the packaged code that can apply a repair.
+
+Choose which capabilities should be enabled before applying the repair. Optional
+services are never enabled merely because their initial saved settings say active.
+The coworker submits the complete observed baselines, explicitly chosen enabled
+capabilities, desired saved settings and the keys allowed to change through the
+same governed runtime transition. Untouched settings, including custom operator
+states, remain unchanged. Active attributed work can require a drain first.
+
+A changed baseline refuses the repair. An interrupted request keeps its original
+transition identity, signed recovery packet and immutable promoter image. Keep
+that request for supported recovery; starting another request does not settle an
+uncertain outcome. Completion requires a signed host result, required service
+health and the owned saved-state commit. Remaining disagreement stays visible.
+
+Coworker tools: `preview_runtime_capability_reconciliation` is read-only;
+`reconcile_runtime_capabilities` applies explicit intent with platform-management
+authority. Unavailable compatibility evidence requires the qualified platform
+update before the repair can proceed.
 
 ## Defaults for work rooms
 

@@ -47,6 +47,10 @@ export interface AdapterRequest {
    * use this field.
    */
   fetchImpl: typeof fetch;
+  /** Outer runtime layer supplies read-only evidence without reversing the routing dependency. */
+  readLocalThinkingBudgetEvidence?: (
+    apiRoot: string, modelId: string, fetchImpl: typeof fetch,
+  ) => Promise<import("./types").LocalThinkingBudgetEvidence | undefined>;
   messages: ChatMessage[];
   systemPrompt: string;
   tools?: Array<Record<string, unknown>>;
@@ -99,6 +103,8 @@ export interface AdapterResult {
    * returning the fragment (BI-1D144CC1). Absent/false means a clean stop.
    */
   truncated?: boolean;
+  /** Actual provider completion reason, absent when the provider did not supply one. */
+  finishReason?: string;
   /**
    * The model's own reasoning/scratchpad for this turn, when the provider emits
    * it as a channel SEPARATE from the answer — llama.cpp / Docker Model Runner

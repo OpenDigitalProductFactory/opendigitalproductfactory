@@ -81,17 +81,12 @@ function renderValue(value: unknown): string | null {
 const OBJECTIVE_ID = "OBJ-1";
 
 /**
- * Flatten a statement onto one line and neutralise the characters the manifest
- * grammar treats as structure.
- *
- * An acceptance cell is `[^|]*`, so a literal pipe inside a criterion ends the
- * cell early and silently truncates — or malforms — the row. A newline splits
- * one criterion across two lines and drops the remainder. Neither may be left to
- * corrupt a manifest a baseline is about to pin.
+ * Flatten a structured statement onto one line. Table escaping is applied only
+ * to table cells; a pipe in an objective is ordinary text.
  */
 function asStatement(value: unknown): string | null {
   if (typeof value !== "string") return null;
-  const flattened = value.replace(/\s+/g, " ").split("|").join("\|").trim();
+  const flattened = value.replace(/\s+/g, " ").trim();
   return flattened || null;
 }
 
@@ -113,7 +108,10 @@ function renderScopeManifest(doc: Record<string, unknown>): string | null {
     // Index the SURVIVING criteria: a criterion that renders to nothing must not
     // leave a gap that shifts every later id and moves the baseline digest.
     .filter((statement): statement is string => statement !== null)
-    .map((statement, index) => `| AC-${index + 1} | ${OBJECTIVE_ID} | ${statement} |`);
+    .map((statement, index) => {
+      const cell = statement.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
+      return `| AC-${index + 1} | ${OBJECTIVE_ID} | ${cell} |`;
+    });
   if (rows.length === 0) return null;
 
   return [

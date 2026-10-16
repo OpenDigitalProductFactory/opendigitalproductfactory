@@ -21,6 +21,7 @@ import {
   shellTargetDir,
   toNativePath,
 } from "./lib/hook-io.mjs";
+import { claudeDenyProblem } from "./lib/claude-hook-contract.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // Deterministic scoping: this test tree IS a DPF checkout, but pin it so the
@@ -42,7 +43,7 @@ test("normalizePayload reads Claude/Codex snake_case envelope", () => {
 });
 
 test("normalizePayload is defensive on junk input", () => {
-  assert.deepEqual(normalizePayload(null), { toolName: undefined, toolInput: {}, cwd: undefined, sessionCwd: undefined });
+  assert.deepEqual(normalizePayload(null), { toolName: undefined, toolInput: {}, cwd: undefined, sessionCwd: undefined, surface: "claude" });
   assert.deepEqual(normalizePayload({ tool_input: "notobj" }).toolInput, {});
 });
 
@@ -69,15 +70,37 @@ test("isDecisionTool spans Claude and Grok decision tools", () => {
   assert.ok(!isDecisionTool("Bash"));
 });
 
-test("denyEnvelope carries BOTH surfaces' deny channels", () => {
-  const e = denyEnvelope("nope");
-  // Grok-native
+test("denyEnvelope carries BOTH channels for Grok, whose verdict is the top-level decision", () => {
+  const e = denyEnvelope("nope", "grok");
   assert.equal(e.decision, "deny");
   assert.equal(e.reason, "nope");
-  // Claude/Codex-native
+  assert.equal(e.hookSpecificOutput.permissionDecision, "deny");
+});
+
+// BI-E5C45F61: Claude Code 2.1.295 (desktop 2.31226.1) validates the hook's
+// output and accepts a top-level `decision` only as approve|block. A "deny"
+// there failed validation, the host DISCARDED the whole output (logging a
+// non-blocking error), and every deny guard failed open on Claude.
+test("denyEnvelope for Claude/Codex carries only hookSpecificOutput and meets the Claude contract", () => {
+  const e = denyEnvelope("nope", "claude");
+  assert.equal("decision" in e, false);
   assert.equal(e.hookSpecificOutput.permissionDecision, "deny");
   assert.equal(e.hookSpecificOutput.permissionDecisionReason, "nope");
   assert.equal(e.hookSpecificOutput.hookEventName, "PreToolUse");
+  assert.equal(claudeDenyProblem(JSON.stringify(e)), null);
+});
+
+test("normalizePayload names the surface from the envelope casing", () => {
+  assert.equal(normalizePayload({ toolName: "Shell", toolInput: {} }).surface, "grok");
+  assert.equal(normalizePayload({ tool_name: "Bash", tool_input: {} }).surface, "claude");
+  assert.equal(normalizePayload(null).surface, "claude");
+});
+
+test("claudeDenyProblem rejects the legacy dual envelope the host discards", () => {
+  assert.match(claudeDenyProblem(JSON.stringify(denyEnvelope("x", "grok"))), /top-level decision/);
+  assert.match(claudeDenyProblem(""), /no output/);
+  assert.match(claudeDenyProblem("not json"), /not JSON/);
+  assert.match(claudeDenyProblem(JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse" } })), /permissionDecision/);
 });
 
 // ── End-to-end: pipe a Grok-shaped payload through the real guard binaries and
@@ -120,6 +143,37 @@ test("decision-routing-guard denies a platform decision under the Grok AskQuesti
   assert.equal(v.decision, "deny");
   assert.equal(v.hookSpecificOutput.permissionDecision, "deny");
 });
+
+// The reproduction for BI-E5C45F61: the real guard binaries, fed the Claude
+// envelope, must emit an output the Claude host honours rather than discards.
+for (const [script, payload, env] of [
+  ["compose-guard.mjs", { tool_name: "Bash", tool_input: { command: "docker compose up --help" } }, { COMPOSE_PROJECT_NAME: "" }],
+  ["lease-punt-guard.mjs", { tool_name: "Bash", tool_input: { command: ["npx", "prisma", "migrate", "dev"].join(" ") } }, { DATABASE_URL: "" }],
+  [
+    "decision-routing-guard.mjs",
+    {
+      tool_name: "AskUserQuestion",
+      tool_input: {
+        questions: [
+          {
+            question: "Which architecture approach should we build first for the gate?",
+            options: [{ label: "Server-side plane" }, { label: "Harness hook only" }],
+          },
+        ],
+      },
+    },
+    {},
+  ],
+]) {
+  test(`${script} denies under the Claude envelope in a form the Claude host honours`, () => {
+    const out = execFileSync("node", [join(HERE, script)], {
+      input: JSON.stringify(payload),
+      env: { ...process.env, ...ANY, ...env },
+      encoding: "utf8",
+    });
+    assert.equal(claudeDenyProblem(out), null);
+  });
+}
 
 test("guards stay inert on non-matching Grok tool names (fail-safe allow)", () => {
   const out = execFileSync("node", [join(HERE, "lease-punt-guard.mjs")], {
