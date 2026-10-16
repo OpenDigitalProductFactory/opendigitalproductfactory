@@ -319,3 +319,21 @@ to plan blob `177bca1ab7966efde7944527ba0e31d079f0bda7` at
 `9b9a83f088ccf4d3bd30e55ab6bd6195e22d5e57`; implementation admission
 `IRD-58F6C6246868` allowed the existing small/low delivery. Refresh final
 immutable coverage after publication; these receipts remain historical evidence.
+
+Independent source assessment of `8b6663317139b37b65eb2ebee1767e2dbaa4741f`
+found a P2: Build Studio rooms may retain a BacklogItem row ID, while the MCP
+recovery reader accepts its semantic BI ID. Hold publication and normalize this
+existing soft pointer in one bounded identifier-only batch, shared by detail and
+liveness. Do not mutate stored linkage or expose item bodies. Missing or failed
+resolution must name coordinator escalation without emitting the raw ID as a
+tool argument. Three regressions reproduced the invalid detail action, missing
+batch resolution and unsafe raw-ID reducer action before repair.
+
+The additional normal claims are `apps/web/lib/work-capsules/mcp-handlers.ts`,
+`apps/web/lib/work-capsules/liveness-inventory.ts`,
+`apps/web/lib/work-capsules/mcp-workroom-recovery.test.ts` and
+`apps/web/lib/work-capsules/liveness-inventory.test.ts`. Expanded eleven-path
+coverage `cmvaqdaka0hdk01pdlogyyuc2` was checked valid against the same published
+pre-implementation plan before correcting these adapters. Reuse graph-linked
+investment readback, terminal recovery, scope-input parity and scope-release
+tests as well as the prior verification set; obtain a new exact source assessment.

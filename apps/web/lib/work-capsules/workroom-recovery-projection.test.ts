@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { projectWorkroomRecovery, projectWorkroomIdentityRepair } from "./workroom-recovery-projection";
+import { loadWorkroomRecoveryItems, projectWorkroomRecovery, projectWorkroomIdentityRepair } from "./workroom-recovery-projection";
 import type { ReviewerExecutionObservation } from "@/lib/work-management/semantic-review-room-projection";
 
 const identity = {
@@ -91,6 +91,19 @@ const reviewRun = (patch: Partial<ReviewerExecutionObservation> = {}): ReviewerE
 const reviewView = (runs: ReviewerExecutionObservation[], partial = false) => ({ runs, partial, attentionReason: null });
 
 describe("metadata-linked semantic review recovery", () => {
+  it("keeps failed linkage lookup unresolved while retaining semantic links and rejecting unrelated lookup rows", async () => {
+    const rooms = [{ backlogItemId: "BI-1" }, { backlogItemId: "raw-row" }];
+    const failed = await loadWorkroomRecoveryItems({ backlogItem: { findMany: async () => { throw new Error("unavailable"); } } }, rooms);
+    expect([...failed]).toEqual([["BI-1", "BI-1"]]);
+    const result = await loadWorkroomRecoveryItems({ backlogItem: { findMany: async () => [
+      { id: "another-row", itemId: "BI-OTHER" }, { id: "raw-row", itemId: "malformed" },
+    ] } }, rooms);
+    expect([...result]).toEqual([["BI-1", "BI-1"]]);
+  });
+  it("never emits a raw backlog row id as a semantic tool argument without normalization", () => {
+    const recovery = projectWorkroomRecovery({ ...reviewRoom, backlogItemId: "raw-row-id" }, reviewView([], true));
+    expect(recovery.blocker?.action).toBeNull();
+  });
   it("bounds historical summaries and marks truncation without promoting their receipts", () => {
     const runs = Array.from({ length: 7 }, (_, index) => reviewRun({ taskRunId: `TR-OLD-${index}`, identityScope: "historical",
       sourceHeadSha: "b".repeat(40), status: "completed", receipt: { id: `receipt-${index}`, decision: "pass", summary: "Old pass" } }));

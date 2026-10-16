@@ -18,6 +18,22 @@ type ReviewProjection = Pick<Awaited<ReturnType<typeof loadSemanticReviewRoomPro
 
 type WorkroomReadback = { capsule: Record<string, unknown>; log?: { afterSequence: number; activity: unknown[]; hasMore: boolean } };
 
+const semanticBacklogId = (value: string | null | undefined): boolean => Boolean(value && /^BI-[a-z0-9-]+$/i.test(value));
+type RecoveryItemDb = { backlogItem?: { findMany(args: unknown): Promise<Array<{ id?: string; itemId: string }>> } };
+
+/** Legacy Build Studio rooms use row IDs; MCP recovery accepts semantic IDs.
+ * Resolve only identifiers in one page-sized batch, never private item bodies. */
+export async function loadWorkroomRecoveryItems(db: RecoveryItemDb, rooms: readonly Pick<WorkroomIdentity, "backlogItemId">[]) {
+  const ids = [...new Set(rooms.flatMap(room => room.backlogItemId ? [room.backlogItemId] : []))];
+  const result = new Map(ids.filter(semanticBacklogId).map(id => [id, id]));
+  const rawIds = ids.filter(id => !semanticBacklogId(id));
+  const rows = rawIds.length && db.backlogItem ? await db.backlogItem.findMany({
+    where: { id: { in: rawIds } }, select: { id: true, itemId: true }, take: rawIds.length,
+  }).catch(() => []) : [];
+  for (const row of rows) if (row.id && rawIds.includes(row.id) && semanticBacklogId(row.itemId)) result.set(row.id, row.itemId);
+  return result;
+}
+
 /** Preserve actionable facts instead of letting the route replace the whole room with a text preview. */
 export function boundWorkroomRecoveryReadback(data: WorkroomReadback, fits: (value: unknown) => boolean) {
   if (fits(data)) return data;
@@ -57,7 +73,7 @@ function projectReviewExecution(run: ReviewProjection["runs"][number], nextActio
 }
 
 /** Observations are readback, never completion evidence or retry authorization. */
-function projectSemanticRecovery(room: WorkroomIdentity, view: ReviewProjection) {
+function projectSemanticRecovery(room: WorkroomIdentity, view: ReviewProjection, recoveryItemId: string | null) {
   const runs = view.runs.filter(run => run.capsuleId === room.capsuleId);
   const current = runs.filter(run => run.identityScope === "current" && room.headSha && run.sourceHeadSha
     && run.sourceHeadSha.toLowerCase() === room.headSha.toLowerCase());
@@ -82,12 +98,14 @@ function projectSemanticRecovery(room: WorkroomIdentity, view: ReviewProjection)
   const needsIssuer = view.partial || current.length !== 1;
   // The issuer owns recovery and exact packet selection. A repeat of this same
   // bounded observation cannot repair source absence, truncation or conflict.
-  const issuerAction = room.backlogItemId ? { toolName: "get_backlog_item" as const,
-    args: { itemId: room.backlogItemId, recoveryGate: "post-implementation-review" as const } } : null;
+  const issuerAction = recoveryItemId ? { toolName: "get_backlog_item" as const,
+    args: { itemId: recoveryItemId, recoveryGate: "post-implementation-review" as const } } : null;
   const nextAction = needsIssuer
     ? issuerAction
       ? "The delivery coordinator must read get_backlog_item with post-implementation-review recovery for the current source. Historical reviews do not authorize a retry or publication."
-      : "Link this Workroom to its governing backlog item through the existing delivery coordinator, then read that item's post-implementation-review recovery. Do not retry historical work."
+      : room.backlogItemId
+        ? "Resolve this Workroom's recorded backlog linkage through its delivery coordinator; no semantic item ID could be confirmed. Do not retry historical work."
+        : "Link this Workroom to its governing backlog item through the existing delivery coordinator, then read that item's post-implementation-review recovery. Do not retry historical work."
     : run?.nextAction ?? view.attentionReason ?? "Read this Workroom again to resolve the current review identity and evidence.";
   return {
     state,
@@ -159,6 +177,7 @@ export function projectWorkroomIdentityRepair(
 export function projectWorkroomRecovery(
   room: WorkroomIdentity & WorkroomRepairContext & { taskRun?: LinkedTaskRun },
   review?: ReviewProjection,
+  recoveryItemId: string | null = semanticBacklogId(room.backlogItemId) ? room.backlogItemId ?? null : null,
 ) {
   const identityRepair = projectWorkroomIdentityRepair(room, repairContextFields(room));
   // These are recorded states, not proof of a current heartbeat. In particular,
@@ -171,7 +190,7 @@ export function projectWorkroomRecovery(
       pending: executionState === "unknown" ? null : executionState !== "terminal",
     }
     : null;
-  const semantic = review ? projectSemanticRecovery(room, review) : null;
+  const semantic = review ? projectSemanticRecovery(room, review, semanticBacklogId(recoveryItemId) ? recoveryItemId : null) : null;
   const recoveryExecution: WorkroomReviewerExecution | null = semantic ? semantic.reviewerExecution : reviewerExecution;
   const prerequisite = identityRepair
     ? {
