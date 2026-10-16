@@ -8,7 +8,11 @@ status: active
 - **Design:** `docs/superpowers/specs/2026-09-26-review-instantiation-by-shape-and-criticality-design.md`
 - **Prerequisite:** BI-74B2A8CD merged. Phases 2 and 6 call `resolveDecisionEscalation`, `decisionAllowsStep` and the shared damaging definition it adds to `apps/web/lib/govern/authority/escalation-gate.ts`. No phase starts before it lands.
 
-One pull request per phase, in this order. Each phase is independently revertible and leaves the platform working: until phase 6, review still runs, only chosen differently.
+Owner revision, 2026-10-15: target one PR for the related participation and
+consultation repairs. The phases below are internal sequencing, not a requirement
+for six PRs. Reconcile delivery mappings and renew independent coverage for the
+revised design before implementation. Until phase 6, retain the existing decision
+behavior; never enable a hold without its executable reviewer path.
 
 ## Phase 1: step criticality
 
@@ -55,3 +59,55 @@ One pull request per phase, in this order. Each phase is independently revertibl
 | room-instantiation | 4 | OBJ-INSTANCE | stepReviewBinding | design §3.4 | AC-4 |
 | need-and-receipts | 5 | OBJ-NEED | resolveSemanticReviewCoordination | design §3.2 | AC-2 |
 | undecided-hold | 6 | OBJ-UNDECIDED | INDEPENDENT_REVIEW_INTERIM | design §3.6 | AC-6 |
+
+## Resumption and expanded participation scope, 2026-10-15
+
+Codex took over WC-8D35443E through the approved executor-transfer envelope,
+preserved the two design/plan commits and rebased only those commits onto
+origin/main at b338f06e581e6cc7886c334b519f098feb142865. No implementation
+existed on the resumed branch. The managed readiness probe reports source-only
+(`node_modules` and the generated Prisma client are absent); no test or typecheck
+pass is implied.
+
+Apply design section 7 before sequencing the revised implementation:
+
+1. Reconcile BI-74B2A8CD with its existing room/branch. It remains the prerequisite
+   for the authority and undecided-hold work; no phase starts before it lands
+   under this plan's existing contract. Preserve the other room's ownership.
+2. Review the overlapping live items named in design section 7. Map authoring
+   participation, complete profession coverage, external consultation and
+   executed-result evidence onto their proper existing BIs. BI-0AABCD1F remains
+   research intake until that mapping and design coverage are accepted.
+3. Obtain independent review of the changed scope and immutable revised artifacts;
+   renew the baseline/plan coverage. Old receipts cannot authorize AC-7–AC-10.
+4. Extend the existing classifier with deliverable requirements before path-based
+   inference. Replace silent three-profession truncation with bounded scheduling
+   that retains all required contributions. Include roles needed during authoring
+   as well as independent review.
+5. Trace a real service engagement from request through dispatch and returned
+   revision-bound evidence. Reuse the task/room/evidence substrate and preserve
+   honest pending, failed and unavailable states. A request row earns no pass.
+6. Add the supported external-caller craft consultation seam while retaining the
+   authenticated actor, scoped grants and explicit consulted-profession ledger.
+7. Complete phases 1–6 against the then-current substrate. Update the architecture
+   and contributor documentation; compare the resulting diff against the renewed
+   impact contract before testing or publication.
+
+Required functional evidence includes more than three required professions,
+an HTML prototype before React paths exist, different room criticalities over
+identical files, failure of one contribution, independent author/reviewer
+principals, a stale revision refusing reuse, and a governed Codex-to-UX consult
+whose evidence identifies both actor and consulted craft. Preserve advisory
+calibration limits. Source-local tests, typecheck, shared-runtime workflow proof
+and protected PR checks remain required; none has run on this revision.
+
+For this docs-only planning revision, the recorded impact contract has no
+testImpact or guardObligation entries and requires the derived doc index check.
+Run the available doc guards and record any unavailable checks as unrun.
+
+### Backlog coverage status
+
+The original immutable six-deliverable coverage belongs to the previous scope.
+This expanded plan has **coverage pending**, not a fabricated replacement receipt.
+Do not enter implementation until the dependency and revised coverage above are
+resolved. This is a resumption checkpoint, not a completed design or shipped fix.

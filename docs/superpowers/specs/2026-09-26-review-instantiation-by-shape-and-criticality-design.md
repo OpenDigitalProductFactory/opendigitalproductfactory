@@ -209,3 +209,90 @@ where the founder's "middle band" is resolved by a coworker instead of a person.
 - Calibrating the semantic reviewer so the global mode can move to enforce.
   That is data-gated; this design makes enforcement per-step when it happens.
 - Coworker-led promotion of craft material (BI-1C9E7EB2).
+
+## 7. Owner-directed revision, 2026-10-15 — pending independent review
+
+The owner requested delivery-relevant specialists in every Workroom run, including
+their contribution to the deliverable rather than only its final review. The
+owner also requested one PR for related participation and UX consultation repairs.
+This revision is a proposal awaiting renewed design and plan coverage; the old
+receipts do not approve these additions. Research intake: BI-0AABCD1F.
+
+### Required participation precedes review authority
+
+For each run, derive required professions from the declared deliverables, their
+acceptance criteria, the shape's stages and recorded sensitivity. Changed paths
+supplement that selection; they cannot substitute for deliverable requirements.
+An HTML UX prototype and a UX-bearing document require UX expertise even before
+a React file exists. Data, security, architecture, operations and domain work
+similarly carry their owning professions into the stages producing that work.
+
+Use the existing shape stage, participant assignment and review binding
+substrate. Reuse profession/coworker registries and their live grants; do not
+introduce a second profession roster or use a caller-supplied identity as proof
+of expertise. Authoring assistance and independent review have distinct evidence
+obligations. An authoring specialist cannot satisfy its own independent review.
+
+The three-specialist cap in section 3.2 and the existing
+`MAX_ACUMEN_CONSULTS_PER_PHASE` cap must not silently discard required professions.
+Bound concurrency or schedule batches while retaining every required obligation.
+A missing provider or incomplete consultation remains explicitly outstanding.
+Participation requirements do not promote an uncalibrated critic to blocking
+verdict authority; section 3.5's calibration ceiling remains in force.
+
+### Request, execution and contribution are different facts
+
+Record the profession, selected coworker, stage, immutable input revision,
+dispatch identity, execution state, returned findings, corpus references and the
+author's disposition through existing room/task/evidence records. A catalog
+request in `requested` state with no execution result cannot satisfy a completed
+contribution. Reuse matching evidence only when its scope and revision remain
+valid. Distinguish a missing required contribution from an advisory finding.
+
+### Governed external-client consultation
+
+This connection identifies as `AGT-EXT-CODEX`. A live request naming `ux-design`
+returned `software-engineer` with `declaredBorrow: false` (DI-C86741F070DF).
+Current code intentionally ignores a borrow when any agent identity exists.
+Design a supported cross-profession consult for a governed external participant:
+preserve the authenticated actor and ledger attribution, resolve the consulted
+profession separately, and retain the same token, membership and grant checks.
+Never remove the actor identity to make an external client look anonymous.
+Whether this is an explicit consult or an executed specialist contribution must
+be visible in the evidence; neither can claim to be the other's completed work.
+
+The live calibrated UX critique search returned zero entries. No proposal may
+claim founder/designer-calibrated support from that result. Preserve founder
+feedback through the existing draft capture path and retain human-owned verdict
+authority. This work does not make agent proposals calibration-eligible.
+
+### Additional acceptance proposals
+
+| AC | Objective | Acceptance criterion |
+|---|---|---|
+| AC-7 | OBJ-CRAFT | Declared deliverables select their required professions before changed files exist; a UX prototype receives UX participation, and a non-UX deliverable receives its owning specialists without a new hardcoded coworker map. |
+| AC-8 | OBJ-INSTANCE | A run requiring more than three professions retains all of their obligations; batching or capacity failure cannot be reported as complete participation. |
+| AC-9 | OBJ-INSTANCE | Requested, executing, completed, failed and unavailable contributions are distinguishable; only revision-bound returned evidence satisfies a completed contribution, and independent review remains separate from authoring. |
+| AC-10 | OBJ-CRAFT | A governed external Codex caller can consult UX through the supported path with its own authenticated identity retained, the consulted UX profession named, and the result correctly attributed without widening authority. |
+
+### Related work and boundaries
+
+- BI-E27F3600 owns shape/criticality-based review instantiation. BI-0AABCD1F
+  records the consultation/execution research; reconcile its final delivery
+  mappings before implementation rather than treating triage intake as approved.
+- Live search found BI-39C7D449 (specialist review joined to WSID), BI-6BB728F1
+  (profession material domain mismatch), BI-6B33B1C8 (craft corpus curation),
+  BI-D543F934 (UX-fit evidence) and BI-3913EB49 (shape-conformance overseer).
+  Their current acceptance/status must be reconciled before assigning duplicate
+  scope. A search hit is not proof of delivery.
+- BI-7AA4EB6B owns the compact provider-page UX. Its implementation stays with
+  the other chat; shared participation evidence may be consumed there.
+- The owner requested autonomous routine DEV work, with external credentials
+  reserved for human handling. The observed executor-transfer tool nevertheless
+  declares unconditional `consequence: authority`, pinned by a test. This design
+  does not disable that gate or change global permissions. Any refinement needs
+  a server-verifiable owner mandate and its own authorized authority review.
+- BI-74B2A8CD remains an unmerged prerequisite. Its existing workroom and branch
+  are preserved. Do not invent its functions, switch undecided decisions to
+  `hold` without an executable reviewer path, or claim this combined work ready
+  while that dependency is unresolved.
