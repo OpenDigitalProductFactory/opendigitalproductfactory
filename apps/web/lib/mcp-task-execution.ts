@@ -1,4 +1,4 @@
-import { EXECUTION_UNCERTAIN_MESSAGE, executionUncertaintyFromError, hasExecutionUncertainty } from "./inference/execution-uncertainty";
+import { EXECUTION_UNCERTAIN_MESSAGE, executionUncertaintyFromError, hasExecutionUncertainty } from "./shared/execution-uncertainty";
 import { reservationIdentity, dispatchIdentity, settleRemoteTask } from "./mcp-task-attempt-state";
 import { projectRemoteTaskReplay } from "./mcp-task-replay-projection";
 import { TASK_IN_FLIGHT_STATES } from "@/lib/tak/task-states";
@@ -126,7 +126,15 @@ export async function executeRemoteTaskAttempt(input: {
     } };
   }
   if (hasExecutionUncertainty(admittedRun.progressPayload)) {
-    return projectRemoteTaskReplay({ existing: { ...admittedRun, taskRunId: run.taskRunId }, requestMatches: true });
+    const progress = admittedRun.progressPayload && typeof admittedRun.progressPayload === "object"
+      && !Array.isArray(admittedRun.progressPayload) ? admittedRun.progressPayload as Record<string, unknown> : {};
+    const displaced = await settle({ where: { taskRunId: run.taskRunId }, data: {
+      status: "input-required", completedAt: null, progressPayload: {
+        ...progress, summary: EXECUTION_UNCERTAIN_MESSAGE, requiresApproval: false,
+      } as Prisma.InputJsonValue,
+    } });
+    return displaced ?? projectRemoteTaskReplay({ existing: { ...admittedRun,
+      status: "input-required", taskRunId: run.taskRunId }, requestMatches: true });
   }
   const agent = await resolveAutonomousWorkAgent({
     agentId: parsed.agentId,
@@ -321,13 +329,15 @@ export async function executeRemoteTaskAttempt(input: {
           select: { status: true, progressPayload: true },
         });
     if (result.failure?.kind === "execution-uncertain" && !persistedOutcome) {
-      const priorProgress = currentRun?.progressPayload && typeof currentRun.progressPayload === "object"
-        && !Array.isArray(currentRun.progressPayload) ? currentRun.progressPayload as Record<string, unknown> : {};
+      const savedProgress = currentRun?.progressPayload ?? admittedRun.progressPayload;
+      const priorProgress = savedProgress && typeof savedProgress === "object"
+        && !Array.isArray(savedProgress) ? savedProgress as Record<string, unknown> : {};
+      const uncertainty = { ...executionUncertaintyFromError(result.failure.executionUncertainty),
+        observedAt: new Date().toISOString() };
       const displaced = await settle({ where: { taskRunId: run.taskRunId }, data: {
         status: "input-required", completedAt: null, progressPayload: {
           ...priorProgress, summary: EXECUTION_UNCERTAIN_MESSAGE, requiresApproval: false,
-          executionUncertainty: { ...executionUncertaintyFromError(result.failure.executionUncertainty),
-            observedAt: new Date().toISOString() },
+          executionUncertainty: uncertainty,
           executedToolCount: result.executedTools?.length ?? 0, ...resumedFlag,
         },
       } });
@@ -335,6 +345,7 @@ export async function executeRemoteTaskAttempt(input: {
       return { kind: "result", result: {
         taskRunId: run.taskRunId, status: "input-required", idempotentReplay: input.idempotentReplay,
         ...resumedFlag, requiresApproval: false, resumable: false, waitReason: "execution-uncertain",
+        structuredContent: { error: "execution_uncertain", executionUncertainty: uncertainty },
         content: remoteTaskContent(EXECUTION_UNCERTAIN_MESSAGE), isError: false,
       } };
     }

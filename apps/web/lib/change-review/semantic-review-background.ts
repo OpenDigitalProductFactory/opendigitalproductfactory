@@ -1,5 +1,5 @@
 import { classifyDispatchFailure } from "../inference/dispatch-failure-class";
-import { executionUncertaintyFromError } from "../inference/execution-uncertainty";
+import { executionUncertaintyFromError } from "../shared/execution-uncertainty";
 import { randomUUID } from "node:crypto";
 import { prisma, type Prisma } from "@dpf/db";
 import { reserveSubmittedTaskRunWorking, withHeartbeatTicker } from "@/lib/observability/heartbeat";

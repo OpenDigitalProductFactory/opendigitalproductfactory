@@ -19,6 +19,16 @@ const original = {
 };
 
 describe("native execution uncertainty is never a missing-writer retry", () => {
+  it.each([1, 3])("holds original legacy evidence without an injected marker (attempt %s)", (attempt) => {
+    const progressPayload = { terminalWriterWait: { ...original.progressPayload.terminalWriterWait, attempt },
+      ...(attempt === 3 ? { terminalWriterEscalation: { schemaVersion: 1,
+        code: "terminal_writer_retry_exhausted", writerToolName: "record_initiative_design_review",
+        attempt, observedAt: "2026-10-15T23:12:03.896Z", action: "select-different-reviewer-provider" } } : {}) };
+    const { result } = projectRemoteTaskReplay({ existing: { ...original, progressPayload }, requestMatches: true });
+    expect(result).toMatchObject({ resumable: false, waitReason: "execution-uncertain" });
+    expect(JSON.stringify(result.content)).not.toMatch(/different.*provider|resumable/);
+    expect(progressPayload.terminalWriterWait.attempt).toBe(attempt);
+  });
   it.each([
     new NativeCliExecutionUncertainError("anthropic-sub"),
     { name: "NativeCliExecutionUncertainError", message },

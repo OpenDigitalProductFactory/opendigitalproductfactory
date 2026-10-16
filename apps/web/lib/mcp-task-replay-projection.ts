@@ -1,5 +1,5 @@
 import { parseResourceWaitProjection } from "./mcp-task-capacity-contract";
-import { hasExecutionUncertainty, EXECUTION_UNCERTAIN_MESSAGE } from "./inference/execution-uncertainty";
+import { hasExecutionUncertainty, EXECUTION_UNCERTAIN_MESSAGE } from "./shared/execution-uncertainty";
 import type { Prisma } from "@dpf/db";
 import {
   recoverTerminalWriterEscalation,

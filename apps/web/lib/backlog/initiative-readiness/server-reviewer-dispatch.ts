@@ -27,7 +27,7 @@ import "server-only";
 // reason is recorded on the room.
 
 import { prisma } from "@dpf/db";
-import { EXECUTION_UNCERTAIN_MESSAGE } from "@/lib/inference/execution-uncertainty";
+import { EXECUTION_UNCERTAIN_MESSAGE } from "@/lib/shared/execution-uncertainty";
 
 import type { GovernedExecuteArgs, GovernedExecuteResult } from "@/lib/mcp-governed-execute-types";
 import { findStandingConnection, findStandingConnectionForUser, type StandingConnection } from "@/lib/mcp/standing-connection";

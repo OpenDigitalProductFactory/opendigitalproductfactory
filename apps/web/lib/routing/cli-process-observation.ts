@@ -1,13 +1,14 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
-import type { NativeCliDiagnostics } from "../inference/execution-uncertainty";
+import type { NativeCliDiagnostics } from "../shared/execution-uncertainty";
 
 /** Share host lifetime observation; provider-specific failure policy stays in each adapter. */
 export function observeCliProcess(proc: ChildProcessWithoutNullStreams, input: {
   timeoutMs: number;
   onClose: (observation: { code: number | null; stdout: string; stderr: string; diagnostics: NativeCliDiagnostics }) => void;
-  onError: (error: Error) => void;
+  onError: (error: Error, observation: { started: boolean; diagnostics: NativeCliDiagnostics }) => void;
 }): void {
-  let stdout = "", stderr = "", timedOut = false, finished = false;
+  let stdout = "", stderr = "", timedOut = false, finished = false, spawned = false;
+  proc.on("spawn", () => { spawned = true; });
   const timer = setTimeout(() => {
     timedOut = true;
     proc.kill("SIGTERM");
@@ -29,6 +30,9 @@ export function observeCliProcess(proc: ChildProcessWithoutNullStreams, input: {
     if (finished) return;
     finished = true;
     clearTimeout(timer);
-    input.onError(error);
+    input.onError(error, { started: spawned || proc.pid !== undefined || stdout.length > 0 || stderr.length > 0,
+      diagnostics: { exitCode: null, signal: null, timedOut, outerProcessClosed: false,
+        stdoutPresent: stdout.trim().length > 0, stderrPresent: stderr.trim().length > 0,
+        childProcessClosure: "unverified" } });
   });
 }

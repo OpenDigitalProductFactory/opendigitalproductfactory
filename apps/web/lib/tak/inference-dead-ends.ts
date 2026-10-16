@@ -23,7 +23,7 @@
 import { describeContextCapacityFailure } from "./context-capacity-failure";
 import { buildHumanHandoff } from "./escalation-ladder";
 import { classifyDispatchFailure } from "../inference/dispatch-failure-class";
-import { EXECUTION_UNCERTAIN_MESSAGE, executionUncertaintyFromError, type ExecutionUncertainty } from "../inference/execution-uncertainty";
+import { EXECUTION_UNCERTAIN_MESSAGE, executionUncertaintyFromError, type ExecutionUncertainty } from "../shared/execution-uncertainty";
 
 /** Routing eliminated every candidate — a real configuration question. */
 export function noEligibleModelHandoff(): string {

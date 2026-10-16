@@ -1,4 +1,4 @@
-import { hasExecutionUncertainty } from "./inference/execution-uncertainty";
+import { hasExecutionUncertainty } from "./shared/execution-uncertainty";
 import { parseRemoteTaskSubmitParams, type RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 import type { ExistingRemoteTask, RemoteTaskSubmitAuth, RemoteTaskSubmitOutcome } from "./mcp-task-submit-types";
 export { parseRemoteTaskSubmitParams, REMOTE_RISK_CLASSES } from "./mcp-task-submit-params";

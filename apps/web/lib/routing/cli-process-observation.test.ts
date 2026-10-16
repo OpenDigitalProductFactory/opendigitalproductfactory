@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { observeCliProcess } from "./cli-process-observation";
 import { NativeCliExecutionUncertainError } from "./cli-owned-runner";
-import { executionUncertaintyFromError } from "../inference/execution-uncertainty";
+import { executionUncertaintyFromError } from "../shared/execution-uncertainty";
 
 function fixture(script: string, timeoutMs = 5000) {
   return new Promise<Parameters<Parameters<typeof observeCliProcess>[1]["onClose"]>[0]>((resolve, reject) => {

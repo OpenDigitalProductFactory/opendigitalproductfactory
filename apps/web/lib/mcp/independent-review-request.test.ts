@@ -131,7 +131,7 @@ describe("consent-bound independent review request", () => {
           title: old.questionPacketSummary, objective: old.objective, prompt: old.objective, idempotencyKey: old.requestKey,
           riskClass: "bounded-write", authorityScope: scope, collaborationKind: "handoff", initiativeReviewBinding: old.initiativeReviewBinding }) },
       progressPayload: { terminalWriterWait: { schemaVersion: 1, kind: "missing-terminal-writer", writerToolName: "record_initiative_design_review",
-        resumeMode: "same-taskrun", attempt: 3, observedAt: "2026-10-12T20:00:00Z" } },
+        resumeMode: "same-taskrun", dispatchContract: "required-tool-call", attempt: 3, observedAt: "2026-10-12T20:00:00Z" } },
     } : null);
     const issue = (taskAuthority: typeof authority) => resolveInitiativeReviewerRecovery({ ...input,
       isPlanReviewExhausted: createExhaustedPlanReviewPredicate(taskAuthority, { taskRun: { findFirst: mocks.task } }) });

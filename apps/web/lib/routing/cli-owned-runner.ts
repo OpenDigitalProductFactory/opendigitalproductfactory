@@ -1,5 +1,5 @@
 import { basename, isAbsolute } from "node:path";
-import { sanitizeNativeCliDiagnostics, type NativeCliDiagnostics } from "../inference/execution-uncertainty";
+import { sanitizeNativeCliDiagnostics, type NativeCliDiagnostics } from "../shared/execution-uncertainty";
 
 type OwnedCliRunnerInput = {
   command: string; args: string[]; home: string; cwd: string; promptFile: string;

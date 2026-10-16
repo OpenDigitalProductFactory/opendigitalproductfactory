@@ -24,10 +24,18 @@ function fixture() {
     a2aMetadata: { taskAuthorityKey: authority.taskAuthorityKey, idempotencyKey: packet.requestKey,
       requestedAgentId: "reviewer", requestDigestVersion: 2, requestDigest: remoteTaskRequestDigest(submitted) },
     progressPayload: { terminalWriterWait: { schemaVersion: 1, kind: "missing-terminal-writer",
-      writerToolName: binding.writerToolName, resumeMode: "same-taskrun", attempt: 3, observedAt: "2026-10-12T20:00:00Z" } },
+      writerToolName: binding.writerToolName, resumeMode: "same-taskrun", dispatchContract: "required-tool-call", attempt: 3, observedAt: "2026-10-12T20:00:00Z" } },
   };
 }
 describe("exact owned exhausted plan review", () => {
+  it.each(["contractless", "typed-uncertainty"])("never offers a replacement for %s execution evidence", async (kind) => {
+    const row = fixture();
+    if (kind === "contractless") delete (row.progressPayload.terminalWriterWait as Record<string, unknown>).dispatchContract;
+    else Object.assign(row.progressPayload, { executionUncertainty: { schemaVersion: 1, settlement: "unknown" } });
+    const snapshot = structuredClone(row);
+    expect(await createExhaustedPlanReviewPredicate(authority, { taskRun: { findFirst: vi.fn().mockResolvedValue(row) } })(packet)).toBe(false);
+    expect(row).toEqual(snapshot);
+  });
   it("excludes only the exact owned terminal-exhausted packet", async () => {
     const findFirst = vi.fn().mockResolvedValue(fixture());
     expect(await createExhaustedPlanReviewPredicate(authority, { taskRun: { findFirst } })(packet)).toBe(true);

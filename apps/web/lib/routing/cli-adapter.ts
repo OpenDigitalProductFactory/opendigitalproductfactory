@@ -1,4 +1,4 @@
-import { assertCliResultSucceeded, isProviderOverloadMessage, stripLeadingQuotaBanner } from "./cli-result-errors";
+import { assertCliResultSucceeded, isProviderOverloadMessage, stripLeadingQuotaBanner, parseCliTerminalResultMetadata } from "./cli-result-errors";
 export { isCliQuotaBanner, stripLeadingQuotaBanner } from "./cli-result-errors";
 
 // apps/web/lib/routing/cli-adapter.ts
@@ -37,6 +37,7 @@ import { providerSetupLocation } from "@/lib/ai-provider-routes";
 import { randomUUID } from "node:crypto";
 import { renderOwnedCliRunner, NativeCliExecutionUncertainError } from "./cli-owned-runner";
 import { observeCliProcess } from "./cli-process-observation";
+import type { NativeCliDiagnostics } from "../shared/execution-uncertainty";
 
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
@@ -550,7 +551,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
       // callers (Build Studio + coworkers), so a fan-out can't starve the
       // shared sandbox / portal. Prep (auth, file writes) stays outside the
       // slot so slots turn over on real inference, not setup.
-      const { stdout } = await withCliSlot(() => new Promise<{ stdout: string }>((resolve, reject) => {
+      const { stdout, diagnostics } = await withCliSlot(() => new Promise<{ stdout: string; diagnostics: NativeCliDiagnostics }>((resolve, reject) => {
         const proc = spawnCb("docker", [
           "exec", "--user", "node", SANDBOX_CONTAINER, "node", runnerScript,
         ]);
@@ -558,13 +559,14 @@ export const cliAdapter: ExecutionAdapterHandler = {
 
         observeCliProcess(proc, {
           timeoutMs: CLI_TIMEOUT_MS + 15_000,
-          onClose: ({ code, stdout, stderr, diagnostics }) => {
+          onClose: ({ code, stdout, stderr, diagnostics: localDiagnostics }) => {
+            const diagnostics = { ...localDiagnostics, terminalResult: parseCliTerminalResultMetadata(stdout) };
             if (diagnostics.timedOut || code === null || code === 124 || stderr.includes("DPF_CLI_TIMEOUT")) {
               reject(new NativeCliExecutionUncertainError(providerId, diagnostics));
-            } else if (code !== 0 && stdout.trim()) {
+            } else if (code !== 0 && (mcpJwt || stdout.trim())) {
               reject(new NativeCliExecutionUncertainError(providerId, diagnostics));
             } else if (code === 0) {
-              resolve({ stdout });
+              resolve({ stdout, diagnostics });
             } else {
               // Check for auth errors in stderr
               if (stderr.includes("unauthorized") || stderr.includes("401") || stderr.includes("authentication")) {
@@ -596,7 +598,11 @@ export const cliAdapter: ExecutionAdapterHandler = {
               }
             }
           },
-          onError: (err: Error) => {
+          onError: (err: Error, observation) => {
+            if (observation.started) {
+              reject(new NativeCliExecutionUncertainError(providerId, observation.diagnostics));
+              return;
+            }
             containerDispatchStarted = false;
             reject(new InferenceError(
               `Claude CLI spawn error: ${err.message}`,
@@ -608,12 +614,15 @@ export const cliAdapter: ExecutionAdapterHandler = {
       }));
 
       // 7. Parse the output
+      if (mcpJwt && diagnostics.terminalResult?.status !== "success") throw new NativeCliExecutionUncertainError(providerId, diagnostics);
       const parsed = parseCliJsonOutput(stdout);
       const inferenceMs = Date.now() - startMs;
 
       try {
         assertCliResultSucceeded(stdout, parsed, providerId);
       } catch (error) {
+        // Native MCP tools may have run before an error-shaped terminal result.
+        if (mcpJwt) throw new NativeCliExecutionUncertainError(providerId, diagnostics);
         if (error instanceof InferenceError && error.code === "rate_limit") {
           // Publish exhaustion before fallback can select another model on the
           // same account. The recorder contains persistence failures itself.
