@@ -11,6 +11,12 @@ loopback port, environment class and current ownership checks remain required.
 Regression fixtures cover both verification adapters; a failed initialization
 or binding check never earns a served UX pass.
 
+The full local-CI runner also reuses the verified native shell adapter for its
+child environment. Windows fixtures that invoke `sh` must not inherit WSL or
+depend on an agent manually extending PATH. A missing compatible shell is an
+unavailable prerequisite (exit 88), not a failing product test. The parent
+environment, worker limits, test deadlines and lease fences stay unchanged.
+
 ## Capability reconciliation on release installs (BI-5ACBAC50)
 
 The portal's Linux container is not the host platform. Explicit v2 runtime
