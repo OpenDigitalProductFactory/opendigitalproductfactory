@@ -82,6 +82,39 @@ const base = {
 };
 
 describe("evaluateProfessionDecisionGate", () => {
+  it("consults another craft without replacing the authenticated actor or authorizing a step", async () => {
+    const db = makeDb();
+    const resolver = fakeResolver({ professionKey: "ux-design" });
+    const result = await evaluateProfessionDecisionGate({
+      ...base, db: db as never, consultProfessionKey: "ux-design",
+      caller: { agentId: "AGT-DATA-ARCH", apiTokenId: "token-1" },
+      resolver: resolver as never, evaluator: () => makeEval(),
+    });
+    expect(resolver.mock.calls[0]![0]).toMatchObject({
+      agentIdentity: base.agentIdentity, declaredProfessionKey: "ux-design",
+    });
+    expect(result).toMatchObject({ allowed: false, advisoryOnly: true, consultedProfessionKey: "ux-design" });
+    expect(result.operatorMessage).toMatch(/advisory.*does not authorize/i);
+    const payload = db.decisionInteraction.create.mock.calls[0]![0].data.outcomePayload;
+    expect(payload).toMatchObject({
+      advisoryOnly: true, consultedProfessionKey: "ux-design", actorIdentity: base.agentIdentity,
+      caller: { agentId: "AGT-DATA-ARCH", apiTokenId: "token-1" }, declaredBorrow: false,
+    });
+  });
+
+  it("keeps a failed explicit consultation advisory and never substitutes the actor's craft", async () => {
+    const db = makeDb();
+    const resolver = vi.fn().mockRejectedValue(new Error("Unknown professionKey"));
+    const result = await evaluateProfessionDecisionGate({
+      ...base, db: db as never, consultProfessionKey: "unknown-craft", resolver: resolver as never,
+    });
+    expect(resolver).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ allowed: false, advisoryOnly: true, consultedProfessionKey: "unknown-craft" });
+    expect(db.decisionInteraction.create.mock.calls[0]![0].data.outcomePayload).toMatchObject({
+      advisoryOnly: true, consultedProfessionKey: "unknown-craft", actorIdentity: base.agentIdentity,
+    });
+  });
+
   it("uses independent review for a non-damaging unresolved craft decision", async () => {
     const result = await evaluateProfessionDecisionGate({ ...base, db: makeDb() as never,
       resolver: fakeResolver() as never, evaluator: () => makeEval({ outcomeType: "defer", coverageGap: true }) });

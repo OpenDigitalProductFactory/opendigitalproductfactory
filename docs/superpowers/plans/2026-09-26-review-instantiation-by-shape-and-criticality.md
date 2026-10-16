@@ -51,6 +51,18 @@ tests, both TS7 programs and style/whitespace checks passed. This is prerequisit
 work only: the semantic selector/persona roster is still present, and live
 eligible-coworker resolution and independence checks remain to be integrated.
 
+Source recovery checkpoint, 2026-10-16: `evaluate_profession_decision` now accepts
+an explicit `consultProfessionKey` separately from authenticated actor identity.
+It validates the canonical profession registry, resolves the named craft, retains
+the actor and caller in the ledger, and returns `advisoryOnly: true` with
+`allowed: false`. This does not dispatch a specialist or satisfy a review receipt.
+Six new regressions first failed, then all 46 tests in the gate, pack and phase
+consult suites passed; both TypeScript 7 programs and the style guard passed.
+Native consultation, integration gate and live acceptance remain unrun. The
+attempted Workroom feed post was refused as not-admitted; no alternate write path
+was used. Existing source-recovery authority permits this bounded source repair,
+not bypassing admission, grants or independent receipt writers.
+
 ## Phase 4: room-bound instantiation
 
 - Add `stepReviewBinding` to the external coworker task contract (`apps/web/lib/mcp/external-coworker-task-adapter.ts`), following `initiativeReviewBinding`.

@@ -60,6 +60,9 @@ export type ProfessionAgentIdentityInput = {
 };
 
 export type ProfessionDecisionGateResult = {
+  /** An explicit consultation informs the actor; it never authorizes a step or supplies a specialist receipt. */
+  advisoryOnly: boolean;
+  consultedProfessionKey: string | null;
   /** True only when the resolved craft doctrine recommends/arbitrates the call. */
   allowed: boolean;
   interactionId: string;
@@ -188,6 +191,8 @@ function failClosedEvaluation(input: {
 export async function evaluateProfessionDecisionGate(input: {
   db: ProfessionGateClient;
   agentIdentity: ProfessionAgentIdentityInput;
+  /** Explicit advisory consultation, separate from the authenticated actor's own craft and authority. */
+  consultProfessionKey?: string | null;
   /**
    * Declared borrow (BI-52839DEA). Set only when an EXTERNAL caller — a Claude
    * Code / Codex / Grok development session — consults a profession it does not
@@ -250,6 +255,14 @@ export async function evaluateProfessionDecisionGate(input: {
   const interactionId = createDecisionInteractionId();
   const { question, options, domainClass, riskTier } = input;
   const resolve = input.resolver ?? resolveProfileMaterialForProfession;
+  const consultedProfessionKey = input.consultProfessionKey?.trim() || null;
+  const advisoryOnly = consultedProfessionKey !== null;
+  const consultationLedgerFields = advisoryOnly
+    ? { advisoryOnly: true, consultedProfessionKey, actorIdentity: input.agentIdentity }
+    : { advisoryOnly: false };
+  const messageFor = (message: string) => advisoryOnly
+    ? `Advisory consultation of ${consultedProfessionKey}; this does not authorize a step or satisfy an independent specialist review. ${message}`
+    : message;
 
   // A borrow is only honoured for a caller with no craft identity of its own.
   // An in-portal coworker naming a profession would be impersonation, and the
@@ -277,7 +290,7 @@ export async function evaluateProfessionDecisionGate(input: {
     resolved = await resolve({
       db: input.db,
       agentIdentity: input.agentIdentity,
-      declaredProfessionKey: borrow?.professionKey ?? null,
+      declaredProfessionKey: consultedProfessionKey ?? borrow?.professionKey ?? null,
       domainClass,
       fallbackProfileId: input.fallbackProfileId,
     });
@@ -325,14 +338,17 @@ export async function evaluateProfessionDecisionGate(input: {
         professionKey,
         caller: input.caller ?? null,
         ...borrowLedgerFields,
+        ...consultationLedgerFields,
       },
     });
     traceWsid("wsid.ledger.written", { interactionId, outcomeType: evaluation.outcomeType });
     return {
-      allowed: decisionAllowsStep(evaluation),
+      allowed: !advisoryOnly && decisionAllowsStep(evaluation),
+      advisoryOnly,
+      consultedProfessionKey,
       interactionId,
       evaluation,
-      operatorMessage: operatorMessageFor(evaluation, professionProfileSelected, professionKey),
+      operatorMessage: messageFor(operatorMessageFor(evaluation, professionProfileSelected, professionKey)),
       professionProfileSelected,
       professionKey,
       corpusGap: null,
@@ -445,7 +461,7 @@ export async function evaluateProfessionDecisionGate(input: {
     professionKey,
     professionProfileSelected,
     // A borrow has no coworker of its own; the acumen registry names the owner.
-    fallbackAgentId: borrow
+    fallbackAgentId: borrow || advisoryOnly
       ? null
       : input.agentIdentity.agentId ?? input.agentIdentity.slugId ?? null,
     routeContext: input.routeContext,
@@ -476,6 +492,7 @@ export async function evaluateProfessionDecisionGate(input: {
       professionKey,
       caller: input.caller ?? null,
       ...borrowLedgerFields,
+      ...consultationLedgerFields,
       corpusGapNomination: corpusGap,
     },
   });
@@ -485,10 +502,12 @@ export async function evaluateProfessionDecisionGate(input: {
   });
 
   return {
-    allowed: decisionAllowsStep(evaluation),
+    allowed: !advisoryOnly && decisionAllowsStep(evaluation),
+    advisoryOnly,
+    consultedProfessionKey,
     interactionId: persisted.interactionId,
     evaluation,
-    operatorMessage: operatorMessageFor(evaluation, professionProfileSelected, professionKey, corpusGap),
+    operatorMessage: messageFor(operatorMessageFor(evaluation, professionProfileSelected, professionKey, corpusGap)),
     professionProfileSelected,
     professionKey,
     corpusGap,

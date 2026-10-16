@@ -67,6 +67,10 @@ const definitions: ToolDefinition[] = [
           description:
             "Required for a declared borrow (external population, no coworker identity): the professionKey to consult, e.g. 'ux-design'. Must be a family registered in docs/professions/registry.json — an unknown key fails rather than degrading to platform defaults. Ignored for in-platform callers, who always reason from the craft they practise.",
         },
+        consultProfessionKey: {
+          type: "string",
+          description: "Explicitly consult another registered profession (for example ux-design) while retaining your authenticated identity. Returns advisory guidance only: allowed=false; it does not authorize a step, impersonate a specialist, execute a specialist engagement or satisfy independent review. Omit to use your own craft. Takes precedence over legacy declared-borrow fields.",
+        },
       },
       required: ["question", "options", "domainClass", "riskTier"],
     },
@@ -98,6 +102,7 @@ async function evaluateProfessionDecision(
   );
   const { parseOptionFeatures } = await import("@/lib/decision-perspective/scored-option-input");
   const { prisma } = await import("@dpf/db");
+  const { findProfessionFamilyByKey } = await import("@/lib/decision-perspective/resolve-profession-profile");
 
   const question = String(params["question"] ?? "").trim();
   const options = Array.isArray(params["options"]) ? params["options"].map((o) => String(o)) : [];
@@ -129,8 +134,15 @@ async function evaluateProfessionDecision(
   const declaredProfessionKey = String(params["professionKey"] ?? "").trim();
   const isExternalPopulation =
     declaredPopulation === "external_coding_agent" || declaredPopulation === "human";
+  const consultationSupplied = params["consultProfessionKey"] !== undefined;
+  const consultProfessionKey = typeof params["consultProfessionKey"] === "string"
+    ? params["consultProfessionKey"].trim()
+    : null;
+  if (consultationSupplied && (!consultProfessionKey || !findProfessionFamilyByKey(consultProfessionKey))) {
+    return { success: false, error: "invalid_params", message: "consultProfessionKey must name a registered profession family." };
+  }
 
-  if (!context?.agentId && !isExternalPopulation) {
+  if (!context?.agentId && !isExternalPopulation && !consultProfessionKey) {
     return {
       success: false,
       error: "no_agent_identity",
@@ -141,7 +153,7 @@ async function evaluateProfessionDecision(
     };
   }
 
-  if (!context?.agentId && isExternalPopulation && !declaredProfessionKey) {
+  if (!context?.agentId && isExternalPopulation && !declaredProfessionKey && !consultProfessionKey) {
     return {
       success: false,
       error: "no_profession_declared",
@@ -166,10 +178,11 @@ async function evaluateProfessionDecision(
       agentName: agent?.name ?? null,
       slugId: agent?.slugId ?? context?.agentId ?? null,
     },
+    consultProfessionKey,
     // The gate itself refuses a borrow from a caller that already carries an
     // agent identity, so an in-portal coworker cannot name its way into another
     // craft even if it passes these fields.
-    declaredBorrow: isExternalPopulation
+    declaredBorrow: isExternalPopulation && !consultProfessionKey
       ? { callingPopulation: declaredPopulation, professionKey: declaredProfessionKey }
       : null,
     question,
@@ -196,13 +209,15 @@ async function evaluateProfessionDecision(
     data: {
       interactionId: decision.interactionId,
       allowed: decision.allowed,
+      advisoryOnly: decision.advisoryOnly,
+      consultedProfessionKey: decision.consultedProfessionKey,
       outcomeType: decision.evaluation.outcomeType,
       confidenceScore: decision.evaluation.confidenceScore,
       professionKey: decision.professionKey,
       professionProfileSelected: decision.professionProfileSelected,
       // Echoed so an external caller can see, without reading the ledger, that
       // it consulted a real craft profile rather than platform doctrine.
-      declaredBorrow: !context?.agentId && isExternalPopulation,
+      declaredBorrow: !context?.agentId && isExternalPopulation && !consultProfessionKey,
       recommendedOptionId: decision.evaluation.recommendedOptionId ?? null,
       rationale: rationale.length > 500 ? `${rationale.slice(0, 500)}...` : rationale,
     },

@@ -25,6 +25,32 @@ beforeEach(() => {
 });
 
 describe("profession-decision pack — evaluate_profession_decision optionFeatures (BI-6DCF772F)", () => {
+  it("passes an explicit advisory consultation separately from authenticated identity", async () => {
+    gateMock.mockResolvedValueOnce({
+      interactionId: "DI-UX", allowed: false, advisoryOnly: true, consultedProfessionKey: "ux-design",
+      evaluation: { rationale: "advisory", outcomeType: "recommend", confidenceScore: 0.8 },
+      professionKey: "ux-design", professionProfileSelected: true,
+    });
+    const res = await professionDecisionPack.handlers.evaluate_profession_decision!(
+      { question: "Q", options: ["a"], domainClass: "professional-practice", riskTier: "medium", consultProfessionKey: "ux-design" },
+      "user-1", { agentId: "AGT-1", apiTokenId: "token-1" },
+    );
+    expect(gateMock.mock.calls[0]![0]).toMatchObject({
+      consultProfessionKey: "ux-design", agentIdentity: { agentId: "AGT-1" },
+      caller: { agentId: "AGT-1", apiTokenId: "token-1" },
+    });
+    expect(res.data).toMatchObject({ allowed: false, advisoryOnly: true, consultedProfessionKey: "ux-design", declaredBorrow: false });
+  });
+
+  it.each(["", "unknown-craft", 42])("rejects an invalid explicit consultation before invoking the gate: %s", async (consultProfessionKey) => {
+    const res = await professionDecisionPack.handlers.evaluate_profession_decision!(
+      { question: "Q", options: ["a"], domainClass: "professional-practice", riskTier: "medium", consultProfessionKey },
+      "user-1", { agentId: "AGT-1" },
+    );
+    expect(res.success).toBe(false);
+    expect(gateMock).not.toHaveBeenCalled();
+  });
+
   it("rejects optionFeatures that don't align 1:1 with options, before invoking the gate", async () => {
     const res = await professionDecisionPack.handlers.evaluate_profession_decision!(
       {
