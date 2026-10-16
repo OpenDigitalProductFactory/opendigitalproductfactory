@@ -265,3 +265,49 @@ is part of this correction. Refresh coverage for the published corrective head,
 obtain independent bounded source assessment, preserve audited DEV publication
 exceptions as skipped/unrun, then use fresh protected CI and canonical deployment
 before rerunning the failed live check.
+
+**Historical-only readback correction, same BI-CAP-21C511CA.** Canonical
+recovery.102 served `a914e8314d52449979af7b84599b3908b2a61036`. Actual
+`get_workroom` for WC-D299E3B8 still returned an incomplete observation, null
+accountable owner and an identical read action when every valid request belonged
+to older source. Failure activity `cmvapsu610au101pdbuv96w2m` preserves this
+observation; the old uncertain TR-GATE-376F91B64F4544826FF58E7F stays historical.
+
+This is one atomic correction of READBACK-CURRENT, READBACK-RESULT,
+READBACK-AUTH and READBACK-UNKNOWN, using the same contracts and flow above.
+No independent delivery, new task reader, receipt, queue or authority is needed.
+PR 6449's native source validation is a source dependency, already merged as
+`203c62de7794a2074f952cb40d513d175786ffc8`. BI-7CCCA696 continues to own automatic
+capacity recovery; canonical identity and role/room repairs remain separate.
+
+1. Distinguish complete historical-only observation from actual query failure,
+   malformed identity, conflicting identity and truncated task/node history.
+   Keep complete absence of a current review unknown, never passing.
+2. Reuse the existing execution projection for explicitly historical summaries
+   (at most five, with an explicit truncation flag), including recorded source,
+   requester, outcome, original budget and requester-bound `tasks/result` action.
+   Historical evidence must never become the current execution or readiness.
+3. When current identity cannot be resolved, expose the existing accountable
+   delivery-coordinator role and the existing `get_backlog_item` bounded
+   post-implementation-review recovery route. This asks the canonical issuer for
+   current recovery, never creates/retries a review or invents a request nonce.
+   For rooms without a linked item, retain an explicit owning-role escalation
+   rather than promising the same read will repair it.
+4. Reserve at least 20 percent for consolidating execution summary/receipt
+   visibility and recovery-action selection in the existing reducer. Both detail
+   and liveness already consume it; do not fork adapter behavior.
+5. Resolve claimed-path test impact before Red. Add loader-to-reducer regressions
+   for complete old-source PASS/FAIL/inconclusive/uncertain state, missing current
+   source, bounded history, source mismatch and corruption; update the existing
+   read-only PostgreSQL regression. Run related detail/liveness and Ops Map tests,
+   both TypeScript programs and applicable guards. Database suites without a
+   governed database remain explicitly skipped, not passed.
+6. Obtain independent source assessment on the frozen commit, publish a regular
+   DCO PR through protected CI/queue, then repeat the failed live read after a
+   containing canonical upgrade and CAN-TEST. No old uncertain provider replay,
+   post-publication model review, exact-approval waiver substitution or fake PASS.
+
+Rollback reverts the additive readback correction and preserves all stored tasks,
+receipts and the recorded failures. Existing coverage is historical; record and
+check new live coverage against this immutable plan and seven claimed paths
+before implementation. The owned runbook must describe the current issuer action.
