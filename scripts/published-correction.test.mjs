@@ -32,11 +32,28 @@ test("GitHub context lookup supplies the actual branch with an explicit origin r
         assert.deepEqual(args.slice(3, 5), ["--repo", "github.com/example/platform"]);
         return { number: 7, headRefName: branch };
       }
-      return [{ type: "merge_queue" }, { type: "required_status_checks", parameters: { required_status_checks: [{ context: "CI" }] } }];
+      if (args.at(-1).endsWith("/rules/branches/main")) return [{ type: "merge_queue" }, { type: "required_status_checks", parameters: { required_status_checks: [{ context: "CI" }] } }];
+      return { required_status_checks: { contexts: ["DCO", "CI"] } };
     } });
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 3);
     assert.equal(result.protection.mergeQueue, true);
-    assert.deepEqual(result.protection.requiredChecks, ["CI"]);
+    assert.deepEqual(result.protection.requiredChecks, ["CI", "DCO"]);
+  } finally { rmSync(cwd, { recursive: true, force: true }); }
+});
+
+test("GitHub context accepts observed classic required checks alongside a ruleset merge queue", () => {
+  const cwd = mkdtempSync(join(tmpdir(), "correction-protection-"));
+  try {
+    execFileSync("git", ["init", "-b", branch], { cwd, stdio: "pipe" });
+    execFileSync("git", ["remote", "add", "origin", "git@github.com:example/platform.git"], { cwd });
+    const result = readPublishedContext(cwd, { readJson(command, args) {
+      if (args[0] === "pr") return { number: 7, headRefName: branch };
+      if (args.at(-1).endsWith("/rules/branches/main")) return [{ type: "merge_queue" }];
+      assert.equal(args.at(-1), "repos/example/platform/branches/main/protection");
+      return { required_status_checks: { contexts: ["DCO", "Merge Readiness"], checks: [{ context: "DCO" }] } };
+    } });
+    assert.equal(result.protection.mergeQueue, true);
+    assert.deepEqual(result.protection.requiredChecks, ["DCO", "Merge Readiness"]);
   } finally { rmSync(cwd, { recursive: true, force: true }); }
 });
 
@@ -313,6 +330,10 @@ test("a recorded arbitrary command list cannot replace the source-derived affect
       identify: () => ({ ...fixture.identify(), environment: "changed" }) }), false);
     assertReaders(inspectCorrectionRecord(fixture.cwd, { identify: fixture.identify, contextReader: () => {
       const changed = fixture.contextReader(); changed.protection.mergeQueue = false; return changed;
+    } }), false);
+    assertReaders(inspectCorrectionRecord(fixture.cwd, { identify: fixture.identify, contextReader: () => {
+      const changed = fixture.contextReader(); changed.protection.requiredChecks = ["CI", "Changed classic protection"];
+      return changed;
     } }), false);
     const path = correctionReceiptPath(fixture.cwd);
     const receipt = JSON.parse(readFileSync(path, "utf8"));

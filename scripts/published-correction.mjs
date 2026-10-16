@@ -71,10 +71,14 @@ export function readPublishedContext(cwd = process.cwd(), { readJson = jsonComma
   if (!branch) throw new Error("Published correction requires a named local branch.");
   const pr = readJson("gh", ["pr", "view", branch, "--repo", `${repositoryHost}/${repositoryFullName}`, "--json", "number,state,isDraft,headRefName,headRefOid,baseRefName,url"], cwd);
   const rules = readJson("gh", ["api", "--hostname", repositoryHost, `repos/${repositoryFullName}/rules/branches/main`], cwd);
+  const rulesetChecks = rules.filter(rule => rule.type === "required_status_checks")
+    .flatMap(rule => rule.parameters?.required_status_checks ?? []).map(check => check.context);
+  const classic = readJson("gh", ["api", "--hostname", repositoryHost, `repos/${repositoryFullName}/branches/main/protection`], cwd);
+  const requiredChecks = [...new Set([...rulesetChecks, ...(classic.required_status_checks?.contexts ?? []),
+    ...(classic.required_status_checks?.checks ?? []).map(check => check.context)])];
   return { pullRequest: { ...pr, repositoryFullName, repositoryHost }, protection: {
     repositoryFullName, branch: "main", mergeQueue: rules.some(rule => rule.type === "merge_queue"),
-    requiredChecks: rules.filter(rule => rule.type === "required_status_checks")
-      .flatMap(rule => rule.parameters?.required_status_checks ?? []).map(check => check.context),
+    requiredChecks,
     observedAt: new Date().toISOString(),
   } };
 }
