@@ -6,7 +6,7 @@ status: active
 
 - **Backlog item:** BI-E27F3600
 - **Design:** `docs/superpowers/specs/2026-09-26-review-instantiation-by-shape-and-criticality-design.md`
-- **Prerequisite:** BI-74B2A8CD merged. Phases 2 and 6 call `resolveDecisionEscalation`, `decisionAllowsStep` and the shared damaging definition it adds to `apps/web/lib/govern/authority/escalation-gate.ts`. No phase starts before it lands.
+- **Integration prerequisite:** BI-74B2A8CD merged. Phases 2 and 6 call `resolveDecisionEscalation`, `decisionAllowsStep` and the shared damaging definition it adds to `apps/web/lib/govern/authority/escalation-gate.ts`. No authority/decision integration starts before it lands. The original approved phase 1 may be prepared and tested independently: its pure calculation has no dependency on that module and is not wired into runtime dispatch by this preparation.
 
 Owner revision, 2026-10-15: target one PR for the related participation and
 consultation repairs. The phases below are internal sequencing, not a requirement
@@ -72,8 +72,10 @@ pass is implied.
 Apply design section 7 before sequencing the revised implementation:
 
 1. Reconcile BI-74B2A8CD with its existing room/branch. It remains the prerequisite
-   for the authority and undecided-hold work; no phase starts before it lands
-   under this plan's existing contract. Preserve the other room's ownership.
+   for authority, dispatch and undecided-hold integration. Only the original
+   approved phase 1's pure calculation/type declaration may be prepared and
+   tested before it lands, with no new runtime reader. Preserve the other room's
+   ownership. This sequencing correction does not approve expanded AC-7–AC-10.
 2. Review the overlapping live items named in design section 7. Map authoring
    participation, complete profession coverage, external consultation and
    executed-result evidence onto their proper existing BIs. BI-0AABCD1F remains
@@ -109,5 +111,35 @@ Run the available doc guards and record any unavailable checks as unrun.
 
 The original immutable six-deliverable coverage belongs to the previous scope.
 This expanded plan has **coverage pending**, not a fabricated replacement receipt.
-Do not enter implementation until the dependency and revised coverage above are
-resolved. This is a resumption checkpoint, not a completed design or shipped fix.
+Do not implement the expanded scope or runtime integration until the dependency
+and revised coverage above are resolved. Original phase 1 is already covered by
+the accepted OBJ-NEED / AC-1 baseline and original six-deliverable coverage. Its
+source-only preparation does not satisfy AC-1's eventual end-to-end review proof.
+The exact-head implementation claim IRD-DC3770D02E22 admitted that existing scope;
+it is not evidence of independent approval of this revision. This remains a
+resumption checkpoint, not a completed design or shipped fix.
+
+## Source preparation evidence, 2026-10-15
+
+Prepared the original section 3.1 pure `resolveStepCriticality` calculation.
+It accepts the already-resolved effective shape, advance kind, transition risk,
+server-resolved damaging fact and optional declared stage floor. The calculation
+takes the maximum and never grants permission or infers that high review depth
+means damage. No runtime dispatcher consumes it yet. The optional stage-field
+declaration and its shape-language/compiler round trip remain integration work;
+adding a property that serializers could drop is not counted as complete.
+
+- Test-first red: the new focused suite failed because the calculation module
+  did not exist; this was an executed test run, not a missing runtime dependency.
+- Green: 13 tests passed in this worktree, including 320 signal combinations
+  that verify no input floor can be lowered, and explicit expected outputs for
+  each shape, risk, governed transition and damaging declaration.
+- `pnpm --filter web typecheck`: passed, TypeScript 7 and generated route types.
+- Style/token drift guard and `git diff --check`: passed.
+- The managed dependency bootstrap now reports compile-ready with repository-
+  pinned pnpm 10.33.2 and zero ignored builds.
+- Merged-code gate, runtime workflow proof and complete acceptance: pending.
+  This source preparation is not the end-to-end specialist participation fix.
+
+BI-B22C8E02 is being handled by the separate chat named `Execute BI-B22C8E02`;
+this branch does not compete for its approval/handoff implementation scope.
