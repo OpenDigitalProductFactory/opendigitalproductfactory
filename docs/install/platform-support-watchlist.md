@@ -17,6 +17,17 @@ depend on an agent manually extending PATH. A missing compatible shell is an
 unavailable prerequisite (exit 88), not a failing product test. The parent
 environment, worker limits, test deadlines and lease fences stay unchanged.
 
+## Literal Windows package-manager arguments (BI-263055E3)
+
+The shared host command resolver launches pnpm/Corepack JavaScript entrypoints
+with Node and a literal argument array; native pnpm executables run directly.
+It honors the selected installation and PATH precedence, supports npm global
+and workspace bin layouts, and refuses unsupported shims without a shell
+fallback. The observed process runner uses the same boundary with shell mode
+disabled. Local-CI version pinning supplies a JavaScript forwarding entrypoint
+so percent expansion, quotes and command separators remain argument data.
+POSIX executable selection is unchanged.
+
 ## Capability reconciliation on release installs (BI-5ACBAC50)
 
 The portal's Linux container is not the host platform. Explicit v2 runtime

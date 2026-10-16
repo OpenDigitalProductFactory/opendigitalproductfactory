@@ -114,7 +114,7 @@ export function resolveLocalCiPnpmInvocation(
   { env = process.env, platform = process.platform } = {},
 ) {
   return platform === "win32"
-    ? resolveHostCommandInvocation("pnpm", args, { env, platform })
+    ? resolveHostCommandInvocation(hostPnpm, args, { env, platform })
     : { command: hostPnpm, args };
 }
 
@@ -179,9 +179,18 @@ export function preparePinnedPnpmEnvironment({
 
   mkdirSync(toolchainDir, { recursive: true });
   if (platform === "win32") {
+    // Direct Node callers use this entrypoint instead of reparsing a .cmd shim.
+    writeFileSync(
+      join(toolchainDir, "pnpm.cjs"),
+      `const { spawnSync } = require("node:child_process");\n` +
+      `const result = spawnSync(${JSON.stringify(bootstrapInvocation.command)}, ` +
+      `[...${JSON.stringify(bootstrapInvocation.args.slice(0, -1))}, ...process.argv.slice(2)], ` +
+      `{ stdio: "inherit", env: process.env, shell: false });\n` +
+      `if (result.error) throw result.error;\nprocess.exit(result.status ?? 1);\n`,
+    );
     writeFileSync(
       join(toolchainDir, "pnpm.cmd"),
-      `@echo off\r\n"${hostPnpm.replaceAll('"', '""')}" ${pinnedPrefix.join(" ")} %*\r\n`,
+      `@echo off\r\n"${process.execPath}" "%~dp0pnpm.cjs" %*\r\n`,
     );
   } else {
     const shimPath = join(toolchainDir, "pnpm");
