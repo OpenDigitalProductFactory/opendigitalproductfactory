@@ -61,6 +61,16 @@ any unclassified install script keeps the tree `source-only` and emits a stable
 that key as the backlog intake origin so the canonical ingester increments one
 occurrence instead of filing one review per worktree.
 
+A successful managed install can retain qualified dependency evidence in this
+worktree's Git metadata when pnpm omits its build record after a no-op install.
+Ordinary probes still check current artifacts, dependency resolution, workspace
+links, staleness and unclassified scripts. Changed install inputs or metadata,
+failed installs and missing or invalid evidence prevent reuse. This evidence is
+not a build/test result and grants no build-script permission.
+Each probe rediscovers workspace manifests, so editing, adding or removing a
+package invalidates prior evidence. Custom hooks, patches and unsupported
+workspace formats keep the normal managed-install path.
+
 ## Compose project isolation
 
 `docker-compose.yml` defaults to the root project `dpf`; linked worktrees must override it with an ignored `.env` value such as `COMPOSE_PROJECT_NAME=dpf-<topic>`. The worktree MCP seed scripts write this automatically.

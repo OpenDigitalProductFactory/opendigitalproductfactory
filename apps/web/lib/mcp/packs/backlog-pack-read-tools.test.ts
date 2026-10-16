@@ -276,7 +276,7 @@ describe("backlog deferral read projection", () => {
       a2aMetadata: { taskAuthorityKey: authority.taskAuthorityKey, idempotencyKey: oldPacket.requestKey,
         requestedAgentId: "AGT-A", requestDigestVersion: 2, requestDigest: remoteTaskRequestDigest(submitted) },
       progressPayload: { terminalWriterWait: { schemaVersion: 1, kind: "missing-terminal-writer",
-        writerToolName: "record_initiative_design_review", resumeMode: "same-taskrun", attempt: 3, observedAt: "2026-10-16T00:00:00Z" } },
+        writerToolName: "record_initiative_design_review", resumeMode: "same-taskrun", dispatchContract: "required-tool-call", attempt: 3, observedAt: "2026-10-16T00:00:00Z" } },
     });
     const validator = await issue(authority);
     expect(validator.reviewerRoutes[0]!.requestCoworker.targetAgent).toBe("AGT-B");

@@ -1,4 +1,6 @@
 import { InferenceError } from "./inference-error";
+import { CLI_RESULT_SUBTYPES, type CliTerminalResultMetadata } from "../shared/execution-uncertainty";
+export type { CliTerminalResultMetadata } from "../shared/execution-uncertainty";
 
 // CLI-owned banner, including the organization spend cap observed in BI-EDF1BD54.
 // Anchor it so a successful explanation mentioning a limit is not a failure.
@@ -23,19 +25,6 @@ function isCliOverloadError(text: string): boolean {
   return text.length < 600 && isProviderOverloadMessage(text);
 }
 
-const RESULT_SUBTYPES = [
-  "success", "error_during_execution", "error_max_turns",
-  "error_max_budget_usd", "error_max_structured_output_retries",
-] as const;
-type CliResultSubtype = typeof RESULT_SUBTYPES[number];
-export interface CliTerminalResultMetadata {
-  status: "success" | "error" | "unknown";
-  type: "result" | "unknown";
-  subtype: CliResultSubtype | "unknown";
-  isError: boolean | null;
-  hint: "quota" | "auth" | "overloaded" | "model" | "unclassified";
-}
-
 /** Output diagnostics only. No child output proves remote settlement or retry safety. */
 export function parseCliTerminalResultMetadata(output: string): CliTerminalResultMetadata {
   const metadata: CliTerminalResultMetadata = {
@@ -48,7 +37,7 @@ export function parseCliTerminalResultMetadata(output: string): CliTerminalResul
   if (record.type !== "result") return metadata;
   metadata.type = "result";
   if (typeof record.is_error === "boolean") metadata.isError = record.is_error;
-  const subtype = RESULT_SUBTYPES.find((known) => known === record.subtype);
+  const subtype = CLI_RESULT_SUBTYPES.find((known) => known === record.subtype);
   if (subtype) metadata.subtype = subtype;
   // Unknown/error arrays can contain sensitive text and do not supply a result.
   // Contradictory nonempty arrays also cannot establish a complete envelope.

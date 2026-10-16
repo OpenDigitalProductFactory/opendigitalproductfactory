@@ -1,3 +1,4 @@
+import { hasExecutionUncertainty } from "./shared/execution-uncertainty";
 import { parseRemoteTaskSubmitParams, type RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 import type { ExistingRemoteTask, RemoteTaskSubmitAuth, RemoteTaskSubmitOutcome } from "./mcp-task-submit-types";
 export { parseRemoteTaskSubmitParams, REMOTE_RISK_CLASSES } from "./mcp-task-submit-params";
@@ -277,6 +278,9 @@ export async function submitRemoteCoworkerTask(input: {
       }
     }
     const replay = replayOrConflict(existing, parsed);
+    // Exact persisted receipts above may settle without inference. Every other
+    // recovery path must hold an execution whose effects remain unknown.
+    if (hasExecutionUncertainty(existing.progressPayload)) return replay;
     if (requestMatches && parsed.initiativeReviewBinding && await recoverExpiredOAuthReview(existing, token)) {
       return { kind: "result", result: { taskRunId: existing.taskRunId, status: "submitted",
         idempotentReplay: true, requiresApproval: false, asynchronous: true,

@@ -13,6 +13,7 @@ import { prisma } from "@dpf/db";
 import { routeAndCall } from "@/lib/routed-inference";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { runAgenticLoop } from "./agentic-loop";
+import { NativeCliExecutionUncertainError } from "../routing/cli-owned-runner";
 
 const writer = "record_initiative_design_review";
 const reply = (truncated: boolean, toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }> = []) => ({
@@ -34,6 +35,15 @@ const params = {
 };
 
 describe("terminal writer output truncation", () => {
+  it("preserves native execution uncertainty on a required-writer call without another inference", async () => {
+    vi.mocked(routeAndCall).mockRejectedValueOnce(new NativeCliExecutionUncertainError("anthropic-sub"));
+    const result = await runAgenticLoop(params);
+    expect(result.failure).toMatchObject({ kind: "execution-uncertain",
+      executionUncertainty: { providerId: "anthropic-sub", settlement: "unknown" } });
+    expect(result.content).not.toMatch(/resumable|reconnect|try again/);
+    expect(routeAndCall).toHaveBeenCalledTimes(1);
+    expect(governedExecuteTool).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(prisma.agentModelConfig.findUnique).mockResolvedValue(null as never);

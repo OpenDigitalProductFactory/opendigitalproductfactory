@@ -9,6 +9,8 @@ import { isSemanticReviewRecoveryWait, semanticReviewRecoveryObservation, readSe
 
 /** Read-only facts from existing tasks; neither a verdict nor a new execution ledger. */
 export type ReviewerExecutionObservation = {
+  capsuleId?: string | null;
+  requesterAgentId?: string | null;
   taskRunId: string; recordId: string; status: string; requesterId: string | null; requesterName?: string | null;
   reason: string | null; nextAction: string; readAt: string; lastHeartbeatAt: string | null;
   heartbeat: "historical" | "unknown" | "stale" | "recent";
@@ -30,6 +32,7 @@ export type ReviewerRoomClient = { taskRun?: { findMany(args: unknown): Promise<
 
 type RequestIdentity = {
   rowId: string; capsuleId: string; sourceHeadSha: string | null; currentHeadSha: string | null;
+  requesterAgentId?: string | null;
   issuedAt: string | null; requestBound: boolean;
   receiptId?: string | null; receiptDecision?: string | null; receiptSummary?: string | null;
   receiptCreatedAt?: Date | null;
@@ -40,6 +43,8 @@ async function loadRequestIdentities(db: ReviewerRoomClient, rows: ReviewerRunSn
   if (!rows.length || !db.$queryRaw) return [];
   return db.$queryRaw<RequestIdentity[]>`
     SELECT t.id AS "rowId", w."capsuleId", w."headSha" AS "currentHeadSha",
+      CASE WHEN length(a.parts #>> '{0,data,actor,agentId}') BETWEEN 1 AND 256
+        THEN a.parts #>> '{0,data,actor,agentId}' END AS "requesterAgentId",
       e.id AS "receiptId", e.details #>> '{result,decision}' AS "receiptDecision",
       e."createdAt" AS "receiptCreatedAt",
       LEFT(e.details #>> '{result,summary}', 1200) AS "receiptSummary",
@@ -128,7 +133,9 @@ export async function loadSemanticReviewRoomProjection(db: ReviewerRoomClient, c
     const heartbeat = row.lastHeartbeatAt ? row.lastHeartbeatAt.toISOString() : "unknown";
     const age = row.lastHeartbeatAt ? now.getTime() - row.lastHeartbeatAt.getTime() : null;
     const freshness = state === "terminal" ? "historical" : age === null || age < 0 ? "unknown" : age >= SEMANTIC_REVIEW_HEARTBEAT_STALE_MS ? "stale" : "recent";
-    runs.push({ taskRunId: row.taskRunId, recordId: row.id, status: row.status, requesterId: row.userId,
+    runs.push({ capsuleId: identity?.capsuleId ?? null,
+      requesterAgentId: identity?.requestBound ? identity.requesterAgentId ?? null : null,
+      taskRunId: row.taskRunId, recordId: row.id, status: row.status, requesterId: row.userId,
       requesterName: row.user?.employeeProfile?.displayName.trim() || null,
       identityScope, sourceHeadSha: identity?.requestBound ? identity.sourceHeadSha : null,
       ...(identity?.requestBound && identity.receiptId

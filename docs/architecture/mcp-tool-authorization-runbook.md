@@ -15,6 +15,9 @@ context, never an extra grant; the paired installation remains read-only.
 
 ## Reading an owned semantic review's recovery state
 
+For exhausted independent-review replacement, follow the
+[initiative readiness recovery procedure](initiative-readiness-runbook.md#4-the-reviewer-roster-who-holds-which-grant).
+
 The existing `tasks/get` and `tasks/result` methods return `recovery.details`
 for semantic reviews after checking the authenticated task owner. This includes
 at most 100 task node IDs, recorded status, digest binding and current scoped
