@@ -619,6 +619,70 @@ cannot fit, return a bounded refusal. An oversized activity page is explicitly
 incomplete and cannot advance its cursor; full large-activity detail remains
 BI-3CE72645, not a fabricated empty or completed page.
 
+## Automatic pre-dispatch capacity continuation — BI-7CCCA696
+
+Extend the recovery mechanism above within its original immutable request and
+budget. This repair is separate from BI-8ECEC429's explicitly authorized expired
+successors and BI-DB4E6F81's endpoint-eligibility remediation. The latter's
+no-dispatch eligibility proof does not authorize automatic capacity recovery.
+BI-CAP-21C511CA remains the Workroom receipt/readback owner. Canonical identity
+BI-CAP-437F7745 and role/room configuration BI-56E9CEC2 are dependencies, not
+additional scope here.
+
+### Reproduction and alternatives
+
+On `86e552f4d8ebc6dae30e22438c35293b6bef023b`, checkpointBranch accepts a
+capacity error by name and the reconciler excludes input-required tasks. The
+existing explicit recovery route requires a client even after capacity returns.
+The new worker regression first failed because an ordinary Error with a copied
+capacity name was recorded as a completed pre-dispatch refusal. Baseline worker,
+request and recovery-policy suites passed110 tests before this regression.
+Recorded logs and source provenance live in WC-82EAA947.
+
+Choose positive checkpoint proof and the existing reconciler over two rejected
+alternatives: automatically retrying every inconclusive review risks duplicate
+paid execution; adding a client timer or second queue cannot provide the
+server-owned recovery guarantee. Existing typed capacity policy, immutable
+request, transactional generation fences, outbox and checkpoint store already
+provide the necessary substrate. This bug repair adds no dependency or schema.
+
+### Ordered repair and acceptance
+
+Implement the single atomic outcome through
+`docs/superpowers/plans/2026-10-16-semantic-capacity-auto-resume.md`, whose
+AC-AUTO-1 through AC-AUTO-5 quote the live item criteria. CT-CAPACITY-PROOF and
+FLOW-SETTLE require the real LocalProviderCapacityDeferredError class; copied
+names, wrapped causes and model strings remain uncertain. Persist a versioned,
+request-bound no-provider-started proof only after the real refusal settles.
+
+CT-CHECKPOINT-SET and FLOW-ELIGIBILITY require the complete expected branch set,
+passing siblings, at least one proven refusal and no unfinished, foreign,
+failed or unsupported outcome. Unknown legacy checkpoints stay manual.
+CT-BOUNDED-RESUME and FLOW-RECONCILE extend the bounded existing reconciler:
+cheap capacity observation, persisted bounded backoff, original deadline and
+consumed attempt counters, current authority/source/failure-evidence checks,
+quiescence, and one CAS-admitted generation. Capacity remains advisory; actual
+dispatch still enforces its admission policy. A concurrent refusal can become
+another bounded wait, never a reason to clear counters or renew the window.
+
+CT-OBSERVED-RECOVERY and FLOW-READBACK project that persisted wait and final
+native receipt through existing task/Workroom readers. Preserve explicit retry,
+expired successors and independent verdicts. At least20% relevant refactoring
+consolidates checkpoint/budget/readback eligibility rather than duplicating it.
+
+VC-TYPED-DEFERRAL, VC-NO-REPLAY, VC-SINGLE-GENERATION and VC-TRUTHFUL-STATE
+cover lookalike/wrapped errors, unavailable-then-recovered capacity, retained
+passing siblings, final receipt, concurrent reconciliation, unknown execution,
+actual fail, cancellation, stale source/evidence, authority loss, quiescence and
+budget exhaustion. Denied cases make zero provider calls. Run affected tests,
+typechecks and policy guards, independent review, DCO and protected merge queue.
+Deploy canonically before recording served automatic-continuation acceptance.
+No historical uncertain task is replayed to prove this repair.
+
+Rollback through a signed revert, preserving requests, checkpoints, deadlines,
+attempt history and receipts. Unsupported proof versions stay ineligible.
+Source delivery is not deployed verification; an unavailable check stays unrun.
+
 ## Non-goals
 
 - Replacing GitHub review.

@@ -581,6 +581,38 @@ test("classifyGateOutcome passes/fails normally when the sandbox is green", () =
   assert.equal(failed.productEvidence, true);
 });
 
+// BI-B62A6686: prisma migrate deploy P1001 used to be stored as a reusable
+// product FAIL. A test title that merely mentions P1001 is still a product fail.
+test("prisma migrate deploy P1001 is control-plane starvation, not a product fail", () => {
+  const log = [
+    "> prisma migrate deploy",
+    "Error: P1001",
+    "Can't reach database server at `127.0.0.1:5432`",
+  ].join("\n");
+  const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: 1, gateOutput: log });
+  assert.equal(outcome.status, "blocked_control_plane_starvation");
+  assert.equal(outcome.gatePassed, false);
+  assert.equal(outcome.productEvidence, false);
+  assert.match(outcome.summary, /prisma migrate deploy/);
+});
+
+test("a test title that mentions P1001 stays a product failure", () => {
+  const log = "FAIL lib/foo.test.ts > reports P1001 when the database is down\n";
+  const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: 1, gateOutput: log });
+  assert.equal(outcome.status, "failed");
+  assert.equal(outcome.productEvidence, true);
+});
+
+test("ECONNREFUSED without prisma migrate deploy stays a product failure", () => {
+  const outcome = classifyGateOutcome({
+    freshnessVerdict: "green",
+    gateExitCode: 1,
+    gateOutput: "connect ECONNREFUSED 127.0.0.1:9\n",
+  });
+  assert.equal(outcome.status, "failed");
+  assert.equal(outcome.productEvidence, true);
+});
+
 test("classifyGateOutcome treats pnpm lifecycle exit 3 as product evidence when freshness is green", () => {
   const failed = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: EXIT_SANDBOX_DRIFT });
   assert.equal(failed.status, "failed");
