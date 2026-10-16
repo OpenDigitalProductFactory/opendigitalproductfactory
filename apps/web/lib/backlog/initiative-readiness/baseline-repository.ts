@@ -17,6 +17,11 @@ import type {
 import { validateInitiativeGateReceiptDraft } from "./receipt-schema";
 import type { InitiativeSubject, ReadinessProfile } from "./types";
 import { resolveReviewerIdentity } from "./reviewer-identity";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
+import type { InitiativeGateReceipt } from "./receipt-schema";
+import { boundReviewReceiptId, findBoundReviewWinner, lockBoundReviewEffect, publishBoundReviewEffect,
+  type BoundReviewTask } from "./bound-review-effect";
 
 export type InitiativeBaselineChainEntry = {
   baselineId: string;
@@ -208,6 +213,7 @@ export function validateInitiativeSupersessionDispositions(
 
 export type RecordInitiativeSpecApprovalResult =
   | { ok: true; receiptId: string; baselineId: string; artifactDigest: string }
+  | { ok: true; receiptId: string; baselineId: string | null; artifactDigest: string; deduplicated: true; receipt: InitiativeGateReceipt }
   | { ok: false; code: string; error: string };
 
 class InitiativeApprovalRollback extends Error {
@@ -222,6 +228,8 @@ export async function recordInitiativeSpecApproval(args: {
   artifactRole: InitiativeScopeBaseline["artifactRole"];
   artifactRef: InitiativeArtifactRef;
   expectedCurrentBaselineId: string | null;
+  boundReviewTask?: BoundReviewTask;
+  workroomRef?: InitiativeReviewBinding["workroomRef"];
   supersessionDispositions: Array<{ statementId: string; reason: string }>;
   resolvedFindingRefs: string[];
   reason: string;
@@ -290,7 +298,7 @@ export async function recordInitiativeSpecApproval(args: {
     && !/^docs\/superpowers\/specs\/[^/]+\.md$/.test(args.artifactRef.path)) {
     return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Repository scope approval requires a canonical design under docs/superpowers/specs/." };
   }
-  const artifact = await resolveInitiativeArtifact({ locator: args.artifactRef, subject, organizationId });
+  const artifact = await resolveInitiativeArtifact({ locator: args.artifactRef, workroomRef: args.workroomRef, subject, organizationId });
   if (!artifact.ok) return artifact;
   const content = decodeUtf8(artifact.artifact.bytes);
   if (!content) return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Canonical design content must be valid UTF-8." };
@@ -310,7 +318,10 @@ export async function recordInitiativeSpecApproval(args: {
   }
 
   try {
-    return await prisma.$transaction(async (tx) => {
+    const effectScope = { ...args, actionKey: "record_initiative_design_review", gate: "spec-approval" as const };
+    return await publishBoundReviewEffect<RecordInitiativeSpecApprovalResult>(Boolean(args.boundReviewTask), (winnerOnly) => prisma.$transaction(async (tx) => {
+    const taskRefusal = await lockBoundReviewEffect(tx, effectScope, item.organizationId);
+    if (taskRefusal) return taskRefusal;
     await tx.$queryRaw`SELECT "id" FROM "BacklogItem" WHERE "id" = ${item.id} FOR UPDATE`;
     if (args.artifactRef.kind === "feature-build-revision") {
       await tx.$queryRaw`SELECT "id" FROM "BuildArtifactRevision" WHERE "id" = ${args.artifactRef.revisionId} FOR SHARE`;
@@ -318,12 +329,15 @@ export async function recordInitiativeSpecApproval(args: {
     } else if (args.artifactRef.kind === "document-version") {
       await tx.$queryRaw`SELECT d."id" FROM "Document" d JOIN "DocumentVersion" v ON v."documentId" = d."id" WHERE v."id" = ${args.artifactRef.versionId} FOR SHARE OF d, v`;
       await tx.$queryRaw`SELECT b."id" FROM "DocumentBlob" b JOIN "DocumentVersion" v ON v."contentBlobId" = b."id" WHERE v."id" = ${args.artifactRef.versionId} FOR SHARE OF b`;
+    } else if (args.workroomRef) {
+      await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "capsuleId" = ${args.workroomRef.workroomId} FOR SHARE`;
     } else {
       await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "backlogItemId" = ${item.itemId} AND "repositoryFullName" = ${args.artifactRef.repositoryFullName} AND "headSha" = ${args.artifactRef.commitSha} FOR SHARE`;
     }
     const lockedItem = await tx.backlogItem.findUnique({
       where: { id: item.id },
       select: {
+        organizationId: true,
         type: true,
         source: true,
         workType: true,
@@ -335,8 +349,12 @@ export async function recordInitiativeSpecApproval(args: {
       },
     });
     if (!lockedItem) return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "The governed initiative no longer exists." };
+    if (args.boundReviewTask && (lockedItem.organizationId ?? null) !== (item.organizationId ?? null)) {
+      return { ok: false, code: "AUTHORIZATION_DENIED", error: "The initiative authority scope changed before publication." };
+    }
     const lockedArtifact = await resolveInitiativeArtifact({
       locator: args.artifactRef,
+      workroomRef: args.workroomRef,
       subject,
       organizationId,
       db: tx as never,
@@ -351,10 +369,43 @@ export async function recordInitiativeSpecApproval(args: {
     const priorRows = await tx.backlogItemActivity.findMany({
       where: { backlogItemId: item.id, kind: "initiative_scope_baseline" },
       orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
-      select: { payload: true },
+      select: { id: true, payload: true },
     });
     const entries = baselineEntries(priorRows);
     if (!entries) return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "The baseline chain contains a malformed record." };
+    const winner = await findBoundReviewWinner(tx, effectScope, lockedArtifact.artifact, item.id, item.organizationId, reviewerPrincipalId);
+    if (!winner.ok) return winner;
+    if (winner.receipt) {
+      const receipt = winner.receipt;
+      if (receipt.decision !== "pass") return { ok: true, receiptId: receipt.receiptId, baselineId: null,
+        artifactDigest: receipt.artifactDigest, deduplicated: true, receipt };
+      const matching = priorRows.filter((row) => (row.payload as Record<string, unknown>)?.approvalReceiptId === receipt.receiptId);
+      const baseline = matching[0]?.payload as unknown as InitiativeScopeBaseline | undefined;
+      const pin = matching.length === 1 ? await tx.initiativeArtifactRetentionPin.findUnique({
+        where: { baselineActivityId: matching[0]!.id },
+      }) : null;
+      const same = (a: unknown, b: unknown) => canonicalJson(a ?? null) === canonicalJson(b ?? null);
+      const chainHead = baseline && validateInitiativeBaselineChainHead(entries, baseline.baselineId);
+      const retained = pin && (args.artifactRef.kind === "repo-blob-at-commit"
+        ? pin.sourceKind === "repository_blob_archive" && Boolean(pin.documentVersionId && pin.documentBlobId)
+        : args.artifactRef.kind === "feature-build-revision"
+          ? pin.sourceKind === "build_artifact_revision" && pin.buildArtifactRevisionId === args.artifactRef.revisionId
+          : pin.sourceKind === "document_version" && pin.documentVersionId === args.artifactRef.versionId
+            && pin.documentBlobId === (lockedArtifact.artifact.documentBlobId ?? null));
+      if (!baseline || !chainHead?.ok || baseline.schemaVersion !== 1 || !same(baseline.subject, subject)
+        || baseline.profile !== args.profile || baseline.artifactRole !== args.artifactRole
+        || !same(baseline.artifactRef, args.artifactRef) || baseline.artifactDigest !== artifact.artifact.digest
+        || baseline.supersedesBaselineId !== args.expectedCurrentBaselineId
+        || !same(baseline.objectiveStatements, manifest.objectives) || !same(baseline.acceptanceStatements, manifest.acceptance)
+        || !same(baseline.authoritySnapshot, receipt.authoritySnapshot)
+        || !retained || pin!.artifactDigest !== artifact.artifact.digest || !same(pin!.artifactLocator, args.artifactRef)) {
+        return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "The prior approval no longer has one matching current baseline and retention pin. No replacement was created." };
+      }
+      return { ok: true, receiptId: receipt.receiptId, baselineId: baseline.baselineId,
+        artifactDigest: receipt.artifactDigest, deduplicated: true, receipt };
+    }
+    if (winnerOnly) return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
+      error: "Concurrent approval did not leave a qualified winner. No write was retried." };
     const chain = validateInitiativeBaselineChainHead(entries, args.expectedCurrentBaselineId);
     if (!chain.ok) return chain;
 
@@ -396,7 +447,7 @@ export async function recordInitiativeSpecApproval(args: {
       if (Array.isArray(payload.resolvedFindingRefs)) for (const id of payload.resolvedFindingRefs) if (typeof id === "string") openFindings.delete(id);
     }
 
-    const receiptId = `initiative-${randomUUID()}`;
+    const receiptId = boundReviewReceiptId(effectScope, artifact.artifact.digest) ?? `initiative-${randomUUID()}`;
     const baselineId = `baseline-${randomUUID()}`;
     const baselineActivityId = `initiative-${randomUUID()}`;
     const authoritySnapshot: InitiativeAuthoritySnapshot = {
@@ -549,7 +600,7 @@ export async function recordInitiativeSpecApproval(args: {
       documentBlobId: "documentBlobId" in built.pin ? built.pin.documentBlobId : null,
     } });
     return { ok: true, receiptId, baselineId, artifactDigest: artifact.artifact.digest };
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
   } catch (error) {
     if (error instanceof InitiativeApprovalRollback) return error.result;
     throw error;
