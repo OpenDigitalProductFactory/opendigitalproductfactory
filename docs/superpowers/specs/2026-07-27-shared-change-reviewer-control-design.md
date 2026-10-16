@@ -546,6 +546,15 @@ liveness and detail readbacks must use the same reducer. BI-7CCCA696 separately
 owns automatic continuation of proven pre-dispatch capacity waits; this successor
 does not retry inference or alter expired-review replacement BI-8ECEC429.
 
+The recovery view must survive the MCP route's existing result budget. Keep
+ordinary detail responses unchanged. For an oversized room, retain exact source,
+ownership/CAS fields and the recovery view, and explicitly list omitted bulk
+fields instead of allowing the route to replace the entire room with a preview.
+Never shorten a commit, owner, path or lease identity. If even those exact facts
+cannot fit, return a bounded refusal. An oversized activity page is explicitly
+incomplete and cannot advance its cursor; full large-activity detail remains
+BI-3CE72645, not a fabricated empty or completed page.
+
 ## Non-goals
 
 - Replacing GitHub review.

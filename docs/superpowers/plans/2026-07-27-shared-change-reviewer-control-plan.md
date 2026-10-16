@@ -202,7 +202,11 @@ The umbrella is complete only when:
 extends the design's Workroom readback successor without reopening the original
 umbrella or its immutable coverage. Its single deliverable is atomic: a shared
 recovery reducer and its detail/liveness adapters must agree to avoid conflicting
-readiness claims. Live successor coverage is recorded separately before code.
+readiness claims. Live successor coverage is recorded separately before code:
+`cmva95lin1dfg01rxp6ay9y4w` (atomic), bound to plan blob
+`a6eb44798dc946a7af46e54881b69b3c879f76cd` at
+`f753c7682117ccf4d9bfad3bb3b4c70ceb690f8b`. Research receipt:
+`initiative-4a9af857-bfe3-4ae0-bfd5-3c1895df283f`.
 
 Requirements: READBACK-CURRENT (only the current immutable source's review is
 current), READBACK-RESULT (durable final result is visible), READBACK-AUTH
@@ -227,6 +231,11 @@ liveness must use the same projection and reducer.
    `apps/web/lib/work-capsules/liveness-inventory.test.ts` and handler tests.
    The handler edit waits for its existing owner to land and a normal scope
    claim to succeed; no forced overlap. No grant or visibility expansion.
+   Verify an oversized capsule still returns exact ownership/source and recovery
+   within the existing route budget, with explicit omitted fields. An oversized
+   log remains incomplete without cursor advancement; a source identity that
+   cannot fit returns a bounded refusal. Full activity-detail repair stays
+   BI-3CE72645.
 4. Run the focused suites, both package typechecks, style-drift guard and
    applicable canonical integration. Freeze, obtain independent review, pass
    readiness, push and open a regular DCO PR through protected merge controls.
