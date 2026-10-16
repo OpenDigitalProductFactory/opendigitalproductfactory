@@ -281,6 +281,21 @@ dirty source, ambiguous history or changed source identity fails closed to an
 explicit unresolved publication result. It does not automatically request a
 new full local lease. Initial publication retains its existing requirements.
 
+Independent design assessment identified a missing initial-publication boundary.
+An open PR alone is insufficient. Require a machine-validated immutable initial
+publication anchor from a qualified canonical receipt or an already permitted
+recorded override, bound to the repository, branch, PR and original published
+source. A delegated correction cannot mint that initial anchor. Missing or
+foreign provenance follows the original publication path. Preserve the anchor
+without rewriting its timestamps or pretending it covers later source.
+Compare cumulative changed bytes against that accepted source, so an arbitrary
+external remote update never becomes an unchecked zero-work baseline. Reused
+correction proof also binds the expected check plan, policy, toolchain and
+environment; an arbitrary successful command list is insufficient. Test an
+open PR with no anchor, an initial permitted override, remote drift and changed
+expected commands as explicit negative/positive cases. The four classes are
+descriptive; every changed tree follows the same affected-check contract.
+
 Classify against the actual published head and its branch-authored diff:
 unchanged head; identical tree with changed commit metadata; main refresh with
 unchanged authored diff; and authored correction. Record both immutable source
