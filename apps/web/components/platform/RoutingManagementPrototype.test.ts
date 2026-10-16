@@ -25,7 +25,7 @@ describe("routing prototype HTML boundaries", () => {
   });
   it("keeps override identifiers inside the revoke button attribute", () => {
     const id = 'preview-" data-injected="true';
-    const fixture = preview(`state.overrides=[{id:${JSON.stringify(id)},provider:providers[0].id,levels:['internal'],reason:'Test rationale',expires:'2027-01-01'}]; document.getElementById('settings-content').innerHTML=clearanceSettings(providers[0]);`);
+    const fixture = preview(`state.overrides=[{id:${JSON.stringify(id)},provider:providers[0].id,levels:['internal'],reason:'Test rationale',expires:new Date(Date.now()+86_400_000).toISOString()}]; document.getElementById('settings-content').innerHTML=clearanceSettings(providers[0]);`);
     const content = fixture.getElementById("settings-content")!;
     expect(content.querySelector("[data-injected]")).toBeNull();
     expect(content.querySelector("[data-revoke-clearance]")?.getAttribute("data-revoke-clearance")).toBe(id);
