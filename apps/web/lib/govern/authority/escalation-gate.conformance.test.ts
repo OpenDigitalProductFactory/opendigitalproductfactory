@@ -30,8 +30,62 @@ import {
   describeEscalationRule,
   ESCALATION_STEERING,
   resolveEscalation,
+  resolveDecisionEscalation,
+  DECISION_BASES,
+  DAMAGING_CONSEQUENCES,
   type EscalationInput,
 } from "./escalation-gate";
+
+describe("decision routing conformance (BI-74B2A8CD)", () => {
+  it("walks all 384 shapes: a person if and only if damage is declared", () => {
+    let checked = 0;
+    for (const basis of ["decided", "corpus-gap", "vector-gap", "capability-gap", "policy-limit", "evaluation-fault"] as const) {
+      for (const riskTier of ["low", "medium", "high", "critical"] as const) {
+        for (const consequence of [null, "outward", "irreversible", "authority"] as const) {
+          for (const thresholdExceeded of [false, true]) {
+            for (const regulated of [false, true]) {
+              const damage = riskTier === "critical" || consequence !== null || thresholdExceeded || regulated;
+              const result = resolveDecisionEscalation({ basis, riskTier, declarations: { consequence, thresholdExceeded, regulated } });
+              expect(result.damaging).toBe(damage);
+              expect(result.route === "human").toBe(damage);
+              if (!damage) {
+                expect(result.route).toBe(basis === "decided" ? "decided" : "independent-review");
+                expect(result.followOn).toBe(basis === "decided" ? null : basis);
+              }
+              checked += 1;
+            }
+          }
+        }
+      }
+    }
+    expect(checked).toBe(384);
+  });
+
+  it("keeps the closed six bases and shared damaging vocabulary", () => {
+    expect(DECISION_BASES).toEqual(["decided", "corpus-gap", "vector-gap", "capability-gap", "policy-limit", "evaluation-fault"]);
+    expect(DAMAGING_CONSEQUENCES).toEqual(["outward", "irreversible", "authority"]);
+  });
+
+  it.each([
+    ["critical", "authority", true, true, "damaging-critical-risk"],
+    ["high", "authority", true, true, "damaging-consequence"],
+    ["high", null, true, true, "damaging-threshold"],
+    ["high", null, false, true, "damaging-regulated"],
+  ] as const)("damage wins over a decided corpus with an attributable reason (%s/%s)", (riskTier, consequence, thresholdExceeded, regulated, reasonCode) => {
+    expect(resolveDecisionEscalation({ basis: "decided", riskTier, declarations: { consequence, thresholdExceeded, regulated } }))
+      .toMatchObject({ route: "human", damaging: true, reasonCode });
+  });
+
+  it("with no declarations, only removes the legacy human escalations", () => {
+    for (const basis of ["decided", "corpus-gap", "vector-gap", "capability-gap", "policy-limit", "evaluation-fault"] as const) {
+      for (const riskTier of ["low", "medium", "high", "critical"] as const) {
+        const legacyUnresolved = basis !== "decided" || riskTier === "critical";
+        const result = resolveDecisionEscalation({ basis, riskTier, declarations: {} });
+        if (result.route === "human") expect(legacyUnresolved).toBe(true);
+      }
+    }
+  });
+});
 
 // `new URL(...).pathname` returns "/D:/..." on Windows and breaks readFileSync.
 const HERE = dirname(fileURLToPath(import.meta.url));
