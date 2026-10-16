@@ -1091,6 +1091,11 @@ fi
 # postgres and the other services running. DEPLOYED_SHA resolves to DPF_VERSION (the
 # derived built identity) via compose, so the new portal reports exactly the
 # SHA of the code it is running at /api/health/sha.
+if [[ $_dry_run -eq 0 && $_promote_phase == all && -f "$_promoter_dir/promoter-epoch-evidence.mjs" ]]; then
+  # Optional on N-1 staged promoters. An unavailable baseline never becomes proof.
+  node "$_promoter_dir/promoter-epoch-evidence.mjs" --phase capture \
+    || printf 'step=maintenance-epoch-capture-unavailable\n'
+fi
 emit_step docker-up
 if [[ $_dry_run -eq 0 ]]; then
   # BI-3267763F: inngest first, so the new portal's boot-time sync is signed
@@ -1310,6 +1315,11 @@ if [[ $_dry_run -eq 0 ]]; then
 fi
 
 # --- Step 7c: legacy-datastore decommission ---
+if [[ $_dry_run -eq 0 && ${_sandbox_ok:-0} -eq 1 && -f "$_promoter_dir/promoter-epoch-evidence.mjs" ]]; then
+  node "$_promoter_dir/promoter-epoch-evidence.mjs" --phase finish \
+    || printf 'step=maintenance-epoch-retirement-unavailable\n'
+fi
+
 # BET-5 (BI-922EBB99 / BI-2A3BE4D7): the portal now runs on Postgres only (pgvector for
 # vectors, a graph mirror for the graph). The one-time boot backfill that staged legacy data
 # into Postgres was retired once the fleet finished migrating; the platform is Postgres-only

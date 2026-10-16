@@ -23,6 +23,7 @@ import {
   roomLabel,
 } from "./presentation";
 import { WorkroomCycles } from "./WorkroomCycles";
+import { WorkroomReviewRequirements } from "./WorkroomReviewRequirements";
 import { WorkroomShapeSection } from "./WorkroomShapeSection";
 import { WorkroomParticipants } from "./WorkroomParticipants";
 import { WorkroomPosture } from "./WorkroomPosture";
@@ -275,6 +276,7 @@ function WorkroomDetailsContent({ detail, room }: Props) {
   return (
     <>
       <WorkroomCycles room={room} />
+      <WorkroomReviewRequirements profile={room.reviewProfile} />
 
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(18rem,0.75fr)]">
         <section

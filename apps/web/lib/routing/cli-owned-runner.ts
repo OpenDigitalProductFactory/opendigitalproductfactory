@@ -1,4 +1,5 @@
 import { basename, isAbsolute } from "node:path";
+import { sanitizeNativeCliDiagnostics, type NativeCliDiagnostics } from "../shared/execution-uncertainty";
 
 type OwnedCliRunnerInput = {
   command: string; args: string[]; home: string; cwd: string; promptFile: string;
@@ -9,9 +10,11 @@ type OwnedCliRunnerInput = {
 
 /** Native tool effects may have committed before a lost/timeout response. */
 export class NativeCliExecutionUncertainError extends Error {
-  constructor(public readonly providerId: string) {
+  public readonly diagnostics?: NativeCliDiagnostics;
+  constructor(public readonly providerId: string, diagnostics?: NativeCliDiagnostics) {
     super(`Native CLI execution on ${providerId} did not return a settled result. Review the existing execution before retrying.`);
     this.name = "NativeCliExecutionUncertainError";
+    this.diagnostics = sanitizeNativeCliDiagnostics(diagnostics);
   }
 }
 

@@ -25,6 +25,7 @@ vi.mock("./failure-readiness-status", () => ({ publishFailureReadinessStatus: vi
 import { createSemanticReviewRequest } from "./semantic-review-request";
 import { failureAnalysisFixture } from "./failure-analysis.test-fixtures";
 import { currentInferenceOrigin } from "@/lib/inference/inference-admission";
+import { NativeCliExecutionUncertainError } from "../routing/cli-owned-runner";
 
 const result = { decision: "pass", failureAnalysisReview: { adequate: true, rationale: "Challenged stale evidence and recovery paths against the executed test." }, issues: [], summary: "Exact diff reviewed." };
 let row: Record<string, unknown>;
@@ -223,6 +224,30 @@ describe("durable semantic review worker", () => {
       expect(mocks.evidence).not.toHaveBeenCalled();
     } finally { clock.mockRestore(); }
   });
+  it("retains native execution uncertainty and safe diagnostics in the original failed checkpoint", async () => {
+    const error = new NativeCliExecutionUncertainError("anthropic-sub", {
+      exitCode: 1, signal: null, timedOut: false, outerProcessClosed: true,
+      stdoutPresent: true, stderrPresent: true, childProcessClosure: "unverified",
+    });
+    mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => {
+      try { return await branch("change-reviewer", async () => { providerCalls++; throw error; }); }
+      catch { return { decision: "inconclusive", issues: [], summary: "Unknown outcome." }; }
+    });
+    await executePersistedSemanticReview("TR-1");
+    expect(row.status).toBe("input-required");
+    expect(row.progressPayload).toMatchObject({ semanticReview: { branchFailure: {
+      errorKind: "NativeCliExecutionUncertainError", executionUncertainty: {
+        providerId: "anthropic-sub", settlement: "unknown", diagnostics: { exitCode: 1, childProcessClosure: "unverified" },
+      },
+    } } });
+    expect(mocks.db.taskNode.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      status: "failed", outputSnapshot: expect.objectContaining({ requestDigest: packet.digest,
+        providerOutcome: "unknown", failure: expect.objectContaining({ errorKind: "NativeCliExecutionUncertainError" }) }),
+    }) }));
+    expect(providerCalls).toBe(1);
+    expect(mocks.evidence).not.toHaveBeenCalled();
+  });
+
   it("does not retain arbitrary error names, codes or messages in failure evidence", async () => {
     mocks.db.taskNode.findUnique.mockRejectedValueOnce(Object.assign(new Error("private content"), {
       name: "private name", code: "private code",

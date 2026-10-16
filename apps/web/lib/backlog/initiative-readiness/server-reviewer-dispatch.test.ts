@@ -70,6 +70,16 @@ function deps(overrides: Record<string, unknown> = {}) {
 }
 
 describe("dispatchOwedIndependentReviews", () => {
+  it("records an uncertain idempotent replay as held instead of a new reviewer dispatch", async () => {
+    const d = deps({ execute: vi.fn(async () => ({ success: true, data: {
+      taskRunId: "TR-ORIGINAL", idempotentReplay: true, resumable: false,
+      waitReason: "execution-uncertain", status: "input-required" } })) });
+    await expect(dispatchOwedIndependentReviews(d)).resolves.toMatchObject([{ outcome: "refused", detail: expect.stringMatching(/existing execution/i) }]);
+    expect(prismaMock.workroomActivity.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      summary: expect.stringMatching(/existing execution/i), payload: expect.objectContaining({ outcome: "refused" }),
+    }) });
+    expect(d.execute).toHaveBeenCalledTimes(1);
+  });
   it("supplies the recorded requesting person to body acceptance recovery", async () => {
     recoveryMock.getBacklogItem.mockResolvedValue({ success: true, data: { readiness: { decisions: { completion: { verdict: "input-required" } } } } });
     recoveryMock.resolveTerminalInitiativeRecovery.mockResolvedValue({ reviewerRoutes: [{ independent: true, workroomId: "WC-1", requestCoworker: packet }] });

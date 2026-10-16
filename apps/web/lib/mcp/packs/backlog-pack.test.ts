@@ -74,6 +74,7 @@ const specPlanSearch = vi.hoisted(() => ({
 vi.mock("@/lib/backlog/spec-plan-search", () => specPlanSearch);
 
 import { backlogPack } from "./backlog-pack";
+import * as backlogReadTools from "./backlog-pack-read-tools";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 
 const EXPECTED_TOOLS = [
@@ -244,6 +245,16 @@ describe("backlog pack — handler behavior (delegation preserved)", () => {
     const res = await backlogPack.handlers.get_backlog_item({}, "u1");
     expect(res.success).toBe(false);
     expect(res.error).toBe("missing_itemId");
+  });
+
+  it("passes server execution context to the bounded recovery reader", async () => {
+    const read = vi.spyOn(backlogReadTools, "getBacklogItem").mockResolvedValue({ success: true, message: "bounded" });
+    const context = { agentId: "AGT-AUTHOR", authSource: "oauth", apiTokenId: "token-row" };
+    const params = { itemId: "BI-ONE", recoveryGate: "plan-review" };
+    try {
+      await backlogPack.handlers.get_backlog_item(params, "user-1", context);
+      expect(read).toHaveBeenCalledWith(params, "AGT-AUTHOR", "user-1", context);
+    } finally { read.mockRestore(); }
   });
 
   it("update_backlog_item_status rejects an invalid target status", async () => {

@@ -207,7 +207,7 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
       threadId: "thread-bi47", contextId: "thread-bi47", status: "input-required",
       progressPayload: exhausted ? { terminalWriterWait: {
         schemaVersion: 1, kind: "missing-terminal-writer",
-        writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun",
+        writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun", dispatchContract: "required-tool-call",
         attempt: 3, observedAt: "2026-08-24T06:00:00.000Z",
       } } : null,
       a2aMetadata: { idempotencyKey: params.idempotencyKey, apiTokenId: "PAT-BI47", requestDigest },
@@ -274,7 +274,7 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
     const retryProgress = exhaustion === "none" ? {} : {
       terminalWriterWait: {
         schemaVersion: 1, kind: "missing-terminal-writer",
-        writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun",
+        writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun", dispatchContract: "required-tool-call",
         attempt: 3, observedAt: "2026-08-24T06:00:00.000Z",
       },
       ...(exhaustion === "explicit" ? { terminalWriterEscalation: {

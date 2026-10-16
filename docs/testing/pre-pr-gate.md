@@ -14,6 +14,16 @@ wins and this doc is the bug — fix it.
 
 ## The contract (read this first)
 
+Automatic worktree adoption observes the actual repository, branch, worktree,
+fetched base branch, merge-base SHA and head SHA through the existing binder.
+Local Git observation has one ten-second elapsed budget. Missing ancestry is
+unavailable identity, never a substitute base equal to HEAD. The creation hook,
+CLI and reconciliation validate authoritative readback and recheck source
+identity after adoption before caching a binding. Conflicting, incomplete or
+changed identity leaves the recorded room for inspection and writes no success
+marker. Legacy direct adoption remains a compatibility path; a saved claim is
+not by itself proof that current source identity or review readiness is valid.
+
 Host policy commands use the existing observed-process runner with a 30-minute
 command budget, bounded diagnostic tails and graceful/forced tree termination.
 The parent preflight has a 60-minute outer budget. Full source guard loops have
@@ -42,7 +52,12 @@ Uncertain admission returns unrun88 with the same source-bound resume pin.
 Authoritative refusal, foreign identity and active authority owned by another
 process stop recovery. A wrapped executable that cannot spawn is also unrun88;
 an executed child's nonzero exit remains a code result. Windows package-manager
-shims use the existing command resolver.
+shims use the existing command resolver, which launches the installed
+pnpm/Corepack JavaScript entrypoint through Node with literal argv. Native
+pnpm executables run directly; an unsupported shim fails without a shell
+fallback. The observed process runner disables shell parsing on Windows too.
+Local-CI pinning generates a JavaScript forwarding entrypoint so selecting the
+repository version preserves argument boundaries throughout the launch chain.
 Cleanup refusal or uncertainty is reported separately with the original
 lease/session recovery action; it cannot be presented as a verified release
 or change an executed child's nonzero result to success.
