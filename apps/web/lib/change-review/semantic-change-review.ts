@@ -10,7 +10,7 @@
 import { z } from "zod";
 import { createHash } from "node:crypto";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
-import { PROFESSION_REGISTRY } from "@/lib/decision-perspective/resolve-profession-profile";
+import { PROFESSION_REGISTRY } from "@/lib/decision-perspective/profession-registry";
 import { selectableCoworkerIdentityRefs } from "@/lib/coworker-record/selectable-coworker";
 import { readRoutingEligibility, type RoutingEligibility } from "../inference/routing-exclusion-buckets.ts";
 import type { DeliberationArtifactType } from "../deliberation/external-review-activation";

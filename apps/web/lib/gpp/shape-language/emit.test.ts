@@ -103,6 +103,11 @@ function typecheck(files: Record<string, string>): string[] {
       roots.push(path);
     }
     const program = ts.createProgram(roots, webCompilerOptions());
+    // A public shape type must not pull live specialist selection/authorization
+    // into this offline compiler. That edge previously exhausted a 4 GiB worker.
+    const liveRuntime = program.getSourceFiles().map(file => file.fileName.replaceAll("\\", "/"))
+      .filter(file => /\/change-review\/(?:live-specialist-selection|review-specialist-preparation)\.ts$/.test(file));
+    if (liveRuntime.length) throw new Error(`Work-shape type checking loaded live specialist runtime: ${liveRuntime.join(", ")}`);
     const out: string[] = [];
     for (const root of roots) {
       const sourceFile = program.getSourceFile(root);

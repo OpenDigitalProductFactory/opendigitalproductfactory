@@ -53,6 +53,7 @@ export async function validateEngagementTask(input: {
   const { binding, token } = input;
   const { isCurrentOAuthExecutionAuthority, OAUTH_EXECUTION_AUTHORITY_SELECT } = await import("@/lib/auth/oauth-tokens");
   const { expandGrants, persistedAgentToolGrants } = await import("@/lib/tak/agent-grants");
+  const { coworkerAuthorityAgentId } = await import("@/lib/coworker-identity");
   const { resolveAgentWorkroomAccess } = await import("@/lib/work-management/workroom-agent-access.server");
   if ((token.source !== "oauth" && token.source !== "pat") || token.capability !== "write") throw new Error("engagement_requires_verified_write_token");
   const credential = await db.mcpApiToken.findUnique({ where: { id: token.tokenId }, select: {
@@ -78,12 +79,20 @@ export async function validateEngagementTask(input: {
   if (!["operator", "oauth_access", "workroom_session"].includes(credential.kind)
     || (credential.kind === "workroom_session" && (credential.workroomRef !== room.capsuleId
       || credential.runRef !== room.taskRunId))) throw new Error("engagement_credential_scope_refused");
+  // Execution aliases own service/skill references, not an independent grant set.
+  // Use the same canonical authority owner as every governed tool lookup.
+  const actorOwnerId = coworkerAuthorityAgentId(actor.agentId);
+  const actorOwner = actor.agentId === actorOwnerId ? actor : await db.agent.findUnique({
+    where: { agentId: actorOwnerId }, include: { toolGrants: true, toolGrantRevocations: true },
+  });
+  const providerOwnerId = coworkerAuthorityAgentId(provider.agentId);
+  const providerOwner = [provider, counterpart].find(row => row.agentId === providerOwnerId);
+  if (!actorOwner || actorOwner.status !== "active" || actorOwner.archived || !providerOwner) throw new Error("engagement_canonical_authority_unavailable");
   const tokenGrants = expandGrants(credential.scopes);
-  const actorGrants = expandGrants(persistedAgentToolGrants(actor));
-  const providerGrants = expandGrants(persistedAgentToolGrants(provider));
-  const counterpartGrants = expandGrants(persistedAgentToolGrants(counterpart));
+  const actorGrants = expandGrants(persistedAgentToolGrants(actorOwner));
+  const providerGrants = expandGrants(persistedAgentToolGrants(providerOwner));
   if (!tokenGrants.includes("coworker_engagement_write") || !actorGrants.includes("coworker_engagement_write")
-    || ["file_read", "registry_read"].some(grant => !tokenGrants.includes(grant) || !actorGrants.includes(grant) || !providerGrants.includes(grant) || !counterpartGrants.includes(grant))
+    || ["file_read", "registry_read"].some(grant => !tokenGrants.includes(grant) || !actorGrants.includes(grant) || !providerGrants.includes(grant))
     || input.authorityScope.some(scope => scope.startsWith("tool:")
       ? !(ENGAGEMENT_READ_TOOLS as readonly string[]).includes(scope.slice(5))
       : !tokenGrants.includes(scope) || !actorGrants.includes(scope))

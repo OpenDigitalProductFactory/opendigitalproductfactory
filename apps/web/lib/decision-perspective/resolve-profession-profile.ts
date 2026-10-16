@@ -1,31 +1,11 @@
 import type { DecisionPerspectiveProfile } from "./types";
 import { MARK_DPF_PLATFORM_PROFILE } from "./default-profile";
-import professionRegistryData from "../../../../docs/professions/registry.json";
 
 // ─── Registry types ─────────────────────────────────────────────────────────
 
-export type ProfessionSource = {
-  name: string;
-  url: string;
-  licenseClass: "open" | "licensed" | "org-supplied";
-};
-
-export type ProfessionFamily = {
-  professionKey: string;
-  label: string;
-  roles: string[];
-  contextSlugs: string[];
-  sources: ProfessionSource[];
-  coverageChecklist: string[];
-};
-
-export type ProfessionRegistry = {
-  version: string;
-  description: string;
-  families: ProfessionFamily[];
-};
-
-export const PROFESSION_REGISTRY = professionRegistryData as ProfessionRegistry;
+import { PROFESSION_REGISTRY } from "./profession-registry";
+export { PROFESSION_REGISTRY, type ProfessionSource, type ProfessionFamily, type ProfessionRegistry } from "./profession-registry";
+import type { ProfessionSource, ProfessionFamily, ProfessionRegistry } from "./profession-registry";
 
 export type ProfessionAgentIdentity = {
   agentId?: string | null;

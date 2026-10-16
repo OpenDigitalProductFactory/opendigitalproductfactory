@@ -422,3 +422,53 @@ verified user argument, pins agent authorship and draft status, and can propose
 no human calibration verdict. No public action accepts a replacement user id;
 no grant, consent or publishing authority changes. The refused live request
 remains refused until the normal containing release and a new authorized call.
+
+
+## 9. Current provider qualification and artifact sharing — proposal, not approval
+
+A read-only live check on October 16 found the UX critic's canonical AGT-906
+active in production with registry/document/spec-plan/browser reads, but without
+file_read. Its registered runtime alias has no independent grant rows. The
+engagement read reported zero active rooms. This establishes neither a completed
+contribution nor permission to add grants. The v1 reader recipe therefore remains
+unavailable for that provider under its actual authority.
+
+Grant lookup must use the existing canonical coworker authority identity for
+both actor and provider. Check canonical revocations, and separately require
+current lifecycle/identity-pair and room eligibility. Never union alias grants,
+replace a revocation with seed data or use an empty alias as an alternative grant
+owner. This corrects authority lookup; it does not provide the critic file_read.
+
+The proposed v2 path reuses native semantic review's artifact-injection pattern:
+the original requesting actor performs the immutable source read through its
+own governed authority. The provider receives explicitly shared assessment data,
+not the actor's credential or file-reading authority. Before reading, retaining
+content in TaskArtifact, admitting execution and each inference, validate current
+token/consent, source disclosure permission, room access and the maximum applicable
+source/room sensitivity, plus provider residency and model eligibility. An
+unresolved source classification or sharing boundary leaves the contribution
+outstanding. Inspect and reuse those existing substrate checks before code;
+file_read by itself is insufficient permission to share.
+
+Persist the actual original reader ToolExecution, actor, exact returned blob,
+full-content digest and bounded completeness alongside the immutable TaskArtifact
+and the provider/stage/head association. A truncated or incomplete read cannot
+become full-artifact evidence. Source text remains untrusted data. The returned
+contribution must distinguish actor-owned source projection from the critic's
+own executed WSID/corpus work; it cannot claim the critic executed a reader tool
+it did not possess. The original actor cannot be replaced during recovery.
+
+Existing v1 tasks retain their exact request, key and unknown effects. Do not
+silently migrate a saved task or use a new nonce after refusal. Pending original
+engagements may be admitted only against a valid immutable current-artifact
+binding. If an original request is explicitly bound to an older revision, a
+supported revision extension must preserve its request, execution and findings;
+it must not relabel an old critique as coverage for a correction. The two
+original routing engagements remain pending until real current-source evidence
+exists. No replacement engagement, replay or v2 implementation is claimed here.
+
+Independent preliminary architecture feedback supports this separation subject
+to the current-sharing and provenance conditions above. Frozen-source assessment,
+native design/baseline renewal, implementation and live acceptance remain owed.
+The existing strict recipe, global calibration ceiling and interim decision
+behavior remain in place until their qualified replacements are executable.

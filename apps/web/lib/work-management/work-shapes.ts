@@ -1,4 +1,4 @@
-import { PROFESSION_REGISTRY } from "@/lib/decision-perspective/resolve-profession-profile";
+import { PROFESSION_REGISTRY } from "@/lib/decision-perspective/profession-registry";
 import type { PermitAuthority } from "@/lib/gpp/permit-claims";
 import type { OutcomeDisposition } from "@/lib/shared/outcome-disposition";
 // apps/web/lib/work-management/work-shapes.ts
@@ -35,7 +35,7 @@ import { ORCHESTRATION_SHAPES } from "./orchestration-shapes";
 import { STANDING_SHAPES } from "./standing-operations-shapes";
 import { WORK_SHAPE_PRIOR_VERSIONS } from "./work-shape-prior-versions";
 import type { WorkShapeEvidenceKind } from "./work-shape-evidence-kinds";
-import type { StepCriticality } from "./step-criticality";
+import type { StepCriticality } from "./step-criticality-contract";
 
 /** §8.11.1 trigger vocabulary, verbatim and closed. */
 export const WORK_SHAPE_TRIGGER_CLASSES = [

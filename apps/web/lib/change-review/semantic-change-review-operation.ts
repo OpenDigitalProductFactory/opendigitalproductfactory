@@ -19,7 +19,7 @@ import {
   type StrategyProfile,
 } from "@/lib/deliberation/external-review-activation";
 import { validateFailureAnalysis, type FailureVerificationEvidence } from "./failure-analysis";
-import { liveReviewSpecialistSelectionDigest, liveReviewSpecialistSelectionSchema, type LiveReviewSpecialistSelection } from "./live-specialist-selection";
+import { liveReviewSpecialistSelectionDigest, liveReviewSpecialistSelectionSchema, type LiveReviewSpecialistSelection } from "./semantic-change-review";
 
 export const SEMANTIC_CHANGE_REVIEW_MAX_REPAIR_ROUNDS = 2;
 export const PROFESSION_BOUND_CHANGE_REVIEWER_VERSION = "change-reviewer.v3-professions";

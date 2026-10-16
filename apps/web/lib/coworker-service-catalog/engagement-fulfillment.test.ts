@@ -85,7 +85,38 @@ describe("bounded advisory engagement fulfillment", () => {
     const fake = authorityDb();
     await expect(validateEngagementTask({ ...execution, db: fake.db as never, request: { objective: "Different objective", prompt: "Different instructions" } } as never)).rejects.toThrow(/request_content_refused/);
   });
-  it("admits a canonical provider with its current runtime pair and refuses revocation on either side", async () => {
+  it("keeps the original actor while resolving its canonical grants and revocations", async () => {
+    const fake = authorityDb();
+    const canonical = { ...fake.actor, agentId: "AGT-EXT-CODEX" };
+    fake.actor.agentId = "external-codex";
+    fake.actor.toolGrants = [];
+    Object.assign(fake.credential, { agentId: "external-codex" });
+    Object.assign(fake.state.engagement, { requestedByAgentId: "external-codex" });
+    const currentBinding = { ...binding, actorAgentId: "external-codex" };
+    fake.db.agent.findUnique = async (args) => (args as { where: { agentId: string } }).where.agentId === "AGT-EXT-CODEX" ? canonical : fake.provider;
+    const result = await validateEngagementTask({ ...execution, binding: currentBinding, db: fake.db as never });
+    expect(result.engagement.requestedByAgentId).toBe("external-codex");
+    canonical.toolGrantRevocations = [{ grantKey: "coworker_engagement_write" }];
+    fake.actor.toolGrants = [{ grantKey: "coworker_engagement_write" }, { grantKey: "file_read" }, { grantKey: "registry_read" }];
+    await expect(admitEngagementTask({ ...execution, binding: currentBinding, db: fake.db as never })).rejects.toThrow(/grant_intersection_refused/);
+    expect(fake.updateMany).not.toHaveBeenCalled();
+  });
+  it("reads grants only from the current canonical authority owner, never an empty or permissive alias", async () => {
+    const fake = authorityDb();
+    const currentBinding = { ...binding, providerAgentId: "AGT-906" };
+    // Isolate authority ownership: this fixture's canonical provider is qualified.
+    // The live UX critic still lacks file_read; this fixture does not grant it.
+    const canonical = { ...fake.provider, agentId: "AGT-906" };
+    const runtime = { ...fake.provider, agentId: "ux-design-critic", toolGrants: [] as Array<{ grantKey: string }> };
+    Object.assign(fake.state.engagement, { providerAgentId: "AGT-906" });
+    Object.assign(fake.state.service, { providerAgentId: "AGT-906" });
+    fake.db.agent.findUnique = async (args) => (args as { where: { agentId: string } }).where.agentId === "AGT-906" ? canonical : runtime;
+    await expect(validateEngagementTask({ ...execution, binding: currentBinding, db: fake.db as never })).resolves.toHaveProperty("room");
+    canonical.toolGrantRevocations = [{ grantKey: "file_read" }];
+    runtime.toolGrants = [{ grantKey: "file_read" }, { grantKey: "registry_read" }];
+    await expect(validateEngagementTask({ ...execution, binding: currentBinding, db: fake.db as never })).rejects.toThrow(/grant_intersection_refused/);
+  });
+  it("admits a canonical provider with its current runtime pair and refuses canonical revocation or inactive identities", async () => {
     const fake = authorityDb();
     const canonicalBinding = { ...binding, providerAgentId: "AGT-906" };
     const canonical = { ...fake.provider, agentId: "AGT-906" };
@@ -94,9 +125,12 @@ describe("bounded advisory engagement fulfillment", () => {
     Object.assign(fake.state.service, { providerAgentId: "AGT-906" });
     fake.db.agent.findUnique = async (args) => (args as { where: { agentId: string } }).where.agentId === "AGT-906" ? canonical : runtime;
     await expect(validateEngagementTask({ ...execution, binding: canonicalBinding, db: fake.db as never })).resolves.toHaveProperty("room");
-    runtime.toolGrantRevocations = [{ grantKey: "registry_read" }];
+    canonical.toolGrantRevocations = [{ grantKey: "registry_read" }];
     await expect(validateEngagementTask({ ...execution, binding: canonicalBinding, db: fake.db as never })).rejects.toThrow(/grant_intersection_refused/);
-    runtime.toolGrantRevocations = [];
+    canonical.toolGrantRevocations = [];
+    runtime.archived = true;
+    await expect(validateEngagementTask({ ...execution, binding: canonicalBinding, db: fake.db as never })).rejects.toThrow(/identity_pair_unavailable/);
+    runtime.archived = false;
     canonical.archived = true;
     await expect(validateEngagementTask({ ...execution, binding: canonicalBinding, db: fake.db as never })).rejects.toThrow(/principal_or_scope_unavailable/);
   });

@@ -45,7 +45,7 @@
 import type { PrincipalSensitivity } from "@dpf/db/principal-sensitivity";
 import type { ToolConsequence, ToolConsequenceScope } from "@/lib/tool-consequence";
 import type { DecisionRiskTier } from "@/lib/decision-perspective/types";
-import type { StepCriticality } from "@/lib/work-management/step-criticality";
+import type { StepCriticality } from "@/lib/work-management/step-criticality-contract";
 
 export type ReviewAuthority = "advisory" | "blocking" | "blocking-with-person";
 

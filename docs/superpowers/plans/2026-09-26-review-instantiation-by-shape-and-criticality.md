@@ -482,3 +482,47 @@ the unchanged 75-file cycle budget. All 129 tests in eight affected suites pass.
 A transient lazy-import experiment failed the concurrent pack test and was
 removed; admission retains its original static preparation seam. The next
 canonical gate must cover this corrected source, not reuse 50ca4f3 as a pass.
+
+
+## Integration correction and next implementation boundary
+
+Candidate 1f710ccb59433e518b6d016b9577c3cd5c245edd passed all 84 host guards,
+then its admitted NPEL-C2698B78ED integration failed and recorded evidence
+cmvaq4nw30eoe01pdmn6rbe1d. The run had 11,279 passing tests, one schema-parity
+assertion failure and a GPP emitter worker heap failure. This is a FAIL, not a
+passing gate. The corrected uniqueness test also exercises duplicate required
+professions; its 34 focused tests passed.
+
+The emitter heap failure reproduced alone. Pure semantic coordination still
+imported the live provider selector for a schema/digest that already had a
+contract home. Removing that edge and keeping profession/criticality vocabulary
+in dependency leaves reduced the shape-type compiler graph from 1,837 to 1,316
+files. The full 13-test emitter suite then passed without increasing heap size.
+A regression guard rejects live specialist runtime in the offline type program;
+reintroducing the bad edge produced the intended explicit failure, not an OOM.
+The control root checkout bd3540d6 passed 13 emitter tests; it is not a claim
+that current main or this corrected branch has passed canonical integration.
+
+Current read-only live evidence also exposed raw alias-grant intersection in
+the engagement validator. A real-shaped empty-alias regression failed against
+that implementation. The correction reads canonical authority owners while
+preserving actor attribution, canonical revocations, both identity lifecycles
+and room checks. The provider's missing file_read is still refused: no live
+grant or membership was changed. Design section 9 proposes a separately
+qualified actor-owned artifact handoff, not an implemented permission fallback.
+Its sensitivity/provenance checks require substrate inspection and independent
+frozen/native assessment before implementation.
+
+After the source corrections pass the normal gate, publish the immutable branch
+so native artifact readers can renew the expanded design, architecture, baseline
+and plan coverage. Then complete stage/participant obligations, authoring versus
+independent review, actual returned contribution/disposition and served UX
+acceptance. Preserve old unknown executions and the B22 handoff owner's scope.
+
+
+Correction verification: 404 tests in 18 affected compiler, registry, review,
+authority and engagement suites passed, including the new compiler dependency
+guard and canonical actor/empty-provider-alias/revocation cases. No heap limit
+was raised. The type-reexport, image-script dependency and unchanged 75-file
+cycle guards passed. Live-specialist authority and prototype acceptance are
+still unrun on this corrected source; the existing failed native gate is retained.

@@ -35,8 +35,8 @@ import { z } from "zod";
 import { OUTCOME_DISPOSITIONS } from "@/lib/shared/outcome-disposition";
 import { WORKROOM_SHAPE_KEYS } from "@/lib/work-management/room-shapes";
 import { WORK_SHAPE_EVIDENCE_KINDS } from "@/lib/work-management/work-shape-evidence-kinds";
-import { STEP_CRITICALITIES } from "@/lib/work-management/step-criticality";
-import { PROFESSION_REGISTRY } from "@/lib/decision-perspective/resolve-profession-profile";
+import { STEP_CRITICALITIES } from "@/lib/work-management/step-criticality-contract";
+import { PROFESSION_REGISTRY } from "@/lib/decision-perspective/profession-registry";
 import {
   WORK_SHAPE_TRIGGER_CLASSES,
   type WorkShapeBinding,

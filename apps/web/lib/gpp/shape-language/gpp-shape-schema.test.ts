@@ -256,6 +256,7 @@ describe("GPP shape document schema", () => {
       ["triggers", (d) => { d.triggers = ["cadence", "cadence"]; }],
       ["stage.evidence", (d) => { (d.stages as JsonObject[])[0].evidence = ["draft-artifact", "draft-artifact"]; }],
       ["stage.tools", (d) => { (d.stages as JsonObject[])[0].tools = ["list_customer_accounts", "list_customer_accounts"]; }],
+      ["stage.requiredProfessions", (d) => { (d.stages as JsonObject[])[0].requiredProfessions = ["ux-design", "ux-design"]; }],
     ];
     for (const [name, mutate] of cases) {
       const doc = workedExample();
@@ -267,7 +268,7 @@ describe("GPP shape document schema", () => {
   it("every `uniqueItems` path in the JSON Schema has a matching Zod uniqueness refine, and the reverse", () => {
     const published = pointersWhere(gppShapeJsonSchema() as unknown as Json, (n) => n.uniqueItems === true).sort();
     const inProcess = zodUniquePointers(gppShapeDocumentSchema as unknown as ZodNode, "", new Set()).sort();
-    expect(published).toEqual(["/$defs/stage/properties/evidence", "/$defs/stage/properties/mandatedTools", "/$defs/stage/properties/tools", "/properties/triggers"]);
+    expect(published).toEqual(["/$defs/stage/properties/evidence", "/$defs/stage/properties/mandatedTools", "/$defs/stage/properties/requiredProfessions", "/$defs/stage/properties/tools", "/properties/triggers"]);
     expect(inProcess).toEqual(published);
   });
 });

@@ -1,13 +1,12 @@
-import { PROFESSION_REGISTRY } from "@/lib/decision-perspective/resolve-profession-profile";
+import { PROFESSION_REGISTRY } from "@/lib/decision-perspective/profession-registry";
 import { resolveReviewAuthority } from "@/lib/govern/authority/escalation-gate";
 import type { WorkroomShapeKey } from "./room-shapes";
 import type { ReadinessShape } from "@/lib/backlog/initiative-readiness/types";
 import type { DecisionRiskTier } from "@/lib/decision-perspective/types";
 import type { WorkShapeAdvance } from "./work-shapes";
 
-/** Review depth, distinct from a damaging action or permission to execute. */
-export const STEP_CRITICALITIES = ["routine", "consequential", "critical"] as const;
-export type StepCriticality = (typeof STEP_CRITICALITIES)[number];
+import { STEP_CRITICALITIES, type StepCriticality } from "./step-criticality-contract";
+export { STEP_CRITICALITIES, type StepCriticality } from "./step-criticality-contract";
 
 export type StepCriticalityInput = {
   /** Already raised by the canonical shape/sensitivity resolver. */
