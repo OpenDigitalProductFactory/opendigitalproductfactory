@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { projectRemoteTaskReplay } from "./mcp-task-replay-projection";
 const db = vi.hoisted(() => ({ item: vi.fn(), execution: vi.fn(), update: vi.fn(), updateMany: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: { backlogItem: { findUnique: db.item }, toolExecution: { findFirst: db.execution }, taskRun: { update: db.update, updateMany: db.updateMany } } }));
 vi.mock("./backlog/initiative-readiness/parent-scope-inheritance", () => ({ loadInheritedInitiativeScope: vi.fn(async () => null) }));
@@ -17,6 +18,20 @@ function item(payload: unknown = receipt) {
 const snapshot = { taskRunId: "TR-1", status: "input-required", updatedAt: new Date("2026-10-11T12:00:00Z"), progressPayload: { auditMarker: "retain", terminalWriterWait: {}, approvalEnvelopeId: "stale" } };
 beforeEach(() => { vi.resetAllMocks(); db.item.mockResolvedValue(item()); db.updateMany.mockResolvedValue({ count: 1 }); });
 describe("persisted initiative review outcome", () => {
+  it("archives uncertainty when the exact receipt settles, so a concurrent loser reads completion", async () => {
+    const uncertainty = { schemaVersion: 1, kind: "execution-uncertain", settlement: "unknown" };
+    const progress = { ...snapshot.progressPayload, executionUncertainty: uncertainty };
+    const outcome = await loadInitiativeReviewOutcome(binding, "receipt");
+    await reconcilePersistedReviewStatus(snapshot.taskRunId, progress, outcome!, snapshot);
+    const data = db.updateMany.mock.calls[0][0].data;
+    expect(data.progressPayload).not.toHaveProperty("executionUncertainty");
+    expect(data.progressPayload.executionUncertaintyResolution).toMatchObject({ reviewReceiptId: "receipt",
+      prior: { executionUncertainty: uncertainty } });
+    const replay = projectRemoteTaskReplay({ existing: { taskRunId: snapshot.taskRunId, status: data.status,
+      progressPayload: data.progressPayload, a2aMetadata: {} }, requestMatches: true });
+    expect(replay.result.waitReason).toBeUndefined();
+    expect(progress.executionUncertainty.settlement).toBe("unknown");
+  });
   it("reconciles stale status from a verified receipt while preserving unrelated progress", async () => {
     const outcome = await loadInitiativeReviewOutcome(binding, "receipt");
     expect(await reconcilePersistedReviewStatus(snapshot.taskRunId, snapshot.progressPayload, outcome!, snapshot)).toBe(true);
