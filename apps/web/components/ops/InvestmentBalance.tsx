@@ -38,7 +38,7 @@ function ScopeBalance({ view, canManage, formatLocale }: { view: OwnerInvestment
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const purpose = t(view.scope.purpose === "shared-platform" ? "investment.shared" : "investment.archetype");
-  if (!report) return <Notice variant="warn" title={`${view.organizationName} · ${purpose}`}>{t("investment.unavailable")}</Notice>;
+  if (!report) return <Notice variant="warn" title={<span className="text-dpf-text">{view.organizationName} · {purpose}</span>}>{t("investment.unavailable")}</Notice>;
   const measured = report.observation;
   const number = new Intl.NumberFormat(formatLocale);
   const priorities = [{ value: "80", label: t("investment.strengthen") }, { value: "50", label: t("investment.balance") }, { value: "20", label: t("investment.expand") }];
@@ -60,7 +60,7 @@ function ScopeBalance({ view, canManage, formatLocale }: { view: OwnerInvestment
   return <div className="border-t border-dpf-border pt-4">
     <h4 className="text-dpf-body-lg font-dpf-semibold">{view.organizationName} · {purpose}</h4>
     <p className="text-dpf-body text-dpf-text">{t(report.source === "default" ? report.ownerKind === "founder" ? "investment.founderDefault" : "investment.organizationDefault" : "investment.ownerSet")}</p>
-    {!report.policyActive ? <p role="status" className="text-dpf-body text-[var(--dpf-warning)]">{t("investment.inactive")}</p> : null}
+    {!report.policyActive ? <p role="status" className="text-dpf-body text-dpf-text">{t("investment.inactive")}</p> : null}
     <dl className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 text-dpf-body">
       <div><dt className="text-dpf-text">{t("investment.target")}</dt><dd className="font-dpf-semibold">{t("investment.targetMix", { repair: report.policy.refactorPercent, newWork: 100 - report.policy.refactorPercent })}</dd></div>
       <div><dt className="text-dpf-text">{t("investment.observed", { days: report.policy.windowDays })}</dt><dd>{measured.actualRefactorPercent === null ? t("investment.notMeasured") : t("investment.measured", { repair: Math.round(measured.actualRefactorPercent), tokens: number.format(measured.knownTokens) })}</dd></div>
@@ -83,7 +83,7 @@ function ScopeBalance({ view, canManage, formatLocale }: { view: OwnerInvestment
       </details>
       <details className="mt-2"><summary className="cursor-pointer py-3 text-dpf-body text-dpf-accent">{t("investment.installationFunding")}</summary>
         <p className="text-dpf-body text-dpf-text">{t("investment.installationExplanation")}</p>
-        {boundHere ? <StatusBadge intent="neutral" label={t("investment.bound")} size="md" /> : binding && !report.canSucceedBinding ? <p className="text-dpf-body">{t("investment.anotherOwner")}</p> : <form className="mt-3 max-w-lg space-y-3" onSubmit={(event) => { event.preventDefault(); run(() => bindInstallationInvestmentAction({ scope: view.scope, expectedBoundAt: binding?.boundAt ?? null, reason: bindingReason })); }}>
+        {boundHere ? <StatusBadge intent="neutral" label={t("investment.bound")} size="md" variant="solid" /> : binding && !report.canSucceedBinding ? <p className="text-dpf-body">{t("investment.anotherOwner")}</p> : <form className="mt-3 max-w-lg space-y-3" onSubmit={(event) => { event.preventDefault(); run(() => bindInstallationInvestmentAction({ scope: view.scope, expectedBoundAt: binding?.boundAt ?? null, reason: bindingReason })); }}>
           {report.canSucceedBinding ? <p className="text-dpf-body">{t("investment.successor")}</p> : null}
           <TextField name={`binding-reason-${view.scope.organizationId}-${view.scope.purpose}`} label={t("investment.fundingReason")} value={bindingReason} onValueChange={setBindingReason} required disabled={pending} />
           <Button type="submit" disabled={pending || !bindingReason.trim() || !report.policyActive}>{t(pending ? "investment.saving" : "investment.useScope")}</Button>
@@ -92,6 +92,6 @@ function ScopeBalance({ view, canManage, formatLocale }: { view: OwnerInvestment
     </> : null}
     {pending ? <p role="status" className="text-dpf-body text-dpf-text">{t("investment.savingStatus")}</p> : null}
     {message ? <p role="status" className="mt-2 text-dpf-body">{message}</p> : null}
-    {error ? <p role="alert" className="mt-2 text-dpf-body text-[var(--dpf-error)]">{error}</p> : null}
+    {error ? <p role="alert" className="mt-2 text-dpf-body text-dpf-text">{error}</p> : null}
   </div>;
 }
