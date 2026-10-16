@@ -4,7 +4,7 @@ backlogItem: BI-928E1B0F
 epic: EP-B932453F
 ---
 
-# Refresh the four normative trusted-agent Word editions
+# Finish trusted-agent publication reconciliation and Word editions
 
 For agentic workers: execute this plan one independently reviewable backlog item
 at a time. Use `dpf-local-merge-ci-before-push` and the actual gate context before
@@ -20,7 +20,7 @@ renderer/layout prerequisites. Preserve their inbound URLs, plain-blob storage
 exceptions and draft/partial-evidence claims. Prove final source/content parity,
 inspect every final rendered page and verify the released HTTP bytes.
 
-This is the remaining edition part of BI-928E1B0F. PR #6462 delivered the earlier
+The edition recipe below is the remaining edition part of BI-928E1B0F. PR #6462 delivered the earlier
 snapshot-download/public-claim correction at
 `46bd5e2414bc90c1864016ef9d2159c2602fc5d7`; those bytes and its evidence remain
 historical. That PR did not regenerate the retained October 1–2 Word snapshots.
@@ -50,8 +50,109 @@ quoted verbatim:
 - Content review and applicable source checks are recorded; live verification is recorded after release, never inferred from a draft.
 - The programme's publication milestone is not complete while known stale claims remain on its in-scope public surfaces.
 
-This plan supplies only the four-edition subset. Other baseline rows and
-implementation/portability evidence keep their existing accountable BIs.
+The current admitted packet is the bounded reference/projection reconciliation
+below. The four-edition recipe remains a future packet: no current coverage or
+source claim grants its held assets. Other baseline rows and implementation /
+portability evidence keep their existing accountable BIs.
+
+## Current packet: references and accountable publication projections
+
+The initial plan was committed and normally pushed as
+`e2bcebd1a93793a953efacc1a097987a796a8da6`. Its plan-only coverage receipt is
+`cmvbf7m2w5h3e01ptvjzj63gb`; documentation evidence is
+`cmvbf5u7q5h2001pt0u0mcgnd`. Its single native PLAN request,
+`TR-GATE-230EB5D4153D74876542BB74`, was actually observed input-required /
+provider-outcome-uncertain with no verdict or receipt. That immutable request,
+deadline and evidence remain historical; changing this plan cannot settle or
+retry that execution.
+
+A bounded source/publication audit is recorded as
+`cmvbfsagg5rot01ptnjn5t1gj`, October 16 at 20:45 UTC. The 34 selected source
+blobs at `bf39a9fd58536171e7dd6b136d13e5192f86904d` were unchanged at current
+main `250447587496308226abc10aca79ee006ecd10f6`. Actual HTTP observations
+identified 12 failed authored targets in 17 occurrences. Five Word and three
+TBM PDF/PPTX downloads returned genuine packages; this does not make the four
+old normative editions current. Thirty-nine sampled fragment targets exist.
+No all-site, runtime, accessibility or cache-freshness verdict was made.
+
+At 20:45:16 UTC, ordinary `claim_workroom_scope` admitted exactly the eight
+paths below in WC-4C700C83, in addition to this plan. It returned a resolved
+change-impact contract with no test-impact or guard-obligation entries. Derived
+checks are the doc index, doc-impact manifest and rendered guide diagrams.
+Run those actual checks; no generated-file claim is implied by this source claim.
+
+| Claimed source | Bounded correction |
+| --- | --- |
+| `docs/architecture/agent-standards-family.md` | One broken composition-design reference |
+| `docs/architecture/agent-standards-external-alignment.md` | One broken composition-design reference |
+| `docs/architecture/trusted-ai-kernel.md` | One broken composition-design reference and one wrapped PAAW link; no normative obligation change |
+| `docs/architecture/trusted-agent-reference-contract.md` | Two broken excluded-design/plan references; preserve actual approved-design provenance |
+| `docs/architecture/work-shapes-and-the-decision-gate.md` | Six broken excluded-source/reference occurrences |
+| `docs/user-guide/ai-workforce/decision-perspective.md` | One wrapped practice-guide link |
+| `docs/architecture/agent-standards-dpf-conformance.md` | Date and qualify the source-declared first-pass projection; correct five stale source-path occurrences without a new assessment |
+| `docs/superpowers/evidence/2026-09-27-trusted-agent-publication-reconciliation.md` | Dated source/live/download/owner dispositions; actual white-paper 2.2 delivery and remaining publication work |
+
+This is thirteen reference occurrences plus their related publication
+projections. Intentionally excluded drafts remain excluded: use immutable
+GitHub source URLs at the verified source commit. Existing published PAAW and
+practice-guide pages remain authoritative. Do not unexclude directories, rename
+standards, alter a parser/guard, or publish a new normative surface to eliminate
+a 404. Verify each replacement target and preserve fragments.
+
+Live ownership was checked: BI-1139F962 is open and retains broad PAAW public
+harmonization; BI-4E32C6A2 is done, with historical filename/redirect follow-ons
+still described in its body. Neither has an active room. This packet repairs
+only a malformed link to the actual existing PAAW page, without taking over
+their naming, migration or guard work. BI-2AB781FA / BI-F3C2EC7A retain the
+clause/test/evidence and actual-runtime assessment; a current source locator is
+not an implementation result. BI-A2A71149 retains separate end-to-end document
+lifecycle acceptance. Book, TBM and white-paper typed delivery remains separately
+attributed, not re-approved by their publication author.
+
+Four failing occurrences in peer-held JSI and GPP sources remain proposals only.
+The parent's eight exact claims and pending release decision have not been
+executed by this packet. No alternative room, force claim, elapsed lease,
+historical approval or source copy is a transfer. The separate GPP section 13
+editorial erratum remains with BI-A484D58F.
+
+### Current packet sequence and verification
+
+1. Preserve the e2 source and native history. Commit and normally push this plan
+   amendment, record fresh scope-bound immutable coverage, validate it, then
+   re-claim implementation with the same delegated session and exact head.
+   No public source edit precedes those actual permissions.
+2. Correct only the claimed references and dated publication projections.
+   Preserve old evidence and distinguish new observations, historical snapshots,
+   source declarations, unassessed related guides and independently owned proof.
+3. Run the actual diff's gate context, derived freshness checks, guide links,
+   source checks and required documentation gate. Exercise the site build's
+   link transformation and the changed guide at desktop/mobile. Record source /
+   static verification limits; no browser navigation to the operator's approval.
+4. Obtain independent CLIENT review of the exact frozen diff and seek native
+   committed-change review under current policy, without retrying the old
+   uncertain PLAN task. Preserve any actual infrastructure limitation. DCO push,
+   one ready PR, attachment and protected merge queue remain mandatory.
+5. After the actual Pages build, fetch each changed public page and replacement
+   target; record returned content and the old-to-new dispositions. Reconcile
+   only this packet, not the held sources, four editions or wider programme.
+
+**PUB-REQ:** the quoted live BI acceptance criteria applied to the observed
+reference failures and source-only publication projections.
+
+**PUB-CONTRACT:** exact existing routes and authoritative public/immutable-source
+targets, with no authority, normative or qualification change.
+
+**PUB-FLOW:** admitted scope → immutable plan coverage → bounded correction →
+independent review / documentation gate → protected publication → actual GET.
+
+**PUB-VERIFY:** exact changed text and source identities, transformed links,
+derived/source checks, separately attributed CLIENT/native outcomes and dated
+actual public responses, with explicit unassessed/runtime boundaries.
+
+For the current coverage record, these are internal steps of one publication
+repair packet under BI-928E1B0F, not independent features. The future four-Word
+edition packet needs its own current scope/coverage before mutation; its recipe
+below is retained to make that remaining dependency explicit.
 
 ## Actual observations and dependencies
 
@@ -73,9 +174,9 @@ The following prerequisites are distinct:
 
 | Dependency | Actual disposition at plan authoring | Required before use |
 | --- | --- | --- |
-| BI-7939AE2A / PR #6467 | Separate generator freshness/failure repair, head `068fe0c2d5cbe7bea480b1b14f97a69f72ad61ca`; open at last parent observation | Merge through its own gates; inherit actual main bytes rather than copy its patch |
+| BI-7939AE2A / PR #6467 | Separate generator freshness/failure repair merged as `250447587496308226abc10aca79ee006ecd10f6`; earlier reviewed source was `068fe0c2d5cbe7bea480b1b14f97a69f72ad61ca` | Inherit actual main bytes at the final edition freeze rather than copy its patch |
 | BI-6CC40F77 / PR #6466 | White-paper delivery includes the shared image-extent helper; separately owned and accepted. Its owner ordinarily released remaining helper/paper claims at WC-616A sequence57 | Verify merged helper identity and obtain any exact claim before use; no duplicate helper |
-| Table layout and GPP rendering configuration | Actual private candidate/preservation/visual evidence exists; reusable source repair is not admitted by this doc-only BI | Capture/reuse a separately classified implementation defect and its proportional design, normal ownership, checks and source delivery |
+| Table layout and rendering configuration | Separately captured BI-1B66A62E is ordinarily admitted to the programme source owner in WC-FE71CAF2; private candidate/preservation/visual evidence is not source delivery | Consume that owner's actual source merge/gates and final renderer/config pins; do not absorb generic source code under this doc-only BI |
 | Existing normative Word paths | Parent's release request covers GAID, JSI and GPP Word outputs and was pending at plan authoring; TAK is not part of that claim | Observe actual ordinary release of the three peer-held paths and normally claim all four outputs; no force, elapsed-time assumption, alternative room or copied approval |
 | GPP ownership hazard cross-reference | Separate BI-A484D58F editorial owner will repair the stale §13 `escalate` reference | Consume its final source pin after delivery; do not duplicate its normative edit |
 | Public snapshot note and reconciliation ledger | Current white-paper owner coordinates those shared surfaces | Obtain ordinary scope handoff for the exact final note/ledger delta |
@@ -232,18 +333,28 @@ standards, runtime policy or historical receipts to make a publication pass.
 
 Parent: BI-928E1B0F. Existing separate dependencies: BI-7939AE2A,
 BI-6CC40F77 and the BI-A484D58F-owned GPP editorial correction.
-The reusable table/config source defect still needs its own normal live
-capture and admission before implementation.
+The reusable table/config source defect is separately captured/admitted as
+BI-1B66A62E; source delivery remains its owner's responsibility.
 
-Proposed atomic mapping for this edition-only packet:
+Current packet maps atomically to BI-928E1B0F with `PUB-REQ`, `PUB-CONTRACT`,
+`PUB-FLOW` and `PUB-VERIFY`. Reference fixes and dated source/publication limits
+are one repair to the observed published reading path; their checks, provenance,
+review and post-release observations are internal completion steps. They add no
+independent capability. Record and validate fresh immutable coverage for the
+nine actual claimed paths before public source implementation. The earlier
+`cmvbf7m2w5h3e01ptvjzj63gb` covers only e2's original plan scope and is retained
+as historical evidence, not reused for this changed scope.
+
+Future edition-packet references, not authorized by the current packet:
 
 - requirement reference: `EDITION-REQ` — the four refreshed Word editions and the quoted BI acceptance subset above.
 - contract reference: `EDITION-CONTRACT` — canonical Markdown/Mermaid/catalogue to existing URLs, with draft and evidence boundaries preserved.
 - flow reference: `EDITION-FLOW` — source freeze → generation → all-page review → gated publication → deployed byte verification.
 - verification reference: `EDITION-VERIFY` — exact source/package/layout, independent CLIENT, canonical checks and actual HTTP-byte evidence.
 
-No live plan coverage receipt is claimed yet. Record against the immutable
-committed plan through `record_plan_backlog_coverage`; the server selects the
-applicable schema. Reconcile exact declared scope and refresh coverage after
-the final ordinary claims are admitted. A Markdown checklist is not coverage
-or implementation permission.
+Record against the actual immutable committed plan through
+`record_plan_backlog_coverage`; the server selects the applicable schema. Copy
+the resulting receipt into the next plan revision or canonical handoff without
+pretending that a document can contain its own later receipt. Reconcile exact
+scope again before the edition packet. A Markdown checklist is not coverage or
+implementation permission.
