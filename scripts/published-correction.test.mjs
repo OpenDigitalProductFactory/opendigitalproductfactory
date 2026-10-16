@@ -356,6 +356,27 @@ test("a recorded arbitrary command list cannot replace the source-derived affect
   } finally { fixture.remove(); }
 });
 
+test("unrelated main advancement reuses source-bound correction proof without another affected run", async () => {
+  const fixture = gitFixture();
+  try {
+    fixture.write(2); fixture.git("add", "."); fixture.git("commit", "--quiet", "-m", "repair source");
+    await verifyPublishedCorrection({ ...fixture.options, persist: true });
+    const priorMain = fixture.git("rev-parse", "origin/main");
+    fixture.git("read-tree", "origin/main");
+    fixture.git("update-index", "--add", "--cacheinfo", "100644", fixture.git("rev-parse", "origin/main:README.md"), "UPSTREAM.md");
+    const upstreamTree = fixture.git("write-tree");
+    fixture.git("read-tree", "HEAD");
+    assert.notEqual(upstreamTree, fixture.git("rev-parse", "origin/main^{tree}"));
+    const nextMain = fixture.git("commit-tree", upstreamTree, "-p", priorMain, "-m", "independent upstream document");
+    fixture.git("update-ref", "refs/remotes/origin/main", nextMain);
+    const inspection = inspectCorrectionRecord(fixture.cwd, { identify: fixture.identify, contextReader: fixture.contextReader });
+    assert.equal(inspection.ok, true, inspection.reason);
+    const reused = await verifyPublishedCorrection({ ...fixture.options, persist: true,
+      run: () => { throw new Error("unchanged affected source must reuse its existing proof"); } });
+    assert.equal(reused.sha, fixture.git("rev-parse", "HEAD"));
+  } finally { fixture.remove(); }
+});
+
 test("a real TODO-only Node child exits zero but cannot qualify affected verification", async () => {
   const fixture = gitFixture();
   try {

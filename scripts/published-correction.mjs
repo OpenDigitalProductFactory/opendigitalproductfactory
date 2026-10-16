@@ -102,7 +102,7 @@ export function inspectCorrectionRecord(cwd = process.cwd(), { contextReader = r
   if (![proof.sha, proof.pullRequest.headRefOid].includes(current.pullRequest.headRefOid)
     || !stageIdentityMatches(contextIdentity(expected), contextIdentity({ pullRequest: proof.pullRequest, protection: proof.protection }))) return { ok: false, reason: "Published PR or protection changed; correction proof is not current." };
   const identity = identify({ cwd, plan: proof.commands });
-  const rebound = identity ? { ...identity, policy: CORRECTION_POLICY, branch: proof.branch, plan: proof.planDigest } : null;
+  const rebound = identity ? { ...identity, base: git(["merge-base", "HEAD", "origin/main"]), policy: CORRECTION_POLICY, branch: proof.branch, plan: proof.planDigest } : null;
   if (!stageIdentityMatches(proof.identity, rebound)) return { ok: false, reason: "Source, toolchain, environment or expected plan changed; correction proof cannot be reused." };
   return { ...verdict, state };
   } catch (error) { return { ok: false, reason: `Correction inspection unavailable: ${error.message}` }; }
@@ -193,7 +193,9 @@ export async function verifyPublishedCorrection({ cwd = process.cwd(), relatedTe
   const { commands, changedFiles, classification, plan } = describeCorrection({ cwd, anchor, head, tree, relatedTestsBySource });
   const identityNow = () => {
     const value = identify({ cwd, plan: commands });
-    return value ? { ...value, policy: CORRECTION_POLICY, branch, plan: correctionPlanDigest(commands) } : null;
+    // The queue owns integration with the moving main tip. Local affected proof
+    // binds this branch's actual merge base and the independently rederived plan.
+    return value ? { ...value, base: git(["merge-base", "HEAD", "origin/main"]), policy: CORRECTION_POLICY, branch, plan: correctionPlanDigest(commands) } : null;
   };
   const identity = identityNow();
   if (!identity) throw new Error("Source/toolchain/environment identity is unproven; no correction checks started.");

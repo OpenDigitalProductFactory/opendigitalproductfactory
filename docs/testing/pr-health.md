@@ -123,6 +123,9 @@ Unchanged bytes or a commit-message correction execute no source suite. Changed
 bytes use the existing affected-test/package planner and execute its checks;
 full integration and broad source guards are delegated to protected GitHub.
 Repository, DCO and body/label-sensitive guards remain fresh. The verifier
+binds the branch's merge base, so unrelated incoming main commits do not rerun
+affected checks; protected GitHub checks still verify the current integration.
+The verifier
 checks source, toolchain, environment, expected commands, actual PR and branch
 protection again before retaining reusable evidence for at most one hour.
 Failures, skips, dirty files or identity drift refuse this publication path.
