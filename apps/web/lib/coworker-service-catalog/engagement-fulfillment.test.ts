@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { parseEngagementTaskBinding, engagementInputDigest, assertEngagementSnapshot, engagementToolAllowed, validateEngagementContribution, validateEngagementTask, admitEngagementTask } from "./engagement-fulfillment";
+import { parseEngagementTaskBinding, engagementInputDigest, assertEngagementSnapshot, engagementToolAllowed, validateEngagementContribution, validateEngagementTask, admitEngagementTask, engagementProviderIdentityRefs, reconcileEngagementTaskResult } from "./engagement-fulfillment";
 import { parseRemoteTaskSubmitParams } from "@/lib/mcp-task-submit-params";
 import { remoteTaskRequestDigest } from "@/lib/mcp-task-capacity-contract";
 const admission = vi.hoisted(() => ({ allowed: true }));
@@ -15,15 +15,42 @@ const snapshot = () => ({
 });
 
 describe("bounded advisory engagement fulfillment", () => {
+  it("uses the registered canonical/runtime provider pair and no unrelated aliases", () => {
+    expect(engagementProviderIdentityRefs("AGT-906")).toEqual(["AGT-906", "ux-design-critic"]);
+    expect(engagementProviderIdentityRefs("ux-design-critic")).toEqual(["AGT-906", "ux-design-critic"]);
+    expect(engagementProviderIdentityRefs("AGT-906")).not.toContain("ux-accessibility");
+  });
+  it("reprojects an unknown original task only from its actual persisted state and evidence", async () => {
+    const result = { summary: "Use compact rows", criteria: ["Surface detail"], corpusRefs: ["professions/ux-design/hierarchy"], findings: [] };
+    const task = { status: "input-required", progressPayload: { executionUncertainty: { outcome: "unknown" }, summary: JSON.stringify(result) }, a2aMetadata: { engagementBinding: binding }, completedAt: null };
+    const engagement = { ...snapshot().engagement, id: "row-1", status: "unknown", updatedAt: new Date(), metadata: { fulfillment: { taskRunId: "TR-ORIGINAL", binding } } };
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const fakeDb = {
+      taskRun: { findUnique: async () => task }, coworkerEngagement: { findUnique: async () => engagement, updateMany },
+      workroom: { findUnique: async () => snapshot().room },
+      agent: { findUnique: async () => ({ agentId: "ux-design-critic", name: "ux-design-critic", slugId: "ux-design-critic" }) },
+      toolExecution: { findMany: async () => [
+        { id: "read-1", toolName: "read_source_at_version", success: true, parameters: { repositoryFullName: "owner/repo", version: artifactRef.commitSha, path: artifactRef.path, expectedBlobId: artifactRef.providerBlobId }, result: {} },
+        { id: "wiki-1", toolName: "wiki_query", success: true, parameters: {}, result: { data: { results: [{ slug: "professions/ux-design/hierarchy" }] } } },
+        { id: "critique-1", toolName: "search_ux_critique_corpus", success: true, parameters: { calibratedOnly: true }, result: { data: { grounding: "UNGROUNDED", total: 0 } } },
+      ] },
+    };
+    await reconcileEngagementTaskResult("TR-ORIGINAL", fakeDb as never);
+    expect(updateMany).not.toHaveBeenCalled();
+    task.status = "completed";
+    task.progressPayload = { summary: JSON.stringify(result) } as typeof task.progressPayload;
+    await reconcileEngagementTaskResult("TR-ORIGINAL", fakeDb as never);
+    expect(updateMany.mock.calls[0]![0].data).toMatchObject({ status: "completed", metadata: { result: { advisoryOnly: true, authorDisposition: "pending", sourceExecutionIds: ["read-1"] } } });
+  });
   function authorityDb() {
     const state = snapshot();
     const grants = ["coworker_engagement_write", "file_read", "registry_read"];
-    const actor = { agentId: String(binding.actorAgentId), status: "active", archived: false, toolGrants: grants.map(grantKey => ({ grantKey })), toolGrantRevocations: [] as { grantKey: string }[] };
-    const provider = { ...actor, agentId: binding.providerAgentId };
-    const credential = { kind: "operator", userId: String(binding.userId), agentId: binding.actorAgentId, capability: "write", revokedAt: null as Date | null, expiresAt: null, scopes: grants };
+    const actor = { agentId: String(binding.actorAgentId), status: "active", archived: false, lifecycleStage: "production", toolGrants: grants.map(grantKey => ({ grantKey })), toolGrantRevocations: [] as { grantKey: string }[] };
+    const provider = { ...actor, agentId: String(binding.providerAgentId) };
+    const credential = { kind: "operator", userId: String(binding.userId), agentId: binding.actorAgentId, capability: "write", revokedAt: null as Date | null, expiresAt: null, scopes: grants, workroomRef: null as string | null, runRef: null as string | null };
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
     return { actor, provider, credential, state, updateMany, db: {
-      mcpApiToken: { findUnique: async () => credential }, agent: { findFirst: async () => actor, findUnique: async () => provider },
+      mcpApiToken: { findUnique: async () => credential }, agent: { findFirst: async () => actor, findUnique: async (_args: unknown) => provider },
       coworkerEngagement: { findUnique: async () => ({ ...state.engagement, id: "row-1", updatedAt: new Date(), offer: state.offer, service: state.service }), updateMany },
       workroom: { findUnique: async () => ({ ...state.room, id: "room-row-1" }) },
     } };
@@ -45,6 +72,21 @@ describe("bounded advisory engagement fulfillment", () => {
     const fake = authorityDb();
     await admitEngagementTask({ ...execution, db: fake.db as never });
     expect(fake.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "accepted", workCapsuleId: "WC-1", metadata: { fulfillment: expect.objectContaining({ taskRunId: "TR-ORIGINAL", binding }) } }) }));
+  });
+  it("admits a canonical provider with its current runtime pair and refuses revocation on either side", async () => {
+    const fake = authorityDb();
+    const canonicalBinding = { ...binding, providerAgentId: "AGT-906" };
+    const canonical = { ...fake.provider, agentId: "AGT-906" };
+    const runtime = { ...fake.provider, agentId: "ux-design-critic" };
+    Object.assign(fake.state.engagement, { providerAgentId: "AGT-906" });
+    Object.assign(fake.state.service, { providerAgentId: "AGT-906" });
+    fake.db.agent.findUnique = async (args) => (args as { where: { agentId: string } }).where.agentId === "AGT-906" ? canonical : runtime;
+    await expect(validateEngagementTask({ ...execution, binding: canonicalBinding, db: fake.db as never })).resolves.toHaveProperty("room");
+    runtime.toolGrantRevocations = [{ grantKey: "registry_read" }];
+    await expect(validateEngagementTask({ ...execution, binding: canonicalBinding, db: fake.db as never })).rejects.toThrow(/grant_intersection_refused/);
+    runtime.toolGrantRevocations = [];
+    canonical.archived = true;
+    await expect(validateEngagementTask({ ...execution, binding: canonicalBinding, db: fake.db as never })).rejects.toThrow(/principal_or_scope_unavailable/);
   });
   it("refuses revoked, foreign, narrowed, or unadmitted authority without associating work", async () => {
     admission.allowed = true;
@@ -70,6 +112,19 @@ describe("bounded advisory engagement fulfillment", () => {
     await expect(validateEngagementTask({ ...execution, db: fake.db as never, requireAssociation: true })).rejects.toThrow(/association_missing/);
     fake.updateMany.mockResolvedValueOnce({ count: 0 });
     await expect(admitEngagementTask({ ...execution, db: fake.db as never })).rejects.toThrow(/race_retry_original/);
+  });
+  it("keeps a room-session credential inside its original room and run", async () => {
+    const fake = authorityDb();
+    fake.credential.kind = "workroom_session";
+    fake.credential.workroomRef = "WC-FOREIGN";
+    fake.credential.runRef = "run-1";
+    Object.assign(fake.state.room.workspaceState.workroomDrive, { runKey: "run-1" });
+    await expect(validateEngagementTask({ ...execution, db: fake.db as never })).rejects.toThrow(/credential_scope_refused/);
+    fake.credential.workroomRef = binding.workroomId;
+    fake.credential.runRef = "old-run";
+    await expect(validateEngagementTask({ ...execution, db: fake.db as never })).rejects.toThrow(/credential_scope_refused/);
+    fake.credential.runRef = "run-1";
+    await expect(validateEngagementTask({ ...execution, db: fake.db as never })).resolves.toHaveProperty("room");
   });
   it("requires actual source and cited corpus executions before accepting a contribution", () => {
     const content = JSON.stringify({ summary: "Use compact rows", criteria: ["Relevant surface detail"], corpusRefs: ["professions/ux-design/hierarchy"], findings: [] });

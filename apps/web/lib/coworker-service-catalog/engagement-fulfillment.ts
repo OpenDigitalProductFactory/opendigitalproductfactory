@@ -4,6 +4,7 @@ import type { InitiativeReviewArtifactRef } from "@/lib/mcp-task-review-contract
 import type { Prisma } from "@dpf/db";
 import type { RemoteTaskSubmitAuth } from "@/lib/mcp-task-submit-types";
 import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
+import { selectableCoworkerIdentityRefs } from "@/lib/coworker-record/selectable-coworker";
 
 type Artifact = Extract<InitiativeReviewArtifactRef, { kind: "repo-blob-at-commit" }>;
 export type EngagementTaskBinding = {
@@ -23,6 +24,10 @@ const bindingKeys = ["version", "engagementId", "offerId", "serviceId", "provide
 export const ENGAGEMENT_READ_TOOLS = ["read_source_at_version", "wiki_query", "search_ux_critique_corpus"] as const;
 const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const text = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0 && value === value.trim();
+export function engagementProviderIdentityRefs(providerAgentId: string): string[] {
+  const pair = selectableCoworkerIdentityRefs(providerAgentId);
+  return [...new Set([pair.canonicalAgentId, pair.runtimeAgentId])];
+}
 
 export function parseEngagementTaskBinding(value: unknown): EngagementTaskBinding | null {
   const row = record(value);
@@ -92,7 +97,7 @@ export async function validateEngagementTask(input: {
   const { resolveAgentWorkroomAccess } = await import("@/lib/work-management/workroom-agent-access.server");
   if ((token.source !== "oauth" && token.source !== "pat") || token.capability !== "write") throw new Error("engagement_requires_verified_write_token");
   const credential = await db.mcpApiToken.findUnique({ where: { id: token.tokenId }, select: {
-    ...OAUTH_EXECUTION_AUTHORITY_SELECT, scopes: true, capability: true,
+    ...OAUTH_EXECUTION_AUTHORITY_SELECT, scopes: true, capability: true, workroomRef: true, runRef: true,
   } });
   if (!credential || credential.capability !== "write" || credential.userId !== token.userId || token.userId !== binding.userId || !credential.agentId
     || credential.revokedAt || (token.source === "oauth"
@@ -106,18 +111,27 @@ export async function validateEngagementTask(input: {
   ]);
   if (!actor || actor.agentId !== binding.actorAgentId || !provider || provider.status !== "active" || provider.archived
     || !engagement || !room) throw new Error("engagement_principal_or_scope_unavailable");
+  const providerRefs = engagementProviderIdentityRefs(binding.providerAgentId);
+  const counterpartId = providerRefs.find(id => id !== provider.agentId);
+  const counterpart = counterpartId ? await db.agent.findUnique({ where: { agentId: counterpartId }, include: { toolGrants: true, toolGrantRevocations: true } }) : provider;
+  if (!counterpart || counterpart.status !== "active" || counterpart.archived
+    || provider.lifecycleStage !== "production" || counterpart.lifecycleStage !== "production") throw new Error("engagement_provider_identity_pair_unavailable");
+  if (!["operator", "oauth_access", "workroom_session"].includes(credential.kind)
+    || (credential.kind === "workroom_session" && (credential.workroomRef !== room.capsuleId
+      || credential.runRef !== record(record(room.workspaceState).workroomDrive).runKey))) throw new Error("engagement_credential_scope_refused");
   const tokenGrants = expandGrants(credential.scopes);
   const actorGrants = expandGrants(persistedAgentToolGrants(actor));
   const providerGrants = expandGrants(persistedAgentToolGrants(provider));
+  const counterpartGrants = expandGrants(persistedAgentToolGrants(counterpart));
   if (!tokenGrants.includes("coworker_engagement_write") || !actorGrants.includes("coworker_engagement_write")
-    || ["file_read", "registry_read"].some(grant => !tokenGrants.includes(grant) || !actorGrants.includes(grant) || !providerGrants.includes(grant))
+    || ["file_read", "registry_read"].some(grant => !tokenGrants.includes(grant) || !actorGrants.includes(grant) || !providerGrants.includes(grant) || !counterpartGrants.includes(grant))
     || input.authorityScope.some(scope => scope.startsWith("tool:")
       ? !(ENGAGEMENT_READ_TOOLS as readonly string[]).includes(scope.slice(5))
       : !tokenGrants.includes(scope) || !actorGrants.includes(scope))
     || ENGAGEMENT_READ_TOOLS.some(name => !input.authorityScope.includes(`tool:${name}`))) throw new Error("engagement_grant_intersection_refused");
   assertEngagementSnapshot(binding, { engagement, offer: engagement.offer, service: engagement.service, room }, input.taskRunId);
   if (input.requireAssociation && record(record(engagement.metadata).fulfillment).taskRunId !== input.taskRunId) throw new Error("engagement_execution_association_missing");
-  for (const [agentId, requested] of [[actor.agentId, "action"], [provider.agentId, "content"]] as const) {
+  for (const [agentId, requested] of [[actor.agentId, "action"], ...providerRefs.map(id => [id, "content"] as const)] as const) {
     const access = await resolveAgentWorkroomAccess({ userId: token.userId, agentId, workroomId: room.id, requested }, db);
     if (access.decision.level !== requested) throw new Error(`engagement_room_access_refused:${access.decision.reason}`);
   }
@@ -148,14 +162,14 @@ export function validateEngagementContribution(binding: EngagementTaskBinding, c
 }
 
 /** Projection is repeatable from persisted task + tool evidence, including after worker interruption. */
-export async function reconcileEngagementTaskResult(taskRunId: string) {
-  const { prisma } = await import("@dpf/db");
+export async function reconcileEngagementTaskResult(taskRunId: string, db?: Prisma.TransactionClient) {
+  const prisma = db ?? (await import("@dpf/db")).prisma;
   const { hasExecutionUncertainty } = await import("@/lib/shared/execution-uncertainty");
   const task = await prisma.taskRun.findUnique({ where: { taskRunId }, select: { status: true, progressPayload: true, a2aMetadata: true, completedAt: true } });
   const binding = parseEngagementTaskBinding(record(task?.a2aMetadata).engagementBinding);
   if (!task || !binding) return;
   const engagement = await prisma.coworkerEngagement.findUnique({ where: { engagementId: binding.engagementId } });
-  if (!engagement || !["accepted", "in-progress"].includes(engagement.status)) return;
+  if (!engagement || !["accepted", "in-progress", "unknown"].includes(engagement.status)) return;
   const metadata = record(engagement.metadata), association = record(metadata.fulfillment);
   if (association.taskRunId !== taskRunId || canonicalJson(association.binding) !== canonicalJson(binding)) return;
   let status: string = "accepted";
@@ -166,7 +180,7 @@ export async function reconcileEngagementTaskResult(taskRunId: string) {
   else if (task.status === "working") status = "in-progress";
   else if (task.status === "completed") {
     const room = await prisma.workroom.findUnique({ where: { capsuleId: binding.workroomId }, select: { repositoryFullName: true, headSha: true } });
-    const executions = await prisma.toolExecution.findMany({ where: { taskRunId, agentId: binding.providerAgentId, userId: binding.userId, success: true },
+    const executions = await prisma.toolExecution.findMany({ where: { taskRunId, agentId: { in: engagementProviderIdentityRefs(binding.providerAgentId) }, userId: binding.userId, success: true },
       select: { id: true, toolName: true, parameters: true, result: true, success: true } });
     const { findProfessionFamilyForAgentIdentity } = await import("@/lib/decision-perspective/resolve-profession-profile");
     const provider = await prisma.agent.findUnique({ where: { agentId: binding.providerAgentId }, select: { agentId: true, name: true, slugId: true } });
@@ -176,6 +190,7 @@ export async function reconcileEngagementTaskResult(taskRunId: string) {
     result = family && currentRevision ? validateEngagementContribution(binding, record(task.progressPayload).summary, executions, family.professionKey) : null;
     status = result ? "completed" : "unavailable";
   } else if (["input-required", "auth-required"].includes(task.status)) status = "unknown";
+  if (status === engagement.status && !result) return;
   await prisma.coworkerEngagement.updateMany({ where: { id: engagement.id, updatedAt: engagement.updatedAt, status: engagement.status }, data: {
     status, completedAt: status === "completed" ? task.completedAt ?? new Date() : null,
     metadata: { ...metadata, fulfillment: { ...association, state: status, taskStatus: task.status,

@@ -30,7 +30,7 @@ import { parseEngagementTaskBinding } from "./coworker-service-catalog/engagemen
 import { executeRemoteTaskAttempt } from "./mcp-task-execution";
 import { automaticReviewerRecoveryWait, healParkedReviewFromReceipt } from "./mcp-task-background-dispatch";
 import type { RemoteTaskSubmitAuth } from "./mcp-task-submit-types";
-import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
+import { parseRemoteTaskSubmitParams, type RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 
 type PersistedRemoteTask = {
   id: string;
@@ -249,6 +249,9 @@ export function reconstructPersistedRemoteTask(
     ...(durableInference ? { recipeId: durableInference.recipeId } : {}),
   };
 
+  if (engagementBinding && typeof parseRemoteTaskSubmitParams({ ...parsed }) === "string") {
+    return { ok: false, code: "persisted_request_invalid", message: "Persisted engagement task is outside its closed submission contract." };
+  }
   if (!remoteTaskRequestMatches(metadata, parsed)) {
     return {
       ok: false,

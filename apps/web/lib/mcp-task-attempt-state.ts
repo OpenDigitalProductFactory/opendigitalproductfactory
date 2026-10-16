@@ -55,7 +55,7 @@ export async function settleRemoteTask(
         && current.a2aMetadata.engagementBinding) {
         const { reconcileEngagementTaskResult } = await import("./coworker-service-catalog/engagement-fulfillment");
         // Task settlement is canonical; a projection interruption is repaired on the next engagement read.
-        await reconcileEngagementTaskResult(args.where.taskRunId).catch(error => console.error("Engagement projection deferred", error));
+        await reconcileEngagementTaskResult(args.where.taskRunId).catch(() => console.error("Engagement projection deferred; read the original engagement to reconcile persisted task state."));
       }
       return null;
     }

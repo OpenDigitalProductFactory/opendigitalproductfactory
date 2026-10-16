@@ -224,13 +224,14 @@ async function requestCoworkerEngagement(
 ): Promise<ToolResult> {
   if (params["engagementId"] !== undefined) {
     if (typeof params["engagementId"] !== "string" || !params["engagementId"].trim()
-      || params["offerId"] !== undefined || params["requestedOutcome"] !== undefined || params["metadata"] !== undefined) {
+      || Object.keys(params).some(key => !["engagementId", "fulfillment"].includes(key))) {
       return { success: false, error: "invalid_engagement_resume", message: "Resume with engagementId and fulfillment only; original request identity cannot be replaced." };
     }
     const { fulfillCoworkerEngagement } = await import("@/lib/coworker-service-catalog/engagement-fulfillment");
     try { return await fulfillCoworkerEngagement(params["engagementId"].trim(), params["fulfillment"], userId, context); }
     catch (error) { return { success: false, error: "engagement_fulfillment_refused", message: getErrorMessage(error) }; }
   }
+  if (params["fulfillment"] !== undefined) return { success: false, error: "invalid_engagement_resume", message: "Fulfillment must name the original engagementId; create the request first and resume that same engagement." };
   const offerId = typeof params["offerId"] === "string" ? params["offerId"].trim() : "";
   const requestedOutcome = typeof params["requestedOutcome"] === "string" ? params["requestedOutcome"].trim() : "";
   if (!offerId || !requestedOutcome) {

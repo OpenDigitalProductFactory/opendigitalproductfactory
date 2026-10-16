@@ -109,16 +109,6 @@ export async function executeRemoteTaskAttempt(input: {
   }
   const settle = (args: Prisma.TaskRunUpdateManyArgs & { where: { taskRunId: string } }) =>
     settleRemoteTask(args, reservation, dispatchClaim);
-  if (parsed.engagementBinding) {
-    const { validateEngagementTask } = await import("./coworker-service-catalog/engagement-fulfillment");
-    try {
-      await validateEngagementTask({ binding: parsed.engagementBinding, token, taskRunId: run.taskRunId, authorityScope: parsed.authorityScope ?? [], requireAssociation: true });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Engagement authority unavailable";
-      const displaced = await settle({ where: { taskRunId: run.taskRunId }, data: { status: "failed", completedAt: new Date(), progressPayload: { summary: message, error: "engagement_execution_refused" } } });
-      return displaced ?? { kind: "result", result: { taskRunId: run.taskRunId, status: "failed", isError: true, content: remoteTaskContent(message) } };
-    }
-  }
   // A lost acknowledgement is recovery work, not another independent assessment.
   // Keep the same bound receipt and let the fenced settlement preserve cancellation.
   const priorReview = parsed.initiativeReviewBinding
@@ -146,6 +136,17 @@ export async function executeRemoteTaskAttempt(input: {
     return displaced ?? projectRemoteTaskReplay({ existing: { ...admittedRun,
       status: "input-required", taskRunId: run.taskRunId }, requestMatches: true });
   }
+  if (parsed.engagementBinding) {
+    const { validateEngagementTask, reconcileEngagementTaskResult } = await import("./coworker-service-catalog/engagement-fulfillment");
+    try {
+      await reconcileEngagementTaskResult(run.taskRunId);
+      await validateEngagementTask({ binding: parsed.engagementBinding, token, taskRunId: run.taskRunId, authorityScope: parsed.authorityScope ?? [], requireAssociation: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Engagement authority unavailable";
+      const displaced = await settle({ where: { taskRunId: run.taskRunId }, data: { status: "failed", completedAt: new Date(), progressPayload: { summary: message, error: "engagement_execution_refused" } } });
+      return displaced ?? { kind: "result", result: { taskRunId: run.taskRunId, status: "failed", isError: true, content: remoteTaskContent(message) } };
+    }
+  }
   const agent = await resolveAutonomousWorkAgent({
     agentId: parsed.agentId,
     routeContext: parsed.routeContext,
@@ -153,7 +154,10 @@ export async function executeRemoteTaskAttempt(input: {
   });
   const modelRoutingAgentId = agent.agentId ?? parsed.agentId;
   const resolvedAgentId = parsed.engagementBinding ? modelRoutingAgentId : resolveCanonicalAgentId(modelRoutingAgentId);
-  if (parsed.engagementBinding && resolvedAgentId !== parsed.engagementBinding.providerAgentId) throw new Error("Engagement provider identity changed during runtime resolution.");
+  if (parsed.engagementBinding) {
+    const { engagementProviderIdentityRefs } = await import("./coworker-service-catalog/engagement-fulfillment");
+    if (!engagementProviderIdentityRefs(parsed.engagementBinding.providerAgentId).includes(resolvedAgentId)) throw new Error("Engagement provider identity changed during runtime resolution.");
+  }
   const requestedAgentId = parsed.agentId;
   const requestedCanonicalAgentId = resolveCanonicalAgentId(requestedAgentId);
   let routingConfig: {

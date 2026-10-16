@@ -89,6 +89,31 @@ Required-profession scheduling and per-step review wiring remain outstanding.
 The served target is still b8de657544c4 and does not contain prerequisite6432;
 source recovery is not a native baseline approval or live delivery claim.
 
+Independent source assessment of engagement commit acb3f63b63f49385f9ce25a9f9f1ba08c9e4b83b
+held two P2 findings: unknown engagements could not observe a later verified
+original result, and canonical providers could be rejected at their registered
+runtime identity. Corrections keep unknown effects parked, allow read-only
+reprojection of the same association, and use the existing canonical/runtime
+identity contract with grants and room checks for both records. A room-session
+credential is additionally restricted to its original room and run. The room
+credential regression failed when the check was removed, then passed restored;
+the unknown-result regression failed after DB injection made the actual control
+flow testable, then passed. The focused run passed 104 tests across four suites.
+The next focused run passed 116 tests across five suites, including actual
+background reconstruction: the original binding survives, a changed revision
+fails its digest, and widened persisted tools are refused even if a digest is
+recomputed. That last regression first failed before the worker reused the
+closed submission parser. Both TypeScript 7 programs passed after correcting
+test-fixture literal types; the commit hook had correctly rejected those test
+type errors. The new delta still requires independent reassessment and
+canonical/live gates.
+
+The phase-3 edit claim was refused on three existing scopes: semantic review
+background belongs to WC-82EAA947, and routed review/its MCP pack belong to
+WC-AF5C3944. Their owners are being coordinated; no force claim or overlapping
+edit was made. The classifier and remaining scheduler are not delivered merely
+because these source repairs exist.
+
 ## Phase 4: room-bound instantiation
 
 - Add `stepReviewBinding` to the external coworker task contract (`apps/web/lib/mcp/external-coworker-task-adapter.ts`), following `initiativeReviewBinding`.
