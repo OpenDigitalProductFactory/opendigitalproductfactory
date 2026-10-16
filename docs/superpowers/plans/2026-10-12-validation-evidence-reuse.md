@@ -270,8 +270,11 @@ Add one closed, machine-evidence-bound `published-correction` publication
 reason to the existing override contract. It explicitly means **local full
 integration UNRUN / delegated to protected GitHub**, never `gatePassed: true`.
 A prose trailer alone cannot qualify this reason. Every existing consumer
-must validate its structured current-head proof. Keep the proof in the
-existing unslotted publication record; preserve the original slot receipts.
+must validate its structured current-head proof. Keep the proof as the result
+of the existing local stage-receipt mechanism; preserve every slot receipt.
+The legacy unslotted filename is also slot zero, so writing a correction there
+could overwrite genuine historical evidence. Readers project the stage result
+as a publication-only record without changing the canonical gate records.
 
 Eligibility requires an actual open, non-draft PR in the configured repository,
 matching the local named branch and canonical `main` base, plus provider-read
@@ -364,3 +367,20 @@ truthful UNRUN labels. Roll back through one signed revert; unsupported
 `published-correction` records then fail closed without deleting any history.
 Current coverage for this exact continuation must be recorded before code;
 no prior coverage ID above is asserted to cover this scope.
+
+Continuation coverage was actually accepted as `cmvaj8swu07d601pjb5pvfstc`
+against plan commit `c38bec639429e1e7712b904b0b3406fa938ab664`, with atomic
+mapping `automatic-published-correction` to BI-25CB699C and no dependencies.
+Normal implementation admission `IRD-4382C4F5F50B` was allowed. The storage
+refinement above preserves canonical slot zero by using the existing stage
+writer; refresh coverage against the final published immutable plan before PR.
+
+Actual source regressions first produced three failures and one passing
+prose-rejection case. The shared readers then passed all four. Subsequent
+execution cases cover real Node test execution, zero source commands for
+unchanged/metadata updates, main refresh, failed/skipped reports, source/PR
+drift, preserved prior slot bytes and the actual Git hook's execute/reuse/refuse
+paths. A separate tamper regression rejects an arbitrary command list even
+after its stored digest is recomputed. These are source-local test results;
+current full integration, native semantic review and live acceptance remain
+UNRUN pending normal publication and a containing release.

@@ -95,6 +95,46 @@ override; do not invent a PASS or repeat full validation merely to repair text.
 Allowed overrides are reported as **UNRUN**, and protected checks still apply.
 These metadata checks run even when local guard results are reused or skipped.
 
+### Corrections after publication
+
+A failed GitHub check or merge attempt does not automatically send the entire
+PR through local integration again. The normal Git pre-push hook can qualify an
+existing published correction, and `pr:ready` selects the same affected plan.
+For a direct diagnosis or an explicit related-test mapping, run:
+
+```
+node scripts/published-correction.mjs
+node scripts/published-correction.mjs --related-tests <source-to-tests.json>
+node scripts/published-correction.mjs --status
+```
+
+The mapping uses the existing evidence planner's object format: repository
+source paths map to arrays of repository test paths. Missing mappings stop the
+affected route with the precise source paths; they do not request a full lease.
+
+This route requires a clean topic branch, an actual open non-draft PR on that
+branch and repository, required checks plus a protected merge queue on `main`,
+and accepted initial-publication evidence for its published source. A qualified
+canonical record or a previously allowed recorded override can anchor it. An
+open PR by itself, a new correction record or a prose trailer cannot. Initial
+publication keeps its existing requirements.
+
+Unchanged bytes or a commit-message correction execute no source suite. Changed
+bytes use the existing affected-test/package planner and execute its checks;
+full integration and broad source guards are delegated to protected GitHub.
+Repository, DCO and body/label-sensitive guards remain fresh. The verifier
+checks source, toolchain, environment, expected commands, actual PR and branch
+protection again before retaining reusable evidence for at most one hour.
+Failures, skips, dirty files or identity drift refuse this publication path.
+
+Carry the exact emitted `Local-CI-Override: published-correction: ...` line in
+the PR body. Every publication reader requires its current machine proof in the
+existing local stage receipts. It reports **full local integration UNRUN /
+delegated**; neither the previous canonical PASS nor the canonical slot records
+are rewritten. Their source identities and timestamps remain historical.
+All required GitHub checks, unresolved review threads and the protected merge
+queue still gate the merge. Runtime and independent acceptance remain separate.
+
 Build Studio uses the same readiness command with an internal
 `--published-ref` mode. Its shipping transaction is deliberately branch-first:
 it publishes a recoverable branch, fetches and checks out that exact remote
