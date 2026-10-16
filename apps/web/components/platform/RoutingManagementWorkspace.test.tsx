@@ -56,6 +56,14 @@ describe("routing workspace investigation", () => {
 });
 
 describe("existing provider navigation", () => {
+  it("groups contextual routing links without duplicating the platform navigation landmark", () => {
+    window.history.replaceState(null, "", "/platform/ai/providers");
+    render(withMessages(<RoutingManagementNav />));
+    const shortcuts = screen.getByRole("group", { name: "Routing management" });
+    expect(within(shortcuts).getByRole("link", { name: "Traffic" })).toBeTruthy();
+    expect(within(shortcuts).getByRole("link", { name: "Providers" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.queryByRole("navigation")).toBeNull();
+  });
   it("restores scope when an existing catalog link omits it, and persists it for reload", () => {
     const view = render(withMessages(<RoutingManagementNav />));
     window.history.replaceState(null, "", "/platform/ai/providers/cloud");

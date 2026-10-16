@@ -29,12 +29,14 @@ export function RoutingManagementNav() {
     }, [supported, pathname, params, scope.view, scope.task, scope.provider, scope.data, scope.minutes, detailId]);
     if (!supported)
         return null;
-    return <nav aria-label={t("routingManagement")} className="mb-3 flex flex-wrap items-center gap-2 border-b border-[var(--dpf-border)] pb-3">
+    // Contextual shortcuts sit below the canonical PlatformTabNav. Keep their
+    // accessible grouping without adding another page-navigation landmark.
+    return <div role="group" aria-label={t("routingManagement")} className="mb-3 flex flex-wrap items-center gap-2 border-b border-[var(--dpf-border)] pb-3">
     {[
             { label: t("traffic"), href: routingHref(MAP, { ...scope, view: "traffic" }), active: pathname === MAP && scope.view === "traffic" },
             { label: t("evaluation"), href: routingHref(MAP, { ...scope, view: "evaluation" }), active: pathname === MAP && scope.view === "evaluation" },
             { label: t("providers"), href: routingHref(PROVIDERS, scope), active: pathname.startsWith(PROVIDERS) },
         ].map(item => <Link key={item.label} href={item.href} aria-current={item.active ? "page" : undefined} className={`inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] ${item.active ? "bg-[var(--dpf-accent-soft)] text-[var(--dpf-text)]" : "text-[var(--dpf-muted)] hover:bg-[var(--dpf-surface-2)]"}`}>{item.label}</Link>)}
-    {pathname.startsWith(PROVIDERS) && <span className="min-w-0 text-xs text-[var(--dpf-muted)]">{t("routingContext")}{scope.task === "all" ? t("allTasks") : scope.task} · {scope.data}{t("dataLabel")}{scope.minutes < 1440 ? t("min", { p0: scope.minutes }) : t("days", { p0: scope.minutes / 1440 })}</span>}
-  </nav>;
+    {pathname.startsWith(PROVIDERS) && <span className="min-w-0 text-xs text-[var(--dpf-muted)]">{t("routingContext")}{" "}{scope.task === "all" ? t("allTasks") : scope.task} · {t("dataLabel")}{": "}{scope.data}{" · "}{scope.minutes < 1440 ? t("min", { p0: scope.minutes }) : t("days", { p0: scope.minutes / 1440 })}</span>}
+  </div>;
 }
