@@ -33,7 +33,7 @@ export type {
   AuthorityApprovalTaskResume,
   CoworkerAuthorityInputResolver,
 } from "./govern/authority/coworker-tool-authority-gate";
-import { PLATFORM_TOOLS, executeTool } from "./mcp-tools";
+import { PLATFORM_TOOLS, executeTool, getAvailableTools } from "./mcp-tools";
 import type { ToolDefinition, ToolResult, ToolExecutionContext } from "./mcp-tool-types";
 import { resolveGovernedTool, discoveredToolExecutionContext, discoveredToolGrantAllowed } from "./tak/discovered-tool-governance";
 import type {
@@ -656,7 +656,8 @@ async function governedExecuteToolRun(args: GovernedExecuteArgs, run: ApprovalRu
       governedSource: args.source,
       tokenScope: args.context?.tokenScope,
       tokenGrantScopes: args.context?.tokenGrantScopes,
-      roomAuthorizedGrants: args.context?.roomAuthority?.authorizedGrants,
+      governedReadToolCatalog: () => getAvailableTools(args.userContext, { mode: "advise",
+        agentId: args.context?.agentId, roomAuthorizedGrants: args.context?.roomAuthority?.authorizedGrants }),
       authorizedSurfaceContext: args.context?.authorizedSurfaceContext,
       authorityDecisionId,
       approvedAuthorityEnvelopeId,

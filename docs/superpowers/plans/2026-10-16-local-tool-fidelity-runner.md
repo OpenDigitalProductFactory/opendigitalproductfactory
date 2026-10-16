@@ -68,6 +68,7 @@ apps/web/lib/mcp/packs/build-ops-pack.ts,
 apps/web/lib/mcp/packs/build-ops-pack.test.ts,
 apps/web/lib/mcp-governed-execute.ts,
 apps/web/lib/mcp-governed-execute-types.ts,
+apps/web/lib/mcp-tool-types.ts,
 apps/web/lib/coworker/authorized-surface-execution-types.ts and
 apps/web/lib/mcp-governed-execute-audit-identity.test.ts.
 User documentation extends docs/user-guide/ai-workforce/provider-developer-notes.md
@@ -85,6 +86,10 @@ server dispatch result and its exact returned audit ID against the positive
 persisted actor/thread/task/tool execution; never infer identity by timing.
 Retained nonempty arguments still match exactly. Preserve agent/thread/build
 attribution into callProvider so its ordinary daily budget guard remains active.
+Compile fresh catalogs through an original server-owned context closure, beside
+governedDispatch, using the original user/agent/room restrictions. The runner
+must not import the MCP registry hub or accept a caller-provided catalog. Keep
+the existing import-cycle budget; no baseline increase is part of this repair.
 
 Impact contract: normal source claims resolved. Resolve graph-linked tests for
 all six implementation/type entries before RED; if the graph is unavailable,

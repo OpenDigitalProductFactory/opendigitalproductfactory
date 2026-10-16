@@ -2,7 +2,6 @@ import { randomUUID, createHash } from "node:crypto";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { prisma, type Prisma } from "@dpf/db";
 import { callProvider } from "@/lib/ai-inference";
-import { getAvailableTools } from "@/lib/mcp-tools";
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import { isToolAllowedByGrants } from "@/lib/agent-grants";
 import { loadPlatformVersion } from "@/lib/platform/version";
@@ -36,11 +35,11 @@ export async function runLocalToolFidelityDiagnostic(
     || selection.modelId === "default" || !selection.providerConnectionId?.trim()) {
     return refusal("Fidelity requires one explicit local provider, account and model.");
   }
-  if (!context?.agentId || !context.threadId || !context.userContext || !context.governedDispatch
+  if (!context?.agentId || !context.threadId || !context.userContext || !context.governedDispatch || !context.governedReadToolCatalog
     || (context.apiTokenId && !context.tokenGrantScopes)) {
-    return refusal("Fidelity requires the original governed actor, thread and dispatch authority.");
+    return refusal("Fidelity requires the original governed actor, thread, catalog and dispatch authority.");
   }
-  const { agentId, threadId, governedDispatch, userContext } = context;
+  const { agentId, threadId, governedDispatch, governedReadToolCatalog } = context;
   const deadline = Date.now() + 240_000;
   const outerSignal = currentInferenceSignal();
   const version = await loadPlatformVersion();
@@ -72,8 +71,7 @@ export async function runLocalToolFidelityDiagnostic(
   const initial = await readIdentity();
   if (!initial) return refusal("Exact eligible account/model and observed local runtime digest are unavailable; no inference ran.");
   const readCatalog = async () => {
-    const tools = await getAvailableTools(userContext, { mode: "advise", agentId,
-      roomAuthorizedGrants: context.roomAuthorizedGrants });
+    const tools = await governedReadToolCatalog();
     return tools.filter(tool => tool.sideEffect === false && !tool.consequence && !tool.consequenceForCall && !tool.requiresExternalAccess
       && !tool.secretResultKeys?.length && (!context.apiTokenId
         || isToolAllowedByGrants(tool.name, context.tokenGrantScopes!)))

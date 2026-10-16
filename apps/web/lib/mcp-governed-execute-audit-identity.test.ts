@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { _setGovernanceForTests, governedExecuteTool } from "./mcp-governed-execute";
+import * as mcpTools from "./mcp-tools";
 
 const userContext = { platformRole: "ceo", isSuperuser: true };
 const call = () => governedExecuteTool({ toolName: "query_backlog", rawParams: {},
@@ -44,10 +45,17 @@ describe("governed result audit identity", () => {
       .toEqual(["persisted-1", "persisted-2"]);
   });
   it("projects room narrowing from the original governed authority rather than caller metadata", async () => {
-    await governedExecuteTool({ toolName: "query_backlog", rawParams: {}, userId: "audit-identity-user", userContext,
+    const catalog = vi.spyOn(mcpTools, "getAvailableTools").mockResolvedValue([]);
+    execute.mockImplementation(async (_name, _params, _userId, context) => {
+      await context.governedReadToolCatalog();
+      return { success: true, message: "read completed" };
+    });
+    const result = await governedExecuteTool({ toolName: "query_backlog", rawParams: {}, userId: "audit-identity-user", userContext,
       source: "rest", context: { roomAuthority: { workroomId: "WC-ROOM", collaborationShape: null, workShapeKey: null,
         authorizedGrants: ["backlog_read"], actionBoundary: null, participantRoles: null, memberOfRoom: true } } });
     expect(execute).toHaveBeenCalledWith("query_backlog", {}, "audit-identity-user",
-      expect.objectContaining({ roomAuthorizedGrants: ["backlog_read"], governedDispatch: expect.any(Function) }));
+      expect.objectContaining({ governedReadToolCatalog: expect.any(Function), governedDispatch: expect.any(Function) }));
+    expect(result.success).toBe(true);
+    expect(catalog).toHaveBeenCalledWith(userContext, { mode: "advise", agentId: undefined, roomAuthorizedGrants: ["backlog_read"] });
   });
 });

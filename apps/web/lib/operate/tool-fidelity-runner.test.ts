@@ -9,7 +9,6 @@ const mocks = vi.hoisted(() => ({ call: vi.fn(), manifests: vi.fn(), tools: vi.f
   account: vi.fn(), budget: vi.fn(), budgetEvent: vi.fn(), executeAdapter: vi.fn(), admit: vi.fn() }));
 vi.mock("@/lib/ai-inference", () => ({ callProvider: mocks.call }));
 vi.mock("@/lib/routing/loader", () => ({ loadEndpointManifests: mocks.manifests, invalidateRoutingLoaderCache: vi.fn() }));
-vi.mock("@/lib/mcp-tools", () => ({ getAvailableTools: mocks.tools }));
 vi.mock("@/lib/platform/version", () => ({ loadPlatformVersion: mocks.version }));
 vi.mock("@/lib/inference/dmr-runtime-config", () => ({ getLocalThinkingBudgetEvidence: mocks.proof }));
 vi.mock("@/lib/agent-grants", () => ({ isToolAllowedByGrants: mocks.grants }));
@@ -32,7 +31,7 @@ type Dispatch = NonNullable<ToolExecutionContext["governedDispatch"]>;
 let reads: ReturnType<typeof vi.fn<Dispatch>>;
 let rows: Map<string, Record<string, unknown>>;
 const context = () => ({ agentId: "agent", threadId: "thread", userContext: { platformRole: "ceo", isSuperuser: true },
-  roomAuthorizedGrants: ["backlog_read"], governedDispatch: reads });
+  governedReadToolCatalog: mocks.tools, governedDispatch: reads });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -74,7 +73,7 @@ describe("bounded local fidelity diagnostic", () => {
     expect(mocks.call.mock.calls.map(call => (call[4] as unknown[]).length))
       .toEqual([8, 15, 24, 32, 48].flatMap(size => Array(9).fill(size)));
     expect(mocks.update).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "completed" }) }));
-    expect(mocks.tools).toHaveBeenCalledWith(context().userContext, expect.objectContaining({ roomAuthorizedGrants: ["backlog_read"] }));
+    expect(mocks.tools).toHaveBeenCalledTimes(46);
   });
   it("never sends a tool result or model prose into another inference call", async () => {
     await runLocalToolFidelityDiagnostic(selection, "u", context());
@@ -88,6 +87,12 @@ describe("bounded local fidelity diagnostic", () => {
   it("does not infer authority or audit correlation for an unbound caller", async () => {
     const result = await runLocalToolFidelityDiagnostic(selection, "u", { ...context(), governedDispatch: undefined });
     expect(result.success).toBe(false); expect(mocks.call).not.toHaveBeenCalled();
+  });
+  it("refuses a caller without the original server-owned catalog projection", async () => {
+    const result = await runLocalToolFidelityDiagnostic(selection, "u", { ...context(), governedReadToolCatalog: undefined } as ToolExecutionContext);
+    expect(result.success).toBe(false);
+    expect(mocks.call).not.toHaveBeenCalled();
+    expect(mocks.create).not.toHaveBeenCalled();
   });
   it("keeps unavailable exact model/runtime identity unrun", async () => {
     mocks.proof.mockResolvedValue(undefined);
