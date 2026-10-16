@@ -329,3 +329,94 @@ old local-CI skill calling it an unnecessary fallback. Align that instruction
 with the real readiness contract: use the existing qualified reference, retain
 private lease/session/path detail on the install, and do not re-run a full gate
 for a body metadata omission.
+
+## Headless assistant identity correction (2026-10-16)
+
+This continuation addresses AC-PREVIEW-4 / R4 in BI-10AC904B. It does not declare
+the other preview criteria or the preserved feature accepted. WC-38F686BF owns
+`fix/headless-coworker-binding`, based on
+`46cce23828404c121d31eb15c82e1621193e60b5`. The initial design claim derived a
+small shape from the legacy unclassified bug; retain the earlier medium
+implementation history and declare medium for this authority-sensitive repair.
+No credential, grant, clearance, native connector, endpoint or runtime changed.
+
+### Reproduction and architecture
+
+The unchanged source binder plus canonical MCP transport returned success with
+`agentBound=false` and no actor. The native connector separately resolves
+AGT-EXT-CODEX. On the named base, a real Node assertion configuring fixture-only
+headless OAuth credentials failed: `resolveMcpAccess` returned null because it
+reads only the PAT. This rules out network, OAuth exchange and agent grants as
+the cause of that source failure. Existing client creation submits only name
+and scopes; its server action accepts an unchecked Agent row reference. The
+token exchange requires a valid active Agent row. Post-fix green and live
+credential qualification remain unrun.
+
+Reuse the existing OAuth eligible-coworker query for both listing and submission;
+semantic assistant IDs must resolve to its returned row IDs. A new headless
+client has no prior client/resource delegation: make that absence explicit in
+the shared query while preserving existing scoped interactive calls. Current
+human eligibility, active/non-archived identity, canonical mirror exclusions,
+token scopes, coworker grants and room admission remain authoritative. Preserve
+intentional account-only clients and the existing PAT migration path. Never
+infer identity from a display name, use another client's credentials, or copy
+the interactive connector's tokens into a shell.
+
+### Design grounding
+
+The existing `/admin/platform-development` form remains the only home. Its
+operator persona needs a named client, an explicit assistant choice and the
+existing permission choices. Reuse shared form fields, notices, report-kit and
+theme tokens; add no navigation or wizard. Account-only clients explain their
+Workroom limit. Missing eligibility, loading, permission and submission errors
+stay inline and must not silently create an anonymous client after a failed
+selection. Identity displayed after creation comes from the saved server result.
+
+The working [HTML prototype](../prototypes/2026-10-16-headless-coworker-binding.html)
+was exercised by selecting Codex and previewing its identity; it creates no key.
+UX advisory engagement CE-7FFF5D1E is requested, not a completed critique.
+Recorded kernel interaction DI-BE040C114168 chose `explicit-existing-assistant`
+over `implicit-client-name` and `separate-credential-wizard`, with high confidence
+and usable signal. This is design advice, not an execution grant. Reject name-only
+identity inference; the existing interactive authority-equivalence default is a
+separate validated mechanism and remains unchanged. The UX-fit manifest records
+this actual choice. Keep existing prose budgets by shortening repeated copy.
+
+### Ordered bounded delivery
+
+1. **HCB-R1 / HCB-CT-IDENTITY / HCB-FLOW-ISSUE / HCB-VC-ISSUE:** add red tests for
+   explicit eligible assistant selection, semantic-to-row binding, account-only
+   compatibility, unauthorized/stale/archived identities and no secret issuance
+   on refusal. Extend the existing OAuth eligibility seam, action and form;
+   re-read eligibility on submission. Test exact persisted identity and display.
+2. **HCB-R2 / HCB-CT-CREDENTIAL / HCB-FLOW-BIND / HCB-VC-BIND:** make the source
+   Workroom binder reuse `mcp-credential.mjs` rather than duplicate PAT-only
+   resolution. Keep endpoint precedence, short timeout and unavailable/refused
+   marker behavior. Test client credentials, explicit credential file, PAT
+   compatibility, absent/malformed config, no secret output and no marker on
+   refusal. No interactive OAuth token extraction or Grok identity substitution.
+3. Resolve graph-linked tests for all three source entries in the Workroom impact
+   contract. Run affected component/action/OAuth tests, Node credential/binder
+   contracts, production/test web typechecks, prose and style guards, doc index
+   and diagrams. Exercise the form's keyboard, narrow viewport and failure states
+   in the governed verification lane; retain measured or recorded-choice UX-fit
+   evidence. Run qualified exact-tree integration and independent source review,
+   then normal DCO publication, protected CI and merge queue.
+4. After canonical deployment and CAN-TEST, qualify the intended source actor
+   through supported credential provisioning using the same account and bounded
+   permissions. Record actual get_my_coworker_profile binding separately from
+   native connector identity. Unavailable provisioning remains unrun; do not
+   manufacture an accepted credential, token, delegated human or review receipt.
+
+This is one atomic correction to the existing approved delivery path: provisioning
+an assistant without consumption leaves the source workflow anonymous, while
+consumption alone cannot supply the missing assistant binding. Use live immutable
+coverage against this continuation before product edits; historical coverage is
+not evidence for these new paths. The existing eight preview criteria remain
+the owning item's full completion contract.
+
+Risks are incorrect row/semantic identity, stale eligibility, authority widening,
+secret exposure and a changed default endpoint. Negative tests must fence each.
+Rollback is a reviewed source revert and normal canonical release. Revoke only
+an explicitly identified newly issued test client through its supported owner
+flow if cleanup is required; never revoke or rotate another client's credential.
