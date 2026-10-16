@@ -29,6 +29,8 @@ vi.mock("@/lib/routing/model-auth-eligibility", () => ({ recordDiscoveredAuthEli
 vi.mock("@dpf/db", () => ({
   Prisma: { AnyNull: "any-null" },
   prisma: {
+    // These legacy discovery fixtures deliberately have no owned connection.
+    aiProviderConnection: { findUnique: vi.fn(async () => null) },
     credentialEntry: {
       findUnique: vi.fn(async (args: { where?: { providerId?: string } } | undefined) => {
         const providerId = args?.where?.providerId;

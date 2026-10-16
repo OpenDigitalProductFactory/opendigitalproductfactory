@@ -34,7 +34,7 @@ For locally capability-activated services, runtime profile names are mechanicall
 | `runtime:browser-automation` | `runtime-browser-automation` | `browser-use` |
 | `runtime:durable-automation` | `runtime-durable-automation` | `redis`, `redis-exporter`, `inngest` |
 | `runtime:local-speech` | `runtime-local-speech` | `dpf-tts` (speech-to-text is provider-managed, not a local service — see below) |
-| `runtime:deep-observability` | `runtime-deep-observability` | Prometheus, Grafana, Loki, Alloy, and PostgreSQL exporter |
+| `runtime:deep-observability` | `runtime-deep-observability` | Prometheus, Grafana, and PostgreSQL exporter (Loki and Alloy are always-on `runtime:core` services, BI-F8024A9D). The operator chooses it at install or in Settings → Monitoring (BI-83260BB3). |
 | `runtime:external-ai` | `runtime-external-ai` on Linux | Ollama from the Linux overlay; configured external providers remain provider-managed |
 | `runtime:adp-integration` | `integrations-adp` (separate-distribution exception) | `adp` |
 | `runtime:development` | `dev` and `integration-test` (lifecycle-only) | `dev-postgres`, `dev-init`, `dev-portal`, and `integration-test-harness` |
@@ -59,6 +59,8 @@ The governed [Compose wrapper](../../scripts/dpf-compose.mjs) locates the instal
 Enabling resolves the full dependency closure, persists the desired catalog/state identity, starts the required services, and commits live capability state only after the signed host receipt proves the exact topology and required health. Disabling first closes work admission. If a declared work guard has queued or running work, the request returns `drain_required` with blocker counts and leaves the current projection active. Once drained, the transition stops and removes services no longer required.
 
 The transition protocol uses an HMAC-signed, expiring envelope containing the transition identifier, prior and desired keys, hashes, profiles, and services. The promoter has the only read-write `/dpf-state` mount. The host apply script serializes transitions, writes the install snapshot atomically, reconciles explicit service deltas, observes the Compose project, and writes a signed receipt. Its journal permits a crash-safe retry. A failed reconcile or required-health check restores the previous install snapshot and service closure; an unverifiable rollback is reported as `rollback_failed`, never as success. Startup reconciliation completes or compensates pending database receipts before admitting another transition.
+
+Host apply can recreate the portal before it writes its receipt. A process-owned observer checks for late signed receipts every 30 seconds, independently of optional job infrastructure. This observer never launches or compensates host work when a receipt is absent. Startup and live completion share the transactional envelope, database-baseline and audit fences; identical completion is idempotent. Serialization contention leaves the existing transition available for the next pass. Admission still checks durable active and recovery-required rows, and background observation cannot reopen a failed startup barrier.
 
 Health is an observation of the desired state, not permission to enable or disable a capability.
 
@@ -162,7 +164,20 @@ Reporting is not repair. The diagnosis says what diverged; it never decides whic
 authority wins, because reconciling without first finding the writer that moved
 state outside the transition protocol leaves the cause in place.
 
-## Proposed existing-install reconciliation — BI-5ACBAC50
+## Existing-install reconciliation — BI-5ACBAC50
+
+The current implementation supports version 2 reconciliation with distinct,
+complete host and database baselines, immutable packaged code identity, touched-only
+database updates, and persisted compensation. Preview reports disagreement without
+choosing desired settings; apply requires an explicit request. Browser actions
+authorize the session's `manage_platform` capability. Governed MCP checks the same
+capability and existing token/coworker grants, then passes its authenticated user
+to the shared command service; a browser cookie is not an MCP prerequisite.
+
+The backend checkpoint passed all six real PostgreSQL cases and its canonical
+gate; PR 6366 also passed protected integration and merged. Those are source and
+cloud proofs. Canonical deployment and live reconciliation remain separate
+acceptance gates, and no native review verdict is implied.
 
 The bounded design passed independent review; implementation is in progress
 and has not run on an installation.
@@ -272,6 +287,13 @@ owner's receipt. Keep authority, credential and destructive confirmation gates.
 At least 20% of this repair consolidates duplicated projection, signing and
 baseline validation. No source test, consultation, merged PR or healthy portal
 substitutes for the live reconciliation and build-engine acceptance.
+
+### Historical implementation evidence
+
+The following incremental notes preserve earlier test results and the boundaries
+that existed at each checkpoint. Their statements about unimplemented modes or
+pending source qualification are superseded by the current contract above; they
+do not describe the latest source or establish live acceptance.
 
 The first signing regression reproduced two failures before the repair, then
 passed all 13 shared-signing tests. The host actuator now imports that same

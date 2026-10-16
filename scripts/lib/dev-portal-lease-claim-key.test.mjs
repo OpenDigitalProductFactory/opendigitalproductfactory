@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, cpSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, dirname } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -46,7 +46,7 @@ test("terminal keys are stopped instead of scanned or replaced", () => {
 });
 
 import { protectedServiceIdentity, REQUIRED_PREVIEW_DELIVERY_TOOLS, assertToolReadiness, assertPreviewConfig, assertPreviewContainer, previewOverride, runPreviewLifecycle, stopOwnedPreviewContainers } from './dev-preview-runtime.mjs';
-const identity = { worktree: '/feature/worktree', sha: 'a'.repeat(40), leaseId: 'NPEL-MINE' };
+const identity = { worktree: resolve('/feature/worktree'), sha: 'a'.repeat(40), leaseId: 'NPEL-MINE' };
 const config = () => {
   const result = previewOverride(identity);
   Object.assign(result.services['dev-init'].environment, { CONTRIBUTOR_PREVIEW_PASSWORD: 'only-in-memory',
@@ -163,6 +163,10 @@ test('the policy claim-key suite runs without installed workspace dependencies',
     const shared = join(fixture, 'packages/integration-shared/src');
     mkdirSync(shared, { recursive: true });
     cpSync(join(source, '../../packages/integration-shared/src/delivery-readiness-contract.cjs'), join(shared, 'delivery-readiness-contract.cjs'));
+    // mcp-credential.mjs re-exports the client_credentials exchange from the skill pack (BI-84C1F526).
+    const packLib = join(fixture, 'packages/dpf-skill-pack/scripts/lib');
+    mkdirSync(packLib, { recursive: true });
+    cpSync(join(source, '../../packages/dpf-skill-pack/scripts/lib/client-credentials-exchange.mjs'), join(packLib, 'client-credentials-exchange.mjs'));
     const { NODE_TEST_CONTEXT: inheritedTestContext, ...env } = process.env;
     const result = spawnSync(process.execPath, ['--test', '--test-name-pattern=^the contributor-preview', join(fixture, 'scripts/lib/dev-portal-lease-claim-key.test.mjs')], { encoding: 'utf8', cwd: fixture, env });
     assert.equal(result.status, 0, result.stderr || result.stdout);

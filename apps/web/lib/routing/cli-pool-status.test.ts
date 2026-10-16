@@ -6,25 +6,27 @@ vi.mock("@dpf/db", () => {
   return {
     prisma: {
       cliPoolStatus: {
-        upsert: vi.fn(async ({ where, create, update }: { where: { adapterType: string }; create: Record<string, unknown>; update: Record<string, unknown> }) => {
-          const existing = rows.get(where.adapterType);
+        upsert: vi.fn(async ({ where, create, update }: { where: { adapterType?: string; scopeKey?: string }; create: Record<string, unknown>; update: Record<string, unknown> }) => {
+          const key = where.scopeKey ?? where.adapterType!;
+          const existing = rows.get(key);
           const row = existing ? { ...existing, ...update } : { ...create };
-          rows.set(where.adapterType, row);
+          rows.set(key, row);
           return row;
         }),
-        findUnique: vi.fn(async ({ where }: { where: { adapterType: string } }) => {
-          return rows.get(where.adapterType) ?? null;
+        findUnique: vi.fn(async ({ where }: { where: { adapterType?: string; scopeKey?: string } }) => {
+          return rows.get(where.scopeKey ?? where.adapterType!) ?? null;
         }),
         findMany: vi.fn(async () => [...rows.values()]),
-        update: vi.fn(async ({ where, data }: { where: { adapterType: string }; data: Record<string, unknown> }) => {
-          const existing = rows.get(where.adapterType);
+        update: vi.fn(async ({ where, data }: { where: { adapterType?: string; scopeKey?: string }; data: Record<string, unknown> }) => {
+          const key = where.scopeKey ?? where.adapterType!;
+          const existing = rows.get(key);
           if (!existing) throw new Error("Record to update not found");
           const row = { ...existing, ...data };
-          rows.set(where.adapterType, row);
+          rows.set(key, row);
           return row;
         }),
-        deleteMany: vi.fn(async ({ where }: { where: { adapterType: string } }) => {
-          rows.delete(where.adapterType);
+        deleteMany: vi.fn(async ({ where }: { where: { adapterType?: string; scopeKey?: string } }) => {
+          rows.delete(where.scopeKey ?? where.adapterType!);
           return { count: 1 };
         }),
         _rows: rows,
@@ -46,10 +48,20 @@ import {
   getCliPoolStatus,
   getAllCliPoolStatuses,
   clearCliRateLimit,
+  indexCliPoolResetTimes,
 } from "./cli-pool-status";
 import type { WeeklyQuotaSnapshot } from "./weekly-quota";
 import { prisma } from "@dpf/db";
 import { applyCapacitySoftExclusion, capacityRoutingExclusionReason } from "./capacity-routing-exclude";
+
+it("projects typed scoped CLI cooldowns conservatively alongside legacy aliases", () => {
+  const later = new Date("2026-10-15T00:00:00Z");
+  expect(indexCliPoolResetTimes([
+    { adapterType: "codex-cli", adapterKind: null, resetAt: new Date("2026-10-14T00:00:00Z") },
+    { adapterType: null, adapterKind: "codex", resetAt: later },
+    { adapterType: null, adapterKind: null, resetAt: later },
+  ])).toEqual(new Map([["codex-cli", later.getTime()]]));
+});
 
 function snap(overrides: Partial<WeeklyQuotaSnapshot> = {}): WeeklyQuotaSnapshot {
   return {
@@ -101,6 +113,15 @@ describe("parseRetryAfterSeconds", () => {
 });
 
 describe("recordCliRateLimit", () => {
+  it("does not clear a longer legacy cooldown when a scoped pool has a shorter observation", async () => {
+    clearMockRows();
+    const identity = { providerId: "codex", providerConnectionId: "extra-account" };
+    await recordCliRateLimit("codex-cli", "codex", "Retry-After: 120");
+    await recordCliRateLimit("codex-cli", "codex", "Retry-After: 10", identity);
+    expect((await getCliPoolStatus("codex-cli", identity))?.secondsUntilReset).toBeGreaterThan(100);
+    await clearCliRateLimit("codex-cli", identity);
+    expect((await getCliPoolStatus("codex-cli"))?.isExhausted).toBe(true);
+  });
   beforeEach(() => {
     clearMockRows();
     vi.clearAllMocks();

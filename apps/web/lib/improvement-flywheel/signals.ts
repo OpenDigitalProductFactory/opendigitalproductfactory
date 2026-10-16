@@ -8,6 +8,7 @@ import type { Prisma } from "@dpf/db";
 import { prisma } from "@dpf/db";
 
 import { ingestBacklogItem } from "@/lib/operate/backlog-ingest";
+import { toolDefectOrigin } from "@/lib/operate/tool-defect-origin";
 import type { BacklogWorkType } from "@/lib/explore/backlog";
 
 export const SIGNAL_BACKLOG_THRESHOLD = 3;
@@ -55,6 +56,7 @@ export type FileSignalBacklogItemFn = (input: {
   recurrenceCount: number;
   routeContext?: string | null;
   agentId?: string | null;
+  evidence?: unknown;
 }) => Promise<{ itemId: string } | null>;
 
 export type ImprovementSignalDeps = { fileBacklogItem?: FileSignalBacklogItemFn };
@@ -74,7 +76,9 @@ const filePersistentSignal: FileSignalBacklogItemFn = async (signal) => {
       source: "automated-detection",
       itemIdPrefix: "SIG",
       agentId: signal.agentId ?? null,
-      origin: { kind: "improvement-signal", id: signal.signalId },
+      // A repeated tool failure files under its tool, not this per-agent+route
+      // signal, so every coworker's observation lands on one item (BI-891E4E11).
+      origin: toolDefectOrigin(signal.evidence) ?? { kind: "improvement-signal", id: signal.signalId },
     });
     return { itemId: result.itemId };
   } catch (error) {

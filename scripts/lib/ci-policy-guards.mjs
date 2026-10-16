@@ -264,6 +264,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // then recorded as done by Save-Progress. Optional-script guards must say so.
       conformanceTest("scripts/check-installer-skip-visibility.test.mjs"),
       conformanceTest("scripts/check-setup-worktree-hygiene.test.mjs"),
+      // BI-8D152751: the Grok credential step must feed its issuer on stdin.
+      conformanceTest("scripts/bootstrap-grok-credential-issuer.test.mjs"),
     ], { inputs: ["code"] }),
     guard("installer-state-contract", "Installer State Contract", [
       // Drives real bash: install-dpf.sh runs under `set -euo pipefail`, and the
@@ -398,6 +400,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/ci-policy-test-inventory.test.mjs",
         "scripts/lib/git-shallow-preflight.test.mjs",
         "scripts/lib/ensure-compile-ready.test.mjs",
+        "scripts/lib/bootstrap-managed-install-proof.test.mjs",
+        "scripts/lib/bootstrap-worktree-deps.test.mjs",
         "scripts/pregate-preflight.test.mjs",
         "scripts/pregate.test.mjs",
         "scripts/lib/pregate-preflight-receipt.test.mjs",
@@ -432,6 +436,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-5BCDB07C: the Grok refresher writes bearer_token_file and stops
       // when the credentials client is refused. Listed here so CI runs it.
       node("--test", "scripts/lib/grok-credential.test.mjs"),
+      // BI-84C1F526: Grok's SessionStart refreshes that file from the pack copy.
+      node("--test", "packages/dpf-skill-pack/hooks/grok-credential-refresh.test.mjs"),
       node("scripts/check-authoring-cost-dimensions.mjs"),
       node("scripts/check-ci-policy-test-inventory.mjs"),
     ]),
@@ -884,6 +890,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/root-clone-refresh.test.mjs",
         "scripts/lib/compose-safety.test.mjs",
         "scripts/lib/promoter-compose-mounts.test.mjs",
+        "scripts/lib/maintenance-epoch-receipt.test.mjs",
+        "scripts/promoter-epoch-evidence.test.mjs",
         "scripts/sandbox-entrypoint.test.mjs",
         "scripts/lib/local-integration-ci.test.mjs",
         // BI-ECAE03F7: the supervisor that fences a long gate run was
@@ -1115,6 +1123,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "packages/dpf-skill-pack/hooks/process-spine-health.test.mjs",
         "packages/dpf-skill-pack/scripts/generate-operating-contract.test.mjs",
+        "packages/dpf-skill-pack/scripts/gen-client-capabilities.test.mjs",
       ),
       node(
         "--test",

@@ -13,7 +13,8 @@ const MARK = { userId: "u-mark", principalRowId: "p-mark", principalRef: "PRN-ma
 function fakeDb(overrides: Partial<{ rooms: unknown[]; builds: unknown[]; tasks: unknown[] }> = {}) {
   const db = {
     user: { findFirst: vi.fn(async ({ where }: { where: { OR: Array<{ id?: string; email?: string }> } }) =>
-      where.OR.some((o) => o.id === ADMIN.userId || o.email === "admin@dpf.local") ? { id: ADMIN.userId, email: "admin@dpf.local" } : null) },
+      where.OR.some((o) => o.id === ADMIN.userId || o.email === "admin@dpf.local") ? { id: ADMIN.userId, email: "admin@dpf.local" } : null),
+      update: vi.fn(async () => ({})) },
     principalAlias: { findFirst: vi.fn(async ({ where }: { where: { aliasValue: string } }) =>
       where.aliasValue === ADMIN.userId ? { principal: { id: ADMIN.principalRowId, principalId: ADMIN.principalRef } }
         : where.aliasValue === MARK.userId ? { principal: { id: MARK.principalRowId, principalId: MARK.principalRef } } : null) },
@@ -108,6 +109,28 @@ describe("applyAccountHandover", () => {
     const result = await applyAccountHandover(fakeDb(), { sourceAccount: "admin@dpf.local", digest: "stale", reason: "r", actor });
     expect(result).toMatchObject({ ok: false });
     expect(execute).not.toHaveBeenCalled();
+  });
+
+  // BI-858FDE5A: re-homing existing work is not enough. Rules that name an
+  // owner for NEW work (the workroom drive, the task seeds) read history, so
+  // the account itself records that its work was handed over.
+  it("records on the account that its work was handed over, by whom", async () => {
+    const db = fakeDb();
+    const plan = await planAccountHandover(db, { sourceAccount: "admin@dpf.local" });
+    if (!plan.ok) throw new Error("expected a plan");
+    const now = new Date("2026-10-14T12:00:00Z");
+    await applyAccountHandover(db, { sourceAccount: "admin@dpf.local", digest: plan.data.digest, reason: "Absent account", actor, now });
+    expect(db.user.update).toHaveBeenCalledWith({
+      where: { id: "u-admin" },
+      data: { workHandedOverAt: now, workHandedOverById: "u-mark" },
+    });
+  });
+
+  it("records no handover when the approval was refused", async () => {
+    const db = fakeDb();
+    await applyAccountHandover(db, { sourceAccount: "admin@dpf.local", digest: "stale", reason: "r", actor });
+    await applyAccountHandover(db, { sourceAccount: "admin@dpf.local", digest: "stale", reason: " ", actor });
+    expect(db.user.update).not.toHaveBeenCalled();
   });
 
   it("re-homes every planned item under the approving person and reports counts", async () => {

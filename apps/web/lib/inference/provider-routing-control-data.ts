@@ -9,6 +9,7 @@ import { loadProviderHealthBatch } from "@/lib/routing/provider-health-loader";
 import { getEndpointRuntimeState } from "@/lib/routing/rate-tracker";
 import { cliAdapterTypeForProvider } from "@/lib/routing/provider-routing-eligibility";
 import { getAllCliPoolStatuses, formatWeeklyAllocationHint } from "@/lib/routing/cli-pool-status";
+import { capacityProviderIds, indexProviderCapacityByProvider } from "@/lib/routing/provider-capacity/store";
 import { readRecoveryState, providerRecoveryJobId } from "@/lib/routing/provider-auto-disable";
 
 /** Shared catalog/detail read model; no status mutation or page-driven recovery. */
@@ -18,12 +19,12 @@ export async function loadProviderRoutingControls(providers: ProviderWithCredent
   const [health, pools, localOnly, capacities, recoveries, hostCapacity, t] = await Promise.all([
     loadProviderHealthBatch(ids, { now: now.getTime(), runtimeState: getEndpointRuntimeState }),
     getAllCliPoolStatuses(), getLocalOnlyInference(),
-    prisma.providerCapacityStatus.findMany({ where: { providerId: { in: ids } } }),
+    prisma.providerCapacityStatus.findMany({ where: { providerId: { in: capacityProviderIds(ids) } } }),
     prisma.scheduledJob.findMany({ where: { jobId: { in: ids.flatMap(id => [providerRecoveryJobId(id), `provider-reenable-${id}`]) }, lastStatus: "scheduled", schedule: { not: "disabled" } } }),
     ids.some(isLocalProviderId) ? inspectLocalProviderCapacity() : Promise.resolve(null),
     getT("setup"),
   ]);
-  const capacityById = new Map(capacities.map(c => [c.providerId, c]));
+  const capacityById = indexProviderCapacityByProvider(capacities, now.getTime());
   const recoveryById = new Map(recoveries.map(j => [j.jobId, j]));
   return new Map(providers.map(pw => {
     const id = pw.provider.providerId;

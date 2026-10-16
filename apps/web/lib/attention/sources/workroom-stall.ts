@@ -172,8 +172,10 @@ export function projectRoomStall(row: RoomStallRow): AttentionItem | null {
         ? "this room's outcome, and anything nested under it"
         : "this room's outcome — and it has no owner to escalate to",
       // Appointing an owner or clearing a stop condition is a judgment call about
-      // who is accountable, not a one-tap acknowledgement.
-      decideEffort: "judgment",
+      // who is accountable, not a one-tap acknowledgement. A writeback stall is
+      // neither: the card says an appointment will not change it, so it asks for
+      // no judgment and owner-routing sends it to the custodian (BI-72679FE0).
+      decideEffort: writeback ? "review" : "judgment",
       irreversible: false,
     },
     // The age of the stall, not of the last tick: every tick bumps updatedAt, so

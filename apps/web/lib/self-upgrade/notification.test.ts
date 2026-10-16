@@ -2,17 +2,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
   create: vi.fn(),
+  findNotification: vi.fn(),
+  findRun: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
     platformNotification: {
       create: db.create,
+      findFirst: db.findNotification,
+    },
+    selfUpgradeRun: {
+      findFirst: db.findRun,
     },
   },
 }));
 
-import { notificationMessage, notifySelfUpgradeEvent } from "./notification";
+import { notificationMessage, notifySelfUpgradeCompletedFor, notifySelfUpgradeEvent } from "./notification";
 
 describe("notificationMessage", () => {
   it("formats start, completion, failure, and skipped messages", () => {
@@ -77,5 +83,42 @@ describe("notifySelfUpgradeEvent", () => {
     );
 
     warn.mockRestore();
+  });
+});
+
+describe("notifySelfUpgradeCompletedFor (BI-E7974C18)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db.create.mockResolvedValue({});
+  });
+
+  it("writes one completed notification for the run that produced the serving image", async () => {
+    db.findRun.mockResolvedValue({ runId: "SUR-9" });
+    db.findNotification.mockResolvedValue(null);
+
+    await notifySelfUpgradeCompletedFor("abc123");
+
+    expect(db.findRun).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ status: "succeeded" }),
+    }));
+    expect(db.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ category: "self-upgrade", subjectId: "SUR-9", message: "Portal self-upgrade SUR-9 completed." }),
+    });
+  });
+
+  it("writes nothing on a restart: the run was already announced", async () => {
+    db.findRun.mockResolvedValue({ runId: "SUR-9" });
+    db.findNotification.mockResolvedValue({ id: "n1" });
+
+    await notifySelfUpgradeCompletedFor("abc123");
+
+    expect(db.create).not.toHaveBeenCalled();
+  });
+
+  it("writes nothing when no upgrade run produced this image", async () => {
+    db.findRun.mockResolvedValue(null);
+    await notifySelfUpgradeCompletedFor("abc123");
+    await notifySelfUpgradeCompletedFor(null);
+    expect(db.create).not.toHaveBeenCalled();
   });
 });

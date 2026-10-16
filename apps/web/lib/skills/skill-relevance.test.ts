@@ -115,7 +115,12 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
   /** Frozen per-role eligible counts. Lower one when you genuinely reduce a
    *  role's set; never raise one without saying why in the PR. */
   const ELIGIBLE_BASELINE: Record<string, number> = {
-    "admin-assistant": 7,
+    // +1 each (admin-assistant 7 -> 8, ea-architect 13 -> 14, finance-controller
+    // 8 -> 9): create-office-document (BI-012487AA) is these roles' only guide to
+    // create_report, create_letter, create_sheet and create_drawing, granted in the
+    // same change. Additive capability, not drift; its narrow triggerPattern
+    // (report, letter, spreadsheet, diagram) ranks it only when asked.
+    "admin-assistant": 8,
     // ── BI-4CE4F52F / BI-5C1978C7 pattern: five services in the coworker service
     //    catalog advertised a backingSkillId that resolved to NOTHING — an
     //    advertised capability with no skill behind it. Each of these five roles
@@ -145,7 +150,7 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
     "data-architect": 9,
     "doc-specialist": 11,
     "documentation-specialist": 10,
-    "ea-architect": 13,
+    "ea-architect": 14,
     "external-catalog-scout": 8,
     "external-coding-agent": 18,
     "farm-ranch-steward": 7,
@@ -160,7 +165,8 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
     bookkeeper: 7,
     // 7 -> 8: likewise two — burn-revenue-runway-read (standing work) and
     //    provider-cost-intake (backs svc-finance-provider-cost-intake).
-    "finance-controller": 8,
+    // 8 -> 9: create-office-document (BI-012487AA), see admin-assistant above.
+    "finance-controller": 9,
     "integration-engineer": 7,
     "time-off-advisor": 7,
     "ux-design-critic": 7,

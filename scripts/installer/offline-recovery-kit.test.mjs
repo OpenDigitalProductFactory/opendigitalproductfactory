@@ -79,8 +79,11 @@ test("refuses a linked enrollment file", posix, async t => {
   await assert.rejects(loadOfflineRecoveryKit({ ...f.args, trustFile: alias }), /offline_recovery_kit_file/);
 });
 test("rejects duplicate keys in the protected enrollment", posix, async t => {
-  const f = await fixture(t); const text = (await readFile(f.trustFile, "utf8")).replace('{', '{"version":1,');
-  await writeFile(f.trustFile, text);
+  const f = await fixture(t);
+  const text = await readFile(f.trustFile, "utf8");
+  assert.equal(text[0], "{");
+  // Insert one extra root key; preserve every nested object and original byte.
+  await writeFile(f.trustFile, '{"version":1,' + text.slice(1));
   await assert.rejects(loadOfflineRecoveryKit(f.args), /offline_recovery_kit_enrollment/);
 });
 test("Windows refuses before trusting permission bits", { skip: process.platform !== "win32" }, async () => {

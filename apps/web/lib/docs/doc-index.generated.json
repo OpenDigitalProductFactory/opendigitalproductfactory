@@ -617,6 +617,7 @@
       "anchors": [
         "agent-client-capability-parity-tracker",
         "why-this-exists",
+        "client-capability-profile-generated-bi-64795fd0",
         "capability-matrix-verified-2026-06-20",
         "2026-06-26-refresh-delivery-surface-sweep",
         "2026-07-24-refresh-bi-14e9f7ce-closeout-grok-hook-portability",
@@ -1266,7 +1267,8 @@
         "backup-and-health-semantics",
         "observation-and-diagnostics-boundary",
         "diagnosing-capability-drift-bi-5acbac50",
-        "proposed-existing-install-reconciliation-bi-5acbac50",
+        "existing-install-reconciliation-bi-5acbac50",
+        "historical-implementation-evidence",
         "safe-operating-rules",
         "how-self-upgrade-may-recreate-a-service"
       ]
@@ -2826,6 +2828,7 @@
       "publishedPortal": false,
       "anchors": [
         "workroom-review-profile-read-contract",
+        "operator-disclosure",
         "common-requirements-and-extensions",
         "coverage-and-representative-domains",
         "verification-and-recovery"
@@ -5720,6 +5723,7 @@
       "publishedPortal": false,
       "anchors": [
         "platform-support-watch-list-living-document",
+        "capability-reconciliation-on-release-installs-bi-5acbac50",
         "host-process-inventory-before-admission-bi-6de5a3b6",
         "host-claim-transport-and-windows-command-launch-bi-091a2dcf",
         "windows-host-guard-interpreters-bi-ba5f777a",
@@ -11825,6 +11829,17 @@
         "how-work-rooms-behave"
       ]
     },
+    "docs/user-guide/ai-workforce/provider-account-routing.md": {
+      "publicHref": "/user-guide/ai-workforce/provider-account-routing/",
+      "portalHref": "/docs/ai-workforce/provider-account-routing",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "choose-accounts-for-the-work",
+        "capacity-and-recovery",
+        "usage-records"
+      ]
+    },
     "docs/user-guide/ai-workforce/provider-anthropic.md": {
       "publicHref": "/user-guide/ai-workforce/provider-anthropic/",
       "portalHref": "/docs/ai-workforce/provider-anthropic",
@@ -12521,6 +12536,7 @@
         "close-readiness-workflow",
         "what-to-watch",
         "recovery-and-evidence",
+        "ask-for-a-branded-report-workbook-or-letter",
         "related-help"
       ]
     },
@@ -12761,6 +12777,7 @@
         "what-happens-if-you-do-nothing",
         "what-is-reversible",
         "recovery-and-help",
+        "connected-agent-clients",
         "what-to-watch",
         "when-required-services-are-degraded"
       ]

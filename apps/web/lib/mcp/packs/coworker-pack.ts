@@ -155,6 +155,13 @@ const definitions: ToolDefinition[] = [
   },
 ];
 
+/** BI-4592CF69: the author learns at request time what the reviewer would hit. */
+function withReviewDocumentNotice(result: ToolResult, notice: string | undefined): ToolResult {
+  if (!notice || !result.success) return result;
+  const data = result.data && typeof result.data === "object" && !Array.isArray(result.data) ? result.data : {};
+  return { ...result, message: [result.message, notice].filter(Boolean).join(" "), data: { ...data, reviewDocumentNotice: notice } };
+}
+
 async function requestCoworkerHandler(
   params: Record<string, unknown>,
   userId: string,
@@ -168,7 +175,7 @@ async function requestCoworkerHandler(
   const authority = await authorizeCoworkerRequest(params, userId, context);
   if (authority.refusal) return authority.refusal;
   if (authority.bounded || !context?.threadId) {
-    return dispatchExternalCoworkerTask({
+    const dispatched = await dispatchExternalCoworkerTask({
       collaborationKind: "handoff",
       targetAgent,
       objective,
@@ -179,6 +186,7 @@ async function requestCoworkerHandler(
       userId,
       context: authority.bounded ? { ...context, routeContext: "/build" } : context,
     });
+    return withReviewDocumentNotice(dispatched, authority.notice);
   }
   const tierParam = Number(params["tier"]);
   const enteredViaParam = typeof params["enteredVia"] === "string" ? params["enteredVia"] : undefined;
