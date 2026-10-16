@@ -116,6 +116,35 @@ function ratifiedTable(scope: string, gate: GppGate): Readonly<Record<string, Ga
   };
 }
 
+describe("declared stage review criticality", () => {
+  it.each(["routine", "consequential", "critical"])("preserves %s through validation, lowering and decompilation", (criticality) => {
+    const input = workedExampleWithoutGate();
+    (input.stages as JsonObject[])[0].criticality = criticality;
+    const document = gppShapeDocumentSchema.parse(input);
+    const definition = lowerToDefinition(document);
+    const roundTrip = decompile(definition, { ratification: NOTHING_RATIFIED }).document;
+
+    expect(definition.stages[0]).toHaveProperty("criticality", criticality);
+    expect(roundTrip.stages[0]).toHaveProperty("criticality", criticality);
+    expect(canonicalJson(roundTrip)).toBe(canonicalJson(document));
+  });
+
+  it("keeps an undeclared stage floor absent throughout the round trip", () => {
+    const document = gppShapeDocumentSchema.parse(workedExampleWithoutGate());
+    const definition = lowerToDefinition(document);
+    const roundTrip = decompile(definition, { ratification: NOTHING_RATIFIED }).document;
+
+    expect(definition.stages[0]).not.toHaveProperty("criticality");
+    expect(roundTrip.stages[0]).not.toHaveProperty("criticality");
+  });
+
+  it("rejects a floor outside the closed review-depth vocabulary", () => {
+    const input = workedExampleWithoutGate();
+    (input.stages as JsonObject[])[0].criticality = "urgent";
+    expect(gppShapeDocumentSchema.safeParse(input).success).toBe(false);
+  });
+});
+
 describe("decompile: the §4.5 worked example", () => {
   it("inquiry-response-watch@1.0.0 decompiles to the §4.5 document minus the gate block when no entry is ratified", () => {
     const { document, awaitingRatification } = decompile(shape("inquiry-response-watch"), { ratification: NOTHING_RATIFIED });

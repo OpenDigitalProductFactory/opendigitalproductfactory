@@ -93,6 +93,7 @@ export function decompile(definition: WorkShapeDefinition, options: DecompileOpt
       advance: decompileAdvance(stage, table, awaitingRatification, declaresRefuseRoute(definition, stage.key)),
       evidence: [...stage.evidence],
     };
+    if (stage.criticality !== undefined) documentStage.criticality = stage.criticality;
     if (stage.tools !== undefined) documentStage.tools = [...stage.tools];
     if (stage.mandatedTools !== undefined) documentStage.mandatedTools = [...stage.mandatedTools];
     if (stage.binding !== undefined) documentStage.binding = copyBinding(stage.binding);

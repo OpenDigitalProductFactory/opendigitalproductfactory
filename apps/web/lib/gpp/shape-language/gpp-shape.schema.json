@@ -186,6 +186,15 @@
         "advance": {
           "$ref": "#/$defs/advance"
         },
+        "criticality": {
+          "type": "string",
+          "enum": [
+            "routine",
+            "consequential",
+            "critical"
+          ],
+          "description": "Optional review-depth floor; does not grant authority or lower inferred criticality."
+        },
         "evidence": {
           "type": "array",
           "items": {

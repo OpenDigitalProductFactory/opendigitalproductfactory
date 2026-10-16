@@ -140,8 +140,10 @@ It accepts the already-resolved effective shape, advance kind, transition risk,
 server-resolved damaging fact and optional declared stage floor. The calculation
 takes the maximum and never grants permission or infers that high review depth
 means damage. No runtime dispatcher consumes it yet. The optional stage-field
-declaration and its shape-language/compiler round trip remain integration work;
-adding a property that serializers could drop is not counted as complete.
+declaration now uses the same criticality type and vocabulary in `WorkShapeStage`
+and the shape-document schema. Lowering and decompilation preserve all three
+values while keeping an undeclared floor absent. No existing shape instance was
+changed and no runtime authority or review consumer was enabled.
 
 - Test-first red: the new focused suite failed because the calculation module
   did not exist; this was an executed test run, not a missing runtime dependency.
@@ -157,6 +159,14 @@ adding a property that serializers could drop is not counted as complete.
 
 BI-B22C8E02 is being handled by the separate chat named `Execute BI-B22C8E02`;
 this branch does not compete for its approval/handoff implementation scope.
+
+Additional phase-1 preparation verification: the first executed round-trip run
+failed for all three declared values because the schema rejected `criticality`.
+After the type/schema/lowering/decompilation changes, 1,182 tests in 38 selected
+compiler and graph-related suites passed, along with both TS7 programs. The
+generated GPP artifacts, style/token drift and whitespace checks passed. These
+are source-local results, not a new canonical integration gate or live workflow
+proof. Full specialist participation and the expanded baseline remain pending.
 
 ## Fulfillment implementation sequence — pending revised review and coverage
 
