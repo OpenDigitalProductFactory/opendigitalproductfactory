@@ -66,3 +66,9 @@ Funding is platform reliability under the operator's existing DEV authorization.
 
 At least one fifth of the work consolidates install provenance and persistence
 in existing primitives rather than adding parallel cache or validation machinery.
+
+## Traceability
+
+Contract: docs/architecture/branch-and-worktree-runbook.md#verification-readiness-classification.
+Flow: scripts/lib/bootstrap-worktree-deps.mjs.
+Verification: scripts/lib/bootstrap-worktree-deps.test.mjs and scripts/lib/bootstrap-managed-install-proof.test.mjs.
