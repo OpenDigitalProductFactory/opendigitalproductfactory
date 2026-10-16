@@ -1,0 +1,28 @@
+# Delivery verification tiers implementation plan
+
+Backlog: BI-5445CECA. Workroom: WC-DD0E6AE5.
+Design: [Delivery verification tiers](../specs/2026-10-16-delivery-verification-tiers-design.md).
+Status: proposed; independent design approval and live plan coverage are not yet recorded.
+
+For agentic workers: execute this plan one independently reviewable backlog item at a time. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the completion gate before success claims, and `dpf-pr-with-dco` for handoff.
+
+## Backlog coverage
+
+This plan implements BI-5445CECA atomically. Policy declaration, receipt validation, executor consumption and release admission form one enforcement contract: publishing a tier label without its producer/consumer integrity and activation fence is not delivery. Phases below are internal sequencing and may be pushed as review checkpoints; none independently satisfies this item's acceptance. Record the governed atomic receipt after independent spec approval and immutable provider publication. Do not implement before that receipt and applicable readiness reviews pass.
+
+Related independently owned work remains mapped to existing records: BI-25CB699C (refresh/correction reuse), BI-329B6128 (source-head scope), BI-E3B918C2 (durable release acceptance), BI-8D56F777 (capacity). Validate and consume their outcomes; do not close them based on source inspection.
+
+## Sequence
+
+1. **Reconcile baseline and approvals.** Read current provider source and live status for related work. Record research, independent spec approval and architecture review. Publish this immutable plan and record atomic coverage. Read the Workroom change-impact contract before claiming implementation paths; unresolved advice requires exhaustive verification. Requirements: OBJ-VT-1 through OBJ-VT-4. Contracts: CT-VT-1 through CT-VT-4. Flow: FLOW-VT-1, claim to policy resolution. Verification: AC-VT-1 through AC-VT-8; source inspection is not served acceptance.
+2. **Policy and receipt contract.** Extend `config/ci-evidence-policy.json`, `scripts/lib/ci-evidence-plan.mjs`, `apps/web/lib/work-management/work-shapes.ts`, `delivery-shapes.ts`, `work-shape-evidence-kinds.ts` and existing evidence validators as required by the approved design. Keep one machine-readable policy across Node/server consumers. Preserve old shape references and coordinated MCP derivation/registry compatibility. Requirements: OBJ-VT-1, OBJ-VT-2. Contracts: CT-VT-1, CT-VT-2. Flow: FLOW-VT-2, shape to obligations to verified evidence. Verification: AC-VT-1, AC-VT-3, AC-VT-4; focused tests must first reject spoofed/unknown/legacy-as-new receipts and unsafe impact narrowing.
+3. **Executor and release integration.** Refactor existing pre-push, local integration and Build Studio consumers to resolve obligations; preserve default merge-queue production-build delegation. Connect required release obligations to existing promotion/self-upgrade/RuntimeVerification and deduplicated corrective work. Maintain shadow comparison until end-to-end parity and release admission are proven. Requirements: OBJ-VT-1, OBJ-VT-2, OBJ-VT-3. Contracts: CT-VT-1, CT-VT-2, CT-VT-3. Flow: FLOW-VT-3, checked source to protected merge to blocked-or-admitted release. Verification: AC-VT-2 through AC-VT-6, including duplicate delivery, infrastructure interruption, changed artifact and missing evidence.
+4. **Projection, acceptance and measurement.** Extend existing Workroom/Task Hub projections only where their current fields cannot explain evidence status and next action. Consume durable acceptance under BI-E3B918C2. Update affected operating guidance. Requirements: OBJ-VT-4. Contracts: CT-VT-3, CT-VT-4. Flow: FLOW-VT-4, deployed artifact to pending-or-recorded acceptance. Verification: AC-VT-6 through AC-VT-8, served theme/viewport checks for UI changes and a seven-day comparison with workload/sample caveats. Do not retain the authoring process merely to wait for the reporting window; record a durable handoff through existing orchestration.
+
+## Verification and completion
+
+Run affected tests and package typechecks in a compile-ready worktree, using source-local Node tests where dependencies are unnecessary. Run `pnpm gate:context` for the actual diff and satisfy its generated guards, derived artifacts and required attestations. Runtime-bound proof uses the canonical runtime or governed shared lease. Required protected merge checks remain authoritative. Independent acceptance records every AC against the approved baseline; unknown/unrun never becomes passed. Preserve a pushed DCO-signed branch, open a ready PR only after required verification, and merge through the queue.
+
+## Risks, rollback and stop conditions
+
+Policy alone must never waive a check. Stop activation on executor divergence, unsupported shape versions, invalid provenance, unavailable release admission or a missing independent review. Preserve current checks while repairing. Roll back policy selection to the previous supported executor path while retaining historical evidence and pending acceptance obligations. Keep canonical migration and external-side-effect recovery; a source revert is not a database rollback. If work introduces an independently shippable domain capability, update decomposition and live coverage before that work.
