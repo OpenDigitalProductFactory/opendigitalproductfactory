@@ -25,6 +25,16 @@ behavior; never enable a hold without its executable reviewer path.
 - Add `resolveReviewAuthority({ criticality, damaging })` in `apps/web/lib/govern/authority/escalation-gate.ts`, beside `resolveDecisionEscalation`, returning `advisory | blocking | blocking-with-person`.
 - Extend `escalation-gate.conformance.test.ts` to walk every criticality × damaging combination. It proves `blocking-with-person` if and only if damaging, and extends `describeEscalationRule()` plus the principle page with the review sentence.
 
+Source checkpoint, 2026-10-16: after merging the completed BI-74B2A8CD source,
+the pure `resolveReviewAuthority` calculation is implemented beside its decision
+twin. Seven new tests first failed on the missing export. All 224 tests in nine
+selected related suites then passed, including all six expected outcomes and a
+1,152-combination walk using the shared decision rule's damage fact. Both TS7
+programs and the style/token, document-index and whitespace checks passed.
+The principle sentence is pinned by the existing conformance guard. No runtime
+consumer, calibration mode, grant, approval routing or interim hold changed;
+canonical integration and live workflow proof remain outstanding.
+
 ## Phase 3: one craft classifier
 
 - Replace `selectSemanticReviewSpecialists` in `apps/web/lib/change-review/semantic-change-review-operation.ts` with `deriveImpactedAcumens`, resolved to live coworkers (acumen `coworkerAgentId`, else the registry family's first active role).

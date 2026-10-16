@@ -45,6 +45,18 @@
 import type { PrincipalSensitivity } from "@dpf/db/principal-sensitivity";
 import type { ToolConsequence, ToolConsequenceScope } from "@/lib/tool-consequence";
 import type { DecisionRiskTier } from "@/lib/decision-perspective/types";
+import type { StepCriticality } from "@/lib/work-management/step-criticality";
+
+export type ReviewAuthority = "advisory" | "blocking" | "blocking-with-person";
+
+/** Review depth never invents damage; callers supply the shared rule's fact. */
+export function resolveReviewAuthority(input: {
+  criticality: StepCriticality;
+  damaging: boolean;
+}): ReviewAuthority {
+  if (input.damaging) return "blocking-with-person";
+  return input.criticality === "routine" ? "advisory" : "blocking";
+}
 
 /** The declared reach shared by the action and decision entry points. */
 export const DAMAGING_CONSEQUENCES = ["outward", "irreversible", "authority"] as const satisfies readonly ToolConsequence[];
@@ -337,5 +349,6 @@ export function describeEscalationRule(): string[] {
     "A non-damaging action with no steering reaches a human only when it has a side effect; an immediate read never escalates.",
     "A tool declared as a proposal is always put to a person, because that is its declared shape.",
     "A coworker set to propose, not act, puts every change it attempts to a person, and no recorded policy decides it on that person's behalf.",
+    "Review authority is advisory for a routine step, blocking for a consequential or critical step, and blocking with a person only when the shared damaging decision declares damage.",
   ];
 }

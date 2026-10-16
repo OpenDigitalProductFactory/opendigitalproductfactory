@@ -32,10 +32,45 @@ import {
   ESCALATION_STEERING,
   resolveEscalation,
   resolveDecisionEscalation,
+  resolveReviewAuthority,
   DECISION_BASES,
   DAMAGING_CONSEQUENCES,
   type EscalationInput,
 } from "./escalation-gate";
+
+describe("step review authority (BI-E27F3600)", () => {
+  it.each([
+    ["routine", false, "advisory"],
+    ["consequential", false, "blocking"],
+    ["critical", false, "blocking"],
+    ["routine", true, "blocking-with-person"],
+    ["consequential", true, "blocking-with-person"],
+    ["critical", true, "blocking-with-person"],
+  ] as const)("resolves %s / damaging=%s to %s", (criticality, damaging, expected) => {
+    expect(resolveReviewAuthority({ criticality, damaging })).toBe(expected);
+  });
+
+  it("uses the decision rule's damage fact across all 1,152 review and decision combinations", () => {
+    let checked = 0;
+    for (const criticality of ["routine", "consequential", "critical"] as const) {
+      for (const basis of DECISION_BASES) {
+        for (const riskTier of ["low", "medium", "high", "critical"] as const) {
+          for (const consequence of [null, ...DAMAGING_CONSEQUENCES]) {
+            for (const thresholdExceeded of [false, true]) {
+              for (const regulated of [false, true]) {
+                const decision = resolveDecisionEscalation({ basis, riskTier, declarations: { consequence, thresholdExceeded, regulated } });
+                const authority = resolveReviewAuthority({ criticality, damaging: decision.damaging });
+                expect(authority === "blocking-with-person").toBe(decision.route === "human");
+                checked += 1;
+              }
+            }
+          }
+        }
+      }
+    }
+    expect(checked).toBe(1_152);
+  });
+});
 
 describe("decision routing conformance (BI-74B2A8CD)", () => {
   it("walks all 384 shapes: a person if and only if damage is declared", () => {

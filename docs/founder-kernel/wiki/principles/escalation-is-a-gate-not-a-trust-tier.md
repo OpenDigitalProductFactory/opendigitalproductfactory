@@ -99,6 +99,12 @@ require them verbatim, so doctrine and enforcement cannot drift apart.
 
 ## How to apply
 
+Review authority is advisory for a routine step, blocking for a consequential or critical step, and blocking with a person only when the shared damaging decision declares damage.
+
+This is the declared review authority calculated by `resolveReviewAuthority`.
+Publication enforcement still respects the semantic review calibration ceiling;
+the calculation alone enables neither blocking enforcement nor new human gates.
+
 Do not ask a person to confirm an action that is neither damaging nor unsteered — and do not write a rule into an agent's memory to make that true. Memory does not reach the next install. Put the decision in the gate, where every install runs it with no AI client present.
 
 When an approval envelope appears for a routine action, treat it as a defect in the gate's inputs, not as a step to perform. Either the action's declared consequence is wrong, or the steering that should have decided it was not recorded — a reviewer binding that never resolved, or a room whose action boundary nobody declared. Fix the input.
