@@ -60,6 +60,7 @@ describe("governed result audit identity", () => {
   it("projects room narrowing from the original governed authority rather than caller metadata", async () => {
     const catalog = vi.spyOn(mcpTools, "getAvailableTools").mockResolvedValue([]);
     execute.mockImplementation(async (_name, _params, _userId, context) => {
+      expect(context.governedRoomAuthority()).toMatchObject({ workroomId: "WC-ROOM", authorizedGrants: ["backlog_read"] });
       await context.governedReadToolCatalog();
       return { success: true, message: "read completed" };
     });
@@ -70,5 +71,13 @@ describe("governed result audit identity", () => {
       expect.objectContaining({ governedReadToolCatalog: expect.any(Function), governedDispatch: expect.any(Function) }));
     expect(result.success).toBe(true);
     expect(catalog).toHaveBeenCalledWith(userContext, { mode: "advise", agentId: undefined, roomAuthorizedGrants: ["backlog_read"] });
+  });
+  it("explicitly distinguishes a trusted unroomed executor from a missing getter", async () => {
+    execute.mockImplementation(async (_name, _params, _userId, context) => {
+      expect(typeof context.governedRoomAuthority).toBe("function");
+      expect(context.governedRoomAuthority()).toBeNull();
+      return { success: true, message: "read completed" };
+    });
+    expect((await call()).success).toBe(true);
   });
 });
