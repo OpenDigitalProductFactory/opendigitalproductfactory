@@ -26,6 +26,7 @@ import {
 } from "./mcp-task-durable-inference-contract";
 import { admitDurableInferenceTask } from "./mcp-task-durable-inference-runtime";
 import { parseInitiativeReviewBinding } from "./mcp-task-review-contract";
+import { parseEngagementTaskBinding } from "./coworker-service-catalog/engagement-fulfillment";
 import { executeRemoteTaskAttempt } from "./mcp-task-execution";
 import { automaticReviewerRecoveryWait, healParkedReviewFromReceipt } from "./mcp-task-background-dispatch";
 import type { RemoteTaskSubmitAuth } from "./mcp-task-submit-types";
@@ -192,6 +193,9 @@ export function reconstructPersistedRemoteTask(
   }
 
   const rawReviewBinding = metadata?.["initiativeReviewBinding"];
+  const rawEngagementBinding = metadata?.["engagementBinding"];
+  const engagementBinding = rawEngagementBinding == null ? undefined : parseEngagementTaskBinding(rawEngagementBinding);
+  if (rawEngagementBinding != null && !engagementBinding) return { ok: false, code: "persisted_request_invalid", message: "Persisted engagement binding is invalid." };
   const initiativeReviewBinding = rawReviewBinding === null || rawReviewBinding === undefined
     ? undefined
     : parseInitiativeReviewBinding(rawReviewBinding);
@@ -221,6 +225,10 @@ export function reconstructPersistedRemoteTask(
     };
   }
   const requestedThreadId = string(metadata?.["requestedThreadId"]);
+  if (engagementBinding && (initiativeReviewBinding || durableInference || riskClass !== "read" || requestedThreadId
+    || agentId !== engagementBinding.providerAgentId || idempotencyKey !== `coworker-engagement:${engagementBinding.engagementId}`)) {
+    return { ok: false, code: "persisted_request_invalid", message: "Persisted engagement scope is outside its bounded advisory mode." };
+  }
   const collaboration = string(metadata?.["collaborationKind"]);
   const collaborationKind = collaboration === "handoff" || collaboration === "summon"
     ? collaboration
@@ -237,6 +245,7 @@ export function reconstructPersistedRemoteTask(
     authorityScope,
     ...(collaborationKind ? { collaborationKind } : {}),
     ...(initiativeReviewBinding ? { initiativeReviewBinding } : {}),
+    ...(engagementBinding ? { engagementBinding } : {}),
     ...(durableInference ? { recipeId: durableInference.recipeId } : {}),
   };
 

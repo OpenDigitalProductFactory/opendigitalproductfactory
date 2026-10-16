@@ -109,6 +109,16 @@ export async function executeRemoteTaskAttempt(input: {
   }
   const settle = (args: Prisma.TaskRunUpdateManyArgs & { where: { taskRunId: string } }) =>
     settleRemoteTask(args, reservation, dispatchClaim);
+  if (parsed.engagementBinding) {
+    const { validateEngagementTask } = await import("./coworker-service-catalog/engagement-fulfillment");
+    try {
+      await validateEngagementTask({ binding: parsed.engagementBinding, token, taskRunId: run.taskRunId, authorityScope: parsed.authorityScope ?? [], requireAssociation: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Engagement authority unavailable";
+      const displaced = await settle({ where: { taskRunId: run.taskRunId }, data: { status: "failed", completedAt: new Date(), progressPayload: { summary: message, error: "engagement_execution_refused" } } });
+      return displaced ?? { kind: "result", result: { taskRunId: run.taskRunId, status: "failed", isError: true, content: remoteTaskContent(message) } };
+    }
+  }
   // A lost acknowledgement is recovery work, not another independent assessment.
   // Keep the same bound receipt and let the fenced settlement preserve cancellation.
   const priorReview = parsed.initiativeReviewBinding
@@ -142,7 +152,8 @@ export async function executeRemoteTaskAttempt(input: {
     userContext,
   });
   const modelRoutingAgentId = agent.agentId ?? parsed.agentId;
-  const resolvedAgentId = resolveCanonicalAgentId(modelRoutingAgentId);
+  const resolvedAgentId = parsed.engagementBinding ? modelRoutingAgentId : resolveCanonicalAgentId(modelRoutingAgentId);
+  if (parsed.engagementBinding && resolvedAgentId !== parsed.engagementBinding.providerAgentId) throw new Error("Engagement provider identity changed during runtime resolution.");
   const requestedAgentId = parsed.agentId;
   const requestedCanonicalAgentId = resolveCanonicalAgentId(requestedAgentId);
   let routingConfig: {
@@ -208,13 +219,23 @@ export async function executeRemoteTaskAttempt(input: {
   });
   const reviewProfile = parsed.initiativeReviewBinding?.gate === "spec-approval"
     ? await loadReviewerProfile(prisma, parsed.initiativeReviewBinding.itemId) : null;
-  const tools = narrowInitiativeReviewTools(
+  const reviewTools = narrowInitiativeReviewTools(
     resolvedTools,
     exactRequiredToolNames,
     parsed.initiativeReviewBinding,
     parsed.prompt,
     reviewProfile,
   );
+  const tools = parsed.engagementBinding ? {
+    ...reviewTools,
+    tools: reviewTools.tools.filter(tool => exactRequiredToolNames.includes(tool.name)),
+    toolsForProvider: reviewTools.toolsForProvider.filter(tool => {
+      const fn = tool.function;
+      const name = fn && typeof fn === "object" && "name" in fn ? fn.name : tool.name;
+      return typeof name === "string" && exactRequiredToolNames.includes(name);
+    }),
+    deferredTools: reviewTools.deferredTools.filter(tool => exactRequiredToolNames.includes(tool.name)),
+  } : reviewTools;
   const effortWarrant = requiresInitiativeReviewEffort(exactRequiredToolNames)
     ? deriveEffortWarrant({
         reasoningDepth: "high",

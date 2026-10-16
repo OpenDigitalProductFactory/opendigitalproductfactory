@@ -30,7 +30,7 @@ export async function settleRemoteTask(
 ): Promise<RemoteTaskSubmitOutcome | null> {
   const current = await prisma.taskRun.findUnique({
     where: { taskRunId: args.where.taskRunId },
-    select: { status: true, updatedAt: true, progressPayload: true },
+    select: { status: true, updatedAt: true, progressPayload: true, a2aMetadata: true },
   });
   if (current && (TASK_IN_FLIGHT_STATES as readonly string[]).includes(current.status)
     && reservationIdentity(current.progressPayload) === reservation
@@ -50,7 +50,15 @@ export async function settleRemoteTask(
       },
       where: { ...args.where, status: current.status, updatedAt: current.updatedAt },
     });
-    if (written.count === 1) return null;
+    if (written.count === 1) {
+      if (current.a2aMetadata && typeof current.a2aMetadata === "object" && !Array.isArray(current.a2aMetadata)
+        && current.a2aMetadata.engagementBinding) {
+        const { reconcileEngagementTaskResult } = await import("./coworker-service-catalog/engagement-fulfillment");
+        // Task settlement is canonical; a projection interruption is repaired on the next engagement read.
+        await reconcileEngagementTaskResult(args.where.taskRunId).catch(error => console.error("Engagement projection deferred", error));
+      }
+      return null;
+    }
   }
   const persisted = await prisma.taskRun.findUnique({
     where: { taskRunId: args.where.taskRunId },

@@ -192,7 +192,13 @@ export async function readCoworkerA2aTask(
   deps: { db?: DbClient } = {},
 ): Promise<CoworkerA2aTask | null> {
   const db = deps.db ?? (prisma as unknown as DbClient);
-  const engagement = await db.coworkerEngagement.findUnique({ where: { engagementId: taskId } });
+  let engagement = await db.coworkerEngagement.findUnique({ where: { engagementId: taskId } });
+  const taskRunId = stringValue(record(record(engagement?.metadata).fulfillment).taskRunId);
+  if (!deps.db && taskRunId) {
+    const { reconcileEngagementTaskResult } = await import("./engagement-fulfillment");
+    await reconcileEngagementTaskResult(taskRunId);
+    engagement = await db.coworkerEngagement.findUnique({ where: { engagementId: taskId } });
+  }
   return engagement ? mapCoworkerEngagementToA2aTask(engagement) : null;
 }
 
@@ -255,6 +261,8 @@ function mapEngagementStatus(status: string): A2aTaskState {
   if (status === "completed") return "completed";
   if (status === "cancelled") return "canceled";
   if (status === "rejected") return "rejected";
+  if (status === "failed" || status === "unavailable") return "failed";
+  if (status === "unknown") return "input-required";
   return "submitted";
 }
 

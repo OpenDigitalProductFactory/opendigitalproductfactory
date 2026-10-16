@@ -63,6 +63,32 @@ attempted Workroom feed post was refused as not-admitted; no alternate write pat
 was used. Existing source-recovery authority permits this bounded source repair,
 not bypassing admission, grants or independent receipt writers.
 
+Source recovery checkpoint, engagement execution, 2026-10-16: the existing
+request tool can now resume a caller-owned engagement using a Workroom stage
+and immutable repository artifact. Source adds a closed advisory task binding
+to the existing TaskRun digest, atomic admission and deferred-message/outbox
+path, background reconstruction, execution and governed-tool checks. Admission
+rechecks current credential/actor/provider grants, offer boundaries and exact
+room admission; it grants no membership. Source/result metadata is server-owned.
+Settlement projects only evidence-backed contributions; source/corpus tool
+execution IDs, criteria and current revision are required. An author disposition
+remains explicitly pending. Failed, unavailable and unknown outcomes cannot be
+projected as successful specialist work. A read of the existing request repairs
+a lost status projection without launching another task.
+
+The live UX offer is internal, low risk and proposal-only; that boundary is
+retained. Its critique-corpus lookup is included, and an empty calibrated set is
+recorded as a limitation rather than a calibrated verdict. No provider grants
+are added. The first new-module run could not import the absent module (no tests
+executed); a later metadata-forgery regression failed against the old creation
+path, then passed. The broader source run passed 739 tests across 63 suites;
+the subsequent focused run passed 39 tests across four suites. Current source
+still needs independent authority assessment, task-boundary/reconstruction and
+projection regressions, the canonical integration gate and live execution.
+Required-profession scheduling and per-step review wiring remain outstanding.
+The served target is still b8de657544c4 and does not contain prerequisite6432;
+source recovery is not a native baseline approval or live delivery claim.
+
 ## Phase 4: room-bound instantiation
 
 - Add `stepReviewBinding` to the external coworker task contract (`apps/web/lib/mcp/external-coworker-task-adapter.ts`), following `initiativeReviewBinding`.
