@@ -64,6 +64,10 @@ BI-0169B7D7 and BI-A472354E own broader routing/profile work, outside this runne
    current workroom/source, research, body acceptance and immutable plan coverage.
    Resolve CWN-63C5BE75 through its owning authority. Discovery's missing
    tool_evaluation_create remains stopped; no direct inference fallback.
+   Its external dependency-evaluation semantics do not fit this runner.
+   Reuse the callable run_endpoint_tests diagnostic contract for a scoped
+   observational mode, after coordinating the endpoint runner's existing owner;
+   current fixed stub-tool probes and rating writes do not meet this contract.
    Claim exact implementation files and consume the change-impact contract.
 2. **RED source regressions.** Extend the existing scorer tests with real-call
    shaped evidence fixtures, keeping fixtures labeled source-only. Cover all

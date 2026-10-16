@@ -372,7 +372,14 @@ consumption remains a separate explicitly designed change.
 
 CWN-63C5BE75 / BI-CAP-FEE56611 records the supported operation/authority question.
 Discovery showed missing coworker `tool_evaluation_create`; no denied action
-was invoked. Neither this design nor its tests grant that capability.
+was invoked. That tool evaluates external dependencies, not model fidelity;
+granting it is not this runner's remedy. The already authorized
+`run_endpoint_tests` is the relevant existing diagnostic operation. Its current
+fixed probes inspect returned calls to stub tools and can update model ratings;
+it does not implement the requested surface matrix or governed-read execution.
+Extend that existing contract only after reconciling its owned source and the
+scoped observational mode. Neither diagnostic was executed during planning.
+Neither this design nor its tests grant capabilities.
 The historical 870/941 executions remain outside the runner and cannot be
 retried, settled or replaced by its results.
 
