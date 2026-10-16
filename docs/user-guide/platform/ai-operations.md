@@ -33,6 +33,8 @@ Choose a task, provider, data sensitivity and time window; the URL preserves tho
 
 The default view groups assignments on the left and providers on the right. Counts describe the recorded decisions in your scope. Open **All** to search a larger assignment or provider catalog; model lists come from configured model profiles, including models that received no traffic. **Recent decisions** is a small preview; **View all** opens searchable traffic.
 
+On a narrow screen, traffic and evaluation rows keep their task and model together, with labeled outcome and cost values below. All four scope filters remain directly available.
+
 Select a decision to inspect its sensitivity, screening, exclusions, recorded attempts, tokens and cost in an overlay. Escape or Close returns to the same view. Attempts are ordered by their recorded start time. Missing traces or traces shared by several decisions cannot safely attribute attempts or cost, so the inspector states that limitation.
 
 Recorded cost uses correlated token usage when present, otherwise correlated route outcomes. Adapter estimates are displayed separately and are not added again to recorded cost. Coverage states how many decisions have prices. Unknown price does not mean free.
