@@ -107,7 +107,20 @@ For this docs-only planning revision, the recorded impact contract has no
 testImpact or guardObligation entries and requires the derived doc index check.
 Run the available doc guards and record any unavailable checks as unrun.
 
-### Backlog coverage status
+## Backlog coverage
+
+The following is the proposed coverage reconciliation, not an accepted new
+receipt. The checked-in coverage gate allows a plan to preserve a concrete
+blocked-by condition; implementation authority still comes from live receipts.
+
+- Decision: decomposed
+- Parent: BI-E27F3600
+- Receipt: blocked-by: expanded AC-7 through AC-10 need independently accepted revised scope and plan coverage; exact-head claims return historical passes without a new reviewer packet, while independent-review dispatch requires that packet.
+- Dependencies: BI-74B2A8CD must land before authority/decision integration; revised-scope review and delivery mapping for BI-0AABCD1F remain pending.
+- step-criticality, review-authority, craft-classifier, room-instantiation, need-and-receipts, undecided-hold -> BI-E27F3600 (original six-deliverable coverage; not new scope approval).
+- governed external consultation and executed-result/corpus evidence -> BI-0AABCD1F (triage research, design and final delivery mapping pending).
+- approval and bounded executor-handoff changes -> BI-B22C8E02 (separate active chat; not implemented in this branch).
+- provider-page prototype and compact UX -> BI-7AA4EB6B (separate chat; not implemented in this branch).
 
 The original immutable six-deliverable coverage belongs to the previous scope.
 This expanded plan has **coverage pending**, not a fabricated replacement receipt.
