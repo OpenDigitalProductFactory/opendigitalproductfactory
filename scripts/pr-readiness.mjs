@@ -7,22 +7,20 @@
 
 import { parseArgs as utilParseArgs } from "node:util";
 import { scriptArgv } from "./lib/script-argv.mjs";
-import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 import { buildGatePlan, evaluateReadiness, formatReadinessReport } from "./pr-readiness/core.mjs";
 import { collectWorktreeDiff } from "./gate-context.mjs";
-import { resolvePolicyGuardInvocation } from "./lib/ci-policy-guards.mjs";
-import { guardShellEnv } from "./lib/guard-bash.mjs";
 import { buildGateContext } from "./lib/gate-context.mjs";
 import { fetchOriginMainSharedSafe, isShallowRepository } from "./lib/git-fetch-shared-safe.mjs";
-import { isEnvironmentFailureOutput } from "./lib/pregate-preflight.mjs";
+import { createDefaultExecute, isEnvironmentFailureOutput } from "./lib/pregate-preflight.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { GitCommandError, runGit } from "./lib/git.mjs";
 import { guardReceiptDirectory, identifyGuardExecution, runWithGuardReceipt } from "./lib/pregate-preflight-receipt.mjs";
 import { resolveWorktreeContext } from "./pregate-status.mjs";
 import { LOCAL_CI_SLOT_KEYS, createLocalCiSlotManifest } from "./lib/local-ci-slot-manifest.mjs";
 import { readLocalCiGateState } from "./lib/local-ci-gate-state.mjs";
+import { classifyChangedFiles } from "./ci-change-scope.mjs";
 
 export function readPublicationGateRecords(context = resolveWorktreeContext(), read = readLocalCiGateState) {
   if (!context) return [];
@@ -145,28 +143,17 @@ function readRepoState(publishedRef = null) {
   };
 }
 
-let guardEnv;
-export function runGate(gate) {
+export async function runGate(gate, { progress, signal } = {}) {
   const [command, args] = gate.command;
-  guardEnv ??= guardShellEnv();
-  const env = { ...guardEnv, ...gate.env };
-  const invocation = resolvePolicyGuardInvocation(command, args, { env });
-  const result = spawnSync(invocation.command, invocation.args, {
-    cwd: process.cwd(),
-    env,
-    encoding: "utf8",
-    maxBuffer: 32 * 1024 * 1024,
-    shell: false,
-  });
-  const output = [result.stdout, result.stderr, result.error?.message]
-    .filter(Boolean)
-    .join("\n")
-    .trim();
+  const execute = createDefaultExecute({ ...process.env, ...gate.env }, { progress, signal });
+  const result = await execute(command, args, { guardName: gate.name });
+  const output = result.output.trim();
   return {
     name: gate.name,
-    ok: result.status === 0,
-    skippedEnvironment: result.status !== 0 && isEnvironmentFailureOutput(output),
-    exitCode: result.status ?? 1,
+    ok: result.exitCode === 0 && !result.outcome,
+    skippedEnvironment: !result.outcome && result.exitCode !== 0 && isEnvironmentFailureOutput(output),
+    outcome: result.outcome,
+    exitCode: result.exitCode,
     output,
   };
 }
@@ -193,14 +180,26 @@ async function main() {
     process.exit(2);
   }
 
-  const gatePlan = buildGatePlan({ prBody: args.prBody, prLabelsJson: args.prLabelsJson });
-  const execution = args.runGates ? await runWithGuardReceipt({
+  const gatePlan = buildGatePlan({ prBody: args.prBody, prLabelsJson: args.prLabelsJson, changeScope: classifyChangedFiles(repo.changedFiles) });
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  process.once("SIGINT", cancel);
+  process.once("SIGTERM", cancel);
+  let execution;
+  try { execution = args.runGates ? await runWithGuardReceipt({
     directory: guardReceiptDirectory(),
     stage: "pr-readiness",
     identify: () => identifyGuardExecution({ plan: gatePlan }),
-    execute: async () => gatePlan.map(runGate),
+    execute: async ({ progress }) => {
+      const results = [];
+      for (const gate of gatePlan) results.push(await runGate(gate, { progress, signal: controller.signal }));
+      return results;
+    },
     passed: results => Array.isArray(results) && results.length === gatePlan.length && results.every(result => result.ok && !result.skippedEnvironment),
-  }) : { result: [], reused: false };
+  }) : { result: [], reused: false }; } finally {
+    process.removeListener("SIGINT", cancel);
+    process.removeListener("SIGTERM", cancel);
+  }
   const gateResults = execution.result;
   const gateContext = buildGateContext({
     changedFiles: repo.changedFileEntries,
@@ -211,6 +210,10 @@ async function main() {
     || git(["rev-parse", "--abbrev-ref", "HEAD"]).trim() !== repo.branch;
   repo.statusPorcelain = git(["status", "--porcelain"]);
   const verdict = evaluateReadiness({ repo, gateResults, prBody: args.prBody, gateContext, localCiRecords: readPublicationGateRecords() });
+  if (args.runGates && !execution.identityVerified) {
+    verdict.ready = false;
+    verdict.blockers.push("Host guard execution lacks a complete unchanged source/environment identity; inspect its receipt and recover those prerequisites before publication.");
+  }
   if (execution.reused) verdict.notes.push(`Local guard results reused from ${execution.executedAt}; no guard scripts rerun. Repository and PR metadata inspected now. Protected GitHub checks remain the integration authority.`);
   process.stdout.write(formatReadinessReport(verdict));
   if (args.json) {

@@ -27,6 +27,28 @@ function completion(unmet: InitiativeReadinessDecision["unmet"]): InitiativeRead
 }
 
 describe("designPhaseReviewDecision", () => {
+  it("keeps a completion-owned plan review requestable for a decomposed xlarge parent", () => {
+    const planReview = readinessRequirement({ code: "PLAN_REVIEW_REQUIRED", state: "missing", accountableRole: "plan-reviewer" });
+    const terminal = completion([planReview,
+      readinessRequirement({ code: "OBJECTIVE_RECONCILIATION_REQUIRED", state: "missing", accountableRole: "acceptance-reviewer" }),
+    ]);
+    const implementation = { ...completion([]), target: "implementation" as const, verdict: "denied" as const,
+      blockers: [readinessRequirement({ code: "DECOMPOSITION_REQUIRED", state: "fail", accountableRole: "portfolio-owner" })] };
+    const decisions = { plan: { ...completion([]), target: "plan" as const, verdict: "allowed" as const }, implementation, completion: terminal };
+    expect(decisionForIndependentReview("record_initiative_design_review", decisions)).toMatchObject({
+      target: "completion", unmet: [planReview], blockers: [],
+    });
+    expect(implementation.blockers[0]?.code).toBe("DECOMPOSITION_REQUIRED");
+    expect(decisionForIndependentReview("record_initiative_architecture_review", decisions)).toBeNull();
+    expect(decisionForIndependentReview("record_initiative_design_review", { ...decisions, completion: completion([]) })).toBeNull();
+    expect(decisionForIndependentReview("record_initiative_design_review", { ...decisions,
+      completion: { ...terminal, verdict: "allowed" },
+    })).toBeNull();
+    expect(decisionForIndependentReview("record_initiative_design_review", { ...decisions,
+      completion: completion([{ ...planReview, accountableRole: "product-owner" }]),
+    })).toBeNull();
+  });
+
   it("keeps terminal writers on completion while design writers use pre-delivery obligations", () => {
     const design = completion([readinessRequirement({ code: "SPEC_APPROVAL_REQUIRED", state: "missing", accountableRole: "design-checklist-reviewer" })]);
     const terminal = completion([readinessRequirement({ code: "ACCEPTANCE_EVIDENCE_REQUIRED", state: "missing", accountableRole: "acceptance-reviewer" })]);

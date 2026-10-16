@@ -137,6 +137,12 @@ jobs:
       # swallowed"). BI-98D19DF2's interim eaReferenceModels tolerance
       # carve-out (PR #3445) is removed now that `lfs: true` above fixes the
       # root cause — a full, unmodified failure is a real signal again.
+      - name: Prepare the CI host capability fixture
+        run: |
+          node scripts/ci-runtime-install-state-fixture.mjs > "$RUNNER_TEMP/install-state.json"
+          sudo install -d /dpf-state
+          sudo install -m 0644 "$RUNNER_TEMP/install-state.json" /dpf-state/install-state.json
+
       - name: Seed the fixture organisation
         run: pnpm --filter @dpf/db seed
 

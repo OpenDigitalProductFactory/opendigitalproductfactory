@@ -9,6 +9,18 @@ import { resolveGuardBash } from "../lib/guard-bash.mjs";
 
 const read = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 
+test('PKI stages custody before authority startup and CLI clients bypass CA initialization', async () => {
+  const shell = await read('scripts/bootstrap-organization-pki.sh');
+  const ps = await read('scripts/bootstrap-organization-pki.ps1');
+  assert.match(shell, /compose stage-password\s+compose up -d step-ca/);
+  assert.match(ps, /@\("stage-password"\)\s+Invoke-DpfPkiCompose -Arguments @\("up", "-d", "step-ca"\)/);
+  assert.match(shell, /--entrypoint "" --user "\$\(id -u\):\$\(id -g\)"/);
+  assert.match(shell, /--env HOME=\/tmp --env STEPPATH=\/tmp\/step/);
+  for (const line of ps.split(/\r?\n/).filter(line => line.includes('docker run --rm'))) {
+    assert.match(line, /--entrypoint (step|sh)/);
+  }
+});
+
 /**
  * Can this host represent POSIX permission bits? (BI-C69C13AC)
  *
@@ -54,7 +66,8 @@ test("organization PKI compose pins the approved image and protects CA custody",
     /smallstep\/step-ca:0\.30\.2@sha256:a2b17872915c193259b75a5474c398326f41bd199f0842093e52cf4182bc8270/,
   );
   assert.doesNotMatch(compose, /smallstep\/step-ca:latest/);
-  assert.match(compose, /DPF_PKI_PASSWORD_FILE/);
+  assert.doesNotMatch(compose, /DPF_PKI_PASSWORD_FILE|\/run\/secrets\/step-ca-password/);
+  assert.match(compose, /DOCKER_STEPCA_INIT_PASSWORD_FILE: \/home\/step\/secrets\/password/);
   assert.match(compose, /DOCKER_STEPCA_INIT_PASSWORD_FILE/);
   assert.doesNotMatch(compose, /DOCKER_STEPCA_INIT_PASSWORD:/);
   assert.match(compose, /DPF_PKI_BIND_ADDRESS:-127\.0\.0\.1/);

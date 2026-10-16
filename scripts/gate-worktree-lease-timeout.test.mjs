@@ -24,13 +24,9 @@ test("the timeout is tunable without patching source", async (t) => {
     else process.env.DPF_GATE_MCP_TIMEOUT_MS = previous;
   });
 
-  // Resolved once at module load, so this asserts the contract the env var
-  // feeds rather than re-importing: a positive finite override is honoured and
-  // anything else falls back to the default.
-  const resolve = (raw) => {
-    const value = Number(raw);
-    return Number.isFinite(value) && value > 0 ? value : 60_000;
-  };
+  // Exercise the shared production resolver rather than mirroring its code.
+  const resolve = raw => leaseQueueCallOptions("http://127.0.0.1/api/mcp/v1", "fixture-only",
+    { env: { DPF_GATE_MCP_TIMEOUT_MS: raw } }).timeoutMs;
   assert.equal(resolve("120000"), 120_000);
   assert.equal(resolve("0"), 60_000);
   assert.equal(resolve("-1"), 60_000);

@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 // Harness lives in promote-script-functional.test-support.ts; the cleanup
 // sweep suite lives in promote-script-cleanup.test.ts.
 
-import { BASH_OK, GIT_OK, PROMOTE_TEST_TIMEOUT_MS, makeScratch, runPromote, toBashPath } from "./promote-script-functional.test-support";
+import { BASH_OK, GIT_OK, PROMOTE_TEST_TIMEOUT_MS, makeScratch, promoteDiagnostics, runPromote, toBashPath } from "./promote-script-functional.test-support";
 
 describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run", () => {
   it.each([
@@ -87,7 +87,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
         platformArchitecture, enginePlatformArchitecture, frozenStrata, repoImageId, registryConfigDigest, duplicatePlatform, candidateAssets, gitLog,
       };
       const r = runPromote({ source, installRoot, backup, targetSha, fakeBin, dockerLog, composeEnvFile: join(installRoot, ".env"), release });
-      expect(r.status, r.stderr).toBe(expectedStatus);
+      expect(r.status, promoteDiagnostics(r, { "docker.log": dockerLog, "candidate assets": candidateAssets, backup })).toBe(expectedStatus);
       if (expectedStatus !== 0) {
         expect(r.stderr).toMatch(/(?:missing required variables|not a pulled repository digest|could not resolve an immutable|resolved config digest .* does not match|does not match resolved (?:config\/platform\/channel identities|candidate linux\/amd64))/);
         return;
@@ -269,7 +269,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       expect(log).toContain("build sandbox");
       expect(log).toContain("up -d --no-deps --force-recreate sandbox");
       const recreates = log.split(/\r?\n/).filter((line) => line.startsWith("recreate service="));
-      expect(recreates.map((line) => line.match(/^recreate service=(\S+)/)?.[1]).sort()).toEqual(["portal", "sandbox", "sandbox-postgres"]);
+      expect(recreates.map((line) => line.match(/^recreate service=(\S+)/)?.[1]).sort(), promoteDiagnostics(r, { "docker.log": dockerLog })).toEqual(["portal", "sandbox", "sandbox-postgres"]);
       for (const recreate of recreates) {
         expect(recreate).toContain("DPF_STATE_DIR=<unset>");
         expect(recreate).toContain(`DPF_PROMOTER_STATE_DIR=${toBashPath(join(backup, "state"))}`);
@@ -544,4 +544,27 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       rmSync(root, { recursive: true, force: true });
     }
   }, PROMOTE_TEST_TIMEOUT_MS);
+});
+
+// BI-683619D9: a CI-only failure must leave its evidence in the assertion message.
+describe("promoteDiagnostics", () => {
+  it("carries status, output tails, a log file and a directory listing, and survives a missing path", () => {
+    const { root } = makeScratch();
+    try {
+      const log = join(root, "docker.log");
+      writeFileSync(log, "recreate service=portal\n");
+      mkdirSync(join(root, "assets", "scripts"), { recursive: true });
+      writeFileSync(join(root, "assets", "SHA256SUMS"), "x\n");
+      const text = promoteDiagnostics({ status: 1, stdout: "step=done", stderr: "sha256sum: SHA256SUMS: No such file or directory" }, {
+        "docker.log": log, assets: join(root, "assets"), gone: join(root, "missing"),
+      });
+      expect(text).toContain("status=1");
+      expect(text).toContain("sha256sum: SHA256SUMS");
+      expect(text).toContain("recreate service=portal");
+      expect(text).toMatch(/SHA256SUMS\nscripts/);
+      expect(text).toMatch(/--- gone .*\n<unreadable: /);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

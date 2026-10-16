@@ -320,7 +320,7 @@ async function manage(params: Record<string, unknown>): Promise<ToolResult> {
     }
     case "configure": {
       const input: Parameters<typeof accounts.configureProviderAccount>[0] = { connectionId };
-      for (const key of ["label", "secretRef", "clientId", "clientSecret", "tokenEndpoint", "scope"] as const) {
+      for (const key of ["label", "secretRef", "clientId", "clientSecret", "tokenEndpoint", "scope", "providerWorkspaceId"] as const) {
         if (typeof params[key] === "string") input[key] = params[key];
       }
       return result(await accounts.configureProviderAccount(input));
@@ -338,7 +338,10 @@ async function manage(params: Record<string, unknown>): Promise<ToolResult> {
     }
     case "test": {
       const { testProviderAuthInternal } = await import("@/lib/actions/provider-auth-test");
-      const out = await testProviderAuthInternal(connection.providerId, false, connectionId);
+      const { isDefaultSubscriptionIdentity } = await import("@/lib/inference/active-provider-account-verification");
+      const out = isDefaultSubscriptionIdentity(connection.providerId, connectionId)
+        ? await testProviderAuthInternal(connection.providerId, false, connectionId, { verificationOnly: true })
+        : await testProviderAuthInternal(connection.providerId, false, connectionId);
       return { success: out.ok, message: out.message, ...(out.ok ? {} : { error: out.message }) };
     }
     default: return { success: false, error: "Invalid operation", message: "Choose a supported account operation" };

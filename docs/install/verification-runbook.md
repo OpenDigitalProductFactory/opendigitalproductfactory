@@ -7,9 +7,9 @@
 > those gaps.
 >
 > macOS Apple Silicon is **GA** — validated end-to-end on real
-> hardware. The Linux and cloud installers are code-complete and
-> statically CI-green and graduate to GA when the community sends us
-> verification reports from real hardware. Reports still widen the
+> hardware. Linux and cloud remain early access: source fixes and CI results
+> are preparation for customer validation, not a completed acceptance claim.
+> Use the [Linux guide](linux.md) to select a release containing the repairs. Reports still widen the
 > tested matrix on every platform, including additional Mac models /
 > macOS versions. If you have an Apple Silicon Mac, a non-Ubuntu Linux
 > box, a TAPPaaS environment, or a cloud VM you can spare for an hour,
@@ -26,6 +26,30 @@
 >
 > We don't need every checkbox before reading your report —
 > partial reports are useful too.
+
+## Linux customer handoff
+
+Recommended first target: Ubuntu Server 24.04 LTS x86-64, a dedicated VM or
+server, native Docker Engine and Compose v2. Use the [hardware guide](hardware.md)
+for sizing. Before the pilot, record a published release containing the
+[startup repairs](linux.md#source-repairs-awaiting-native-acceptance).
+
+Record these fields with the report: distro/version, CPU architecture and cores,
+RAM, free disk, VM/physical/cloud, host UID, Docker and Compose versions,
+installer source tag/SHA, image tag/digest, selected capabilities, AI provider,
+and fresh install versus migration. Do not include credentials or private keys.
+
+For each [pilot acceptance check](linux.md#pilot-acceptance-checks), record
+**pass**, **fail** or **unrun**, the observation and a redacted evidence link.
+Include a non-UID-1000 user where practical to exercise private file ownership.
+Capture the first failure before retrying; HTTP health does not substitute for
+HTTPS/login, AI or reboot checks. Never attach raw CA initialization logs,
+`.env`, enrollment packages or state secrets. Review even a redacted doctor
+bundle before sharing. Run restore and destructive uninstall only against a
+declared disposable installation with the operator's explicit authorization.
+
+The customer's results are the native acceptance evidence. A source fix,
+mocked command test or green CI job cannot fill in an unrun checklist row.
 
 ## Verification matrix
 

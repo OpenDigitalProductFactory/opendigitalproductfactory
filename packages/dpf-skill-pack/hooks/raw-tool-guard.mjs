@@ -15,7 +15,8 @@
 //
 // Refused → redirected:
 //   - bare `tsc` (also `pnpm exec tsc`, `pnpm tsc`, `npx tsc`)
-//       → `pnpm --filter <pkg> typecheck` (scripts/run-tsc.mjs, 8 GB heap)
+//       → `pnpm --filter <pkg> typecheck` (scripts/run-tsc.mjs: the TypeScript 7
+//         checker, or TS6 with its 8 GB heap under DPF_TSC=6 — BI-2B8D67A9)
 //   - `vitest` from the WORKSPACE ROOT with no `--filter <pkg>`
 //       → `pnpm --filter <pkg> exec vitest run <files>` (a root-level run
 //         prunes sibling links — BI-99CAE42F)
@@ -93,8 +94,8 @@ function isNpx(tokens) {
 }
 
 const TSC_GUIDANCE =
-  "Refused: a bare `tsc` runs at Node's default heap and aborts out of memory on this codebase (BI-CD7706B5).\n" +
-  "Run instead:  pnpm --filter <pkg> typecheck     (scripts/run-tsc.mjs raises the heap to 8 GB; add :tests for the test program)\n" +
+  "Refused: a bare `tsc` runs the workspace's TypeScript 6 at Node's default heap, which aborts out of memory on this codebase (BI-CD7706B5), and is not the checker CI uses.\n" +
+  "Run instead:  pnpm --filter <pkg> typecheck     (scripts/run-tsc.mjs runs the TypeScript 7 checker, BI-2B8D67A9; add :tests for the test program)\n" +
   `Raw form on purpose?  prefix with ${BYPASS_ENV}=1`;
 
 const VITEST_GUIDANCE =

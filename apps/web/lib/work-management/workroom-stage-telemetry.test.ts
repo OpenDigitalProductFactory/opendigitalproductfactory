@@ -192,6 +192,45 @@ describe("readDriveObservation", () => {
   });
 });
 
+describe("a run's identity", () => {
+  const FINITE = "delivery-small@1.0.0";
+  const finite = (prior: DriveObservation | null, next: DriveObservation) =>
+    planStageTransitions({ capsuleId: "WC-1", shapeRef: FINITE, prior, next, at: at(0) });
+
+  it("a finite room is one run: the drive's daily cycle stamp does not start a new item", () => {
+    const day1 = obs("attention", "role_stage", "reproduce", "2026-10-07");
+    const day2 = obs("attention", "role_stage", "reproduce", "2026-10-08");
+    expect(finite(day1, day2)).toEqual([]);
+    expect(finite(null, day1).every((t) => t.itemId === "WC-1:run")).toBe(true);
+  });
+
+  it("a recurring cycle still open when the next begins is cancelled, never counted as a success", () => {
+    // Live 2026-10-12: a dependency-advisory-watch sweep started, was held on
+    // executor_writeback_unavailable, and the next day's cycle began over it.
+    const held = obs("pause", "executor_writeback_unavailable", "sweep", "2026-10-12");
+    const nextDay = obs("dispatch_agent", "agent_stage", "sweep", "2026-10-13");
+    const out = plan(held, nextDay);
+    expect(out.map((t) => [t.itemId.split(":").pop(), t.transition, t.outcome])).toEqual([
+      ["2026-10-12", "released", null],
+      ["2026-10-12", "cancelled", "cancelled"],
+      ["2026-10-13", "enqueued", null],
+      ["2026-10-13", "started", null],
+    ]);
+  });
+
+  it("moving to the next step inside one cycle still completes the step", () => {
+    const out = plan(obs("dispatch_agent", "agent_stage", "sweep", "c1"), obs("dispatch_agent", "agent_stage", "raise", "c1"));
+    expect(compact(out)).toEqual([["sweep", "finished", "success"], ["raise", "enqueued", null], ["raise", "started", null]]);
+  });
+
+  it("re-attaches to the item a room left open when it went idle, instead of entering it twice", () => {
+    const idle = obs("do_not_wake", "quiet", null, "c1");
+    const resumed = obs("dispatch_agent", "agent_stage", "sweep", "c1");
+    const out = planStageTransitions({ capsuleId: "WC-1", shapeRef: SHAPE, prior: idle, next: resumed, at: at(0), openStageKey: "sweep" });
+    expect(compact(out)).toEqual([["sweep", "released", null], ["sweep", "started", null]]);
+  });
+});
+
 describe("openStageAfter", () => {
   it("follows the last enqueue and clears on a finish", async () => {
     const { openStageAfter } = await import("./workroom-stage-telemetry");

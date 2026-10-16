@@ -286,8 +286,11 @@ export function selectBuildEngineFromCandidates(args: {
     }
   }
 
-  const selected = args.route.selectedProviderId
+  const selectedCandidate = args.route.selectedProviderId
     ? eligible.find((candidate) => candidate.providerId === args.route.selectedProviderId) ?? null
+    : null;
+  const selected = selectedCandidate
+    ? { ...selectedCandidate, modelId: args.route.selectedModelId ?? selectedCandidate.modelId }
     : null;
   const pinned = args.policy.mode === "pinned";
   if (!selected) {

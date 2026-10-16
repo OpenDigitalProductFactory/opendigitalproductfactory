@@ -13,6 +13,40 @@ const classify = (params: Record<string, unknown>) => resolveCallConsequence(too
 const local = { connectionId: "provider-default-local", providerId: "local", authMethod: "local", executionChannel: "local-runtime", credentialEntryId: null, organizationId: null };
 const disable = { operation: "disable", connectionId: local.connectionId };
 
+describe("active DEV subscription verification", () => {
+  const account = { connectionId: "provider-default-chatgpt", providerId: "chatgpt", authMethod: "oauth", status: "active", credentialEntryId: "owned", organizationId: null };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.stance.mockResolvedValue({ environmentClass: "development", primaryPurpose: "evolve-dpf" });
+    mocks.account.mockResolvedValue(account);
+  });
+  it.each(["chatgpt", "codex"])("verifies the active default %s through recorded delegation", async providerId => {
+    mocks.account.mockResolvedValue({ ...account, providerId, connectionId: `provider-default-${providerId}` });
+    const consequence = (await classify({ operation: "test", providerId, connectionId: `provider-default-${providerId}` })).consequence;
+    expect(consequence).toBeNull();
+    const base = { action: { sideEffect: true, executionMode: "immediate" as const, consequence }, dataPolicy: { sensitivity: "internal" as const }, operatorRequiresApproval: true };
+    expect(resolveEscalation({ ...base, steering: "connection-delegation" }).verdict).toBe("automated");
+    expect(resolveEscalation({ ...base, steering: "none" }).verdict).toBe("human");
+    expect(resolveEscalation({ ...base, steering: "connection-delegation", dataPolicy: { sensitivity: "restricted" } }).verdict).toBe("human");
+    expect(resolveEscalation({ ...base, steering: "connection-delegation", proposeBoundary: true }).verdict).toBe("human");
+  });
+  it.each([
+    { ...account, status: "inactive" }, { ...account, status: "disabled" }, { ...account, status: "disconnected" },
+    { ...account, organizationId: "peer" }, { ...account, credentialEntryId: null },
+    { ...account, authMethod: "api-key" }, { ...account, connectionId: "additional-account" }, null,
+  ])("keeps other persisted account effects consequential: %j", async persisted => {
+    mocks.account.mockResolvedValue(persisted);
+    expect((await classify({ operation: "test", connectionId: account.connectionId })).consequence).toBe("authority");
+  });
+  it.each([{}, { environmentClass: "production", primaryPurpose: "evolve-dpf" }, { environmentClass: "development", primaryPurpose: "operate-business" }])("requires proven DEV maintenance stance: %j", async stance => {
+    mocks.stance.mockResolvedValue(stance);
+    expect((await classify({ operation: "test", connectionId: account.connectionId })).consequence).toBe("authority");
+  });
+  it.each([{ secretRef: "replacement" }, { environmentClass: "development" }, { providerId: "openai" }])("does not trust configuration or environment assertions: %j", async extra => {
+    expect((await classify({ operation: "test", connectionId: account.connectionId, ...extra })).consequence).toBe("authority");
+  });
+});
+
 describe("delegated DEV credentialless local containment", () => {
   beforeEach(() => {
     vi.clearAllMocks();

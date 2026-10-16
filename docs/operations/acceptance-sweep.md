@@ -1,5 +1,29 @@
 # Acceptance sweep (operator runbook)
 
+## Medium work whose criteria are in its body
+
+Product-linked medium work still needs independent acceptance after delivery.
+It can use an Acceptance heading with one criterion per bullet, or explicit
+`AC-<id>:` bullets, without obtaining a separate spec approval.
+
+After delivery passes, an authorized completion attempt retains those criteria
+as an immutable version. It requires one current source Workroom with a full
+repository commit, attributable criteria and source authors, and document storage
+in the item's organization. The attempt may still refuse completion: retaining
+criteria is preparation for review, not an acceptance receipt.
+
+Read the returned recovery action. It distinguishes unreadable criteria,
+unretained criteria, stale source or criteria, missing eligible evidence, and
+an unavailable independent reviewer. Record passing evidence after the retained
+baseline, then request the exact server-issued acceptance packet. The reviewer
+needs its existing reading and evidence-writing grants plus admission to the
+Workroom; use the governed coworker engagement procedure when admission is absent.
+
+Changed criteria, source identity or eligible evidence invalidate the old request.
+Refresh recovery for a successor; unchanged retries reuse the request and receipt.
+Historical requests remain auditable. Only a current independent receipt satisfies
+acceptance. Product links, delivery shape and administrator approval gates stay intact.
+
 The `acceptance-sweep-daily` scheduled task (05:00 UTC, owned by the Portfolio
 Advisor, AGT-WS-PORTFOLIO) revisits a page of `awaiting-acceptance` backlog
 items each day. It records who owes each item's acceptance, measures how long
@@ -97,6 +121,14 @@ host with a source checkout can point `DPF_HOST_SOURCE_ROOT` at it instead.
   could answer. This means "unknown", never "not merged". Check that the
   clone exists and has an `origin/main`. The item stays awaiting acceptance
   with its evidence until the signal can answer.
+- **A merge never outranks a current failure:** if the newest evidence of any
+  kind on the item (tests, build, UX, migration) is a failure recorded in the
+  last 30 days, the item cannot close: not by the sweep, the status tool, the
+  backlog editor or a deployment closure. The completion check names the
+  failing row. Fix it and record a passing result of the same kind, which
+  replaces the failure. A manual check is always recorded as a pass, so
+  writing "blocked" in its text does not stop a close (BI-4A222439,
+  BI-00A50610).
 
 ## Known limit
 

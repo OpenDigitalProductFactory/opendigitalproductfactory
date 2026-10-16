@@ -19,6 +19,8 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { dirname, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
+import { leaseQueueCallOptions } from "./lib/lease-queue-call-options.mjs";
+export { leaseQueueCallOptions } from "./lib/lease-queue-call-options.mjs";
 import { loadEvidencePolicy } from "./lib/ci-evidence-plan.mjs";
 import { resolveMcpCredential } from "./lib/mcp-credential.mjs";
 import { readQuiescenceStatus, quiescenceBlocksWrites, quiescenceWait } from "./lib/gate-quiescence.mjs";
@@ -42,15 +44,7 @@ import { readFailureEvidenceBinding } from "./lib/semantic-review-gate.mjs";
 //
 // So these calls get real headroom, tunable without patching source. The global
 // default stays at 10s: a health probe should still fail fast.
-const LEASE_QUEUE_TIMEOUT_MS = (() => {
-  const raw = Number(process.env.DPF_GATE_MCP_TIMEOUT_MS);
-  return Number.isFinite(raw) && raw > 0 ? raw : 60_000;
-})();
-
-/** Transport options for a queue call whose latency grows with the queue. */
-export function leaseQueueCallOptions(mcpUrl, bearerToken) {
-  return { mcpUrl, bearerToken, timeoutMs: LEASE_QUEUE_TIMEOUT_MS };
-}
+// The shared resolver carries this existing contract for all lease callers.
 
 /**
  * Describe a failed lease-queue call in the terms the operator has to act on.
@@ -68,10 +62,10 @@ export function describeLeaseCallFailure(error) {
     + "if this box regularly runs several gates at once";
 }
 import { summarizeLocalCiOutput } from "./lib/local-ci-failure-summary.mjs";
-import { classifyGateOutcome, EXIT_CHILD_SIGNAL_DEATH, EXIT_SLOT_SUBSTRATE_UNAVAILABLE, EXIT_SOURCE_DRIFT, EXIT_USAGE, EXIT_WAIT_CANCELLED } from "./lib/sandbox-freshness.mjs";
+import { classifyGateOutcome, EXIT_CANDIDATE_MERGE_CONFLICT, EXIT_CHILD_SIGNAL_DEATH, EXIT_SLOT_SUBSTRATE_UNAVAILABLE, EXIT_SOURCE_DRIFT, EXIT_USAGE, EXIT_WAIT_CANCELLED } from "./lib/sandbox-freshness.mjs";
 import { SLOT_SUBSTRATE_UNAVAILABLE_STATUS, assessSlotSubstrate, ensureSlotPostgres } from "./lib/local-ci-slot-substrate.mjs";
 import { GATE_CLIENT_REVISION } from "./lib/gate-client-revision.mjs";
-import { buildIsDelegated, defaultBuildStrategy } from "./lib/local-integration-ci.mjs";
+import { buildIsDelegated, defaultBuildStrategy, metadataMergeConflictForRun } from "./lib/local-integration-ci.mjs";
 import { fallbackStatusForUnknown } from "./lib/local-integration-status.mjs";
 import {
   createRetryableRelease,
@@ -2605,12 +2599,20 @@ async function main() {
     // No report produced; the command exit code remains authoritative and the
     // evidence records freshness as unknown.
   }
+  let contentMetadata = null;
+  try {
+    contentMetadata = JSON.parse(readFileSync(metadataFile, "utf8"));
+  } catch {
+    // no metadata written by this run — evidence.content stays null, matching the sh port.
+  }
   const outcome = runResult.infrastructureReason ? {
     status: "blocked_control_plane_starvation", gatePassed: false, productEvidence: false,
     summary: `local-CI supervision is inconclusive: ${runResult.infrastructureReason}. This is infrastructure evidence, not a product verdict.`,
   } : classifyGateOutcome({
     freshnessVerdict: freshnessReport ? freshnessReport.verdict : "",
     gateExitCode: runResult.status,
+    // BI-FCC1DCB2: the conflicting paths, quoted only from THIS run's metadata.
+    mergeConflict: metadataMergeConflictForRun(contentMetadata, { leaseId, sha }),
   });
   const freshness = freshnessReport
     ? {
@@ -2622,12 +2624,6 @@ async function main() {
     }
     : { verdict: "unknown", reason: "no freshness report was produced by the gate command" };
 
-  let contentMetadata = null;
-  try {
-    contentMetadata = JSON.parse(readFileSync(metadataFile, "utf8"));
-  } catch {
-    // no metadata written by this run — evidence.content stays null, matching the sh port.
-  }
   let controlPlaneEvidence = null;
   try {
     controlPlaneEvidence = JSON.parse(
@@ -2857,6 +2853,7 @@ async function main() {
       evidencePending: true,
       evidencePendingReason: evidenceError || "publication_unconfirmed",
       failureReason: `Execution ${outcome.status}; canonical publication remains unconfirmed`,
+      mergeConflict: outcome.status === "conflict" ? outcome.mergeConflict ?? null : null,
     });
     die(`failed to record local integration evidence: ${JSON.stringify(evidenceResponse)}`);
   }
@@ -2884,6 +2881,7 @@ async function main() {
     evidencePending: false,
     failureReason: persistedReason,
     failureSummary,
+    mergeConflict: outcome.status === "conflict" ? outcome.mergeConflict ?? null : null,
     childExitCode: runResult.status,
     testStub: testStubRun,
     ...(outcome.gatePassed ? { onPassWritten: retireLosingSiblings } : {}),
@@ -2928,6 +2926,12 @@ async function main() {
     process.stderr.write(`gate-worktree: BLOCKED (control-plane starvation): ${outcome.summary}\n`);
     process.exit(5);
   }
+  if (outcome.status === "conflict") {
+    // BI-FCC1DCB2: the author's verdict, with the author's remedy. Not
+    // infrastructure, and re-running the gate cannot change it.
+    process.stderr.write(`gate-worktree: MERGE CONFLICT with base: ${outcome.summary}\n`);
+    process.exit(EXIT_CANDIDATE_MERGE_CONFLICT);
+  }
   if (outcome.status === "blocked_child_signal_death") {
     process.stderr.write(`gate-worktree: BLOCKED (child signal death): ${outcome.summary}\n`);
     process.stderr.write("gate-worktree: this is infrastructure evidence, not a product failure; retry on a quieter host\n");
@@ -2956,6 +2960,7 @@ function writeState(stateFile, {
   admission = null,
   failureReason = "",
   failureSummary = null,
+  mergeConflict = null,
   childExitCode = null,
   testStub = false,
   onPassWritten = null,
@@ -2980,6 +2985,7 @@ function writeState(stateFile, {
     admission,
     failureReason,
     failureSummary,
+    mergeConflict,
     childExitCode,
     testStub,
   });

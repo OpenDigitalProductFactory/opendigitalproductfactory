@@ -45,10 +45,9 @@ try {
   } catch (error) { if (error.code !== "ENOENT") throw error; }
   try {
     await stat(applyLockPath);
-    let expiresAt;
-    try { expiresAt = Date.parse((await readFile(join(applyLockPath, "expires-at"), "utf8")).trim()); } catch {}
-    if (!Number.isFinite(expiresAt) || expiresAt >= Date.now()) { const error = new Error("transition_in_progress"); error.code = "DPF_TRANSITION_IN_PROGRESS"; throw error; }
-    await rm(applyLockPath, { recursive: true, force: true });
+    // Do not rotate a receipt key while an unmeasured executor may use it.
+    // Legacy apply-lock expiry does not establish executor settlement.
+    const error = new Error("transition_in_progress"); error.code = "DPF_TRANSITION_IN_PROGRESS"; throw error;
   } catch (error) { if (error.code !== "ENOENT") throw error; }
   try {
     const existing = (await readFile(secretPath, "utf8")).trim();

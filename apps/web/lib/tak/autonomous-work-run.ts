@@ -388,6 +388,8 @@ export async function executeAutonomousAgenticLoop(input: {
   agentDisplayName?: string;
   buildPhase?: string | null;
   featureBuildId?: string | null;
+  /** The turn's coworker mode, forwarded so delegation tools never widen it (BI-FAD98137). */
+  coworkerMode?: "advise" | "act";
   modelRequirements?: Record<string, unknown>;
   apiTokenId?: string | null;
   tokenScope?: "read" | "write" | "admin";
@@ -551,6 +553,7 @@ export async function executeAutonomousAgenticLoop(input: {
         agentDisplayName: input.agentDisplayName,
         buildPhase: input.buildPhase,
         featureBuildId: input.featureBuildId,
+        coworkerMode: input.coworkerMode,
         activeSkillId: input.activeSkillId ?? null,
         agentMessageId: input.agentMessageId ?? null,
         interactionMode: input.interactionMode,

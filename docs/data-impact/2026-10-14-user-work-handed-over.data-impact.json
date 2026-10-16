@@ -1,0 +1,49 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "User.workHandedOverAt / User.workHandedOverById, written by applyAccountHandover (apps/web/lib/work-management/account-handover.ts)",
+    "Read by the workroom drive's task owner (roomOwnerUserId / loadHandedOverUserIds in apps/web/lib/work-management/delivery-room-ownership.ts), the scheduled-task seeds and the resolveWorkOwner fallback (findInstallWorkOwnerUserId in packages/db/src/install-work-owner.ts)"
+  ],
+  "privacyAssessment": {
+    "personalData": true,
+    "sensitivity": "internal: a timestamp and the id of the approving user on an existing account row",
+    "dataSubjectRights": "Follows the User row: erased or exported with the account. The approver reference is SET NULL if the approving account is deleted.",
+    "reviewDisposition": "Same lifecycle and access as the User row it sits on; no new personal content."
+  },
+  "migration": {
+    "name": "20261014150000_user_work_handed_over",
+    "backfill": "Sets workHandedOverAt only for accounts a past apply recorded, from the BuildActivity rows tool='apply_account_handover' summary 'Handed over from <email> (BI-F25A5FC7)' (earliest createdAt). On the live install that is one account (admin@dpf.local, 2026-10-01 10:41:18Z). workHandedOverById stays NULL because the approver was not recorded then. Only NULL markers are written; re-runnable.",
+    "rollback": "Forward-only and additive. Older code never reads the columns. Clearing a marker (UPDATE User SET workHandedOverAt = NULL) restores the old owner rules for that account."
+  },
+  "tests": [
+    "packages/db/src/install-work-owner.test.ts",
+    "apps/web/lib/work-management/delivery-room-ownership.test.ts",
+    "apps/web/lib/work-management/account-handover.test.ts",
+    "apps/web/lib/portfolio/accountable-owner.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:user",
+      "prismaModel": "User",
+      "lifecycleDisposition": "Existing model; the columns follow the account row.",
+      "fields": [
+        {
+          "fieldId": "data:user#workHandedOverAt",
+          "resolution": "governed",
+          "reason": "When the account's live work was handed over; owner-at-birth rules skip a handed-over account.",
+          "provenance": "BI-858FDE5A",
+          "flags": []
+        },
+        {
+          "fieldId": "data:user#workHandedOverById",
+          "resolution": "governed",
+          "reason": "The person who approved the handover.",
+          "provenance": "BI-858FDE5A",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

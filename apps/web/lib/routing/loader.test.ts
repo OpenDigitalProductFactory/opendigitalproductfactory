@@ -13,6 +13,7 @@ import { MODEL_ROUTING_ENDPOINT_TYPES } from "./provider-eligibility";
 
 const { mockPrisma, mockProviderHasConfiguredCredential, mockServedContext } = vi.hoisted(() => ({
   mockPrisma: {
+    aiProviderConnection: { findMany: vi.fn().mockResolvedValue([]) },
     routeDecisionLog: {
       create: vi.fn().mockResolvedValue({ id: "decision-log-1" }),
     },
@@ -238,6 +239,15 @@ describe("routing-loader cache (BI-OPT-ROUTING-CACHE)", () => {
     expect((await readEndpointManifests(100001))[0]?.maxOutputTokens).toBeNull();
     const unavailableReader = vi.fn().mockResolvedValue(null);
     expect((await readEndpointManifests(100002, unavailableReader))[0]?.maxContextTokens).toBeNull();
+  });
+
+  it("carries selected runtime support alongside observed capacity without trusting stored parameters", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([localProfile()]);
+    const evidence = { dialect: "llama.cpp-b9879" as const, modelDigest: "digest", engineIdentity: "engine", templateDigest: "template", configDigest: "config", observedAt: Date.now() };
+    const [manifest] = await readEndpointManifests(Date.now(), async () => ({ contextTokens: 131072, thinkingBudgetEvidence: evidence }));
+    expect(manifest).toMatchObject({ maxContextTokens: 131072, localThinkingBudgetEvidence: evidence });
+    const [unknown] = await readEndpointManifests(Date.now(), async () => ({ contextTokens: 131072 }));
+    expect(unknown?.localThinkingBudgetEvidence).toBeUndefined();
   });
 
   it("leaves embedding capacity on its existing metadata path", async () => {

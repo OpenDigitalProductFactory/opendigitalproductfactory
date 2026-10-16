@@ -4,7 +4,7 @@ import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readi
 import { currentUserContext } from "@/lib/govern/current-user-context";
 import { can } from "@/lib/permissions";
 import { expandGrants } from "@/lib/tak/agent-grants";
-import { INITIATIVE_READINESS_LANES } from "@/lib/tak/initiative-readiness-tool-grants";
+import { INITIATIVE_READINESS_LANES, readinessLaneForRole } from "@/lib/tak/initiative-readiness-tool-grants";
 import { OAUTH_EXECUTION_AUTHORITY_SELECT, isCurrentOAuthExecutionAuthority } from "@/lib/auth/oauth-tokens";
 import { resolveAgentWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
 import { parseInitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
@@ -13,34 +13,42 @@ import { resolveMcpTaskAuthorityKey } from "@/lib/auth/oauth-task-authority";
 import { deterministicExternalTaskRunId, remoteTaskRequestMatches } from "@/lib/mcp-task-capacity-contract";
 import { loadTaskInitiativeReviewOutcome } from "@/lib/mcp-task-review-outcome";
 import { BUILD_STUDIO_ASSISTANT_AGENT_ID, buildStudioOwedRoutes } from "@/lib/backlog/initiative-readiness/build-studio-owed-routes";
+import { reviewDocumentPreflight } from "@/lib/mcp-task-review-document";
 
-/** A finished review disappears from readiness. Replays may retrieve its real
- * writer receipt, but must never turn a stale proposal into another execution. */
-async function hasCompletedReview(params: Record<string, unknown>, userId: string, context: ToolExecutionContext) {
+/** Match the durable request identity, never a caller's task-handle assertion. */
+async function matchingReviewRequest(params: Record<string, unknown>, userId: string, context: ToolExecutionContext) {
   const binding = parseInitiativeReviewBinding(params.initiativeReviewBinding);
   const keys = ["targetAgent", "objective", "questionPacketSummary", "requestKey", "tier", "enteredVia", "requiredToolNames", "initiativeReviewBinding"];
   if (!binding || Object.keys(params).some((key) => !keys.includes(key)) || params.tier !== 2 || params.enteredVia !== "handoff"
     || typeof params.targetAgent !== "string" || typeof params.objective !== "string"
     || typeof params.questionPacketSummary !== "string" || typeof params.requestKey !== "string"
-    || !Array.isArray(params.requiredToolNames) || params.requiredToolNames.some((name) => typeof name !== "string")) return false;
+    || !Array.isArray(params.requiredToolNames) || params.requiredToolNames.some((name) => typeof name !== "string")) return null;
   const authorityKey = await resolveMcpTaskAuthorityKey({ tokenId: context.apiTokenId!, userId, source: "oauth" });
-  if (!authorityKey) return false;
+  if (!authorityKey) return null;
   const taskRunId = deterministicExternalTaskRunId(authorityKey, params.requestKey);
   const task = await prisma.taskRun.findFirst({ where: { taskRunId, userId }, select: { a2aMetadata: true } });
   const names = [...new Set(params.requiredToolNames as string[])];
   const scope = [...(context.tokenGrantScopes ?? []).filter((entry) => !entry.startsWith("tool:") && !entry.startsWith("backlog-item:")),
     `backlog-item:${binding.itemId}`, ...names.map((name) => `tool:${name}`)];
-  return Boolean(task && remoteTaskRequestMatches(task.a2aMetadata, {
+  return task && remoteTaskRequestMatches(task.a2aMetadata, {
     agentId: params.targetAgent, routeContext: "/build", title: params.questionPacketSummary,
     objective: params.objective, prompt: params.objective, idempotencyKey: params.requestKey,
     riskClass: "bounded-write", authorityScope: scope, collaborationKind: "handoff", initiativeReviewBinding: binding,
-  }) && await loadTaskInitiativeReviewOutcome(taskRunId, binding));
+  }) ? { taskRunId, binding } : null;
 }
 
-type RequestAuthority = { bounded: boolean; refusal?: ToolResult };
+async function hasCompletedReview(params: Record<string, unknown>, userId: string, context: ToolExecutionContext) {
+  // A finished review disappears from readiness. A replay may retrieve its
+  // writer receipt, but a stale proposal cannot start another execution.
+  const request = await matchingReviewRequest(params, userId, context);
+  return Boolean(request && await loadTaskInitiativeReviewOutcome(request.taskRunId, request.binding));
+}
+
+/** `notice` is plain-words advice for the author; it never blocks (BI-4592CF69). */
+type RequestAuthority = { bounded: boolean; refusal?: ToolResult; notice?: string };
 const deny = (message: string): RequestAuthority => ({ bounded: true, refusal: {
   success: false, error: "independent_review_request_denied", message,
-  data: { action: "Refresh the item's readiness and submit its exact review request. Access to its Workroom must already be authorized." },
+  data: { action: "For design, architecture or plan review, refresh claim_backlog_item_for_work on the exact Workroom with workIntent plan or implementation and submit recovery.reviewerRoutes[].requestCoworker unchanged. For terminal review, read get_backlog_item recovery. If the request was not delivered in a large response, use get_backlog_item with itemId and recoveryGate for one exact bounded request or explicit recovery. Workroom access must already be authorized." },
 } });
 
 /** An evidence author may request an independent review, never impersonate its writer.
@@ -77,12 +85,14 @@ export async function authorizeCoworkerRequest(
     return deny("The connection's authorization is no longer current.");
   }
   const binding = parseInitiativeReviewBinding(params.initiativeReviewBinding);
-  const lane = binding && INITIATIVE_READINESS_LANES[binding.writerToolName];
+  const lane = binding?.gate === "objective-mapping" && binding.writerToolName === "record_initiative_evidence"
+    ? readinessLaneForRole("acceptance-reviewer")?.lane
+    : binding && INITIATIVE_READINESS_LANES[binding.writerToolName];
   if (options?.sourceOnly && (!binding || binding.eligibleEvidenceActivityIds?.length
     || !["record_initiative_design_review", "record_initiative_architecture_review"].includes(binding.writerToolName))) {
     return deny("This review does not have a source-only activity contract.");
   }
-  if (!binding?.workroomRef || !lane?.independent || !lane.gates.some((gate) => gate === binding.gate)
+  if (!binding?.workroomRef || !lane?.independent || (binding.gate !== "objective-mapping" && !lane.gates.some((gate) => gate === binding.gate))
     || params.targetAgent === context.agentId) return deny("Use an independent review request supplied by the item's readiness check.");
   const human = await currentUserContext(userId);
   if (!human || !can(human, "manage_backlog") || !can(human, lane.capability)) {
@@ -137,7 +147,7 @@ export async function authorizeCoworkerRequest(
     })()
     : await (async () => {
       const { resolveTerminalInitiativeRecovery } = await import("@/lib/backlog/initiative-readiness/terminal-recovery");
-      const recovery = await resolveTerminalInitiativeRecovery({ decision, currentAgentId: context!.agentId ?? null,
+      const recovery = await resolveTerminalInitiativeRecovery({ decision, currentAgentId: context!.agentId ?? null, currentUserId: userId,
         refusedWorkroomId: binding.workroomRef!.workroomId,
         taskAuthority: binding.gate === "plan-review" ? await (async () => {
           const taskAuthorityKey = await resolveMcpTaskAuthorityKey({ tokenId: context.apiTokenId!, userId, source: "oauth" });
@@ -147,7 +157,21 @@ export async function authorizeCoworkerRequest(
     })();
   if (!issued.some((issuedPacket) => canonicalJson(issuedPacket) === canonicalJson(params))) {
     if (!options?.sourceOnly && await hasCompletedReview(params, userId, context)) return { bounded: true };
-    return deny("The review request has changed or is no longer eligible. Refresh readiness to get the current request.");
+    return deny("The review request has changed or is no longer eligible. This refusal does not deliver a replacement packet. Read get_backlog_item with itemId and recoveryGate for the current exact request or explicit recovery; never reconstruct it.");
+  }
+  // Read protected bytes only after consent, grants, room access and exact
+  // issuance are established. Existing requests join their recorded work;
+  // neither a provider outage nor a new parser can erase historical evidence.
+  if (!options?.sourceOnly && binding.writerToolName === "record_initiative_design_review"
+    && (binding.gate === "spec-approval" || binding.gate === "design-spec")
+    && !await matchingReviewRequest(params, userId, context)) {
+    const { refusal: documentRefusal, notice } = await reviewDocumentPreflight(binding);
+    if (documentRefusal) return { bounded: true, refusal: { success: false,
+      error: documentRefusal.error, message: documentRefusal.message,
+      data: { gateStatus: documentRefusal.gateStatus,
+        action: "Correct the scope document and refresh its immutable review request, or retry the same request after source access is restored." },
+    } };
+    if (notice) return { bounded: true, notice };
   }
   return { bounded: true };
 }

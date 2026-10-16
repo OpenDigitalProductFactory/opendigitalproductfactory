@@ -20,6 +20,7 @@ export type AttentionSource =
   | "approval-outbound" // OutboundDraft pending-review (marketing)
   | "approval-bill" // Bill awaiting_approval (AP — carries a dueDate)
   | "approval-expense" // ExpenseClaim submitted
+  | "approval-leave" // LeaveRequest pending — the manager's own decision (BI-7BCC87BB)
   | "compliance-submission" // RegulatorySubmission draft (carries a dueDate)
   | "research-proposal" // ResearchProposal pending
   | "coworker-memory" // Newly distilled CoworkerMemoryNote rows for digest visibility
@@ -204,6 +205,12 @@ export type AttentionEnvelopeApproval = {
   declineHref: string;
   /** POST target that raises an expired, unanswered request again. */
   reraiseHref?: string;
+  /**
+   * BI-7BCC87BB (AC-OVERRIDE): set only when an admin who is not the delegate
+   * opened this request's exact link. The card then offers "Decide on their
+   * behalf" with a required reason instead of Authorize / Decline.
+   */
+  onBehalf?: { ownerLabel: string };
 };
 
 export type AttentionItem = {
@@ -241,6 +248,10 @@ export type AttentionItem = {
   /** The governed coworker action awaiting this reader's decision. Set only by
    * the `coworker-envelope` source (BI-7CB2CCDE). */
   envelope?: AttentionEnvelopeApproval;
+  /** A legacy proposal whose approval the reference monitor refused: why it
+   * can no longer run as proposed. Set only by the `agent-proposal` source
+   * (convert-and-run, BI-04E5A511); the card then offers Decline only. */
+  noLongerRunnable?: string;
 };
 
 /**

@@ -1,12 +1,15 @@
 import "server-only";
 import { prisma } from "@dpf/db";
 import { projectApprovalOutcome, type ApprovalOutcome, type ApprovalOutcomeRow } from "./approval-outcome";
+import { labelOnBehalfDecision } from "./on-behalf-decision";
 import type { ApprovedRequestRun } from "./approved-request-run-types";
+import { parseInitiativeReviewBinding, type InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
+import { isRecord } from "@/lib/shared/coerce";
 
 type Db = typeof prisma;
 
 const select = {
-  id: true, status: true, createdAt: true, expiresAt: true,
+  id: true, status: true, createdAt: true, expiresAt: true, argsJson: true,
   toolExecutions: {
     where: { executionMode: "approval-outcome" },
     orderBy: { createdAt: "desc" as const }, take: 1,
@@ -19,12 +22,14 @@ const select = {
  * This never changes the envelope's authority, expiry, or execution reservation. */
 export async function recordApprovalOutcome(
   envelopeId: string, userId: string, outcome: ApprovedRequestRun, db: Db = prisma,
+  /** BI-7BCC87BB: an admin who decided on `userId`'s behalf; the request stays `userId`'s. */
+  decidedByUserId?: string,
 ): Promise<void> {
   const envelope = await db.coworkerActionEnvelope.findFirst({ where: { id: envelopeId, delegatingUserId: userId } });
   if (!envelope) throw new Error("Approval request not available.");
   await db.toolExecution.create({ data: {
     threadId: envelope.threadId, agentId: envelope.coworkerAgentId,
-    userId, delegatingUserId: userId, envelopeId, taskRunId: envelope.taskRunId,
+    userId: decidedByUserId ?? userId, delegatingUserId: userId, envelopeId, taskRunId: envelope.taskRunId,
     toolName: "approval_outcome", executionMode: "approval-outcome",
     parameters: {}, success: outcome.status === "executed",
     // Raw handler messages can contain private task data; the shared projection
@@ -60,5 +65,62 @@ export async function loadApprovalOutcomes(
     },
     orderBy: { createdAt: "desc" }, take: envelopeId ? 1 : 10, select,
   });
-  return rows.map((row) => projectApprovalOutcome(row as ApprovalOutcomeRow, now));
+  const outcomes = rows.map((row) => projectApprovalOutcome(row as ApprovalOutcomeRow, now));
+  return labelOnBehalfOutcomes(outcomes, db);
+}
+
+/** BI-7BCC87BB: name the admin and the owner of an on-behalf decision by email. */
+async function labelOnBehalfOutcomes(outcomes: ApprovalOutcome[], db: Db): Promise<ApprovalOutcome[]> {
+  const ids = [...new Set(outcomes.flatMap((o) => (o.decidedOnBehalf ? [o.decidedOnBehalf.by, o.decidedOnBehalf.onBehalfOf] : [])))];
+  if (ids.length === 0) return outcomes;
+  const users = await db.user.findMany({ where: { id: { in: ids } }, select: { id: true, email: true } }).catch(() => []);
+  const labels = new Map(users.map((user) => [user.id, user.email]));
+  return outcomes.map((o) => (o.decidedOnBehalf ? { ...o, decidedOnBehalf: labelOnBehalfDecision(o.decidedOnBehalf, labels) } : o));
+}
+
+type ReviewLocator = Pick<InitiativeReviewBinding, "writerToolName" | "itemId" | "gate" | "artifactRef" | "workroomRef">;
+type PendingApprovalOutcome = ApprovalOutcome & {
+  delegatingUserId: string;
+  coworkerAgentId: string;
+  expiresAtIso: string | null;
+  taskRunId: string | null;
+  reviewBinding: ReviewLocator | null;
+};
+
+/** Discovery retains the exact reader's user AND assistant isolation. Metadata
+ * is parsed and whitelisted; an evidence locator grants no source access. */
+export async function listPendingApprovalOutcomes(
+  userId: string, agentId: string | undefined, db: Db = prisma, now = new Date(),
+): Promise<{ approvals: PendingApprovalOutcome[]; hasMore: boolean; inboxHref: string }> {
+  if (!userId || !agentId) return { approvals: [], hasMore: false, inboxHref: "/workspace/inbox" };
+  const pageSize = 20;
+  const rows = await db.coworkerActionEnvelope.findMany({
+    where: {
+      delegatingUserId: userId, coworkerAgentId: agentId, status: "proposed",
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: pageSize + 1,
+    select: {
+      ...select, delegatingUserId: true, coworkerAgentId: true, taskRunId: true,
+      manifestActionId: true,
+      taskRun: { select: { userId: true, a2aMetadata: true } },
+    },
+  });
+  const approvals = rows.slice(0, pageSize).map((row): PendingApprovalOutcome => {
+    const metadata = row.taskRun?.userId === userId && isRecord(row.taskRun.a2aMetadata)
+      ? row.taskRun.a2aMetadata : null;
+    const binding = parseInitiativeReviewBinding(metadata?.initiativeReviewBinding);
+    const reviewBinding: ReviewLocator | null = binding?.writerToolName === row.manifestActionId
+      ? {
+        writerToolName: binding.writerToolName, itemId: binding.itemId,
+        gate: binding.gate, artifactRef: binding.artifactRef,
+        ...(binding.workroomRef ? { workroomRef: binding.workroomRef } : {}),
+      } : null;
+    return {
+      ...projectApprovalOutcome(row, now), delegatingUserId: row.delegatingUserId,
+      coworkerAgentId: row.coworkerAgentId, expiresAtIso: row.expiresAt?.toISOString() ?? null,
+      taskRunId: row.taskRunId, reviewBinding,
+    };
+  });
+  return { approvals, hasMore: rows.length > pageSize, inboxHref: "/workspace/inbox" };
 }

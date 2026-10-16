@@ -47,6 +47,12 @@ export function immutableArtifactIdentity(ref: InitiativeReviewArtifactRef) {
 
 export type InitiativeReviewArtifactRef =
   | {
+    kind: "document-version";
+    repositoryFullName: string;
+    versionId: string;
+    valueDigest: string;
+  }
+  | {
     kind: "repo-blob-at-commit";
     repositoryFullName: string;
     commitSha: string;
@@ -102,20 +108,16 @@ function explicitlyRequestsObjectiveMapping(prompt: string | undefined): boolean
     && /\boperation\s*(?:=|:)\s*['"]objective-mapping['"]/i.test(prompt);
 }
 
-export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBinding | null {
+/** Shared artifact decoder for issuer, admission, history and receipt writer. */
+export function parseInitiativeReviewArtifactRef(value: unknown): InitiativeReviewArtifactRef | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const binding = value as Record<string, unknown>;
-  const artifact = binding["artifactRef"];
-  if (!artifact || typeof artifact !== "object" || Array.isArray(artifact)) return null;
-  const artifactRef = artifact as Record<string, unknown>;
-  const writerToolName = optionalString(binding["writerToolName"]);
-  const itemId = optionalString(binding["itemId"]);
-  const gate = optionalString(binding["gate"]);
+  const artifactRef = value as Record<string, unknown>;
   const repositoryFullName = optionalString(artifactRef["repositoryFullName"]);
   const commitSha = optionalString(artifactRef["commitSha"]);
   const path = optionalString(artifactRef["path"]);
   const providerBlobId = optionalString(artifactRef["providerBlobId"]);
   const revisionId = optionalString(artifactRef["revisionId"]);
+  const versionId = optionalString(artifactRef["versionId"]);
   const valueDigest = optionalString(artifactRef["valueDigest"]);
   const repoBlobRef = artifactRef["kind"] === "repo-blob-at-commit" && repositoryFullName && commitSha && path && providerBlobId
     ? { kind: "repo-blob-at-commit" as const, repositoryFullName, commitSha, path, providerBlobId }
@@ -123,7 +125,20 @@ export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBi
   const revisionRef = artifactRef["kind"] === "feature-build-revision" && repositoryFullName && revisionId && valueDigest
     ? { kind: "feature-build-revision" as const, repositoryFullName, revisionId, valueDigest }
     : null;
-  const parsedArtifactRef: InitiativeReviewArtifactRef | null = repoBlobRef ?? revisionRef;
+  const documentRef = artifactRef["kind"] === "document-version" && repositoryFullName && versionId && valueDigest
+    ? { kind: "document-version" as const, repositoryFullName, versionId, valueDigest }
+    : null;
+  return repoBlobRef ?? revisionRef ?? documentRef;
+}
+
+export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBinding | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const binding = value as Record<string, unknown>;
+  const parsedArtifactRef = parseInitiativeReviewArtifactRef(binding.artifactRef);
+  const repositoryFullName = parsedArtifactRef?.repositoryFullName;
+  const writerToolName = optionalString(binding["writerToolName"]);
+  const itemId = optionalString(binding["itemId"]);
+  const gate = optionalString(binding["gate"]);
   const expectedCurrentBaselineId = binding["expectedCurrentBaselineId"];
   const rawEligibleEvidenceActivityIds = binding["eligibleEvidenceActivityIds"];
   const eligibleEvidenceActivityIds = rawEligibleEvidenceActivityIds === undefined

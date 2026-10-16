@@ -467,7 +467,7 @@ export async function reconcileDeployedShipBuilds(
     for (const build of shipBuilds) {
       try {
         if (!(await isFeatureBuildDeployed(build.buildId))) {
-          await (await import("@/lib/build/auto-open-build-pr")).retryPrForShipBuild(build.buildId, logger); // refused PR, hourly retry
+          if (await (await import("@/lib/build/ship-source-refresh")).refreshOrRetryShipBuildPr(build.buildId, logger)) continue; // BI-76BD65E6
           // A fully-local install treats ProductVersion registration as delivery.
           // Upstream builds no-op here and keep waiting for deployed evidence.
           if (!(await mayCompleteAutonomousBuild({ buildId: build.buildId, logger }))) continue;
@@ -633,6 +633,7 @@ export async function resumeStrandedBuildsOnBoot(
         void (async () => {
           const { resumePreBuildPhase } = await import("@/lib/build/resume-pre-build-phase");
           const outcome = await resumePreBuildPhase(args);
+          if (outcome.kind === "skipped" && outcome.quiet) return; // BI-6F2872FC: unchanged refusal, nothing to record
           await prisma.buildActivity
             .create({
               data: {
@@ -748,15 +749,9 @@ export async function resumeStrandedBuildsOnBoot(
         logger.log(
           `[build-resume] ${build.buildId} stranded in ${build.phase} phase after restart/swap — auto-resuming (BI-9257CF19)`,
         );
-        await prisma.buildActivity
-          .create({
-            data: {
-              buildId: build.buildId,
-              tool: "resumeStrandedBuildsOnBoot",
-              summary: `Stranded in ${build.phase} phase after a restart/swap — auto-resuming the canonical ${build.phase} generator/reviewer (BI-9257CF19).`,
-            },
-          })
-          .catch(() => {});
+        // The resume's outcome row records this attempt; a pre-row here wrote one
+        // more line per build per tick even when the outcome was a quiet hold
+        // (BI-6F2872FC: 159k such rows on the live install).
         resumePreBuild({ buildId: build.buildId, phase: build.phase, userId: build.createdById });
         flagged++;
         continue;
@@ -987,16 +982,16 @@ export async function register() {
       await assertDbContinuityOnBoot();
     }
 
-    // Runtime capability recovery is a boot barrier, not background cleanup:
-    // no authenticated mutation may be admitted until durable host/DB state is
+    // Runtime recovery is a boot barrier: no mutation is admitted until state is
     // reconciled or explicitly marked recovery_required.
     {
-      const { createProductionRuntimeTransitionHost, reconcileRuntimeCapabilityTransitionsOnStartup } = await import("@/lib/platform-runtime/transition-recovery");
+      const { createProductionRuntimeTransitionHost, reconcileRuntimeCapabilityTransitionsOnStartup, startRuntimeCapabilityReceiptSettlement } = await import("@/lib/platform-runtime/transition-recovery");
       try {
         await reconcileRuntimeCapabilityTransitionsOnStartup(await createProductionRuntimeTransitionHost());
       } catch (error) {
         console.error("[runtime-capabilities] Startup reconciliation requires recovery:", error);
       }
+      if (!measurementRuntime) startRuntimeCapabilityReceiptSettlement();
     }
 
     // Graph-mirror projections with no indexer of their own (BI-FEDFABF6). Boot is
@@ -1031,7 +1026,7 @@ export async function register() {
       void resetStuckQuiescenceLevelOnBoot();
 
       void reconcileSelfUpgradeAdmissions().catch((error) => console.error("[self-upgrade] admission reconcile failed", error)); void import("@/lib/jobs/postgres/start").then((m) => m.startPostgresJobWorker()).catch((error) => console.error("[jobs/postgres] worker failed to start", error)); // BI-85E6EF14: a no-op unless DPF_JOBS_ENGINE routes functions to the owned engine
-      void reconcileSelfUpgradeRunsOnBoot(); void import("@/lib/federation/boot-reconcile").then((m) => m.reconcileFederationDurableStateOnBoot()).catch((error) => console.error("[federation] durable-state reconcile failed", error)); void import("@/lib/self-upgrade/service-reconcile-attach").then((m) => m.scheduleServiceReconcileAttach()).catch((error) => console.error("[self-upgrade] service-reconcile attach scheduling failed", error)); // BI-DB87D925
+      void reconcileSelfUpgradeRunsOnBoot().then(() => import("@/lib/agent-toolchain/announce-release")).then((m) => m.announceToolchainReleaseOnBoot()).catch((error) => console.error("[agent-toolchain] release announcement failed", error)); /* BI-E7974C18: after the run reconcile */ void import("@/lib/federation/boot-reconcile").then((m) => m.reconcileFederationDurableStateOnBoot()).catch((error) => console.error("[federation] durable-state reconcile failed", error)); void import("@/lib/self-upgrade/service-reconcile-attach").then((m) => m.scheduleServiceReconcileAttach()).catch((error) => console.error("[self-upgrade] service-reconcile attach scheduling failed", error)); // BI-DB87D925
 
       // Periodic safety net — cron-independent (the boot reconcile above and the
       // Inngest cron can BOTH miss this). If a swap's orchestrator dies while the

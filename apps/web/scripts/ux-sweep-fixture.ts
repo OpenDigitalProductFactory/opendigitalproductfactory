@@ -21,13 +21,28 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { Prisma, prisma } from "@dpf/db";
+import { Prisma, prisma, loadDiscoveryAttributionInputs, normalizeDiscoveredFacts, persistBootstrapDiscoveryRun } from "@dpf/db";
+import { flagUnconfiguredGateways } from "../../../packages/db/src/discovery-runner";
 
-import { convergeUxSweepFixture } from "./ux-sweep-fixture-core.mjs";
+import { convergeUxSweepFixture, convergeUxSweepEstate } from "./ux-sweep-fixture-core.mjs";
 import { SWEEP_ROUTE_PARAMS_REL } from "@/lib/ux-budget/route-shells";
 
 void (async () => {
   try {
+    // The estate represents a declared test scenario, never the developer's
+    // live observations. Both existing CI passes run before authentication.
+    if (process.env.CI === "true" && process.env.UX_SWEEP_BASE_URL) {
+      const estate = await convergeUxSweepEstate(prisma, new Date(), async (facts, meta) => {
+        const inputs = await loadDiscoveryAttributionInputs(prisma);
+        return persistBootstrapDiscoveryRun(prisma, normalizeDiscoveredFacts(facts, inputs), meta);
+      });
+      // Complete the same gateway follow-up as bootstrap, including replay.
+      // A real discovery context is preserved by convergeUxSweepEstate.
+      if (estate) await flagUnconfiguredGateways(prisma);
+      console.error(estate
+        ? `[ux-sweep-fixture] canonical estate ${estate.reused ? "reused" : "populated"}: ${estate.runId}`
+        : "[ux-sweep-fixture] preserved existing discovery context");
+    }
     const result = await convergeUxSweepFixture(prisma, new Date(), {
       dbNull: Prisma.DbNull,
     });

@@ -72,7 +72,7 @@ export function beginJourney(name: JourneyName, env = browserEnvironment(), atMs
  */
 export function completeJourney(
   name: JourneyName,
-  opts: { serverUrl?: string } = {},
+  opts: { serverUrl?: string; serverTiming?: string | null } = {},
   env = browserEnvironment(),
 ): void {
   if (!env) return;
@@ -82,7 +82,9 @@ export function completeJourney(
   env.requestFrame(() =>
     env.afterFrame(() => {
       const totalMs = Math.max(0, Math.round(env.now() - start));
-      const serverMs = opts.serverUrl ? env.serverTimingMs(opts.serverUrl) : undefined;
+      // The response's own header first: fetch resolves on headers, before the
+      // browser records the resource-timing entry (live finding, 2026-10-13).
+      const serverMs = appDurationMs(opts.serverTiming) ?? (opts.serverUrl ? env.serverTimingMs(opts.serverUrl) : undefined);
       enqueue(
         {
           kind: "journey",
@@ -94,6 +96,19 @@ export function completeJourney(
       );
     }),
   );
+}
+
+/** `app;dur=<ms>` from a Server-Timing header value, or undefined. */
+export function appDurationMs(header: string | null | undefined): number | undefined {
+  if (!header) return undefined;
+  for (const metric of header.split(",")) {
+    const [name, ...params] = metric.trim().split(";").map((part) => part.trim());
+    if (name !== "app") continue;
+    const dur = params.find((p) => p.startsWith("dur="));
+    const value = dur ? Number(dur.slice(4)) : Number.NaN;
+    return Number.isFinite(value) && value >= 0 ? value : undefined;
+  }
+  return undefined;
 }
 
 /** Queue a web-vital reading from next/web-vitals. */

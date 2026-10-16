@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/tak/agent-grants", async importOriginal => {
+  const actual = await importOriginal<typeof import("@/lib/tak/agent-grants")>();
+  return { ...actual, getAgentToolGrantsAsync: vi.fn() };
+});
+import { getAgentToolGrantsAsync } from "@/lib/tak/agent-grants";
+import { DELIVERY_WORKFLOW_TOOLS } from "@dpf/integration-shared/delivery-readiness-contract";
 vi.mock("@/lib/auth/mcp-api-token", () => ({
   copyMcpApiTokenPlaintext: vi.fn(),
   listMcpApiTokens: vi.fn(),
@@ -31,11 +37,11 @@ function token(overrides: Partial<ContributorMcpTokenRow> = {}): ContributorMcpT
     canCopy: true,
     capability: "write",
     scope: "write",
-    scopes: [...CONTRIBUTOR_MCP_READINESS_REQUIRED_GRANTS],
+    scopes: [...getMcpTokenTemplate("development")!.grants],
     kind: "operator",
     buildId: null,
     // BI-B986A18B: the acting coworker a token speaks as; null = anonymous.
-    agentId: null,
+    agentId: "AGT-EXT-CODEX",
     lastUsedAt: new Date("2026-05-26T12:00:00Z"),
     expiresAt: null,
     revokedAt: null,
@@ -46,6 +52,7 @@ function token(overrides: Partial<ContributorMcpTokenRow> = {}): ContributorMcpT
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.mocked(getAgentToolGrantsAsync).mockResolvedValue([...getMcpTokenTemplate("development")!.grants]);
   _resetContributorMcpReadinessProbeCacheForTests();
 });
 
@@ -157,7 +164,7 @@ describe("getContributorMcpReadiness", () => {
 
     expect(result.status).toBe("ready");
     expect(result.recommendedAction).toBe("test_connection");
-    expect(result.identityBinding).toBe("not_available");
+    expect(result.identityBinding).toBe("bound");
     expect(result.missingGrants).toEqual([]);
     expect(result.requiredGrants).toEqual([...CONTRIBUTOR_MCP_READINESS_REQUIRED_GRANTS]);
     expect(result.token?.id).toBe("tok_1");
@@ -185,7 +192,7 @@ describe("getContributorMcpReadiness", () => {
     });
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ result: { tools: [{ name: "list_backlog_items" }] } }),
+      json: async () => ({ result: { structuredContent: { status: DELIVERY_WORKFLOW_TOOLS.map(name => ({ name, serverHasTool: true, tokenGranted: true, agentGranted: true, callableByName: true })) } } }),
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -201,7 +208,7 @@ describe("getContributorMcpReadiness", () => {
     expect(first.probe).toEqual({
       status: "success",
       checkedAt: "2026-05-26T12:00:00.000Z",
-      toolCount: 1,
+      toolCount: DELIVERY_WORKFLOW_TOOLS.length,
     });
     expect(second.probe).toEqual(first.probe);
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -219,7 +226,7 @@ describe("getContributorMcpReadiness", () => {
     });
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ result: { tools: [{ name: "list_backlog_items" }] } }),
+      json: async () => ({ result: { structuredContent: { status: DELIVERY_WORKFLOW_TOOLS.map(name => ({ name, serverHasTool: true, tokenGranted: true, agentGranted: true, callableByName: true })) } } }),
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -265,4 +272,29 @@ describe("getContributorMcpReadiness", () => {
     expect(second.probe).toEqual(first.probe);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+});
+
+it("refuses a token-only success and names the coworker layer without suggesting token rotation", async () => {
+  listTokensMock.mockResolvedValue([token()]);
+  vi.mocked(getAgentToolGrantsAsync).mockResolvedValue(getMcpTokenTemplate("development")!.grants.filter(grant => !["coworker_catalog_read", "coworker_engagement_write"].includes(grant)));
+  const result = await getContributorMcpReadiness("user_1");
+  expect(result.status).toBe("needs_grants");
+  expect(result.permissionLayer).toBe("coworker");
+  expect(result.missingCoworkerTools).toEqual(["list_coworker_offers", "request_coworker_engagement"]);
+  expect(result.missingTokenTools).toEqual([]);
+  expect(result.recommendedAction).toBe("none");
+});
+it("does not establish coworker authority from an anonymous binding", async () => {
+  listTokensMock.mockResolvedValue([token({ agentId: null })]);
+  expect((await getContributorMcpReadiness("user_1")).status).toBe("needs_identity_binding");
+});
+
+it("does not label a tools/list-only response ready even when stored grants look complete", async () => {
+  listTokensMock.mockResolvedValue([token()]);
+  copyTokenMock.mockResolvedValue({ ok: true, plaintext: "synthetic-only" });
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ result: { tools: [{ name: "registry_read" }] } }) }));
+  const result = await getContributorMcpReadiness("user_1", { probe: true });
+  expect(result.status).not.toBe("ready");
+  expect(result.probe.status).toBe("failed");
+  expect(JSON.stringify(result)).not.toContain("synthetic-only");
 });

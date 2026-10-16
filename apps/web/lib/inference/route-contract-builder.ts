@@ -53,14 +53,14 @@ export async function buildEffectiveRequestContract(input: {
           input.taskType,
           input.messages,
           input.tools,
-          undefined,
+          input.options?.activityContract?.successShape === "json" ? {} : undefined,
           input.routeContext,
         )
       : await inferContract(
           input.taskType,
           input.messages,
           input.tools,
-          undefined,
+          input.options?.activityContract?.successShape === "json" ? {} : undefined,
           input.routeContext,
           input.taskRequirement,
         );

@@ -25,6 +25,8 @@
 // Setting an owner is a governed write: a person, a reason, and a timestamp are
 // recorded with it, and a coworker cannot be made accountable.
 
+import { findInstallWorkOwnerUserId } from "@dpf/db/install-work-owner";
+
 import { ok, type ActionFailure, type ActionSuccess } from "@/lib/shared/action-result";
 
 /** The Foundational portfolio holds the platform's own work. */
@@ -88,12 +90,10 @@ export async function resolveWorkOwner(
 
   // Nothing is recorded. Keep work running under the install owner the platform
   // used before, but say so: callers and surfaces report `fallback` as a gap.
-  const guess = await db.user.findFirst({
-    where: { isSuperuser: true, isActive: true },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
-  if (guess) return { userId: guess.id, source: "fallback" };
+  // The same install-owner rule as the task seeds: a handed-over account is
+  // skipped unless it is the only active superuser left (BI-858FDE5A).
+  const guess = await findInstallWorkOwnerUserId(db as never);
+  if (guess) return { userId: guess, source: "fallback" };
 
   throw new Error("No accountable owner is recorded and no active superuser exists to own automatic work.");
 }

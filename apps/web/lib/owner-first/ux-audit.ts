@@ -41,9 +41,14 @@ function decodeEntities(text: string): string {
   return text.replace(/&(?:amp|lt|gt|quot|nbsp|#x27|#39);/g, (m) => ENTITY_MAP[m] ?? m);
 }
 
+/** React text separators and other HTML comments create no rendered whitespace. */
+function withoutComments(html: string): string {
+  return html.replace(/<!--[\s\S]*?-->/g, "");
+}
+
 /** Strip tags and collapse whitespace to the visible text of a markup string. */
 export function visibleText(html: string): string {
-  const withoutTags = html.replace(/<[^>]*>/g, " ");
+  const withoutTags = withoutComments(html).replace(/<[^>]*>/g, " ");
   return decodeEntities(withoutTags).replace(/\s+/g, " ").trim();
 }
 
@@ -78,10 +83,10 @@ const NAMED_TAG_RE = /<\/?([a-zA-Z][a-zA-Z0-9-]*)\b[^>]*>/g;
  * stops (BI-0ED0F6B3). Pair this with `analyzeUiReadability`.
  */
 export function visibleUtterances(html: string): string[] {
-  const marked = String(html).replace(NAMED_TAG_RE, (_m, name: string) =>
+  const marked = withoutComments(String(html)).replace(NAMED_TAG_RE, (_m, name: string) =>
     INLINE_ELEMENTS.has(name.toLowerCase()) ? " " : UTTERANCE_BREAK,
   );
-  // Comments, doctypes and anything else tag-shaped but unnamed: drop as before.
+  // Doctypes and remaining unnamed markup retain the existing tag boundary.
   return decodeEntities(marked.replace(/<[^>]*>/g, " "))
     .split(UTTERANCE_BREAK)
     .map((part) => part.replace(/\s+/g, " ").trim())

@@ -27,6 +27,10 @@ describe("routed semantic review", () => {
       strategyProfile: "high-assurance", reviewerId: "change-reviewer", specialistIds: ["AGT-181"], surface,
     });
     expect(routeAndCall).toHaveBeenCalledTimes(2);
+    for (const call of vi.mocked(routeAndCall).mock.calls) {
+      expect(call[3]?.activityContract?.successShape).toBe("json");
+      expect(call[3]?.activityContract?.tokenEnvelope.maxOutputTokens).toBe(16384);
+    }
     for (const [messages, systemPrompt, sensitivity] of vi.mocked(routeAndCall).mock.calls) {
       const screened = screenInferencePayload({ messages, systemPrompt, taskType: "build-review", routeContext: { sensitivity } });
       expect(screened.receipt.classifiedDataClasses).toContain("source-code");

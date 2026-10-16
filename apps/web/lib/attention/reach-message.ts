@@ -34,6 +34,7 @@ export type ReachMessage = {
 const OUTCOME_CLASS: Record<AttentionSource, string> = {
   "approval-bill": "A bill needs your approval",
   "approval-expense": "An expense claim needs your approval",
+  "approval-leave": "A time-off request needs your decision",
   "approval-outbound": "A message to a customer needs your approval",
   "compliance-submission": "A filing needs your approval",
   "reservation-exception": "A booking needs your decision",

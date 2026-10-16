@@ -162,6 +162,20 @@ within budget: its portfolio has a budget this quarter and its delivered plus in
 fit it (`author-stage-autonomy.ts`, BI-8A32EBFF). `delivery-xlarge` never binds. When either
 condition fails the stage stays attention and the drive ledger names the missing condition.
 
+**The drive acts only on live work** ⟦runtime: 2026-10-14, `BI-72679FE0`⟧. A delivery room
+outlives its item, so a room whose item is finished or shelved is still non-terminal and still
+shaped. When the pre-authorisation came into force on 2026-10-13, the next tick dispatched
+agents into 341 such rooms, many untouched since 2026-09-25. Each run left no evidence. By
+04:00Z 277 rooms were held on `executor_writeback_unavailable`, against a baseline of 6 a day,
+and the owner's "Needs you" showed ~56 of them. The item status now gates every plan
+(`drive-work-item-gate.ts`). When the item is `done`, `deferred` or `retired`, the room stands
+down entirely. When it is `awaiting-acceptance`, no agent runs and no agent-side pause is held,
+but a person stage (the acceptance itself) still asks. A conformance stop or escalation is never
+hidden. A stood-down tick is `do_not_wake`/`work_item_inactive`: it deactivates the room's task
+and replaces its pause, so an existing stall card clears on the next tick with no data repair.
+Reopening the item lets the next tick plan the room again. A room with no item, or an item whose
+status could not be read, is driven as before.
+
 A room that never declared one gets a **derived** shape from what it already is
 (`derive-workroom-shape.ts`): a standing WSID room is craft stewardship by definition,
 `launch-readiness` is an approval sign-off, `governance` and `remediation` are consequential
@@ -566,6 +580,11 @@ counts a run of non-advancing actions, not a run of pauses.
   routes to its Process Overseer as well.
 - **The item names the room, the reason and the streak length.** Not "a room is
   stuck".
+- **A stall an appointment cannot clear is recovery, not an owner decision**
+  (`BI-72679FE0`). A writeback stall (the coworker ran and left no result) says
+  "Appointing an owner will not change this", so it carries `decideEffort: "review"`.
+  `owner-routing.ts` sends it to the custodian lane, not to "Needs you". Stalls that an
+  appointment does clear stay `judgment` and still reach the owner.
 
 Raw SQL against this trail must use the physical table name `"WorkCapsuleActivity"`
 (`@@map`), exactly as `Workroom` maps to `"WorkCapsule"`. The Prisma model name
@@ -891,10 +910,38 @@ green (BI-3ACFD254).
 `DrivePlan.reason`, the drive's plan constructor and the drive job's overrides
 are now typed from that list. A reason the drive emits but the list omits fails
 typecheck. A writeback-paused room now concludes as blocked, and clears when the
-executor records evidence or a writeback for the dispatched stage. A room with
-no owner user for its agent stage concludes as blocked, and clears when an owner
-user is bound. A finished cycle and a lease held by another worker conclude as
-in motion.
+executor records evidence or a writeback for the dispatched stage. A finished
+cycle and a lease held by another worker conclude as in motion.
+
+### An undispatched stage is a pause, and its task owner is the accountable person
+
+`missing_task_owner` was filed under `dispatch_agent`, and the drive overwrote
+only the reason when it could not schedule a task. On 2026-10-13, 127 Build
+Studio delivery rooms recorded `dispatch_agent` with an in-motion conclusion
+and had no ScheduledAgentTask. Build Studio rooms record no requester or
+creator principal, and the drive read the task owner only from those
+(`roomOwnerUserId`). The false dispatch also tripped the writeback latch, so
+those rooms were then reported as `executor_writeback_unavailable` (BI-D13FA12A).
+
+The drive now settles the task owner before it records anything about the tick
+(`workroom-drive-task-owner.ts`). A room that records its owner user keeps it.
+Otherwise the owner is the room's accountable person, from the same
+accountability walk the conclusions use (explicit room, inherited room, then the
+organization's recorded owner), mapped to that person's one active user. The
+snapshot's `taskOwner` and the trail line name the source. When nobody can be
+named, the tick becomes `pause / missing_task_owner` before its hold and
+conclusion are computed. It takes no lease, schedules nothing, counts as stuck
+for the stall notice, and its conclusion names the missing owner. A graph room
+whose aggregate plan is `dispatch_agent` follows the same rule. No administrator
+or other guess is substituted.
+
+A room's requester and creator are history and are never rewritten, so an
+account handover (BI-F25A5FC7) left them naming the account it retired. Until
+BI-858FDE5A the drive read them as the current owner and created new tasks under
+that account: eight on 2026-10-13/14. A handover now records
+`User.workHandedOverAt` on the account. `roomOwnerUserId` skips a handed-over
+account, so such a room falls through to its accountable person by the walk
+above.
 
 ### Every stage is a queue
 

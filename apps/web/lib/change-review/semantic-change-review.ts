@@ -8,10 +8,25 @@
  */
 
 import { z } from "zod";
+import type { DeliberationArtifactType } from "../deliberation/external-review-activation";
 
-export const CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION = "semantic-change-review-receipt.v2";
+export const LEGACY_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION = "semantic-change-review-receipt.v2";
+export const ROLE_BOUND_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION = "semantic-change-review-receipt.v3";
+export const CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION = ROLE_BOUND_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION;
 export const CHANGE_REVIEW_POLICY_VERSION = "semantic-change-review-policy.v3";
-export const CHANGE_REVIEWER_VERSION = "change-reviewer.v1";
+export const LEGACY_CHANGE_REVIEWER_VERSION = "change-reviewer.v1";
+export const CHANGE_REVIEWER_VERSION = "change-reviewer.v2";
+/** Compatible readers deployed before activation; legacy packets retain their original version. */
+export const SEMANTIC_REVIEW_ARTIFACT_CONTRACT_VERSION: 1 | 2 = 2;
+
+/** Historical receipts remain readable; freshness determines whether they authorize new work. */
+export function isSemanticReviewReceipt(value: unknown): value is SemanticReviewReceipt {
+  if (!value || typeof value !== "object") return false;
+  const receipt = value as Partial<SemanticReviewReceipt>;
+  return receipt.schemaVersion === LEGACY_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION
+    || (receipt.schemaVersion === ROLE_BOUND_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION
+      && typeof receipt.artifactType === "string");
+}
 
 export type SemanticReviewSeverity = "critical" | "important" | "minor";
 export type SemanticReviewDecision = "pass" | "fail" | "inconclusive";
@@ -45,6 +60,8 @@ export interface SemanticReviewParseDiagnostic {
 }
 
 export interface SemanticReviewIdentity {
+  /** Absent only on immutable legacy requests and historical receipts. */
+  artifactType?: DeliberationArtifactType;
   capsuleId: string;
   baseTreeHash: string;
   headTreeHash: string;
@@ -58,7 +75,7 @@ export interface SemanticReviewIdentity {
 
 export interface SemanticReviewReceipt extends Omit<SemanticReviewIdentity, "specialistIds"> {
   failureAnalysis?: unknown;
-  schemaVersion: typeof CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION;
+  schemaVersion: typeof ROLE_BOUND_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION | typeof LEGACY_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION;
   specialistIds: string[];
   disposition: SemanticReviewDisposition;
   risk: SemanticReviewRisk;
@@ -68,6 +85,7 @@ export interface SemanticReviewReceipt extends Omit<SemanticReviewIdentity, "spe
 
 export type SemanticReviewStaleReason =
   | "schema-version-changed"
+  | "artifact-type-changed"
   | "capsule-changed"
   | "base-tree-changed"
   | "head-tree-changed"
@@ -89,7 +107,7 @@ export function createSemanticReviewReceipt(input: {
   rationale?: string;
 }): SemanticReviewReceipt {
   return {
-    schemaVersion: CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION,
+    schemaVersion: input.identity.artifactType ? ROLE_BOUND_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION : LEGACY_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION,
     ...input.identity,
     specialistIds: normalizedSpecialistIds(input.identity.specialistIds),
     disposition: input.disposition,
@@ -121,7 +139,9 @@ export function assessSemanticReviewReceiptFreshness(
   current: SemanticReviewIdentity,
 ): { fresh: boolean; reasons: SemanticReviewStaleReason[] } {
   const reasons: SemanticReviewStaleReason[] = [];
-  if (receipt.schemaVersion !== CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION) reasons.push("schema-version-changed");
+  const schemaVersion = current.artifactType ? ROLE_BOUND_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION : LEGACY_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION;
+  if (receipt.schemaVersion !== schemaVersion) reasons.push("schema-version-changed");
+  if (receipt.artifactType !== current.artifactType) reasons.push("artifact-type-changed");
   if (receipt.capsuleId !== current.capsuleId) reasons.push("capsule-changed");
   if (receipt.baseTreeHash !== current.baseTreeHash) reasons.push("base-tree-changed");
   if (receipt.headTreeHash !== current.headTreeHash) reasons.push("head-tree-changed");
@@ -167,6 +187,7 @@ export function projectSemanticReviewReceipt(receipt: SemanticReviewReceipt): {
 }
 
 export function buildSemanticChangeReviewPrompt(input: {
+  artifactType?: DeliberationArtifactType;
   title: string;
   artifact: string;
   verificationEvidence: string;
@@ -193,6 +214,36 @@ export function buildSemanticChangeReviewPrompt(input: {
   const responseGuidance = buildStudio ? "" : `Choose decision \"pass\", \"fail\" or \"cannot-verify\" from the evidence. For findings, issues contains objects with severity (\"critical\", \"important\" or \"minor\") and description. The example values are placeholders, not a verdict.${input.requireFailureAnalysis ? " Include failureAnalysisReview in the same object. Set adequate to your assessment; explain the omission challenge and why final-change evidence supports recovery readiness. A bare assurance is insufficient." : ""}\n\n`;
 
   const artifactAuthority = buildStudio ? "" : "The supplied immutable artifact is the review target. Review its changed code and attached evidence. An unrelated ambient checkout is not evidence that this artifact is missing; do not substitute local HEAD for the supplied change. If the artifact itself is absent, truncated, or lacks context needed for a verdict, use cannot-verify and name the missing evidence.\n\n";
+
+  if (!buildStudio && input.artifactType && input.artifactType !== "code-change") {
+    const expectations: Record<Exclude<DeliberationArtifactType, "code-change">, string> = {
+      spec: "Evaluate requirements, acceptance criteria, scope, existing architecture, alternatives, interfaces, risks and a feasible verification strategy.",
+      plan: "Evaluate ordered work, dependencies, ownership, compatibility and deployment stages, rollback, acceptance coverage and a feasible verification strategy.",
+      "architecture-decision": "Evaluate the decision context, alternatives, tradeoffs, canonical contracts, consequences, reversibility and validation strategy.",
+      policy: "Evaluate policy scope, authority, obligations, exceptions, enforceability, conflicts and evidence of compliance.",
+      "research-question": "Evaluate the question, assumptions, sources, methods, uncertainty, alternatives and what evidence could answer or refute it.",
+    };
+    return `You are reviewing an immutable ${input.artifactType} document produced by an authoring surface.
+
+The supplied immutable artifact is the review target. An unrelated ambient checkout cannot replace it. Use cannot-verify for empty, truncated, identity-mismatched or insufficient material, naming the missing reference. Never invent a verdict for unread contents.
+
+DOCUMENT: ${input.title}
+
+IMMUTABLE ARTIFACT (${input.artifactType}):
+${input.artifact}
+
+VERIFICATION EVIDENCE:
+${input.verificationEvidence}
+
+REVIEW EXPECTATIONS:
+${expectations[input.artifactType]}
+Distinguish design adequacy from implementation proof. For a proposal, judge whether its verification and failure-recovery plan is credible; do not demand passing tests for code it explicitly has not implemented. Require evidence for claims that implementation or runtime verification already occurred. Check consistency, traceability, authorization boundaries and concrete business/user effects. Ordinary prose does not require a governed objective grammar unless that role is explicitly declared.
+
+DECISION DISCIPLINE: report genuine blocking defects comprehensively. Reserve critical for data loss, security holes or broken functionality; important/minor observations do not block. Missing or contradictory source is cannot-verify, not a finding about unread code.
+
+${responseGuidance}RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
+${responseContract}`;
+  }
 
   return `${introduction}
 

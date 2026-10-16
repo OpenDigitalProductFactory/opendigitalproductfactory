@@ -190,6 +190,12 @@ export function shapeRequirements(
   if (shape === "large") return v2(facts, target);
   // xlarge
   if (target === "design" || target === "plan") return v2(facts, target);
+  if (target === "completion") return [
+    req("PLAN_COVERAGE_REQUIRED", facts.planCoverage === "pass" ? facts.decomposition ?? "missing" : facts.planCoverage, "portfolio-management"),
+    req("OBJECTIVE_BASELINE_REQUIRED", facts.objectiveBaseline, "design-checklist-reviewer"),
+    req("OBJECTIVE_RECONCILIATION_REQUIRED", facts.objectiveReconciliation, "acceptance-reviewer"),
+    ...v2(facts, "completion"),
+  ];
   return [
     ...v2(facts, "plan"),
     req("DECOMPOSITION_REQUIRED", "fail", "portfolio-owner"),

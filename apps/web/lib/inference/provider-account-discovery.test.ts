@@ -29,6 +29,15 @@ describe("account model discovery", () => {
     expect(mocks.profile).toHaveBeenCalledWith("openai", ["model-b"]);
   });
 
+  it("sends the selected Anthropic account's workspace during discovery", async () => {
+    mocks.db.aiProviderConnection.findUnique.mockResolvedValue({ connectionId: "account-b", providerId: "anthropic", authMethod: "api-key", status: "active", updatedAt: new Date("2026-10-01") });
+    mocks.db.modelProvider.findUnique.mockResolvedValue({ providerId: "anthropic", authHeader: "x-api-key", baseUrl: "https://api.anthropic.com/v1" });
+    mocks.credential.mockResolvedValue({ secretRef: "key-b", providerWorkspaceId: "wrkspc_accountB" });
+    expect((await discoverProviderAccountModels("account-b")).ok).toBe(true);
+    expect(mocks.credential).toHaveBeenCalledWith("anthropic", "account-b");
+    expect(fetch).toHaveBeenCalledWith("https://api.anthropic.com/v1/models", expect.objectContaining({ headers: { "x-api-key": "key-b", "anthropic-workspace-id": "wrkspc_accountB" } }));
+  });
+
   it.each(["codex", "chatgpt"])("discovers %s subscription models through the selected account CLI context", async (providerId) => {
     mocks.db.aiProviderConnection.findUnique.mockResolvedValue({ connectionId: "account-b", providerId, authMethod: "oauth", executionChannel: "subscription-cli", status: "active", updatedAt: new Date("2026-10-01") });
     mocks.bearer.mockResolvedValue({ token: "account-b-token" });

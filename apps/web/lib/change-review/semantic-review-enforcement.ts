@@ -7,6 +7,7 @@ import {
   type SemanticReviewReceipt,
 } from "./semantic-change-review";
 import type { SemanticChangeReviewMode, SemanticChangeReviewSurface } from "./semantic-change-review-operation";
+import type { DeliberationArtifactType } from "../deliberation/external-review-activation";
 
 export const SEMANTIC_REVIEW_EXEMPTION_SCHEMA_VERSION = "semantic-change-review-exemption.v1";
 export const SEMANTIC_REVIEW_OUTCOME_SCHEMA_VERSION = "semantic-change-review-outcome.v1";
@@ -41,6 +42,7 @@ function exemptionIsValid(
   now: Date,
 ): boolean {
   return exemption.schemaVersion === SEMANTIC_REVIEW_EXEMPTION_SCHEMA_VERSION &&
+    identity.artifactType === "code-change" &&
     exemption.policyVersion === CHANGE_REVIEW_POLICY_VERSION &&
     exemption.policyVersion === identity.policyVersion &&
     exemption.capsuleId === identity.capsuleId &&
@@ -55,14 +57,17 @@ function exemptionIsValid(
 export function evaluateSemanticReviewPublicationControl(input: {
   mode: SemanticChangeReviewMode;
   identity: SemanticReviewIdentity;
+  /** Supplied by the publication request, independently of receipt contents. */
+  expectedArtifactType?: DeliberationArtifactType;
   receipt: SemanticReviewReceipt | null;
   exemption?: SemanticReviewPolicyExemption | null;
   now?: Date;
 }): SemanticReviewPublicationControl {
   const now = input.now ?? new Date();
+  const identity: SemanticReviewIdentity = { ...input.identity, artifactType: input.expectedArtifactType ?? "code-change" };
   if (!input.receipt) {
     if (input.exemption) {
-      const valid = exemptionIsValid(input.exemption, input.identity, now);
+      const valid = exemptionIsValid(input.exemption, identity, now);
       if (valid) return { disposition: "allow", reason: "policy-exemption", mayPublish: true, staleReasons: [] };
       if (input.mode === "shadow") {
         return { disposition: "shadow-observe", reason: "invalid-exemption", mayPublish: true, staleReasons: [] };
@@ -74,7 +79,7 @@ export function evaluateSemanticReviewPublicationControl(input: {
       : { disposition: "block", reason: "missing-receipt", mayPublish: false, staleReasons: [] };
   }
 
-  const freshness = assessSemanticReviewReceiptFreshness(input.receipt, input.identity);
+  const freshness = assessSemanticReviewReceiptFreshness(input.receipt, identity);
   if (!freshness.fresh) {
     return input.mode === "shadow"
       ? { disposition: "shadow-observe", reason: "stale-receipt", mayPublish: true, staleReasons: freshness.reasons }
