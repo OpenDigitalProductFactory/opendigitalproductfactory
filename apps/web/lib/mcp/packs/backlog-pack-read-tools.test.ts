@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   resolveTerminalRecovery: vi.fn(),
   readCompletion: vi.fn(),
   roomAccess: vi.fn(),
+  roomIdentity: vi.fn(),
 }));
 
 const CORPUS_AVAILABLE = { available: true, root: "/repo", searchedPaths: ["docs/superpowers/specs", "docs/superpowers/plans"], missingPaths: [], fileCount: 2, reason: "Searched 2 markdown file(s)." };
@@ -25,6 +26,7 @@ vi.mock("@dpf/db", () => ({
     backlogItem: { count: mocks.count, findMany: mocks.findMany, findUnique: mocks.findUnique, findFirst: vi.fn().mockResolvedValue(null) },
     backlogItemActivity: { findMany: vi.fn().mockResolvedValue([]) },
     epic: { findFirst: mocks.findEpic, count: mocks.countEpics, findMany: mocks.findEpics },
+    workroom: { findUnique: mocks.roomIdentity },
   },
 }));
 
@@ -94,7 +96,10 @@ describe("backlog deferral read projection", () => {
     mocks.mapDemandRows.mockReturnValue([{ activation: null, evidenceLinks: [] }]);
     mocks.projectReadiness.mockReturnValue({ verdict: "allowed" });
     mocks.readCompletion.mockResolvedValue(null);
-    mocks.roomAccess.mockResolvedValue({ decision: { level: "content" } });
+    mocks.roomIdentity.mockResolvedValue({ id: "relational-room-row" });
+    mocks.roomAccess.mockImplementation(async ({ workroomId }) => ({ decision: {
+      level: workroomId === "relational-room-row" ? "content" : "none",
+    } }));
   });
 
   it("does not report a plan-only epic as having a spec", async () => {
@@ -187,7 +192,19 @@ describe("backlog deferral read projection", () => {
     expect(mocks.resolveTerminalRecovery).toHaveBeenCalledWith(expect.objectContaining({
       decision: completion, currentAgentId: "AGT-AUTHOR", currentUserId: "user-1",
     }));
-    expect(mocks.roomAccess).toHaveBeenCalledWith({ userId: "user-1", agentId: "AGT-AUTHOR", workroomId: "WC-BOUND", requested: "content" });
+    expect(mocks.roomIdentity).toHaveBeenCalledWith({ where: { capsuleId: "WC-BOUND" }, select: { id: true } });
+    expect(mocks.roomAccess).toHaveBeenCalledWith({ userId: "user-1", agentId: "AGT-AUTHOR", workroomId: "relational-room-row", requested: "content" });
+    mocks.roomIdentity.mockResolvedValue(null);
+    mocks.roomAccess.mockClear();
+    const missing = await getBacklogItem({ itemId: baseItem.itemId, recoveryGate: "plan-review" }, "AGT-AUTHOR", "user-1");
+    expect(missing).toMatchObject({ success: false, error: "workroom_data_access_required" });
+    expect(mocks.roomAccess).not.toHaveBeenCalled();
+    mocks.roomIdentity.mockResolvedValue({ id: "relational-room-row" });
+    const human = await getBacklogItem({ itemId: baseItem.itemId, recoveryGate: "plan-review" }, null, "user-1");
+    expect(human.success).toBe(true);
+    expect(mocks.roomAccess).toHaveBeenCalledWith({ userId: "user-1", workroomId: "relational-room-row", requested: "content" });
+    const missingCaller = await getBacklogItem({ itemId: baseItem.itemId, recoveryGate: "plan-review" }, "AGT-AUTHOR");
+    expect(missingCaller).toMatchObject({ success: false, error: "workroom_data_access_required" });
     mocks.roomAccess.mockResolvedValue({ decision: { level: "none" } });
     const denied = await getBacklogItem({ itemId: baseItem.itemId, recoveryGate: "plan-review" }, "AGT-AUTHOR", "user-1");
     expect(denied).toMatchObject({ success: false, error: "workroom_data_access_required" });

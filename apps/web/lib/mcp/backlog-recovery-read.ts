@@ -33,10 +33,13 @@ export async function canReadRecoveryPacket(args: {
   const routes = args.recovery?.reviewerRoutes.filter(route => route.gate === args.gate) ?? [];
   if (!routes.length) return true; // The issuer's refusal/escalation contains no request.
   if (!args.currentUserId) return false;
+  const { prisma } = await import("@dpf/db");
   const { resolveAgentWorkroomAccess, resolveHumanWorkroomAccess } = await import("@/lib/work-management/workroom-agent-access.server");
   for (const route of routes) {
     if (!route.workroomId) return false;
-    const input = { userId: args.currentUserId, workroomId: route.workroomId, requested: "content" as const };
+    const room = await prisma.workroom.findUnique({ where: { capsuleId: route.workroomId }, select: { id: true } });
+    if (!room) return false;
+    const input = { userId: args.currentUserId, workroomId: room.id, requested: "content" as const };
     const access = args.currentAgentId
       ? await resolveAgentWorkroomAccess({ ...input, agentId: args.currentAgentId })
       : await resolveHumanWorkroomAccess(input);
@@ -51,7 +54,7 @@ type Recovery = {
   unroutable: readonly unknown[];
 };
 
-/** One exact request or a finite refusal. Never truncate packet bytes or keep a second store. */
+/** One exact request or a finite refusal, shared by MCP callers without registering a tool pack. */
 export function boundedBacklogRecoveryRead(args: {
   itemId: string; status: string; workShape: string | null; gate: string; recovery?: Recovery;
 }): ToolResult {

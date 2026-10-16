@@ -1,5 +1,5 @@
 import type { ToolDefinition } from "@/lib/mcp-tool-types";
-import { RECOVERY_READ_GATES } from "./backlog-recovery-read";
+import { RECOVERY_READ_GATES } from "../backlog-recovery-read";
 import {
   backlogScopeCreateProperties,
   backlogScopeFilterProperties,

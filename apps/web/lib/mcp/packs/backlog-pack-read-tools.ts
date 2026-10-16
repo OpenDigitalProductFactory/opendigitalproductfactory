@@ -1,7 +1,7 @@
 import type { ToolResult } from "@/lib/mcp-tool-types";
 import { resolveEpicRowId, resolveListLimit } from "./backlog-read-helpers";
 import { addScopeFilters, backlogScopeSelect, scopeData } from "./backlog-scope-metadata";
-import { boundedBacklogRecoveryRead, canReadRecoveryPacket, isRecoveryReadGate, recoveryReadDecision } from "./backlog-recovery-read";
+import { boundedBacklogRecoveryRead, canReadRecoveryPacket, isRecoveryReadGate, recoveryReadDecision } from "../backlog-recovery-read";
 
 const INITIATIVE_READINESS_ACTIVITY_KINDS = [
   "initiative_gate_receipt",
