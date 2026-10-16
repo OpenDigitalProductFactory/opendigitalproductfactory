@@ -1,0 +1,38 @@
+---
+status: active
+---
+
+# Audited approval consumption repair
+
+Backlog: BI-6BA00C83. Workroom: WC-8903C5DA. Design: [audited approval consumption](../specs/2026-10-16-audited-approval-consumption-design.md).
+
+For agentic workers: execute one independently reviewable backlog item at a time. Use dpf-tdd, dpf-local-merge-ci-before-push and dpf-pr-with-dco. No implementation success is claimed before actual checks and served verification.
+
+## Delivery boundary
+
+One atomic repair extends the existing envelope consumer contract. A producer-only identity rewrite would falsify the actual approver; an execution-only fix would still fail at consumption; a consumption-only change cannot create a valid record. Tests, capture and consumption therefore ship together as BI-6BA00C83. The owner authorized DEV workflow repairs through delivery. This is sequencing within that repair, not separate capabilities or a new policy initiative.
+
+## Ordered work
+
+1. Preserve the live approved-but-failed request and named-base reproduction. Publish this bounded design and plan; record research and immutable plan coverage. Confirm normal implementation admission before behavior edits.
+2. Resolve test impact before Red. Native impact advice links the exemption test; the shared helper has no graph-linked tests, so add its direct tests and include on-behalf producer, expiry/concurrency and break-fix consumer suites.
+3. Observe failing regressions for valid on-behalf execution and exception consumption. Cover exact owner/agent/tool/input binding, actual decision maker, reason, time, reservation, expiry, revocation and insufficient action authority. Keep direct-owner and existing owner-only break-fix compatibility tests.
+4. Refactor the existing approval helper into one strict persisted-envelope interpretation with separate execution/consumption state requirements. Explicit action-consumer opt-in supplies the required capability. Preserve actual approver and delegated owner separately. Reuse canonical current-user and permission functions.
+5. Make exception capture and consumption use that interpretation. Retain all existing DEV/evolve-dpf, exact-source, evidence, expiry and failed-review requirements. Do not replay the failed original request or create an exception during source verification.
+6. Run affected tests, both web TypeScript programs, style/module/boundary and documentation checks. Regenerate the documentation index through a normal claim only if required. Run one governed local integration gate, independent source review and the protected publication path, keeping native review uncertainty explicit.
+7. Have the existing canonical release coordinator deliver the merged source. Verify a fresh supported request's approval, actual decider, execution and consumption on the exact served target. Close through the governed evidence transition only when its actual conditions are met.
+
+## Coverage references
+
+- Requirement: `AC-ONBEHALF`, plus AC-OWNER, AC-CAPABILITY, AC-BINDING, AC-CONSUMERS, AC-ASSURANCE and AC-LIVE in the design.
+- Contract: `AC-OVERRIDE` in the existing approval convergence design; actual action authority remains required.
+- Flow: `approved-reserved-executed-consumed` through the existing envelope and exception records.
+- Verification: `persisted-approval-and-exception-regressions`, affected producer/consumer suites, both web types, governed integration and served happy path.
+
+## Backlog coverage
+
+Single deliverable: persisted approval interpretation and exception capture/consumption, mapped to BI-6BA00C83. Decision: atomic. Dependencies are the existing canonical approval contract and current source; no new independently shippable child. Immutable coverage is pending publication of this plan and the normal MCP receipt; this text is not a receipt.
+
+## Risks and rollback
+
+Authorization interpretation is sensitive. Prevent an admin-only capability from standing in for actual action authority; preserve the owner-only default for other consumers. Reject stale or unverifiable approvals at use time. Preserve legacy direct-owner records only when their exact durable approval remains valid. Roll back through a protected source revert; never repair history by mutating failed envelopes or evidence. Deployment, native review, and live acceptance remain unrun until their actual results exist.
