@@ -46,5 +46,5 @@ byId('approve').onclick=()=>{byId('approval').close();if(!preview||preview.revis
 byId('change').onclick=()=>{revision++;byId('exampleState').textContent='Example permissions changed; an earlier preview is now stale.'};
 byId('changePreview').onclick=()=>{revision++;byId('previewState').textContent='Example permissions changed; this preview is now stale.'};
 byId('failure').onclick=()=>{failNext=true;byId('exampleState').textContent='The next example save will fail without changing access.'};
-byId('reset').onclick=()=>{revision++;failNext=false;preview=null;selectAll('');byId('conflict').hidden=false;byId('permissions').textContent='Read registry · Read backlog · Update backlog';byId('permission').options[1].disabled=false;byId('saved').textContent='Changes apply on the next request.';byId('exampleState').textContent='Example reset.';byId('review').focus()};
+byId('reset').onclick=()=>{revision++;failNext=false;preview=null;selectAll('');byId('conflict').hidden=false;byId('permissions').textContent='Read registry · Read backlog · Update backlog';byId('permission').options[1].disabled=false;byId('saved').textContent='Changes apply on the next request.';byId('exampleState').textContent='Example reset.';byId('review').focus();};
 </script></body></html>
