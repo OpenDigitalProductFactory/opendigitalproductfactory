@@ -35,6 +35,38 @@ The counted quantities: words in the default-visible content, words in the lead 
 
 A complementary rule prevents gaming from the other direction: once total content passes a threshold, deferred structure must *exist*. Dumping everything into the default view is as much a violation as burying the lead.
 
+### Keep useful detail on the surface
+
+Owner direction, 2026-10-16: favor useful density and progressive disclosure. A
+low word count does not establish a good interface. Large cards with little
+content can make comparison harder and push the next useful fact out of view.
+
+For an operational list, keep the recognizable subject, current state, relevant
+reason or consequence, meaningful timing and next action together. Use aligned,
+compact rows when people compare accounts or work items. Remove repeated labels
+and explanatory filler before removing information needed for the decision.
+Keep text readable, controls operable and the layout usable at narrow widths;
+density does not justify tiny type or targets.
+
+Progressive disclosure defers secondary configuration, full inventories, routing
+rules and diagnostic history. It must not hide the reason work cannot run, an
+important restriction, the next useful check or the action that resolves the
+problem. Make expansion keyboard-operable and give its control a meaningful
+accessible name.
+
+Name subjects with labels people recognize: account and team names, work titles,
+provider names and meaningful locations. A database identifier is not a useful
+primary label merely because it is unique. Put opaque internal identifiers in
+diagnostic detail with a copy action when support needs them. Show a reference
+on the main surface only when people actually recognize and use it; preserve a
+readable name alongside it.
+
+Critique both what the default view exposes and what it forces people to open.
+For example, an account row should expose its readiness, why it is waiting,
+the next check and its permitted work, while deferring the complete model list
+and connection identifiers. A sparse card that hides those facts is not an
+improvement over a dense row just because it scores lower on text mass.
+
 **Honesty about these numbers:** the text-mass thresholds are platform-owned calibration, not science. No study validates words-per-screen against user outcomes. They are defensible as a consistent yardstick and as a regression tripwire; they are not a finding about human cognition, and must never be presented as one.
 
 **The visual metrics are different.** Computational measures of clutter, colour range, figure-ground contrast, contour congestion, symmetry, grid quality and white space have been validated against human aesthetic ratings, explaining up to 49% of variance for webpages. Those numbers carry evidence behind them, and — being deterministic — they can be ratcheted where a model's opinion cannot.

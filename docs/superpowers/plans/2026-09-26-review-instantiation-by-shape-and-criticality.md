@@ -114,6 +114,12 @@ WC-AF5C3944. Their owners are being coordinated; no force claim or overlapping
 edit was made. The classifier and remaining scheduler are not delivered merely
 because these source repairs exist.
 
+Further source hardening binds the task objective and complete server-built
+prompt to the original engagement at submission, transactional admission and
+execution. A direct-content substitution regression first failed, then passed;
+the focused task/engagement run passed 76 tests across four suites. This delta
+is not covered by the c833 independent assessment until separately reviewed.
+
 ## Phase 4: room-bound instantiation
 
 - Add `stepReviewBinding` to the external coworker task contract (`apps/web/lib/mcp/external-coworker-task-adapter.ts`), following `initiativeReviewBinding`.

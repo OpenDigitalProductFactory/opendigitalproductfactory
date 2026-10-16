@@ -216,7 +216,7 @@ export async function submitRemoteCoworkerTask(input: {
   const taskRunId = deterministicExternalTaskRunId(taskAuthorityKey, parsed.idempotencyKey);
   if (parsed.engagementBinding) {
     try {
-      await validateEngagementTask({ binding: parsed.engagementBinding, token, taskRunId, authorityScope: parsed.authorityScope ?? [] });
+      await validateEngagementTask({ binding: parsed.engagementBinding, token, taskRunId, authorityScope: parsed.authorityScope ?? [], request: parsed });
     } catch (error) {
       return { kind: "result", result: { isError: true, content: remoteTaskContent(error instanceof Error ? error.message : "Engagement authority unavailable"), structuredContent: { error: "engagement_admission_refused" } } };
     }
@@ -554,7 +554,7 @@ export async function submitRemoteCoworkerTask(input: {
       ...(objectiveMappingAdmission.data.admission ?? {}),
       ...(parsed.engagementBinding ? {
         transactionIsolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        admissionGuard: (db: Prisma.TransactionClient) => admitEngagementTask({ binding: parsed.engagementBinding!, token, taskRunId, authorityScope: parsed.authorityScope ?? [], db }),
+        admissionGuard: (db: Prisma.TransactionClient) => admitEngagementTask({ binding: parsed.engagementBinding!, token, taskRunId, authorityScope: parsed.authorityScope ?? [], request: parsed, db }),
       } : {}),
     });
   } catch (error) {

@@ -73,6 +73,10 @@ describe("bounded advisory engagement fulfillment", () => {
     await admitEngagementTask({ ...execution, db: fake.db as never });
     expect(fake.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "accepted", workCapsuleId: "WC-1", metadata: { fulfillment: expect.objectContaining({ taskRunId: "TR-ORIGINAL", binding }) } }) }));
   });
+  it("refuses a direct task submission that substitutes the engagement objective or prompt", async () => {
+    const fake = authorityDb();
+    await expect(validateEngagementTask({ ...execution, db: fake.db as never, request: { objective: "Different objective", prompt: "Different instructions" } } as never)).rejects.toThrow(/request_content_refused/);
+  });
   it("admits a canonical provider with its current runtime pair and refuses revocation on either side", async () => {
     const fake = authorityDb();
     const canonicalBinding = { ...binding, providerAgentId: "AGT-906" };
