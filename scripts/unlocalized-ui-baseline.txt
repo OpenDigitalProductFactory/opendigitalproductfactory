@@ -498,7 +498,7 @@ apps/web/components/admin/LocalePreferencesPanel.tsx	jsx-copy	5
 apps/web/components/admin/MarketContextFields.tsx	jsx-copy	1
 apps/web/components/admin/MarketContextFields.tsx	physical-direction	1
 apps/web/components/admin/MatchConfigCard.tsx	jsx-copy	4
-apps/web/components/admin/McpOAuthClientManager.tsx	jsx-copy	14
+apps/web/components/admin/McpOAuthClientManager.tsx	jsx-copy	13
 apps/web/components/admin/McpTokenManager.tsx	jsx-copy	18
 apps/web/components/admin/McpTokenManager.tsx	physical-direction	3
 apps/web/components/admin/OperatingHoursEditor.tsx	jsx-copy	2

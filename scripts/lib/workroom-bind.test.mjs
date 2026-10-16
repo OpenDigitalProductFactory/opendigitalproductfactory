@@ -19,7 +19,7 @@ import { test } from "node:test";
 
 import {
   activityKindForBranch,
-  bindWorktreeToWorkroom,
+  bindWorktreeToWorkroom as bindWithConfiguredCredentials,
   markerFromAdoption,
   planAdoption,
   resolveMcpAccess,
@@ -29,6 +29,46 @@ import {
 } from "./workroom-bind.mjs";
 
 const REPO = "OpenDigitalProductFactory/opendigitalproductfactory";
+const absentCredentialsFile = join(tmpdir(), `dpf-binder-absent-${process.pid}.json`);
+// Unit fixtures must never load the user's real headless credential file.
+const fixtureEnv = (env = {}) => ({ DPF_MCP_CLIENT_CREDENTIALS_FILE: absentCredentialsFile, ...env });
+const bindWorktreeToWorkroom = input => bindWithConfiguredCredentials({ ...input, env: fixtureEnv(input.env) });
+
+test("headless OAuth credentials are consumed before a legacy PAT without changing the endpoint", () => {
+  const access = resolveMcpAccess({
+    DPF_MCP_ENDPOINT: "https://localhost/api/mcp/v1?tier=full",
+    DPF_MCP_CLIENT_ID: "fixture-client", DPF_MCP_CLIENT_SECRET: "fixture-secret",
+    DPF_MCP_BEARER_TOKEN: "fixture-pat",
+  });
+  assert.equal(access?.mcpUrl, "https://localhost/api/mcp/v1?tier=full");
+  assert.equal(access?.bearerToken.kind, "client_credentials");
+  assert.equal(typeof access.bearerToken.get, "function");
+});
+
+test("a configured headless credential file is consumed and malformed credentials never fall back to PAT", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dpf-binder-credentials-"));
+  const file = join(dir, "credentials.json");
+  try {
+    writeFileSync(file, JSON.stringify({ clientId: "fixture-client", clientSecret: "fixture-secret" }));
+    const env = { DPF_MCP_CLIENT_CREDENTIALS_FILE: file, DPF_MCP_BEARER_TOKEN: "fixture-pat" };
+    assert.equal(resolveMcpAccess(env)?.bearerToken.kind, "client_credentials");
+    writeFileSync(file, "invalid fixture content");
+    assert.equal(resolveMcpAccess(env), null);
+    assert.equal(resolveMcpAccess({ ...env, DPF_MCP_CLIENT_ID: "half-configured" }), null);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("invalid headless credential configuration is unavailable before adoption and writes no marker", async () => {
+  let called = false, wrote = false;
+  const result = await bindWorktreeToWorkroom({
+    branch: "fix/a", worktreePath: "/wt/a", gitDir: "/git", repositoryFullName: REPO,
+    env: { DPF_MCP_CLIENT_ID: "fixture-client", DPF_MCP_BEARER_TOKEN: "fixture-pat" },
+    call: async () => { called = true; return capsule(); }, writeMarker: () => { wrote = true; },
+  });
+  assert.equal(result.status, "unavailable");
+  assert.equal(called, false);
+  assert.equal(wrote, false);
+});
 
 test("automatic adoption retains both observed full commit identities", () => {
   const baseSha = "1".repeat(40);
@@ -215,8 +255,8 @@ test("a response with no capsuleId or no lease NEVER becomes a marker", () => {
 // ── degradation ──────────────────────────────────────────────────────────────
 
 test("no token means binding is unavailable, not silently skipped", () => {
-  assert.equal(resolveMcpAccess({}), null);
-  const a = resolveMcpAccess({ DPF_MCP_BEARER_TOKEN: "t" });
+  assert.equal(resolveMcpAccess(fixtureEnv()), null);
+  const a = resolveMcpAccess(fixtureEnv({ DPF_MCP_BEARER_TOKEN: "t" }));
   assert.equal(a.bearerToken, "t");
   assert.match(a.mcpUrl, /api\/mcp\/v1/);
 });

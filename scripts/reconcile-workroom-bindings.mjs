@@ -24,6 +24,7 @@ import { fileURLToPath } from "node:url";
 
 import { isClaimExemptBranch } from "../packages/dpf-skill-pack/hooks/lib/workroom-claim-lookup.mjs";
 import { bindWorktreeToWorkroom, resolveMcpAccess } from "./lib/workroom-bind.mjs";
+import { MCP_CREDENTIAL_HELP } from "./lib/mcp-credential.mjs";
 import { gitText } from "./lib/git.mjs";
 
 
@@ -99,7 +100,7 @@ async function main() {
   const asJson = args.includes("--json");
 
   if (apply && !resolveMcpAccess()) {
-    console.error("[reconcile-workrooms] --apply needs DPF_MCP_BEARER_TOKEN; MCP is the only authority on claims.");
+    console.error(`[reconcile-workrooms] ${MCP_CREDENTIAL_HELP}\nMCP is the only authority on claims.`);
     process.exit(1);
   }
 
