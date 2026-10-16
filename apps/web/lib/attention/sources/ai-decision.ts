@@ -9,11 +9,13 @@ import type { prisma } from "@dpf/db";
 import { isFounderActionable, normalizeFounderReviewQuestion } from "@/lib/founder-review/queue";
 import { retractionOf } from "@/lib/decision-perspective/retract-superseded";
 import { humanEscalationWhere, isHumanEscalation, type HumanEscalationRow } from "@/lib/decision-perspective/human-escalation";
+import { humanDecisionReviewMessage } from "@/lib/decision-perspective/decision-escalation";
 import type { AttentionItem, AttentionRiskClass, ResidueReason } from "../types";
 
 type Db = typeof prisma;
 
 export type DecisionInteractionRow = HumanEscalationRow & {
+  escalationReason?: string | null;
   interactionId: string;
   question: string;
   outcomeType: string;
@@ -95,6 +97,7 @@ export function aiDecisionToAttentionItem(
     source: "ai-decision",
     title: clip(row.question),
     context: [
+      row.escalationRoute === "human" ? humanDecisionReviewMessage(row.escalationReason) : null,
       proposal?.summary ?? row.rationale ?? "The governed scopes could not resolve this decision.",
       occurrences > 1 ? `Asked ${occurrences} times and still unresolved.` : null,
     ]
@@ -180,6 +183,7 @@ export async function loadAiDecisionItems(db: Db): Promise<AttentionItem[]> {
       question: true,
       outcomeType: true,
       escalationRoute: true,
+      escalationReason: true,
       riskTier: true,
       principleConflict: true,
       rationale: true,

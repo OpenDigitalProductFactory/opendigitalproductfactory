@@ -10,7 +10,7 @@
 
 import type { DecisionAuditTierOrOther, DecisionTierStats } from "./decision-audit";
 import { isHumanEscalation, type HumanEscalationRow } from "@/lib/decision-perspective/human-escalation";
-import { INDEPENDENT_REVIEW_INTERIM } from "@/lib/decision-perspective/decision-escalation";
+import { decisionAllowsStep, humanDecisionReviewMessage } from "@/lib/decision-perspective/decision-escalation";
 
 export type DecisionHelpStep = {
   label: string;
@@ -28,6 +28,9 @@ export type DecisionHelp = {
 };
 
 export type DecisionHelpInput = HumanEscalationRow & {
+  /** Restored persisted facts, including opposing stance and constitutional holds. */
+  permissionEvaluation?: Parameters<typeof decisionAllowsStep>[0];
+  escalationReason?: string | null;
   escalationFollowOn?: string | null;
   outcomeType: string;
   tier: DecisionAuditTierOrOther;
@@ -163,11 +166,14 @@ export function buildDecisionHelp(input: DecisionHelpInput): DecisionHelp {
   }
 
   if (input.escalationRoute === "independent_review") {
+    const permitted = input.permissionEvaluation?.escalation?.route === "independent-review"
+      ? decisionAllowsStep(input.permissionEvaluation) : null;
     return {
       meaning: "Independent review is required by the recorded decision route. This does not request an owner answer.",
-      urgency: INDEPENDENT_REVIEW_INTERIM === "proceed" && input.outcomeType !== "decline"
-        ? "The current interim permits work to continue within its existing authority; independent review remains outstanding."
-        : "This step remains held; independent review is outstanding.",
+      urgency: permitted === null
+        ? "Continuation permission could not be verified from the recorded evaluation. Check the decision record before advancing."
+        : permitted ? "The current interim permits work to continue within its existing authority; independent review remains outstanding."
+          : "This step remains held; independent review is outstanding.",
       steps: [],
     };
   }
@@ -190,7 +196,7 @@ export function buildDecisionHelp(input: DecisionHelpInput): DecisionHelp {
   }
 
   const meaning = input.escalationRoute === "human"
-    ? "The recorded decision route requires human approval because of its risk, consequences, or a declared limit. The recommendation alone does not authorize the work."
+    ? `${humanDecisionReviewMessage(input.escalationReason)} The recommendation alone does not authorize the work.`
     : input.outcomeType === "defer" ? deferMeaning(input) : escalateMeaning(input);
 
   if (!unresolvedAsk) {

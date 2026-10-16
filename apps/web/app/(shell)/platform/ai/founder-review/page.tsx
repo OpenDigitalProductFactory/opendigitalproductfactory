@@ -73,6 +73,7 @@ export default async function FounderReviewPage({ searchParams }: PageProps) {
       options: true,
       outcomeType: true,
       escalationRoute: true,
+      escalationReason: true,
       outcomePayload: true,
       buildId: true,
       taskRunId: true,

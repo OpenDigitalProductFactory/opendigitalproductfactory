@@ -48,6 +48,7 @@ const openDecisionReviewSelect = {
   options: true,
   outcomeType: true,
   escalationRoute: true,
+  escalationReason: true,
   outcomePayload: true,
   buildId: true,
   taskRunId: true,

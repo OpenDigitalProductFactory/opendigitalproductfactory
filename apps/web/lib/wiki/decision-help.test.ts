@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildAwaitingDigest, buildDecisionHelp, type DecisionHelpInput } from "./decision-help";
 import { buildTierStats } from "./decision-audit";
+import { withDecisionEscalation } from "@/lib/decision-perspective/decision-escalation";
 
 function input(overrides: Partial<DecisionHelpInput> = {}): DecisionHelpInput {
   return {
@@ -19,10 +20,23 @@ function input(overrides: Partial<DecisionHelpInput> = {}): DecisionHelpInput {
 
 describe("buildDecisionHelp", () => {
   it("explains independent review without requesting an owner answer", () => {
-    const help = buildDecisionHelp(input({ escalationRoute: "independent_review", escalationFollowOn: "corpus-gap" }));
+    const permissionEvaluation = withDecisionEscalation({ outcomeType: "defer", riskTier: "medium", coverageGap: true } as const);
+    const help = buildDecisionHelp(input({ escalationRoute: "independent_review", escalationFollowOn: "corpus-gap", permissionEvaluation }));
     expect(help.meaning).toContain("Independent review");
     expect(help.urgency).toContain("continue");
     expect(help.steps).toEqual([]);
+  });
+
+  it("explains a held opposing stance through the same permission result as execution", () => {
+    const permissionEvaluation = withDecisionEscalation({ outcomeType: "escalate", riskTier: "medium", stanceAlignment: "decline", relevanceMethod: "lexical" } as const);
+    const help = buildDecisionHelp(input({ escalationRoute: "independent_review", permissionEvaluation }));
+    expect(help.urgency).toContain("remains held");
+    expect(help.urgency).not.toContain("permits work");
+  });
+
+  it("does not claim continuation permission when restored evaluation facts are absent", () => {
+    const help = buildDecisionHelp(input({ escalationRoute: "independent_review" }));
+    expect(help.urgency).not.toContain("permits work");
   });
 
   it("keeps a damaging recommendation waiting for human approval", () => {
