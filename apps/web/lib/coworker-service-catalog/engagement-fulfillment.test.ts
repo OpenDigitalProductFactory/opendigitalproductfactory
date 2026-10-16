@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { parseEngagementTaskBinding, engagementInputDigest, assertEngagementSnapshot, engagementToolAllowed, validateEngagementContribution, validateEngagementTask, admitEngagementTask, engagementProviderIdentityRefs, reconcileEngagementTaskResult, fulfillCoworkerEngagement } from "./engagement-fulfillment";
+import { parseEngagementTaskBinding, engagementInputDigest, assertEngagementSnapshot, engagementToolAllowed, validateEngagementContribution, validateEngagementTask, admitEngagementTask, engagementProviderIdentityRefs, reconcileEngagementTaskResult } from "./engagement-fulfillment";
+import { fulfillCoworkerEngagement } from "@/lib/mcp/external-coworker-task-adapter";
 import { parseRemoteTaskSubmitParams } from "@/lib/mcp-task-submit-params";
 import { remoteTaskRequestDigest } from "@/lib/mcp-task-capacity-contract";
 const admission = vi.hoisted(() => ({ allowed: true }));

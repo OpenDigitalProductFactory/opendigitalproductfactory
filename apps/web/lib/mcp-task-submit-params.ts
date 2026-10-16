@@ -1,6 +1,6 @@
 import { parseInitiativeReviewBinding, validateInitiativeReviewAuthorityScope, type InitiativeReviewBinding } from "./mcp-task-review-contract";
 import { parseDurableInferenceTaskRecipeId, type DurableInferenceTaskRecipeId } from "./mcp-task-durable-inference-contract";
-import { parseEngagementTaskBinding, type EngagementTaskBinding, ENGAGEMENT_READ_TOOLS } from "./coworker-service-catalog/engagement-fulfillment";
+import { parseEngagementTaskBinding, type EngagementTaskBinding, ENGAGEMENT_READ_TOOLS } from "./coworker-service-catalog/engagement-task-binding";
 
 function optionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;

@@ -452,3 +452,20 @@ wrote nothing. The three capture/wiki suites passed 36 tests; the focused
 engagement/capture run passed 71 tests in five suites. Both transport wrappers
 retain their own authentication boundaries. The live rejected critique was not
 saved by an alternate path.
+
+
+The independent reviewer assessed exact 0bb4542cb218487005947552f53adc155992379e:
+no blocking source finding in the critique transport repair, and section 8's
+native TaskRun/TaskNode amendment is architecturally coherent. This remains a
+source assessment, not native EA/baseline approval. Narrow capture additionally
+refuses collisions without updating an existing calibrated page; 38 tests in the
+three focused capture/wiki suites and both TS7 programs passed.
+
+The import-cycle repair now passes at the existing 75-file budget, with no
+static value cycle and no baseline increase. Immutable engagement parsing is a
+leaf contract; submission remains in the existing external coworker adapter.
+Two callers now import the provider implementation directly instead of a cyclic
+compatibility re-export. Ninety-seven tests across six selected engagement,
+adapter, readiness and attention suites passed. Seed-fit and convergence guards
+passed after adding the recorded global-default/auto-converges attestations.
+Canonical integration, native baseline renewal and live acceptance remain owed.

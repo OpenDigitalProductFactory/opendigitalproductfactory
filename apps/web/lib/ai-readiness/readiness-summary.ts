@@ -1,6 +1,6 @@
 import { prisma } from "@dpf/db";
 
-import { getProviders, getProviderModelSummaries } from "@/lib/ai-provider-data";
+import { getProviders, getProviderModelSummaries } from "@/lib/inference/ai-provider-data";
 import {
   buildEngineLabel,
   resolveModelSelectionByPhase,

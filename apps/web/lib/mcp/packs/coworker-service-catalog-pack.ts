@@ -227,7 +227,7 @@ async function requestCoworkerEngagement(
       || Object.keys(params).some(key => !["engagementId", "fulfillment"].includes(key))) {
       return { success: false, error: "invalid_engagement_resume", message: "Resume with engagementId and fulfillment only; original request identity cannot be replaced." };
     }
-    const { fulfillCoworkerEngagement } = await import("@/lib/coworker-service-catalog/engagement-fulfillment");
+    const { fulfillCoworkerEngagement } = await import("@/lib/mcp/external-coworker-task-adapter");
     try { return await fulfillCoworkerEngagement(params["engagementId"].trim(), params["fulfillment"], userId, context); }
     catch (error) { return { success: false, error: "engagement_fulfillment_refused", message: getErrorMessage(error) }; }
   }

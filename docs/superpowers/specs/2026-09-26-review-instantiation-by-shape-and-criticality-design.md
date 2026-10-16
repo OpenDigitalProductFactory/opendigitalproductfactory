@@ -370,7 +370,7 @@ must be exercised on the served canonical target after the containing release.
   while that dependency is unresolved.
 
 
-## 8. Native execution amendment, 2026-10-16 — independent assessment pending
+## 8. Native execution amendment, 2026-10-16 - independent assessment pending
 
 This amendment supersedes section 3.4's proposed external terminal-writer
 mechanism. Source inspection found that `record_semantic_review_outcome` records

@@ -34,7 +34,7 @@
 // reconnect alert. "inactive" is deliberately NOT included — that is an operator
 // choice to turn a provider off, not a failure.
 
-import { getProviders } from "@/lib/ai-provider-data";
+import { getProviders } from "@/lib/inference/ai-provider-data";
 import { AI_PROVIDER_CONNECTIONS_ROUTE } from "@/lib/ai-provider-routes";
 import type { prisma } from "@dpf/db";
 import {
