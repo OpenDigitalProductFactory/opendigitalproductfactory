@@ -43,6 +43,12 @@ function deferredRefresh() {
 }
 
 describe("Workroom snapshot connectivity", () => {
+  it("preserves the two existing freshness paragraphs when there is no connectivity notice", () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    const { container } = render(<ProjectionFreshness readAt={null} lastEvidenceAt={null} />);
+    expect(container.querySelectorAll("p")).toHaveLength(2);
+  });
+
   it("retains the snapshot and keyboard target when offline, then offers manual retry without refreshing automatically", async () => {
     const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
     render(<ProjectionFreshness readAt="2026-10-16T03:00:00Z" lastEvidenceAt={null} />);
@@ -50,12 +56,12 @@ describe("Workroom snapshot connectivity", () => {
     button.focus();
     await act(async () => { fireEvent.click(button); });
     expect(refresh).not.toHaveBeenCalled();
-    expect(screen.getByText("Browser offline. Showing the saved snapshot. Reconnect to refresh.")).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByText("Browser offline. Showing the saved snapshot. Reconnect to refresh.").closest("p")).toHaveAttribute("aria-live", "polite");
     expect(button).toHaveFocus();
     expect(button).not.toBeDisabled();
     online.mockReturnValue(true);
     fireEvent(window, new Event("online"));
-    expect(screen.getByText("Connection restored. Refresh to check for changes.")).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByText("Connection restored. Refresh to check for changes.").closest("p")).toHaveAttribute("aria-live", "polite");
     expect(refresh).not.toHaveBeenCalled();
     await act(async () => { fireEvent.click(button); });
     expect(refresh).toHaveBeenCalledOnce();

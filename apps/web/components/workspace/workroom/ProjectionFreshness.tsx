@@ -38,11 +38,11 @@ export function ProjectionFreshness({ readAt, lastEvidenceAt }: {
   return <div className="flex flex-wrap items-center justify-between gap-3">
     <div>
       <p aria-live="polite" aria-atomic="true">{unknown ? "Snapshot age unknown." : stale
-        ? "Snapshot stale. Refresh to check." : "Recent snapshot."}</p>
+        ? "Snapshot stale. Refresh to check." : "Recent snapshot."}
+        {connectivity !== "unknown" ? <> <span>{connectivity === "offline" ? t("refresh.offline")
+          : t("refresh.restored")}</span></> : null}</p>
       <p>Checked: <LocalTime value={Number.isFinite(readTime) ? readAt : null} options={SNAPSHOT_TIME_FORMAT} fallback="Unknown" />
         {" · Evidence: "}<LocalTime value={lastEvidenceAt} options={SNAPSHOT_TIME_FORMAT} fallback="Unknown" /></p>
-      <p aria-live="polite" aria-atomic="true">{connectivity === "offline" ? t("refresh.offline")
-        : connectivity === "restored" ? t("refresh.restored") : null}</p>
     </div>
     <Button variant="secondary" className="min-h-11 aria-disabled:cursor-wait aria-disabled:opacity-60"
       aria-disabled={pending} aria-busy={pending}
