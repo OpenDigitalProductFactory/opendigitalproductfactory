@@ -130,8 +130,9 @@ replaying that task. For the same user and current OAuth task family, the
 server excludes only that recorded exhausted packet and issues the next
 currently eligible independent reviewer with both writer and reader grants.
 The artifact, baseline and Workroom binding stay fixed; the replacement key
-includes the new target. A matching exhausted legacy task retains its spent
-budget. Submit the newly issued packet unchanged. Issuance
+includes the new target independently of roster order. An exact owned legacy
+task retains its recorded key and retry budget, including while active.
+Submit the newly issued packet unchanged. Issuance
 and authorization use the same exact task-history check. Writer refusals,
 capacity or approval waits, active tasks and uncertain provider outcomes do
 not authorize replacement. If all eligible reviewers are exhausted, the

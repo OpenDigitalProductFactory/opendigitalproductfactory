@@ -294,7 +294,10 @@ export async function resolveInitiativeReviewerRecovery(input: {
   expectedCurrentBaselineId?: string | null;
   eligibleEvidenceActivityIds?: readonly string[];
   /** Server-owned independent-review history predicate; the original name is retained for compatibility. */
-  isPlanReviewExhausted?: (packet: ReturnType<typeof requestCoworkerPacket>) => Promise<boolean>;
+  isPlanReviewExhausted?: ((packet: ReturnType<typeof requestCoworkerPacket>) => Promise<boolean>) & {
+    /** Preserve an exact owned legacy task's identity before checking its budget. */
+    resolvePacket?: (packet: ReturnType<typeof requestCoworkerPacket>) => Promise<ReturnType<typeof requestCoworkerPacket>>;
+  };
   isReviewerEligible?: (agentId: string) => Promise<boolean>;
 }): Promise<InitiativeReviewerRecovery> {
   const requirements = [...input.decision.blockers, ...input.decision.unmet];
@@ -419,7 +422,7 @@ export async function resolveInitiativeReviewerRecovery(input: {
         continue;
       }
       const dispatch = input.dispatchContext;
-      const preparePacket = (targetAgentId: string, alternate = false) => {
+      const preparePacket = async (targetAgentId: string) => {
         const packet = requestCoworkerPacket({
         decision: input.decision,
         gate: entry.gate,
@@ -431,16 +434,19 @@ export async function resolveInitiativeReviewerRecovery(input: {
         expectedCurrentBaselineId: input.expectedCurrentBaselineId ?? null,
         eligibleEvidenceActivityIds,
         });
-        // Plan packets already bind the reviewer. Keep existing first-choice
-        // design keys replayable, but never send an alternate under its key.
-        return alternate && entry.gate !== "plan-review"
+        // Identity belongs to the target, never its position in a mutable roster.
+        // Plan packets already bind their target. Owned legacy tasks keep their
+        // recorded identity so refresh joins them without resetting the budget.
+        const scoped = input.isPlanReviewExhausted && ["design-spec", "spec-approval", "architecture-review"].includes(entry.gate)
           ? { ...packet, requestKey: `${packet.requestKey}:reviewer:${createHash("sha256").update(targetAgentId).digest("hex")}` }
           : packet;
+        return input.isPlanReviewExhausted?.resolvePacket
+          ? input.isPlanReviewExhausted.resolvePacket(scoped) : scoped;
       };
-      let packet = preparePacket(candidate.agent.agentId);
+      let packet = await preparePacket(candidate.agent.agentId);
       if (["design-spec", "spec-approval", "architecture-review", "plan-review"].includes(entry.gate) && input.isPlanReviewExhausted) {
-        for (const [index, next] of candidates.entries()) {
-          const nextPacket = preparePacket(next.agent.agentId, index > 0);
+        for (const next of candidates) {
+          const nextPacket = await preparePacket(next.agent.agentId);
           if (await input.isPlanReviewExhausted(nextPacket)) { candidate = undefined; continue; }
           candidate = next;
           packet = nextPacket;

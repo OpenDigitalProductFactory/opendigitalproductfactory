@@ -36,6 +36,13 @@ Retain the existing exported property/function names for source compatibility;
 document their expanded independent-review scope rather than editing unrelated
 callers. Exclude author-satisfiable research/classification from this change.
 
+Design/spec/architecture request keys bind the exact target independently of its
+position in the current roster. The existing history adapter normalizes an exact
+owned legacy packet to its recorded key before issuance; refresh joins that task
+and keeps its retry budget. Exact new-task history takes precedence. Issuance and
+authorization resolve with the same current OAuth task authority for all four
+independent gates; neither path accepts a caller-constructed replacement.
+
 Compare the already shipped plan-review implementation with each affected gate.
 A parameterized regression proves both predicate admission and alternate
 selection. Negative fixtures preserve non-exhausted/foreign/uncertain states.

@@ -28,6 +28,19 @@ function fixture() {
   };
 }
 describe("exact owned exhausted plan review", () => {
+  it("reissues an exact owned live legacy packet under its existing key", async () => {
+    const scopedBinding = { ...binding, gate: "design-spec" as const };
+    const legacy = { ...packet, initiativeReviewBinding: scopedBinding };
+    const scoped = { ...legacy, requestKey: `${packet.requestKey}:reviewer:${"c".repeat(64)}` };
+    const row = { ...fixture(), status: "working" };
+    row.a2aMetadata.requestDigest = remoteTaskRequestDigest({ ...submitted, initiativeReviewBinding: scopedBinding });
+    const findFirst = vi.fn(async ({ where }: { where: { taskRunId: string } }) => where.taskRunId === row.taskRunId ? row : null);
+    const history = createExhaustedPlanReviewPredicate(authority, { taskRun: { findFirst } });
+    expect(await history.resolvePacket(scoped)).toEqual(legacy);
+    expect(await history(legacy)).toBe(false);
+    row.a2aMetadata.requestDigest = "foreign";
+    expect(await history.resolvePacket(scoped)).toEqual(scoped);
+  });
   it("retains an alternate's exact exhausted legacy budget and does not fall back behind a live new task", async () => {
     const scopedBinding = { ...binding, gate: "design-spec" as const };
     const legacy = { ...packet, initiativeReviewBinding: scopedBinding };

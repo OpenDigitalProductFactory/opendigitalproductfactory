@@ -33,6 +33,10 @@ describe("exact exhausted plan reviewer selection", () => {
     expect(recovery.reviewerRoutes[0]?.targetAgentId).toBe("AGT-B");
     expect(recovery.reviewerRoutes[0]?.requestCoworker.requestKey).not.toBe(original.reviewerRoutes[0]?.requestCoworker.requestKey);
     expect(recovery.reviewerRoutes[0]?.requestCoworker.initiativeReviewBinding).toEqual(original.reviewerRoutes[0]?.requestCoworker.initiativeReviewBinding);
+    const nextOnly = await resolveInitiativeReviewerRecovery({ ...input,
+      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue(boundGrantRows(grant, "AGT-B", "Next")) } },
+    });
+    expect(nextOnly.reviewerRoutes[0]?.requestCoworker.requestKey).toBe(recovery.reviewerRoutes[0]?.requestCoworker.requestKey);
     const exhausted = await resolveInitiativeReviewerRecovery({ ...input, isPlanReviewExhausted: async () => true });
     expect(exhausted.reviewerRoutes).toEqual([]);
     expect(exhausted.escalations[0]?.nextAction).toContain("exhausted this exact packet");

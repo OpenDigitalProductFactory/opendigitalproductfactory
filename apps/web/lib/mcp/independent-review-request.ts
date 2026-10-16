@@ -149,7 +149,7 @@ export async function authorizeCoworkerRequest(
       const { resolveTerminalInitiativeRecovery } = await import("@/lib/backlog/initiative-readiness/terminal-recovery");
       const recovery = await resolveTerminalInitiativeRecovery({ decision, currentAgentId: context!.agentId ?? null, currentUserId: userId,
         refusedWorkroomId: binding.workroomRef!.workroomId,
-        taskAuthority: binding.gate === "plan-review" ? await (async () => {
+        taskAuthority: ["design-spec", "spec-approval", "architecture-review", "plan-review"].includes(binding.gate) ? await (async () => {
           const taskAuthorityKey = await resolveMcpTaskAuthorityKey({ tokenId: context.apiTokenId!, userId, source: "oauth" });
           return taskAuthorityKey ? { userId, taskAuthorityKey } : null;
         })() : null });
