@@ -1,11 +1,124 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { discoverCanonicalDesignArtifact, discoverCanonicalReviewArtifact } from "./canonical-artifact-discovery";
+import { discoverCanonicalDesignArtifact, discoverCanonicalReviewArtifact, prepareCurrentDesignObservation, readCurrentDesignArtifact } from "./canonical-artifact-discovery";
 
 const BASE_SHA = "1111111111111111111111111111111111111111";
 const HEAD_SHA = "2222222222222222222222222222222222222222";
 const BLOB_SHA = "9f2c1d4e6b8a0c2e4f6a8b0c2d4e6f8a0b2c4d6e";
 const OTHER_BLOB_SHA = "0a1b2c3d4e5f60718293a4b5c6d7e8f900112233";
+
+describe("current canonical design observation", () => {
+  const snapshot = () => ({
+    kind: "bound" as const, itemRowId: "item-row", itemId: "BI-X", selection: "docs/superpowers/specs/x.md",
+    baselineId: "baseline-1", baselineDigest: "sha256:old",
+    artifactRef: { kind: "repo-blob-at-commit" as const, repositoryFullName: "org/repo", commitSha: BASE_SHA,
+      path: "docs/superpowers/specs/x.md", providerBlobId: BLOB_SHA },
+    room: { capsuleId: "WC-X", repositoryFullName: "org/repo", baseSha: BASE_SHA, headSha: HEAD_SHA, headBranch: "fix/x" },
+  });
+  function ports() {
+    return { loadBinding: vi.fn().mockResolvedValue(snapshot()),
+      readCurrentArtifact: vi.fn().mockResolvedValue({ state: "verified", digest: "sha256:new" }),
+      lockBinding: vi.fn().mockResolvedValue(undefined) };
+  }
+  it("reads immutable bytes outside the transaction and revalidates without another provider call", async () => {
+    const p = ports();
+    const prepared = await prepareCurrentDesignObservation({ itemId: "BI-X", ports: p });
+    expect(prepared.evidence).toEqual({ state: "verified", digest: "sha256:new" });
+    expect(p.lockBinding).not.toHaveBeenCalled();
+    expect(await prepared.admissionGuard({} as never)).toEqual(prepared.evidence);
+    expect(p.lockBinding).toHaveBeenCalledTimes(1);
+    expect(p.readCurrentArtifact).toHaveBeenCalledTimes(1);
+  });
+  it.each(["baselineId", "selection"] as const)("refuses a same-head concurrent %s change", async field => {
+    const p = ports();
+    const prepared = await prepareCurrentDesignObservation({ itemId: "BI-X", ports: p });
+    p.loadBinding.mockResolvedValue({ ...snapshot(), [field]: "changed" });
+    expect(await prepared.admissionGuard({} as never)).toEqual({ state: "unavailable" });
+  });
+  it("refuses a concurrent head change during the provider read", async () => {
+    const p = ports();
+    p.readCurrentArtifact.mockImplementation(async () => {
+      p.loadBinding.mockResolvedValue({ ...snapshot(), room: { ...snapshot().room, headSha: "f".repeat(40) } });
+      return { state: "verified", digest: "sha256:new" };
+    });
+    expect((await prepareCurrentDesignObservation({ itemId: "BI-X", ports: p })).evidence).toEqual({ state: "unavailable" });
+  });
+  it("retains explicit provider unavailability instead of old baseline success", async () => {
+    const p = ports(); p.readCurrentArtifact.mockResolvedValue({ state: "unavailable" });
+    const prepared = await prepareCurrentDesignObservation({ itemId: "BI-X", ports: p });
+    expect(prepared.evidence).toEqual({ state: "unavailable" });
+    expect(await prepared.admissionGuard({} as never)).toEqual({ state: "unavailable" });
+  });
+  it("does not read provider bytes for inherited, document or absent own repository scope", async () => {
+    const p = ports(); p.loadBinding.mockResolvedValue({ kind: "not-applicable" });
+    const prepared = await prepareCurrentDesignObservation({ itemId: "BI-X", ports: p });
+    expect(prepared.evidence).toEqual({ state: "not-applicable" });
+    expect(p.readCurrentArtifact).not.toHaveBeenCalled();
+  });
+  function stored() {
+    const bound = snapshot();
+    const baselineRow = { id: "baseline-row", kind: "initiative_scope_baseline", gateKey: null, recordedAt: new Date(0),
+      payload: { schemaVersion: 1, baselineId: bound.baselineId, supersedesBaselineId: null,
+        subject: { kind: "backlog-item", id: "BI-X" }, profile: "feature", artifactDigest: bound.baselineDigest,
+        artifactRef: bound.artifactRef } };
+    const store = { backlogItem: { findFirst: vi.fn().mockResolvedValue({ id: "item-row", itemId: "BI-X", body: bound.selection }) },
+      backlogItemActivity: { findMany: vi.fn().mockResolvedValue([baselineRow]) },
+      workroom: { findMany: vi.fn().mockResolvedValue([bound.room]) } };
+    return { store, baselineRow };
+  }
+  it("loads the actual subject baseline and room instead of accepting a caller digest", async () => {
+    const { store } = stored();
+    const readCurrentArtifact = vi.fn().mockResolvedValue({ state: "verified", digest: "sha256:new" });
+    const prepared = await prepareCurrentDesignObservation({ itemId: "BI-X", db: store as never, ports: { readCurrentArtifact } });
+    expect(prepared.evidence).toEqual({ state: "verified", digest: "sha256:new" });
+    expect(readCurrentArtifact).toHaveBeenCalledWith(snapshot());
+    expect(store.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 2,
+      where: expect.objectContaining({ backlogItemId: { in: ["item-row", "BI-X"] }, archivedAt: null }) }));
+  });
+  it("uses normal canonical discovery before falling back to an unchanged baseline path", async () => {
+    const binding = { ...snapshot(), selection: "Source-only repair with no declared design path" };
+    const discoverArtifact = vi.fn().mockResolvedValue({ resolved: false, code: "no-canonical-design" });
+    const readBlob = vi.fn().mockResolvedValue({ ok: true, data: new TextEncoder().encode("verified bytes"), blobId: BLOB_SHA });
+    const result = await readCurrentDesignArtifact(binding, { discoverArtifact, readBlob });
+    expect(discoverArtifact).toHaveBeenCalledWith(expect.objectContaining({ backlogBody: binding.selection }));
+    expect(readBlob).toHaveBeenCalledWith(expect.objectContaining({ path: binding.artifactRef.path,
+      commitSha: HEAD_SHA, expectedBlobId: null }));
+    expect(result).toMatchObject({ state: "verified", digest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) });
+  });
+  it.each([false, true])("withholds current verification on a capped comparison (visible design: %s)", async visibleDesign => {
+    const files = Array.from({ length: 300 }, (_, index) => ({
+      filename: visibleDesign && index === 0 ? "docs/superpowers/specs/visible.md" : `apps/web/lib/file-${index}.ts`,
+      sha: BLOB_SHA, status: "modified",
+    }));
+    const fetchImpl = vi.fn().mockResolvedValue(compareResponse(files));
+    const readBlob = vi.fn().mockResolvedValue({ ok: true, data: new TextEncoder().encode("old baseline"), blobId: BLOB_SHA });
+    const evidence = await readCurrentDesignArtifact({ ...snapshot(), selection: "No explicit design selection" }, {
+      discoverArtifact: async input => discoverCanonicalDesignArtifact({ ...args(fetchImpl as typeof fetch), backlogBody: input.backlogBody }),
+      readBlob,
+    });
+    expect(evidence).toEqual({ state: "unavailable" });
+    expect(readBlob).not.toHaveBeenCalled();
+  });
+  it.each(["ambiguous-canonical-design", "provider-unavailable", "no-canonical-design"])("never substitutes the baseline after unresolved explicit selection (%s)", async code => {
+    const readBlob = vi.fn();
+    const result = await readCurrentDesignArtifact(snapshot(), {
+      discoverArtifact: vi.fn().mockResolvedValue({ resolved: false, code }), readBlob,
+    });
+    expect(result).toEqual({ state: "unavailable" });
+    expect(readBlob).not.toHaveBeenCalled();
+  });
+  it.each(["missing-artifact", "ambiguous-room", "foreign-baseline", "provider-error"])("keeps %s unavailable through the real snapshot reader", async scenario => {
+    const { store, baselineRow } = stored();
+    const readCurrentArtifact = vi.fn().mockResolvedValue({ state: "verified", digest: "sha256:new" });
+    if (scenario === "missing-artifact") baselineRow.payload.artifactRef = null as never;
+    if (scenario === "ambiguous-room") store.workroom.findMany.mockResolvedValue([snapshot().room, snapshot().room]);
+    if (scenario === "foreign-baseline") baselineRow.payload.subject.id = "BI-OTHER";
+    if (scenario === "provider-error") readCurrentArtifact.mockRejectedValue(new Error("provider unavailable"));
+    const prepared = await prepareCurrentDesignObservation({ itemId: "BI-X", db: store as never, ports: { readCurrentArtifact } });
+    expect(prepared.evidence).toEqual({ state: "unavailable" });
+    expect(await prepared.admissionGuard(store as never)).toEqual({ state: "unavailable" });
+  });
+});
 
 const db = {
   credentialEntry: { findUnique: vi.fn().mockResolvedValue(null) },
