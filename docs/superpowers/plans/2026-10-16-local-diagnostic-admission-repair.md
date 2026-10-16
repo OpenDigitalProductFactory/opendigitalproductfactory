@@ -119,6 +119,16 @@ remain active. Identity or catalog drift holds the run without a model call.
 Completed proof still requires the exact server-issued successful ToolExecution
 identity with actor/thread/task/tool binding and metrics-only privacy intact.
 
+The original executor supplies a server-owned room getter beside its catalog
+getter; an absent getter is unknown authority, while an explicit null means
+unroomed. Re-read exact room access, current room controls and current grants;
+removed, terminal or changed rooms hold the observation. Reuse currentUserContext
+and resolveMcpTaskAuthorityKey for current human and credential-family checks.
+A narrowing authority-check scope in governed-inference-deadline composes with
+existing checks at the provider choke point after admission. It grants no
+deadline or capability, creates no pseudo parent, and cannot replace or relax a
+real inherited parent. This permits fresh revocation checks after a long queue.
+
 ## Admission, execution and expiry
 
 CONTRACT-TIMING: attach the existing withInferenceAdmissionObserver and preserve
@@ -188,6 +198,10 @@ operate/tool-fidelity-checkpoint.ts and tests, mcp/packs/build-ops-pack.ts and
 tests, mcp/tool-timeouts.ts and tests, this plan and provider-developer-notes.
 Resolve any additional shared authority-type path through its actual owner
 before changing it. No application-boundary/import-cycle baseline increase.
+Normal additional claims cover mcp-tool-types.ts, mcp-governed-execute.ts,
+mcp-governed-execute-audit-identity.test.ts and routing/governed-inference-deadline.ts
+with its tests. Resolve their graph-linked tests before RED; the shared types
+remain runtime-import-free. No completed reliability feature is reopened.
 New modules remain below 800 lines. Design-Grounding-Decision is required.
 The resolved impact contract requires find_related_tests for runner, checkpoint,
 tool pack and timeout registry; missing advice expands verification. Run
