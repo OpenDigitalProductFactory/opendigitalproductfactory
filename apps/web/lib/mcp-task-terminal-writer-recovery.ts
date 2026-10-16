@@ -1,4 +1,5 @@
 import { prisma, type Prisma } from "@dpf/db";
+import { hasExecutionUncertainty } from "./inference/execution-uncertainty";
 import { reserveTaskRunGenerationWorking } from "./observability/heartbeat";
 import { INITIATIVE_CORRECTABLE_ERRORS } from "./backlog/initiative-readiness/disposition-contract";
 import { remoteTaskRequestMatches } from "./mcp-task-capacity-contract";
@@ -58,6 +59,7 @@ export async function reserveTerminalWriterReplay(input: {
   bootstrapReaderEvidence: boolean;
 } | null> {
   if (!remoteTaskRequestMatches(input.existing.a2aMetadata, input.parsed)) return null;
+  if (hasExecutionUncertainty(input.existing.progressPayload)) return null;
   if (recoverTerminalWriterEscalation(input.existing.progressPayload)) return null;
 
   const existingWait = parseTerminalWriterWait(input.existing.progressPayload);

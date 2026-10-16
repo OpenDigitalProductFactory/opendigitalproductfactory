@@ -18,6 +18,7 @@
 import { excerptHeadAndTail } from "@/lib/shared/excerpt-head-and-tail";
 import { randomUUID } from "node:crypto";
 import { renderOwnedCliRunner, NativeCliExecutionUncertainError } from "./cli-owned-runner";
+import { observeCliProcess } from "./cli-process-observation";
 import type { ToolCallEntry } from "./chat-message-types";
 import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./adapter-types";
 import { InferenceError } from "./inference-error";
@@ -353,73 +354,61 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
         ]);
         containerDispatchStarted = true;
 
-        let stdout = "";
-        let stderr = "";
-        let timedOut = false;
-        const timer = setTimeout(() => {
-          timedOut = true;
-          proc.kill("SIGTERM");
-          // The container supervisor independently settles its owned child.
-        }, CLI_TIMEOUT_MS + 15_000);
-
-        proc.stdout.on("data", (data: Buffer) => { stdout += data.toString(); });
-        proc.stderr.on("data", (data: Buffer) => { stderr += data.toString(); });
-
-        proc.on("close", (code: number | null) => {
-          clearTimeout(timer);
-          if (timedOut || code === null || code === 124 || stderr.includes("DPF_CLI_TIMEOUT")) {
-            reject(new NativeCliExecutionUncertainError(providerId));
-          } else if (code !== 0 && stdout.trim()) {
-            reject(new NativeCliExecutionUncertainError(providerId));
-          } else if (code === 0) {
-            resolve({ stdout });
-          } else {
-            const signal = cliFailureSignal(stderr);
-            if (looksLikeCliAuthFailure(signal)) {
-              reject(new InferenceError(
-                `Codex CLI auth failed: ${excerptHeadAndTail(stderr, 600)}`,
-                "auth",
-                providerId,
-              ));
-            } else if (looksLikeCliUnsupportedModel(signal)) {
-              reject(new InferenceError(
-                `Codex CLI model not found: ${excerptHeadAndTail(stderr, 600)}`,
-                "model_not_found",
-                providerId,
-              ));
-            } else if (looksLikeCliRateLimit(signal)) {
-              // EP-COST Phase 4: record pool exhaustion so orchestrator can back off
-              void recordCliRateLimit("codex-cli", providerId, stderr, poolIdentity);
-              reject(new InferenceError(
-                `Codex CLI rate limited: ${excerptHeadAndTail(stderr, 600)}`,
-                "rate_limit",
-                providerId,
-              ));
+        observeCliProcess(proc, {
+          timeoutMs: CLI_TIMEOUT_MS + 15_000,
+          onClose: ({ code, stdout, stderr, diagnostics }) => {
+            if (diagnostics.timedOut || code === null || code === 124 || stderr.includes("DPF_CLI_TIMEOUT")) {
+              reject(new NativeCliExecutionUncertainError(providerId, diagnostics));
+            } else if (code !== 0 && stdout.trim()) {
+              reject(new NativeCliExecutionUncertainError(providerId, diagnostics));
+            } else if (code === 0) {
+              resolve({ stdout });
             } else {
-              reject(new InferenceError(
-                `Codex CLI exit code ${code}: ${excerptHeadAndTail(stderr, 800)}`,
-                "provider_error",
-                providerId,
-              ));
+              const signal = cliFailureSignal(stderr);
+              if (looksLikeCliAuthFailure(signal)) {
+                reject(new InferenceError(
+                  `Codex CLI auth failed: ${excerptHeadAndTail(stderr, 600)}`,
+                  "auth",
+                  providerId,
+                ));
+              } else if (looksLikeCliUnsupportedModel(signal)) {
+                reject(new InferenceError(
+                  `Codex CLI model not found: ${excerptHeadAndTail(stderr, 600)}`,
+                  "model_not_found",
+                  providerId,
+                ));
+              } else if (looksLikeCliRateLimit(signal)) {
+                // EP-COST Phase 4: record pool exhaustion so orchestrator can back off
+                void recordCliRateLimit("codex-cli", providerId, stderr, poolIdentity);
+                reject(new InferenceError(
+                  `Codex CLI rate limited: ${excerptHeadAndTail(stderr, 600)}`,
+                  "rate_limit",
+                  providerId,
+                ));
+              } else {
+                reject(new InferenceError(
+                  `Codex CLI exit code ${code}: ${excerptHeadAndTail(stderr, 800)}`,
+                  "provider_error",
+                  providerId,
+                ));
+              }
             }
-          }
-        });
-
-        proc.on("error", (err: Error) => {
-          clearTimeout(timer);
-          containerDispatchStarted = false;
-          // E2BIG / ENOMEM: combined arg+env exceeded OS ARG_MAX.
-          // After the stdin-pipe fix this should not occur for prompt writes,
-          // but classify correctly if it ever does so the fallback chain can
-          // skip this provider rather than retrying a doomed request.
-          const isArgTooLong =
-            /E2BIG|ENOMEM/i.test(err.message) ||
-            /argument.*too.*long/i.test(err.message);
-          reject(new InferenceError(
-            `Codex CLI spawn error: ${err.message}`,
-            isArgTooLong ? "request_too_large" : "network",
-            providerId,
-          ));
+          },
+          onError: (err: Error) => {
+            containerDispatchStarted = false;
+            // E2BIG / ENOMEM: combined arg+env exceeded OS ARG_MAX.
+            // After the stdin-pipe fix this should not occur for prompt writes,
+            // but classify correctly if it ever does so the fallback chain can
+            // skip this provider rather than retrying a doomed request.
+            const isArgTooLong =
+              /E2BIG|ENOMEM/i.test(err.message) ||
+              /argument.*too.*long/i.test(err.message);
+            reject(new InferenceError(
+              `Codex CLI spawn error: ${err.message}`,
+              isArgTooLong ? "request_too_large" : "network",
+              providerId,
+            ));
+          },
         });
       }));
 

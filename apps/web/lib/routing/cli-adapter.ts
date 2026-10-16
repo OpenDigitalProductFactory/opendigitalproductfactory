@@ -36,6 +36,7 @@ import { toCliParsedUsage, type CliParsedUsage, type CliUsagePayload } from "./c
 import { providerSetupLocation } from "@/lib/ai-provider-routes";
 import { randomUUID } from "node:crypto";
 import { renderOwnedCliRunner, NativeCliExecutionUncertainError } from "./cli-owned-runner";
+import { observeCliProcess } from "./cli-process-observation";
 
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
@@ -555,66 +556,54 @@ export const cliAdapter: ExecutionAdapterHandler = {
         ]);
         containerDispatchStarted = true;
 
-        let stdout = "";
-        let stderr = "";
-        let timedOut = false;
-        const timer = setTimeout(() => {
-          timedOut = true;
-          proc.kill("SIGTERM");
-          // The container supervisor independently settles its owned child.
-        }, CLI_TIMEOUT_MS + 15_000);
-
-        proc.stdout.on("data", (data: Buffer) => { stdout += data.toString(); });
-        proc.stderr.on("data", (data: Buffer) => { stderr += data.toString(); });
-
-        proc.on("close", (code: number | null) => {
-          clearTimeout(timer);
-          if (timedOut || code === null || code === 124 || stderr.includes("DPF_CLI_TIMEOUT")) {
-            reject(new NativeCliExecutionUncertainError(providerId));
-          } else if (code !== 0 && stdout.trim()) {
-            reject(new NativeCliExecutionUncertainError(providerId));
-          } else if (code === 0) {
-            resolve({ stdout });
-          } else {
-            // Check for auth errors in stderr
-            if (stderr.includes("unauthorized") || stderr.includes("401") || stderr.includes("authentication")) {
-              reject(new InferenceError(
-                `Claude CLI auth failed: ${stderr.slice(0, 300)}`,
-                "auth",
-                providerId,
-              ));
-            } else if (isProviderOverloadMessage(stderr)) {
-              reject(new InferenceError(
-                `Claude CLI overloaded: ${stderr.slice(0, 300)}`,
-                "overloaded",
-                providerId,
-              ));
-            } else if (stderr.includes("rate") || stderr.includes("429")) {
-              // EP-COST Phase 4: record pool exhaustion so orchestrator can back off
-              void recordCliRateLimit("claude-cli", providerId, stderr, poolIdentity);
-              reject(new InferenceError(
-                `Claude CLI rate limited: ${stderr.slice(0, 300)}`,
-                "rate_limit",
-                providerId,
-              ));
+        observeCliProcess(proc, {
+          timeoutMs: CLI_TIMEOUT_MS + 15_000,
+          onClose: ({ code, stdout, stderr, diagnostics }) => {
+            if (diagnostics.timedOut || code === null || code === 124 || stderr.includes("DPF_CLI_TIMEOUT")) {
+              reject(new NativeCliExecutionUncertainError(providerId, diagnostics));
+            } else if (code !== 0 && stdout.trim()) {
+              reject(new NativeCliExecutionUncertainError(providerId, diagnostics));
+            } else if (code === 0) {
+              resolve({ stdout });
             } else {
-              reject(new InferenceError(
-                `Claude CLI exit code ${code}: ${stderr.slice(0, 500)}`,
-                "provider_error",
-                providerId,
-              ));
+              // Check for auth errors in stderr
+              if (stderr.includes("unauthorized") || stderr.includes("401") || stderr.includes("authentication")) {
+                reject(new InferenceError(
+                  `Claude CLI auth failed: ${stderr.slice(0, 300)}`,
+                  "auth",
+                  providerId,
+                ));
+              } else if (isProviderOverloadMessage(stderr)) {
+                reject(new InferenceError(
+                  `Claude CLI overloaded: ${stderr.slice(0, 300)}`,
+                  "overloaded",
+                  providerId,
+                ));
+              } else if (stderr.includes("rate") || stderr.includes("429")) {
+                // EP-COST Phase 4: record pool exhaustion so orchestrator can back off
+                void recordCliRateLimit("claude-cli", providerId, stderr, poolIdentity);
+                reject(new InferenceError(
+                  `Claude CLI rate limited: ${stderr.slice(0, 300)}`,
+                  "rate_limit",
+                  providerId,
+                ));
+              } else {
+                reject(new InferenceError(
+                  `Claude CLI exit code ${code}: ${stderr.slice(0, 500)}`,
+                  "provider_error",
+                  providerId,
+                ));
+              }
             }
-          }
-        });
-
-        proc.on("error", (err: Error) => {
-          clearTimeout(timer);
-          containerDispatchStarted = false;
-          reject(new InferenceError(
-            `Claude CLI spawn error: ${err.message}`,
-            "network",
-            providerId,
-          ));
+          },
+          onError: (err: Error) => {
+            containerDispatchStarted = false;
+            reject(new InferenceError(
+              `Claude CLI spawn error: ${err.message}`,
+              "network",
+              providerId,
+            ));
+          },
         });
       }));
 

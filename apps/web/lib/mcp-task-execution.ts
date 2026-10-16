@@ -1,3 +1,4 @@
+import { EXECUTION_UNCERTAIN_MESSAGE, executionUncertaintyFromError, hasExecutionUncertainty } from "./inference/execution-uncertainty";
 import { reservationIdentity, dispatchIdentity, settleRemoteTask } from "./mcp-task-attempt-state";
 import { projectRemoteTaskReplay } from "./mcp-task-replay-projection";
 import { TASK_IN_FLIGHT_STATES } from "@/lib/tak/task-states";
@@ -123,6 +124,9 @@ export async function executeRemoteTaskAttempt(input: {
       requiresApproval: false, resumable: false, content: remoteTaskContent(priorReview.summary),
       structuredContent: priorReview, isError: false,
     } };
+  }
+  if (hasExecutionUncertainty(admittedRun.progressPayload)) {
+    return projectRemoteTaskReplay({ existing: { ...admittedRun, taskRunId: run.taskRunId }, requestMatches: true });
   }
   const agent = await resolveAutonomousWorkAgent({
     agentId: parsed.agentId,
@@ -316,6 +320,24 @@ export async function executeRemoteTaskAttempt(input: {
           where: { taskRunId: run.taskRunId },
           select: { status: true, progressPayload: true },
         });
+    if (result.failure?.kind === "execution-uncertain" && !persistedOutcome) {
+      const priorProgress = currentRun?.progressPayload && typeof currentRun.progressPayload === "object"
+        && !Array.isArray(currentRun.progressPayload) ? currentRun.progressPayload as Record<string, unknown> : {};
+      const displaced = await settle({ where: { taskRunId: run.taskRunId }, data: {
+        status: "input-required", completedAt: null, progressPayload: {
+          ...priorProgress, summary: EXECUTION_UNCERTAIN_MESSAGE, requiresApproval: false,
+          executionUncertainty: { ...executionUncertaintyFromError(result.failure.executionUncertainty),
+            observedAt: new Date().toISOString() },
+          executedToolCount: result.executedTools?.length ?? 0, ...resumedFlag,
+        },
+      } });
+      if (displaced) return displaced;
+      return { kind: "result", result: {
+        taskRunId: run.taskRunId, status: "input-required", idempotentReplay: input.idempotentReplay,
+        ...resumedFlag, requiresApproval: false, resumable: false, waitReason: "execution-uncertain",
+        content: remoteTaskContent(EXECUTION_UNCERTAIN_MESSAGE), isError: false,
+      } };
+    }
     // The loop is not trusted to self-report a missing writer: main enforces this
     // at the completion boundary (#4925, #4930) so a review cannot pass without
     // the governed writer having been attempted. Ported verbatim into the async

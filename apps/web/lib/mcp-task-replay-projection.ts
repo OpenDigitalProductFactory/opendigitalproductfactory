@@ -1,4 +1,5 @@
 import { parseResourceWaitProjection } from "./mcp-task-capacity-contract";
+import { hasExecutionUncertainty, EXECUTION_UNCERTAIN_MESSAGE } from "./inference/execution-uncertainty";
 import type { Prisma } from "@dpf/db";
 import {
   recoverTerminalWriterEscalation,
@@ -113,6 +114,15 @@ export function projectRemoteTaskReplay(input: {
       taskRunId: input.existing.taskRunId, status: input.existing.status,
       idempotentReplay: true, requiresApproval: false, resumable: false,
       progressPayload: input.existing.progressPayload, a2aMetadata: input.existing.a2aMetadata,
+    } };
+  }
+  if (hasExecutionUncertainty(input.existing.progressPayload)) {
+    return { kind: "result", result: {
+      taskRunId: input.existing.taskRunId, status: input.existing.status,
+      idempotentReplay: true, requiresApproval: false, resumable: false,
+      waitReason: "execution-uncertain", content: remoteTaskContent(EXECUTION_UNCERTAIN_MESSAGE),
+      progressPayload: input.existing.progressPayload, a2aMetadata: input.existing.a2aMetadata,
+      isError: false,
     } };
   }
   const terminalWriterEscalation = recoverTerminalWriterEscalation(input.existing.progressPayload);

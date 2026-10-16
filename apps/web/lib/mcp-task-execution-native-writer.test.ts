@@ -168,6 +168,36 @@ beforeEach(() => {
   autonomous.resolveTools.mockResolvedValue({ tools: [], toolsForProvider: [], deferredTools: [] });
 });
 
+it("holds an uncertain native execution without creating a writer retry or losing prior evidence", async () => {
+  db.item = { activities: [] };
+  db.findTaskRun.mockResolvedValue({ status: "working", progressPayload: { originalEvidence: "retained" }, updatedAt: new Date() });
+  autonomous.execute.mockResolvedValue({ ...liveCliLoopResult(), failure: {
+    kind: "execution-uncertain", message: "Existing execution needs reconciliation.",
+    executionUncertainty: { schemaVersion: 1, kind: "execution-uncertain", settlement: "unknown", providerId: "anthropic-sub",
+      rawOutput: "fake-private-output-that-must-not-persist" },
+  } });
+  const outcome = await run();
+  expect(outcome).toMatchObject({ kind: "result", result: { taskRunId: TASK_RUN_ID,
+    status: "input-required", resumable: false, requiresApproval: false, waitReason: "execution-uncertain" } });
+  expect(settledData()).toMatchObject({ status: "input-required", completedAt: null,
+    progressPayload: { originalEvidence: "retained", executionUncertainty: {
+      settlement: "unknown", providerId: "anthropic-sub", observedAt: expect.any(String) } } });
+  expect(settledData()?.progressPayload).not.toHaveProperty("terminalWriterWait");
+  expect(JSON.stringify(settledData())).not.toContain("fake-private-output");
+  expect(autonomous.execute).toHaveBeenCalledTimes(1);
+});
+
+it("refuses a queued attempt whose admitted generation already contains uncertainty", async () => {
+  db.item = { activities: [] };
+  db.findTaskRun.mockResolvedValue({ status: "working", progressPayload: {
+    executionUncertainty: { schemaVersion: 1, settlement: "unknown" },
+  }, updatedAt: new Date() });
+  autonomous.execute.mockResolvedValue(liveCliLoopResult());
+  expect(await run()).toMatchObject({ result: { resumable: false, waitReason: "execution-uncertain" } });
+  expect(autonomous.execute).not.toHaveBeenCalled();
+  expect(db.updateTaskRun).not.toHaveBeenCalled();
+});
+
 describe("BI-2E479619 executor recognises a natively executed terminal writer", () => {
   it("fixture sanity: the receipt lookup already resolves this TaskRun's native writer row to the persisted pass", async () => {
     db.executions.push(nativeRead(), nativeWriterSuccess());
