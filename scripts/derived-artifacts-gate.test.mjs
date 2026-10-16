@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 // Tests for the derived-artifact registry driver (BI-48768E05). All tests
 // exercise the pure planning/decision functions with injected fakes — no
 // git or subprocess calls, so they run instantly and deterministically.
@@ -49,15 +52,20 @@ const SBOM = {
   autoStage: false,
 };
 
-test("derived-artifact commands resolve pnpm through ComSpec on Windows", () => {
+test("derived-artifact commands keep pnpm arguments outside a shell on Windows", t => {
+  const root = mkdtempSync(join(tmpdir(), "dpf-derived-pnpm-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  writeFileSync(join(root, "pnpm.cmd"), "");
+  const script = join(root, "pnpm.cjs");
+  writeFileSync(script, "");
   assert.deepEqual(
     resolveDerivedArtifactInvocation(["pnpm", "--filter", "web", "run", "check:route-manifest"], {
       platform: "win32",
-      env: { ComSpec: "C:\\Windows\\System32\\cmd.exe" },
+      env: { PATH: root },
     }),
     {
-      command: "C:\\Windows\\System32\\cmd.exe",
-      args: ["/d", "/s", "/c", "pnpm --filter web run check:route-manifest"],
+      command: process.execPath,
+      args: [script, "--filter", "web", "run", "check:route-manifest"],
     },
   );
 });
