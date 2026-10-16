@@ -1,6 +1,6 @@
 # Gated Permissions Process (GPP)
 
-**Status:** working draft 0.18 · **Date:** 2026-10-13 · **Epic:** EP-B932453F · **Backlog:** BI-2C3B3AC9
+**Status:** working draft 0.19 · **Date:** 2026-10-16 · **Epic:** EP-B932453F · **Backlog:** BI-2C3B3AC9
 **Placement decision:** DI-5E0B3CA09D27 (WWMD, high confidence). GPP is the fourth member of the
 [standards family](agent-standards-family.md) and owns the binding semantic only.
 
@@ -243,8 +243,11 @@ The capability vocabulary is the contract between modeled bindings and enforceab
 - A gate `MUST` resolve to exactly one of `admit`, `refuse`, `hold` or `escalate`.
 - Hard constraints in the owning scope `MUST` be applied before any preference ranking
   (TAK §7.13). A preference score cannot turn a `refuse` into an `admit`.
-- Missing evidence `MUST` yield `hold`. Missing authority `MUST` yield `escalate`. Neither
-  defaults to `admit`.
+- Missing evidence `MUST` yield `hold`. Where the owning scope is known but the required
+  decision authority is missing, the gate `MUST` yield `escalate` through the binding's escalation
+  path. If ownership itself is unresolved, §7's `hold` applies until ownership is established;
+  routing an ownership question does not admit the action. Neither outcome overrides a TAK
+  grant denial or defaults to `admit`.
 - An `admit` `MUST` be recorded with the binding version, the scope, the resolver (doctrine
   reference and/or human principal), the evidence references and the validity.
 
@@ -323,10 +326,19 @@ adopts the *Agents Rule of Two* as a model-level constraint.
 
 - An implementation `MUST` tag each capability with whether it introduces **untrusted input**,
   **sensitive access** or **state change / outward communication**.
-- An envelope that combines all three for one actor in one session `MUST` require a binding whose
-  gate resolution mode includes an accountable human or an independent validator, and `MUST`
-  record that combination as a distinct, reviewable class.
+- An envelope that combines all three for one actor in one session `MUST` require an actual
+  accountable-human decision admitting that combination as a distinct, reviewable class. The
+  decision `MUST` name the accountable principal and cover the binding version, subject scope
+  and validity. Doctrine may inform it; a `doctrine-then-human` mode label without an actual
+  human decision does not satisfy this requirement.
 - An implementation `SHOULD` report every envelope that reaches the full combination, per actor.
+
+This is a decision for a bounded class of work, not a fresh prompt for every call within the
+approved envelope. Other capability combinations retain their declared resolution modes.
+Validator-only admission is not specified by this revision: a future profile would need to define
+validator identity, independence, authority and evidence before claiming that alternative. A
+validator result alone `MUST NOT` be treated as the human decision required here. No runtime
+binding is promoted by this draft clarification.
 
 This constraint governs the model. Data-flow techniques such as capability-tagged values
 (CaMeL-style) remain runtime controls under `TAK` and are complementary.
@@ -666,11 +678,11 @@ demote a binding, revert its promotion PR. In an emergency the operator sets
 | GPP-002 | Every capability token resolves to at least one enforceable grant (C-2). |
 | GPP-003 | Every binding names exactly one owning scope (C-3). |
 | GPP-004 | A preference score cannot convert a hard-constraint refusal into `admit`. |
-| GPP-005 | Missing evidence yields `hold` and missing authority yields `escalate`; neither yields `admit`. |
+| GPP-005 | Missing evidence or unresolved ownership yields `hold`; missing decision authority in a known owning scope yields `escalate`. Neither outcome bypasses a TAK denial or yields `admit`. |
 | GPP-006 | A tool outside the envelope is absent from discovery and refused at execution. |
 | GPP-007 | A decision recorded against binding version *n* does not admit calls under version *n+1*. |
 | GPP-008 | Revocation takes effect at the next reach. |
-| GPP-009 | An envelope combining untrusted input, sensitive access and state change requires the §8 gate mode. |
+| GPP-009 | An envelope combining untrusted input, sensitive access and state change/outward communication requires the attributable human decision in §8. A validator-only result or a doctrine-then-human label without that decision does not satisfy it. |
 | GPP-010 | Every tool reachable at runtime for an actor in a stage is admitted by a binding (C-6). |
 | GPP-011 | A shadow-mode binding is never reported as enforced (C-7). |
 | GPP-012 | Each consequential receipt resolves to its binding version and gate decision. |
@@ -819,3 +831,4 @@ obvious. This is the practical argument for MBSE.
 | 0.16 | 2026-10-07 | §12.4.3 and Annex A: stage deadlines are enabled again (GPP Phase 3c, BI-086DC167, BI-8875C9DF). A graph room's marking is now one run that crosses calendar boundaries (keyed by the day it started; a new run only after the previous one concluded), so a deadline of any length comes due once. Sub-shape stays implemented but not enabled until its own change. No registered shape declares a deadline yet. |
 | 0.17 | 2026-10-07 | §12.4.3 and Annex A: sub-shapes are enabled again (GPP Phase 3c, BI-086DC167, BI-8875C9DF). A child is keyed by the parent's run, which crosses calendar boundaries, so a child running across midnight is neither abandoned nor created twice. Every construct flag is on again. No registered shape calls a sub-shape yet. |
 | 0.18 | 2026-10-13 | Annex A: approving a legacy proposal runs through the monitor (approval convergence PR-C, BI-04E5A511, spec D5/D6). Both proposal-approval paths leave `KNOWN_UNMEDIATED_EXECUTE_SITES`; the unmediated set is 23 sites in 11 files with no dynamic site, and the `X-Ops-Token` path on `execute-proposal` is removed (waiver W3). |
+| 0.19 | 2026-10-16 | Resolves the undefined independent-validator alternative in §8 using the existing accountable-human decision model, with a class-level decision rather than per-call prompting. Distinguishes unresolved-ownership hold from missing-decision-authority escalation and updates assertions GPP-005/009 (BI-A484D58F, advisory WWMD DI-3F413560AB76). Source clarification only; no enforcement promotion or runtime conformance claim. |
