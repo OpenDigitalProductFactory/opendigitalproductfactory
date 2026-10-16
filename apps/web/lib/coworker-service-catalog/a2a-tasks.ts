@@ -95,6 +95,7 @@ type DbClient = {
   coworkerEngagement: {
     findUnique(args: unknown): Promise<EngagementRow | null>;
   };
+  workroom?: { findUnique(args: unknown): Promise<{ id: string } | null> };
 };
 
 export async function createCoworkerA2aTask(
@@ -189,10 +190,21 @@ export async function createCoworkerA2aTask(
 
 export async function readCoworkerA2aTask(
   taskId: string,
-  deps: { db?: DbClient } = {},
+  deps: { db?: DbClient; userId?: string } = {},
 ): Promise<CoworkerA2aTask | null> {
   const db = deps.db ?? (prisma as unknown as DbClient);
   let engagement = await db.coworkerEngagement.findUnique({ where: { engagementId: taskId } });
+  const fulfillment = record(engagement?.metadata).fulfillment;
+  if (fulfillment !== undefined) {
+    const { parseEngagementTaskBinding } = await import("./engagement-fulfillment");
+    const binding = parseEngagementTaskBinding(record(fulfillment).binding);
+    if (!binding || !deps.userId || !db.workroom) return null;
+    const room = await db.workroom.findUnique({ where: { capsuleId: binding.workroomId }, select: { id: true } });
+    if (!room) return null;
+    const { resolveHumanWorkroomAccess } = await import("@/lib/work-management/workroom-agent-access.server");
+    const access = await resolveHumanWorkroomAccess({ userId: deps.userId, workroomId: room.id, requested: "content" });
+    if (access.decision.level !== "content") return null;
+  }
   const taskRunId = stringValue(record(record(engagement?.metadata).fulfillment).taskRunId);
   if (!deps.db && taskRunId) {
     const { reconcileEngagementTaskResult } = await import("./engagement-fulfillment");

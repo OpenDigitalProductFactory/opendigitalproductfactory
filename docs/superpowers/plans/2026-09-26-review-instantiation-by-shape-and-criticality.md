@@ -120,6 +120,17 @@ execution. A direct-content substitution regression first failed, then passed;
 the focused task/engagement run passed 76 tests across four suites. This delta
 is not covered by the c833 independent assessment until separately reviewed.
 
+Readback correction: bound engagement results now require current Workroom data
+access in the MCP read path and in the existing authenticated A2A read route.
+The session's user identity is passed to that reader; an unadmitted or missing
+principal receives no task contents. The cross-room MCP result and authenticated
+A2A disclosure cases both reproduced before the checks, then the focused run
+passed 40 tests across three suites. The Workroom session's `runRef` is checked
+against the actual `room.taskRunId` used by its issuer, not the unrelated drive
+cycle key; that contract regression also first failed before correction. No
+credential scopes or grants were added. Independent review and live acceptance
+are still required for this delta.
+
 ## Phase 4: room-bound instantiation
 
 - Add `stepReviewBinding` to the external coworker task contract (`apps/web/lib/mcp/external-coworker-task-adapter.ts`), following `initiativeReviewBinding`.

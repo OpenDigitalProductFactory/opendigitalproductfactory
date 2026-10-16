@@ -127,7 +127,7 @@ export async function validateEngagementTask(input: {
     || provider.lifecycleStage !== "production" || counterpart.lifecycleStage !== "production") throw new Error("engagement_provider_identity_pair_unavailable");
   if (!["operator", "oauth_access", "workroom_session"].includes(credential.kind)
     || (credential.kind === "workroom_session" && (credential.workroomRef !== room.capsuleId
-      || credential.runRef !== record(record(room.workspaceState).workroomDrive).runKey))) throw new Error("engagement_credential_scope_refused");
+      || credential.runRef !== room.taskRunId))) throw new Error("engagement_credential_scope_refused");
   const tokenGrants = expandGrants(credential.scopes);
   const actorGrants = expandGrants(persistedAgentToolGrants(actor));
   const providerGrants = expandGrants(persistedAgentToolGrants(provider));
@@ -229,15 +229,27 @@ export async function admitEngagementTask(input: Parameters<typeof validateEngag
 }
 
 /** Resume the original engagement through the existing governed durable task runner. */
-export async function fulfillCoworkerEngagement(engagementId: string, locator: unknown, userId: string, context?: ToolExecutionContext): Promise<ToolResult> {
+export async function fulfillCoworkerEngagement(engagementId: string, locator: unknown, userId: string, context?: ToolExecutionContext, db?: Prisma.TransactionClient): Promise<ToolResult> {
   if (!context?.agentId || !context.apiTokenId || !context.userContext
     || (context.authSource !== "oauth" && context.authSource !== "pat")) return { success: false, error: "engagement_verified_context_required", message: "An authenticated coworker connection is required to fulfill this request." };
-  const { prisma } = await import("@dpf/db");
+  const prisma = db ?? (await import("@dpf/db")).prisma;
   const engagement = await prisma.coworkerEngagement.findFirst({ where: { engagementId, requestedByUserId: userId, requestedByAgentId: context.agentId } });
   if (!engagement) return { success: false, error: "engagement_not_found", message: "No engagement owned by this caller was found." };
   if (locator === undefined) {
+    const binding = parseEngagementTaskBinding(record(record(engagement.metadata).fulfillment).binding);
+    const credential = await prisma.mcpApiToken.findUnique({ where: { id: context.apiTokenId }, select: { userId: true, kind: true, revokedAt: true, expiresAt: true, workroomRef: true, runRef: true } });
+    if (!credential || credential.userId !== userId || credential.revokedAt
+      || (credential.expiresAt !== null && credential.expiresAt <= new Date())
+      || (credential.kind === "workroom_session" && !binding)) throw new Error("engagement_read_scope_refused");
+    if (binding) {
+      const room = await prisma.workroom.findUnique({ where: { capsuleId: binding.workroomId }, select: { id: true, capsuleId: true, taskRunId: true } });
+      if (!room || (credential.kind === "workroom_session" && (credential.workroomRef !== room.capsuleId || credential.runRef !== room.taskRunId))) throw new Error("engagement_read_scope_refused");
+      const { resolveAgentWorkroomAccess } = await import("@/lib/work-management/workroom-agent-access.server");
+      const access = await resolveAgentWorkroomAccess({ userId, agentId: context.agentId, workroomId: room.id, requested: "content" }, prisma);
+      if (access.decision.level !== "content") throw new Error("engagement_read_access_refused");
+    }
     const taskRunId = record(record(engagement.metadata).fulfillment).taskRunId;
-    if (text(taskRunId)) await reconcileEngagementTaskResult(taskRunId);
+    if (text(taskRunId)) await reconcileEngagementTaskResult(taskRunId, prisma);
     const latest = await prisma.coworkerEngagement.findUnique({ where: { engagementId } });
     return { success: true, entityId: engagementId, message: "Persisted engagement state; no execution was requested.", data: { engagementId, status: latest?.status ?? engagement.status, fulfillment: record(latest?.metadata ?? engagement.metadata).fulfillment ?? null, result: record(latest?.metadata ?? engagement.metadata).result ?? null } };
   }

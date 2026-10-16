@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { parseEngagementTaskBinding, engagementInputDigest, assertEngagementSnapshot, engagementToolAllowed, validateEngagementContribution, validateEngagementTask, admitEngagementTask, engagementProviderIdentityRefs, reconcileEngagementTaskResult } from "./engagement-fulfillment";
+import { parseEngagementTaskBinding, engagementInputDigest, assertEngagementSnapshot, engagementToolAllowed, validateEngagementContribution, validateEngagementTask, admitEngagementTask, engagementProviderIdentityRefs, reconcileEngagementTaskResult, fulfillCoworkerEngagement } from "./engagement-fulfillment";
 import { parseRemoteTaskSubmitParams } from "@/lib/mcp-task-submit-params";
 import { remoteTaskRequestDigest } from "@/lib/mcp-task-capacity-contract";
 const admission = vi.hoisted(() => ({ allowed: true }));
@@ -11,10 +11,17 @@ const snapshot = () => ({
   engagement: { engagementId: "CE-1", offerId: "offer-1", serviceId: "service-1", providerAgentId: "ux-critic", requestedByUserId: "user-1", requestedByAgentId: "coding-agent", requestedOutcome: "Review design", inputPayload: { artifactRef }, status: "requested", approvalContext: { required: false }, metadata: {} },
   offer: { offerId: "offer-1", serviceId: "service-1", status: "active", authorityBoundary: "advice-only", riskTier: "low", availabilityScope: "internal", budgetEnvelope: {}, requiredApprovals: [], expiresAt: null },
   service: { serviceId: "service-1", providerAgentId: "ux-critic", status: "active", authorityBoundary: "advice-only", riskTier: "low", availabilityScope: "internal" },
-  room: { capsuleId: "WC-1", headSha: artifactRef.commitSha, repositoryFullName: "owner/repo", archivedAt: null, workspaceState: { workroomDrive: { stageKey: "design" } } },
+  room: { capsuleId: "WC-1", taskRunId: "run-1", headSha: artifactRef.commitSha, repositoryFullName: "owner/repo", archivedAt: null, workspaceState: { workroomDrive: { stageKey: "design" } } },
 });
 
 describe("bounded advisory engagement fulfillment", () => {
+  it("does not disclose another room's completed contribution to a room-scoped credential", async () => {
+    const engagement = { ...snapshot().engagement, status: "completed", metadata: { fulfillment: { binding, taskRunId: "TR-ORIGINAL" }, result: { summary: "Private room result" } } };
+    const credential = { kind: "workroom_session", userId: "user-1", workroomRef: "WC-FOREIGN", runRef: "run-1", revokedAt: null, expiresAt: null };
+    const fakeDb = { coworkerEngagement: { findFirst: async () => engagement, findUnique: async () => engagement }, mcpApiToken: { findUnique: async () => credential }, taskRun: { findUnique: async () => null }, workroom: { findUnique: async () => ({ ...snapshot().room, id: "room-row-1" }) } };
+    const context = { agentId: binding.actorAgentId, apiTokenId: "token-1", authSource: "pat", userContext: { userId: "user-1", isSuperuser: false, platformRole: "developer" } };
+    await expect(fulfillCoworkerEngagement(binding.engagementId, undefined, binding.userId, context as never, fakeDb as never)).rejects.toThrow(/read_scope_refused/);
+  });
   it("uses the registered canonical/runtime provider pair and no unrelated aliases", () => {
     expect(engagementProviderIdentityRefs("AGT-906")).toEqual(["AGT-906", "ux-design-critic"]);
     expect(engagementProviderIdentityRefs("ux-design-critic")).toEqual(["AGT-906", "ux-design-critic"]);
@@ -122,7 +129,7 @@ describe("bounded advisory engagement fulfillment", () => {
     fake.credential.kind = "workroom_session";
     fake.credential.workroomRef = "WC-FOREIGN";
     fake.credential.runRef = "run-1";
-    Object.assign(fake.state.room.workspaceState.workroomDrive, { runKey: "run-1" });
+    Object.assign(fake.state.room.workspaceState.workroomDrive, { runKey: "delivery-cycle-is-not-the-session-task" });
     await expect(validateEngagementTask({ ...execution, db: fake.db as never })).rejects.toThrow(/credential_scope_refused/);
     fake.credential.workroomRef = binding.workroomId;
     fake.credential.runRef = "old-run";
