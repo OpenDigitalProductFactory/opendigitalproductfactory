@@ -16,8 +16,7 @@ type ReviewProjection = Pick<Awaited<ReturnType<typeof loadSemanticReviewRoomPro
 type WorkroomReadback = { capsule: Record<string, unknown>; log?: { afterSequence: number; activity: unknown[]; hasMore: boolean } };
 
 /** Preserve actionable facts instead of letting the route replace the whole room with a text preview. */
-export function boundWorkroomRecoveryReadback(data: WorkroomReadback, maxChars: number) {
-  const fits = (value: unknown) => JSON.stringify(value).length <= maxChars;
+export function boundWorkroomRecoveryReadback(data: WorkroomReadback, fits: (value: unknown) => boolean) {
   if (fits(data)) return data;
   const retainedKeys = ["id", "capsuleId", "status", "backlogItemId", "repositoryFullName", "baseBranch", "baseSha",
     "headBranch", "headSha", "worktreePath", "executorKind", "executorRef", "leaseHolderPrincipalId", "leaseExpiresAt",

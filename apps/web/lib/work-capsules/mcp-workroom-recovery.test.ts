@@ -5,6 +5,7 @@ const db = vi.hoisted(() => ({ workroom: { findUnique: vi.fn() }, workroomActivi
 vi.mock("@dpf/db", () => ({ prisma: db }));
 
 import { getWorkCapsuleTool } from "./mcp-handlers";
+import { clampToolResultForModel, MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
 
 const now = new Date();
 const room = { id: "room-row", capsuleId: "WC-1", title: "Review recovery", objective: "Expose recorded review state",
@@ -76,6 +77,21 @@ describe("get_workroom native review readback", () => {
     expect(JSON.stringify(result.data).length).toBeLessThanOrEqual(100_000);
     expect(result).toMatchObject({ success: true, data: { capsule: { recovery: { state: "working" } },
       log: { afterSequence: 0, activity: [], hasMore: true, incomplete: true, reason: "activity-page-budget-exceeded" } } });
+  });
+
+  it("keeps current recovery parseable at the actual model-facing response boundary", async () => {
+    const ownership = { leaseHolderPrincipalId: "PRN-OWNER", leaseExpiresAt: now, updatedAt: now, executorRef: "session-1" };
+    db.workroom.findUnique.mockResolvedValue({ ...room, ...ownership, workspaceState: "" });
+    const empty = await getWorkCapsuleTool({ capsuleId: "WC-1" }, "requester-1");
+    const padding = MCP_ROUTE_TOOL_RESULT_CHAR_CAP - JSON.stringify(empty.data).length;
+    db.workroom.findUnique.mockResolvedValue({ ...room, ...ownership, workspaceState: "x".repeat(padding) });
+    const result = await getWorkCapsuleTool({ capsuleId: "WC-1" }, "requester-1");
+    const formatted = clampToolResultForModel(result, { maxChars: MCP_ROUTE_TOOL_RESULT_CHAR_CAP });
+    expect(formatted.truncated).toBe(false);
+    const readback = JSON.parse(formatted.text.slice(formatted.text.indexOf("\n") + 1));
+    expect(readback).toMatchObject({ capsule: { ...ownership, leaseExpiresAt: now.toISOString(), updatedAt: now.toISOString(),
+      headSha: room.headSha, worktreePath: room.worktreePath, recovery: { state: "working" } },
+      omittedFields: expect.arrayContaining(["capsule.workspaceState"]) });
   });
 
   it("reports an explicit failure when exact identity itself cannot fit, instead of returning a truncated identity", async () => {

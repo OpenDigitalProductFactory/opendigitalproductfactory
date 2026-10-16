@@ -63,7 +63,7 @@ import { createWorkroomBoundToBacklogItem } from "./create-workroom-binding";
 import { workCapsuleActor as actor } from "./handler-actor";
 import { commandDb } from "./receipted-tool";
 import { parseScopeReleaseClaims, scopeReleaseWasOrdinary } from "./scope-release-authorization";
-import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
+import { clampToolResultForModel, MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
 type ToolContext = {
   routeContext?: string;
   agentId?: string;
@@ -217,14 +217,16 @@ export async function getWorkCapsuleTool(params: Record<string, unknown>, userId
   // BI-62514632: the room's log from a position the caller already holds.
   const log = afterSequence === undefined ? null
     : { afterSequence, ...(await readActivityAfter(prisma as never, { workCapsuleId: capsule.id, afterSequence })) };
+  const message = `Loaded ${capsule.capsuleId}.`;
   const data = boundWorkroomRecoveryReadback({ capsule: { ...capsule, recovery: projectWorkroomRecovery(capsule, reviews), nestedCoordination },
-    ...(log ? { log } : {}) }, MCP_ROUTE_TOOL_RESULT_CHAR_CAP);
+    ...(log ? { log } : {}) }, value => !clampToolResultForModel({ success: true, message, data: value },
+      { maxChars: MCP_ROUTE_TOOL_RESULT_CHAR_CAP, toolName: "get_workroom" }).truncated);
   if (!data) return { success: false, error: "workroom_recovery_budget_exceeded",
     message: "Exact Workroom identity and recovery exceed the response budget. No partial identity or passing readiness is reported; bounded-detail repair is required." };
   return {
     success: true,
     entityId: capsule.capsuleId,
-    message: `Loaded ${capsule.capsuleId}.`,
+    message,
     data,
   };
 }
