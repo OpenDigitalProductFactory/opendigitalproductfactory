@@ -481,6 +481,12 @@ supported same-parent readiness result after containing CAN-TEST may establish
 the effect on the original refusal. Do not replay its uncertain reviewer task.
 This section records a proposed bounded repair, not executed tests or approval.
 
+Backlog coverage for this atomic repair: `cmvbclq0200c701o3aqnd4j74`, parent
+and sole delivery mapping `BI-E2EEE278`, no independent dependencies. The
+receipt binds the ordered fix above at commit
+`1f737a9f27a57eb660c5cb060a04202ebb7ee3b4`, blob
+`d67595daf0f5f94768941513b205b24f4d6c726e`; it confers no parent baseline.
+
 ## 9. Plan coverage, dependencies, and traceability
 
 The existing `plan-backlog-coverage` receipt remains the canonical decomposition graph. Its current unversioned payload is treated as legacy version 1. Governed feature/archetype/cross-domain implementation requires version 2; the reader remains capable of projecting version 1 for existing items but version 1 cannot satisfy the new traceability gate. Version 2 adds `schemaVersion: 2`, an immutable plan artifact reference/digest, and the following fields to each independently shippable deliverable:

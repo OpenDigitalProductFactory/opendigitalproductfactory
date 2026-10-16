@@ -106,6 +106,8 @@ export type TerminalRecoveryPorts = {
     baseSha: string;
     headSha: string;
     backlogBody?: string | null;
+    subjectItemId?: string;
+    headBranch?: string;
     purpose?: "post-implementation-review";
   }): Promise<Awaited<ReturnType<typeof discoverCanonicalReviewArtifact>>>;
   resolveRecovery(args: Parameters<typeof resolveInitiativeReviewerRecovery>[0]): Promise<InitiativeReviewerRecovery>;
@@ -603,6 +605,9 @@ export async function resolveTerminalInitiativeRecovery(args: {
       repositoryFullName: room.repositoryFullName,
       baseSha: room.baseSha,
       headSha: room.headSha,
+      subjectItemId: args.decision.subject.id,
+      headBranch: room.headBranch,
+      backlogBody: await ports.loadBacklogBody?.(args.decision.subject.id),
     });
   if (discovered && !discovered.resolved) {
     return escalation("canonical-artifact-unavailable", discovered.nextAction);
