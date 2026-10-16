@@ -128,6 +128,20 @@ That flag describes recorded SHA syntax, not observed Git state, approval or
 publication authority. The existing local Git capture observes the actual
 repository, branch, worktree, merge base and head on the caller's host.
 
+**Current and historical review readback.** `get_workroom` and room liveness use
+the same bounded recovery projection. A complete history containing only older
+source is not a failed read, and its outcomes remain explicitly historical.
+Readback includes at most five historical executions and marks truncation;
+their requester-bound `tasks/result` actions retain the existing access check.
+No historical pass, task completion or source identity flag approves the current
+source. Missing current review, incomplete observation and conflicting identity
+remain distinct unknown states. Their recovery names the existing room holder
+principal when recorded and the delivery-coordinator role, then directs callers
+to `get_backlog_item(itemId, recoveryGate: "post-implementation-review")` for the
+current issuer's action. An unlinked room must first be linked by its coordinator.
+Repeating the identical room read does not repair that condition; historical
+unknown provider work must not be replayed or assigned a new request nonce.
+
 An unusable legacy value is named in `identityRepair.missingFields` and excluded
 from the repair packet; valid recorded values are retained. Capture the actual
 missing values locally, then use the issued `adopt_worktree` packet or retry the

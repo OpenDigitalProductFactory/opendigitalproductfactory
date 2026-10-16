@@ -119,7 +119,7 @@ databaseSuite("semantic review readback SQL on PostgreSQL", () => {
     data.room.headSha = "c".repeat(40);
     const result = await project(data);
     expect(result.runs[0].identityScope).toBe("historical");
-    expect(result.partial).toBe(true);
+    expect(result.partial).toBe(false);
     expect(result.attentionReason).toContain("No request for the current source version");
   });
 

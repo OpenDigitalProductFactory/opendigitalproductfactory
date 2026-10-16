@@ -130,7 +130,6 @@ export async function loadSemanticReviewRoomProjection(db: ReviewerRoomClient, c
       : latest.get(identity.capsuleId)?.rowId === row.id ? "current" : "historical";
     if (identityScope === "unknown") partial = true;
     if (identity && validIdentity(identity) && !latest.has(identity.capsuleId)) {
-      partial = true;
       attentionReason ??= "No request for the current source version is in the displayed review history.";
     }
     const state = projectRecordedTaskState(row.status);

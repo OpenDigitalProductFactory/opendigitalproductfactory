@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({ workroom: { findUnique: vi.fn() }, workroomActivity: { findMany: vi.fn() },
-  taskRun: { findMany: vi.fn() }, $queryRaw: vi.fn() }));
+  taskRun: { findMany: vi.fn() }, backlogItem: { findMany: vi.fn() }, $queryRaw: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: db }));
+vi.mock("../portfolio/investment-balance-server", () => ({ projectItemInvestment: vi.fn(async () => null) }));
 
 import { getWorkCapsuleTool } from "./mcp-handlers";
 import { clampToolResultForModel, MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
@@ -17,6 +18,7 @@ describe("get_workroom native review readback", () => {
     vi.resetAllMocks();
     db.workroom.findUnique.mockResolvedValue(room);
     db.workroomActivity.findMany.mockResolvedValue([]);
+    db.backlogItem.findMany.mockResolvedValue([]);
     db.taskRun.findMany.mockResolvedValue([{ id: "review-row", taskRunId: "TR-REVIEW", userId: "requester-1",
       status: "working", updatedAt: now, lastHeartbeatAt: now,
       progressPayload: { privateProviderOutput: "must-not-escape", semanticReview: { schemaVersion: 1,
@@ -24,6 +26,17 @@ describe("get_workroom native review readback", () => {
     db.$queryRaw.mockResolvedValue([{ rowId: "review-row", capsuleId: "WC-1", requestBound: true, requestSchemaVersion: 2, requestArtifactType: "code-change", identityArtifactType: "code-change", identityArtifactTypePresent: true,
       requesterAgentId: "AGT-EXT-CODEX", sourceHeadSha: room.headSha, currentHeadSha: room.headSha,
       issuedAt: new Date(now.getTime() - 1_000).toISOString() }]);
+  });
+
+  it("resolves a Build Studio row-id linkage before emitting the semantic backlog recovery call", async () => {
+    db.workroom.findUnique.mockResolvedValue({ ...room, backlogItemId: "backlog-row" });
+    db.taskRun.findMany.mockRejectedValue(new Error("review unavailable"));
+    db.backlogItem.findMany.mockResolvedValue([{ id: "backlog-row", itemId: "BI-EXISTING" }]);
+    expect(await getWorkCapsuleTool({ capsuleId: "WC-1" }, "requester-1")).toMatchObject({ data: { capsule: { recovery: {
+      state: "unknown", blocker: { action: { toolName: "get_backlog_item",
+        args: { itemId: "BI-EXISTING", recoveryGate: "post-implementation-review" } } },
+    } } } });
+    expect(db.backlogItem.findMany).toHaveBeenCalledTimes(1);
   });
 
   it("exposes metadata-linked execution without leaking the private task payload", async () => {
