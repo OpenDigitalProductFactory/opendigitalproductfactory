@@ -622,3 +622,15 @@ room status. **Next rooms** continues through open rooms; the count is for the
 displayed page. Selecting **Operation** from a room's process returns to the
 same filters and page. Recorded stage waits are shown when the drive has named
 the stage and responsible role.
+
+In **Details**, expand **Review requirements** to see what this source of work
+requires. Each requirement names its expected outcome, comparison population,
+evidence fields and inherited sources. Technical profile identity and unresolved
+references stay in a second disclosure. A profile that composes correctly has
+not necessarily been assessed; organization fit and missing evidence remain
+explicit. Conflicting or unsupported requirements need reconciliation.
+
+**Did the change help?** explains when no independent assessment is available
+in this view. A receipt, completed cycle or deployed change alone does not prove
+improvement. Assessment requires an applied version, a comparison window and an
+independent reviewer. An unknown result is not a success percentage.
