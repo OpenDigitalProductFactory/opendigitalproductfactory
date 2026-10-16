@@ -1,4 +1,4 @@
-import type { ToolResult } from "@/lib/mcp-tool-types";
+import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import { resolveEpicRowId, resolveListLimit } from "./backlog-read-helpers";
 import { addScopeFilters, backlogScopeSelect, scopeData } from "./backlog-scope-metadata";
 import { boundedBacklogRecoveryRead, canReadRecoveryPacket, isRecoveryReadGate, recoveryReadDecision } from "../backlog-recovery-read";
@@ -384,7 +384,7 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
   };
 }
 
-export async function getBacklogItem(params: Record<string, unknown>, currentAgentId: string | null = null, currentUserId?: string): Promise<ToolResult> {
+export async function getBacklogItem(params: Record<string, unknown>, currentAgentId: string | null = null, currentUserId?: string, context?: ToolExecutionContext): Promise<ToolResult> {
   const { prisma } = await import("@dpf/db");
   const itemIdRaw = String(params["itemId"] ?? "").trim();
   if (!itemIdRaw)
@@ -488,10 +488,21 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
     && (requestedGate !== undefined || [...completion.blockers, ...completion.unmet]
       .some((entry) => ["POST_IMPLEMENTATION_REVIEW_REQUIRED", "PLAN_REVIEW_REQUIRED",
         "ACCEPTANCE_EVIDENCE_REQUIRED", "OBJECTIVE_RECONCILIATION_REQUIRED"].includes(entry.code)));
+  let taskAuthority: { userId: string; taskAuthorityKey: string } | null = null;
+  if (needsTerminalRecovery && requestedGate === "plan-review" && context?.authSource === "oauth") {
+    const taskAuthorityKey = currentUserId && context.apiTokenId
+      ? await (await import("@/lib/auth/oauth-task-authority")).resolveMcpTaskAuthorityKey({
+        tokenId: context.apiTokenId, userId: currentUserId, source: "oauth",
+      }) : null;
+    if (!taskAuthorityKey || !currentUserId) return { success: false, error: "review_task_authority_unavailable",
+      message: "The current connection's review task authority could not be verified. No replacement request was delivered; restore the authorized connection before reading plan recovery." };
+    taskAuthority = { userId: currentUserId, taskAuthorityKey };
+  }
   const recovery = needsTerminalRecovery
     ? await (await import("@/lib/backlog/initiative-readiness/terminal-recovery")).resolveTerminalInitiativeRecovery({
       currentUserId,
         decision: completion, currentAgentId, refusedWorkroomId: null,
+        ...(taskAuthority ? { taskAuthority } : {}),
       })
     : undefined;
   if (requestedGate !== undefined) {

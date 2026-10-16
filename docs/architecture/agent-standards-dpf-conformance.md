@@ -151,6 +151,8 @@ oversized request explicitly rather than returning a partial packet. Re-read the
 same gate after source or readiness changes; submit only the issued request,
 unchanged. Research recovery names the author-owned evidence writer and never
 creates an independent research reviewer. Packet delivery is not a review
-receipt or acceptance. The shared projection lives in
+receipt or acceptance. A bounded plan read uses the current server-derived
+OAuth task family for existing retry history; caller input cannot select or
+reset that authority. The shared projection lives in
 `apps/web/lib/mcp/backlog-recovery-read.ts`; existing readiness and dispatch
 remain the authority for eligibility and immutable packet equality.

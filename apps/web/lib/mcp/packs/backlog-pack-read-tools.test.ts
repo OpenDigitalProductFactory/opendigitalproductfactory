@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   readCompletion: vi.fn(),
   roomAccess: vi.fn(),
   roomIdentity: vi.fn(),
+  taskAuthority: vi.fn(),
 }));
 
 const CORPUS_AVAILABLE = { available: true, root: "/repo", searchedPaths: ["docs/superpowers/specs", "docs/superpowers/plans"], missingPaths: [], fileCount: 2, reason: "Searched 2 markdown file(s)." };
@@ -54,8 +55,14 @@ vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({
   resolveAgentWorkroomAccess: mocks.roomAccess,
   resolveHumanWorkroomAccess: mocks.roomAccess,
 }));
+vi.mock("@/lib/auth/oauth-task-authority", () => ({ resolveMcpTaskAuthorityKey: mocks.taskAuthority }));
 
 import { getBacklogItem, listBacklogItems } from "./backlog-pack-read-tools";
+import { resolveInitiativeReviewerRecovery } from "@/lib/tak/initiative-readiness-tool-grants";
+import { createExhaustedPlanReviewPredicate } from "@/lib/backlog/initiative-readiness/exhausted-plan-review";
+import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
+import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness/types";
+import { deterministicExternalTaskRunId, remoteTaskRequestDigest } from "@/lib/mcp-task-capacity-contract";
 
 const baseItem = {
   itemId: "BI-DEFERRAL",
@@ -100,6 +107,7 @@ describe("backlog deferral read projection", () => {
     mocks.roomAccess.mockImplementation(async ({ workroomId }) => ({ decision: {
       level: workroomId === "relational-room-row" ? "content" : "none",
     } }));
+    mocks.taskAuthority.mockResolvedValue("oauth-family:one");
   });
 
   it("does not report a plan-only epic as having a spec", async () => {
@@ -230,6 +238,60 @@ describe("backlog deferral read projection", () => {
     expect(result).toMatchObject({ success: true, data: { recovery } });
     expect(mocks.resolveTerminalRecovery).toHaveBeenCalledWith(expect.objectContaining({ decision: plan }));
     expect(JSON.stringify(result).length).toBeLessThanOrEqual(8_000);
+  });
+
+  it("uses the trusted OAuth task family so a retained exhausted plan packet is not issued again", async () => {
+    mocks.findUnique.mockResolvedValue({ ...baseItem, id: "row-bi", status: "open", body: null,
+      createdAt: new Date("2026-09-21T00:00:00Z"), completedAt: null, deferOwnerPrincipal: null,
+      epic: null, digitalProduct: null, organization: null, productLine: null, businessProduct: null,
+      demandEvidenceLinks: [], activities: [],
+    });
+    const decision: InitiativeReadinessDecision = {
+      decisionId: "IRD-PLAN", policyVersion: "initiative-readiness.v3", subject: { kind: "backlog-item", id: baseItem.itemId },
+      transitionObject: { kind: "work-capsule", id: "WC-BOUND", expectedVersion: "claim.v1", targetState: "implementation" },
+      profile: "feature", target: "implementation", verdict: "input-required", satisfied: [], blockers: [],
+      unmet: [readinessRequirement({ code: "PLAN_REVIEW_REQUIRED", state: "missing", accountableRole: "plan-reviewer" })],
+      evaluatedAt: "2026-10-16T00:00:00Z",
+    };
+    const history = vi.fn();
+    const issue = (taskAuthority: { userId: string; taskAuthorityKey: string } | null) => resolveInitiativeReviewerRecovery({
+      decision, currentAgentId: "AGT-AUTHOR", expectedCurrentBaselineId: "BASE-ONE",
+      dispatchContext: { workroomId: "WC-BOUND", repositoryFullName: "org/repo", branchName: "fix/one", headSha: "a".repeat(40) },
+      planArtifact: { resolved: true, path: "docs/superpowers/plans/one.md", commitSha: "b".repeat(40), providerBlobId: "c".repeat(40) },
+      db: { agentToolGrant: { findMany: async () => ["AGT-A", "AGT-B"].flatMap(agentId =>
+        ["initiative_design_review", "file_read"].map(grantKey => ({ grantKey, agent: {
+          agentId, displayName: agentId, status: "active", archived: false, lifecycleStage: "production",
+        } }))) } },
+      isPlanReviewExhausted: createExhaustedPlanReviewPredicate(taskAuthority, { taskRun: { findFirst: history } }),
+    });
+    const oldPacket = (await issue(null)).reviewerRoutes[0]!.requestCoworker;
+    const authority = { userId: "user-1", taskAuthorityKey: "oauth-family:one" };
+    const authorityScope = ["initiative_evidence_write", `backlog-item:${baseItem.itemId}`, ...oldPacket.requiredToolNames!.map(name => `tool:${name}`)];
+    const submitted = { agentId: oldPacket.targetAgent, objective: oldPacket.objective, prompt: oldPacket.objective,
+      title: oldPacket.questionPacketSummary, idempotencyKey: oldPacket.requestKey, routeContext: "/build",
+      riskClass: "bounded-write" as const, collaborationKind: "handoff" as const, authorityScope,
+      initiativeReviewBinding: oldPacket.initiativeReviewBinding };
+    history.mockResolvedValue({ taskRunId: deterministicExternalTaskRunId(authority.taskAuthorityKey, oldPacket.requestKey),
+      userId: "user-1", currentAgentId: "AGT-A", status: "input-required", authorityScope,
+      a2aMetadata: { taskAuthorityKey: authority.taskAuthorityKey, idempotencyKey: oldPacket.requestKey,
+        requestedAgentId: "AGT-A", requestDigestVersion: 2, requestDigest: remoteTaskRequestDigest(submitted) },
+      progressPayload: { terminalWriterWait: { schemaVersion: 1, kind: "missing-terminal-writer",
+        writerToolName: "record_initiative_design_review", resumeMode: "same-taskrun", attempt: 3, observedAt: "2026-10-16T00:00:00Z" } },
+    });
+    const validator = await issue(authority);
+    expect(validator.reviewerRoutes[0]!.requestCoworker.targetAgent).toBe("AGT-B");
+    mocks.projectReadiness.mockReturnValue({ decisions: { implementation: decision, completion: decision } });
+    mocks.resolveTerminalRecovery.mockImplementation(({ taskAuthority }) => issue(taskAuthority ?? null));
+    const params = { itemId: baseItem.itemId, recoveryGate: "plan-review", taskAuthorityKey: "untrusted-client-family" };
+    const context = { authSource: "oauth", apiTokenId: "token-row" };
+    const read = await Reflect.apply(getBacklogItem, undefined, [params, "AGT-AUTHOR", "user-1", context]);
+    expect(read.data.recovery.reviewerRoutes).toEqual(validator.reviewerRoutes);
+    expect(read.data.recovery.reviewerRoutes[0].requestCoworker).not.toEqual(oldPacket);
+    expect(mocks.taskAuthority).toHaveBeenCalledWith({ tokenId: "token-row", userId: "user-1", source: "oauth" });
+    mocks.taskAuthority.mockResolvedValue(null);
+    const revoked = await Reflect.apply(getBacklogItem, undefined, [params, "AGT-AUTHOR", "user-1", context]);
+    expect(revoked).toMatchObject({ success: false, error: "review_task_authority_unavailable" });
+    expect(revoked.data ?? {}).not.toHaveProperty("recovery");
   });
 
   it.each(["OBJECTIVE_RECONCILIATION_REQUIRED", "ACCEPTANCE_EVIDENCE_REQUIRED", "PLAN_REVIEW_REQUIRED"])(
