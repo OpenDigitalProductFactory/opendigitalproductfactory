@@ -4,10 +4,14 @@ status: draft
 
 # Book proposal: Engineering Accountable Agents
 
-**Working subtitle:** Principles, permissions and evidence across models and runtimes  
-**Proposed author:** Mark Bodman  
-**Editorial status:** Informative review draft, 16 October 2026  
-**Programme:** EP-B932453F · BI-6AC40460  
+**Working subtitle:** Principles, permissions and evidence across models and runtimes
+
+**Proposed author:** Mark Bodman
+
+**Editorial status:** Informative review draft, 16 October 2026
+
+**Programme:** EP-B932453F · BI-6AC40460
+
 **Proposed format:** Approximately 75,000–85,000 words, twelve chapters, diagrams, implementation exercises and a separately versioned companion repository.
 
 This is a proposal for review. It neither commits the author to a full manuscript
