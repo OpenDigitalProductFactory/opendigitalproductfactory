@@ -9,6 +9,7 @@ import { join, dirname, resolve } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createServer } from 'node:http';
+import { guardShellEnv } from './guard-bash.mjs';
 
 const script = readFileSync(
   fileURLToPath(new URL("../dev-portal-lease.sh", import.meta.url)),
@@ -122,6 +123,16 @@ test('actual Docker mount and source/lease labels must match the admitted previe
   actual.Mounts[0].Source = '/root';
   assert.throws(() => assertPreviewContainer(actual, identity), /actual_mount_mismatch/);
 });
+test('actual Docker Desktop Windows mount identifies only its admitted host worktree', () => {
+  const windows = { ...identity, worktree: 'D:/DPF-worktrees/scoped-investment-balance' };
+  const actual = { Mounts: [{ Type: 'bind', Source: '/run/desktop/mnt/host/d/DPF-worktrees/scoped-investment-balance', Destination: '/workspace' }], Config: { Labels: previewOverride(windows).services['dev-portal'].labels, Env: ['DPF_ENVIRONMENT_CLASS=development', `DPF_PREVIEW_SOURCE_SHA=${windows.sha}`, `DPF_PREVIEW_LEASE_ID=${windows.leaseId}`] } };
+  assertPreviewContainer(actual, windows);
+  for (const wrong of ['/run/desktop/mnt/host/e/DPF-worktrees/scoped-investment-balance', '/run/desktop/mnt/host/d/DPF-source-root', 'DPF-worktrees/scoped-investment-balance', '/run/desktop/mnt/host/d/DPF-worktrees/../DPF-source-root']) {
+    actual.Mounts[0].Source = wrong;
+    assert.throws(() => assertPreviewContainer(actual, windows), /actual_mount_mismatch/);
+  }
+});
+
 test('startup isolates dependencies, waits for clone success, verifies actual binding, then permits serving', async () => {
   const calls = [];
   await runPreviewLifecycle({ compose: async args => calls.push(args), inspect: async () => calls.push('inspect'),
@@ -221,6 +232,7 @@ test('the policy claim-key suite runs without installed workspace dependencies',
     const shared = join(fixture, 'packages/integration-shared/src');
     mkdirSync(shared, { recursive: true });
     cpSync(join(source, '../../packages/integration-shared/src/delivery-readiness-contract.cjs'), join(shared, 'delivery-readiness-contract.cjs'));
+    cpSync(join(source, '../../packages/integration-shared/src/preview-mount-identity.cjs'), join(shared, 'preview-mount-identity.cjs'));
     // mcp-credential.mjs re-exports the client_credentials exchange from the skill pack (BI-84C1F526).
     const packLib = join(fixture, 'packages/dpf-skill-pack/scripts/lib');
     mkdirSync(packLib, { recursive: true });
@@ -288,7 +300,7 @@ test('the actual shell refuses same-SHA branch drift and newly dirty source befo
   { cwd: worktree, env: { ...process.env, DPF_DURABLE_RESUME: '', DPF_DURABLE_RESUMER: 'off' }, encoding: 'utf8' });
   assert.equal(replay.status, 75, replay.stderr);
   assert.equal(JSON.parse(replay.stderr.trim()).reason, 'disabled');
-  const deps = { now, env: { ...process.env, DPF_DURABLE_RESUME: '1', DPF_DEV_PORTAL_CURL_BIN: 'missing-preview-test-transport', DPF_DEV_PORTAL_BRANCH: 'feat/original' } };
+  const deps = { now, env: { ...guardShellEnv(), DPF_DURABLE_RESUME: '1', DPF_DEV_PORTAL_CURL_BIN: 'missing-preview-test-transport', DPF_DEV_PORTAL_BRANCH: 'feat/original' } };
   const branchDrift = await resumePreviewQueue({ ...pin, worktree, sha, branch: 'feat/original', mcpUrl: 'http://127.0.0.1:1/api/mcp/v1' },
     { ...deps, readSource: () => ({ sha, branch: 'feat/original', dirty: false }) });
   assert.equal(branchDrift.code, EXIT_SOURCE_DRIFT);
@@ -304,7 +316,7 @@ test('the actual shell refuses source drift between consumer inspection and its 
   const sha = '0'.repeat(40);
   const result = await resumePreviewQueue({ ...pin, worktree, sha, mcpUrl: 'http://127.0.0.1:1/api/mcp/v1' }, {
     now, readSource: () => ({ sha, branch: pin.branch, dirty: false }),
-    env: { ...process.env, DPF_DURABLE_RESUME: '1', DPF_DEV_PORTAL_CURL_BIN: 'missing-preview-test-transport' },
+    env: { ...guardShellEnv(), DPF_DURABLE_RESUME: '1', DPF_DEV_PORTAL_CURL_BIN: 'missing-preview-test-transport' },
   });
   assert.equal(result.code, EXIT_SOURCE_DRIFT);
 });

@@ -5,6 +5,7 @@ import { mintAutomationSignIn, type AutomationSignInDb } from "./automation-sign
 import { syncUserPrincipal } from "@/lib/identity/principal-linking";
 import { isTerminalCapsuleStatus } from "@/lib/work-capsules/work-capsule-branch-identity";
 import { workCapsuleActor } from "@/lib/work-capsules/handler-actor";
+import { previewMountMatches } from "../../../../packages/integration-shared/src/preview-mount-identity.cjs";
 
 const exec = promisify(execFile);
 export type PreviewAdmission = {
@@ -30,7 +31,7 @@ export function assertPreviewIssuerContainer(container: {
   if (!ports?.length || ports.some(port => port.HostPort !== "3001" || !["127.0.0.1", "::1"].includes(port.HostIp))
       || !container.State?.Running || labels?.["com.docker.compose.service"] !== "dev-portal"
       || labels?.["dpf.preview.lease"] !== lease.leaseId || labels?.["dpf.preview.sha"] !== sha
-      || mount?.Type !== "bind" || mount.Source !== lease.worktreePath
+      || mount?.Type !== "bind" || !previewMountMatches(mount.Source, lease.worktreePath)
       || !container.Config?.Env?.includes("DPF_ENVIRONMENT_CLASS=development")) throw new Error("preview_issuer_binding_mismatch");
 }
 

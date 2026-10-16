@@ -1,5 +1,16 @@
 # Platform Support Watch-List (living document)
 
+## Contributor preview mount identity on Docker Desktop (BI-0ACB97B5)
+
+The Windows host records the admitted worktree as a drive-absolute path while
+Docker Desktop reports its bind source as `/run/desktop/mnt/host/<drive>/...`.
+The preview supervisor and Linux-hosted sign-in issuer share the same path
+comparison. Translation applies only to a Windows admission; another drive,
+another worktree, relative paths and traversal fail closed. Source SHA, lease,
+loopback port, environment class and current ownership checks remain required.
+Regression fixtures cover both verification adapters; a failed initialization
+or binding check never earns a served UX pass.
+
 ## Capability reconciliation on release installs (BI-5ACBAC50)
 
 The portal's Linux container is not the host platform. Explicit v2 runtime

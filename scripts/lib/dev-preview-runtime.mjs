@@ -1,4 +1,5 @@
 import { DELIVERY_WORKFLOW_TOOLS, deliveryReadinessFromDiscovery } from '../../packages/integration-shared/src/delivery-readiness-contract.cjs';
+import { previewMountMatches } from '../../packages/integration-shared/src/preview-mount-identity.cjs';
 export const REQUIRED_PREVIEW_DELIVERY_TOOLS = DELIVERY_WORKFLOW_TOOLS;
 import { gitText } from './git.mjs';
 import { spawn } from 'node:child_process';
@@ -65,7 +66,7 @@ export function assertPreviewConfig(config, { worktree, sha, leaseId }) {
 
 export function assertPreviewContainer(container, { worktree, sha, leaseId }) {
   const mount = container.Mounts?.find(volume => volume.Destination === '/workspace');
-  if (mount?.Type !== 'bind' || resolve(mount.Source) !== worktree) throw new Error('preview_actual_mount_mismatch');
+  if (mount?.Type !== 'bind' || !previewMountMatches(mount.Source, worktree)) throw new Error('preview_actual_mount_mismatch');
   if (!container.Config?.Env?.includes('DPF_ENVIRONMENT_CLASS=development')
       || !container.Config?.Env?.includes(`DPF_PREVIEW_SOURCE_SHA=${sha}`)
       || !container.Config?.Env?.includes(`DPF_PREVIEW_LEASE_ID=${leaseId}`)) throw new Error('preview_actual_environment_mismatch');
