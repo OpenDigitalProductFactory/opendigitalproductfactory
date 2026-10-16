@@ -131,7 +131,8 @@ function addWorktree(root, target, branch) {
 async function bindAtBirth({ mainRoot, worktreePath, branch }) {
   let bind;
   try {
-    const source = verifiedBindingSource({ mainRoot, worktreePath, branch });
+    const headSha = git(mainRoot, ["rev-parse", "--verify", `refs/heads/${branch}^{commit}`], { timeout: 3000 });
+    const source = verifiedBindingSource({ mainRoot, worktreePath, branch, headSha });
     const module = await import(pathToFileURL(source).href);
     if (typeof module.bindWorktreeToWorkroom !== "function" || typeof module.resolveWorktreeSourceIdentity !== "function") {
       throw new Error("source binder lacks the source identity contract");
@@ -160,14 +161,16 @@ async function bindAtBirth({ mainRoot, worktreePath, branch }) {
 }
 
 /** Resolve only the checkout whose branch and shared Git repository we created. */
-export function verifiedBindingSource({ mainRoot, worktreePath, branch }) {
+export function verifiedBindingSource({ mainRoot, worktreePath, branch, headSha }) {
   const real = path => realpathSync.native(path);
   const same = (left, right) => process.platform === "win32"
     ? real(left).toLowerCase() === real(right).toLowerCase() : real(left) === real(right);
   const read = (root, args) => git(root, args, { timeout: 3000 });
   const root = real(worktreePath);
-  if (!same(root, read(root, ["rev-parse", "--show-toplevel"]))
+  if (!/^[a-f0-9]{40}$/i.test(headSha ?? "")
+    || !same(root, read(root, ["rev-parse", "--show-toplevel"]))
     || read(root, ["symbolic-ref", "--quiet", "--short", "HEAD"]) !== branch
+    || read(root, ["rev-parse", "--verify", "HEAD^{commit}"]) !== headSha
     || !same(read(root, ["rev-parse", "--path-format=absolute", "--git-common-dir"]),
       read(mainRoot, ["rev-parse", "--path-format=absolute", "--git-common-dir"]))) {
     throw new Error("source checkout, branch or shared repository conflicts with worktree creation");

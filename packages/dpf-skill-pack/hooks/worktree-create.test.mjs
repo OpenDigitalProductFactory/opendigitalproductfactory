@@ -195,9 +195,10 @@ for (const scenario of ["foreign-source", "missing-helper", "unsupported-helper"
 
 test("source validation refuses conflicting branch, nested path, non-Git and foreign repository before import", async t => {
   const f = await packagedFixture(t);
-  const binding = { mainRoot: f.root, worktreePath: f.root, branch: "main" };
+  const binding = { mainRoot: f.root, worktreePath: f.root, branch: "main", headSha: f.sha };
   assert.equal(verifiedBindingSource(binding), realpathSync.native(join(f.root, "scripts/lib/workroom-bind.mjs")));
   assert.throws(() => verifiedBindingSource({ ...binding, branch: "other" }), /conflicts/);
+  assert.throws(() => verifiedBindingSource({ ...binding, headSha: "0".repeat(40) }), /conflicts/);
   assert.throws(() => verifiedBindingSource({ ...binding, worktreePath: join(f.root, "packages") }), /conflicts/);
   assert.throws(() => verifiedBindingSource({ ...binding, worktreePath: f.pack }), /git .*failed|Command failed/);
   assert.throws(() => verifiedBindingSource({ ...binding, mainRoot: f.remote }), /conflicts/);
@@ -211,6 +212,6 @@ test("source validation does not follow a binder junction outside the verified c
   for (const path of [original, outside]) assert.ok(path.startsWith(resolve(f.directory) + sep));
   renameSync(original, outside);
   symlinkSync(outside, original, process.platform === "win32" ? "junction" : "dir");
-  assert.throws(() => verifiedBindingSource({ mainRoot: f.root, worktreePath: f.root, branch: "main" }), /escapes/);
+  assert.throws(() => verifiedBindingSource({ mainRoot: f.root, worktreePath: f.root, branch: "main", headSha: f.sha }), /escapes/);
   assert.equal(f.calls.length, 0);
 });

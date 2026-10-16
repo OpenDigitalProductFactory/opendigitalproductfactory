@@ -28,7 +28,7 @@ placement and caller adapter. Its copied package must locate the canonical
 helper in the Git-verified DPF checkout being created/reused, rather than assume
 repo scripts surround the installed pack. The created checkout is preferable
 to assuming the read-only main checkout contains current code. Validate the
-actual checkout, requested branch, common repository and DPF source markers
+actual checkout, Git-derived expected branch/head, common repository and DPF source markers
 before loading source code; require the identity-capable helper exports.
 Use file URLs and reject paths escaping the verified source root.
 
