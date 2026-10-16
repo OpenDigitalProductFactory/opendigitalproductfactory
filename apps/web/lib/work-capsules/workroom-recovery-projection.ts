@@ -1,6 +1,7 @@
 import type { InitiativeReviewerRecovery } from "@/lib/tak/initiative-readiness-tool-grants";
 import { projectRecordedTaskState } from "@/lib/tak/task-states";
 import type { loadSemanticReviewRoomProjection } from "@/lib/work-management/semantic-review-room-projection";
+import { isFullSourceCommitSha } from "./work-capsule-branch-identity";
 
 type WorkroomIdentity = {
   capsuleId?: string;
@@ -111,28 +112,26 @@ export function projectWorkroomIdentityRepair(
   packetFields: Record<string, unknown> = {},
 ): NonNullable<InitiativeReviewerRecovery["identityRepair"]> | null {
   const missingFields = [
-    ...(!room.baseSha ? ["baseSha" as const] : []),
-    ...(!room.headSha ? ["headSha" as const] : []),
+    ...(!isFullSourceCommitSha(room.baseSha) ? ["baseSha" as const] : []),
+    ...(!isFullSourceCommitSha(room.headSha) ? ["headSha" as const] : []),
   ];
   if (missingFields.length === 0) return null;
   const retainedFields = {
     repositoryFullName: room.repositoryFullName ?? "",
     headBranch: room.headBranch ?? "",
     worktreePath: room.worktreePath ?? "",
-    ...(room.baseSha ? { baseSha: room.baseSha } : {}),
-    ...(room.headSha ? { headSha: room.headSha } : {}),
+    ...(isFullSourceCommitSha(room.baseSha) ? { baseSha: room.baseSha } : {}),
+    ...(isFullSourceCommitSha(room.headSha) ? { headSha: room.headSha } : {}),
   };
+  // A caller's context cannot smuggle an unusable source value back into repair.
+  const { baseSha: _base, headSha: _head, ...context } = packetFields;
   return {
     toolName: "adopt_worktree",
     missingFields,
     retainedFields,
     packet: {
-      ...packetFields,
-      repositoryFullName: retainedFields.repositoryFullName,
-      headBranch: retainedFields.headBranch,
-      worktreePath: retainedFields.worktreePath,
-      ...(room.baseSha ? { baseSha: room.baseSha } : {}),
-      ...(room.headSha ? { headSha: room.headSha } : {}),
+      ...context,
+      ...retainedFields,
     },
   };
 }
