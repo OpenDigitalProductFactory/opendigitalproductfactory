@@ -11,6 +11,34 @@ import {
   type ProviderCapacityClassification,
 } from "./provider-capacity";
 
+/** Content-free constraint families shared by routing failures and their projections. */
+export type RoutingExclusionBucket = "account-model-eligibility" | "connection-excluded"
+  | "sensitivity-clearance" | "quality-floor" | "capability-floor" | "context-window"
+  | "output-capacity" | "residency" | "endpoint-status" | "model-class" | "other";
+export type RoutingEligibility = {
+  sensitivity: string;
+  residencyPolicy: string;
+  excludedCount: number;
+  exclusions: Array<{ bucket: RoutingExclusionBucket; count: number }>;
+};
+
+/** A routing refusal is not proof of zero dispatch until the outer call attests it. */
+export class NoEligibleEndpointsError extends Error {
+  providerDispatch: "not-started" | "unknown" = "unknown";
+  constructor(
+    public readonly taskType: string,
+    public readonly reason: string,
+    public readonly excludedCount: number,
+    public readonly missingCapability?: string,
+    public readonly agentId?: string,
+    public readonly eligibility?: RoutingEligibility,
+  ) {
+    super(`No eligible endpoints for task '${taskType}': ${reason}` +
+      (excludedCount > 0 ? ` (${excludedCount} endpoint(s) excluded)` : ""));
+    this.name = "NoEligibleEndpointsError";
+  }
+}
+
 export class InferenceError extends Error {
   constructor(
     message: string,

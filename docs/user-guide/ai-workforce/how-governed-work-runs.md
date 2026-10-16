@@ -388,3 +388,18 @@ a quieter room still asks permission for exactly the same things.
 
 You can set a room's pace on the room itself, and a default for all rooms under
 Priority & Models. See [Work Rooms](../workspace/work-rooms.md).
+
+
+## Continuing a review after a connection changes
+
+A changed AI connection does not make an unfinished review a new piece of work.
+DPF can supply the agent an exact recovery request for the original review. The
+same person and coworker must still have permission in that Workroom. Current
+permissions are checked again when work resumes, when tools run and when an
+approved action executes; the expired connection is retained as history.
+
+The review's original source, evidence and retry limits stay attached. If the
+prior execution is uncertain, cancelled or exhausted, DPF holds the request for
+reconciliation. Dispatch is not completion: the governed review receipt records
+the actual result. The agent obtains the supported request through the
+[initiative readiness recovery procedure](../../architecture/initiative-readiness-runbook.md#original-review-recovery-across-connection-changes).

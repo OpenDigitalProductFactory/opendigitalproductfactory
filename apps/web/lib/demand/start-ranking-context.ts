@@ -12,13 +12,18 @@ type InFlightRow = { investmentBucket: string | null; workType: string | null; e
 export async function loadStartRankingContext(
   db: { backlogItem: { findMany(args: unknown): Promise<unknown> } },
   config: { demandBucketTargets?: unknown } | null,
+  itemIds: readonly string[] = [],
 ): Promise<StartRankingContext> {
-  if (config?.demandBucketTargets == null) return {};
+  const investmentByItem = itemIds.length
+    ? await (await import("../portfolio/investment-balance-server")).loadInvestmentStartPreferences(db as never, itemIds)
+    : undefined;
+  if (config?.demandBucketTargets == null) return { investmentByItem };
   const inFlight = (await db.backlogItem.findMany({
     where: { activeBuildId: { not: null }, status: { in: ["open", "in-progress"] } },
     select: { investmentBucket: true, workType: true, effortSize: true },
   })) as InFlightRow[];
   return {
+    investmentByItem,
     bucketTargets: resolveDemandPolicy({ demandBucketTargets: config.demandBucketTargets }).bucketTargets,
     inFlight: inFlight.map((row) => ({
       investmentBucket: row.investmentBucket,

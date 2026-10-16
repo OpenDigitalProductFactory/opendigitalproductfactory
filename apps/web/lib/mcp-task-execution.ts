@@ -147,6 +147,27 @@ export async function executeRemoteTaskAttempt(input: {
       return displaced ?? { kind: "result", result: { taskRunId: run.taskRunId, status: "failed", isError: true, content: remoteTaskContent(message) } };
     }
   }
+  const progress = admittedRun.progressPayload && typeof admittedRun.progressPayload === "object"
+    && !Array.isArray(admittedRun.progressPayload) ? admittedRun.progressPayload as Record<string, unknown> : {};
+  // Stable authority and immutable windows survive every parked/terminal result;
+  // transient writer/capacity markers are still rebuilt by their owning branch.
+  const recoveryCheckpoint = Object.fromEntries(["reviewExecutionAuthority", "deadlineAt", "expiresAt"]
+    .filter(key => progress[key] !== undefined).map(key => [key, progress[key]])) as Prisma.InputJsonObject;
+  if (progress.reviewExecutionAuthority !== undefined) {
+    const { revalidateReviewExecutionAuthority } = await import("./mcp-task-review-recovery");
+    if (!await revalidateReviewExecutionAuthority({ token, parsed, userContext,
+      metadata: admittedRun.a2aMetadata, progress })) {
+      const displaced = await settle({ where: { taskRunId: run.taskRunId }, data: {
+        status: "input-required", completedAt: null, progressPayload: {
+          ...progress,
+          errorCode: "review_execution_authority_refused", requiresApproval: false,
+        } as Prisma.InputJsonValue,
+      } });
+      return displaced ?? { kind: "result", result: { taskRunId: run.taskRunId, status: "input-required", isError: true,
+        content: remoteTaskContent("Current review execution authority was refused; no inference was dispatched."),
+        structuredContent: { error: "review_execution_authority_refused" } } };
+    }
+  }
   const agent = await resolveAutonomousWorkAgent({
     agentId: parsed.agentId,
     routeContext: parsed.routeContext,
@@ -361,6 +382,7 @@ export async function executeRemoteTaskAttempt(input: {
         observedAt: new Date().toISOString() };
       const displaced = await settle({ where: { taskRunId: run.taskRunId }, data: {
         status: "input-required", completedAt: null, progressPayload: {
+          ...recoveryCheckpoint,
           ...priorProgress, summary: EXECUTION_UNCERTAIN_MESSAGE, requiresApproval: false,
           executionUncertainty: uncertainty,
           executedToolCount: result.executedTools?.length ?? 0, ...resumedFlag,
@@ -422,6 +444,7 @@ export async function executeRemoteTaskAttempt(input: {
           status: "input-required",
           completedAt: null,
           progressPayload: {
+            ...recoveryCheckpoint,
             ...approvalProgress,
             summary: result.content,
             riskClass: parsed.riskClass,
@@ -472,6 +495,7 @@ export async function executeRemoteTaskAttempt(input: {
           status: "input-required",
           completedAt: null,
           progressPayload: {
+            ...recoveryCheckpoint,
             ...priorProgress,
             summary: result.failure.message,
             riskClass: parsed.riskClass,
@@ -554,6 +578,7 @@ export async function executeRemoteTaskAttempt(input: {
           status: "input-required",
           completedAt: null,
           progressPayload: {
+            ...recoveryCheckpoint,
             summary: terminalWriterFailureMessage,
             riskClass: parsed.riskClass,
             executedToolCount: result.executedTools?.length ?? 0,
@@ -642,6 +667,7 @@ export async function executeRemoteTaskAttempt(input: {
           status: "submitted",
           completedAt: null,
           progressPayload: {
+            ...recoveryCheckpoint,
             summary: result.content,
             riskClass: parsed.riskClass,
             executedToolCount: 0,
@@ -676,6 +702,7 @@ export async function executeRemoteTaskAttempt(input: {
           status: "failed",
           completedAt: new Date(),
           progressPayload: {
+            ...recoveryCheckpoint,
             summary: result.content,
             riskClass: parsed.riskClass,
             executedToolCount: result.executedTools?.length ?? 0,
@@ -707,6 +734,7 @@ export async function executeRemoteTaskAttempt(input: {
         status: "completed",
         completedAt: new Date(),
         progressPayload: {
+          ...recoveryCheckpoint,
           summary: result.content,
           riskClass: parsed.riskClass,
           executedToolCount: result.executedTools?.length ?? 0,
@@ -739,6 +767,7 @@ export async function executeRemoteTaskAttempt(input: {
         status: "failed",
         completedAt: new Date(),
         progressPayload: {
+          ...recoveryCheckpoint,
           summary: message,
           riskClass: parsed.riskClass,
           ...resumedFlag,
