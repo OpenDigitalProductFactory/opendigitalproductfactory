@@ -10,6 +10,12 @@ For agentic workers: execute this plan one independently reviewable backlog item
 
 This plan implements BI-5445CECA atomically. Policy declaration, receipt validation, executor consumption and release admission form one enforcement contract: publishing a tier label without its producer/consumer integrity and activation fence is not delivery. Phases below are internal sequencing and may be pushed as review checkpoints; none independently satisfies this item's acceptance. Record the governed atomic receipt after independent spec approval and immutable provider publication. Do not implement before that receipt and applicable readiness reviews pass.
 
+Coverage recording against immutable plan `8c59ac2955ba150423528612a58f6cdefcd8ffeb` / blob `d50b1511ff337857fe7f88b8c78cc2c6746b2462` was refused with `traceability-incomplete`: **no initiative scope baseline exists for BI-5445CECA**. This is the blocking condition, not an accepted receipt. Reconcile existing independent review executions, obtain a valid scope baseline through the issuer's exact request, then bind coverage to the then-current immutable plan. Do not repeat the unchanged coverage request or replay unknown reviewer executions.
+
+| Deliverable | Backlog | Requirements | Contracts | Flows | Verification | Boundary |
+| --- | --- | --- | --- | --- | --- | --- |
+| delivery-verification-contract | BI-5445CECA | OBJ-VT-1, OBJ-VT-2, OBJ-VT-3, OBJ-VT-4 | CT-VT-1, CT-VT-2, CT-VT-3, CT-VT-4, CT-VT-5 | FLOW-VT-1, FLOW-VT-2, FLOW-VT-3, FLOW-VT-4 | AC-VT-1 through AC-VT-9 | Atomic; phases are internal sequencing |
+
 Related independently owned work remains mapped to existing records: BI-25CB699C (refresh/correction reuse), BI-329B6128 (source-head scope), BI-E3B918C2 (durable release acceptance), BI-8D56F777 (capacity). Validate and consume their outcomes; do not close them based on source inspection.
 
 ## Coordination reconciliation: PR #6441
