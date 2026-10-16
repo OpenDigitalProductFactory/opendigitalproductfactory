@@ -287,11 +287,9 @@ export async function evaluateBacklogItemCompletion(args: {
   if (isRecord(reconciledBaseline) && reconciledBaseline.origin === "item-body") {
     const source = isRecord(reconciledBaseline.sourceIdentity) ? reconciledBaseline.sourceIdentity : null;
     const authority = isRecord(reconciledBaseline.authoritySnapshot) ? reconciledBaseline.authoritySnapshot : null;
-    const currentRoom = await (db as unknown as import("@dpf/db").Prisma.TransactionClient).workroom.findFirst({
-      where: { backlogItemId: { in: [item.id, item.itemId] }, archivedAt: null,
-        status: { notIn: ["abandoned", "archived", "superseded"] } },
-      orderBy: { updatedAt: "desc" }, select: { repositoryFullName: true, headSha: true },
-    });
+    const { resolveBodyBaselineAuthorRoom } = await import("./body-baseline-author-room");
+    const currentRoom = await resolveBodyBaselineAuthorRoom(
+      db as unknown as import("@dpf/db").Prisma.TransactionClient, item);
     if (!currentRoom || source?.headSha !== currentRoom.headSha || source?.repositoryFullName !== currentRoom.repositoryFullName
       || authority?.organizationId !== (item.organizationId ?? "platform")) {
       reconciliation = { ...reconciliation, state: "missing", evidenceRefs: [] };

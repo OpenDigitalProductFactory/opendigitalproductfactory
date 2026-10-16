@@ -30,6 +30,7 @@ import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inven
 
 import { validateInitiativeBaselineChainHead } from "./baseline-repository";
 import { bodyBaselineInputsMatch } from "./body-baseline-binding";
+import { isArchivedBodyAuthorRoom, isCurrentDeliveredBodyAuthor } from "./body-baseline-author-room";
 import { resolveReviewerIdentity } from "./reviewer-identity";
 import { loadBaselineSourceForItem, type BaselineSourceDb } from "./baseline-source";
 import {
@@ -296,9 +297,10 @@ async function validateExecutingObjectiveMappingTask(args: {
       headBranch: true,
       headSha: true,
       archivedAt: true,
+      status: true,
     },
   });
-  if (!room || room.archivedAt !== null
+  if (!room
     || (room.backlogItemId !== args.itemId && room.backlogItemId !== args.itemRowId)
     || room.repositoryFullName?.toLocaleLowerCase("en-US") !== binding.workroomRef.repositoryFullName.toLocaleLowerCase("en-US")
     || room.headBranch !== binding.workroomRef.branchName
@@ -306,12 +308,15 @@ async function validateExecutingObjectiveMappingTask(args: {
     const error = "The executing TaskRun no longer matches the current live Workroom identity.";
     return { ...err(error), code: "OBJECTIVE_MAPPING_AUTHORITY_CONFLICT" };
   }
-  const liveness = await loadCapsuleLivenessInventory(args.tx, {
+  const archived = isArchivedBodyAuthorRoom(room);
+  const deliveredBodyAuthor = archived && binding.artifactRef.kind === "document-version"
+    && await isCurrentDeliveredBodyAuthor(args.tx, { id: args.itemRowId, itemId: args.itemId }, binding.workroomRef);
+  const liveness = deliveredBodyAuthor ? null : await loadCapsuleLivenessInventory(args.tx, {
     where: { capsuleId: binding.workroomRef.workroomId },
     take: 2,
   });
-  if (liveness.capsulesAll.length !== 1 || liveness.capsulesAll[0]?.isLive !== true) {
-    const error = "The executing TaskRun no longer matches the current live Workroom identity.";
+  if (!deliveredBodyAuthor && (archived || liveness?.capsulesAll.length !== 1 || liveness.capsulesAll[0]?.isLive !== true)) {
+    const error = "The executing TaskRun no longer matches the current live or verified delivered body-author Workroom identity.";
     return { ...err(error), code: "OBJECTIVE_MAPPING_AUTHORITY_CONFLICT" };
   }
   if (binding.artifactRef.kind === "document-version") {

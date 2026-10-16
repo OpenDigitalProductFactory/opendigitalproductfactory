@@ -30,6 +30,16 @@ bound retained criteria only for that authorized TaskRun. Room admission is
 checked before reading and again before receipt writing. Automatic reviewer
 dispatch carries the recorded requesting person into these checks.
 
+A merged author's room can remain archived throughout body acceptance. The
+shared author resolver admits only the current unambiguous attempt with an exact
+server-owned, verified merged PR observation matching repository, number, branch
+and head. A newer incomplete or superseded attempt blocks historical fallback.
+This retains source authorship; it grants no execution lease or room admission.
+The reviewer TaskRun, OAuth authority, content access and author separation must
+remain current. Missing merge proof calls for source/observation reconciliation,
+not repeated reopening of a room the reaper correctly considers delivered.
+Spec and post-implementation review retain their existing live-room requirement.
+
 Changed criteria, source identity, organization or eligible evidence reject old
 requests. Refresh recovery for a current successor; unchanged retries reuse the
 TaskRun and proposal. Historical authority stays auditable. Research and
