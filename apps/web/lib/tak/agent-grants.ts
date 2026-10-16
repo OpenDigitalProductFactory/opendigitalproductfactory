@@ -176,13 +176,13 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   propose_portfolio_budgets: ["backlog_read"],
   set_portfolio_budget: ["backlog_write"],
   set_portfolio_owner: ["backlog_write"],
+  get_investment_balance: ["backlog_read"], set_investment_balance: ["backlog_write"], bind_investment_funding: ["backlog_write"],
   query_backlog: ["backlog_read"],
   report_quality_issue: ["backlog_write"],
   escalate_feedback_upstream: ["backlog_write"],
 
   // Workbooks / Universal Grid (EP-GRID-WORKBOOKS, #1582). These MCP tools
-  // shipped without a grant mapping, so every tool was default-deny (INV-1) and
-  // unreachable from any coworker. The handler's capability split is
+  // Previously default-denied without grants. The handler's capability split is
   // view_workbooks (read) / manage_workbooks (write); mirror it as read/write
   // grant categories. Held by no agent yet — workbook tools stay coworker-deny
   // until a role grants them, which is the correct conservative default for a

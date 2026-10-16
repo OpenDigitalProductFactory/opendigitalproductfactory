@@ -2,10 +2,9 @@
 // local-ci-runner.mjs — Node-native port of scripts/local-ci-runner.sh
 // (BI-2272D840). Same non-mutating scratch-worktree contract, but built out
 // of Node primitives (spawnSync git/docker, net.connect for the DB port
-// probe) instead of POSIX sh + awk/sed/nc, so it runs on hosts where a
-// working native `sh` is not available (e.g. a Windows worktree with no
-// Git-for-Windows shell and a WSL install that cannot cleanly read the
-// worktree's `.git` indirection).
+// probe) instead of POSIX sh + awk/sed/nc. Test fixtures still require a
+// native POSIX shell; on Windows the shared adapter supplies verified Git
+// for Windows to children without changing the parent process environment.
 //
 // This file is the canonical implementation on every host.
 // scripts/local-ci-runner.sh is a compatibility entry point that delegates
@@ -35,6 +34,8 @@ import { EXIT_CHILD_SIGNAL_DEATH, EXIT_RUNNER_PREREQUISITE_UNAVAILABLE } from ".
 import { parseRepositoryPnpmVersion, resolvePinnedPnpmInvocation } from "./lib/pinned-pnpm.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
+import { guardShellEnv } from "./lib/guard-bash.mjs";
+import { GuardRuntimeEnvironmentError } from "./lib/load-pinned-guard-typescript.mjs";
 
 function die(message, code = 1) {
   // BI-8304AB09: write BOTH streams so gate-worktree log capture cannot drop the cause.
@@ -653,9 +654,10 @@ async function main() {
     pnpmToolchain = preparePinnedPnpmEnvironment({
       packageManager,
       toolchainDir: join(workspace, ".dpf-local-ci-toolchain", "bin"),
-      env: { ...env, ...slotEnv },
+      env: guardShellEnv({ ...env, ...slotEnv }),
     });
   } catch (error) {
+    if (error instanceof GuardRuntimeEnvironmentError) dieUnavailable(error.message);
     die(error instanceof Error ? error.message : String(error));
   }
   process.stdout.write(
