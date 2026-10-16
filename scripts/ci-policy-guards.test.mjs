@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { readFileSync, mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, it } from "node:test";
@@ -113,7 +113,7 @@ function workflowJobBlock(workflow, jobId) {
 
 describe("CI policy guard registry", () => {
   it("launches pnpm through Node on Windows with literal arguments", t => {
-    const root = mkdtempSync(join(tmpdir(), "dpf-policy-pnpm-"));
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "dpf-policy-pnpm-")));
     t.after(() => rmSync(root, { recursive: true, force: true }));
     writeFileSync(join(root, "pnpm.cmd"), "");
     const script = join(root, "pnpm.cjs");
