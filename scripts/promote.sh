@@ -1292,10 +1292,21 @@ if [[ $_dry_run -eq 0 ]]; then
   if [[ $_sandbox_ok -eq 1 ]]; then
     _sbx_id="$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
       "${_f_args[@]}" ps -q sandbox 2>/dev/null)" || _sbx_id=""
+    # A service render includes dependency images too; their order is not the
+    # identity of sandbox. Read the named service from the same canonical model.
     _sbx_image_ref="$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
-      "${_f_args[@]}" config --images sandbox 2>/dev/null | head -n 1)" || _sbx_image_ref=""
+      "${_f_args[@]}" config --format json sandbox 2>/dev/null | node -e '
+        let input = "";
+        process.stdin.on("data", chunk => input += chunk).on("end", () => {
+          try {
+            const image = JSON.parse(input)?.services?.sandbox?.image;
+            if (typeof image !== "string" || !image || image !== image.trim()) process.exit(1);
+            process.stdout.write(image);
+          } catch { process.exit(1); }
+        });
+      ')" || _sbx_image_ref=""
     _sbx_target_id=""
-    [[ -n "$_sbx_image_ref" ]] && _sbx_target_id="$(docker image inspect --format '{{.Id}}' "$_sbx_image_ref" 2>/dev/null)"
+    [[ -n "$_sbx_image_ref" ]] && _sbx_target_id="$(docker image inspect --format '{{.Id}}' "$_sbx_image_ref" 2>/dev/null)" || _sbx_target_id=""
     _sbx_observed=""
     [[ -n "$_sbx_id" && "$_sbx_id" != *$'\n'* ]] && _sbx_observed="$(docker inspect --format '{{.State.Running}} {{.Image}}' "$_sbx_id" 2>/dev/null)"
     if [[ "${_sbx_observed%% *}" != "true" ]]; then

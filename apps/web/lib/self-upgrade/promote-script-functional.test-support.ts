@@ -121,7 +121,9 @@ if [ "\${1-}" = inspect ] || { [ "\${1-}" = image ] && [ "\${2-}" = inspect ]; }
   done
   case "$inspect_format" in
     "{{.Id}}")
-      if [ "$inspect_target" = dpf-sandbox:target ]; then printf 'sha256:sandbox-target'
+      if [ "$inspect_target" = dpf-sandbox:target ]; then
+        [ "\${DPF_TEST_SANDBOX_IMAGE_MODEL:-}" = uninspectable ] && exit 1
+        printf 'sha256:sandbox-target'
       else printf "%s" "\${DPF_TEST_RELEASE_ENGINE_ID:-$DPF_TEST_RELEASE_CONFIG_DIGEST}"; fi
       exit 0 ;;
     "{{range .RepoDigests}}{{println .}}{{end}}")
@@ -134,7 +136,19 @@ if [ "\${1-}" = inspect ] || { [ "\${1-}" = image ] && [ "\${2-}" = inspect ]; }
 fi
 case "$*" in
   *"ps -q sandbox"*) printf 'sandbox-container' ;;
-  *"config --images sandbox"*) printf 'dpf-sandbox:target\\n' ;;
+  *"config --images sandbox"*)
+    if [ "\${DPF_TEST_SANDBOX_IMAGE_MODEL:-}" = dependencies-first ]; then
+      printf 'dpf-sandbox-init:target\\ndpf-sandbox:target\\npgvector/pgvector:pg16\\n'
+    else printf 'dpf-sandbox:target\\n'; fi
+    ;;
+  *"config --format json sandbox"*)
+    case "\${DPF_TEST_SANDBOX_IMAGE_MODEL:-}" in
+      malformed) printf 'not-json' ;;
+      missing) printf '{"services":{"sandbox-init":{"image":"dpf-sandbox-init:target"}}}' ;;
+      blank) printf '{"services":{"sandbox":{"image":" "}}}' ;;
+      *) printf '{"services":{"sandbox-init":{"image":"dpf-sandbox-init:target"},"sandbox":{"image":"dpf-sandbox:target","depends_on":{"sandbox-init":{"condition":"service_completed_successfully"},"sandbox-postgres":{"condition":"service_healthy"}}},"sandbox-postgres":{"image":"pgvector/pgvector:pg16"}}}' ;;
+    esac
+    ;;
   *"{{.State.Running}} {{.Image}}"*)
     case "\${DPF_TEST_SANDBOX_STATE:-running}" in
       exited) printf 'false sha256:sandbox-target' ;;
@@ -238,6 +252,8 @@ export function runPromote(opts: {
   sandboxState?: "running" | "exited" | "stale";
   /** Make `up -d --no-deps --force-recreate sandbox` itself fail (BI-547B788D AC-3). */
   sandboxRecreateFails?: boolean;
+  /** Real Compose includes dependency images; vary the named service's readback independently. */
+  sandboxImageModel?: "dependencies-first" | "malformed" | "missing" | "blank" | "uninspectable";
   /** Make the reconcile `up -d --no-recreate` fail, to prove it never aborts the upgrade. */
   reconcileFails?: boolean;
   /** Make only `up` of this one service fail (its image tag no longer resolves). */
@@ -317,6 +333,7 @@ export function runPromote(opts: {
     ...(opts.inspectFailService ? [`export DPF_TEST_INSPECT_FAIL_SERVICE=${shellQuote(opts.inspectFailService)}`] : []),
     ...(opts.sandboxState ? [`export DPF_TEST_SANDBOX_STATE=${shellQuote(opts.sandboxState)}`] : []),
     ...(opts.sandboxRecreateFails ? ["export DPF_TEST_SANDBOX_RECREATE_FAILS=1"] : []),
+    ...(opts.sandboxImageModel ? [`export DPF_TEST_SANDBOX_IMAGE_MODEL=${shellQuote(opts.sandboxImageModel)}`] : []),
     ...(opts.reconcileFails ? ["export DPF_TEST_RECONCILE_FAILS=1"] : []),
     ...(opts.reconcileFailService
       ? [`export DPF_TEST_RECONCILE_FAIL_SERVICE=${shellQuote(opts.reconcileFailService)}`]

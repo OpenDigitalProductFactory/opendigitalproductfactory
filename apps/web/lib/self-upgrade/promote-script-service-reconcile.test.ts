@@ -297,7 +297,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("never-started recovery", () => {
   // container, so the run read as clean while every reviewer's inference was
   // down. It must reach the durable outcome as degraded, naming the sandbox.
   describe("sandbox refresh verification (BI-547B788D)", () => {
-    function runWithSandbox(opts: { sandboxState?: "running" | "exited" | "stale"; sandboxRecreateFails?: boolean }) {
+    function runWithSandbox(opts: Pick<Parameters<typeof runPromote>[0], "sandboxState" | "sandboxRecreateFails" | "sandboxImageModel">) {
       const scratch = makeScratch();
       const r = runPromote({
         source: scratch.source,
@@ -355,5 +355,26 @@ describe.skipIf(!BASH_OK || !GIT_OK)("never-started recovery", () => {
         rmSync(root, { recursive: true, force: true });
       }
     }, PROMOTE_TEST_TIMEOUT_MS);
+
+    it("resolves the named sandbox image when Compose lists dependency images first", () => {
+      const { root, backup, r } = runWithSandbox({ sandboxImageModel: "dependencies-first" });
+      try {
+        expect(r.status).toBe(0);
+        expect(r.stdout).not.toContain("step=sandbox-refresh-failed");
+        expect(readOutcome(backup).failed).not.toContain("sandbox");
+      } finally { rmSync(root, { recursive: true, force: true }); }
+    }, PROMOTE_TEST_TIMEOUT_MS);
+
+    it.each(["malformed", "missing", "blank", "uninspectable"] as const)(
+      "keeps unavailable sandbox image %s as a degraded result",
+      (sandboxImageModel) => {
+        const { root, backup, r } = runWithSandbox({ sandboxImageModel });
+        try {
+          expect(r.status).toBe(0);
+          expect(r.stdout).toContain("step=sandbox-refresh-failed");
+          expect(readOutcome(backup)).toMatchObject({ outcome: "degraded", failed: ["sandbox"] });
+        } finally { rmSync(root, { recursive: true, force: true }); }
+      }, PROMOTE_TEST_TIMEOUT_MS,
+    );
   });
 });
