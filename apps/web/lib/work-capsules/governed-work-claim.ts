@@ -16,6 +16,7 @@ import { type InheritanceDb, loadInheritedInitiativeScope } from "@/lib/backlog/
 import { type BoundWorkShapeDb, readBoundEditPaths } from "@/lib/backlog/initiative-readiness/bound-work-shape";
 import { assessDeliverySensitivity } from "@/lib/backlog/initiative-readiness/delivery-sensitivity";
 import { prepareCurrentDesignObservation } from "@/lib/backlog/initiative-readiness/canonical-artifact-discovery";
+import { designPhaseReviewDecision } from "@/lib/backlog/initiative-readiness/design-phase-recovery";
 import {
   governingPrinciplesFor,
   withGoverningRules,
@@ -174,9 +175,8 @@ async function resolveRecoveryOutsideTransaction(args: {
       nextAction: `The workroom lacks ${!pending.baseSha ? "baseSha" : "a valid reviewer dispatch identity (including headSha)"}, so no reviewer binding can be issued. Re-sync the branch with adopt_worktree(headBranch, baseSha, headSha), supplying full immutable commit SHAs for both fields and preserving any valid recorded identity, then retry.`,
     };
 
-  const needsPlanReview = [...pending.decision.blockers, ...pending.decision.unmet]
-    .some(entry => entry.code === "PLAN_REVIEW_REQUIRED");
-  const taskAuthorityKey = needsPlanReview && args.actor.taskAuthorityTokenId
+  const needsDesignReview = designPhaseReviewDecision(pending.decision) !== null;
+  const taskAuthorityKey = needsDesignReview && args.actor.taskAuthorityTokenId
     ? await (await import("@/lib/auth/oauth-task-authority")).resolveMcpTaskAuthorityKey({
       tokenId: args.actor.taskAuthorityTokenId, userId: args.actor.userId, source: "oauth" }) : null;
   const recovery = await resolveInitiativeReviewerRecovery({

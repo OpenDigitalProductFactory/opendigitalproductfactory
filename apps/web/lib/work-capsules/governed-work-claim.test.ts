@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { prisma } from "@dpf/db";
+
+const taskAuthority = vi.hoisted(() => ({ resolve: vi.fn() }));
+vi.mock("@/lib/auth/oauth-task-authority", () => ({ resolveMcpTaskAuthorityKey: taskAuthority.resolve }));
 
 const currentDesign = vi.hoisted(() => ({ prepare: vi.fn(), guard: vi.fn() }));
 vi.mock("@/lib/backlog/initiative-readiness/canonical-artifact-discovery", async importOriginal => ({
@@ -142,6 +146,25 @@ function database(activities: unknown[] = []) {
 }
 
 describe("claimGovernedBacklogWorkspace", () => {
+  it("issues a fresh design request with the same trusted task identity as admission", async () => {
+    taskAuthority.resolve.mockResolvedValue("oauth-family:claim");
+    const history = vi.spyOn(prisma.taskRun, "findFirst").mockResolvedValue(null);
+    try {
+      const result = await claimGovernedBacklogWorkspace({
+        db: database(), input, actor: { ...actor, taskAuthorityTokenId: "access" }, workIntent: "plan",
+        now: new Date("2026-10-16T00:00:00Z"),
+        dependencies: { claimWorkspace: vi.fn(), discoverCanonicalArtifact },
+      });
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("Fresh design must remain unapproved");
+      const request = result.data.recovery.reviewerRoutes.find(route => route.gate === "design-spec")!.requestCoworker;
+      expect(request.requestKey).toMatch(/:reviewer:[a-f0-9]{64}$/);
+      expect(taskAuthority.resolve).toHaveBeenCalledWith({ tokenId: "access", userId: actor.userId, source: "oauth" });
+    } finally {
+      history.mockRestore();
+    }
+  });
+
   it("reads gate facts only after the guard locks, so a concurrent fail cannot be lost", async () => {
     const activities: InitiativeReadinessActivity[] = readyActivities();
     const db = database(activities);

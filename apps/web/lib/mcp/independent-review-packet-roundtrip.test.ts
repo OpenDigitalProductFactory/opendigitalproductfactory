@@ -1,0 +1,137 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  item: vi.fn(), readiness: vi.fn(), recovery: vi.fn(), history: vi.fn(), authority: vi.fn(),
+  access: vi.fn(),
+}));
+vi.mock("@dpf/db", () => ({ prisma: {
+  backlogItem: { findUnique: mocks.item, findFirst: vi.fn().mockResolvedValue(null) },
+  backlogItemActivity: { findMany: vi.fn().mockResolvedValue([]) },
+  workroom: { findUnique: vi.fn().mockResolvedValue({ id: "room-row" }),
+    findFirst: vi.fn().mockResolvedValue({ id: "room-row", backlogItemId: "BI-ROUNDTRIP", executorKind: "codex-desktop" }) },
+  agent: { findUnique: vi.fn().mockResolvedValue({ status: "active", archived: false,
+    toolGrants: [{ grantKey: "initiative_evidence_write" }] }) },
+  mcpApiToken: { findUnique: vi.fn().mockResolvedValue({ userId: "human", agentId: "AGT-AUTHOR",
+    authorityBindingId: "consent", oauthClient: { registrationKind: "dynamic" } }) },
+  taskRun: { findFirst: mocks.history },
+} }));
+vi.mock("@/lib/backlog/spec-plan-search", () => ({
+  searchSpecsAndPlans: vi.fn().mockResolvedValue({ corpus: {}, results: [] }), specPlanCorpusCaveat: () => null,
+}));
+vi.mock("@/lib/work-capsules/backlog-workroom-ownership", () => ({
+  loadBacklogWorkroomOwnership: vi.fn().mockResolvedValue({ workrooms: [], liveWorkrooms: [] }),
+}));
+vi.mock("@/lib/demand/demand-data", () => ({ mapDemandRows: () => [{ activation: null, evidenceLinks: [] }] }));
+vi.mock("@/lib/backlog/initiative-readiness/entry-adapter", () => ({ projectBacklogItemReadinessSummary: mocks.readiness }));
+vi.mock("@/lib/backlog/initiative-readiness/backlog-completion-evaluation", () => ({ readBacklogItemCompletion: async () => null }));
+vi.mock("@/lib/backlog/initiative-readiness/canonical-artifact-discovery", () => ({
+  prepareCurrentDesignObservation: async () => ({ evidence: { state: "not-applicable" } }),
+}));
+vi.mock("@/lib/backlog/initiative-readiness/terminal-recovery", () => ({ resolveTerminalInitiativeRecovery: mocks.recovery }));
+vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({
+  resolveAgentWorkroomAccess: mocks.access, resolveHumanWorkroomAccess: mocks.access,
+}));
+vi.mock("@/lib/auth/oauth-task-authority", () => ({ resolveMcpTaskAuthorityKey: mocks.authority }));
+vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: async () => ({ isSuperuser: true, platformRole: null }) }));
+vi.mock("@/lib/auth/oauth-tokens", () => ({ OAUTH_EXECUTION_AUTHORITY_SELECT: {}, isCurrentOAuthExecutionAuthority: async () => true }));
+vi.mock("@/lib/mcp-task-review-outcome", () => ({ loadTaskInitiativeReviewOutcome: async () => null }));
+vi.mock("@/lib/mcp-task-review-document", () => ({ reviewDocumentPreflight: async () => ({ refusal: null, notice: null }) }));
+
+import { getBacklogItem } from "./packs/backlog-pack-read-tools";
+import { authorizeCoworkerRequest } from "./independent-review-request";
+import { resolveInitiativeReviewerRecovery } from "@/lib/tak/initiative-readiness-tool-grants";
+import { createExhaustedPlanReviewPredicate } from "@/lib/backlog/initiative-readiness/exhausted-plan-review";
+import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
+import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness/types";
+import { deterministicExternalTaskRunId, remoteTaskRequestDigest } from "@/lib/mcp-task-capacity-contract";
+import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
+import type { InitiativeReviewerRecovery } from "@/lib/tak/initiative-readiness-tool-grants";
+
+const context: ToolExecutionContext = { agentId: "AGT-AUTHOR", apiTokenId: "access", authSource: "oauth", tokenScope: "write",
+  tokenGrantScopes: ["initiative_evidence_write"] };
+const authority = { userId: "human", taskAuthorityKey: "oauth-family:roundtrip" };
+const gates = [
+  ["design-spec", "CANONICAL_DESIGN_REQUIRED", "design-checklist-reviewer"],
+  ["spec-approval", "SPEC_APPROVAL_REQUIRED", "design-checklist-reviewer"],
+  ["architecture-review", "REVIEW_REQUIRED", "architecture-reviewer"],
+  ["plan-review", "PLAN_REVIEW_REQUIRED", "plan-reviewer"],
+] as const;
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.history.mockResolvedValue(null);
+  mocks.authority.mockResolvedValue(authority.taskAuthorityKey);
+  mocks.access.mockImplementation(async ({ requested }) => ({ decision: { level: requested } }));
+  mocks.item.mockResolvedValue({ id: "item-row", itemId: "BI-ROUNDTRIP", title: "Current review", status: "open",
+    type: "portfolio", workType: "feature", source: "user-request", priority: 1, effortSize: "large", scopeKind: "platform",
+    body: null, createdAt: new Date("2026-10-16T00:00:00Z"), updatedAt: new Date("2026-10-16T00:00:00Z"),
+    completedAt: null, archetypeCategories: [], archetypeIds: [], lifecycleTags: [], activities: [], demandEvidenceLinks: [],
+    deferOwnerPrincipal: null, epic: null, digitalProduct: null, organization: null, productLine: null, businessProduct: null, activeBuild: null });
+});
+
+function prepare(gate: readonly [typeof gates[number][0], typeof gates[number][1], typeof gates[number][2]]) {
+  const decision: InitiativeReadinessDecision = {
+    decisionId: "IRD-ROUNDTRIP", policyVersion: "initiative-readiness.v3", subject: { kind: "backlog-item", id: "BI-ROUNDTRIP" },
+    transitionObject: { kind: "work-capsule", id: "WC-ROUNDTRIP", expectedVersion: "claim.v1", targetState: "implementation" },
+    profile: "feature", target: "implementation", verdict: "input-required", satisfied: [], blockers: [],
+    unmet: [readinessRequirement({ code: gate[1], state: "missing", accountableRole: gate[2] })], evaluatedAt: "2026-10-16T00:00:00Z",
+  };
+  mocks.readiness.mockReturnValue({ decisions: { plan: decision, implementation: decision, completion: decision } });
+  const input = { decision, currentAgentId: "AGT-AUTHOR", expectedCurrentBaselineId: null,
+    dispatchContext: { workroomId: "WC-ROUNDTRIP", repositoryFullName: "org/repo", branchName: "feat/roundtrip", headSha: "a".repeat(40) },
+    canonicalArtifact: { resolved: true as const, path: "docs/superpowers/specs/roundtrip.md", providerBlobId: "b".repeat(40) },
+    planArtifact: { resolved: true as const, path: "docs/superpowers/plans/roundtrip.md", commitSha: "a".repeat(40), providerBlobId: "c".repeat(40) },
+    db: { agentToolGrant: { findMany: async () => ["initiative_design_review", "initiative_architecture_review", "file_read"].map(grantKey => ({
+      grantKey, agent: { agentId: "AGT-REVIEWER", displayName: "Reviewer", status: "active", archived: false, lifecycleStage: "production" },
+    })) } },
+  };
+  const issue = (taskAuthority: typeof authority | null) => resolveInitiativeReviewerRecovery({ ...input,
+    ...(taskAuthority ? { isPlanReviewExhausted: createExhaustedPlanReviewPredicate(taskAuthority, { taskRun: { findFirst: mocks.history } }) } : {}),
+  });
+  mocks.recovery.mockImplementation(({ taskAuthority }) => issue(taskAuthority ?? null));
+  return { issue };
+}
+
+describe("bounded recovery packet round trip", () => {
+  it.each(gates)("admits the fresh %s packet exactly as emitted", async (...gate) => {
+    prepare(gate);
+    const read = await getBacklogItem({ itemId: "BI-ROUNDTRIP", recoveryGate: gate[0], taskAuthorityKey: "client-forgery" }, "AGT-AUTHOR", "human", context);
+    expect(read.success, JSON.stringify(read)).toBe(true);
+    const packet = packetFrom(read);
+    expect(await authorizeCoworkerRequest(packet, "human", context)).toEqual({ bounded: true });
+    expect(mocks.authority).toHaveBeenCalledWith({ tokenId: "access", userId: "human", source: "oauth" });
+    expect((await authorizeCoworkerRequest({ ...packet, requestKey: `${packet.requestKey}:changed` }, "human", context)).refusal).toBeDefined();
+    mocks.authority.mockResolvedValue(null);
+    const revoked = await getBacklogItem({ itemId: "BI-ROUNDTRIP", recoveryGate: gate[0] }, "AGT-AUTHOR", "human", context);
+    expect(revoked).toMatchObject({ success: false, error: "review_task_authority_unavailable" });
+    expect(revoked.data ?? {}).not.toHaveProperty("recovery");
+  });
+
+  it("retains an owned uncertain legacy design task instead of inventing a new request", async () => {
+    const { issue } = prepare(gates[0]);
+    const old = (await issue(null)).reviewerRoutes[0]!.requestCoworker;
+    const taskRunId = deterministicExternalTaskRunId(authority.taskAuthorityKey, old.requestKey);
+    const authorityScope = ["initiative_evidence_write", "backlog-item:BI-ROUNDTRIP", ...old.requiredToolNames!.map(name => `tool:${name}`)];
+    mocks.history.mockImplementation(async ({ where }) => where.taskRunId === taskRunId ? {
+      taskRunId, userId: "human", currentAgentId: old.targetAgent, status: "input-required", authorityScope,
+      a2aMetadata: { taskAuthorityKey: authority.taskAuthorityKey, idempotencyKey: old.requestKey, requestedAgentId: old.targetAgent,
+        requestDigestVersion: 2, requestDigest: remoteTaskRequestDigest({ agentId: old.targetAgent, routeContext: "/build",
+          title: old.questionPacketSummary, objective: old.objective, prompt: old.objective, idempotencyKey: old.requestKey,
+          riskClass: "bounded-write", authorityScope, collaborationKind: "handoff", initiativeReviewBinding: old.initiativeReviewBinding }) },
+      progressPayload: {
+        executionUncertainty: { schemaVersion: 1, settlement: "unknown" },
+        terminalWriterWait: { schemaVersion: 1, kind: "missing-terminal-writer",
+          writerToolName: "record_initiative_design_review", resumeMode: "same-taskrun",
+          dispatchContract: "required-tool-call", attempt: 3, observedAt: "2026-10-16T00:00:00Z" },
+      },
+    } : null);
+    const read = await getBacklogItem({ itemId: "BI-ROUNDTRIP", recoveryGate: "design-spec" }, "AGT-AUTHOR", "human", context);
+    expect(read.success).toBe(true);
+    expect(packetFrom(read)).toEqual(old);
+    expect(await authorizeCoworkerRequest(old, "human", context)).toEqual({ bounded: true });
+  });
+});
+
+function packetFrom(result: ToolResult) {
+  return (result.data!.recovery as InitiativeReviewerRecovery).reviewerRoutes[0]!.requestCoworker;
+}

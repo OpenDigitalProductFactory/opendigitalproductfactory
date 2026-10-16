@@ -97,3 +97,27 @@ No source tests or runtime acceptance have yet run for this continuation.
 Revert through the protected PR workflow. No schema migration or data rewrite.
 Provider failure reports unavailable and retains the original baseline/history;
 it must not authorize implementation or silently approve changed design bytes.
+
+## Current packet identity correction (2026-10-16)
+
+BI-C684AF45 exposed another issuer/admission disagreement after a substantive
+design amendment. A fresh design, spec-approval or architecture request was
+issued without the reviewer suffix used by the admission resolver. Admission
+therefore rejected the server's own unchanged packet. Existing owned legacy
+tasks masked the defect because history resolution retained their original key.
+
+Continue the same route-agreement acceptance criterion in WC-2A0FAF55. Preserve
+PR #6430 and its pending live acceptance. Reuse the existing design-phase
+selector and trusted OAuth task-family resolver in the governed claim and the
+bounded item-read issuer for all four independent design gates. Keep exact
+packet comparison, room admission, grant checks and document preflight intact.
+Do not accept a caller-supplied task-family key, reset attempts, replace uncertain
+work or approve the author's design.
+
+Regressions first: pass an actual bounded item-read packet unchanged to the
+actual admission function for each gate; reject altered keys and revoked task
+authority; preserve an owned uncertain legacy design request byte for byte.
+Exercise the normal pre-plan claim with no plan-review obligation as well.
+Run the affected review/claim suites and both web TypeScript programs, obtain
+independent source assessment, publish through protected CI and the merge queue,
+then verify the original request only after a containing canonical deployment.
