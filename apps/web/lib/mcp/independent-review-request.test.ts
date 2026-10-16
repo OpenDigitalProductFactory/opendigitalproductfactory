@@ -1,3 +1,5 @@
+const recoveryTarget = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/mcp-task-review-recovery", () => ({ issueOriginalReviewRecoveryTarget: recoveryTarget }));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ agent: vi.fn(), token: vi.fn(), room: vi.fn(),
@@ -47,6 +49,7 @@ const context: ToolExecutionContext = { agentId: "AGT-AUTHOR", apiTokenId: "acce
 
 beforeEach(() => {
   vi.resetAllMocks();
+  recoveryTarget.mockResolvedValue({ kind: "none" });
   mocks.agent.mockResolvedValue({ status: "active", archived: false, toolGrants: [{ grantKey: "initiative_evidence_write" }] });
   mocks.token.mockResolvedValue({ userId: "human", agentId: "AGT-AUTHOR", authorityBindingId: "consent", oauthClient: { registrationKind: "dynamic" } });
   mocks.currentConsent.mockResolvedValue(true);
@@ -132,7 +135,7 @@ describe("consent-bound independent review request", () => {
           title: old.questionPacketSummary, objective: old.objective, prompt: old.objective, idempotencyKey: old.requestKey,
           riskClass: "bounded-write", authorityScope: scope, collaborationKind: "handoff", initiativeReviewBinding: old.initiativeReviewBinding }) },
       progressPayload: { terminalWriterWait: { schemaVersion: 1, kind: "missing-terminal-writer", writerToolName: "record_initiative_design_review",
-        resumeMode: "same-taskrun", attempt: 3, observedAt: "2026-10-12T20:00:00Z" } },
+        resumeMode: "same-taskrun", dispatchContract: "required-tool-call", attempt: 3, observedAt: "2026-10-12T20:00:00Z" } },
     } : null);
     const issue = (taskAuthority: typeof authority) => resolveInitiativeReviewerRecovery({ ...input,
       isPlanReviewExhausted: createExhaustedPlanReviewPredicate(taskAuthority, { taskRun: { findFirst: mocks.task } }) });
@@ -216,6 +219,17 @@ describe("consent-bound independent review request", () => {
     mocks.preflight.mockResolvedValue({ refusal: null, notice: "This design is 70,000 characters." });
     expect(await authorizeCoworkerRequest(design, "human", context)).toEqual({ bounded: true, notice: "This design is 70,000 characters." });
     expect(mocks.preflight).toHaveBeenCalledWith(design.initiativeReviewBinding);
+  });
+  it("requires the exact original locator and does not admit an arbitrary recovery through general thread delegation", async () => {
+    const target = { taskRunId: "TR-MCP-original", requestDigest: "a".repeat(64), expectedUpdatedAt: "2026-10-13T18:00:00.053Z" };
+    recoveryTarget.mockResolvedValue({ kind: "target", target });
+    expect((await authorizeCoworkerRequest(packet, "human", context)).refusal).toBeDefined();
+    expect(await authorizeCoworkerRequest({ ...packet, reviewRecovery: target }, "human", context)).toEqual({ bounded: true });
+    expect((await authorizeCoworkerRequest({ ...packet, reviewRecovery: { ...target, requestDigest: "b".repeat(64) } }, "human", context)).refusal).toBeDefined();
+    mocks.agent.mockResolvedValue({ status: "active", archived: false, toolGrants: [{ grantKey: "thread_write" }] });
+    expect((await authorizeCoworkerRequest({ ...packet, reviewRecovery: target }, "human", {
+      ...context, tokenGrantScopes: ["thread_write"],
+    })).refusal).toBeDefined();
   });
   it("accepts only a regenerated packet after current human, consent, grants and exact room checks", async () => {
     expect(await authorizeCoworkerRequest(packet, "human", context)).toEqual({ bounded: true });

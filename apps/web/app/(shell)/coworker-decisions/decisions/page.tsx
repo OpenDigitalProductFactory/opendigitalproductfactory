@@ -29,7 +29,7 @@ export const metadata = {
 
 type SearchParams = Promise<{ tier?: string }>;
 
-const UNRESOLVED = ["defer", "escalate"];
+import { humanEscalationWhere } from "@/lib/decision-perspective/human-escalation";
 const ROW_LIMIT = 200;
 
 function isTier(value: string | undefined): value is DecisionAuditTier {
@@ -65,7 +65,7 @@ export default async function DecisionLogPage({
           prisma.decisionInteraction.count({
             where: {
               ...where,
-              outcomeType: { in: UNRESOLVED },
+              AND: [humanEscalationWhere()],
               humanOutcome: { equals: Prisma.DbNull },
             },
           }),
@@ -95,6 +95,7 @@ export default async function DecisionLogPage({
         question: true,
         options: true,
         outcomeType: true,
+        escalationRoute: true,
         riskTier: true,
         principleConflict: true,
         domainClass: true,

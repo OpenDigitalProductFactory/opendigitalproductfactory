@@ -1,4 +1,18 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { prisma } from "@dpf/db";
+
+const taskAuthority = vi.hoisted(() => ({ resolve: vi.fn() }));
+vi.mock("@/lib/auth/oauth-task-authority", () => ({ resolveMcpTaskAuthorityKey: taskAuthority.resolve }));
+
+const currentDesign = vi.hoisted(() => ({ prepare: vi.fn(), guard: vi.fn() }));
+vi.mock("@/lib/backlog/initiative-readiness/canonical-artifact-discovery", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/backlog/initiative-readiness/canonical-artifact-discovery")>(),
+  prepareCurrentDesignObservation: currentDesign.prepare,
+}));
+beforeEach(() => {
+  currentDesign.guard.mockReset().mockResolvedValue({ state: "not-applicable" });
+  currentDesign.prepare.mockReset().mockResolvedValue({ evidence: { state: "not-applicable" }, admissionGuard: currentDesign.guard });
+});
 
 import { claimGovernedBacklogWorkspace } from "./governed-work-claim";
 import {
@@ -7,6 +21,8 @@ import {
   governingRulesLine,
 } from "@/lib/kernel/governing-principles";
 import type { CapsuleDb } from "./work-capsule-store-types";
+import { readyActivities, receipt } from "@/lib/backlog/initiative-readiness/entry-adapter.test-fixtures";
+import type { InitiativeReadinessActivity } from "@/lib/backlog/initiative-readiness/entry-adapter";
 
 const actor = { userId: "user-1", agentId: "AGT-1", principalId: "PRN-1" };
 const CANONICAL_DESIGN_PATH = "docs/superpowers/specs/2026-08-22-entry-design.md";
@@ -130,6 +146,98 @@ function database(activities: unknown[] = []) {
 }
 
 describe("claimGovernedBacklogWorkspace", () => {
+  it("keeps trusted task identity when coverage synthesizes spec approval for a fix", async () => {
+    taskAuthority.resolve.mockResolvedValue("oauth-family:claim");
+    const history = vi.spyOn(prisma.taskRun, "findFirst").mockResolvedValue(null);
+    try {
+      const db = database([receipt("research", "research")]);
+      const item = await db.backlogItem!.findFirst({});
+      vi.mocked(db.backlogItem!.findFirst).mockResolvedValue({ ...item, workType: "bug" } as never);
+      const result = await claimGovernedBacklogWorkspace({
+        db, input, actor: { ...actor, taskAuthorityTokenId: "access" }, workIntent: "implementation",
+        now: new Date("2026-10-16T00:00:00Z"),
+        dependencies: { claimWorkspace: vi.fn(), discoverCanonicalArtifact },
+      });
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("Missing coverage must not admit implementation");
+      expect(result.data.readiness.profile).toBe("fix");
+      expect(result.data.readiness.unmet.map(entry => entry.code)).toEqual(["PLAN_REQUIRED"]);
+      const request = result.data.recovery.reviewerRoutes.find(route => route.gate === "spec-approval")!.requestCoworker;
+      expect(request.initiativeReviewBinding?.expectedCurrentBaselineId).toBeNull();
+      expect(request.requestKey).toMatch(/:reviewer:[a-f0-9]{64}$/);
+    } finally {
+      history.mockRestore();
+    }
+  });
+
+  it("issues a fresh design request with the same trusted task identity as admission", async () => {
+    taskAuthority.resolve.mockResolvedValue("oauth-family:claim");
+    const history = vi.spyOn(prisma.taskRun, "findFirst").mockResolvedValue(null);
+    try {
+      const result = await claimGovernedBacklogWorkspace({
+        db: database(), input, actor: { ...actor, taskAuthorityTokenId: "access" }, workIntent: "plan",
+        now: new Date("2026-10-16T00:00:00Z"),
+        dependencies: { claimWorkspace: vi.fn(), discoverCanonicalArtifact },
+      });
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("Fresh design must remain unapproved");
+      const request = result.data.recovery.reviewerRoutes.find(route => route.gate === "design-spec")!.requestCoworker;
+      expect(request.requestKey).toMatch(/:reviewer:[a-f0-9]{64}$/);
+      expect(taskAuthority.resolve).toHaveBeenCalledWith({ tokenId: "access", userId: actor.userId, source: "oauth" });
+    } finally {
+      history.mockRestore();
+    }
+  });
+
+  it("reads gate facts only after the guard locks, so a concurrent fail cannot be lost", async () => {
+    const activities: InitiativeReadinessActivity[] = readyActivities();
+    const db = database(activities);
+    vi.mocked(db.backlogItemActivity!.findMany).mockImplementation(async () => [...activities]);
+    currentDesign.guard.mockImplementation(async () => {
+      const failed = receipt("concurrent-failed-review", "spec-approval");
+      activities.push({ ...failed, recordedAt: new Date(Date.now() + 1_000), payload: { ...failed.payload, decision: "fail" } });
+      return { state: "verified", digest: "sha256:design" };
+    });
+    const claimWorkspace = vi.fn().mockResolvedValue({ capsuleId: "WC-ENTRY" });
+    const result = await claimGovernedBacklogWorkspace({ db, input, actor, workIntent: "plan",
+      dependencies: { claimWorkspace, declareIntent: vi.fn(), discoverCanonicalArtifact } });
+    expect(claimWorkspace).not.toHaveBeenCalled();
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.data.readiness.blockers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "REVIEW_FAILED", state: "fail" }),
+    ]));
+  });
+  it("issues the existing independent approval packet for a previously invisible amendment", async () => {
+    currentDesign.guard.mockResolvedValue({ state: "verified", digest: "sha256:new-design" });
+    const claimWorkspace = vi.fn();
+    const result = await claimGovernedBacklogWorkspace({ db: database(readyActivities()), input, actor,
+      workIntent: "plan", dependencies: { claimWorkspace, discoverCanonicalArtifact } });
+    expect(result.ok).toBe(false);
+    expect(claimWorkspace).not.toHaveBeenCalled();
+    if (result.ok) return;
+    expect(result.data.readiness.unmet).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "SPEC_APPROVAL_REQUIRED", state: "stale" }),
+    ]));
+    const approval = result.data.recovery.reviewerRoutes.find(route => route.gate === "spec-approval");
+    expect(approval?.requestCoworker.initiativeReviewBinding).toMatchObject({
+      expectedCurrentBaselineId: "baseline-1", artifactRef: { providerBlobId: CANONICAL_BLOB_SHA },
+    });
+  });
+
+  it("does not issue any packet or claim when current source verification is unavailable", async () => {
+    currentDesign.guard.mockResolvedValue({ state: "unavailable" });
+    const discover = vi.fn(); const claimWorkspace = vi.fn();
+    const result = await claimGovernedBacklogWorkspace({ db: database(readyActivities()), input, actor,
+      workIntent: "plan", dependencies: { claimWorkspace, discoverCanonicalArtifact: discover } });
+    expect(result.ok).toBe(false);
+    expect(discover).not.toHaveBeenCalled(); expect(claimWorkspace).not.toHaveBeenCalled();
+    if (result.ok) return;
+    expect(result.data.recovery.reviewerRoutes).toEqual([]);
+    expect(result.data.readiness.unmet).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "OBJECTIVE_BASELINE_REQUIRED", state: "missing" }),
+    ]));
+  });
   it("passes the live item's existing design reference into recovery discovery", async () => {
     const db = database();
     const body = `## Design\n\`${CANONICAL_DESIGN_PATH}\``;

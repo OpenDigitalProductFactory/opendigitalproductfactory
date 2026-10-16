@@ -137,6 +137,29 @@ function parseArgs(argv) {
   return options;
 }
 
+/** BI-2FFDBE62. `spawnSync("pnpm")` without a shell fails on Windows because pnpm is pnpm.cmd. */
+export function pregateSpawnOptions({
+  platform = process.platform,
+  env = process.env,
+  cwd = REPO_ROOT,
+} = {}) {
+  const win32 = platform === "win32";
+  return {
+    // pnpm.cmd is the real Windows shim. shell:true with a separate args array
+    // is the deprecated spawn form, and it is unnecessary once the command is
+    // the shim itself.
+    command: win32 ? "pnpm.cmd" : "pnpm",
+    args: ["run", "pregate"],
+    options: {
+      cwd,
+      stdio: "inherit",
+      shell: false,
+      // gate:wait is the sanctioned capture. Pregate must not treat it as a wrapped invocation.
+      env: { ...env, DPF_PREGATE_ALLOW_CAPTURE: "1" },
+    },
+  };
+}
+
 export async function main(argv = process.argv.slice(2)) {
   let options;
   try {
@@ -161,7 +184,8 @@ export async function main(argv = process.argv.slice(2)) {
     // Foreground and UNPIPED — the runbook lists redirecting pregate's output as
     // the most common way to lose a run, so the console goes straight through.
     runGate: () => {
-      const run = spawnSync("pnpm", ["run", "pregate"], { cwd: REPO_ROOT, stdio: "inherit" });
+      const spec = pregateSpawnOptions();
+      const run = spawnSync(spec.command, spec.args, spec.options);
       return { code: run.status };
     },
     readStatus: () => {

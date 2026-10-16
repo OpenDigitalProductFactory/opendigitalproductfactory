@@ -52,7 +52,12 @@ Uncertain admission returns unrun88 with the same source-bound resume pin.
 Authoritative refusal, foreign identity and active authority owned by another
 process stop recovery. A wrapped executable that cannot spawn is also unrun88;
 an executed child's nonzero exit remains a code result. Windows package-manager
-shims use the existing command resolver.
+shims use the existing command resolver, which launches the installed
+pnpm/Corepack JavaScript entrypoint through Node with literal argv. Native
+pnpm executables run directly; an unsupported shim fails without a shell
+fallback. The observed process runner disables shell parsing on Windows too.
+Local-CI pinning generates a JavaScript forwarding entrypoint so selecting the
+repository version preserves argument boundaries throughout the launch chain.
 Cleanup refusal or uncertainty is reported separately with the original
 lease/session recovery action; it cannot be presented as a verified release
 or change an executed child's nonzero result to success.
@@ -628,7 +633,12 @@ anchor *for that run* — it is what the closing summary block ends with. It is
 just not the thing to build automation on.
 
 **How to invoke it.** Run `pregate` in the **foreground**, unpiped, as the sole
-command. On timeout the harness migrates a foreground run to the background and
+command. A captured run whose stdout is not a terminal stops immediately with
+exit 11 and does not take a pool slot, unless `DPF_PREGATE_ALLOW_CAPTURE=1`,
+`CI=true`, or `GITHUB_ACTIONS=true` is set, or the arguments are `--help` or
+`--dry-run` (BI-4BCD269B). `pnpm gate:wait` sets that allowance and, on Windows,
+launches `pnpm.cmd` so the spawn is not recorded as a failed gate (BI-2FFDBE62).
+On timeout the harness migrates a foreground run to the background and
 it **continues** — that is the working path, and it is the opposite of the
 intuitive choice. Do not background it (`&` or `run_in_background`: the harness
 caps and kills it mid-install), do not chain another command after it with `;`
@@ -829,8 +839,10 @@ when its session closed (BI-27A37D27). The resumer is now started through WMI,
 outside that job. If WMI is unavailable, the queued payload says
 `resumerSurvivesSession: false` and the wait ends with the session. For a queued
 claim whose every waiter has ended, `pregate:status` says "no waiter is alive"
-instead of "queued". That is not a verdict on the diff: re-run `pregate`. A
-branch cut before this fix keeps the old resumer until it is rebased.
+instead of "queued". That is not a verdict on the diff: re-run `pregate`. While
+a live waiter already holds the same branch and SHA, another pregate does not
+spawn a second resumer; it exits 75 and names `detached-resumer` (BI-F63D8202).
+A branch cut before this fix keeps the old resumer until it is rebased.
 
 Typecheck writes a separate `web-typecheck` receipt before `next typegen &&
 tsc --noEmit` starts, heartbeats the compiler descendant tree, memory, and a
@@ -874,7 +886,10 @@ metadata, and exits 10 (`EXIT_CANDIDATE_MERGE_CONFLICT`). The wrapper records
 the existing `conflict` status. A run that stopped at its merge graded nothing,
 so the wrapper owes no completion checkpoint and does not rewrite the result as
 infrastructure. `pregate:status` reports FAIL and names the remedy: merge
-`origin/main` into the branch and resolve the listed paths (BI-FCC1DCB2).
+`origin/main` into the branch and resolve the listed paths (BI-FCC1DCB2). The
+same exit 10 is written before admission when `git merge-tree` reports a
+conflict, including a resumed gate, instead of labelling that resume
+`gate-identity-unavailable` (BI-45553400, BI-1F11D17A).
 
 The sandbox-freshness step checks the load-bearing runtime and gate packages,
 including the Vitest runner used by the next step. Vitest is checked for both

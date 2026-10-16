@@ -27,6 +27,7 @@ function run(args: {
   riskTier?: DirectionalOutcomeInput["input"]["riskTier"];
   relevanceMethod?: "semantic" | "lexical";
   settled?: boolean;
+  policy?: Partial<DecisionPerspectiveProfile["autonomyPolicy"]>;
 }) {
   return contentAwareDirectionalOutcome({
     baseResult: {} as DirectionalOutcomeInput["baseResult"],
@@ -35,7 +36,7 @@ function run(args: {
       stanceAlignment: args.alignment,
       ...(args.settled ? { settledByRuling: { materialId: "m", relevance: 1 } } : {}),
     } as ProfileCoverage,
-    selectedProfile: profile,
+    selectedProfile: { ...profile, autonomyPolicy: { ...profile.autonomyPolicy, ...args.policy } },
     confidence: args.confidence ?? 0.9,
     input: { riskTier: args.riskTier ?? "medium", relevanceMethod: args.relevanceMethod ?? "semantic" },
   });
@@ -46,11 +47,23 @@ const BRANCHES: Array<[DirectionalEscalationReason, Parameters<typeof run>[0]]> 
   ["mixed-stance", { alignment: "mixed" }],
   ["critical-risk", { alignment: "approve", riskTier: "critical" }],
   ["below-confidence", { alignment: "none" }],
-  ["aligned-not-settled", { alignment: "approve" }],
   ["high-risk", { alignment: "approve", riskTier: "high", settled: true }],
 ];
 
 describe("directional escalations cite their governing principle", () => {
+  it("records novelty while allowing a confident aligned proposition", () => {
+    expect(run({ alignment: "approve" })).toMatchObject({ outcomeType: "arbitrate", novelProposition: true });
+  });
+
+  it("permits a high-confidence high-risk result within the configured delegation", () => {
+    expect(run({ alignment: "approve", riskTier: "high", policy: { maxRiskForArbitration: "high" } }))
+      .toMatchObject({ outcomeType: "arbitrate", novelProposition: true });
+  });
+
+  it("records an exceeded delegated limit for independent review instead of calling risk alone damage", () => {
+    expect(run({ alignment: "approve", riskTier: "high", settled: true }))
+      .toMatchObject({ outcomeType: "escalate", policyLimitExceeded: true });
+  });
   it.each(BRANCHES)("%s escalates with its table citation", (reason, args) => {
     const result = run(args);
     expect(result?.outcomeType).toBe("escalate");

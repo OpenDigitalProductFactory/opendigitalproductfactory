@@ -15,6 +15,7 @@ import {
 import { type InheritanceDb, loadInheritedInitiativeScope } from "@/lib/backlog/initiative-readiness/parent-scope-inheritance";
 import { type BoundWorkShapeDb, readBoundEditPaths } from "@/lib/backlog/initiative-readiness/bound-work-shape";
 import { assessDeliverySensitivity } from "@/lib/backlog/initiative-readiness/delivery-sensitivity";
+import { prepareCurrentDesignObservation } from "@/lib/backlog/initiative-readiness/canonical-artifact-discovery";
 import {
   governingPrinciplesFor,
   withGoverningRules,
@@ -61,6 +62,7 @@ type ClaimInput = {
 type ClaimResult = Awaited<ReturnType<typeof claimBacklogItemWorkspace>>;
 
 type Dependencies = {
+  prepareCurrentDesign?: typeof prepareCurrentDesignObservation;
   claimWorkspace?: typeof claimBacklogItemWorkspace;
   declareIntent?: typeof declareWorkCapsuleIntent;
   discoverCanonicalArtifact?: DiscoverCanonicalArtifact;
@@ -172,9 +174,9 @@ async function resolveRecoveryOutsideTransaction(args: {
       nextAction: `The workroom lacks ${!pending.baseSha ? "baseSha" : "a valid reviewer dispatch identity (including headSha)"}, so no reviewer binding can be issued. Re-sync the branch with adopt_worktree(headBranch, baseSha, headSha), supplying full immutable commit SHAs for both fields and preserving any valid recorded identity, then retry.`,
     };
 
-  const needsPlanReview = [...pending.decision.blockers, ...pending.decision.unmet]
-    .some(entry => entry.code === "PLAN_REVIEW_REQUIRED");
-  const taskAuthorityKey = needsPlanReview && args.actor.taskAuthorityTokenId
+  // Recovery can synthesize spec approval before missing plan coverage. Resolve
+  // trusted history before routing instead of predicting which gates it emits.
+  const taskAuthorityKey = args.actor.taskAuthorityTokenId
     ? await (await import("@/lib/auth/oauth-task-authority")).resolveMcpTaskAuthorityKey({
       tokenId: args.actor.taskAuthorityTokenId, userId: args.actor.userId, source: "oauth" }) : null;
   const recovery = await resolveInitiativeReviewerRecovery({
@@ -430,6 +432,9 @@ export async function claimGovernedBacklogWorkspace(args: {
   const target = targetForIntent(workIntent);
   const claimWorkspace = args.dependencies?.claimWorkspace ?? claimBacklogItemWorkspace;
   const declareIntent = args.dependencies?.declareIntent ?? declareWorkCapsuleIntent;
+  const currentDesignObservation = await (args.dependencies?.prepareCurrentDesign ?? prepareCurrentDesignObservation)({
+    itemId: args.input.backlogItemId, db: args.db as never,
+  });
   const transact = args.db.$transaction
     ? <T>(fn: (tx: CapsuleDb) => Promise<T>) => args.db.$transaction!(fn)
     : <T>(fn: (tx: CapsuleDb) => Promise<T>) => fn(args.db);
@@ -448,6 +453,11 @@ export async function claimGovernedBacklogWorkspace(args: {
   try {
     const outcome = await transact(async (tx) => {
       if (!tx.backlogItem || !tx.backlogItemActivity) throw new Error("Readiness transaction lost backlog access.");
+      // Receipt writers lock this subject too. Read every gate fact only after
+      // that lock and the prepared source guard, including a newly failed review.
+      if (tx.$queryRaw) await tx.$queryRaw`SELECT "id" FROM "BacklogItem"
+        WHERE "itemId" = ${args.input.backlogItemId} OR "id" = ${args.input.backlogItemId} FOR UPDATE`;
+      const currentDesign = await currentDesignObservation.admissionGuard(tx as never);
       const item = await tx.backlogItem.findFirst({
         where: { OR: [{ itemId: args.input.backlogItemId }, { id: args.input.backlogItemId }] },
         select: {
@@ -467,6 +477,7 @@ export async function claimGovernedBacklogWorkspace(args: {
         { childItemId: item.itemId, childRowId: item.id },
       );
       const projection = projectBacklogItemReadiness({
+        currentDesign,
         item: {
           ...item,
           activeBuildKind: item.activeBuild?.kind ?? null,
@@ -543,7 +554,7 @@ export async function claimGovernedBacklogWorkspace(args: {
         // design (BI-9FE775F9). That must not run inside this transaction, so
         // the not-ready path records its decision here and resolves recovery
         // after the commit.
-        pendingRecovery = {
+        pendingRecovery = projection.currentDesignState === "unavailable" ? null : {
           backlogBody: item.body ?? null,
           decision: evaluated,
           baselineId: projection.baselineId,

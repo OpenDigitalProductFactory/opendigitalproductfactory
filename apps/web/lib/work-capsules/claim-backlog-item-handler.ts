@@ -194,6 +194,9 @@ export async function claimBacklogItemForWork(args: {
       console.warn(`[work-convergence] WorkItem anchor skipped for ${result.capsuleId}: ${error instanceof Error ? error.message : "unknown"}`);
     });
     const base = `Bound ${result.backlogItemId} to ${result.headBranch} (${result.capsuleId}).`;
+    const investment = await (await import("../portfolio/investment-balance-server")).projectItemInvestment(
+      (await import("@dpf/db")).prisma, { itemId: result.backlogItemId, roomId: result.capsuleId },
+    );
     const conflicts = result.conflict
       ? [
           ...(result.conflict.backlogClaim ? [`${result.backlogItemId} already has an ACTIVE claim by another session; this call did NOT steal it`] : []),
@@ -209,6 +212,7 @@ export async function claimBacklogItemForWork(args: {
       data: {
         ...result,
         admissionWarning,
+        investment,
         workShape: shape.resolution && (shape.resolution.kind === "declared" || shape.resolution.kind === "derived")
           ? { ref: shape.resolution.ref, source: shape.resolution.kind, ...(shape.resolution.kind === "derived" ? { reasonCode: shape.resolution.reasonCode, signals: shape.resolution.signals } : {}) }
           : null,

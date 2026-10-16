@@ -197,3 +197,71 @@ The umbrella is complete only when:
 - focused tests, production build, UX/timeline verification, finding-substrate
   guard, local merged-code gate, and PR health are green;
 - user/contributor architecture and workflow documentation is current.
+
+**Readback successor: BI-CAP-21C511CA, 2026-10-16.** This bounded delivery
+extends the design's Workroom readback successor without reopening the original
+umbrella or its immutable coverage. Its single deliverable is atomic: a shared
+recovery reducer and its detail/liveness adapters must agree to avoid conflicting
+readiness claims. Live successor coverage is recorded separately before code:
+`cmva95lin1dfg01rxp6ay9y4w` (atomic), bound to plan blob
+`a6eb44798dc946a7af46e54881b69b3c879f76cd` at
+`f753c7682117ccf4d9bfad3bb3b4c70ceb690f8b`. Research receipt:
+`initiative-4a9af857-bfe3-4ae0-bfd5-3c1895df283f`.
+
+Requirements: READBACK-CURRENT (only the current immutable source's review is
+current), READBACK-RESULT (durable final result is visible), READBACK-AUTH
+(requester-only full receipts remain requester-only), and READBACK-UNKNOWN
+(partial, missing or conflicting proof cannot become a pass).
+
+Contracts: `apps/web/lib/work-management/semantic-review-room-projection.ts::loadSemanticReviewRoomProjection`
+and `apps/web/lib/mcp/tasks-lifecycle.ts::handleTasksResult`. Compare their
+existing bounded room summary and auth-bound full receipt paths; compose the
+former and retain the latter instead of implementing a third reader.
+Flow: `get_workroom -> existing review projection -> recovery readback`;
+liveness must use the same projection and reducer.
+
+1. Reproduce the missing metadata-linked reviewer in
+   `apps/web/lib/work-capsules/workroom-recovery-projection.test.ts`, then cover
+   current versus historical requests, PASS/FAIL/inconclusive receipts, unreadable
+   and partial evidence, stale heartbeat, and identity-repair priority.
+2. Refactor the existing recovery reducer to consume the existing read-model
+   observations. Reserve at least 20 percent for consolidating state selection,
+   unknown handling and canonical result actions rather than adapter copies.
+3. Wire the authorized detail and liveness paths, including colocated
+   `apps/web/lib/work-capsules/liveness-inventory.test.ts` and handler tests.
+   The handler edit waits for its existing owner to land and a normal scope
+   claim to succeed; no forced overlap. No grant or visibility expansion.
+   Verify an oversized capsule still returns exact ownership/source and recovery
+   within the existing route budget, with explicit omitted fields. An oversized
+   log remains incomplete without cursor advancement; a source identity that
+   cannot fit returns a bounded refusal. Full activity-detail repair stays
+   BI-3CE72645.
+4. Run the focused suites, both package typechecks, style-drift guard and
+   applicable canonical integration. Freeze, obtain independent review, pass
+   readiness, push and open a regular DCO PR through protected merge controls.
+5. After canonical deployment, read pending and completed review state through
+   `get_workroom`; retrieve the owning caller's full receipt with `tasks/result`.
+   Record source delivery and deployed verification separately. No fake pending
+   pass, provider replay, private task disclosure, or UI-only success claim.
+
+Rollback reverts this additive projection only and retains all durable records.
+Automatic safe continuation remains BI-7CCCA696; expired successor admission
+remains BI-8ECEC429. Canonical identity repair BI-CAP-437F7745 and role/room
+configuration BI-56E9CEC2 remain separate.
+
+**First-served correction, same BI-CAP-21C511CA.** Release c38edb55 contained
+PR 6423, but actual readback RV-READBACK-6423-FIRST-SERVED-20261016 failed:
+the identity SQL accepted only request schema 1 while the canonical writer
+persists schema 2. The mocked requestBound tests did not exercise that SQL.
+Keep this failure recorded. Reuse the canonical request version/role binding in
+the bounded projection, retaining actor, repository, capsule, gate and digest
+correlation and exact-head selection. Add read-only PostgreSQL fixture CTE tests
+through the actual loader query for both supported versions and unsupported,
+malformed, role-conflicting and cross-identity negatives. Run the actual old
+query against the fixture before correction; record candidate query results
+separately from the protected CI PostgreSQL suite and served acceptance.
+No packet rewrite, stopped-provider retry, new orchestration, or approval grant
+is part of this correction. Refresh coverage for the published corrective head,
+obtain independent bounded source assessment, preserve audited DEV publication
+exceptions as skipped/unrun, then use fresh protected CI and canonical deployment
+before rerunning the failed live check.

@@ -15,6 +15,9 @@ context, never an extra grant; the paired installation remains read-only.
 
 ## Reading an owned semantic review's recovery state
 
+For exhausted independent-review replacement, follow the
+[initiative readiness recovery procedure](initiative-readiness-runbook.md#4-the-reviewer-roster-who-holds-which-grant).
+
 The existing `tasks/get` and `tasks/result` methods return `recovery.details`
 for semantic reviews after checking the authenticated task owner. This includes
 at most 100 task node IDs, recorded status, digest binding and current scoped
@@ -163,6 +166,17 @@ Authorized product surfaces use the six generic `surface_*` MCP tools rather tha
 The SessionStart health hook reads the OAuth challenge on https (a `401` naming `resource_metadata` is the healthy answer) and no longer asks for a token there. Headless callers that cannot open a browser use a `client_credentials` client (design Slice 2b) or, until then, a PAT. Liveness: `OAuthRefreshToken` rows become non-zero on the install and a session authenticates with `source=oauth` (BI-CE5F8C0A).
 
 **Preserve an existing Codex connection.** A toolchain updater run without `--mcp-url` or a nonempty process `DPF_MCP_URL` preserves the saved `mcp_servers.dpf` URL and operator options. Bootstrap also reads that saved URL before install-origin defaults when no process endpoint is named, so its probes and planner use the approved resource. Fresh bootstrap still follows the install HTTPS origin; new standalone connections default to HTTPS localhost. An explicitly named endpoint replaces the saved URL; CLI selection takes precedence over the environment. The shared read-only reader refuses an unreadable URL, embedded credentials or recognized credential query keys before printing the URL or writing configuration. Check the saved endpoint and the public discovery metadata before retrying authentication. If the endpoint changed unexpectedly, restore the approved endpoint through the supported connector command and inspect the client result; changing the resource may initiate OAuth again. Do not treat successful login as proof of silent refresh or task authority. Do not disable certificate validation, inject a legacy token, or substitute a different host.
+
+**Portal origins and MCP endpoints (BI-E2CE164A).** `--from-portal` selects the
+trusted portal that publishes the signed toolchain. `--mcp-url` names the MCP
+resource the clients will use. The standalone updater and Node bootstrap planner
+interpret an explicit bare HTTP(S) origin, with an empty path or `/`, as
+`/api/mcp/v1` on that same origin. An explicit non-root proxy path and its
+non-secret query options remain intact. Unsafe schemes, embedded credentials and
+credential query options are refused before host configuration is read or
+written; diagnostics do not echo the input. An update with no explicit endpoint
+continues to preserve the saved Codex resource. Refresh installed copies through
+the signed portal updater after this repair ships, then restart active clients.
 
 **Concurrent sessions and refresh.** Several sessions of one client can share a stored refresh token. When the same client refreshes the same token again within `DPF_OAUTH_REFRESH_REUSE_GRACE_SECONDS` (default 60s) of rotating it, the server issues a sibling credential and revokes nothing. Reuse after the window, or by another client, still revokes the whole credential family as `refresh_token_replayed`, and the client reports "This connection was reused. Reconnect to continue." In that case, re-authenticate with `/mcp`. The rule and its security reasoning: [credential-lifecycle amendment](../superpowers/specs/2026-09-21-oauth-external-build-authority-design.md#refresh-reuse-grace-amendment-bi-25c6219e-2026-10-02) (BI-25C6219E).
 
@@ -628,3 +642,52 @@ deadline. This repair changes neither token/cost budgets nor model/tool routing.
 A larger context window alone does not prove reliable native tool execution;
 provider routing, tool schema/format fidelity, multistep completion and latency
 need separate measured acceptance.
+
+
+## Recovering an original initiative review after a connection change
+
+Read `get_backlog_item` with the exact `itemId` and `recoveryGate`. For an owned,
+safely stopped review, its native `request_coworker` packet includes
+`reviewRecovery`: the original TaskRun, saved request digest and observed
+`expectedUpdatedAt`. Submit that packet unchanged. An ambiguous, active,
+execution-uncertain or exhausted predecessor requires reconciliation; readback
+returns a refusal rather than a replacement request. Dropping a recovery locator
+from a bounded native request does not authorize a new task.
+
+The locator grants no authority. Submission rechecks the current interactive
+OAuth connection, authenticated human, canonical acting coworker, live grants,
+exact Workroom action admission and current server-issued review packet. The
+original request, source, task namespace and tool/item boundaries must match.
+PAT and credentials-client substitution cannot recover this lane. A stale target
+refuses before task creation; refresh the bounded read after concurrent changes.
+
+Recovery stores current execution authority separately from immutable origin in
+the original task's existing generation reservation. Concurrent requests compete
+on status and `updatedAt`; only one reservation wins. Workers and approval
+continuations reconstruct the same immutable request and recheck current
+authority, recorded deadlines and scope before dispatch. A malformed authority
+record never falls back to the expired origin credential. Parking for capacity,
+a missing writer or a provider failure retains current authority and recorded
+windows; capacity events use the same worker reconstruction. Nested readers and
+writers retain their current governed permission and one-shot approval checks.
+Historical tasks without an absolute deadline retain their existing retry and
+execution ceilings; recovery does not invent a new lifetime.
+
+Server reconciliation checks an already-recorded, verified writer receipt before
+reconstructing credentials or checking permission for new execution. A later
+revoked token or disabled human cannot undo that recorded outcome. The existing
+healer still checks the writer/artifact binding and status/version compare-and-swap;
+it cannot revive cancellation or authorize another inference or effect.
+
+A reservation or successful reader is not a review outcome. Verify the genuine
+governed writer receipt on the original task and reconcile its actual readiness
+finding. Deployment and live recovery acceptance remain separate from source
+verification. Ordinary task submissions retain their existing connection-bound
+idempotency rules; this is an explicit independent-review recovery operation,
+not general cross-user task ownership transfer.
+
+
+Persisted request reconstruction and the execution-authority record parser have
+one home in `apps/web/lib/mcp-task-persisted-request.ts`. Workers and authorization
+guards depend on this leaf; it does not import dispatch or worker modules.
+This keeps per-tool mediation independent of the orchestration load graph.

@@ -406,6 +406,27 @@ When capacity is unavailable, the command records its queue position and exits w
 
 If memory cannot be measured, heavyweight admission fails closed. Cheap repository guards still run without claiming the lane. For current resource classes, memory floors, queue inspection, and recovery, see [Local CI and host-resource lanes](../../operations/local-ci-sandbox-slots.md).
 
+#### Recover a review blocked by endpoint eligibility
+
+An endpoint eligibility refusal means no model met the review's requirements.
+Tasks and the Workroom show the effective data class, residency and grouped
+exclusion counts. A proven refusal stops before provider dispatch and produces
+no review verdict. An uncertain or partially dispatched execution retains that
+uncertainty and its checkpoint history.
+
+The existing **Resume review** action stays disabled for an unchanged eligibility
+refusal. Have the platform verify an eligible route for the complete immutable
+review, preserving screening and the required data boundary. Record fresh scoped
+runtime health evidence for the same Workroom, task and request digest, including
+`semanticReviewRecovery.eligibilityVerified=true` and settlement of any uncertain
+executions. General provider health does not prove this review is eligible.
+
+The requester can then use the existing `retry_semantic_review` operation with
+the verification reference, exact request digest and confirmation. Within the
+original window it retains the request, deadline and remaining attempts. After
+expiry, only the existing qualified bounded-successor contract applies. Neither
+task completion nor successful source tests substitute for an independent verdict.
+
 #### Clean up when merged
 
 ```bash

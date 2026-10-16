@@ -15,9 +15,11 @@ const mocks = vi.hoisted(() => ({
   projectReadiness: vi.fn(),
   resolveTerminalRecovery: vi.fn(),
   readCompletion: vi.fn(),
+  prepareCurrentDesign: vi.fn(),
   roomAccess: vi.fn(),
   roomIdentity: vi.fn(),
   taskAuthority: vi.fn(),
+  recoveryTarget: vi.fn(),
 }));
 
 const CORPUS_AVAILABLE = { available: true, root: "/repo", searchedPaths: ["docs/superpowers/specs", "docs/superpowers/plans"], missingPaths: [], fileCount: 2, reason: "Searched 2 markdown file(s)." };
@@ -51,10 +53,14 @@ vi.mock("@/lib/backlog/initiative-readiness/entry-adapter", () => ({
 vi.mock("@/lib/backlog/initiative-readiness/backlog-completion-evaluation", () => ({
   readBacklogItemCompletion: mocks.readCompletion,
 }));
+vi.mock("@/lib/backlog/initiative-readiness/canonical-artifact-discovery", () => ({
+  prepareCurrentDesignObservation: mocks.prepareCurrentDesign,
+}));
 vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({
   resolveAgentWorkroomAccess: mocks.roomAccess,
   resolveHumanWorkroomAccess: mocks.roomAccess,
 }));
+vi.mock("@/lib/mcp-task-review-recovery", () => ({ issueOriginalReviewRecoveryTarget: mocks.recoveryTarget }));
 vi.mock("@/lib/auth/oauth-task-authority", () => ({ resolveMcpTaskAuthorityKey: mocks.taskAuthority }));
 
 import { getBacklogItem, listBacklogItems } from "./backlog-pack-read-tools";
@@ -84,13 +90,16 @@ const baseItem = {
   activeBuildId: null,
   activeBuild: null,
   updatedAt: new Date("2026-08-15T12:00:00Z"),
+  createdAt: new Date("2026-08-15T12:00:00Z"),
   triageOutcome: "defer",
   epic: null,
 };
 
 describe("backlog deferral read projection", () => {
   beforeEach(() => {
+    mocks.prepareCurrentDesign.mockResolvedValue({ evidence: { state: "not-applicable" } });
     vi.clearAllMocks();
+    mocks.recoveryTarget.mockResolvedValue({ kind: "none" });
     mocks.count.mockResolvedValue(1);
     mocks.findMany.mockResolvedValue([]);
     mocks.findUnique.mockResolvedValue(null);
@@ -108,6 +117,28 @@ describe("backlog deferral read projection", () => {
       level: workroomId === "relational-room-row" ? "content" : "none",
     } }));
     mocks.taskAuthority.mockResolvedValue("oauth-family:one");
+  });
+
+  it("shares one exact source observation with the detail and completion projections", async () => {
+    mocks.findUnique.mockResolvedValue({ ...baseItem, id: "row-1", activities: [] });
+    const evidence = { state: "verified", digest: "sha256:new" };
+    mocks.prepareCurrentDesign.mockResolvedValue({ evidence });
+    const result = await getBacklogItem({ itemId: baseItem.itemId }, "AGT-AUTHOR", "user-1");
+    expect(result.success).toBe(true);
+    expect(mocks.prepareCurrentDesign).toHaveBeenCalledTimes(1);
+    expect(mocks.projectReadiness).toHaveBeenCalledWith(expect.objectContaining({ currentDesign: evidence }));
+    expect(mocks.readCompletion).toHaveBeenCalledWith(expect.objectContaining({ currentDesign: evidence }));
+  });
+
+  it("does not issue a recovery packet when current immutable verification is unavailable", async () => {
+    mocks.findUnique.mockResolvedValue({ ...baseItem, id: "row-1", activities: [] });
+    mocks.prepareCurrentDesign.mockResolvedValue({ evidence: { state: "unavailable" } });
+    mocks.projectReadiness.mockReturnValue({ currentDesignState: "unavailable", decisions: { completion: {
+      verdict: "input-required", blockers: [], unmet: [{ code: "PLAN_REVIEW_REQUIRED" }],
+    } } });
+    const result = await getBacklogItem({ itemId: baseItem.itemId }, "AGT-AUTHOR", "user-1");
+    expect(result).toMatchObject({ success: true, data: { readiness: { currentDesignState: "unavailable" } } });
+    expect(mocks.resolveTerminalRecovery).not.toHaveBeenCalled();
   });
 
   it("does not report a plan-only epic as having a spec", async () => {
@@ -276,7 +307,7 @@ describe("backlog deferral read projection", () => {
       a2aMetadata: { taskAuthorityKey: authority.taskAuthorityKey, idempotencyKey: oldPacket.requestKey,
         requestedAgentId: "AGT-A", requestDigestVersion: 2, requestDigest: remoteTaskRequestDigest(submitted) },
       progressPayload: { terminalWriterWait: { schemaVersion: 1, kind: "missing-terminal-writer",
-        writerToolName: "record_initiative_design_review", resumeMode: "same-taskrun", attempt: 3, observedAt: "2026-10-16T00:00:00Z" } },
+        writerToolName: "record_initiative_design_review", resumeMode: "same-taskrun", dispatchContract: "required-tool-call", attempt: 3, observedAt: "2026-10-16T00:00:00Z" } },
     });
     const validator = await issue(authority);
     expect(validator.reviewerRoutes[0]!.requestCoworker.targetAgent).toBe("AGT-B");
@@ -288,6 +319,15 @@ describe("backlog deferral read projection", () => {
     expect(read.data.recovery.reviewerRoutes).toEqual(validator.reviewerRoutes);
     expect(read.data.recovery.reviewerRoutes[0].requestCoworker).not.toEqual(oldPacket);
     expect(mocks.taskAuthority).toHaveBeenCalledWith({ tokenId: "token-row", userId: "user-1", source: "oauth" });
+    const target = { taskRunId: "TR-MCP-original", requestDigest: "d".repeat(64), expectedUpdatedAt: "2026-10-16T00:00:00.000Z" };
+    mocks.recoveryTarget.mockResolvedValue({ kind: "target", target });
+    const recoveryRead = await Reflect.apply(getBacklogItem, undefined, [params, "AGT-AUTHOR", "user-1", context]);
+    expect(recoveryRead.data.recovery.reviewerRoutes[0].requestCoworker.reviewRecovery).toEqual(target);
+    mocks.recoveryTarget.mockResolvedValue({ kind: "refused", reason: "original-review-ambiguous" });
+    const ambiguous = await Reflect.apply(getBacklogItem, undefined, [params, "AGT-AUTHOR", "user-1", context]);
+    expect(ambiguous).toMatchObject({ success: false, error: "original_review_recovery_required" });
+    expect(ambiguous.data).not.toHaveProperty("recovery");
+
     mocks.taskAuthority.mockResolvedValue(null);
     const revoked = await Reflect.apply(getBacklogItem, undefined, [params, "AGT-AUTHOR", "user-1", context]);
     expect(revoked).toMatchObject({ success: false, error: "review_task_authority_unavailable" });

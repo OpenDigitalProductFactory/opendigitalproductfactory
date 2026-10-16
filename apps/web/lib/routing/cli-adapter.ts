@@ -1,4 +1,4 @@
-import { assertCliResultSucceeded, isProviderOverloadMessage, stripLeadingQuotaBanner } from "./cli-result-errors";
+import { assertCliResultSucceeded, isProviderOverloadMessage, stripLeadingQuotaBanner, parseCliTerminalResultMetadata } from "./cli-result-errors";
 export { isCliQuotaBanner, stripLeadingQuotaBanner } from "./cli-result-errors";
 
 // apps/web/lib/routing/cli-adapter.ts
@@ -36,6 +36,8 @@ import { toCliParsedUsage, type CliParsedUsage, type CliUsagePayload } from "./c
 import { providerSetupLocation } from "@/lib/ai-provider-routes";
 import { randomUUID } from "node:crypto";
 import { renderOwnedCliRunner, NativeCliExecutionUncertainError } from "./cli-owned-runner";
+import { observeCliProcess } from "./cli-process-observation";
+import type { NativeCliDiagnostics } from "../shared/execution-uncertainty";
 
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
@@ -549,82 +551,78 @@ export const cliAdapter: ExecutionAdapterHandler = {
       // callers (Build Studio + coworkers), so a fan-out can't starve the
       // shared sandbox / portal. Prep (auth, file writes) stays outside the
       // slot so slots turn over on real inference, not setup.
-      const { stdout } = await withCliSlot(() => new Promise<{ stdout: string }>((resolve, reject) => {
+      const { stdout, diagnostics } = await withCliSlot(() => new Promise<{ stdout: string; diagnostics: NativeCliDiagnostics }>((resolve, reject) => {
         const proc = spawnCb("docker", [
           "exec", "--user", "node", SANDBOX_CONTAINER, "node", runnerScript,
         ]);
         containerDispatchStarted = true;
 
-        let stdout = "";
-        let stderr = "";
-        let timedOut = false;
-        const timer = setTimeout(() => {
-          timedOut = true;
-          proc.kill("SIGTERM");
-          // The container supervisor independently settles its owned child.
-        }, CLI_TIMEOUT_MS + 15_000);
-
-        proc.stdout.on("data", (data: Buffer) => { stdout += data.toString(); });
-        proc.stderr.on("data", (data: Buffer) => { stderr += data.toString(); });
-
-        proc.on("close", (code: number | null) => {
-          clearTimeout(timer);
-          if (timedOut || code === null || code === 124 || stderr.includes("DPF_CLI_TIMEOUT")) {
-            reject(new NativeCliExecutionUncertainError(providerId));
-          } else if (code !== 0 && stdout.trim()) {
-            reject(new NativeCliExecutionUncertainError(providerId));
-          } else if (code === 0) {
-            resolve({ stdout });
-          } else {
-            // Check for auth errors in stderr
-            if (stderr.includes("unauthorized") || stderr.includes("401") || stderr.includes("authentication")) {
-              reject(new InferenceError(
-                `Claude CLI auth failed: ${stderr.slice(0, 300)}`,
-                "auth",
-                providerId,
-              ));
-            } else if (isProviderOverloadMessage(stderr)) {
-              reject(new InferenceError(
-                `Claude CLI overloaded: ${stderr.slice(0, 300)}`,
-                "overloaded",
-                providerId,
-              ));
-            } else if (stderr.includes("rate") || stderr.includes("429")) {
-              // EP-COST Phase 4: record pool exhaustion so orchestrator can back off
-              void recordCliRateLimit("claude-cli", providerId, stderr, poolIdentity);
-              reject(new InferenceError(
-                `Claude CLI rate limited: ${stderr.slice(0, 300)}`,
-                "rate_limit",
-                providerId,
-              ));
+        observeCliProcess(proc, {
+          timeoutMs: CLI_TIMEOUT_MS + 15_000,
+          onClose: ({ code, stdout, stderr, diagnostics: localDiagnostics }) => {
+            const diagnostics = { ...localDiagnostics, terminalResult: parseCliTerminalResultMetadata(stdout) };
+            if (diagnostics.timedOut || code === null || code === 124 || stderr.includes("DPF_CLI_TIMEOUT")) {
+              reject(new NativeCliExecutionUncertainError(providerId, diagnostics));
+            } else if (code !== 0 && (mcpJwt || stdout.trim())) {
+              reject(new NativeCliExecutionUncertainError(providerId, diagnostics));
+            } else if (code === 0) {
+              resolve({ stdout, diagnostics });
             } else {
-              reject(new InferenceError(
-                `Claude CLI exit code ${code}: ${stderr.slice(0, 500)}`,
-                "provider_error",
-                providerId,
-              ));
+              // Check for auth errors in stderr
+              if (stderr.includes("unauthorized") || stderr.includes("401") || stderr.includes("authentication")) {
+                reject(new InferenceError(
+                  `Claude CLI auth failed: ${stderr.slice(0, 300)}`,
+                  "auth",
+                  providerId,
+                ));
+              } else if (isProviderOverloadMessage(stderr)) {
+                reject(new InferenceError(
+                  `Claude CLI overloaded: ${stderr.slice(0, 300)}`,
+                  "overloaded",
+                  providerId,
+                ));
+              } else if (stderr.includes("rate") || stderr.includes("429")) {
+                // EP-COST Phase 4: record pool exhaustion so orchestrator can back off
+                void recordCliRateLimit("claude-cli", providerId, stderr, poolIdentity);
+                reject(new InferenceError(
+                  `Claude CLI rate limited: ${stderr.slice(0, 300)}`,
+                  "rate_limit",
+                  providerId,
+                ));
+              } else {
+                reject(new InferenceError(
+                  `Claude CLI exit code ${code}: ${stderr.slice(0, 500)}`,
+                  "provider_error",
+                  providerId,
+                ));
+              }
             }
-          }
-        });
-
-        proc.on("error", (err: Error) => {
-          clearTimeout(timer);
-          containerDispatchStarted = false;
-          reject(new InferenceError(
-            `Claude CLI spawn error: ${err.message}`,
-            "network",
-            providerId,
-          ));
+          },
+          onError: (err: Error, observation) => {
+            if (observation.started) {
+              reject(new NativeCliExecutionUncertainError(providerId, observation.diagnostics));
+              return;
+            }
+            containerDispatchStarted = false;
+            reject(new InferenceError(
+              `Claude CLI spawn error: ${err.message}`,
+              "network",
+              providerId,
+            ));
+          },
         });
       }));
 
       // 7. Parse the output
+      if (mcpJwt && diagnostics.terminalResult?.status !== "success") throw new NativeCliExecutionUncertainError(providerId, diagnostics);
       const parsed = parseCliJsonOutput(stdout);
       const inferenceMs = Date.now() - startMs;
 
       try {
         assertCliResultSucceeded(stdout, parsed, providerId);
       } catch (error) {
+        // Native MCP tools may have run before an error-shaped terminal result.
+        if (mcpJwt) throw new NativeCliExecutionUncertainError(providerId, diagnostics);
         if (error instanceof InferenceError && error.code === "rate_limit") {
           // Publish exhaustion before fallback can select another model on the
           // same account. The recorder contains persistence failures itself.
@@ -683,6 +681,17 @@ export const cliAdapter: ExecutionAdapterHandler = {
         usage: parsed.usage,
         inferenceMs,
       };
+    } catch (error) {
+      // Quota is an account observation, not proof that native tool effects settled.
+      // Use only the validated terminal envelope, never raw output or a reset guess.
+      const terminal = error instanceof NativeCliExecutionUncertainError ? error.diagnostics?.terminalResult : undefined;
+      if (terminal?.type === "result" && terminal.status === "error" && terminal.isError === true && terminal.hint === "quota") {
+        try {
+          await recordCliRateLimit("claude-cli", providerId,
+            "The native CLI reported a usage limit; its reset time is unknown.", poolIdentity);
+        } catch { /* Persistence must never replace the original execution hold. */ }
+      }
+      throw error;
     } finally {
       // Clean up temp files (fire-and-forget). The mcp-config file carries the
       // short-lived JWT; even though it's already 5-minute capped, we wipe it
