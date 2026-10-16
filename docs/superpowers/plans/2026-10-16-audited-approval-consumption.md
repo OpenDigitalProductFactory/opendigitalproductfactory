@@ -31,7 +31,9 @@ One atomic repair extends the existing envelope consumer contract. A producer-on
 
 ## Backlog coverage
 
-Single deliverable: persisted approval interpretation and exception capture/consumption, mapped to BI-6BA00C83. Decision: atomic. Dependencies are the existing canonical approval contract and current source; no new independently shippable child. Immutable coverage is pending publication of this plan and the normal MCP receipt; this text is not a receipt.
+Single deliverable: persisted approval interpretation and exception capture/consumption, mapped to BI-6BA00C83. Decision: atomic. Dependencies are the existing canonical approval contract and current source; no new independently shippable child.
+
+Initial pre-implementation coverage: `cmvah4gdk0lk201obzzsaniv5`, binding published plan commit `0a6c6333b9d806cd377fc2abcd3f8275850313cb`, blob `c07bfad3c6d3c21be3c4515662bbd764149bf0fd`; the native resumability check returned valid. Research: `initiative-f51a312a-f343-4f1d-ab24-7708a3fa3074`. Implementation admission: `IRD-23445B38AB6F`. This annotation records that original receipt without claiming it binds future source revisions; refresh current immutable coverage when the normal server contract requires it.
 
 ## Risks and rollback
 
