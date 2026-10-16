@@ -16,6 +16,7 @@
  * and the record it produces is gate-UNRUN, never a pass.
  */
 export const GATE_INFRASTRUCTURE_UNAVAILABLE_CODE = "gate-infrastructure-unavailable";
+export const PUBLISHED_CORRECTION_CODE = "published-correction";
 
 /** Failure classes the probe may record as infrastructure evidence. */
 export const GATE_INFRASTRUCTURE_FAILURE_KINDS = Object.freeze([
@@ -31,6 +32,7 @@ export const LOCAL_CI_OVERRIDE_REASON_CODES = Object.freeze([
   "external-contribution-no-install",
   "install-bootstrap-recovery",
   GATE_INFRASTRUCTURE_UNAVAILABLE_CODE,
+  PUBLISHED_CORRECTION_CODE,
 ]);
 
 const LOCAL_CI_OVERRIDE_CODE_SET = new Set(LOCAL_CI_OVERRIDE_REASON_CODES);
