@@ -53,6 +53,11 @@ Funding is platform reliability under the operator's existing DEV authorization.
 3. Bind it to read-stable source/dependency-policy inputs, pinned toolchain and
    actual installed metadata. Invalidate prior proof before a new install attempt;
    publish successful proof only after the current post-install checks pass.
+   Rediscover and stamp the workspace manifest set on every probe, including newly
+   added or removed manifests. Reuse the dependency-freshness workspace parser;
+   conservatively include excluded packages. Unsupported workspace formats,
+   external hooks and patches retain the ordinary managed-install path because
+   this receipt cannot qualify their transitive inputs.
 4. Only resolve an otherwise indeterminate, empty build record with matching
    successful install evidence. Always execute current artifact, resolution,
    workspace-link, staleness and unclassified-build checks. Never trust a cached
