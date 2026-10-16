@@ -33,6 +33,7 @@ import { createExhaustedPlanReviewPredicate } from "@/lib/backlog/initiative-rea
 import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
 import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness/types";
 import { designPhaseReviewDecision } from "@/lib/backlog/initiative-readiness/design-phase-recovery";
+import { boundedBacklogRecoveryRead } from "./backlog-recovery-read";
 
 const binding: InitiativeReviewBinding = { writerToolName: "record_initiative_post_implementation_review", itemId: "BI-TEST", gate: "post-implementation-review",
   expectedCurrentBaselineId: null,
@@ -179,6 +180,16 @@ describe("consent-bound independent review request", () => {
       implementation: { ...implementation, unmet: [] }, completion,
     } } } });
     expect((await authorizeCoworkerRequest(request, "human", context)).refusal).toBeDefined();
+  });
+  it("accepts the same immutable request delivered through the bounded reader and still rejects alteration", async () => {
+    const projection = boundedBacklogRecoveryRead({ itemId: "BI-TEST", status: "open", workShape: "delivery-large@1.0.0",
+      gate: binding.gate, recovery: { reviewerRoutes: [{ gate: binding.gate, workroomId: "WC-TEST", requestCoworker: packet }], escalations: [], unroutable: [] } });
+    const delivered = (projection.data?.recovery as { reviewerRoutes: { requestCoworker: typeof packet }[] }).reviewerRoutes[0]!.requestCoworker;
+    expect(delivered).toBe(packet);
+    expect(await authorizeCoworkerRequest(delivered, "human", context)).toEqual({ bounded: true });
+    const refused = await authorizeCoworkerRequest({ ...delivered, objective: "altered" }, "human", context);
+    expect(refused.refusal).toMatchObject({ success: false, error: "independent_review_request_denied" });
+    expect(refused.refusal?.data?.action).toContain("recoveryGate");
   });
   it("source-only proof requires platform scope and exact issuance even with general delegation", async () => {
     const design = { ...packet, initiativeReviewBinding: { ...binding, writerToolName: "record_initiative_design_review", gate: "design-spec" },

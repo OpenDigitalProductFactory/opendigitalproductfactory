@@ -1032,6 +1032,9 @@
     "apps/web/lib/mcp-tool-types.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
+    "apps/web/lib/mcp/backlog-recovery-read.ts": [
+      "docs/architecture/agent-standards-dpf-conformance.md"
+    ],
     "apps/web/lib/mcp/external-coworker-task-adapter.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
     ],
@@ -2978,6 +2981,7 @@
       "apps/web/lib/autonomy/trust-graduation.ts",
       "apps/web/lib/coworker/authorized-surface-runtime.ts",
       "apps/web/lib/identity/aidoc-resolver.ts",
+      "apps/web/lib/mcp/backlog-recovery-read.ts",
       "apps/web/lib/mcp/load-tools.ts",
       "apps/web/lib/mcp/tool-tier.ts",
       "apps/web/lib/performance/business-analysis-watch-run.ts",
