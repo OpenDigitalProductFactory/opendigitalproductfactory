@@ -271,6 +271,11 @@ field selection supply relevant refactoring; no new table, queue or authority.
 
 ### Native follow-up backlog coverage and verification
 
+Pre-implementation coverage cmvan462p1ioh01pjh0ml67sl was checked valid for
+design freeze 8634c2fea7c6d7fb46f239f5aaf1b65ab3f8a5a8. Final source evidence
+refreshes live coverage against the published head; this historical receipt
+does not approve later source or replace protected verification.
+
 One atomic deliverable, native-source-validation, maps to BI-023EF164 and its
 existing AC-1/AC-2. Input validation, persisted implementation admission and the
 repair packet cannot ship independently without preserving contradictory

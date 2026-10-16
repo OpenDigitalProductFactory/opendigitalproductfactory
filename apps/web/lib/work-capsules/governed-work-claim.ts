@@ -107,6 +107,7 @@ type ExactReadback = {
   worktreePath: string;
   baseSha: string | null;
   headSha: string | null;
+  /** Full recorded SHA syntax, not observed Git state or publication authority. */
   sourceIdentityComplete: boolean;
   executorKind: string | null;
   executorRef: string | null;
