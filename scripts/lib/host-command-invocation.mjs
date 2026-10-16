@@ -44,8 +44,11 @@ export function resolveHostCommandInvocation(
     join(directory, "pnpm.cjs"),
     join(directory, "node_modules", "pnpm", "bin", "pnpm.cjs"),
     join(directory, "node_modules", "corepack", "dist", "pnpm.js"),
+    join(directory, "..", "node_modules", "pnpm", "bin", "pnpm.cjs"),
+    join(directory, "..", "node_modules", "corepack", "dist", "pnpm.js"),
     join(directory, "..", "pnpm", "bin", "pnpm.cjs"),
     join(directory, "..", "corepack", "dist", "pnpm.js"),
+    join(directory, "..", "dist", "pnpm.js"),
   ].find(isFile);
   if (!entrypoint) throw new Error(`Cannot resolve pnpm JavaScript entrypoint beside ${executable}; reinstall pnpm or enable Corepack.`);
   return { command: process.execPath, args: [entrypoint, ...args] };

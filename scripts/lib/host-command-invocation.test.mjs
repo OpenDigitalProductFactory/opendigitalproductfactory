@@ -35,6 +35,18 @@ test('Windows honors the resolved absolute host pnpm rather than searching PATH 
   }), { command: process.execPath, args: [script, '--version'] });
 });
 
+for (const [entry, shimDirectory] of [['node_modules/pnpm/bin/pnpm.cjs', 'bin'], ['dist/pnpm.js', 'shims']]) {
+  test(`Windows resolves the managed ${shimDirectory} shim layout`, t => {
+    const { root, script } = installation(t, entry);
+    const bin = join(root, shimDirectory);
+    mkdirSync(bin);
+    writeFileSync(join(bin, 'pnpm.cmd'), 'fixture');
+    assert.deepEqual(resolveHostCommandInvocation('pnpm', ['--version'], {
+      platform: 'win32', env: { PATH: bin },
+    }), { command: process.execPath, args: [script, '--version'] });
+  });
+}
+
 test('missing or unsupported Windows pnpm installations never fall back to a shell', t => {
   const { root } = installation(t, 'unrelated.cjs');
   assert.throws(() => resolveHostCommandInvocation('pnpm', [], { platform: 'win32', env: { PATH: root } }), /pnpm.*entrypoint/i);
