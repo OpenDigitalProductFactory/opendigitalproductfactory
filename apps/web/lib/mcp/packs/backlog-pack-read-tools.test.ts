@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   projectReadiness: vi.fn(),
   resolveTerminalRecovery: vi.fn(),
   readCompletion: vi.fn(),
+  prepareCurrentDesign: vi.fn(),
   roomAccess: vi.fn(),
   roomIdentity: vi.fn(),
   taskAuthority: vi.fn(),
@@ -51,6 +52,9 @@ vi.mock("@/lib/backlog/initiative-readiness/entry-adapter", () => ({
 vi.mock("@/lib/backlog/initiative-readiness/backlog-completion-evaluation", () => ({
   readBacklogItemCompletion: mocks.readCompletion,
 }));
+vi.mock("@/lib/backlog/initiative-readiness/canonical-artifact-discovery", () => ({
+  prepareCurrentDesignObservation: mocks.prepareCurrentDesign,
+}));
 vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({
   resolveAgentWorkroomAccess: mocks.roomAccess,
   resolveHumanWorkroomAccess: mocks.roomAccess,
@@ -84,12 +88,14 @@ const baseItem = {
   activeBuildId: null,
   activeBuild: null,
   updatedAt: new Date("2026-08-15T12:00:00Z"),
+  createdAt: new Date("2026-08-15T12:00:00Z"),
   triageOutcome: "defer",
   epic: null,
 };
 
 describe("backlog deferral read projection", () => {
   beforeEach(() => {
+    mocks.prepareCurrentDesign.mockResolvedValue({ evidence: { state: "not-applicable" } });
     vi.clearAllMocks();
     mocks.count.mockResolvedValue(1);
     mocks.findMany.mockResolvedValue([]);
@@ -108,6 +114,28 @@ describe("backlog deferral read projection", () => {
       level: workroomId === "relational-room-row" ? "content" : "none",
     } }));
     mocks.taskAuthority.mockResolvedValue("oauth-family:one");
+  });
+
+  it("shares one exact source observation with the detail and completion projections", async () => {
+    mocks.findUnique.mockResolvedValue({ ...baseItem, id: "row-1", activities: [] });
+    const evidence = { state: "verified", digest: "sha256:new" };
+    mocks.prepareCurrentDesign.mockResolvedValue({ evidence });
+    const result = await getBacklogItem({ itemId: baseItem.itemId }, "AGT-AUTHOR", "user-1");
+    expect(result.success).toBe(true);
+    expect(mocks.prepareCurrentDesign).toHaveBeenCalledTimes(1);
+    expect(mocks.projectReadiness).toHaveBeenCalledWith(expect.objectContaining({ currentDesign: evidence }));
+    expect(mocks.readCompletion).toHaveBeenCalledWith(expect.objectContaining({ currentDesign: evidence }));
+  });
+
+  it("does not issue a recovery packet when current immutable verification is unavailable", async () => {
+    mocks.findUnique.mockResolvedValue({ ...baseItem, id: "row-1", activities: [] });
+    mocks.prepareCurrentDesign.mockResolvedValue({ evidence: { state: "unavailable" } });
+    mocks.projectReadiness.mockReturnValue({ currentDesignState: "unavailable", decisions: { completion: {
+      verdict: "input-required", blockers: [], unmet: [{ code: "PLAN_REVIEW_REQUIRED" }],
+    } } });
+    const result = await getBacklogItem({ itemId: baseItem.itemId }, "AGT-AUTHOR", "user-1");
+    expect(result).toMatchObject({ success: true, data: { readiness: { currentDesignState: "unavailable" } } });
+    expect(mocks.resolveTerminalRecovery).not.toHaveBeenCalled();
   });
 
   it("does not report a plan-only epic as having a spec", async () => {

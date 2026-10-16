@@ -1,4 +1,8 @@
 import { prisma } from "@dpf/db";
+import { createHash } from "node:crypto";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+import type { CurrentDesignEvidence } from "./judged-design-artifact";
+import type { InitiativeArtifactRef } from "./receipt-schema";
 
 import {
   cancelGithubResponseBody,
@@ -13,6 +17,101 @@ import {
  * own signature so this module never declares a second shape for the same rows.
  */
 type CanonicalArtifactDb = Parameters<typeof resolveGithubToken>[0];
+
+type CurrentDesignDb = Pick<typeof prisma, "backlogItem" | "backlogItemActivity" | "workroom">
+  & { $queryRaw?: typeof prisma.$queryRaw };
+type BoundDesign = {
+  kind: "bound"; itemRowId: string; itemId: string; selection: string;
+  baselineId: string; baselineDigest: string;
+  artifactRef: Extract<InitiativeArtifactRef, { kind: "repo-blob-at-commit" }>;
+  room: { capsuleId: string; repositoryFullName: string; baseSha: string; headSha: string; headBranch: string };
+};
+type CurrentDesignBinding = BoundDesign | { kind: "not-applicable" | "unavailable" };
+
+async function loadCurrentDesignBinding(itemId: string, db: CurrentDesignDb): Promise<CurrentDesignBinding> {
+  const item = await db.backlogItem.findFirst({ where: { OR: [{ itemId }, { id: itemId }] },
+    select: { id: true, itemId: true, body: true } });
+  if (!item) return { kind: "unavailable" };
+  const activities = await db.backlogItemActivity.findMany({ where: { backlogItemId: item.id, kind: "initiative_scope_baseline" },
+    select: { id: true, kind: true, gateKey: true, recordedAt: true, payload: true } });
+  const { parseReadinessBaselines } = await import("./entry-adapter");
+  const baseline = parseReadinessBaselines(activities, item.itemId);
+  if (baseline.malformed || baseline.ambiguous) return { kind: "unavailable" };
+  // A child with only inherited scope never authors a parent amendment.
+  if (!baseline.current || baseline.current.origin === "item-body") return { kind: "not-applicable" };
+  if (!baseline.current.artifactRef) return { kind: "unavailable" };
+  if (baseline.current.artifactRef.kind !== "repo-blob-at-commit") return { kind: "not-applicable" };
+  const rooms = await db.workroom.findMany({
+    where: { backlogItemId: { in: [item.id, item.itemId] }, archivedAt: null,
+      status: { notIn: ["abandoned", "archived", "superseded"] } }, take: 2,
+    select: { capsuleId: true, repositoryFullName: true, baseSha: true, headSha: true, headBranch: true },
+  });
+  const room = rooms.length === 1 ? rooms[0] : null;
+  if (!room?.repositoryFullName || !room.baseSha || !room.headSha || !room.headBranch
+    || !/^[a-f0-9]{40}$/i.test(room.baseSha) || !/^[a-f0-9]{40}$/i.test(room.headSha)
+    || room.repositoryFullName !== baseline.current.artifactRef.repositoryFullName) return { kind: "unavailable" };
+  return { kind: "bound", itemRowId: item.id, itemId: item.itemId, selection: item.body ?? "",
+    baselineId: baseline.current.baselineId, baselineDigest: baseline.current.artifactDigest,
+    artifactRef: baseline.current.artifactRef,
+    room: { capsuleId: room.capsuleId, repositoryFullName: room.repositoryFullName, baseSha: room.baseSha,
+      headSha: room.headSha, headBranch: room.headBranch } };
+}
+
+export async function readCurrentDesignArtifact(binding: BoundDesign, ports?: {
+  discoverArtifact?: typeof discoverCanonicalDesignArtifact;
+  readBlob?: typeof import("./repository-artifact").readRepositoryProviderBlob;
+}): Promise<CurrentDesignEvidence> {
+  const discovered = await (ports?.discoverArtifact ?? discoverCanonicalDesignArtifact)({ ...binding.room,
+    backlogBody: binding.selection });
+  // Source-only follow-up commits need not touch their already approved design.
+  // Never use this fallback to override an explicit or ambiguous selection.
+  if (!discovered.resolved && (discovered.code !== "no-canonical-design"
+    || /docs\/superpowers\/specs\//.test(binding.selection))) return { state: "unavailable" };
+  const readRepositoryProviderBlob = ports?.readBlob ?? (await import("./repository-artifact")).readRepositoryProviderBlob;
+  const bytes = await readRepositoryProviderBlob({ repositoryFullName: binding.room.repositoryFullName,
+    commitSha: binding.room.headSha, path: discovered.resolved ? discovered.artifact.path : binding.artifactRef.path,
+    expectedBlobId: discovered.resolved ? discovered.artifact.providerBlobId : null });
+  return bytes.ok ? { state: "verified", digest: `sha256:${createHash("sha256").update(bytes.data).digest("hex")}` }
+    : { state: "unavailable" };
+}
+
+/** Provider work stays outside transactions; only this server closure crosses admission. */
+export async function prepareCurrentDesignObservation(args: {
+  itemId: string; db?: CurrentDesignDb;
+  ports?: Partial<{
+    loadBinding: (itemId: string, db: CurrentDesignDb) => Promise<CurrentDesignBinding>;
+    readCurrentArtifact: (binding: BoundDesign) => Promise<CurrentDesignEvidence>;
+    lockBinding: (binding: BoundDesign, db: CurrentDesignDb) => Promise<void>;
+  }>;
+}): Promise<{ evidence: CurrentDesignEvidence; admissionGuard: (tx: CurrentDesignDb) => Promise<CurrentDesignEvidence> }> {
+  const db = args.db ?? prisma;
+  const load = args.ports?.loadBinding ?? loadCurrentDesignBinding;
+  const read = args.ports?.readCurrentArtifact ?? readCurrentDesignArtifact;
+  const unavailable = { state: "unavailable" } as const;
+  let initial: CurrentDesignBinding;
+  let evidence: CurrentDesignEvidence;
+  try {
+    initial = await load(args.itemId, db);
+    evidence = initial.kind === "bound" ? await read(initial) : { state: initial.kind };
+    if (canonicalJson(await load(args.itemId, db)) !== canonicalJson(initial)) evidence = unavailable;
+  } catch {
+    initial = { kind: "unavailable" }; evidence = unavailable;
+  }
+  return { evidence, admissionGuard: async tx => {
+    if (evidence.state === "unavailable") return unavailable;
+    try {
+      if (initial.kind === "bound") {
+        if (args.ports?.lockBinding) await args.ports.lockBinding(initial, tx);
+        else {
+          if (!tx.$queryRaw) return unavailable;
+          await tx.$queryRaw`SELECT "id" FROM "BacklogItem" WHERE "id" = ${initial.itemRowId} FOR UPDATE`;
+          await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "capsuleId" = ${initial.room.capsuleId} FOR SHARE`;
+        }
+      }
+      return canonicalJson(await load(args.itemId, tx)) === canonicalJson(initial) ? evidence : unavailable;
+    } catch { return unavailable; }
+  } };
+}
 
 export type DiscoveredCanonicalArtifact = {
   path: string;

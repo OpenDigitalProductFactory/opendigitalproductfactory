@@ -1,4 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const currentDesign = vi.hoisted(() => ({ prepare: vi.fn(), guard: vi.fn() }));
+vi.mock("@/lib/backlog/initiative-readiness/canonical-artifact-discovery", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/backlog/initiative-readiness/canonical-artifact-discovery")>(),
+  prepareCurrentDesignObservation: currentDesign.prepare,
+}));
+beforeEach(() => {
+  currentDesign.guard.mockReset().mockResolvedValue({ state: "not-applicable" });
+  currentDesign.prepare.mockReset().mockResolvedValue({ evidence: { state: "not-applicable" }, admissionGuard: currentDesign.guard });
+});
 
 import { claimGovernedBacklogWorkspace } from "./governed-work-claim";
 import {
@@ -7,6 +17,7 @@ import {
   governingRulesLine,
 } from "@/lib/kernel/governing-principles";
 import type { CapsuleDb } from "./work-capsule-store-types";
+import { readyActivities } from "@/lib/backlog/initiative-readiness/entry-adapter.test-fixtures";
 
 const actor = { userId: "user-1", agentId: "AGT-1", principalId: "PRN-1" };
 const CANONICAL_DESIGN_PATH = "docs/superpowers/specs/2026-08-22-entry-design.md";
@@ -130,6 +141,36 @@ function database(activities: unknown[] = []) {
 }
 
 describe("claimGovernedBacklogWorkspace", () => {
+  it("issues the existing independent approval packet for a previously invisible amendment", async () => {
+    currentDesign.guard.mockResolvedValue({ state: "verified", digest: "sha256:new-design" });
+    const claimWorkspace = vi.fn();
+    const result = await claimGovernedBacklogWorkspace({ db: database(readyActivities()), input, actor,
+      workIntent: "plan", dependencies: { claimWorkspace, discoverCanonicalArtifact } });
+    expect(result.ok).toBe(false);
+    expect(claimWorkspace).not.toHaveBeenCalled();
+    if (result.ok) return;
+    expect(result.data.readiness.unmet).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "SPEC_APPROVAL_REQUIRED", state: "stale" }),
+    ]));
+    const approval = result.data.recovery.reviewerRoutes.find(route => route.gate === "spec-approval");
+    expect(approval?.requestCoworker.initiativeReviewBinding).toMatchObject({
+      expectedCurrentBaselineId: "baseline-1", artifactRef: { providerBlobId: CANONICAL_BLOB_SHA },
+    });
+  });
+
+  it("does not issue any packet or claim when current source verification is unavailable", async () => {
+    currentDesign.guard.mockResolvedValue({ state: "unavailable" });
+    const discover = vi.fn(); const claimWorkspace = vi.fn();
+    const result = await claimGovernedBacklogWorkspace({ db: database(readyActivities()), input, actor,
+      workIntent: "plan", dependencies: { claimWorkspace, discoverCanonicalArtifact: discover } });
+    expect(result.ok).toBe(false);
+    expect(discover).not.toHaveBeenCalled(); expect(claimWorkspace).not.toHaveBeenCalled();
+    if (result.ok) return;
+    expect(result.data.recovery.reviewerRoutes).toEqual([]);
+    expect(result.data.readiness.unmet).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "OBJECTIVE_BASELINE_REQUIRED", state: "missing" }),
+    ]));
+  });
   it("passes the live item's existing design reference into recovery discovery", async () => {
     const db = database();
     const body = `## Design\n\`${CANONICAL_DESIGN_PATH}\``;

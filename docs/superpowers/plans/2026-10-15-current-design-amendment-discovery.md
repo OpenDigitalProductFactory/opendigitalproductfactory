@@ -30,10 +30,17 @@ No new gate, receipt kind, authority tier or baseline mutation is needed.
    reader. Use the existing declared design selection; do not accept a caller
    digest or infer a change from the commit SHA alone. When the canonical path
    remains the baseline path, read that exact path at the new head.
-3. Recheck the Workroom identity after the provider read. A changed head,
-   ambiguous room/design, missing file or unavailable source yields explicit
-   unavailable evidence, never a fabricated unchanged digest or permission.
+3. Recheck the Workroom identity, baseline chain head and canonical design
+   selection/subject binding after the provider read. Baseline supersession or
+   selection can change while the source head stays the same. Compare semantic
+   identities in the existing admission/completion transaction; use the existing
+   stale-evidence/CAS refusal, not volatile heartbeat timestamps. A changed
+   binding, ambiguous room/design, missing file or unavailable source yields
+   explicit unavailable evidence, never an unchanged digest or permission.
 4. Feed the verified content digest into `judgedDesignDigest`. Current verified
+   input has three explicit states: verified, not-applicable and unavailable.
+   Unavailable own-repository evidence cannot fall back to old all-pass receipts
+   and cannot issue a reviewer packet or dispatch. Verified current design
    bytes take precedence over historical receipts. Identical bytes at a new
    commit remain current; restored baseline bytes end the amendment. With an
    amendment, the existing approval/baseline requirements become stale and the
@@ -41,11 +48,15 @@ No new gate, receipt kind, authority tier or baseline mutation is needed.
 5. Share this server resolution across governed claims, the exact item detail
    read and completion evaluation. Do not introduce a provider request for
    every item in a bulk backlog list. Keep the pure projector free of I/O.
-   Reuse one resolution across targets in an exact item read.
+   Reuse one resolution across targets in an exact item read. Retain the shared
+   reader's 1 MiB bound and bounded transport. Bulk projections must identify
+   recorded evidence as not verified against the current head.
 6. Add regressions before implementation: all historical gates pass with a new
    unreviewed design; unchanged bytes at a new commit; restoration; a failed
    approval; inherited scope; unavailable/ambiguous source; concurrent head
-   change. Assert the resulting independent packet and supersession binding,
+   change; unchanged-head concurrent baseline/selection change; unavailable
+   source across claim/detail/completion with no issued packet. Assert one
+   resolution shared across targets, the resulting independent packet and supersession binding,
    not only a helper return value. Preserve original receipt discovery tests.
 7. Run graph-related and affected suites, both web TypeScript programs and
    required guards. Obtain an independent source assessment, publish a DCO PR

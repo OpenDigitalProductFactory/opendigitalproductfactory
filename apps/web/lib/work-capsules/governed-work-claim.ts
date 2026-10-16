@@ -15,6 +15,7 @@ import {
 import { type InheritanceDb, loadInheritedInitiativeScope } from "@/lib/backlog/initiative-readiness/parent-scope-inheritance";
 import { type BoundWorkShapeDb, readBoundEditPaths } from "@/lib/backlog/initiative-readiness/bound-work-shape";
 import { assessDeliverySensitivity } from "@/lib/backlog/initiative-readiness/delivery-sensitivity";
+import { prepareCurrentDesignObservation } from "@/lib/backlog/initiative-readiness/canonical-artifact-discovery";
 import {
   governingPrinciplesFor,
   withGoverningRules,
@@ -61,6 +62,7 @@ type ClaimInput = {
 type ClaimResult = Awaited<ReturnType<typeof claimBacklogItemWorkspace>>;
 
 type Dependencies = {
+  prepareCurrentDesign?: typeof prepareCurrentDesignObservation;
   claimWorkspace?: typeof claimBacklogItemWorkspace;
   declareIntent?: typeof declareWorkCapsuleIntent;
   discoverCanonicalArtifact?: DiscoverCanonicalArtifact;
@@ -430,6 +432,9 @@ export async function claimGovernedBacklogWorkspace(args: {
   const target = targetForIntent(workIntent);
   const claimWorkspace = args.dependencies?.claimWorkspace ?? claimBacklogItemWorkspace;
   const declareIntent = args.dependencies?.declareIntent ?? declareWorkCapsuleIntent;
+  const currentDesignObservation = await (args.dependencies?.prepareCurrentDesign ?? prepareCurrentDesignObservation)({
+    itemId: args.input.backlogItemId, db: args.db as never,
+  });
   const transact = args.db.$transaction
     ? <T>(fn: (tx: CapsuleDb) => Promise<T>) => args.db.$transaction!(fn)
     : <T>(fn: (tx: CapsuleDb) => Promise<T>) => fn(args.db);
@@ -467,6 +472,7 @@ export async function claimGovernedBacklogWorkspace(args: {
         { childItemId: item.itemId, childRowId: item.id },
       );
       const projection = projectBacklogItemReadiness({
+        currentDesign: await currentDesignObservation.admissionGuard(tx as never),
         item: {
           ...item,
           activeBuildKind: item.activeBuild?.kind ?? null,
@@ -543,7 +549,7 @@ export async function claimGovernedBacklogWorkspace(args: {
         // design (BI-9FE775F9). That must not run inside this transaction, so
         // the not-ready path records its decision here and resolves recovery
         // after the commit.
-        pendingRecovery = {
+        pendingRecovery = projection.currentDesignState === "unavailable" ? null : {
           backlogBody: item.body ?? null,
           decision: evaluated,
           baselineId: projection.baselineId,
