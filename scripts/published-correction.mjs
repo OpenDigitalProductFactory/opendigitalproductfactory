@@ -68,7 +68,6 @@ export function execute(command, args, { cwd = process.cwd(), env = process.env,
         const bytes = readFreshTestReport(reportPath);
         observation.testReport = bytes.toString("utf8");
         Object.assign(observation.report, { bytes: bytes.length, sha256: reportDigest(bytes) });
-        if (observation.exitCode !== 0) observation.output += `\nVitest report: ${observation.testReport.slice(-8000)}`;
       } catch {
         if (observation.exitCode === 0 && !observation.outcome) observation.outcome = "test-report-unproven";
       }

@@ -404,6 +404,32 @@ test("a complete Vitest file cannot overrule a failed or interrupted child", () 
   }
 });
 
+test("failed verification receipts retain compact report identity without raw assertion payloads", async () => {
+  const fixture = gitFixture();
+  const marker = "raw-report-assertion-payload-must-stay-ephemeral";
+  const report = JSON.stringify({ ...completeVitestReport, success: false, assertionResults: [{ failureMessages: [marker] }] });
+  try {
+    fixture.write(2); fixture.git("add", "."); fixture.git("commit", "--quiet", "-m", "repair source");
+    const runnerPath = join(fixture.cwd, ".git", "report-fixture.mjs");
+    writeFileSync(runnerPath, `import {writeFileSync} from 'node:fs';
+      writeFileSync(process.argv[process.argv.indexOf('--outputFile') + 1], ${JSON.stringify(report)});
+      process.exit(7);`);
+    await assert.rejects(verifyPublishedCorrection({ ...fixture.options, persist: true,
+      run: () => execute("node", [runnerPath, "vitest"]),
+    }), /Affected check failed/);
+    const bytes = readFileSync(correctionReceiptPath(fixture.cwd), "utf8");
+    assert.equal(bytes.includes(marker), false, "raw JSON must not enter the durable failure receipt");
+    const receipt = JSON.parse(bytes);
+    assert.equal(receipt.status, "inconclusive");
+    const result = receipt.results[0];
+    assert.equal(result.exitCode, 7);
+    assert.equal(result.outcome, null);
+    assert.equal(result.report.bytes, Buffer.byteLength(report));
+    assert.equal(result.report.sha256, createHash("sha256").update(report).digest("hex"));
+    assert.equal(Object.hasOwn(result, "testReport"), false);
+  } finally { fixture.remove(); }
+});
+
 test("a recorded arbitrary command list cannot replace the source-derived affected plan", async () => {
   const fixture = gitFixture();
   try {
