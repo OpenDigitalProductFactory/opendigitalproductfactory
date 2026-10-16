@@ -45,6 +45,26 @@ across readers. It does not settle original uncertain provider executions,
 authorize retries or satisfy the remaining seven-scenario, nested or OAuth
 acceptance. Current source/release delivery and those obligations stay separate.
 
+Coverage for this amendment:
+
+- approved-runtime-target-outcome maps OBJ-DELIVERY-VISIBILITY,
+  OBJ-DELIVERY-CONVERGENCE, OBJ-DELIVERY-MEASUREMENT and OBJ-DELIVERY-REFACTOR
+  to AC-DELIVERY-VISIBILITY, AC-DELIVERY-CONVERGENCE, AC-DELIVERY-ADMISSION,
+  AC-DELIVERY-MEASUREMENT and AC-DELIVERY-REFACTOR. Contracts are
+  exact-approved-input-fingerprint, actor-bound-runtime-target,
+  durable-verified-terminal-receipt and caller-scoped-approval-outcome. Flows are
+  original-approval-to-original-transition and native-and-inbox-shared-projection.
+  It depends on parent-verification-dependencies for whole-objective completion.
+- parent-verification-dependencies retains pending OBJ-DELIVERY-VISIBILITY,
+  OBJ-DELIVERY-CAMPAIGN, OBJ-DELIVERY-PLACEMENT, OBJ-DELIVERY-CONVERGENCE,
+  OBJ-DELIVERY-MEASUREMENT and OBJ-DELIVERY-REFACTOR; acceptance remains
+  AC-DELIVERY-VISIBILITY, AC-DELIVERY-CAMPAIGN, AC-DELIVERY-PLACEMENT,
+  AC-DELIVERY-CONVERGENCE, AC-DELIVERY-ADMISSION, AC-DELIVERY-MEASUREMENT and
+  AC-DELIVERY-REFACTOR. Existing flows parent-delivery-convergence,
+  parent-placement-and-campaign and parent-runtime-and-outcome-verification
+  remain governed by docs/superpowers/specs/2026-09-03-local-first-agentic-delivery-throughput-design.md.
+  This row preserves traceability; it is not new implementation or acceptance.
+
 ## October 11 owned review recovery readback (BI-CAP-3147C64B)
 
 WC-502E167E repairs the missing observation path for expired semantic reviews.
