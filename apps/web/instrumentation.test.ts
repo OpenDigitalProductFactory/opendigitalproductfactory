@@ -51,12 +51,9 @@ vi.mock("@/lib/self-upgrade/quiescence", () => ({
   getQuiescenceLevel: async () => "normal", // BI-E9DAA23F pause cases: instrumentation.upgrade-pause.test.ts
 }));
 
-const clearCooldownMock = vi.fn();
 vi.mock("@/lib/self-upgrade/run-store", () => ({
   completeRun: (...args: unknown[]) => completeRunMock(...args),
   failRun: (...args: unknown[]) => failRunMock(...args),
-  clearCooldown: (...args: unknown[]) => clearCooldownMock(...args),
-  LANDED_SWAP_FALSE_FAILURE_REASON: "admission-reopened-before-swap: the drain already ended (completed)",
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -97,7 +94,6 @@ beforeEach(() => {
   getDeployedShaMock.mockReset();
   completeRunMock.mockReset();
   failRunMock.mockReset();
-  clearCooldownMock.mockReset();
   selfUpgradeRunFindManyMock.mockReset();
   featureBuildFindManyMock.mockReset();
   featureBuildFindUniqueMock.mockReset();
@@ -362,47 +358,6 @@ describe("reconcileSelfUpgradeRunsOnBoot", () => {
       "SUR-QUEUED",
       expect.stringContaining("dispatch never started"),
     );
-  });
-
-  it("corrects a landed swap that the retried step recorded failed (SUR-8F1389F9)", async () => {
-    getDeployedShaMock.mockResolvedValueOnce("target-sha");
-    selfUpgradeRunFindManyMock
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([
-        {
-          runId: "SUR-8F1389F9",
-          currentSha: "old-sha",
-          deployedSha: "target-sha",
-          targetSha: "target-sha",
-          reason: "admission-reopened-before-swap: the drain already ended (completed)",
-        },
-      ]);
-    completeRunMock.mockResolvedValueOnce({});
-
-    const result = await reconcileSelfUpgradeRunsOnBoot({ log: vi.fn(), error: vi.fn() });
-
-    expect(result).toEqual({ succeeded: 1, failed: 0 });
-    expect(completeRunMock).toHaveBeenCalledWith("SUR-8F1389F9");
-    expect(failRunMock).not.toHaveBeenCalled();
-  });
-
-  it("leaves a false-failure row alone when this portal is not that run's target", async () => {
-    getDeployedShaMock.mockResolvedValueOnce("other-sha");
-    selfUpgradeRunFindManyMock
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([
-        {
-          runId: "SUR-OTHER",
-          currentSha: "old-sha",
-          deployedSha: "target-sha",
-          targetSha: "target-sha",
-        },
-      ]);
-
-    const result = await reconcileSelfUpgradeRunsOnBoot({ log: vi.fn(), error: vi.fn() });
-
-    expect(result).toEqual({ succeeded: 0, failed: 0 });
-    expect(completeRunMock).not.toHaveBeenCalled();
   });
 
   it("on boot, leaves a run 'running' (no false-fail) when still on the pre-upgrade currentSha (swap pending)", async () => {

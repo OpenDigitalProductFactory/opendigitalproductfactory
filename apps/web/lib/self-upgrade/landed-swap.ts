@@ -23,3 +23,51 @@ export function resumedSwapAlreadyLanded(input: {
   const deployed = input.deployedSha.toLowerCase();
   return deployed === input.targetSha.toLowerCase() && deployed !== input.currentSha.toLowerCase();
 }
+
+type LandedSwapFalseFailureRow = {
+  runId: string;
+  currentSha: string | null;
+  deployedSha: string | null;
+  targetSha: string | null;
+};
+
+/**
+ * Correct rows the retried swap step marked failed after the new portal was
+ * already the target. Returns how many rows were completed. Cooldown clearing
+ * is non-fatal: a failed clear must not hide the ledger correction.
+ */
+export async function healLandedSwapFalseFailures(input: {
+  deployedSha: string | null;
+  completeRun: (runId: string) => Promise<unknown>;
+  logger: Pick<Console, "log" | "error">;
+  findFailedRuns?: (reason: string) => Promise<LandedSwapFalseFailureRow[] | null | undefined>;
+}): Promise<number> {
+  const findFailedRuns = input.findFailedRuns ?? (async (reason: string) => {
+    const { prisma } = await import("@dpf/db");
+    return prisma.selfUpgradeRun.findMany({
+      where: { status: "failed", reason },
+      select: { runId: true, currentSha: true, deployedSha: true, targetSha: true },
+    });
+  });
+  const rows = (await findFailedRuns(LANDED_SWAP_FALSE_FAILURE_REASON)) ?? [];
+  let healed = 0;
+  for (const run of rows) {
+    if (!resumedSwapAlreadyLanded({
+      deployedSha: input.deployedSha,
+      targetSha: run.deployedSha ?? run.targetSha,
+      currentSha: run.currentSha,
+    })) continue;
+    await input.completeRun(run.runId);
+    healed++;
+    input.logger.log(`[self-upgrade-reconcile] ${run.runId} -> succeeded (landed swap had been recorded failed)`);
+  }
+  if (healed > 0) {
+    try {
+      const { clearCooldown } = await import("@/lib/self-upgrade/cooldown");
+      await clearCooldown();
+    } catch (err) {
+      input.logger.error("[self-upgrade-reconcile] landed-swap cooldown clear failed (non-fatal):", err);
+    }
+  }
+  return healed;
+}

@@ -107,7 +107,7 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
     if (!dryRun) await clearCooldown();
     await emitUpgradeEvent({ type: "upgrade.succeeded", runId });
     console.warn(`[self-upgrade] ${runId}: swap step resumed on target ${deployedSha}; recorded success`);
-    return { ok: true, status: "succeeded", runId, quiescenceRunId, reason: "already-deployed" };
+    return { ok: landed, status: "succeeded", runId, quiescenceRunId, reason: "already-deployed" };
   }
   // Cooldowns start when the failure happens, not when the attempt began an
   // hour ago (the drain may have waited that long).
@@ -184,7 +184,7 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
       // still in its backup. failRun refuses to overwrite that. Do not put a
       // cooldown on a swap that landed.
       if (recorded?.status === "succeeded") {
-        return { ok: true, status: "already-finalized", runId, quiescenceRunId, runStatus: "succeeded" };
+        return { ok: recorded.status === "succeeded", status: "already-finalized", runId, quiescenceRunId, runStatus: recorded.status };
       }
       await recordCooldown(now, cooldownMinutes);
       await emitUpgradeEvent({ type: "upgrade.failed", runId });

@@ -3,7 +3,7 @@
 // the run (SUR-6D9543E6: reconciled succeeded, then the retry took a second
 // backup, re-bound the handoff, hit the drain guard and failed the run).
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { err, ok } from "@/lib/shared/action-result";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 
 const mocks = vi.hoisted(() => ({
   getRun: vi.fn(),
@@ -20,7 +20,7 @@ const mocks = vi.hoisted(() => ({
   failQuiescenceSwap: vi.fn(),
   signalSwapStarting: vi.fn(),
   signalSwapComplete: vi.fn(),
-  guardAdmissionClosedForSwap: vi.fn(async (): Promise<{ ok: true; data: { reasserted: boolean } } | { ok: false; error: string }> => ok({ reasserted: false })),
+  guardAdmissionClosedForSwap: vi.fn(async (): Promise<ActionResult<{ reasserted: boolean }>> => ok({ reasserted: false })),
   runPromoter: vi.fn(),
   getDeployedSha: vi.fn(),
 }));
