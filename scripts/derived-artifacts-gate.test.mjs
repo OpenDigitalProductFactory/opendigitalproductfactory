@@ -15,6 +15,8 @@ import {
   evaluateCheckAll,
   isMergeQueueContext,
   resolveDerivedArtifactInvocation,
+  classifyDerivedArtifactCheck,
+  decideSandboxAdmission,
 } from "./derived-artifacts-gate.mjs";
 
 const DOC_INDEX = {
@@ -169,6 +171,40 @@ test("evaluatePushExemption: a docs diff plus a STALE registered artifact is not
   );
   assert.equal(result.exempt, false);
   assert.deepEqual(result.staleArtifacts, ["doc-index"]);
+});
+
+test("evaluatePushExemption: a checker that could not run is not a staleness verdict (BI-BD7E0319)", () => {
+  const result = evaluatePushExemption(["docs/foo.md"], [DOC_INDEX], () => "unrun");
+  assert.equal(result.exempt, true);
+  assert.equal(result.staleArtifacts, undefined);
+  assert.deepEqual(result.unrunArtifacts, ["doc-index"]);
+});
+
+test("classifyDerivedArtifactCheck separates a spawn failure and a missing toolchain from a real stale check (BI-20B40955, BI-BD7E0319)", () => {
+  assert.equal(classifyDerivedArtifactCheck(null), "fresh");
+  assert.equal(classifyDerivedArtifactCheck({ code: "ENOENT", message: "spawn tsx ENOENT" }), "unrun");
+  assert.equal(
+    classifyDerivedArtifactCheck({ status: 127, stderr: "sh: tsx: command not found" }),
+    "unrun",
+  );
+  assert.equal(
+    classifyDerivedArtifactCheck({ status: 1, stderr: "doc-index.generated.json is stale" }),
+    "stale",
+  );
+});
+
+test("decideSandboxAdmission names the code files that cost a docs-only exemption (BI-A254A94C)", () => {
+  const exempt = decideSandboxAdmission({ exempt: true, reason: "docs-only diff, no registered artifact touched" });
+  assert.equal(exempt.claim, false);
+  assert.match(exempt.message, /sandbox not claimed/);
+
+  const mixed = decideSandboxAdmission({
+    exempt: false,
+    reason: "non-docs runtime changes present",
+    files: ["apps/web/app/page.tsx"],
+  });
+  assert.equal(mixed.claim, true);
+  assert.match(mixed.message, /apps\/web\/app\/page\.tsx/);
 });
 
 // ── evaluateCheckAll ─────────────────────────────────────────────────────────

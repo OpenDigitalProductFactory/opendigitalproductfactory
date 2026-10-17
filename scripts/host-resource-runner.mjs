@@ -257,7 +257,11 @@ export function readProcessRows({ platform = process.platform, spawnSyncImpl = s
   const command = [
     "$ErrorActionPreference = 'Stop';",
     "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false);",
-    "$rows = @(Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,CommandLine);",
+    "$rows = @(Get-CimInstance Win32_Process | ForEach-Object {",
+    "  $line = [string]$_.CommandLine;",
+    "  if ($line) { $line = [regex]::Replace($line, '[\\u0000-\\u001F]', '') };",
+    "  [pscustomobject]@{ ProcessId = $_.ProcessId; ParentProcessId = $_.ParentProcessId; CommandLine = $line }",
+    "});",
     "ConvertTo-Json -InputObject $rows -Compress -Depth 3",
   ].join(" ");
   try {
@@ -273,7 +277,14 @@ export function readProcessRows({ platform = process.platform, spawnSyncImpl = s
   let rows;
   if (platform === "win32") {
     let parsed;
-    try { parsed = JSON.parse(text); } catch { unavailable("malformed-output"); }
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      // Windows PowerShell 5.1 emits raw U+0000–U+001F inside JSON strings.
+      // One such command line used to make the whole inventory unparseable.
+      try { parsed = JSON.parse(text.replace(/[\u0000-\u001F]/g, "")); }
+      catch { unavailable("malformed-output"); }
+    }
     rows = (Array.isArray(parsed) ? parsed : [parsed]).map(row => ({
       pid: row?.ProcessId, parentPid: row?.ParentProcessId, commandLine: row?.CommandLine ?? "",
     }));
