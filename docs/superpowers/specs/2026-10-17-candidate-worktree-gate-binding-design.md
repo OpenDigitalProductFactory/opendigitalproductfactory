@@ -20,6 +20,13 @@ module's repository (`scripts/derived-artifacts-gate.mjs:188-198`), as does its
 artifact checker (`267-285`). A gate invoked from one checkout for another
 candidate can classify and check the invoking checkout instead.
 
+Independent review of committed `4752650df53e1097264fb1305eeeeba021360d5c`
+also found the canonical wrapper's second call at `scripts/pregate.mjs:869`.
+Its fence, dirty-tree, PASS reuse, host preflight and final PASS corroboration
+read the invoking directory before forwarding an explicit `--worktree` and
+`--sha` to the controller. CLIENT receipt `cmvd2178i1gj401nqrh9a7fa8` requests
+repair. The controller-only result remains historical, not full completion.
+
 Before source edits, `node --test scripts/gate-worktree-resume.test.mjs` on that
 commit produced 2 passes and 1 failure: AC-DW-01 expected cancellation exit 81,
 but returned documentation-exempt exit 0 before claiming. Evidence:
@@ -43,6 +50,10 @@ policy failure: the failing case never reaches that boundary.
   behavior remains compatible for ordinary callers in the module checkout.
   When the gate supplies an expected candidate SHA, a different or unreadable
   worktree HEAD cannot establish exemption for that requested candidate.
+  The wrapper uses that selected directory for its earlier fence, dirty-tree,
+  PASS reuse and host preflight, its classifier, and final PASS corroboration.
+  A requested SHA mismatch cannot reuse a current-HEAD PASS. The current working
+  directory remains the default and controller arguments remain unchanged.
 - **R2 / C2:** affected artifact checks run in that same selected worktree;
   another checkout's generated output cannot establish candidate freshness.
 - **R3 / C3:** an unresolved merge base or unreadable diff returns an inconclusive
@@ -56,8 +67,9 @@ policy failure: the failing case never reaches that boundary.
 existing exemption predicate -> candidate artifact checks -> sandbox decision ->
 existing lease/execution/evidence flow. A classifier failure continues that flow.
 
-The atomic change touches the two production scripts and their existing derived,
-resume, Node and shell contract tests. There is no migration, grant change,
+The atomic change touches the three production scripts and their existing derived,
+wrapper, resume, Node and shell contract tests, plus this design and the pre-PR
+gate operating guide. There is no migration, grant change,
 runtime deployment, new service, provider call or alteration to the registry's
 path policy. Ordinary same-worktree documentation evidence is not invalidated by
 this cross-worktree defect.
@@ -74,6 +86,11 @@ this cross-worktree defect.
 2. Bind the helper's Git and checker execution to the explicit candidate; pass
    the existing gate's `worktreePath` and `gitBin`. Preserve null versus empty
    output and existing environment/path handling. Reuse existing Git helpers.
+   Bind wrapper reads and preflight to its selected worktree before any reuse or
+   exemption; use the configured Git executable and scrub repository-locating
+   environment variables. Add real separate-repository wrapper tests for selected
+   dirty/fenced/code/derived candidates, foreign PASS records and SHA mismatch;
+   injected child executors may prove actual launch cwd without claiming runtime.
 3. **V2 — Lifecycle:** repair empty fixtures with a real post-base code commit.
    Run resume contracts and both Node/shell gate contract suites. Confirm
    cancellation remains exit 81, no replacement claim occurs, and normal code
