@@ -109,6 +109,7 @@ describe("nonprod-lease pack — registration", () => {
     expect(claim?.inputSchema.properties).toHaveProperty("resourceClass");
     expect(claim?.inputSchema.properties).toHaveProperty("hostResource");
     expect(claim?.inputSchema.properties).toHaveProperty("ownerProcessIdentity");
+    expect(claim?.inputSchema.properties).toHaveProperty("requestedTtlMs.type", "integer");
     expect(renew?.inputSchema.properties).toHaveProperty("slotBinding");
     expect(renew?.inputSchema.properties).toHaveProperty("hostPressure");
   });
@@ -143,7 +144,7 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
     }));
   });
 
-  it.each([0, -1, "120000", null, 1_200_001])("refuses malformed duration %s before invoking the service", async duration => {
+  it.each([0, -1, 0.5, 1.5, "120000", null, 1_200_001])("refuses malformed duration %s before invoking the service", async duration => {
     const result = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
       environmentKey: "active-candidate", ownerProvider: "codex", ownerSessionId: "s1",
       purpose: "preview", url: "http://localhost:3010", ports: [3010],

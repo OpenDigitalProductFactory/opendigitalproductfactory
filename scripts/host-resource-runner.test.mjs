@@ -37,7 +37,7 @@ test("an expired operation deadline cannot be rebased by building fresh argument
 
 test("rejects invalid requested durations rather than silently changing approved arguments", () => {
   const now = new Date("2026-10-16T20:00:00Z");
-  for (const durationMs of [0, -1, NaN, Infinity, 1_200_001]) {
+  for (const durationMs of [0, -1, 0.5, 1.5, NaN, Infinity, 1_200_001]) {
     assert.throws(() => leaseRequestTiming({ now, durationMs, deadline: now.getTime() + 60_000 }), /duration/);
   }
 });

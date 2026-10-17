@@ -19,7 +19,7 @@ describe("absolute lease request validity", () => {
       expiresAt: new Date(now.getTime() - 1), requestedTtlMs: 120_000, waitDeadlineAt: deadline,
     })).toEqual({ ttlMs: 120_000, queueExpiresAt: deadline });
   });
-  it.each([0, -1, NaN, Infinity, 1_200_001])("refuses invalid explicit duration %s", duration => {
+  it.each([0, -1, 0.5, 1.5, NaN, Infinity, 1_200_001])("refuses invalid explicit duration %s", duration => {
     expect(() => resolveLeaseRequestTiming(now, {
       expiresAt: new Date(now.getTime() + 60_000), requestedTtlMs: duration,
       waitDeadlineAt: new Date(now.getTime() + 600_000),

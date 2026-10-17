@@ -50,7 +50,7 @@ export function resolveLeaseRequestTiming(now: Date, input: {
     return { ttlMs, queueExpiresAt: new Date(now.getTime() + ttlMs) };
   }
   const duration = input.requestedTtlMs;
-  if (!Number.isFinite(duration) || duration <= 0 || duration > MAX_LEASE_TTL_MS) {
+  if (!Number.isSafeInteger(duration) || duration <= 0 || duration > MAX_LEASE_TTL_MS) {
     throw new Error("nonprod_lease_duration_invalid");
   }
   const deadline = input.waitDeadlineAt?.getTime();

@@ -1,3 +1,5 @@
+import type { ClaimNonprodEnvironmentLeaseResult, LeaseRow, ResolvedNonprodPoolPolicy } from "./environment-lease-result";
+export type { ClaimNonprodEnvironmentLeaseResult } from "./environment-lease-result";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@dpf/db";
 import {
@@ -5,13 +7,12 @@ import {
   planEnvironmentAdmission,
   type AdmissionLease,
 } from "./environment-lease-admission";
-import { type LocalCiHostPressure, type ResolvedLocalCiPoolPolicy } from "./local-ci-pool-policy";
+import type { LocalCiHostPressure } from "./local-ci-pool-policy";
 import type { LocalCiCapacityBroker } from "./local-ci-capacity-broker";
 import {
   resolveHostResourcePoolPolicy,
   resolveNonprodPoolPolicy,
   type HostResourceLeaseEvidence,
-  type ResolvedHostResourcePoolPolicy,
 } from "./environment-lease-pool-policy";
 import { isHeavyResourceClass, type HeavyResourceClass } from "./host-resource-policy";
 import localCiSlotResources from "./local-ci-slot-resources.json";
@@ -19,7 +20,7 @@ import { assertRenewalSlotBinding, type NonprodSlotBinding } from "./environment
 import { recordQueueTransition } from "@/lib/queue/queue-telemetry";
 import { gateRunDispositionsTotal } from "@/lib/operate/metrics";
 import type { NonprodOwnerProvider } from "./nonprod-owner-provider";
-import { isImmutableGateClaimKey, type LocalCiEvidenceValidity } from "@/lib/gates/gate-run-identity";
+import { isImmutableGateClaimKey } from "@/lib/gates/gate-run-identity";
 import { settleTerminalGateLease } from "./environment-lease-terminal-evidence";
 import { resolveResumeClaim, validateHostResourceClaim } from "./environment-lease-resume";
 import { admittedLeaseTtlMs, DEFAULT_LEASE_TTL_MS, resolveLeaseRequestTiming } from "./environment-lease-timing";
@@ -43,7 +44,6 @@ export type NonprodEnvironmentKey = "active-candidate" | "local-integration-ci" 
 type NonprodSlotKey = keyof typeof localCiSlotResources.slots;
 export const NONPROD_SLOT_KEYS = Object.freeze(Object.keys(localCiSlotResources.slots) as NonprodSlotKey[]);
 
-type LeaseModel = typeof prisma.nonProductionEnvironmentLease;
 type LeaseTx = Pick<
   typeof prisma,
   "$executeRaw" | "nonProductionEnvironmentLease" | "externalEvidenceRecord" | "workroom"
@@ -51,7 +51,6 @@ type LeaseTx = Pick<
 type LeaseDb = Pick<typeof prisma, "nonProductionEnvironmentLease"> & Partial<Pick<
   typeof prisma, "$transaction" | "$executeRaw" | "platformConfig" | "externalEvidenceRecord" | "workroom" | "taskRun"
 >>;
-type LeaseRow = NonNullable<Awaited<ReturnType<LeaseModel["findUnique"]>>>;
 
 function createLeaseId() {
   return `NPEL-${randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase()}`;
@@ -233,17 +232,6 @@ async function reconcileEnvironmentInTransaction(input: {
     queueDepth: plan.queuePositions.length,
   };
 }
-
-/** `supersededLeaseId`: this owner's obsolete queued wait, retired by this claim (BI-D35B85BF). */
-export type ClaimNonprodEnvironmentLeaseResult = { supersededLeaseId?: string } & (
-  | { status: "admitted"; lease: LeaseRow; slotKey: string; waitAgeMs: number; poolPolicy: ResolvedNonprodPoolPolicy }
-  | { status: "queued"; lease: LeaseRow; queuePosition: number; waitAgeMs: number; poolPolicy: ResolvedNonprodPoolPolicy }
-  | { status: "terminal"; lease: LeaseRow; reason: "released" | "expired" | "cancelled"; poolPolicy: ResolvedNonprodPoolPolicy }
-  | { status: "subscribed"; lease: LeaseRow; executionStatus: "admitted" | "queued"; poolPolicy: ResolvedNonprodPoolPolicy }
-  | { status: "reused"; lease: LeaseRow; evidenceRecordId: string; resultClass: "pass" | "fail"; evidenceValidity: LocalCiEvidenceValidity | null; poolPolicy: ResolvedNonprodPoolPolicy }
-  | { status: "blocked"; lease: LeaseRow; reason: "missing-evidence" | "mismatched-evidence" | "expired-evidence"; poolPolicy: ResolvedNonprodPoolPolicy });
-
-type ResolvedNonprodPoolPolicy = ResolvedLocalCiPoolPolicy | ResolvedHostResourcePoolPolicy;
 
 export async function claimNonprodEnvironmentLease(input: {
   db?: LeaseDb;
