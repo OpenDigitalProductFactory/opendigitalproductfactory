@@ -77,6 +77,17 @@ valid_private_ca_url() {
   private_ipv4_or_loopback "$ca_host"
 }
 
+# POSIX mode 0600 is a real control where the filesystem can represent it.
+# NTFS reports chmod 0600 back as 666, so requiring it there hides every later
+# join check (BI-33D63506). Probe a scratch file; do not rewrite the package.
+filesystem_can_represent_mode_0600() {
+  probe="$(mktemp "${TMPDIR:-/tmp}/dpf-mode-probe.XXXXXX")" || return 0
+  chmod 600 "$probe" 2>/dev/null || { rm -f "$probe"; return 0; }
+  probe_mode="$(stat -c '%a' "$probe" 2>/dev/null || stat -f '%Lp' "$probe" 2>/dev/null || echo unknown)"
+  rm -f "$probe"
+  [ "$probe_mode" = "600" ]
+}
+
 read_join_package() {
   package_path="$1"
   [ -f "$package_path" ] || { echo "Join package was not found" >&2; exit 64; }
@@ -84,7 +95,13 @@ read_join_package() {
   # wrong output), while `stat -c` is an illegal option on BSD (it fails and
   # falls through). The BSD-first order read every package as not-0600 on Linux.
   package_mode="$(stat -c '%a' "$package_path" 2>/dev/null || stat -f '%Lp' "$package_path" 2>/dev/null || echo unknown)"
-  [ "$package_mode" = "600" ] || { echo "Join package must have mode 0600" >&2; exit 77; }
+  if [ "$package_mode" != "600" ]; then
+    if filesystem_can_represent_mode_0600; then
+      echo "Join package must have mode 0600" >&2
+      exit 77
+    fi
+    echo "Join package mode 0600 is not representable on this filesystem; the Unix mode control does not apply here." >&2
+  fi
 
   package_header=""
   package_id=""
