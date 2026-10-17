@@ -12,7 +12,8 @@
 //   1. A client_credentials client — DPF_MCP_CLIENT_ID + DPF_MCP_CLIENT_SECRET,
 //      or the JSON file named by DPF_MCP_CLIENT_CREDENTIALS_FILE (default
 //      ~/.dpf/mcp-client-credentials.json, outside every checkout so it can
-//      never be committed). Issued from Admin > Platform Development > MCP.
+//      never be committed). Issued through issue_source_credentials_client for the calling assistant,
+//      or manually from Admin > Platform Development > MCP.
 //      Access tokens are short-lived and re-minted on demand, so a gate that
 //      outlives one token never strands on a stale copy.
 //   2. DPF_MCP_BEARER_TOKEN — the legacy PAT, until the retirement horizon.
@@ -49,7 +50,7 @@ export const MCP_CREDENTIAL_HELP =
   "No MCP credential is configured. A gate script authenticates one of two ways:\n"
   + `  - a client_credentials client (preferred): set ${MCP_CLIENT_ID_ENV} and ${MCP_CLIENT_SECRET_ENV}, `
   + `or write {"clientId","clientSecret"} to ${DEFAULT_CLIENT_CREDENTIALS_FILE} `
-  + `(override the path with ${MCP_CLIENT_CREDENTIALS_FILE_ENV}). Mint one in the portal: Admin > Platform Development > MCP.\n`
+  + `(override the path with ${MCP_CLIENT_CREDENTIALS_FILE_ENV}). An authenticated assistant can issue its own client through issue_source_credentials_client. Use a separate per-assistant file and an explicit path override on shared hosts. Manual alternative: Admin > Platform Development > MCP.\n`
   + `  - a legacy dpfmcp_ personal access token: set ${MCP_BEARER_TOKEN_ENV} (being retired; a client_credentials client replaces it).`;
 
 function readCredentialsFile(path) {

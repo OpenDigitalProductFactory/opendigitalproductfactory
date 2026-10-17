@@ -609,6 +609,19 @@ export function bootstrapWorktreeDeps(worktreePath, opts = {}) {
     // healthy sibling had 1133 entries and reported compile-ready.
     const before = probeWorktreeReadiness(worktreePath, opts);
     if (opts.force || before.status !== "compile-ready") {
+      // A junction or symlink is another tree. Running pnpm here either aborts
+      // with ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY (no TTY) or purges the
+      // target. Name that and do not install (BI-C61C8ADD, BI-7DD16424).
+      if (nodeModulesIsLinked(worktreePath, opts)) {
+        return {
+          status: "source-only",
+          reason: "node_modules_junction",
+          failure: {
+            phase: "install",
+            message: "node_modules is a symlink or junction into another tree. The install was not run, so a purge cannot empty the target. Remove the link, then run node scripts/lib/bootstrap-worktree-deps.mjs .",
+          },
+        };
+      }
       // Managed install via the shared store; --frozen-lockfile keeps it honest
       // to the worktree's lockfile (a worktree off main carries main's lockfile).
       //
