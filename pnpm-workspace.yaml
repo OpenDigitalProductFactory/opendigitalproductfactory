@@ -23,7 +23,7 @@ catalog:
   "@types/pg": ^8.23.1
   "@vitest/coverage-v8": ^5.0.1
   bcryptjs: ^3.0.3
-  dotenv: ^17.4.2
+  dotenv: ^18.0.5
   net-snmp: ^3.26.3
   pg: ^8.23.1
   prom-client: ^15.1.3
