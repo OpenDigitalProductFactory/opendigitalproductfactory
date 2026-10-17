@@ -4,8 +4,10 @@ status: draft
 
 # Trusted agent engineering: MBSE baseline and delivery design
 
-Date: 2026-09-27. Epic: **EP-B932453F**. Baseline deliverable: **BI-9236453D**.
-Design Workroom: **WC-A8298748**. Research evidence: **WC-E4195DEE**.
+First draft: 2026-09-27. Reconciliation: 2026-10-17. Epic: **EP-B932453F**.
+Baseline deliverable: **BI-9236453D**. Original design Workroom:
+**WC-A8298748**; current documentation Workroom: **WC-3ECFAECF**.
+Research evidence: **WC-E4195DEE**.
 
 This is the repository draft of the programme developed with Mark Bodman. It
 consolidates the research and programme roadmap previously recorded in the
@@ -28,18 +30,18 @@ isolation and recovery. It does not establish complete mediation, hardware
 isolation or protection against a compromised host. A prompt alone cannot create
 an enforcement boundary.
 
-The first contribution is a compact composition profile of the existing TAK,
-GAID and TAK-JSI standards. DPF is the initial reference implementation. Other
+The contribution is a compact composition profile of the existing TAK,
+GAID, TAK-JSI and GPP working drafts. DPF is the initial reference implementation. Other
 implementations retain their own principles, organizations, tools and models.
 WWMD, WWWD and WSID are DPF's bindings to authority scopes, not universal values
 that another organization must adopt.
 
 ## Evidence baseline
 
-Source observations below are pinned to repository commit
+The original source observations in the B-01 through B-12 matrix are pinned to repository commit
 `0d827752665f790d3c4d3eba789ae908c45d78ba`. They identify code and test sources;
 they do not report those tests as executed or establish live enforcement.
-The 2026-09-27 live scope reconciliation identified 14 direct backlog items and
+The historical 2026-09-27 live scope reconciliation identified 14 direct backlog items and
 two related items owned by other epics. Their individual statuses remain in the
 live backlog; this document does not declare their delivery complete.
 The design claim for BI-9236453D was allowed by decision `IRD-89085D4D9C64`.
@@ -60,6 +62,43 @@ lifecycle. The
 describes the earlier two-standard framing; the current family map includes JSI.
 Preserve that history and reconcile its status rather than copying its older
 framing into new public material.
+
+### Reconciled source and delivery observations
+
+The following source identities were read at commit
+`305c5e2af8d446c4e263cf96d90fad41c82fc5a2` on 2026-10-17. They bind this
+reconciliation to exact bytes; they do not freeze an assessment profile or
+establish that these sources are deployed on a particular runtime.
+
+| Canonical source under `docs/architecture/` | Git blob |
+|---|---|
+| `trusted-ai-kernel.md` | `2fc0b7ae2790a11193bfeba6d79765052abd4fb2` |
+| `GAID.md` | `24d458b56fd1e87ca17f948f7259221e8a5a8d59` |
+| `job-specific-intelligence.md` | `68672cd9539655112a66e06ef84188a77cbeaf01` |
+| `gated-permissions-process.md` | `5f8919b015a34777d80ede7e004b1e97d63c54b9` |
+| `trusted-agent-reference-contract.md` | `67e6713f5128073463139d9ff7093971f313d47d` |
+
+The live programme query on 2026-10-16 returned 61 items without truncation
+(BI-9236453D evidence `cmvbfuwuc5tzo01ptr8p1mpkv`). That is an inventory count,
+not a count of assessed controls. The delivery observations below retain their
+own dates and assurance limits; neither Git merge nor a backlog status supplies
+missing acceptance evidence.
+
+| Deliverable | Recorded observation | Remaining boundary |
+|---|---|---|
+| Informative white paper, BI-6CC40F77 | Revision 2.2 source and genuine Word bytes delivered by [PR 6466](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/6466), verified 2026-10-16 | Editorial delivery, not runtime or clause conformance |
+| Publisher materials, BI-6AC40460 | Proposal and two sample chapters delivered by [PR 6460](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/6460) | No full manuscript, publisher acceptance or outreach implied |
+| LF/TBM discussion packet, BI-1C39CCF8 | Brief, editable slides, PDFs, notes and bounded demo/fallback delivered by [PR 6461](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/6461) | No accepted conference session, endorsement or observed live demonstration |
+| Portable pure contracts, BI-F9582C48 | Draft 0.1.0 importer and reference loop in `packages/validators/src/trusted-agent-contracts.ts` and `trusted-agent-reference-loop.ts` | Structural/import checks and simulated examples do not prove an authenticated host adapter; redistribution package remains BI-07A2B207 |
+| Publication reconciliation, BI-928E1B0F | Bounded 2026-10-16 audit records genuine downloads, four historical normative Word snapshots, and twelve failing authored URL targets | Current editions, final source parity, all-page review and deployed-byte verification still owed; use the [existing reconciliation ledger](../evidence/2026-09-27-trusted-agent-publication-reconciliation.md) |
+| Executable combined profile, BI-2AB781FA | Design branch `91b8aa5cb6511275fa67b998fa53ded7243a1904` preserved; no implementation delivered | Independent design/architecture receipts and canonical plan coverage missing; original reviewer execution settlement must be established before recovery |
+| DPF specimen, portable hosts and second archetype | BIs F3C2EC7A, 07A2B207, FEA232AF, 0E56BA38 and 72ED2A22 remain separate deliverables | No complete DPF runtime trace, distributable package, Hermes/Cursor reproduction or genuine external assessment is asserted |
+
+The independent review infrastructure has returned uncertain execution, not an
+approval. A readable Workroom, elapsed deadline or missing receipt does not prove
+that an original child stopped or that its intended writer ran. Preserve the
+original review identity and reconcile its execution before any retry. This is
+an observed programme limitation, not a new exception to its gates.
 
 ### Requirement-to-evidence matrix
 
@@ -82,8 +121,44 @@ test assertion and observed outcome before receiving a conformance verdict.
 The observed refusal of `triage_backlog_item` in this session is one bounded
 authority case: tool discovery reported `agent-grant-missing` for `backlog_triage`.
 It did not widen the coworker's grants. This does not validate the other rows.
+This refusal is historical and does not describe the current connection's grants.
 Triage remains with an authorized role; changing status through another transport
 would invalidate the example.
+
+### GPP addition to the baseline
+
+B-13 is an additional evidence question, not a new normative clause or a passed
+test. Its definitions remain in [GPP](../../architecture/gated-permissions-process.md)
+and TAK; the historical B-01 through B-12 observations above are not current
+assessments of their implementations.
+
+| ID and required property | Definition and implementation owners | Source observations at the reconciled commit | Evidence still needed |
+|---|---|---|---|
+| B-13: the decision admits a versioned capability envelope for a bounded stage; runtime permission is intersected and checked at actual use | GPP binding/model; TAK runtime mediation; BI-69415B68 and BI-6DA17863; integrated assessment BI-2AB781FA / BI-F3C2EC7A | `apps/web/lib/gpp/bindings.ts`, `permit-enforcement.ts`, `binding-enforcement.ts` and their tests; `apps/web/lib/gpp/shape-language/compile.ts` and compiler/design-rule tests | Bind the actual gate decision, shape/binding revisions, subject, capability set, exact action, validity and receipt. Observe allowed, out-of-envelope, stale/replayed/expired and uncertain-effect paths. Report modeled, shadow, enforced, downgraded and evidenced states separately. |
+
+These files exist at the reconciled source pin; their tests were not run for this
+documentation slice. The presence of a compiler, permit type or test file is not
+proof of a deployed enforced binding, complete mediation or model/runtime
+correspondence. A GPP binding narrows authority; it supplies neither a missing
+grant nor job qualification. The reference profile must report unsupported
+mandatory controls rather than flattening them into a weaker host's semantics.
+
+The following selected clause interpretations need explicit coverage when the
+assessment matrix is completed. They use the exact source blobs above and are
+informative pointers, not a complete obligation inventory or a new denominator.
+Each is currently **unassessed** by this baseline.
+
+| Baseline questions | Canonical meaning to retain | Missing assessment binding |
+|---|---|---|
+| B-04, B-09 | GAID §10.1 requires a receipt or equivalent evidence for consequential actions across profiles; §10.4 separately strengthens integrity for Federated and above | Named action/receipt assertions, integrity profile, actual subject/environment and outcome evidence |
+| B-02, B-08 | JSI §11.4.3 assesses the actual authority intersection. Discovery curation is not automatically an enforced restriction; a denied request is not an executed violation, and missing authority evidence is inconclusive | Explicit discovery-versus-enforcement contract, per-operation authority evidence and independent oracle |
+| B-03, B-13 | GPP §7.2 holds unresolved evidence or ownership; known ownership with missing decision authority escalates. §8 requires an actual accountable-human class decision for the combined untrusted-input/sensitive-access/effect envelope | Owning scope, accountable class decision, binding/subject/validity and positive/refused/held/escalated observations |
+| B-05, B-07, B-13 | GPP §10 model consistency/reach checks and §11 execution measures establish different claims | Complete C-1 through C-9 and applicable notation verification evidence; actual environment/period, numerators, denominators and omissions for execution measures |
+
+For every B-01 through B-13 row, current clause applicability, exact component
+and test identities, actual enforcement mode/reach, assertion result and observed
+receipt remain unestablished unless a separately reviewed assessment supplies
+them. The matrix's source pointers must not be promoted into those fields.
 
 ### Data admission and processing boundaries
 
@@ -142,7 +217,11 @@ is a candidate package carrier. Hermes and Cursor adapters still need independen
 capability and enforcement checks. Skills/prose portability does not transfer
 credentials, grants or job qualification.
 
-Jev remains a candidate decision service from the earlier research record. Before
+The operator identified Jev as TypeSafe's bounded-output inference component;
+the dated [white-paper discussion](../../architecture/2026-04-18-trusted-ai-agent-governance-white-paper.md)
+and [LF/TBM source register](../../publications/trusted-agent-tbm/sources.md)
+retain the primary references and their limits. It remains a candidate, not an
+adopted provider or a measured DPF result. Before
 selection, compare it against the current route and a deterministic baseline on
 held-out, scope-separated scenarios. Measure false permits, false refusals,
 abstention, review demand, latency and cost per accepted outcome. No vendor speed
@@ -152,14 +231,16 @@ or safety claim becomes a DPF result. Its use cannot bypass TAK authority.
 
 BI-A484D58F owns normative amendments. This section is design input, not a second
 home for requirements. Allocate runtime semantics to TAK, identity/claims to
-GAID, and qualification to JSI. Keep the MBSE composition profile informative
+GAID, qualification to JSI, and the gate-to-capability/stage binding model to GPP.
+Keep the MBSE composition profile informative
 unless a particular exchange or behavior clause is explicitly adopted.
 
 The minimal modeled chain is:
 
 ```text
-requirement -> scoped principle/policy -> decision -> authorized transition
-            -> bounded effect -> receipt -> observed outcome -> revalidation
+requirement -> scoped principle/policy -> decision -> proposed transition
+            -> GPP stage envelope -> current authority intersection
+            -> bounded mediated effect -> receipt -> observed outcome -> revalidation
 ```
 
 Every reference needs an owner and version. An instance binds its work definition,
@@ -195,7 +276,10 @@ on trigger(work, requested_action):
     judgment = evaluate_admissible_options(scope, evidence, snapshot)
     if judgment is unresolved: return recorded_escalation()
     proposal = bind_exact_action_and_versions(judgment, requested_action)
+    envelope = resolve_current_gpp_binding_and_stage(proposal, snapshot)
+    if envelope is unsupported_or_unestablished: return recorded_hold_or_refusal()
     authority = intersect_current_principal_agent_room_and_policy_authority(proposal)
+    authority = narrow_to_gpp_envelope(authority, envelope)
     if authority requires_review: return durable_proposal_for_authorized_reviewer()
     if authority denies: return recorded_refusal()
     # Revalidation and use need an implementation-specific atomicity contract.
@@ -227,13 +311,25 @@ real source identity and refusal example. It does not by itself exercise every
 scenario or qualify those roles. Bind the final specimen to a concrete versioned
 work shape, operating profile and synthetic dataset before assessment.
 
-Propose a second archetype around a synthetic service-work authorization, with
-no customer records or money movement. Sector and accountable practitioner are
-still to be selected; no regulated-industry compliance claim follows from it.
+The operator selected financial operations: approval of a synthetic expense,
+recorded under BI-72ED2A22 in evidence `cmvajjjv44lqu01o9lnjz3xvd`. No real bank
+access, payment or customer record belongs in this demonstration. The owning
+finance doctrine, accountable practitioner/assessor, fixtures and thresholds
+remain to be established before assessment. The illustrative book chapter's
+synthetic policy does not adopt a business policy for this install. No
+regulated-industry compliance claim follows from the sector choice.
+
+The initial candidate remains a bounded documentation change using the existing
+`delivery-small@1.0.0` shape, whose definition is inspected at the reconciled
+source pin. A complete assessment packet still needs its exact serialized shape
+and binding revisions, actor/profile fingerprint, classification/destination
+policy, fixture set, thresholds, assessor and recorded freeze decision. These
+fields are unestablished here. The preserved conformance design and its held
+review executions are not replaced by this candidate description.
 
 | Scenario | Required observable result | Acceptance proposal |
 |---|---|---|
-| S-01 permitted bounded action | Named authority and exact action produce a linked receipt and outcome | All required trace fields resolve to the evaluated versions. |
+| S-01 permitted bounded action | Named authority, GPP stage/binding and exact action produce a linked receipt and outcome | All required trace fields resolve to the evaluated versions; a binding supplies no missing grant. |
 | S-02 missing grant / prohibited effect | Refusal before the effect; reason identifies the missing authority | Zero prohibited effects in the frozen scenario set. |
 | S-03 unclear scope or insufficient evidence | Work waits for the right input or accountable authority | No default permission; a resolvable next action is recorded. |
 | S-04 material model/tool/profile change | Prior qualification is revalidated or restricted as specified | Old qualification cannot silently authorize changed scope. |
@@ -258,22 +354,24 @@ row needs a reviewed change or no-change disposition at the publication mileston
 
 | Existing source/surface | Required revision | Delivery owner |
 |---|---|---|
-| `docs/architecture/trusted-ai-kernel.md` | Explicit principle-directed judgment, conflicts, version binding, failure/recovery and conformance assertions | BI-A484D58F |
+| `docs/architecture/trusted-ai-kernel.md`; `gated-permissions-process.md` | Explicit principle-directed judgment, gate-to-capability/stage binding, conflicts, version binding, failure/recovery and conformance assertions | BI-A484D58F; reuse GPP BI-2C3B3AC9 |
 | `docs/architecture/GAID.md`; `job-specific-intelligence.md` | Clarify identity/profile/qualification bindings and transfer/revalidation boundaries | BI-A484D58F |
 | `agent-standards-family.md`; `agent-standards-external-alignment.md`; `agent-standards-contribution-roadmap.md` under `docs/architecture/` | Align ownership, composition and contribution sequence; preserve prior decisions | BI-A484D58F |
-| `docs/architecture/agent-standards-dpf-conformance.md`; TAK/GAID/JSI conformance rubrics | Replace stale assessments with clause/test/evidence references and dates | BI-2AB781FA; BI-F3C2EC7A |
+| `docs/architecture/agent-standards-dpf-conformance.md`; TAK/GAID/JSI conformance rubrics and GPP assertions | Replace stale assessments with clause/test/evidence references and dates | BI-2AB781FA; BI-F3C2EC7A |
 | `docs/index.html` trust, standards and maturity sections | Explain the sharper paradigm with bounded evidence and draft/verified distinctions | BI-928E1B0F |
 | Architecture pages and relevant `docs/user-guide/` workroom, decision, workforce and authority guidance | Synchronize user explanations, terminology, links and examples | BI-928E1B0F |
 | `docs/architecture/2026-04-18-trusted-ai-agent-governance-white-paper.md` | Revise the argument and cases from assessed evidence | BI-6CC40F77 |
-| `docs/architecture/agent-standard-publications.mjs` and its existing source documents/generators | Regenerate TAK, GAID, JSI and white-paper Word publications; validate source/version parity | BI-928E1B0F, coordinated with BI-6CC40F77 |
-| TAK/GAID/JSI diagram directories and user-guide rendered assets | Refresh affected diagrams with their owning sources | BI-928E1B0F |
+| `docs/architecture/agent-standard-publications.mjs` and its existing source documents/generators | Regenerate TAK, GAID, JSI, GPP and white-paper Word publications; validate source/version parity | BI-928E1B0F, coordinated with BI-6CC40F77 |
+| TAK/GAID/JSI/GPP diagram directories and user-guide rendered assets | Refresh affected diagrams with their owning sources | BI-928E1B0F |
 | Public publication/deployment channel | Verify the actual release mechanism and rendered result before claiming publication | BI-928E1B0F |
 
 BI-1139F962 retains PAAW public-document harmonization ownership; BI-4E32C6A2
 retains inbound-link migration. EP-31C5A6C8 owns website-channel integration.
 This programme consumes those efforts rather than creating duplicate migrations
-or a new CMS. The website deployment configuration has not been verified in this
-baseline; source discovery alone does not establish publication readiness.
+or a new CMS. The publication audit records bounded build, URL and download
+observations in the existing reconciliation ledger. It is not an all-site,
+cache-freshness, accessibility or runtime acceptance result; source discovery
+alone does not establish publication readiness.
 
 ## Delivery sequence and existing ownership
 
@@ -311,8 +409,10 @@ proof that an implementation is complete today.
 The earlier programme proposed baseline work in early October, candidate text
 later in October, and a discussion package in early November, with portability
 and independent work extending into November/December. These are uncommitted
-targets. Confirm the user's event, capacity, reviewers and sector before making
-external delivery promises. Keep the existing contribution roadmap's readiness
+targets. The operator has since confirmed the November 9–11, 2026 TBM conference;
+December is superseded for that discussion packet. The synthetic finance sector
+choice is also settled. Capacity, independent assessors and external commitments
+are not supplied by those choices. Keep the existing contribution roadmap's readiness
 criteria; neither this draft nor a publisher conversation advances their level.
 
 ## Acceptance, risks and remaining decisions
