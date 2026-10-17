@@ -249,6 +249,7 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   cpSync(join(repoRoot, "scripts", "lib", "mermaid-renderer.mjs"), join(temp, "scripts", "lib", "mermaid-renderer.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "git-hook-env.mjs"), join(temp, "scripts", "lib", "git-hook-env.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "mcp-client.mjs"), join(temp, "scripts", "lib", "mcp-client.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "nonprod-lease-request.mjs"), join(temp, "scripts", "lib", "nonprod-lease-request.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "lease-queue-call-options.mjs"), join(temp, "scripts", "lib", "lease-queue-call-options.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "script-argv.mjs"), join(temp, "scripts", "lib", "script-argv.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "mcp-credential.mjs"), join(temp, "scripts", "lib", "mcp-credential.mjs"));
