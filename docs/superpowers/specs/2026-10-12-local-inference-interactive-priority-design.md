@@ -189,3 +189,180 @@ Acceptance requires all four objectives and these concrete proofs:
 Stop rather than weaken the contract if the protected gate, semantic review,
 merge queue or exact-live verification refuses it. Multi-replica aggregate
 admission is explicitly not claimed by this slice.
+
+## 8. Proposed extension: accepted interactive capacity recovery
+
+**State: proposed; implementation and acceptance are unrun.** This section extends
+the existing BI-285EF102 delivery, not the background-only scope of BI-F6AD1E18
+or BI-A50F6B7B. The deployed lane repair and its proofs remain valid. Original
+AC-LIP-5 remains failed: the 2026-10-16 canonical governed lookup's corrective
+inference expired after 120000 ms behind a real autonomous plan request lasting
+about 308 seconds. The later successful 70377 ms lookup had no proven autonomous
+overlap. Neither that lookup nor the successful source-answer controls is a
+load-acceptance pass.
+
+### 8.1 Decision and evidence
+
+WWMD DI-9A4E9EE0053E selected `same-turn-pretool-recovery`: composite 9.389,
+margin 2.217, high confidence, autonomy eligible, no commandment conflict. The
+agent recorded agreement. The alternatives were general post-tool loop replay
+and retaining terminal retry guidance. Existing-substrate reuse, one source of
+truth and platform-owned execution support the selected bounded extension.
+This decision selects direction; it is not an independent design receipt or a
+claim that the source is implemented.
+
+Source was inspected at 92bd1ea9532a001d10f0c1743a616074be7c93c6, containing
+canonical 305c5e2af8d446c4e263cf96d90fad41c82fc5a2:
+
+- `app/api/agent/send/route.ts` persists the user message, acknowledges it and
+  runs `sendMessage` in a process-local IIFE. Accepted input survives; execution
+  does not have a durable continuation.
+- `lib/actions/agent-coworker.ts` authenticates the human, constructs context,
+  calls the loop and persists a capacity failure as a finished system response.
+- `lib/tak/agentic-loop.ts` has no typed durable checkpoint. A failed corrective
+  dispatch can follow a settled but unverified model answer without any tools.
+- `lib/mcp-task-capacity-contract.ts` supplies bounded backoff and a versioned
+  same-TaskRun wait. Its zero-executed-tools predicate alone is insufficient:
+  loop-intrinsic tool loading can mutate messages without entering that array.
+- `lib/tak/autonomous-work-run.ts`, the external-MCP background outbox/worker,
+  and `lib/jobs` already provide TaskRun, immutable TaskMessage, jobs, CAS and
+  scheduled reconciliation. Their MCP bearer requirements must remain unchanged.
+
+### 8.2 Identity and acknowledgment
+
+One accepted user message owns one TaskRun and one preallocated assistant-message
+id. The TaskRun's server-owned input binds the human, thread, accepted message,
+route, mode, attachment/question/form references, history boundary and digest.
+Never resolve the newest conversation TaskRun as the continuation identity.
+
+Persist the accepted input and recoverable submission atomically before a
+successful acknowledgment. Job emission uses an outbox so an event-delivery
+failure cannot lose acknowledged work. A worker reloads the committed packet;
+neither a browser nor a wake event supplies a replacement actor or replay body.
+Only the oldest nonterminal accepted turn in a thread may execute; later accepted
+turns remain queued and cannot enter the older turn's context.
+
+Extract shared preparation, execution and final-message persistence into
+server-only modules. Public server actions retain session authentication and
+ownership checks. A durable worker revalidates the original human with
+`currentUserContext`, current thread ownership, coworker lifecycle/grants,
+Workroom posture and routing/privacy rules. Do not add an actor argument to a
+public server action or manufacture an MCP token. Audit every nested
+session-dependent context reader during extraction.
+
+### 8.3 Closed pre-tool continuation
+
+This version resumes only a proven local HTTP admission-capacity wait before
+any tool or loop intrinsic starts. It excludes terminal-writer policy, execution
+plans, structured assistant tool calls/tool-role history, changed dynamic tool
+surfaces, unknown failures, execution uncertainty and all post-tool work.
+Authentication, configuration, missing models, privacy/capability refusal and
+context overflow remain terminal. Generic error-text matching is insufficient.
+
+Persist a versioned, digest-bound checkpoint of the **pending dispatch**, not a
+fresh `sendMessage` invocation. It contains the exact message snapshot and
+provenance, original system-instruction provenance, allowed tool names/policy
+ceiling, settled last-result metadata, best pre-nudge answer, current iteration,
+inference/token totals and all continuation/evidence/fabrication/frustration/
+truncation counters. Later chat history is excluded. Resume restores that state;
+it does not rerun successful inference, reset nudges or create another reply.
+No raw provider reasoning or credentials belong in the checkpoint.
+
+The versioned state inventory is exhaustive, not an illustrative field list.
+It also fixes original evidenceRequirement/suppliedSourceEvidence, original
+skill and turn policy, effective route/model/tool-schema digests,
+resolvedMaxContextTokens, ctxPeakTokens and previousResponseId. Preserve both
+raw loop messages and the exact pending dispatch. Evidence intent must not be
+reclassified from a nudge-tailed message array. The local chat protocol must
+prove previousResponseId absent, or retain and validate it without introducing
+a different provider protocol. All excluded tool/intrinsic state must assert
+zero/empty, including dynamic attachment changes and execution-plan state.
+Centralize resumable state in a closed type/schema; missing, unknown or
+unsupported state versions fail closed. Review/tests must enumerate every
+mutable pre-tool loop variable before enabling the adapter.
+
+Before any governed or intrinsic tool dispatch, atomically mark the turn
+non-replayable under its worker reservation. Failure to persist that marker
+prevents the tool call. A crash after the marker cannot authorize automatic
+replay, even when no completed ToolExecution exists. Preserve the existing
+execution-uncertain classification and governed approval/idempotency controls.
+
+### 8.4 State and clocks
+
+Reuse TaskRun status/progress, TaskMessage and the jobs facade. Add a closed
+interactive adapter; do not widen the external-MCP worker's token contract,
+create another table, scheduler, GPU lane or provider transport.
+
+| State | Durable meaning | Permitted next transition |
+| --- | --- | --- |
+| submitted | Input committed; dispatch or recovery due | working, canceled |
+| working | One CAS-reserved worker owns this accepted turn | submitted with resourceWait, terminal result, canceled |
+| submitted + resourceWait | Proven eligible local capacity wait; checkpoint committed; completedAt null | working when due, canceled, bounded exhaustion |
+| terminal | Final reply, honest nonretryable failure or cancellation committed once | No automatic replay |
+
+Keep the current local admission and transport timeouts, single-GPU exclusion,
+interactive priority and autonomous aging. Reuse the resource-wait backoff and
+attempt ceiling, including an honest final busy result on exhaustion.
+
+The extension deliberately separates proven queue waiting from active execution
+time: measure admission wait through caller-scoped lane events, persist it, and
+exclude only that proven interval from active effort accounting. Preserve the
+original effort warrant, iteration/nudge/token ceilings and cumulative active
+time across wakes. No wake receives a fresh execution budget. Unknown/unmeasured
+time cannot be deducted. This changes clock semantics and requires review; it
+does not claim the original within-one-admission-budget AC-LIP-5 passed.
+
+Maintain two separate persisted clocks: cumulative active effort and resource-
+wait lifetime. Matched lane events alone exclude an in-process admission interval;
+a committed parked/backoff interval belongs to resource-wait lifetime and does
+not consume active execution effort. Restart gaps without a committed parked
+state are conservatively charged or settled uncertain, never guessed away.
+Preserve any original absolute governed parent deadline unchanged and enforce
+it on every wake, independently of these clocks. Never derive a fresh parent
+deadline from now plus remaining effort, revive a closed parent, or extend the
+deadline to fit a backoff. An expired parent settles without model/tool dispatch.
+A crash after provider dispatch without a durable settled capacity rejection
+remains execution-uncertain; zero tools alone cannot authorize replay.
+
+CAS owns reservation, parking and settlement. Deterministic event delivery is
+an optimization, not the sole duplicate-execution control. Cancellation updates
+the parent TaskRun durably, removes a queued waiter, and prevents later wake or
+reply settlement. Active transport retains its GPU reservation until settled.
+Status and reconnect read durable state; the event bus remains best effort.
+
+### 8.5 Proposed extension acceptance
+
+Keep original AC-LIP-1 through AC-LIP-4 unchanged. Retain original AC-LIP-5 and
+its failures in history. A reviewed baseline amendment must distinguish bounded
+attempt latency from eventual turn completion; never edit the old result into a
+pass. Proposed extension criteria:
+
+| Acceptance | Objective | Required outcome |
+| --- | --- | --- |
+| AC-LIR-1 | OBJ-LIP-4 | A successfully acknowledged interactive local turn has one durable accepted-message/TaskRun/reply identity and recoverable original input, including when event emission fails. |
+| AC-LIR-2 | OBJ-LIP-4 | A proven eligible local admission expiry persists a same-turn capacity wait with completedAt null and resumes the exact pending dispatch automatically after capacity recovers. |
+| AC-LIR-3 | OBJ-LIP-4 | Duplicate deliveries, process restart and later user messages do not duplicate execution, change original context or create a second final reply. |
+| AC-LIR-4 | OBJ-LIP-4 | Original effort limits and spent work persist across wakes; observed admission and committed parked time are accounted separately; recovery attempts/backoff remain bounded and original absolute parent deadlines never extend. |
+| AC-LIR-5 | OBJ-LIP-4 | Cancellation, revoked human membership/grants, changed ownership/posture/privacy, malformed checkpoints, execution uncertainty and any started tool or intrinsic block automatic replay. |
+| AC-LIR-6 | OBJ-LIP-4 | The canonical portal shows a persisted waiting state and completes a real governed local tool turn behind a naturally occurring long autonomous holder, with actual overlap, capacity wait, release, tool execution and final reply evidence. |
+
+### 8.6 Research, rollout and rollback
+
+[Inngest idempotency](https://www.inngest.com/docs/durable-execution/guides-and-advanced/idempotency)
+distinguishes delivery deduplication from making effects safe to repeat; therefore
+the database reservation and durable pre-tool fence remain required.
+[Inngest concurrency](https://www.inngest.com/docs/durable-execution/flow-control/concurrency)
+supports execution limits by key; thread ordering supplements the existing GPU
+lane rather than replacing it.
+[AWS workflow error handling](https://docs.aws.amazon.com/step-functions/latest/dg/concepts-error-handling.html)
+supports named transient-error handling; broad retries remain excluded.
+
+These primary references were read on 2026-10-17. The implementation sequence
+and exact verification obligations extend the existing July admission plan.
+No implementation starts without current coverage and required independent
+contract review. Release uses the protected queue and canonical self-upgrade;
+live acceptance waits for materially containing bytes and actual natural load.
+Rollback stops new recoverable submissions, preserves existing waits as visible
+pending obligations, and either drains them with the compatible worker or
+settles them explicitly. Never silently strand accepted tasks by reverting the
+only worker or discarding checkpoints.

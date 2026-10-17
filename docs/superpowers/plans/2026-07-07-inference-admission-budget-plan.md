@@ -120,3 +120,109 @@ without leaving contradictory local-GPU paths. It remains owned by
 | AC-LIP-3 | OBJ-LIP-3 | Docker Model Runner and host-GPU probes execute only after local-lane admission, so internal contention queues while a genuinely external or unexpected owner still returns the existing typed busy result. | Probe-order composition test and host-busy regression test. |
 | AC-LIP-4 | OBJ-LIP-4 | Aggregate queue-depth, cancellation/failure cleanup, idempotent release, single-GPU exclusion and remote-provider admission tests pass without weakening the host safety fence. | ResourceLane telemetry, bounded-depth, failure and remote-admission regression tests. |
 | AC-LIP-5 | OBJ-LIP-4 | On the canonical live install, an interactive coworker selects and executes an attached governed DPF tool within its admission budget while autonomous local inference is active or queued; Operations evidence distinguishes queued internal contention from external host busy. | Protected delivery, exact-live identity and browser/runtime evidence. |
+
+## 2026-10-17 proposed continuation extension
+
+**Planning only; implementation, coverage refresh and acceptance are pending.**
+BI-285EF102 / WC-1EBA9720 remains the single delivery home. WWMD
+DI-9A4E9EE0053E selects bounded same-turn pre-tool recovery. Section 8 of the
+existing local interactive-priority design defines the proposed contract. It
+does not amend the background-only BI-F6AD1E18/BI-A50F6B7B or turn original
+AC-LIP-5 into a pass. Canonical 305c5e2 is deployed; the last actual long-holder
+acceptance attempt remains failed. No new live model probes are part of planning.
+
+### Delivery boundary
+
+This is one atomic correctness boundary: durable acceptance without recovery
+loses work; recovery without immutable authority/context/CAS can repeat or widen
+work; recovery without durable status/cancellation misleads the person and can
+run canceled work. These are internal implementation phases of one deliverable,
+not independently shippable features. Reuse BI-285EF102 and existing jobs,
+TaskRun, TaskMessage and capacity-wait infrastructure. No new schema or scheduler
+is proposed. Reassess classification/sensitivity through the governed scope
+claim before source implementation; do not retain medium by assumption.
+
+### Ordered implementation and proof
+
+1. **Ratify the extension and record current coverage.** Independently review
+   the closed checkpoint, durable pre-tool fence, identity, cancellation,
+   authority revalidation and changed queue/active clock semantics. Preserve
+   the original AC-LIP-5 failure and bind the approved extension acceptance to
+   the current scope. Record immutable plan coverage; do not reuse an old plan
+   head or rewind source to satisfy a stale receipt.
+2. **Prove the current failure first.** Add regressions for an acknowledged
+   turn whose initial or corrective local dispatch cannot be admitted, event
+   emission failure, restart and later-message isolation. Confirm red on the
+   named parent; record only results actually run. Resolve related-test advice
+   and guard obligations for every final edit path before production edits.
+3. **Own accepted turns durably.** Extract server-only preparation/execution/
+   persistence from the public action. Audit nested session readers. Extend
+   `lib/agent/accept-user-message.ts` and the send route to commit original
+   input plus one accepted-turn TaskRun before acknowledgment. Add the closed
+   interactive branch to `lib/tak/autonomous-work-run.ts`, preserving the
+   external-MCP authority boundary. Test transaction rollback, request-digest
+   tampering, thread ownership and exactly one identity.
+4. **Persist the exact eligible dispatch.** Add a bounded pre-tool checkpoint
+   contract adjacent to `lib/tak/agentic-loop.ts`. Preserve message provenance,
+   counters, fixed evidence intent, effective route/tool-schema/skill policy,
+   context limits, original warrant and cumulative active work. Enumerate every
+   mutable pre-tool variable, preserve raw messages and the exact pending
+   dispatch, reject missing/unknown fields and assert excluded tool/intrinsic
+   state empty. Typed observed local
+   admission expiry alone can park; every tool/intrinsic start commits the
+   no-replay fence first. Test the rejected-answer/corrective-dispatch case,
+   load_tools and execution-plan exclusions, failed fence persistence, unknown
+   or execution-uncertain outcomes, post-tool refusal and missing wait timing.
+5. **Resume with the existing executor.** Extend the jobs outbox/reconciler and
+   add its interactive queue-function adapter. Reuse deterministic delivery,
+   per-turn CAS, capacity backoff/ceiling, oldest-open-turn ordering and fresh
+   `currentUserContext`/coworker/Workroom/privacy authorization. Restore the
+   pending dispatch instead of invoking a fresh send. Test duplicate workers,
+   restart recovery, stale worker settlement, exhausted waits, revoked authority
+   and original absolute parent-deadline expiry during backoff. Keep cumulative
+   active effort separate from committed parked time; charge unmeasured restart
+   gaps conservatively and never reset authority deadlines. Test a crash after
+   provider dispatch without a settled rejection as execution-uncertain,
+   and unchanged external-MCP token/digest tests.
+6. **Finish once and make waiting legible.** Share final-message persistence
+   under the stable assistant id. Extend existing status/cancel APIs and their
+   panel projection to read/cancel the parent TaskRun durably. Reconnect must
+   recover the current state without timer-driven route refresh. Test pending
+   state after restart, cancellation before wake/during admission and a race
+   with final settlement. Update the existing model-routing lifecycle guide.
+7. **Verify and deliver.** Run affected tests and both web typechecks, the
+   actual diff's gate context, UX fit, exact-tree canonical CI, independent
+   semantic review and all protected PR/merge-group checks. Canonical deployment
+   alone proves delivery, not AC-LIR-6. After containing deployment, observe a
+   real long autonomous local holder and submit one useful governed turn;
+   preserve actual wait/recovery/release/tool/final-answer evidence. No fake
+   holder, short idle substitute, timeout/config change, preemption or cloud
+   privacy escape can satisfy this proof.
+
+### Traceability and current evidence
+
+Requirement references for the extension are `AC-LIR-1`, `AC-LIR-2`, `AC-LIR-3`,
+`AC-LIR-4`, `AC-LIR-5`, `AC-LIR-6` in section 8 of the canonical design.
+Contract references: `CONTRACT-accepted-turn-identity`,
+`CONTRACT-pretool-checkpoint`, `CONTRACT-current-authority`,
+`CONTRACT-original-effort-ledger`. Flow references:
+`FLOW-accept-park-resume-settle`, `FLOW-cancel-before-resume`.
+Verification references: `VERIFY-corrective-dispatch-recovery`,
+`VERIFY-restart-and-duplicate-delivery`, `VERIFY-no-posttool-replay`,
+`VERIFY-canonical-natural-long-holder`.
+
+Existing actual failures: RV-WC-1EBA9720-LOCAL-TOOL-20261016T0611Z and
+RV-WC-1EBA9720-CLEAN-CONTROL-ADMISSION-20261016. Passing source-pair and idle
+governed-read evidence retain their narrower scopes. Source baseline for this
+plan extension is 92bd1ea9532a001d10f0c1743a616074be7c93c6, containing current
+canonical 305c5e2af8d446c4e263cf96d90fad41c82fc5a2. Tests for this extension
+have not run and no native design receipt or refreshed coverage is claimed.
+
+### Risks and rollback
+
+The primary risks are authority drift, a mistaken replay-safe classification,
+newer-message contamination, duplicate effect/reply settlement and resetting
+spent effort. Every one has a named negative test above. Existing MCP outage
+recovery and local admission must retain their original suites. Rollback must
+leave compatible recovery available for already accepted turns or settle those
+obligations explicitly; disabling submission alone must not strand queued work.
