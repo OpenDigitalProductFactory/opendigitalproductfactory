@@ -12,7 +12,18 @@ const mocks = vi.hoisted(() => ({ call: vi.fn(), manifests: vi.fn(), tools: vi.f
   proof: vi.fn(), create: vi.fn(), update: vi.fn(), audit: vi.fn(), provider: vi.fn(), grants: vi.fn(),
   account: vi.fn(), budget: vi.fn(), budgetEvent: vi.fn(), executeAdapter: vi.fn(), admit: vi.fn(),
   checkpointRead: vi.fn(), user: vi.fn(), agent: vi.fn(), token: vi.fn(), authorityKey: vi.fn(),
-  room: vi.fn(), roomAuthority: vi.fn(), access: vi.fn() }));
+  room: vi.fn(), roomAuthority: vi.fn(), access: vi.fn(), providerFetch: vi.fn() }));
+vi.mock("@/lib/routing/local-provider-capacity", () => ({ assertProviderDispatchCapacity: vi.fn() }));
+vi.mock("@/lib/queue/resource-lane", () => ({ withLocalInferenceLock: (work: () => unknown) => work() }));
+vi.mock("@/lib/inference/provider-inference-transport", () => ({
+  providerInferenceFetch: mocks.providerFetch,
+  withInferenceCancellationFetch: (fetchImpl: typeof fetch) => fetchImpl,
+}));
+vi.mock("@/lib/routing/adapter-telemetry-writer", () => ({ writeAdapterTelemetry: vi.fn() }));
+vi.mock("@/lib/routing/provider-capacity/store", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/routing/provider-capacity/store")>(),
+  clearProviderCapacityStatus: vi.fn().mockResolvedValue(undefined), recordProviderCapacityStatus: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: mocks.user }));
 vi.mock("@/lib/auth/oauth-task-authority", () => ({ resolveMcpTaskAuthorityKey: mocks.authorityKey }));
 vi.mock("@/lib/work-management/room-turn-authority.server", () => ({ loadRoomTurnAuthority: mocks.roomAuthority }));
@@ -380,6 +391,36 @@ describe("bounded local fidelity diagnostic", () => {
     expect(mocks.budget).toHaveBeenCalledWith("agent");
     expect(mocks.executeAdapter).not.toHaveBeenCalled(); expect(mocks.admit).not.toHaveBeenCalled();
     expect(reads).not.toHaveBeenCalled(); expect(mocks.call).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    ["ai/test", true], ["docker.io/ai/test:latest", true], ["ai/other", false], [undefined, false],
+  ])("carries real chat response model %s through inference to fidelity", async (returnedModel, accepted) => {
+    const account = { connectionId: selection.providerConnectionId, providerId: "local", status: "active", authMethod: "local",
+      executionChannel: "direct-api", credentialEntryId: null, credentialEntry: null, accessibleModelIds: ["ai/test"],
+      modelsVerifiedAt: null, evidenceStatus: "unreviewed" };
+    mocks.account.mockResolvedValue(account);
+    mocks.provider.mockResolvedValue({ providerId: "local", status: "active", baseUrl: "http://provider.invalid/v1", authMethod: "none" });
+    const manifests = await mocks.manifests();
+    mocks.manifests.mockResolvedValue([{ ...manifests[0], providerConnectionVersion: accountExecutionVersion(account) }]);
+    mocks.budget.mockResolvedValue({ status: "ok" });
+    mocks.providerFetch.mockResolvedValue(new Response(JSON.stringify({
+      model: returnedModel, choices: [{ finish_reason: "tool_calls", message: { content: "", tool_calls: [{
+        id: "provider-tool-fixture", type: "function", function: { name: GOLDEN_CASES[0]!.correctToolNames[0], arguments: "{}" },
+      }] } }], usage: { prompt_tokens: 2, completion_tokens: 1 },
+    }), { status: 200 }));
+    const { chatAdapter } = await import("@/lib/routing/chat-adapter");
+    mocks.executeAdapter.mockImplementation(request => chatAdapter.execute(request));
+    const real = await vi.importActual<typeof import("@/lib/inference/ai-inference")>("@/lib/inference/ai-inference");
+    mocks.call.mockImplementation(real.callProvider);
+    const result = await runLocalToolFidelityDiagnostic(selection, "u", context());
+    expect(mocks.providerFetch).toHaveBeenCalledTimes(1);
+    expect(mocks.executeAdapter).toHaveBeenCalledTimes(1);
+    expect((result.data!.observations as Array<unknown>)[0]).toMatchObject({
+      status: accepted ? "passed" : "incomplete", executionPassed: accepted,
+      reason: accepted ? "verified_governed_read" : "model_identity_unverified",
+    });
+    expect(reads).toHaveBeenCalledTimes(accepted ? 1 : 0);
+    expect(result.data).toMatchObject({ capChanged: false, checkpoint: { state: accepted ? "ready" : "held" } });
   });
   it("allows a healthy call beyond thirty seconds inside the existing admission and execution policies", async () => {
     vi.useFakeTimers(); vi.setSystemTime(0);
