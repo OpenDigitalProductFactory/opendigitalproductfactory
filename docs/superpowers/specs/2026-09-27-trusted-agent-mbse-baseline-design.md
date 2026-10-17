@@ -447,7 +447,8 @@ No runtime, UX, migration or conformance-test pass may be inferred from this edi
 
 The initial worktree probe reported `source-only`; the managed dependency
 bootstrap subsequently established `compile-ready` with the repository-pinned
-pnpm and no ignored builds. Runtime conformance scenarios remain unrun. Before a PR, apply the
-normal DCO, overlap and publication gates. The current `backlog_triage` grant
-restriction must be resolved by an authorized role before intake promotion;
-the separate allowed design claim does not bypass it.
+pnpm and no ignored builds. Runtime conformance scenarios remain unrun. Before a
+PR, apply the normal DCO, overlap and publication gates. The recorded
+`backlog_triage` refusal is historical; it does not establish current grants.
+Any future intake promotion must use fresh authority discovery and respect any
+resulting refusal; this documentation claim grants no promotion authority.
