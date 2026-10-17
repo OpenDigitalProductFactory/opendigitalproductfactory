@@ -143,7 +143,10 @@ export const DERIVED_ARTIFACTS = [
     id: "doc-diagrams",
     description: "Rendered Mermaid diagram SVGs + manifest",
     sourceGlobs: ["docs/user-guide/**/*.md", "docs/architecture/**/*.md"],
-    artifactPaths: ["docs/user-guide/assets/diagrams/**"],
+    artifactPaths: [
+      "docs/user-guide/assets/diagrams/**",
+      "apps/web/lib/docs/diagram-versions.generated.mjs",
+    ],
     generate: ["node", "scripts/render-doc-diagrams.mjs"],
     check: ["node", "scripts/render-doc-diagrams.mjs", "--check"],
     // Rendering needs a Mermaid renderer (scripts/lib/mermaid-renderer.mjs:

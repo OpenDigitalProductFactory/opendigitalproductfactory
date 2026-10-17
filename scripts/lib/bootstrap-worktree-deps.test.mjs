@@ -449,7 +449,7 @@ test("an ABSENT node_modules installs with the purge prompt disabled too (nothin
   }
 });
 
-test("a node_modules that is a LINK keeps pnpm's purge confirmation, so the link target survives (BI-7DD16424)", () => {
+test("a node_modules that is a LINK is named and not installed through, so the link target survives (BI-7DD16424, BI-C61C8ADD)", () => {
   const sandbox = mkdtempSync(join(tmpdir(), "dpf-linked-wt-"));
   try {
     const rootClone = join(sandbox, "root-clone");
@@ -459,13 +459,10 @@ test("a node_modules that is a LINK keeps pnpm's purge confirmation, so the link
     // "junction" is honoured on Windows and ignored elsewhere — the real shape on both.
     symlinkSync(join(rootClone, "node_modules"), join(worktree, "node_modules"), "junction");
     const calls = [];
-    bootstrapWorktreeDeps(worktree, { execute: recordingExecute(calls) });
-    const install = installCall(calls);
-    assert.ok(install, `the install still runs (pnpm refuses the purge itself); commands were: ${JSON.stringify(calls)}`);
-    assert.ok(
-      !install.includes(PURGE_WITHOUT_PROMPT),
-      `purging through a link wipes the tree it points at; ran: ${install}`,
-    );
+    const result = bootstrapWorktreeDeps(worktree, { execute: recordingExecute(calls) });
+    assert.equal(installCall(calls), undefined, `a junctioned node_modules must not run pnpm install; commands were: ${JSON.stringify(calls)}`);
+    assert.equal(result.status, "source-only");
+    assert.equal(result.reason, "node_modules_junction");
     assert.ok(existsSync(join(rootClone, "node_modules", "keep-me")));
   } finally {
     rmSync(sandbox, { recursive: true, force: true });

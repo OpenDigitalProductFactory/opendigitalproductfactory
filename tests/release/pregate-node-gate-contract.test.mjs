@@ -241,6 +241,13 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   mkdirSync(join(temp, "scripts", "lib"), { recursive: true });
   mkdirSync(join(temp, "apps", "web", "lib", "nonprod"), { recursive: true });
   cpSync(gateScript, join(temp, "scripts", "gate-worktree.mjs"));
+  // BI-A254A94C: sandbox admission is a static import. The temp tree has to
+  // carry that module and the helpers it imports that this fixture does not
+  // already copy, or the refusal path dies before its assertion.
+  cpSync(join(repoRoot, "scripts", "derived-artifacts-gate.mjs"), join(temp, "scripts", "derived-artifacts-gate.mjs"));
+  cpSync(join(repoRoot, "scripts", "check-guards.mjs"), join(temp, "scripts", "check-guards.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "mermaid-renderer.mjs"), join(temp, "scripts", "lib", "mermaid-renderer.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "git-hook-env.mjs"), join(temp, "scripts", "lib", "git-hook-env.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "mcp-client.mjs"), join(temp, "scripts", "lib", "mcp-client.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "lease-queue-call-options.mjs"), join(temp, "scripts", "lib", "lease-queue-call-options.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "script-argv.mjs"), join(temp, "scripts", "lib", "script-argv.mjs"));

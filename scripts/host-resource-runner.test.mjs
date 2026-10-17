@@ -352,6 +352,19 @@ for (const [reason, result] of Object.entries({
   });
 }
 
+test("a control character in one Windows command line does not make the whole inventory unusable (BI-97430AD3)", () => {
+  const raw = "[{\"ProcessId\":42,\"ParentProcessId\":1,\"CommandLine\":\"node bad\u0001line\"}]";
+  const rows = readProcessRows({
+    platform: "win32",
+    spawnSyncImpl: (command, args) => {
+      assert.equal(command, "powershell.exe");
+      assert.match(args.at(-1), /\\u0000-\\u001F/);
+      return { status: 0, stdout: raw };
+    },
+  });
+  assert.deepEqual(rows, [{ pid: 42, parentPid: 1, commandLine: "node badline" }]);
+});
+
 test("process inventory preserves Unicode commands and enforces producer bounds", () => {
   const rows = readProcessRows({ platform: "win32", spawnSyncImpl: (command, args, options) => {
     assert.equal(command, "powershell.exe");
