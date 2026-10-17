@@ -388,7 +388,9 @@ export async function completeRun(runId: string): Promise<SelfUpgradeRunRow> {
   const completedAt = new Date();
   const updated = await prisma.selfUpgradeRun.update({
     where: { runId },
-    data: { status: "succeeded", completedAt },
+    // A landed swap can be recorded failed by the retried step and then
+    // corrected. Drop the failure text so a succeeded row does not keep it.
+    data: { status: "succeeded", completedAt, reason: null, failureLog: null },
   });
   notifyRunState(updated.runId, "succeeded");
   await safeSyncSelfUpgradeChangeRecord(runId);

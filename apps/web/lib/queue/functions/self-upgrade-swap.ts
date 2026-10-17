@@ -18,9 +18,10 @@ import {
   runCandidatePreflight,
   type InstallStateMigrationHandoff,
 } from "@/lib/self-upgrade/preflight";
-import { isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
+import { getDeployedSha, isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
 import { classifyBuildFailure, formatClassifiedExcerpt } from "@/lib/self-upgrade/build-failure-classifier";
 import { completeRun, failRun, getRun, recordPromoterReadiness, recordRunRecoveryPoint } from "@/lib/self-upgrade/run-store";
+import { LANDED_SWAP_FALSE_FAILURE_REASON, resumedSwapAlreadyLanded } from "@/lib/self-upgrade/landed-swap";
 import { clearCooldown, recordCooldown } from "@/lib/self-upgrade/cooldown";
 import { emitUpgradeEvent } from "@/lib/self-upgrade/notifications";
 import {
@@ -67,6 +68,8 @@ export type SelfUpgradeSwapContext = {
 /** Run states the swap step must never act on again. */
 const FINALIZED_RUN_STATUSES = new Set(["succeeded", "failed", "cancelled", "skipped"]);
 
+export { resumedSwapAlreadyLanded } from "@/lib/self-upgrade/landed-swap";
+
 async function loadPromoterRuntime() {
   return await import("@/lib/self-upgrade/promoter");
 }
@@ -79,9 +82,32 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
   // the handoff to already-migrated state, swap again, or fail a finished run
   // (SUR-6D9543E6 was reconciled succeeded, then failed by its own retry).
   const existing = await getRun(runId);
-  if (existing && FINALIZED_RUN_STATUSES.has(existing.status)) {
+  const deployedSha = await getDeployedSha();
+  const landed = resumedSwapAlreadyLanded({
+    deployedSha,
+    targetSha: ctx.builtStamp,
+    currentSha: existing?.currentSha,
+  });
+  // A failed row whose target is the image we are running was the false
+  // failure this step writes. Correct it instead of leaving the lie in place.
+  if (existing && FINALIZED_RUN_STATUSES.has(existing.status) && !(existing.status === "failed" && landed)) {
     console.warn(`[self-upgrade] ${runId}: swap step re-entered after the run finalized (${existing.status}); nothing to do`);
     return { ok: existing.status === "succeeded", status: "already-finalized", runId, quiescenceRunId, runStatus: existing.status };
+  }
+  if (landed) {
+    if (quiescenceRunId) {
+      try {
+        await signalSwapComplete(quiescenceRunId);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(`[self-upgrade] ${runId}: swap already landed; swap-complete signal failed: ${message}`);
+      }
+    }
+    await completeRun(runId);
+    if (!dryRun) await clearCooldown();
+    await emitUpgradeEvent({ type: "upgrade.succeeded", runId });
+    console.warn(`[self-upgrade] ${runId}: swap step resumed on target ${deployedSha}; recorded success`);
+    return { ok: true, status: "succeeded", runId, quiescenceRunId, reason: "already-deployed" };
   }
   // Cooldowns start when the failure happens, not when the attempt began an
   // hour ago (the drain may have waited that long).
@@ -149,7 +175,17 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
     const guard = await guardAdmissionClosedForSwap(quiescenceRunId, { forced: ctx.force });
     if (!guard.ok) {
       await failQuiescenceSwap(quiescenceRunId, guard.error);
-      await failRun(runId, `admission-reopened-before-swap: ${guard.error}`);
+      const recorded = await failRun(
+        runId,
+        `admission-reopened-before-swap: ${guard.error}`,
+        guard.error === "the drain already ended (completed)" ? LANDED_SWAP_FALSE_FAILURE_REASON : undefined,
+      );
+      // Reconciliation may have marked the run succeeded while this step was
+      // still in its backup. failRun refuses to overwrite that. Do not put a
+      // cooldown on a swap that landed.
+      if (recorded?.status === "succeeded") {
+        return { ok: true, status: "already-finalized", runId, quiescenceRunId, runStatus: "succeeded" };
+      }
       await recordCooldown(now, cooldownMinutes);
       await emitUpgradeEvent({ type: "upgrade.failed", runId });
       return { ok: false, status: "failed", runId, quiescenceRunId, reason: "admission-reopened-before-swap", excerpt: guard.error };

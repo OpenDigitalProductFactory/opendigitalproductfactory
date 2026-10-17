@@ -32,8 +32,10 @@ is unavailable and does not offer or queue an upgrade.
    trigger.
 
    A waiting update stays named on the card while an upgrade is running
-   (**Installing now**) and after one fails (**Update still pending**), so a
-   failed or in-progress attempt never reads as being up to date.
+   (**Installing now**) and after one fails without landing (**Update still
+   pending**). An in-progress attempt never reads as being up to date. A
+   failed ledger row whose target is already the running image reads as
+   current: the swap landed and only the completion report was wrong.
 2. Review the pending upgrade and what it will change before triggering anything.
    **What's in this update?** compares the running build with the resolved
    update. Consumer installs read published source changes without needing a

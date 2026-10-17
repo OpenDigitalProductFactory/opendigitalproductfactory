@@ -103,6 +103,7 @@ export async function reconcileSelfUpgradeRunsOnBoot(
     const { prisma } = await import("@dpf/db");
     const { getDeployedSha } = await import("@/lib/self-upgrade/completion");
     const { completeRun, failRun } = await import("@/lib/self-upgrade/run-store");
+    const { LANDED_SWAP_FALSE_FAILURE_REASON } = await import("@/lib/self-upgrade/landed-swap");
     const deployedSha = await getDeployedSha();
     // staleAfterMs > 0 → PERIODIC mode: only runs stuck "running" well past a normal
     // upgrade, so an in-flight swap is never reconciled out from under itself.
@@ -184,6 +185,39 @@ export async function reconcileSelfUpgradeRunsOnBoot(
         logger.log(
           `[self-upgrade-reconcile] ${run.runId} -> failed (never-dispatched ${run.status})`,
         );
+      }
+    }
+
+    // SUR-8F1389F9: the swap landed and boot reconciliation recorded success,
+    // then the retried swap step overwrote the row as failed. Correct a row
+    // that still says that, once this portal is the image that row targeted.
+    const falseFailed = (await prisma.selfUpgradeRun.findMany({
+      where: { status: "failed", reason: LANDED_SWAP_FALSE_FAILURE_REASON },
+      select: { runId: true, currentSha: true, deployedSha: true, targetSha: true },
+    })) ?? [];
+    let healedLandedSwap = false;
+    for (const run of falseFailed) {
+      const expectedDeployedSha = run.deployedSha ?? run.targetSha ?? null;
+      if (
+        !deployedSha ||
+        !expectedDeployedSha ||
+        !run.currentSha ||
+        expectedDeployedSha.toLowerCase() !== deployedSha.toLowerCase() ||
+        run.currentSha.toLowerCase() === deployedSha.toLowerCase()
+      ) {
+        continue;
+      }
+      await completeRun(run.runId);
+      healedLandedSwap = true;
+      succeeded++;
+      logger.log(`[self-upgrade-reconcile] ${run.runId} -> succeeded (landed swap had been recorded failed)`);
+    }
+    if (healedLandedSwap) {
+      try {
+        const { clearCooldown } = await import("@/lib/self-upgrade/cooldown");
+        await clearCooldown();
+      } catch (err) {
+        logger.error("[self-upgrade-reconcile] landed-swap cooldown clear failed (non-fatal):", err);
       }
     }
 

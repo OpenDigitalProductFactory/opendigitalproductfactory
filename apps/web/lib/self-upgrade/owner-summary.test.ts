@@ -243,6 +243,24 @@ describe("buildOwnerReleaseSummary", () => {
     }
   });
 
+  it("reports the platform up to date when the latest run failed but the running image is the target (SUR-8F1389F9)", () => {
+    const s = buildOwnerReleaseSummary(
+      baseInput({
+        isFresh: true,
+        latestRun: {
+          status: "failed",
+          reason: "admission-reopened-before-swap: the drain already ended (completed)",
+          targetSha: "abc1234def",
+        },
+      }),
+      NO_LOCAL_CHANGES,
+    );
+    expect(s.state).toBe("up-to-date");
+    expect(s.headline).toBe("Your platform is up to date");
+    expect(s.ifYouDoNothing).not.toContain("previous version");
+    expect(s.whatCouldGoWrong.join(" ")).not.toContain("didn't finish");
+  });
+
   it("reports failed and points at recovery when a run failed with a recovery point", () => {
     const s = buildOwnerReleaseSummary(
       baseInput({

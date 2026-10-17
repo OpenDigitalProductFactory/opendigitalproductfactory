@@ -176,7 +176,10 @@ export function buildOwnerReleaseSummary(
     ? "unavailable"
     : inFlight
       ? "in-progress"
-      : failed
+      // A failed ledger row whose target is the running image is the landed
+      // swap the retried step recorded wrong (SUR-8F1389F9). The install is
+      // current; saying it stayed on the previous version is the false report.
+      : failed && !input.isFresh
         ? "failed"
         : input.targetAvailability === "unavailable"
           ? "unavailable"
@@ -286,7 +289,7 @@ export function buildOwnerReleaseSummary(
       "Your local changes are merged in automatically; a rare conflict would pause the update for review rather than lose your work.",
     );
   }
-  if (state !== "unavailable" && failed) {
+  if (state === "failed") {
     // Say WHAT went wrong, not just that something did. "Check the details
     // below" used to point at a raw build log — the only place the cause
     // existed, which is how two multi-day outages stayed invisible.
