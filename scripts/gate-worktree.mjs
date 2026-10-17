@@ -26,6 +26,7 @@ import { resolveMcpCredential } from "./lib/mcp-credential.mjs";
 import { readQuiescenceStatus, quiescenceBlocksWrites, quiescenceWait } from "./lib/gate-quiescence.mjs";
 import { readFailureEvidenceBinding } from "./lib/semantic-review-gate.mjs";
 import { sandboxDecisionForHead } from "./derived-artifacts-gate.mjs";
+import { scrubGitRepoLocationEnv } from "./lib/git-hook-env.mjs";
 
 // BI-46B03CAE — the lease-queue MCP calls cost more than mcpCall's 10s default.
 //
@@ -382,15 +383,15 @@ export function defaultDescendantPollMs(platform = process.platform) {
   return platform === "win32" ? 1000 : 250;
 }
 
-function git(gitBin, args, cwd) {
+function git(gitBin, args, cwd, env = process.env) {
   if (
     process.platform === "win32"
     && process.env.DPF_GATE_GIT_BIN
     && !/\.(?:exe|cmd|bat)$/i.test(gitBin)
   ) {
-    return spawnSync("sh", [gitBin, ...args], { cwd, encoding: "utf8" });
+    return spawnSync("sh", [gitBin, ...args], { cwd, encoding: "utf8", env });
   }
-  return spawnSync(gitBin, args, { cwd, encoding: "utf8" });
+  return spawnSync(gitBin, args, { cwd, encoding: "utf8", env });
 }
 
 function gitOrEmpty(gitBin, args, cwd) {
@@ -1720,7 +1721,14 @@ async function main() {
   // BI-A254A94C: a docs-only diff the pre-push gate would exempt must not take
   // the single sandbox slot. A resumed claim already holds a place in line.
   if (!options.finalizeEvidence && !options.resumeLeaseId) {
-    const sandbox = sandboxDecisionForHead();
+    const sandbox = sandboxDecisionForHead({
+      cwd: worktreePath,
+      expectedSha: sha,
+      git: (args) => {
+        const result = git(gitBin, args, worktreePath, scrubGitRepoLocationEnv());
+        return result.status === 0 ? result.stdout.trim() : null;
+      },
+    });
     if (sandbox) {
       process.stdout.write(`gate-worktree: ${sandbox.message}\n`);
       if (!sandbox.claim) {

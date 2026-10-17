@@ -36,6 +36,7 @@ import { DERIVED_ARTIFACTS, affectedEntries, matchesAnyGlob } from "./lib/derive
 import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
 import { availableMermaidRenderer } from "./lib/mermaid-renderer.mjs";
 import { gitText, gitTextOrNull } from "./lib/git.mjs";
+import { scrubGitRepoLocationEnv } from "./lib/git-hook-env.mjs";
 import { classifySpawnResult, SPAWN_OUTCOME } from "./check-guards.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -186,10 +187,13 @@ export function decideSandboxAdmission(exemption) {
 
 /** Null when the merge base cannot be resolved — the caller must not treat that as exempt. */
 export function sandboxDecisionForHead({
-  git = (args) => gitTextOrNull(args, { cwd: REPO_ROOT }),
-  runCheck = runCheckLive,
+  cwd = REPO_ROOT,
+  expectedSha,
+  git = (args) => gitTextOrNull(args, { cwd, env: scrubGitRepoLocationEnv() }),
+  runCheck = (entry) => runCheckLive(entry, cwd, scrubGitRepoLocationEnv()),
   registry = DERIVED_ARTIFACTS,
 } = {}) {
+  if (expectedSha && git(["rev-parse", "HEAD"]) !== expectedSha) return null;
   const mergeBase = git(["merge-base", "HEAD", "origin/main"]);
   if (!mergeBase) return null;
   const diff = git(["diff", "--name-only", mergeBase, "HEAD"]);
@@ -264,10 +268,11 @@ export function resolveDerivedArtifactInvocation(
   return resolveHostCommandInvocation(argv[0], argv.slice(1), { platform, env });
 }
 
-function execDerivedArtifactCommand(argv, stdio) {
+function execDerivedArtifactCommand(argv, stdio, cwd = REPO_ROOT, env = process.env) {
   const invocation = resolveDerivedArtifactInvocation(argv);
   return execFileSync(invocation.command, invocation.args, {
-    cwd: REPO_ROOT,
+    cwd,
+    env,
     stdio,
   });
 }
@@ -276,9 +281,9 @@ function runCommand(argv) {
   execDerivedArtifactCommand(argv, "inherit");
 }
 
-function runCheckLive(entry) {
+function runCheckLive(entry, cwd = REPO_ROOT, env = process.env) {
   try {
-    execDerivedArtifactCommand(entry.check, "pipe");
+    execDerivedArtifactCommand(entry.check, "pipe", cwd, env);
     return "fresh";
   } catch (error) {
     return classifyDerivedArtifactCheck(error);

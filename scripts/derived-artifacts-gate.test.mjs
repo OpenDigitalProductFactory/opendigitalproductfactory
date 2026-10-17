@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { cpSync, mkdtempSync, mkdirSync, realpathSync, writeFileSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-// Tests for the derived-artifact registry driver (BI-48768E05). All tests
-// exercise the pure planning/decision functions with injected fakes — no
-// git or subprocess calls, so they run instantly and deterministically.
+import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
+// Pure policy decisions and real candidate-repository binding regressions.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -17,7 +17,9 @@ import {
   resolveDerivedArtifactInvocation,
   classifyDerivedArtifactCheck,
   decideSandboxAdmission,
+  sandboxDecisionForHead,
 } from "./derived-artifacts-gate.mjs";
+import { scrubGitRepoLocationEnv } from "./lib/git-hook-env.mjs";
 
 const DOC_INDEX = {
   id: "doc-index",
@@ -55,7 +57,7 @@ const SBOM = {
 };
 
 test("derived-artifact commands keep pnpm arguments outside a shell on Windows", t => {
-  const root = mkdtempSync(join(tmpdir(), "dpf-derived-pnpm-"));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "dpf-derived-pnpm-")));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   writeFileSync(join(root, "pnpm.cmd"), "");
   const script = join(root, "pnpm.cjs");
@@ -205,6 +207,83 @@ test("decideSandboxAdmission names the code files that cost a docs-only exemptio
   });
   assert.equal(mixed.claim, true);
   assert.match(mixed.message, /apps\/web\/app\/page\.tsx/);
+});
+
+function candidateRepository(t, files) {
+  const root = mkdtempSync(join(tmpdir(), "dpf-admission-candidate-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const git = args => execFileSync("git", args, {
+    cwd: root, encoding: "utf8", env: scrubGitRepoLocationEnv(),
+  }).trim();
+  git(["init", "-q", "-b", "candidate"]);
+  git(["config", "user.name", "DPF Test"]);
+  git(["config", "user.email", "test@example.invalid"]);
+  git(["config", "commit.gpgsign", "false"]);
+  writeFileSync(join(root, "README.md"), "base\n");
+  git(["add", "."]);
+  git(["commit", "-q", "-m", "base"]);
+  git(["update-ref", "refs/remotes/origin/main", "HEAD"]);
+  for (const [path, content] of Object.entries(files)) {
+    mkdirSync(dirname(join(root, path)), { recursive: true });
+    writeFileSync(join(root, path), content);
+  }
+  git(["add", "."]);
+  git(["commit", "-q", "-m", "candidate"]);
+  return { root, sha: git(["rev-parse", "HEAD"]), git };
+}
+
+function classifyCandidate(candidate, invoking, extra = {}) {
+  // Load the actual production module from the other repository. Its default
+  // REPO_ROOT must genuinely disagree with the selected candidate in this test.
+  const scripts = join(invoking.root, "scripts");
+  mkdirSync(scripts, { recursive: true });
+  for (const filename of ["derived-artifacts-gate.mjs", "check-guards.mjs"]) {
+    cpSync(new URL(`./${filename}`, import.meta.url), join(scripts, filename));
+  }
+  cpSync(new URL("./lib", import.meta.url), join(scripts, "lib"), { recursive: true });
+  const moduleUrl = pathToFileURL(join(scripts, "derived-artifacts-gate.mjs")).href;
+  const options = { cwd: candidate.root, expectedSha: candidate.sha, registry: [], ...extra };
+  const output = execFileSync(process.execPath, ["--input-type=module", "-e",
+    `import { sandboxDecisionForHead } from ${JSON.stringify(moduleUrl)};
+console.log(JSON.stringify(sandboxDecisionForHead(JSON.parse(process.argv[1]))));`,
+    JSON.stringify(options),
+  ], { cwd: invoking.root, encoding: "utf8", env: scrubGitRepoLocationEnv() });
+  return JSON.parse(output);
+}
+
+test("sandbox admission requires a code candidate despite a documentation invoking checkout", t => {
+  const docs = candidateRepository(t, { "docs/brief.md": "documentation\n" });
+  const code = candidateRepository(t, { "code.ts": "export const changed = true;\n" });
+  assert.equal(classifyCandidate(code, docs)?.claim, true, "code candidate must not borrow a docs exemption");
+});
+
+test("sandbox admission exempts a docs candidate despite a code invoking checkout", t => {
+  const docs = candidateRepository(t, { "docs/brief.md": "documentation\n" });
+  const code = candidateRepository(t, { "code.ts": "export const changed = true;\n" });
+  assert.equal(classifyCandidate(docs, code)?.claim, false, "unrelated code must not consume the docs candidate's sandbox slot");
+});
+
+test("sandbox admission checks derived freshness in the selected candidate", t => {
+  const fresh = candidateRepository(t, { "docs/spec.md": "spec\n", "docs/artifact.txt": "fresh" });
+  const stale = candidateRepository(t, { "docs/spec.md": "spec\n", "docs/artifact.txt": "stale" });
+  const registry = [{
+    id: "candidate-artifact", sourceGlobs: ["docs/spec.md"], artifactPaths: ["docs/artifact.txt"],
+    check: [process.execPath, "-e", "process.exit(require('node:fs').readFileSync('docs/artifact.txt','utf8')==='fresh'?0:1)"],
+  }];
+  assert.equal(classifyCandidate(fresh, stale, { registry })?.claim, false, "another checkout cannot make the fresh candidate stale");
+  assert.equal(classifyCandidate(stale, fresh, { registry })?.claim, true, "another checkout cannot make the stale candidate fresh");
+});
+
+test("sandbox admission cannot exempt a different requested SHA", t => {
+  const docs = candidateRepository(t, { "docs/brief.md": "documentation\n" });
+  assert.equal(classifyCandidate(docs, docs, { expectedSha: "a".repeat(40) }), null);
+});
+
+test("sandbox admission keeps an unreadable candidate merge base or diff inconclusive", t => {
+  const docs = candidateRepository(t, { "docs/brief.md": "documentation\n" });
+  docs.git(["update-ref", "-d", "refs/remotes/origin/main"]);
+  assert.equal(classifyCandidate(docs, docs), null);
+  assert.equal(sandboxDecisionForHead({ git: args => args[0] === "merge-base" ? "base" : null }), null);
 });
 
 // ── evaluateCheckAll ─────────────────────────────────────────────────────────

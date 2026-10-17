@@ -44,6 +44,9 @@ function makeTempRepo() {
   g(["add", "."]);
   g(["commit", "-q", "-m", "base"]);
   g(["update-ref", "refs/remotes/origin/main", "HEAD"]);
+  writeFileSync(join(dir, "candidate.ts"), "export const candidate = true;\n");
+  g(["add", "candidate.ts"]);
+  g(["commit", "-q", "-m", "code candidate"]);
   return { dir, g };
 }
 
@@ -352,6 +355,35 @@ test("gate-worktree.mjs still runs main() when invoked through a symlinked path 
 
 // ── scripts/gate-worktree.mjs: full lease/evidence sequence ─────────────────
 
+test("gate-worktree.mjs exempts the requested derived-only candidate independently of its script checkout", async () => {
+  const { dir, g } = makeTempRepo();
+  g(["update-ref", "refs/remotes/origin/main", "HEAD"]);
+  // A registered output alone uses the legacy exemption, not the separate
+  // documentation-evidence producer. Exercise the actual fallback call site.
+  mkdirSync(join(dir, "apps", "web", "lib", "docs"), { recursive: true });
+  writeFileSync(join(dir, "apps", "web", "lib", "docs", "doc-index.generated.json"), "{}\n");
+  g(["add", "."]);
+  g(["commit", "-q", "-m", "derived candidate"]);
+  const sha = g(["rev-parse", "HEAD"]);
+  const mcp = await startMockMcp({
+    claim_nonprod_environment_lease: () => ({ success: true, entityId: "NPEL-UNEXPECTED" }),
+    record_local_integration_result: () => ({ success: true, entityId: "EXT-UNEXPECTED" }),
+    release_nonprod_environment_lease: () => ({ success: true, entityId: "NPEL-UNEXPECTED" }),
+  });
+  try {
+    const result = await runGateAsync(
+      ["--branch", "candidate", "--sha", sha, "--worktree", dir, "--no-push", "--mcp-url", mcp.url],
+      { ...process.env, DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_GATE_OWNER_PROVIDER: "codex", DPF_GATE_OWNER_SESSION_ID: "candidate-binding", DPF_ALLOW_LOCAL_CI_STUB: "1" },
+    );
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    assert.match(result.stdout, /docs-only diff — sandbox not claimed/);
+    assert.equal(mcp.calls.some(c => c.params.name === "claim_nonprod_environment_lease"), false);
+    assert.equal(mcp.calls.some(c => c.params.name === "record_local_integration_result"), false);
+  } finally {
+    await mcp.close();
+  }
+});
+
 test("gate-worktree.mjs claims, records, and releases in order, and carries evidence fields (BI-166C59F3/BI-76551B2D)", async () => {
   const { dir } = makeTempRepo();
   const mcp = await startMockMcp({
@@ -485,6 +517,8 @@ test("gate-worktree.mjs parks on authoritative quiescence without polling or cla
 test("gate-worktree.mjs reports active lease contention and stale main before expensive work", async () => {
   const { dir, g } = makeTempRepo();
   g(["branch", "feat/topic"]);
+  // Advance main from its own base, without absorbing the code candidate.
+  g(["checkout", "-q", "-b", "mainline", "origin/main"]);
   writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
   g(["commit", "-qam", "advance main"]);
   const advancedMain = g(["rev-parse", "HEAD"]);
