@@ -8,6 +8,8 @@
 //     the maintenance window it runs now; outside it, or during an operator
 //     blackout, the request is deferred to the next window and the answer says
 //     when that is.
+//     A server-verified development/evolve-dpf repair request may run outside
+//     business hours; explicit blackouts and the governed pipeline remain.
 //   - A human operator pressing "Upgrade now" has explicitly chosen this moment
 //     and runs immediately; when that is outside the window the run's trigger
 //     records the bypass, so the run history and the change record show it.
@@ -15,12 +17,13 @@
 // The window itself comes from effective-window.ts, so the time promised here is
 // the one the status panel shows and the scheduled cron applies.
 
-import { AUTOMATION_PERSONA_EMAIL } from "@/lib/govern/automation-sign-in";
+import { isPlatformAutomationPersona } from "@/lib/govern/automation-persona-identity";
 import { getActiveSelfUpgradeBlackout } from "@/lib/self-upgrade/blackout";
 import type { SelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { recordDeferredUpgradeRequest } from "@/lib/self-upgrade/deferred-request";
 import { resolveEffectiveUpgradeWindow } from "@/lib/self-upgrade/effective-window";
 import { computeNextScheduledUpgradeCheckAt } from "@/lib/self-upgrade/next-check";
+import type { InstanceStanceProfile } from "@dpf/db/installation-instance-stance";
 
 export type UpgradeRequesterKind = "human" | "agent";
 
@@ -30,7 +33,7 @@ export type UpgradeRequesterKind = "human" | "agent";
  * (issue_ux_verification_sign_in). Every other signed-in user is a human.
  */
 export function portalRequesterKind(email: string | null | undefined): UpgradeRequesterKind {
-  return email?.trim().toLowerCase() === AUTOMATION_PERSONA_EMAIL ? "agent" : "human";
+  return isPlatformAutomationPersona(email) ? "agent" : "human";
 }
 
 export const WINDOW_BYPASS_TRIGGER_SUFFIX = "+outside-window";
@@ -61,6 +64,8 @@ export async function decideUpgradeTiming(args: {
   requester: UpgradeRequesterKind;
   config: TimingConfig;
   now: Date;
+  /** Trusted server projection; never an MCP or browser input. */
+  instanceStance?: Pick<InstanceStanceProfile, "environmentClass" | "primaryPurpose">;
 }): Promise<UpgradeTimingDecision> {
   const { requester, config, now } = args;
   const window = await resolveEffectiveUpgradeWindow({ config, now });
@@ -69,13 +74,19 @@ export async function decideUpgradeTiming(args: {
     return { kind: "run-now", windowBypassed: window.source === "needs-timezone" || !window.open };
   }
 
-  if (window.source === "needs-timezone") return { kind: "needs-timezone" };
+  const developmentEvolution = args.instanceStance?.environmentClass === "development"
+    && args.instanceStance.primaryPurpose === "evolve-dpf";
+  if (!developmentEvolution && window.source === "needs-timezone") return { kind: "needs-timezone" };
 
   const blackout = await getActiveSelfUpgradeBlackout(now);
-  if (window.open && !blackout) return { kind: "run-now", windowBypassed: false };
+  if ((window.open || developmentEvolution) && !blackout) {
+    return { kind: "run-now", windowBypassed: window.source === "needs-timezone" || !window.open };
+  }
 
   let opensAt = window.open ? now : window.nextWindowStart;
   if (blackout) {
+    // Retain the scheduler's existing blackout/window contract. A DEV timing
+    // exception must not promise a tick the unchanged cron would decline.
     const after = await resolveEffectiveUpgradeWindow({ config, now: blackout.endAt });
     opensAt = after.open ? blackout.endAt : after.nextWindowStart;
   }

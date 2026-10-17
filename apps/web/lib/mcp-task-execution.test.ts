@@ -300,7 +300,7 @@ describe("remote task terminal-writer postcondition", () => {
   });
 
   it("parks an approval-required terminal writer even when the tool did not project TaskRun state", async () => {
-    db.findTaskRun.mockResolvedValue({
+    db.findTaskRun.mockResolvedValueOnce({ status: "working", progressPayload: {} }).mockResolvedValue({
       status: "input-required",
       progressPayload: {
         auditMarker: "preserve-me",

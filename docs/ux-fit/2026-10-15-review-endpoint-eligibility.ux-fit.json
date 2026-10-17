@@ -1,0 +1,22 @@
+{
+  "version": "1",
+  "decision": "fits-with-guardrails",
+  "decisionInteractionId": "DI-FFD8192B1F45",
+  "decidedOption": "existing-disclosure",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/StalledTaskRecoveryActions.tsx",
+      "apps/web/components/workspace/workroom/ReviewerExecutionList.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["existing-disclosure", "new-routing-dashboard"]
+  },
+  "guardrails": [
+    "Reuse existing recovery disclosure and request history; no new navigation or raw routing inputs.",
+    "Explain safe eligibility constraints and disable unchanged inference retry.",
+    "Preserve immutable deadline and attempt limits; ambiguous execution remains uncertain.",
+    "Coworker critique CE-6ACAE3B7 is requested; no findings or served UX acceptance are claimed."
+  ]
+}

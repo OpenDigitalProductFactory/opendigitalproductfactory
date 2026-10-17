@@ -13,6 +13,7 @@ import {
   LOCAL_INFERENCE_LANE_KEY,
 } from "./resource-lane";
 import type { QueueTransitionInput } from "./queue-telemetry";
+import { currentInferenceOrigin, withInferenceOrigin } from "@/lib/inference/inference-admission";
 
 function deferred<T>() {
   let resolve!: (v: T) => void;
@@ -25,6 +26,55 @@ function deferred<T>() {
 }
 
 describe("ResourceLane serialization", () => {
+  it("runs each observer in its submitter's context across priority handoff", async () => {
+    const lane = new ResourceLane("compute:observer-context", { record: () => {} });
+    const seen: string[] = [];
+    const run = (origin: "interactive" | "autonomous") => withInferenceOrigin(origin, () => lane.run(async () => {}, {
+      priority: origin, observeAdmission: phase => { seen.push(`${origin}:${phase}:${currentInferenceOrigin()}`); },
+    }));
+    await Promise.all([run("autonomous"), run("interactive")]);
+    await vi.waitFor(() => expect(seen.filter(e => e.includes(":released:"))).toHaveLength(2));
+    expect(seen.every(e => e.split(":")[0] === e.split(":")[2])).toBe(true);
+  });
+  it("observes actual release before handoff even when an observer throws", async () => {
+    const lane = new ResourceLane("compute:observed", { record: () => {} });
+    const events: string[] = [];
+    const error = new Error("work failed");
+    const observe = (caller: number) => (phase: string) => {
+      events.push(`${caller}:${phase}`);
+      if (caller === 0) throw new Error("observer cannot affect scheduling");
+    };
+    const first = lane.run(async () => { throw error; }, { observeAdmission: observe(0) });
+    const second = lane.run(async () => "next", { observeAdmission: observe(1) });
+    await expect(first).rejects.toBe(error);
+    await expect(second).resolves.toBe("next");
+    await vi.waitFor(() => expect(events).toContain("1:released"));
+    expect(events.indexOf("0:released")).toBeLessThan(events.indexOf("1:acquired"));
+    expect(events.filter(e => e.endsWith(":released"))).toHaveLength(2);
+  });
+
+  it.each(["canceled", "timed-out"] as const)("observes %s waiters without claiming a release", async phase => {
+    const lane = new ResourceLane(`compute:observed-${phase}`, { record: () => {} });
+    const holder = deferred<void>();
+    const active = lane.run(() => holder.promise);
+    await Promise.resolve();
+    const controller = new AbortController();
+    const events: string[] = [];
+    const waiting = lane.run(async () => "must not start", {
+      signal: controller.signal, waitTimeoutMs: phase === "timed-out" ? 10 : null,
+      observeAdmission: e => events.push(e),
+    });
+    const rejected = expect(waiting).rejects.toBeInstanceOf(Error);
+    if (phase === "canceled") controller.abort(new Error("caller stopped"));
+    try {
+      await rejected;
+      expect(events).toEqual(["queued", phase]);
+      expect(lane.depth()).toBe(0);
+    } finally {
+      holder.resolve();
+      await active;
+    }
+  });
   it("runs one call at a time in FIFO order", async () => {
     const lane = new ResourceLane("compute:test", { record: () => {} });
     const order: string[] = [];

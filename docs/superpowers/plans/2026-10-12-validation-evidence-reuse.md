@@ -240,3 +240,189 @@ style-drift guard. Run all related suites, both TypeScript programs and affected
 policy guards. Full local integration and native semantic review remain unrun
 under the authorized recovery route; independent source review and protected
 GitHub checks remain required. No UI, schema or capacity-policy change occurs.
+
+## Automatic published-correction policy — October 16 continuation
+
+BI-25CB699C / WC-0B3EF2C5, branch `fix/published-correction-validation`,
+source base is merge PR #6432 (`c1febac87438`). The earlier implementation
+checkpoints above remain historical evidence, not completion of AC-1/AC-2.
+
+The October 12 founder clarification is the governing direction for this
+continuation. Current measured examples repeat the symptom: 156 readiness
+guards finished on unchanged source, but a concurrent `origin/main` update
+made their aggregate inconclusive; a second chat repeated 84 guards with the
+same outcome. Neither result is converted into a full PASS. The protected
+GitHub queue continues to perform the actual merged-tree integration.
+
+### Existing substrate and chosen boundary
+
+Extend the existing publication policy, not the canonical integration verdict.
+The source homes are `.githooks/pre-push-gate`, `scripts/pr-readiness.mjs` and
+`core.mjs`, `scripts/pr-health.mjs`, and the packaged
+`pregate-evidence-guard.mjs` / `lib/local-ci-override.mjs`. Reuse
+`scripts/ci-evidence-plan.mjs` for changed-file/test/package recommendations,
+`scripts/lib/host-command-invocation.mjs` for portable command execution, and
+the existing atomic JSON/stage-receipt primitives for local observations.
+The shared canonical gate records and their historical PASS/FAIL identities
+remain unchanged. No database model, grant, queue or service is introduced.
+
+Add one closed, machine-evidence-bound `published-correction` publication
+reason to the existing override contract. It explicitly means **local full
+integration UNRUN / delegated to protected GitHub**, never `gatePassed: true`.
+A prose trailer alone cannot qualify this reason. Every existing consumer
+must validate its structured current-head proof. Keep the proof as the result
+of the existing local stage-receipt mechanism; preserve every slot receipt.
+The legacy unslotted filename is also slot zero, so writing a correction there
+could overwrite genuine historical evidence. Readers project the stage result
+as a publication-only record without changing the canonical gate records.
+
+Eligibility requires an actual open, non-draft PR in the configured repository,
+matching the local named branch and canonical `main` base, plus provider-read
+confirmation that active branch rules require checks and a merge queue.
+Unreadable provider state, a wrong or closed PR, absent queue protection,
+dirty source, ambiguous history or changed source identity fails closed to an
+explicit unresolved publication result. It does not automatically request a
+new full local lease. Initial publication retains its existing requirements.
+
+Independent design assessment identified a missing initial-publication boundary.
+An open PR alone is insufficient. Require a machine-validated immutable initial
+publication anchor from a qualified canonical receipt or an already permitted
+recorded override, bound to the repository, branch, PR and original published
+source. A delegated correction cannot mint that initial anchor. Missing or
+foreign provenance follows the original publication path. Preserve the anchor
+without rewriting its timestamps or pretending it covers later source.
+Compare cumulative changed bytes against that accepted source, so an arbitrary
+external remote update never becomes an unchecked zero-work baseline. Reused
+correction proof also binds the expected check plan, policy, toolchain and
+environment; an arbitrary successful command list is insufficient. Test an
+open PR with no anchor, an initial permitted override, remote drift and changed
+expected commands as explicit negative/positive cases. The four classes are
+descriptive; every changed tree follows the same affected-check contract.
+
+The live item's later acceptance mapping also contains marked criteria. They
+remain part of the server-parsed medium baseline and are quoted verbatim:
+
+- AC-1: classifier and refresh-tier tests, then a live clean main-refresh push that does not wait for a full local-CI slot.
+- AC-2: tests where a hand-resolved file in the branch's diff triggers affected tests; alteration of branch-authored logic is verified against the clarified rule above.
+- AC-3: confirm protected required checks and the merge queue are unchanged and still gate the merge.
+- AC-4: test and live observation that a re-claim keeps its position.
+
+Classify against the actual published head and its branch-authored diff:
+unchanged head; identical tree with changed commit metadata; main refresh with
+unchanged authored diff; and authored correction. Record both immutable source
+identities, the class, executed command/results and delegated obligations.
+The unchanged and metadata cases execute no source suite. A changed tree runs
+the existing planner's affected tests and package typechecks, with named
+failure reproduction where supplied. Unmapped or unsupported local execution
+is an explicit unresolved prerequisite, never zero-check success. Planner
+global-risk/exhaustive recommendations remain visible and are delegated to
+the protected integration path rather than silently discarded.
+
+Readiness detects the existing published PR automatically and chooses the
+bounded correction plan. Fresh repository, DCO, body/label and relevant trailer
+checks remain mandatory. Broad source guard execution is delegated explicitly;
+cached source results retain their original identity/time. Before returning or
+persisting permission to publish, re-read clean Git/source identity and actual
+PR/rule identity. A race, failed check, interrupted child or malformed receipt
+cannot become reusable proof. Publication evidence has bounded freshness and
+cannot expand authority or imply runtime acceptance.
+
+### Ordered verification and delivery
+
+1. CT-PUBLICATION / FLOW-CORRECTION: first reproduce the repeated-validation
+   behavior in tests. Add executable Git-fixture/command-adapter tests for all
+   four classes, first publication, wrong repo/branch/base, missing protected
+   checks/queue, foreign/expired/malformed proof, dirty source, drift during
+   execution, failed or skipped affected checks and unsupported source mappings.
+   VC-PUBLICATION must prove zero full-gate/lease invocations on eligible
+   corrections, and no borrowed full PASS on changed bytes.
+2. Implement one shared packaged proof classifier and one source-side adapter;
+   route the Git hook, PreToolUse, readiness and PR health through that contract.
+   Tests must exercise those actual consumer paths, including refusal of a
+   prose-only `published-correction` trailer and preservation of an earlier FAIL.
+   Register the regression in `scripts/lib/ci-policy-guards.mjs` after the
+   current scale-adapter owner releases its normal scope claim.
+3. Update `docs/testing/pr-health.md` and this plan; no UI or schema changes.
+   Resolve the native impact advice for the three packaged-hook paths before
+   Red. Run affected Node/hook/readiness/health suites, shell syntax and named
+   design-grounding/convergence/doc guards. This is source verification;
+   protected GitHub CI/queue remains the integration authority.
+4. Obtain independent source assessment, publish through the normal signed
+   branch/PR route, and exercise an actual post-publication correction without
+   another full local lease. Record executed, reused and delegated separately.
+   AC-3 protection stays unchanged; AC-4 uses the already delivered resume
+   identity work and is not rewritten in this continuation.
+
+These steps implement one publication-policy change under the existing medium
+BI. The shared classifier and all consumers must ship together; partial reader
+acceptance would create inconsistent publication behavior. Normal scope claims
+cover the 15 source/document paths before implementation. The current native
+impact contract is resolved, identifies the three packaged-hook related-test
+lookups, and requires design-grounding and convergence trailers. No explicit
+guard obligations were inferred; that does not exempt affected source checks.
+
+Risk: accepting stale/foreign evidence or treating delegated integration as a
+PASS. Prefer a refusal to inferred equivalence; keep original evidence and
+truthful UNRUN labels. Roll back through one signed revert; unsupported
+`published-correction` records then fail closed without deleting any history.
+Current coverage for this exact continuation must be recorded before code;
+no prior coverage ID above is asserted to cover this scope.
+
+Continuation coverage was actually accepted as `cmvaj8swu07d601pjb5pvfstc`
+against plan commit `c38bec639429e1e7712b904b0b3406fa938ab664`, with atomic
+mapping `automatic-published-correction` to BI-25CB699C and no dependencies.
+Normal implementation admission `IRD-4382C4F5F50B` was allowed. The storage
+refinement above preserves canonical slot zero by using the existing stage
+writer; refresh coverage against the final published immutable plan before PR.
+
+Actual source regressions first produced three failures and one passing
+prose-rejection case. The shared readers then passed all four. Subsequent
+execution cases cover real Node test execution, zero source commands for
+unchanged/metadata updates, main refresh, failed/skipped reports, source/PR
+drift, preserved prior slot bytes and the actual Git hook's execute/reuse/refuse
+paths. A separate tamper regression rejects an arbitrary command list even
+after its stored digest is recomputed. These are source-local test results;
+current full integration, native semantic review and live acceptance remain
+UNRUN pending normal publication and a containing release.
+
+The October 16 deployed correction path exposed a real reporter mismatch on
+PR #6452: Vitest exited zero with nine passing tests but wrote its JSON report
+to `.vitest/json/output.json`, while stdout contained launcher notices. The
+adapter correctly refused `test-report-unproven`; that refusal and the original
+report remain evidence, not failed source tests or a passing publication proof.
+Continue this same policy under BI-25CB699C and WC-0B3EF2C5, using the five
+normally claimed paths `scripts/published-correction.mjs`,
+`scripts/published-correction.test.mjs`, `scripts/pr-readiness.mjs`,
+`scripts/pr-readiness.test.mjs` and this plan. No new work carrier,
+schema, permission, receipt store or integration authority is introduced.
+
+Before implementation, publish this immutable continuation, refresh its atomic
+coverage and obtain normal implementation admission. First reproduce the real
+Vitest file-reporter behavior with the installed runner and noisy stdout. Make
+the existing execution adapter allocate an exclusive fresh bounded JSON sink
+for each Vitest invocation, pass it explicitly to the child, and qualify only
+that invocation's report. Preserve the source-derived logical check plan while
+recording the actual child arguments and report digest. A missing, malformed,
+oversized, stale, incomplete or foreign report, nonzero exit or interrupted
+child cannot qualify. Never borrow a previous project-default report or parse
+an arbitrary path from stdout. Clean up only the adapter-owned temporary files.
+
+Add meaningful regressions for real file output and launcher noise, absent or
+stale default output, incomplete results and unsuccessful children. Keep Node
+TAP qualification, exact source/plan/environment checks and protected GitHub
+integration intact. Run the affected Node suites and the real Vitest regression,
+obtain independent source assessment, then verify a genuine published correction
+through the ordinary push path. Initial bounded DEV recovery, if needed, uses
+only the existing audited route and reports full integration unrun. Current
+coverage, independent assessment, publication and functional results for this
+continuation are still pending; earlier f510/d412 evidence is historical.
+
+The same deployed policy also misroutes a reused branch's initial publication
+when GitHub returns its historical MERGED or CLOSED PR. PR #6455 preparation
+reproduced that failure against old PR #6439. Extract the existing orchestration
+without changing its behavior, reproduce the failure, then attempt proportional
+verification only for an OPEN PR. MERGED/CLOSED contexts retain the ordinary
+initial-publication path and its actual attestation/metadata requirements;
+malformed state remains unproven. Test those transitions and fresh OPEN-context
+rechecks. The documented metadata-only recovery remains truthful zero-execution
+metadata work, not a passing integration record or a protection waiver.

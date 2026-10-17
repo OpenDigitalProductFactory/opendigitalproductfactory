@@ -47,10 +47,11 @@
         "73-why-this-matters-beyond-dpf",
         "74-from-model-to-machine",
         "8-dpf-the-working-instantiation",
-        "81-scale-of-the-reference-system",
+        "81-what-was-examined",
         "82-claim-to-evidence-ledger",
         "83-what-building-it-taught-us",
-        "84-portability",
+        "84-portability-and-replaceable-inference",
+        "85-immutable-source-and-evidence-register",
         "9-measuring-whether-it-works",
         "10-a-neutral-reference-model",
         "11-public-verification-architecture-options-for-gaid",
@@ -2026,7 +2027,8 @@
         "6-known-limitation-reviewer-dispatch-can-complete-without-writing-a-receipt",
         "7-closing-a-small-or-medium-item-the-baseline-is-the-body-bi-0f8e39d5",
         "approval-outcome-readback",
-        "anti-patterns-observed"
+        "anti-patterns-observed",
+        "original-review-recovery-across-connection-changes"
       ]
     },
     "docs/architecture/job-specific-intelligence.md": {
@@ -2164,7 +2166,8 @@
         "administrator-classification-recovery",
         "approval-convergence-probe",
         "recovering-an-interrupted-independent-review",
-        "parent-bounded-local-review-execution-bi-03ac2fd9"
+        "parent-bounded-local-review-execution-bi-03ac2fd9",
+        "recovering-an-original-initiative-review-after-a-connection-change"
       ]
     },
     "docs/architecture/mcp-tool-packs.md": {
@@ -2219,6 +2222,7 @@
         "offline-recovery-preparation-and-compatible-rollout",
         "available-source-primitives",
         "release-sequence",
+        "observed-staging-release",
         "remaining-acceptance"
       ]
     },
@@ -2821,6 +2825,15 @@
         "verification-and-rollback-boundary"
       ]
     },
+    "docs/architecture/workroom-ingestion-scale-qualification.md": {
+      "publicHref": "/architecture/workroom-ingestion-scale-qualification/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "workroom-ingestion-scale-qualification"
+      ]
+    },
     "docs/architecture/workroom-review-profile-contract.md": {
       "publicHref": "/architecture/workroom-review-profile-contract/",
       "portalHref": null,
@@ -2828,6 +2841,7 @@
       "publishedPortal": false,
       "anchors": [
         "workroom-review-profile-read-contract",
+        "operator-disclosure",
         "common-requirements-and-extensions",
         "coverage-and-representative-domains",
         "verification-and-recovery"
@@ -4271,6 +4285,7 @@
       "publishedPortal": false,
       "anchors": [
         "rule",
+        "decision-outcomes",
         "why",
         "how-to-apply"
       ]
@@ -5722,6 +5737,9 @@
       "publishedPortal": false,
       "anchors": [
         "platform-support-watch-list-living-document",
+        "contributor-preview-mount-identity-on-docker-desktop-bi-0acb97b5",
+        "literal-windows-package-manager-arguments-bi-263055e3",
+        "capability-reconciliation-on-release-installs-bi-5acbac50",
         "host-process-inventory-before-admission-bi-6de5a3b6",
         "host-claim-transport-and-windows-command-launch-bi-091a2dcf",
         "windows-host-guard-interpreters-bi-ba5f777a",
@@ -5831,6 +5849,16 @@
         "uninstall",
         "going-further",
         "connecting-claude-code-or-vs-code-via-mcp"
+      ]
+    },
+    "docs/install/workroom-activity-migration-recovery.md": {
+      "publicHref": "/install/workroom-activity-migration-recovery/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "workroom-activity-migration-recovery",
+        "verification"
       ]
     },
     "docs/install/worktree-janitor-schedule.md": {
@@ -9370,6 +9398,150 @@
         "form-of-the-output"
       ]
     },
+    "docs/publications/trusted-agent-engineering/README.md": {
+      "publicHref": "/publications/trusted-agent-engineering/README/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "trusted-agent-engineering-publisher-review-packet",
+        "editorial-delivery-and-acceptance",
+        "source-baseline",
+        "claims-boundary",
+        "withdrawal-and-correction"
+      ]
+    },
+    "docs/publications/trusted-agent-engineering/chapter-01-engineering-the-working-system.md": {
+      "publicHref": "/publications/trusted-agent-engineering/chapter-01-engineering-the-working-system/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "chapter-1-engineering-the-working-system",
+        "begin-with-the-operating-composition",
+        "five-statements-that-should-not-collapse-into-done",
+        "principles-direct-policies-constrain-grants-authorize",
+        "use-hard-constraints-before-preferences",
+        "four-standards-around-one-effect",
+        "a-kernel-metaphor-with-an-explicit-boundary",
+        "model-the-relationships-then-prove-their-realization",
+        "make-the-human-decision-useful",
+        "a-small-design-exercise"
+      ]
+    },
+    "docs/publications/trusted-agent-engineering/chapter-02-synthetic-expense-control-loop.md": {
+      "publicHref": "/publications/trusted-agent-engineering/chapter-02-synthetic-expense-control-loop/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "chapter-6-a-synthetic-expense-control-loop",
+        "freeze-the-teaching-world",
+        "give-the-work-stages",
+        "establish-identity-and-job-scope",
+        "resolve-the-policy-question",
+        "resolve-the-gated-permission",
+        "bind-one-exact-effect",
+        "put-the-durable-boundary-around-dispatch",
+        "lose-the-response",
+        "revoke-authority-between-recommendation-and-use",
+        "challenge-the-claim-before-reporting-it",
+        "show-the-operator-what-remains"
+      ]
+    },
+    "docs/publications/trusted-agent-engineering/publisher-proposal.md": {
+      "publicHref": "/publications/trusted-agent-engineering/publisher-proposal/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "book-proposal-engineering-accountable-agents",
+        "the-book-in-one-paragraph",
+        "reader-and-practical-promise",
+        "why-this-book-now",
+        "comparable-titles-and-differentiation",
+        "structure-and-annotated-contents",
+        "cases-artifacts-and-evidence-policy",
+        "companion-material-and-rights-boundary",
+        "delivery-schedule-and-submission-boundary"
+      ]
+    },
+    "docs/publications/trusted-agent-tbm/README.md": {
+      "publicHref": "/publications/trusted-agent-tbm/README/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "trusted-agent-engineering-lftbm-discussion-packet",
+        "use-the-packet",
+        "canonical-owners",
+        "file-provenance-and-reproduction"
+      ]
+    },
+    "docs/publications/trusted-agent-tbm/demo-script.md": {
+      "publicHref": "/publications/trusted-agent-tbm/demo-script/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "synthetic-expense-demonstration-script-and-static-fallback",
+        "opening-statement",
+        "readiness-manifest",
+        "seven-minute-walkthrough",
+        "frozen-vector-proposal",
+        "static-fallback-annotated-specimen",
+        "recording-plan"
+      ]
+    },
+    "docs/publications/trusted-agent-tbm/governance-options.md": {
+      "publicHref": "/publications/trusted-agent-tbm/governance-options/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "governance-and-intellectual-property-discussion-options",
+        "recommended-meeting-request",
+        "options",
+        "proposed-operating-terms-for-review",
+        "owner-decisions-before-filing"
+      ]
+    },
+    "docs/publications/trusted-agent-tbm/known-gaps.md": {
+      "publicHref": "/publications/trusted-agent-tbm/known-gaps/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "known-gaps-and-claim-limits"
+      ]
+    },
+    "docs/publications/trusted-agent-tbm/meeting-brief.md": {
+      "publicHref": "/publications/trusted-agent-tbm/meeting-brief/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "trusted-agent-execution",
+        "the-proposal",
+        "four-responsibilities",
+        "model-the-execution-chain",
+        "evidence-before-adoption",
+        "two-contexts-one-contract",
+        "measure-acceptable-work",
+        "the-collaboration-request",
+        "sources-and-current-limits"
+      ]
+    },
+    "docs/publications/trusted-agent-tbm/sources.md": {
+      "publicHref": "/publications/trusted-agent-tbm/sources/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "meeting-packet-source-register",
+        "existing-dpf-source-owners"
+      ]
+    },
     "docs/runbooks/2026-07-18-self-upgrade-mounts-denied-state-dir.md": {
       "publicHref": "/runbooks/2026-07-18-self-upgrade-mounts-denied-state-dir/",
       "portalHref": null,
@@ -11411,6 +11583,7 @@
         "observation-versus-merge-authority",
         "know-the-constraints-before-you-write-pnpm-gatecontext",
         "before-a-pr-exists-pnpm-prready",
+        "corrections-after-publication",
         "local-ci-infrastructure-outcomes",
         "tests-ci"
       ]
@@ -11748,7 +11921,8 @@
         "6-the-receipt-is-what-you-review",
         "known-limits",
         "related",
-        "the-pace-a-room-runs-at"
+        "the-pace-a-room-runs-at",
+        "continuing-a-review-after-a-connection-changes"
       ]
     },
     "docs/user-guide/ai-workforce/index.md": {
@@ -11825,6 +11999,17 @@
         "honest-limits",
         "related",
         "how-work-rooms-behave"
+      ]
+    },
+    "docs/user-guide/ai-workforce/provider-account-routing.md": {
+      "publicHref": "/user-guide/ai-workforce/provider-account-routing/",
+      "portalHref": "/docs/ai-workforce/provider-account-routing",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "choose-accounts-for-the-work",
+        "capacity-and-recovery",
+        "usage-records"
       ]
     },
     "docs/user-guide/ai-workforce/provider-anthropic.md": {
@@ -12235,6 +12420,7 @@
         "commit-and-push-fast",
         "worktrees-are-source-control-isolation-not-runtime-isolation",
         "heavy-local-commands-use-a-shared-host-resource-lane",
+        "recover-a-review-blocked-by-endpoint-eligibility",
         "clean-up-when-merged",
         "webhooks-closing-the-promotion-loop",
         "adhering-to-the-portals-processes",
@@ -12523,6 +12709,7 @@
         "close-readiness-workflow",
         "what-to-watch",
         "recovery-and-evidence",
+        "ask-for-a-branded-report-workbook-or-letter",
         "related-help"
       ]
     },
@@ -12633,6 +12820,15 @@
         "architecture-and-standards",
         "specifications-and-plans",
         "documentation-freshness"
+      ]
+    },
+    "docs/user-guide/investment-allocation.md": {
+      "publicHref": "/user-guide/investment-allocation/",
+      "portalHref": "/docs/investment-allocation",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "investment-allocation"
       ]
     },
     "docs/user-guide/market-archetypes.md": {
@@ -12794,6 +12990,10 @@
         "use-this-doc-for",
         "workflow",
         "read-the-routing-picture",
+        "follow-traffic",
+        "investigate-stops-and-provider-setup",
+        "evaluate-outcomes",
+        "technical-architecture-and-replay",
         "confirm-a-routing-override",
         "architecture-and-evidence",
         "understanding-background-inference",

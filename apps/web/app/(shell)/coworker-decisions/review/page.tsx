@@ -45,7 +45,7 @@ export const metadata = {
 import { listCraftConsultDemand } from "@/lib/decision-perspective/craft-consult-demand";
 import { ownerRulingQueueWhere } from "@/lib/decision-perspective/owner-ruling-queue";
 
-const UNRESOLVED = ["defer", "escalate"];
+import { humanEscalationWhere } from "@/lib/decision-perspective/human-escalation";
 
 const OPERATOR_ACTIONABLE_WHERE: Prisma.DecisionInteractionWhereInput = {
   question: { not: "" },
@@ -164,7 +164,7 @@ export default async function DecisionReviewPage({
         // Only rows the operator hasn't already answered (humanOutcome null) —
         // once answered via the loop below they resolve and drop off.
         where: {
-          outcomeType: { in: UNRESOLVED },
+          AND: [humanEscalationWhere()],
           humanOutcome: { equals: Prisma.DbNull },
           ...OPERATOR_ACTIONABLE_WHERE,
         },
@@ -191,6 +191,7 @@ export default async function DecisionReviewPage({
           question: true,
           riskTier: true,
           outcomeType: true,
+          escalationRoute: true,
           createdAt: true,
           scoredOptions: true,
           recommendedOptionId: true,

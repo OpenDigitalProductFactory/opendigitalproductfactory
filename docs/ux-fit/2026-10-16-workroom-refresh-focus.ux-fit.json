@@ -1,0 +1,12 @@
+{
+  "version": "1",
+  "decidedOption": "focusable-guarded-pending",
+  "decisionInteractionId": "DI-74081AD1EB1B",
+  "scope": {
+    "files": ["apps/web/components/workspace/workroom/ProjectionFreshness.tsx"]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["focusable-guarded-pending", "disabled-conditional-focus-restore"]
+  }
+}

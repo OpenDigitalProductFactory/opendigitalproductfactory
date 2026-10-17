@@ -1,5 +1,23 @@
 # Workroom review profile read contract
 
+## Operator disclosure
+
+The existing Workroom Details view renders the authorized `reviewProfile` through
+one shared `WorkroomReviewRequirements` component. It reads the composed payload;
+it does not import the server composer into the client or recompute qualification.
+Requirement outcomes, denominators and inherited provenance remain available
+behind labelled disclosure. Unsupported, conflicting and missing profiles retain
+their explicit state. Organization applicability remains unknown where the
+canonical read model has not established it.
+
+`resolved` describes composition, not a passed review. The current read contract
+supplies `assessment: not-exercised`; the view therefore states that no independent
+assessment is available there. Receipt counts, cycle closure and deployment are
+not substitutes. A future assessment presentation must consume its existing
+attributable canonical carrier rather than inventing a browser evaluation store.
+The owner next-action fallback also respects recorded room accountability while
+preserving process, execution, dependency and system-wait precedence.
+
 This is the first source-contract slice of BI-11458908 under the
 [approved delivery plan](../superpowers/plans/2026-09-12-cross-workroom-learning-delivery-plan.md).
 It does not activate a reviewer, change a grant, assess an occurrence, or claim

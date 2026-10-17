@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const recoveryAuthority = vi.hoisted(() => vi.fn());
+vi.mock("./mcp-task-review-recovery", () => ({ revalidateReviewExecutionAuthority: recoveryAuthority }));
 const db = vi.hoisted(() => ({
   findModelConfig: vi.fn(),
   findTaskRun: vi.fn(),
@@ -86,6 +88,32 @@ describe("remote task cancellation settlement", () => {
     expect(autonomous.execute).not.toHaveBeenCalled();
     expect(db.updateTaskRun).not.toHaveBeenCalled();
   });
+  it("refuses malformed transferred authority before inference without falling back to the origin token", async () => {
+    db.findTaskRun.mockResolvedValue({ status: "working", progressPayload: { reviewExecutionAuthority: { tokenId: "forged" } }, a2aMetadata: {} });
+    const outcome = await executeRemoteTaskAttempt({ run: { id: "run", taskRunId: "TR-RECOVERY", contextId: "thread-1" }, threadId: "thread-1",
+      token: { tokenId: "PAT", userId: "user-1", capability: "write", source: "pat" }, userContext: {} as never,
+      parsed, idempotentReplay: true, capacityAttempt: 1 });
+    expect(outcome).toMatchObject({ kind: "result", result: { status: "input-required", isError: true,
+      structuredContent: { error: "review_execution_authority_refused" } } });
+    expect(autonomous.execute).not.toHaveBeenCalled(); expect(autonomous.resolveAgent).not.toHaveBeenCalled();
+  });
+  it.each(["capacity", "missing-writer", "exception"])("retains current authority and recorded windows when execution parks as %s", async mode => {
+    const authority = { tokenId: "current-token", originTokenId: "expired-token" };
+    const deadlineAt = new Date(Date.now() + 60_000).toISOString();
+    const expiresAt = new Date(Date.now() + 120_000).toISOString();
+    db.findTaskRun.mockResolvedValue({ status: "working", progressPayload: { reviewExecutionAuthority: authority, deadlineAt, expiresAt }, a2aMetadata: {} });
+    recoveryAuthority.mockResolvedValue(true);
+    if (mode === "exception") autonomous.execute.mockRejectedValue(Error("Provider failure"));
+    else autonomous.execute.mockResolvedValue({ content: "Still waiting", executedTools: [],
+      ...(mode === "capacity" ? { failure: { kind: "capacity", message: "No provider capacity available" } } : {}) });
+    await executeRemoteTaskAttempt({ run: { id: "run", taskRunId: "TR-RECOVERED", contextId: "thread-1" }, threadId: "thread-1",
+      token: { tokenId: "current-token", userId: "user-1", capability: "write", source: "oauth" }, userContext: {} as never,
+      parsed, idempotentReplay: true, capacityAttempt: 1 });
+    expect(autonomous.execute).toHaveBeenCalledOnce();
+    expect(db.updateTaskRun).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      progressPayload: expect.objectContaining({ reviewExecutionAuthority: authority, deadlineAt, expiresAt }),
+    }) }));
+  });
   it("preserves queue claim and dispatch budget when parking", async () => {
     const dispatch = { claimedAt: "claim", count: 3, state: "claimed" };
     db.findTaskRun.mockResolvedValue({ status: "working", progressPayload: { dispatch } });
@@ -140,6 +168,7 @@ describe("remote task cancellation settlement", () => {
   });
   beforeEach(() => {
     vi.clearAllMocks();
+    recoveryAuthority.mockResolvedValue(false);
     autonomous.execute.mockReset();
     db.updateTaskRun.mockReset();
     db.findModelConfig.mockResolvedValue(null);

@@ -10,10 +10,15 @@ import { connectionPosture, loadBusinessSuitabilityContext, providerCatalogFacts
 import { PROVIDER_TRUST_CLAIM_KEYS, resolveProviderTrustEvidence } from "@/lib/routing/provider-suitability/evidence";
 import { resolveProviderTrustFacts } from "@/lib/routing/provider-suitability/provider-trust";
 import { projectProviderConnectionReview } from "@/lib/routing/provider-suitability/provider-connection-review";
+import { loadProviderCapacitySnapshots } from "@/lib/routing/provider-capacity/store";
+import { capacityRoutingExclusionReason } from "@/lib/routing/capacity-routing-exclude";
+import { accountRuntimeKey } from "@/lib/routing/provider-account-candidates";
+import { isAccountCapacityState } from "@/lib/routing/provider-capacity/scopes";
 
-export async function getProviderAccountCopy() {
-  const t = await getT("providerAccounts");
-  return Object.fromEntries(Object.keys(SOURCE_CATALOG.providerAccounts).map(key => [key, t(key as keyof typeof SOURCE_CATALOG.providerAccounts)]));
+export async function getProviderAccountCopy(): Promise<Record<string, string>> {
+  const [t, setup] = await Promise.all([getT("providerAccounts"), getT("setup")]);
+  return { ...Object.fromEntries(Object.keys(SOURCE_CATALOG.providerAccounts).map(key => [key, t(key as keyof typeof SOURCE_CATALOG.providerAccounts)])),
+    modelsExecution: setup("providerConnection.modelsExecution") };
 }
 
 export async function loadProviderAccountOverview(input: {
@@ -22,13 +27,14 @@ export async function loadProviderAccountOverview(input: {
   copy: Record<string, string>; now?: Date;
 }): Promise<ProviderAccountOverviewRow[]> {
   const now = input.now ?? new Date();
-  const [accounts, business, evidence] = await Promise.all([
+  const [accounts, business, evidence, capacity] = await Promise.all([
     getProviderAccounts(), loadBusinessSuitabilityContext(),
     prisma.aiProviderConnection.findMany({
       where: { providerId: { in: input.providers.map(pw => pw.provider.providerId) } },
       include: { provider: { select: { providerId: true, category: true, endpointType: true, catalogEntry: true } },
         trustEvidence: true, supplierContract: { select: { contractId: true, status: true, startDate: true, endDate: true } } },
     }),
+    loadProviderCapacitySnapshots({ includeInactiveAccountHealth: true }).catch(() => null),
   ]);
   const providers = new Map(input.providers.map(pw => [pw.provider.providerId, pw]));
   const evidenceById = new Map(evidence.map(connection => [connection.connectionId, connection]));
@@ -44,6 +50,28 @@ export async function loadProviderAccountOverview(input: {
     const review = source && resolved ? projectProviderConnectionReview({ ...business,
       facts: resolveProviderTrustFacts({ catalog: providerCatalogFacts(source.provider), connection: resolved.posture }) }) : null;
     const control = account.isDefault ? input.controls.get(account.providerId) : undefined;
+    const ownedHealth = capacity?.get(accountRuntimeKey(account.providerId, account.connectionId));
+    const ownedRestriction = capacityRoutingExclusionReason(ownedHealth, now.getTime());
+    const providerLimit = capacity?.get(account.providerId);
+    const sharedLimit = !account.isDefault && providerLimit && !isAccountCapacityState(providerLimit.state)
+      && capacityRoutingExclusionReason(providerLimit, now.getTime()) ? providerLimit : null;
+    const credentialNeedsRenewal = account.credential?.status === "expired"
+      || Boolean(account.credential?.tokenExpiresAt && Date.parse(account.credential.tokenExpiresAt) <= now.getTime());
+    const additionalSharedControl = !account.isDefault ? input.controls.get(account.providerId) : undefined;
+    const sharedRestrictions = additionalSharedControl?.restrictions.filter(restriction =>
+      ["quota", "quota-recovery", "local-only", "host-capacity"].includes(restriction.key)) ?? [];
+    const recoveryAction = ownedHealth?.action === "reconnect" ? ["oauth", "oauth2_authorization_code"].includes(account.authMethod) ? input.copy.signIn : input.copy.reviewConnectionSettings
+      : ownedHealth?.action === "add_credits_or_plan" ? input.copy.reviewAccountBilling : null;
+    const resetParts = [
+      ...(credentialNeedsRenewal ? [input.copy.tokenNeedsRenewal] : []),
+      ...(ownedRestriction && recoveryAction ? [recoveryAction] : []),
+      ...(ownedRestriction && ownedHealth?.retryAtMs ? [new Date(ownedHealth.retryAtMs).toISOString()] : []),
+      ...(control ? control.restrictions.map(restriction => `${restriction.summary}${restriction.until ? ` ${restriction.until}` : ""}`) : []),
+      ...(additionalSharedControl?.weeklyHint ? [`${input.copy.sharedProviderLimits}: ${additionalSharedControl.weeklyHint}`] : []),
+      ...sharedRestrictions.map(restriction => `${input.copy.sharedProviderLimits}: ${restriction.summary}${restriction.until ? ` ${restriction.until}` : ""}`),
+      ...(sharedLimit?.safeSummary ? [`${input.copy.sharedProviderLimits}: ${sharedLimit.safeSummary}${sharedLimit.retryAtMs ? ` ${new Date(sharedLimit.retryAtMs).toISOString()}` : ""}`] : []),
+      ...(capacity === null ? [input.copy.routingCheckUnavailable] : []),
+    ].filter(Boolean);
     const accessible = Array.isArray(account.accessibleModelIds) ? account.accessibleModelIds.filter(value => typeof value === "string") : [];
     const summary = input.modelSummaries.get(account.providerId);
     const catalogCount = summary?.totalModels;
@@ -54,15 +82,17 @@ export async function loadProviderAccountOverview(input: {
       status: account.status, credential: account.credential ? { hasUsableMaterial: account.credential.hasUsableMaterial } : null,
       modelsVerifiedAt: account.modelsVerifiedAt, lastReviewedAt: account.lastReviewedAt, supplierContractId: account.supplierContractId,
       label: account.label ?? pw.provider.name, providerName: pw.provider.name,
-      statusLabel: control?.eligibility.label ?? (account.status === "paused" ? input.copy.paused : account.isDefault ? input.copy.routingUnknown : statusLabels[account.status] ?? input.copy.unavailable),
+      statusLabel: ["paused", "disabled", "disconnected"].includes(account.status) ? statusLabels[account.status]
+        : credentialNeedsRenewal || ownedRestriction ? input.copy.degraded
+          : control?.eligibility.label ?? (account.isDefault ? input.copy.routingUnknown : statusLabels[account.status] ?? input.copy.unavailable),
       allowedWork: review?.scope === "company-work" ? input.copy.companyWork : review?.scope === "public-only" ? input.copy.publicOnly : input.copy.workBlocked,
       allowedWorkSummary: review?.headline ?? input.copy.notVerified,
       modelSummary,
       capabilitySummary: account.isDefault && summary?.routingScores && (!account.modelsVerifiedAt || accessible.includes(summary.representativeModelId ?? ""))
         ? `${input.copy.catalogCapability} ${input.copy.reasoning} ${summary.routingScores.reasoning} · ${input.copy.coding} ${summary.routingScores.codegen} · ${input.copy.tools} ${summary.routingScores.toolFidelity}`
         : input.copy.capabilityUnmeasured,
-      capacitySummary: control?.weeklyHint ?? input.copy.capacityUnknown,
-      resetSummary: control ? control.restrictions.map(restriction => `${restriction.summary}${restriction.until ? ` ${restriction.until}` : ""}`).join(" ") || null : account.isDefault ? input.copy.routingCheckUnavailable : null,
+      capacitySummary: ownedRestriction && ownedHealth?.safeSummary ? `${ownedHealth.safeSummary} · ${input.copy.capacityUnknown}` : control?.weeklyHint ?? input.copy.capacityUnknown,
+      resetSummary: [...new Set(resetParts)].join(" ") || (account.isDefault && !control ? input.copy.routingCheckUnavailable : null),
       resolvesPhases: account.isDefault ? input.resolvesPhases.get(account.providerId) ?? [] : [],
     }];
   });

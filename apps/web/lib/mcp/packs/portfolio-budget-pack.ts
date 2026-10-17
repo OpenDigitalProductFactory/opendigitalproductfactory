@@ -25,8 +25,50 @@ import {
 } from "@/lib/portfolio/portfolio-budget";
 import { setPortfolioOwner } from "@/lib/portfolio/accountable-owner";
 import type { ToolPack } from "../tool-pack";
+import { isRecord } from "@/lib/shared/coerce";
+import { parseFundingScope } from "@/lib/portfolio/investment-balance-binding";
+import { validateBalancePolicy } from "@/lib/portfolio/investment-balance";
+
+const fundingScopeSchema = {
+  type: "object", additionalProperties: false,
+  properties: { principalId: { type: "string" }, organizationId: { type: "string" }, purpose: { type: "string", enum: ["shared-platform", "archetype"] } },
+  required: ["principalId", "organizationId", "purpose"],
+};
+const balancePolicySchema = {
+  type: "object", additionalProperties: false,
+  properties: {
+    refactorPercent: { type: "integer", minimum: 0, maximum: 100 },
+    windowDays: { type: "integer", minimum: 1, maximum: 180 },
+    tolerancePercent: { type: "integer", minimum: 0, maximum: 20 },
+    steeringEnabled: { type: "boolean" }, minimumAttempts: { type: "integer", minimum: 1 },
+    minimumTokens: { type: "integer", minimum: 1 }, minimumClassificationPercent: { type: "integer", minimum: 1, maximum: 100 },
+    freshnessDays: { type: "integer", minimum: 1, maximum: 180 },
+  },
+  required: ["refactorPercent", "windowDays", "tolerancePercent", "steeringEnabled", "minimumAttempts", "minimumTokens", "minimumClassificationPercent", "freshnessDays"],
+};
 
 const definitions: ToolDefinition[] = [
+  {
+    name: "get_investment_balance",
+    description: "Read your funding scope's cumulative refactor/new target, revision and measured token coverage. Founder shared platform defaults to 80% refactor; organization/archetype work defaults to 20%. Unobserved external spending is not estimated. Requires the recorded funding owner; an admin role does not substitute.",
+    inputSchema: { type: "object", properties: { scope: fundingScopeSchema }, required: ["scope"] },
+    requiredCapability: "view_operations", executionMode: "immediate", sideEffect: false,
+  },
+  {
+    name: "set_investment_balance",
+    description: "Set your scope's approximate cumulative refactor/new target and optional dynamic steering. Read the current revision first, then provide expectedRevision (null for first setup) and a reason. Canonical funding authority is checked in the transaction. Revisions preserve history; hard spend, readiness and WIP limits remain in force.",
+    inputSchema: { type: "object", properties: { scope: fundingScopeSchema, policy: balancePolicySchema, expectedRevision: { type: ["string", "null"] }, reason: { type: "string" }, expiresAt: { type: ["string", "null"] } }, required: ["scope", "policy", "expectedRevision", "reason"] },
+    requiredCapability: "manage_backlog", sideEffect: true, consequence: "authority",
+  },
+  {
+    name: "bind_investment_funding",
+    description: "Explicitly bind your funding scope to this installation, your organization's work in a portfolio, or an admitted Workroom item. Portfolio management does not transfer funding authority. A Workroom itemId of * is its default; specific items override it and may carry an evidenced refactor/new classification. Bindings never follow coordinator changes or copied installation identity. Requires expectedBoundAt (null for first setup) and a reason. A successor is allowed only after the former owner loses recorded funding authority; history stays unchanged.",
+    inputSchema: { type: "object", properties: {
+      scope: fundingScopeSchema, expectedBoundAt: { type: ["string", "null"] }, reason: { type: "string" }, classification: { type: ["string", "null"], enum: ["refactor", "new", null], description: "Optional evidenced classification for one specific Workroom item. Explain in reason. Null clears the override; omit to preserve it." },
+      target: { type: "object", properties: { kind: { type: "string", enum: ["installation", "portfolio", "workroom"] }, id: { type: "string" }, purpose: { type: "string", enum: ["shared-platform", "archetype"] }, itemId: { type: "string" } }, required: ["kind"] },
+    }, required: ["scope", "target", "expectedBoundAt", "reason"] },
+    requiredCapability: "manage_backlog", sideEffect: true, consequence: "authority",
+  },
   {
     name: "propose_epic_portfolios",
     description:
@@ -235,10 +277,49 @@ async function confirmEpicPortfoliosHandler(
   };
 }
 
+async function investmentHandler(operation: "read" | "save" | "bind", params: Record<string, unknown>, userId: string, context?: ToolExecutionContext): Promise<ToolResult> {
+  const scope = parseFundingScope(params.scope);
+  const invalid = { success: false, error: "invalid-investment-input", message: "Provide a funding scope and valid policy or binding fields, including the expected revision and reason for changes." };
+  if (!scope || !userId) return invalid;
+  if (operation === "save") {
+    if (!validateBalancePolicy(params.policy) || !(params.expectedRevision === null || typeof params.expectedRevision === "string")
+      || typeof params.reason !== "string" || !(params.expiresAt === undefined || params.expiresAt === null || typeof params.expiresAt === "string")) return invalid;
+    const { saveScopedBalancePolicy } = await import("@/lib/portfolio/investment-balance-server");
+    const result = await saveScopedBalancePolicy(prisma, { userId, scope, policy: params.policy, expectedRevision: params.expectedRevision, reason: params.reason, expiresAt: params.expiresAt });
+    return result.ok ? { success: true, message: "Investment allocation saved.", data: result.data } : { success: false, error: result.error, message: "Investment allocation was not changed." };
+  }
+  if (operation === "bind") {
+    const target = params.target;
+    if (params.classification !== undefined && params.classification !== null && params.classification !== "refactor" && params.classification !== "new") return invalid;
+    if (!isRecord(target) || typeof params.reason !== "string" || !(params.expectedBoundAt === null || typeof params.expectedBoundAt === "string")) return invalid;
+    let typedTarget: import("@/lib/portfolio/investment-balance-server").FundingTarget;
+    if (target.kind === "workroom" && typeof target.id === "string" && target.id && typeof target.itemId === "string" && target.itemId)
+      typedTarget = { kind: "workroom", id: target.id, itemId: target.itemId };
+    else if ((target.purpose === "shared-platform" || target.purpose === "archetype") && target.kind === "installation")
+      typedTarget = { kind: "installation", purpose: target.purpose };
+    else if ((target.purpose === "shared-platform" || target.purpose === "archetype") && target.kind === "portfolio" && typeof target.id === "string" && target.id)
+      typedTarget = { kind: "portfolio", id: target.id, purpose: target.purpose };
+    else return invalid;
+    const { bindInvestmentFunding } = await import("@/lib/portfolio/investment-balance-server");
+    const result = await bindInvestmentFunding(prisma, { userId, agentId: context?.agentId, scope, target: typedTarget, expectedBoundAt: params.expectedBoundAt, reason: params.reason, classification: params.classification });
+    return result.ok ? { success: true, message: "Funding scope bound.", data: result.data } : { success: false, error: result.error, message: "Funding scope was not changed." };
+  }
+  const { resolvePrincipalRecordIdForSessionIdentity } = await import("@/lib/identity/principal-linking");
+  const actor = await resolvePrincipalRecordIdForSessionIdentity({ type: "admin", id: userId });
+  if (actor !== scope.principalId) return { success: false, error: "not-owner", message: "Only the funding owner can read this allocation report." };
+  const { loadScopedBalanceReport } = await import("@/lib/portfolio/investment-balance-server");
+  const resolved = await loadScopedBalanceReport(prisma, scope);
+  if (!resolved.ok) return { success: false, error: resolved.error, message: "Funding authority or policy is unresolved." };
+  return { success: true, message: "Investment allocation loaded.", data: resolved.data };
+}
+
 export const portfolioBudgetPack: ToolPack = {
   packId: "portfolio-budget",
   definitions,
   handlers: {
+    get_investment_balance: (params, userId) => investmentHandler("read", params, userId),
+    set_investment_balance: (params, userId) => investmentHandler("save", params, userId),
+    bind_investment_funding: (params, userId, context) => investmentHandler("bind", params, userId, context),
     propose_epic_portfolios: (params) => proposeEpicPortfoliosHandler(params),
     confirm_epic_portfolios: (params, userId, context) => confirmEpicPortfoliosHandler(params, userId, context),
     propose_portfolio_budgets: (params) => proposePortfolioBudgetsHandler(params),
@@ -246,6 +327,9 @@ export const portfolioBudgetPack: ToolPack = {
     set_portfolio_owner: (params, userId) => setPortfolioOwnerHandler(params, userId),
   },
   grants: {
+    get_investment_balance: ["backlog_read"],
+    set_investment_balance: ["backlog_write"],
+    bind_investment_funding: ["backlog_write"],
     propose_epic_portfolios: ["backlog_read"],
     confirm_epic_portfolios: ["backlog_write"],
     propose_portfolio_budgets: ["backlog_read"],

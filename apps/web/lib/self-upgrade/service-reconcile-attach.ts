@@ -10,6 +10,7 @@
 import { readFile } from "node:fs/promises";
 import { attachServiceReconcileOutcome, SERVICE_RECONCILE_OUTCOME_PATH } from "./service-reconcile-outcome";
 import { findSucceededRunForPromotedSha, recordServiceReconcileOutcome } from "./run-store";
+import { attachMaintenanceEpochEvidence } from "./maintenance-epoch-evidence";
 
 const FIRST_ATTACH_DELAY_MS = 5 * 60 * 1000;
 const ATTACH_INTERVAL_MS = 20 * 60 * 1000;
@@ -17,6 +18,12 @@ const ATTACH_INTERVAL_MS = 20 * 60 * 1000;
 export async function attachServiceReconcileOutcomeToRun(
   logger: Pick<Console, "log" | "error"> = console,
 ): Promise<void> {
+  try {
+    const epoch = await attachMaintenanceEpochEvidence();
+    if (epoch.status === "attached") logger.log(`[self-upgrade-reconcile] ${epoch.runId} environment retirement evidence attached.`);
+  } catch {
+    logger.error("[self-upgrade-reconcile] environment retirement evidence unavailable (non-fatal).");
+  }
   try {
     const attached = await attachServiceReconcileOutcome({
       readOutcome: () => readFile(SERVICE_RECONCILE_OUTCOME_PATH, "utf8").catch(() => null),

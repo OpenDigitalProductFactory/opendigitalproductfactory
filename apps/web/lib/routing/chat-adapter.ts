@@ -589,6 +589,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
     // this to avoid returning a max_tokens-truncated fragment as a final answer
     // (BI-1D144CC1). Each branch below maps its provider-specific value.
     let truncated = false;
+    let finishReason: string | undefined;
     /** Separate thinking channel, when the provider emits one (BI-1E77BEE3). */
     let reasoning: string | undefined;
 
@@ -674,6 +675,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
         };
       }>)?.[0];
       const msg = choice?.message;
+      finishReason = typeof choice?.finish_reason === "string" ? choice.finish_reason : undefined;
 
       // Capture reasoning as its OWN channel (BI-1E77BEE3). Providers disagree on
       // the field name: llama.cpp / Docker Model Runner emit `reasoning_content`,
@@ -723,6 +725,8 @@ export const chatAdapter: ExecutionAdapterHandler = {
       outputTokens = readUsage("output_tokens", "completion_tokens");
     }
 
+    // Keep provider-supplied identity, never the requested model or response body.
+    const returnedModel = typeof data.model === "string" && data.model.trim() ? data.model : undefined;
     return {
       text,
       toolCalls,
@@ -732,8 +736,12 @@ export const chatAdapter: ExecutionAdapterHandler = {
       usage: { inputTokens, outputTokens, cacheCreationInputTokens, cacheReadInputTokens },
       inferenceMs,
       truncated,
-      ...(openRouterRoutingEvidence
-        ? { raw: { openRouterRoutingEvidence } }
+      ...(finishReason !== undefined && { finishReason }),
+      ...(returnedModel !== undefined || openRouterRoutingEvidence
+        ? { raw: {
+          ...(returnedModel !== undefined ? { model: returnedModel } : {}),
+          ...(openRouterRoutingEvidence ? { openRouterRoutingEvidence } : {}),
+        } }
         : {}),
     };
   },

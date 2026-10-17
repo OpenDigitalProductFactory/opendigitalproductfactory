@@ -1,5 +1,44 @@
 # Platform Support Watch-List (living document)
 
+## Contributor preview mount identity on Docker Desktop (BI-0ACB97B5)
+
+The Windows host records the admitted worktree as a drive-absolute path while
+Docker Desktop reports its bind source as `/run/desktop/mnt/host/<drive>/...`.
+The preview supervisor and Linux-hosted sign-in issuer share the same path
+comparison. Translation applies only to a Windows admission; another drive,
+another worktree, relative paths and traversal fail closed. Source SHA, lease,
+loopback port, environment class and current ownership checks remain required.
+Regression fixtures cover both verification adapters; a failed initialization
+or binding check never earns a served UX pass.
+
+The full local-CI runner also reuses the verified native shell adapter for its
+child environment. Windows fixtures that invoke `sh` must not inherit WSL or
+depend on an agent manually extending PATH. A missing compatible shell is an
+unavailable prerequisite (exit 88), not a failing product test. The parent
+environment, worker limits, test deadlines and lease fences stay unchanged.
+
+## Literal Windows package-manager arguments (BI-263055E3)
+
+The shared host command resolver launches pnpm/Corepack JavaScript entrypoints
+with Node and a literal argument array; native pnpm executables run directly.
+It honors the selected installation and PATH precedence, supports npm global
+and workspace bin layouts, and refuses unsupported shims without a shell
+fallback. The observed process runner uses the same boundary with shell mode
+disabled. Local-CI version pinning supplies a JavaScript forwarding entrypoint
+so percent expansion, quotes and command separators remain argument data.
+POSIX executable selection is unchanged.
+
+## Capability reconciliation on release installs (BI-5ACBAC50)
+
+The portal's Linux container is not the host platform. Explicit v2 runtime
+reconciliation filters service eligibility using the signed installation's
+Windows, macOS or Linux identity on both server and packaged actuator. Preserve
+the recorded release Compose overlays and canonical environment file through
+initial execution and signed recovery. Base-only Compose can reintroduce source
+builds on a source-free consumer install. The actuator's packaged catalog remains
+bound to the signed catalog hash. Source fixtures cover the platform matrix and
+release context; live host application requires a qualified containing release.
+
 ## Host process inventory before admission (BI-6DE5A3B6)
 
 Windows process inventory uses explicit UTF-8, terminating PowerShell errors,

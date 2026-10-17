@@ -982,16 +982,16 @@ export async function register() {
       await assertDbContinuityOnBoot();
     }
 
-    // Runtime capability recovery is a boot barrier, not background cleanup:
-    // no authenticated mutation may be admitted until durable host/DB state is
+    // Runtime recovery is a boot barrier: no mutation is admitted until state is
     // reconciled or explicitly marked recovery_required.
     {
-      const { createProductionRuntimeTransitionHost, reconcileRuntimeCapabilityTransitionsOnStartup } = await import("@/lib/platform-runtime/transition-recovery");
+      const { createProductionRuntimeTransitionHost, reconcileRuntimeCapabilityTransitionsOnStartup, startRuntimeCapabilityReceiptSettlement } = await import("@/lib/platform-runtime/transition-recovery");
       try {
         await reconcileRuntimeCapabilityTransitionsOnStartup(await createProductionRuntimeTransitionHost());
       } catch (error) {
         console.error("[runtime-capabilities] Startup reconciliation requires recovery:", error);
       }
+      if (!measurementRuntime) startRuntimeCapabilityReceiptSettlement();
     }
 
     // Graph-mirror projections with no indexer of their own (BI-FEDFABF6). Boot is

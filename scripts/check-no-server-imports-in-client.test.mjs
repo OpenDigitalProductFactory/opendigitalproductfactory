@@ -27,6 +27,25 @@ test("directiveOf reads a leading directive even after a comment; valueImportSpe
   assert.deepEqual(valueImportSpecifiers(fixture["apps/web/components/x/Ops.tsx"]), ["@/lib/x/daily-care", "@/app/x/actions"]);
 });
 
+test("a dynamic import() is walked the same way as a static import (BI-FBA996A4)", () => {
+  const source = `"use client";\nexport function Map() { return import("@/lib/work-management/workroom-stage-telemetry"); }\n`;
+  assert.deepEqual(valueImportSpecifiers(source), ["@/lib/work-management/workroom-stage-telemetry"]);
+  const dynamicFixture = {
+    ...fixture,
+    "apps/web/components/x/Flow.tsx": source,
+    "apps/web/lib/work-management/workroom-stage-telemetry.ts": `export const stage = import("@dpf/db");\n`,
+  };
+  const found = findServerImportChain("apps/web/components/x/Flow.tsx", {
+    read: (f) => dynamicFixture[f] ?? null,
+    resolveImport: (from, spec) => resolveLocalImport(from, spec, { exists: (p) => p in dynamicFixture }),
+  });
+  assert.equal(found.specifier, "@dpf/db");
+  assert.deepEqual(found.chain, [
+    "apps/web/components/x/Flow.tsx",
+    "apps/web/lib/work-management/workroom-stage-telemetry.ts",
+  ]);
+});
+
 test("a client component that reaches @dpf/db through a lib module is reported with its chain", () => {
   const found = findServerImportChain("apps/web/components/x/Ops.tsx", { read, resolveImport });
   assert.deepEqual(found, { chain: ["apps/web/components/x/Ops.tsx", "apps/web/lib/x/daily-care.ts"], specifier: "@dpf/db" });

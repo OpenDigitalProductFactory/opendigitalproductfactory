@@ -69,13 +69,29 @@ export async function runApprovedTaskRequest(
     },
   });
   const metadata = record(task?.a2aMetadata);
-  const tokenId = text(metadata["apiTokenId"]);
+  let tokenId = text(metadata["apiTokenId"]);
   const agentId = text(metadata["requestedAgentId"]);
   if (!task || !tokenId || !agentId || task.userId !== envelope.delegatingUserId) {
     return { status: "not-run", reason: "task-bound" };
   }
   if (task.status !== "input-required") return { status: "not-run", reason: "task-not-waiting" };
 
+  const userContext = await currentUserContext(envelope.delegatingUserId).catch(() => null)
+    ?? { userId: envelope.delegatingUserId, platformRole: null, isSuperuser: false };
+  if (record(task.progressPayload)["reviewExecutionAuthority"] !== undefined) {
+    const { parseReviewExecutionAuthority, revalidateReviewExecutionAuthority } = await import("@/lib/mcp-task-review-recovery");
+    const authority = parseReviewExecutionAuthority(task.progressPayload, metadata, task.userId);
+    if (!authority) return { status: "not-run", reason: "task-bound" };
+    const { loadPersistedRemoteTask, reconstructPersistedRemoteTask } = await import("@/lib/mcp-task-background-worker");
+    const stored = await loadPersistedRemoteTask(task.taskRunId);
+    const reconstructed = stored ? reconstructPersistedRemoteTask(stored) : null;
+    if (!stored || stored.updatedAt.getTime() !== task.updatedAt.getTime() || !reconstructed?.ok
+      || reconstructed.data.token.tokenId !== authority.tokenId
+      || !await revalidateReviewExecutionAuthority({ ...reconstructed.data, userContext, metadata, progress: task.progressPayload })) {
+      return { status: "not-run", reason: "task-bound" };
+    }
+    tokenId = authority.tokenId;
+  }
   const credential = await verifyApprovalCredential(db, tokenId, {
     delegatingUserId: envelope.delegatingUserId,
     assistantAgentId: null,
@@ -83,8 +99,6 @@ export async function runApprovedTaskRequest(
   });
   if (typeof credential === "string") return { status: "not-run", reason: credential };
 
-  const userContext = await currentUserContext(envelope.delegatingUserId).catch(() => null)
-    ?? { userId: envelope.delegatingUserId, platformRole: null, isSuperuser: false };
   const outcome = await (deps.resume ?? resumeApprovedTask)({
     existing: task,
     userId: envelope.delegatingUserId,
