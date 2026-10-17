@@ -67,3 +67,16 @@ test("generic white-paper generation retains its previous direct conversion beha
   assert.deepEqual(readFileSync(outputPath), untouched);
   assert.deepEqual(readdirSync(directory), ["white-paper.docx"]);
 }));
+
+test("unqualified inherited catalog identifier cannot opt into layout or invoke generation", () => sandbox(async directory => {
+  const outputPath = join(directory, "retained.docx");
+  writeFileSync(outputPath, "retained prior edition");
+  let generated = false;
+  await assert.rejects(generateAgentStandardDocx("toString", { config: { outputPath }, generate: async config => {
+    generated = true;
+    writeFileSync(config.outputPath, docx());
+  } }), /explicit.*layout profile/i);
+  assert.equal(generated, false);
+  assert.equal(readFileSync(outputPath, "utf8"), "retained prior edition");
+  assert.deepEqual(readdirSync(directory), ["retained.docx"]);
+}));

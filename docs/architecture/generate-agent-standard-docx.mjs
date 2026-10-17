@@ -16,6 +16,8 @@ import {
 } from "./agent-standard-publications.mjs";
 import { generateDocxFromMarkdown } from "./generate-docx-from-markdown.mjs";
 
+const NORMATIVE_LAYOUT_KEYS = new Set(["tak", "gaid", "jsi", "gpp"]);
+
 /** Generate a canonical publication; only the four normative editions opt in. */
 export async function generateAgentStandardDocx(key, {
   config = publicationConfig(key),
@@ -26,7 +28,10 @@ export async function generateAgentStandardDocx(key, {
     // wrapper separately owns its existing image-only post-processing.
     return generate(config);
   }
-  publicationConfig(key); // Unknown keys cannot become a new opt-in profile.
+  publicationConfig(key);
+  if (!NORMATIVE_LAYOUT_KEYS.has(key)) {
+    throw new Error(`Publication "${key}" has no explicit normative layout profile`);
+  }
   const directory = mkdtempSync(join(dirname(config.outputPath), ".dpf-publication-"));
   const outputPath = join(directory, basename(config.outputPath));
   try {

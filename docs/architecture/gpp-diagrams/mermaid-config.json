@@ -13,5 +13,8 @@
     "noteTextColor": "#333333",
     "fontFamily": "Segoe UI, Arial",
     "fontSize": "24px"
+  },
+  "flowchart": {
+    "nodeSpacing": 400
   }
 }
