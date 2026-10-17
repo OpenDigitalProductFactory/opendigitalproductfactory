@@ -14,6 +14,7 @@ export { boundedDockerSocketGet } from "./docker-socket.mjs";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 import {
+  CapabilityStateDivergenceError,
   diagnoseCapabilityStateDivergence,
   isCapabilityStateStaleError,
 } from "./capability-state-divergence";
@@ -80,12 +81,8 @@ export function createOperationalCapabilityState(input: {
       enabledRuntimeCapabilities: input.installSnapshot.enabledRuntimeCapabilities,
       capabilityStates: input.capabilityStates,
     });
-    const enriched = new Error(`${getErrorMessage(error)} — ${report.summary}`);
-    // Keep the machine-readable report on the error so a caller that wants to
-    // render the condition does not have to re-derive it from prose.
-    (enriched as Error & { divergence?: unknown }).divergence = report;
-    if (error instanceof Error) enriched.cause = error;
-    throw enriched;
+    throw new CapabilityStateDivergenceError(`${getErrorMessage(error)} — ${report.summary}`, report,
+      error instanceof Error ? { cause: error } : undefined);
   }
   if (!/^[a-f0-9]{64}$/.test(input.installSnapshot.capabilityCatalogHash ?? "")) throw new Error("install_catalog_identity_invalid");
   if (!/^[a-f0-9]{64}$/.test(input.installSnapshot.capabilityStateVersion ?? "")) throw new Error("install_capability_state_identity_invalid");

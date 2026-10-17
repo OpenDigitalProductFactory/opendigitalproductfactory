@@ -139,7 +139,7 @@ Runtime Health explains infrastructure in terms of enabled capabilities. **Requi
 
 ### Turning monitoring on or off
 
-Monitoring is optional. Open **Settings → Monitoring** (`/admin/settings/monitoring`), or follow the action on a Prometheus, Grafana or postgres-exporter row in Runtime Health. The page shows whether monitoring is actually running, what it costs in memory and CPU, and the last change. Someone with platform management rights can turn it on or off; the change runs through the same governed capability change as any other runtime capability and reports its outcome. If the install's capability records disagree, the switch stays locked and says so until they are reconciled. With monitoring off, health pages say "Monitoring is off on this install" rather than showing an outage.
+Monitoring is optional. Open **Settings → Monitoring** (`/admin/settings/monitoring`), or follow the action on a Prometheus, Grafana or postgres-exporter row in Runtime Health. The page shows whether monitoring is actually running, what it costs in memory and CPU, and the last change. Someone with platform management rights can turn it on or off; the change runs through the same governed capability change as any other runtime capability and reports its outcome. If the monitoring record disagrees with what is actually running, the button reads **Match records** and brings the record in line without changing what runs; only incomplete or unreadable capability records lock it. With monitoring off, health pages say "Monitoring is off on this install" rather than showing an outage.
 
 ### Coworker routing
 

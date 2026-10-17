@@ -154,6 +154,11 @@ function loadToolToGrants(): Record<string, string[]> {
       path: "apps/web/lib/tak/provider-management-tool-grants.ts",
       pattern: /PROVIDER_MANAGEMENT_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
     },
+    {
+      // Platform updates and explicit reconciliation share this canonical map.
+      path: "apps/web/lib/tak/platform-update-tool-grants.ts",
+      pattern: /PLATFORM_UPDATE_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
+    },
   ];
 
   for (const source of sources) {

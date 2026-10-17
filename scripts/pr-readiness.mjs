@@ -21,13 +21,17 @@ import { resolveWorktreeContext } from "./pregate-status.mjs";
 import { LOCAL_CI_SLOT_KEYS, createLocalCiSlotManifest } from "./lib/local-ci-slot-manifest.mjs";
 import { readLocalCiGateState } from "./lib/local-ci-gate-state.mjs";
 import { classifyChangedFiles } from "./ci-change-scope.mjs";
+import { verifyPublishedCorrection, readPublishedContext, inspectCorrectionRecord } from "./published-correction.mjs";
 
-export function readPublicationGateRecords(context = resolveWorktreeContext(), read = readLocalCiGateState) {
+export function readPublicationGateRecords(context = resolveWorktreeContext(), read = readLocalCiGateState, inspect = inspectCorrectionRecord) {
   if (!context) return [];
-  return LOCAL_CI_SLOT_KEYS.map(slotKey => {
+  const records = LOCAL_CI_SLOT_KEYS.map(slotKey => {
     const manifest = createLocalCiSlotManifest({ slotKey, ...context });
     return { state: read(manifest.evidence.state), metadata: read(manifest.evidence.metadata) };
   });
+  const inspected = inspect();
+  if (inspected.ok) records.push({ state: inspected.state, metadata: null, publicationInspection: inspected });
+  return records;
 }
 
 function git(args, { allowFail = false } = {}) {
@@ -158,6 +162,21 @@ export async function runGate(gate, { progress, signal } = {}) {
   };
 }
 
+export async function verifyCurrentPublication({ contextReader = readPublishedContext, verify = verifyPublishedCorrection } = {}) {
+  let publishedContext;
+  try { publishedContext = contextReader(); } catch { /* Initial publication retains its existing path. */ }
+  if (publishedContext) {
+    const state = publishedContext.pullRequest?.state;
+    if (state === "MERGED" || state === "CLOSED") return;
+    if (state !== "OPEN") throw new Error("Published PR state is unproven; inspect the GitHub context before publication.");
+    let observed = false;
+    await verify({ contextReader: () => {
+      if (!observed) { observed = true; return publishedContext; }
+      return contextReader();
+    } });
+  }
+}
+
 async function main() {
   let args;
   try {
@@ -180,7 +199,17 @@ async function main() {
     process.exit(2);
   }
 
-  const gatePlan = buildGatePlan({ prBody: args.prBody, prLabelsJson: args.prLabelsJson, changeScope: classifyChangedFiles(repo.changedFiles) });
+  if (args.runGates) {
+    try { await verifyCurrentPublication(); }
+    catch (error) {
+      console.error(`PR readiness: NOT READY. ${error.message} No broad local guard or integration rerun was started.`);
+      process.exitCode = 1;
+      return;
+    }
+  }
+  const inspected = inspectCorrectionRecord();
+  const proportional = inspected.ok;
+  const gatePlan = buildGatePlan({ prBody: args.prBody, prLabelsJson: args.prLabelsJson, changeScope: classifyChangedFiles(repo.changedFiles), publishedCorrection: proportional });
   const controller = new AbortController();
   const cancel = () => controller.abort();
   process.once("SIGINT", cancel);
@@ -210,6 +239,7 @@ async function main() {
     || git(["rev-parse", "--abbrev-ref", "HEAD"]).trim() !== repo.branch;
   repo.statusPorcelain = git(["status", "--porcelain"]);
   const verdict = evaluateReadiness({ repo, gateResults, prBody: args.prBody, gateContext, localCiRecords: readPublicationGateRecords() });
+  if (proportional) verdict.notes.push("Published correction: fresh repository/DCO/metadata guards run locally; broad source guards and full integration delegated to protected GitHub, not rerun locally.");
   if (args.runGates && !execution.identityVerified) {
     verdict.ready = false;
     verdict.blockers.push("Host guard execution lacks a complete unchanged source/environment identity; inspect its receipt and recover those prerequisites before publication.");

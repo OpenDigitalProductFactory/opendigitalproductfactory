@@ -28,6 +28,7 @@ import { useMetricQuery } from "./useMetricQuery";
 import type { ReleaseHealthCardData } from "./health-summary";
 import type { CapabilityServiceHealthProjection } from "@/lib/platform-runtime/service-health";
 import { inactiveCapabilityServices } from "@/lib/platform-runtime/inactive-scrape-targets";
+import { useT } from "@/lib/i18n/use-t";
 
 type ServiceHealthDashboardProps = {
   capabilityHealth: CapabilityServiceHealthProjection | null;
@@ -225,17 +226,18 @@ function CapabilityAuthoritySection({
 }: {
   capabilityHealth: CapabilityServiceHealthProjection | null;
 }) {
-  if (capabilityHealth) return <CapabilityServiceHealth projection={capabilityHealth} />;
+  const t = useT("admin");
+  if (capabilityHealth) return <CapabilityServiceHealth projection={capabilityHealth} t={t} />;
   return (
     <section
       aria-labelledby="capability-service-health-title"
       className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
     >
       <h2 id="capability-service-health-title" className="text-sm font-semibold text-[var(--dpf-text)]">
-        Capability service requirements
+        {t("runtimeHealth.capabilityServices.heading")}
       </h2>
       <p className="mt-1 text-xs leading-5 text-[var(--dpf-muted)]">
-        Capability authority is unavailable, so service requirements cannot be classified safely.
+        {t("runtimeHealth.capabilityServices.authorityUnavailable")}
       </p>
     </section>
   );

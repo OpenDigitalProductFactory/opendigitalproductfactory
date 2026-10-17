@@ -22,6 +22,9 @@ from typing import Any, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib.parse import urlparse
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from grok_credential import converge_grok_credential, find_grok_refresher  # noqa: E402
+
 
 PLUGIN_NAME = "dpf-platform"
 CODEX_PLUGIN_ID = f"{PLUGIN_NAME}@personal"
@@ -35,6 +38,25 @@ TOKEN_ENV_VAR = "DPF_MCP_BEARER_TOKEN"
 # The shipped plugin descriptors are generated from it, so a client with no
 # DPF_MCP_URL still lands on the one origin OAuth tokens are issued for.
 DEFAULT_MCP_URL = "https://localhost/api/mcp/v1"
+
+
+def normalize_mcp_endpoint(endpoint: str) -> str:
+    """Treat an explicit portal origin as the canonical MCP path, never a root resource."""
+    try:
+        parsed = urlsplit(endpoint)
+        credential_keys = {"access_token", "accesstoken", "refresh_token", "refreshtoken", "token", "api_key", "apikey", "key",
+                           "authorization", "client_secret", "clientsecret", "secret", "password"}
+        if (parsed.scheme not in ("http", "https") or not parsed.hostname or "\\" in endpoint
+                or parsed.username or parsed.password or any(char.isspace() for char in endpoint)
+                or any(key.lower().replace("-", "_") in credential_keys for key, _ in parse_qsl(parsed.query))):
+            raise ValueError("Unsafe endpoint")
+        _ = parsed.port  # Validate the port before any configuration is written.
+        if parsed.path in ("", "/"):
+            return urlunsplit((parsed.scheme, parsed.netloc, "/api/mcp/v1", parsed.query, parsed.fragment))
+        return endpoint
+    except ValueError:
+        # Never include an input that may contain credentials in diagnostics.
+        raise ValueError("MCP endpoint must be a credential-free HTTP(S) URL") from None
 
 
 def with_mcp_catalog_tier(mcp_url: str, tier: str) -> str:
@@ -712,13 +734,7 @@ def existing_codex_mcp_endpoint(text: str) -> Optional[str]:
         quoted = match.group(1)
         try:
             endpoint = json.loads(quoted) if quoted.startswith('"') else quoted[1:-1]
-            parsed = urlsplit(endpoint)
-            credential_keys = {"access_token", "accesstoken", "refresh_token", "refreshtoken", "token", "api_key", "apikey", "key",
-                               "authorization", "client_secret", "clientsecret", "secret", "password"}
-            if (parsed.scheme not in ("http", "https") or not parsed.hostname
-                    or parsed.username or parsed.password or any(char.isspace() for char in endpoint)
-                    or any(key.lower().replace("-", "_") in credential_keys for key, _ in parse_qsl(parsed.query))):
-                raise ValueError("Saved URL is not a credential-free HTTP endpoint")
+            normalize_mcp_endpoint(endpoint)
             return endpoint
         except ValueError as error:
             raise ValueError("Cannot preserve saved Codex URL; select an explicit MCP endpoint to repair it") from error
@@ -760,7 +776,7 @@ def codex_mcp_body(text: str, endpoint: Optional[str], declaration_header: Optio
             retained.append(line)
     # An implicit plugin refresh must not change the resource an OAuth login
     # names. Only an explicitly supplied CLI/environment URL replaces it.
-    endpoint = with_mcp_catalog_tier(endpoint or existing_endpoint or DEFAULT_MCP_URL, "full")
+    endpoint = with_mcp_catalog_tier(normalize_mcp_endpoint(endpoint) if endpoint else existing_endpoint or DEFAULT_MCP_URL, "full")
     body = [f'url = {json.dumps(endpoint)}', "enabled = true", *retained]
     if not custom_bearer and mcp_client_bearer_header_required(endpoint, "codex"):
         body.append(f'bearer_token_env_var = "{TOKEN_ENV_VAR}"')
@@ -2314,6 +2330,11 @@ def main(argv: list[str]) -> int:
         action="store_true",
         help="Exit 2 when Codex is installed but hook trust has not been granted (BI-66EBEA06).",
     )
+    parser.add_argument(
+        "--grok-client-stdin",
+        action="store_true",
+        help="Read Grok's credentials client (from issue_grok_credentials_client) as JSON on stdin (BI-84C1F526).",
+    )
     parser.add_argument("--dry-run", action="store_true")
     # BI-DE1E6485 (design 2026-10-07 §5.3): pull the pack from the portal,
     # verified by the installation's signature, instead of a local directory.
@@ -2335,6 +2356,8 @@ def main(argv: list[str]) -> int:
         text = path.read_text(encoding="utf-8-sig") if path.exists() else ""
         print(existing_codex_mcp_endpoint(text) or "")
         return 0
+    if args.mcp_url:
+        args.mcp_url = normalize_mcp_endpoint(args.mcp_url)
     if args.from_portal:
         import portal_source
 
@@ -2461,6 +2484,18 @@ def main(argv: list[str]) -> int:
                 process_spine_root, dry_run=args.dry_run
             )
         print(f"  Grok competitive: {grok_competitive_status}")
+        # Grok's own OAuth credentials client, refreshed into bearer_token_file
+        # (BI-84C1F526, DI-4B843FAF62F9). The secret arrives on stdin only.
+        grok_credential_status = converge_grok_credential(
+            home=home, refresher=find_grok_refresher(skill_pack), mcp_url=args.mcp_url,
+            client_payload=sys.stdin.read() if args.grok_client_stdin else None,
+            dry_run=args.dry_run, default_mcp_url=mcp_url,
+            # The query carrier declare_grok_descriptor writes into grok.mcp.json, so the
+            # config.toml connector declares the pack too (design §5.2).
+            declare_url=(lambda url: declarations.query_url(url, "grok"))
+            if declarations is not None and declarations.carrier("grok") == "query" else None,
+        )
+        print(f"  Grok credential: {grok_credential_status}")
         if report:
             report.add("codex", "user", codex_status)
             report.add("grok", "user", grok_status)

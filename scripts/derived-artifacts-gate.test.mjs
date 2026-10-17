@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 // Tests for the derived-artifact registry driver (BI-48768E05). All tests
 // exercise the pure planning/decision functions with injected fakes — no
 // git or subprocess calls, so they run instantly and deterministically.
@@ -12,6 +15,8 @@ import {
   evaluateCheckAll,
   isMergeQueueContext,
   resolveDerivedArtifactInvocation,
+  classifyDerivedArtifactCheck,
+  decideSandboxAdmission,
 } from "./derived-artifacts-gate.mjs";
 
 const DOC_INDEX = {
@@ -49,15 +54,20 @@ const SBOM = {
   autoStage: false,
 };
 
-test("derived-artifact commands resolve pnpm through ComSpec on Windows", () => {
+test("derived-artifact commands keep pnpm arguments outside a shell on Windows", t => {
+  const root = mkdtempSync(join(tmpdir(), "dpf-derived-pnpm-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  writeFileSync(join(root, "pnpm.cmd"), "");
+  const script = join(root, "pnpm.cjs");
+  writeFileSync(script, "");
   assert.deepEqual(
     resolveDerivedArtifactInvocation(["pnpm", "--filter", "web", "run", "check:route-manifest"], {
       platform: "win32",
-      env: { ComSpec: "C:\\Windows\\System32\\cmd.exe" },
+      env: { PATH: root },
     }),
     {
-      command: "C:\\Windows\\System32\\cmd.exe",
-      args: ["/d", "/s", "/c", "pnpm --filter web run check:route-manifest"],
+      command: process.execPath,
+      args: [script, "--filter", "web", "run", "check:route-manifest"],
     },
   );
 });
@@ -161,6 +171,40 @@ test("evaluatePushExemption: a docs diff plus a STALE registered artifact is not
   );
   assert.equal(result.exempt, false);
   assert.deepEqual(result.staleArtifacts, ["doc-index"]);
+});
+
+test("evaluatePushExemption: a checker that could not run is not a staleness verdict (BI-BD7E0319)", () => {
+  const result = evaluatePushExemption(["docs/foo.md"], [DOC_INDEX], () => "unrun");
+  assert.equal(result.exempt, true);
+  assert.equal(result.staleArtifacts, undefined);
+  assert.deepEqual(result.unrunArtifacts, ["doc-index"]);
+});
+
+test("classifyDerivedArtifactCheck separates a spawn failure and a missing toolchain from a real stale check (BI-20B40955, BI-BD7E0319)", () => {
+  assert.equal(classifyDerivedArtifactCheck(null), "fresh");
+  assert.equal(classifyDerivedArtifactCheck({ code: "ENOENT", message: "spawn tsx ENOENT" }), "unrun");
+  assert.equal(
+    classifyDerivedArtifactCheck({ status: 127, stderr: "sh: tsx: command not found" }),
+    "unrun",
+  );
+  assert.equal(
+    classifyDerivedArtifactCheck({ status: 1, stderr: "doc-index.generated.json is stale" }),
+    "stale",
+  );
+});
+
+test("decideSandboxAdmission names the code files that cost a docs-only exemption (BI-A254A94C)", () => {
+  const exempt = decideSandboxAdmission({ exempt: true, reason: "docs-only diff, no registered artifact touched" });
+  assert.equal(exempt.claim, false);
+  assert.match(exempt.message, /sandbox not claimed/);
+
+  const mixed = decideSandboxAdmission({
+    exempt: false,
+    reason: "non-docs runtime changes present",
+    files: ["apps/web/app/page.tsx"],
+  });
+  assert.equal(mixed.claim, true);
+  assert.match(mixed.message, /apps\/web\/app\/page\.tsx/);
 });
 
 // ── evaluateCheckAll ─────────────────────────────────────────────────────────

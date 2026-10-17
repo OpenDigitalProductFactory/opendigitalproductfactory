@@ -8,6 +8,8 @@
  * of it: it is reloaded here, so it never lands in the job engine's state.
  */
 import type { PromoterParams, VerifiedReleaseIdentity } from "@/lib/self-upgrade/promoter";
+import { createHash } from "node:crypto";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { PROMOTER_ALREADY_RUNNING_EXIT_CODE } from "@/lib/self-upgrade/promoter-exit-codes";
 import {
   loadInstallStateSigningContext,
@@ -149,6 +151,7 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
       installStateMigrationEnvelope: migrationHandoff ? Buffer.from(JSON.stringify(migrationHandoff.envelope)).toString("base64url") : undefined,
       installStateMigrationSignature: migrationHandoff?.signature,
       installStateMigrationRunId: migrationHandoff?.envelope.runId,
+      maintenanceRecoveryPointDigest: createHash("sha256").update(canonicalJson(recoveryPoint)).digest("hex"),
       installStateMigrationHandoff: migrationHandoff,
       // Deterministic name so a stalled build can be force-removed by name on
       // timeout (runPromoter) or by the watchdog backstop.

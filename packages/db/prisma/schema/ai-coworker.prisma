@@ -524,6 +524,41 @@ model AgentSurfaceReadiness {
   @@index([reportedAt(sort: Desc)])
 }
 
+// BI-54469E18 (design 2026-10-07-agent-toolchain-release-delivery §5.2b). What
+// the server SAW on an MCP connection: which credential connected and which
+// dpf-platform pack it declared it loaded. One row per credential and loaded
+// digest, so a host with one current project and one pinned project shows both.
+// Self-reported host state stays on AgentSurfaceReadiness; the verdict
+// (current / stale / below-floor / undeclared) is computed when read, never stored.
+/// Connection-observed agent toolchain copies, one row per credential and loaded digest. Operational drift telemetry; 30 days covers a release cycle.
+/// @dpf lifecycle=telemetry-bounded retention=30d categories=telemetry timeAxis=lastObservedAt
+model AgentToolchainObservation {
+  id                String                 @id @default(cuid())
+  // Server-derived credential identity: oauth:<OAuthClient.id> or token:<McpApiToken.id>.
+  credentialRef     String
+  // First 16 hex of the declared delivered digest, or "undeclared".
+  loadedDigest      String
+  // Declared client kind, else undeclared.
+  clientKind        String
+  // User-Agent hint for display only; never used for enforcement.
+  probableClient    String?
+  loadedPackVersion String?
+  authMode          AgentToolchainAuthMode
+  clientInfoName    String?
+  clientInfoVersion String?
+  firstObservedAt   DateTime               @default(now())
+  lastObservedAt    DateTime               @default(now())
+
+  @@unique([credentialRef, loadedDigest])
+  @@index([lastObservedAt(sort: Desc)])
+}
+
+enum AgentToolchainAuthMode {
+  oauth
+  bearer
+  session
+}
+
 model CoworkerSelfAssessment {
   id                String                   @id @default(cuid())
   assessmentId      String                   @unique
@@ -659,7 +694,17 @@ model AdapterCapabilityProfile {
 // quota pool, status, refusal/error class, tool-call validity, capability
 // usage, and schema-drift detection. Supports single/shadow/race execution
 // modes via raceCohortId grouping. Feeds nightly outcome scoring (§6.4).
-/// One row per LLM inference (probes, evals, coworker reasoning, builds). Cost/quality telemetry; running aggregates live elsewhere, so raw rows are disposable past 6 months.
+enum InvestmentWorkPurpose {
+  sharedPlatform
+  archetype
+}
+
+enum InvestmentWorkClass {
+  refactor
+  new
+}
+
+/// One immutable inference attempt, including its funding attribution at dispatch.
 /// @dpf lifecycle=telemetry-bounded retention=180d categories=telemetry timeAxis=startedAt
 model AdapterRunTelemetry {
   id             String  @id @default(cuid())
@@ -706,12 +751,28 @@ model AdapterRunTelemetry {
 
   rawEventDigest String? // sha256 of normalized event log, for cross-adapter equivalence checks
 
+  // Nullable for legacy/unassigned attempts; never reconstructed from today's owner.
+  investmentPrincipalId     String?
+  investmentOrganizationId  String?
+  investmentItemId          String?
+  investmentPurpose         InvestmentWorkPurpose?
+  investmentClass           InvestmentWorkClass?
+  investmentPolicyRef       String? // serialized policy revision/default and optional classification provenance references
+  investmentInstallationRef String? // canonical federation device id captured at dispatch
+  investmentCapturedAt      DateTime?
+  investmentPrincipal       Principal?    @relation("InvestmentAttemptPrincipal", fields: [investmentPrincipalId], references: [id], onDelete: Restrict)
+  investmentOrganization    Organization? @relation("InvestmentAttemptOrganization", fields: [investmentOrganizationId], references: [id], onDelete: Restrict)
+  investmentItem            BacklogItem?  @relation("InvestmentAttemptItem", fields: [investmentItemId], references: [id], onDelete: Restrict)
+
   @@index([adapterKind, startedAt])
   @@index([raceCohortId])
   @@index([threadId, startedAt])
   @@index([agentId, startedAt])
   @@index([startedAt])
   @@index([traceId])
+  @@index([investmentPrincipalId, investmentOrganizationId, investmentPurpose, startedAt], map: "AdapterRunTelemetry_investment_scope_startedAt_idx")
+  @@index([investmentOrganizationId])
+  @@index([investmentItemId])
 }
 
 // EP-COST Phase 2 prerequisite — one row per budget event so the

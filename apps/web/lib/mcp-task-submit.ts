@@ -1,3 +1,5 @@
+import { loadExplicitReviewRecovery } from "./mcp-task-review-recovery";
+import { hasExecutionUncertainty } from "./shared/execution-uncertainty";
 import { parseRemoteTaskSubmitParams, type RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 import type { ExistingRemoteTask, RemoteTaskSubmitAuth, RemoteTaskSubmitOutcome } from "./mcp-task-submit-types";
 export { parseRemoteTaskSubmitParams, REMOTE_RISK_CLASSES } from "./mcp-task-submit-params";
@@ -211,7 +213,11 @@ export async function submitRemoteCoworkerTask(input: {
         parsed.initiativeReviewBinding.artifactRef,
       )
     : null;
-  const taskRunId = deterministicExternalTaskRunId(taskAuthorityKey, parsed.idempotencyKey);
+  const recovery = parsed.reviewRecovery
+    ? await loadExplicitReviewRecovery({ token, parsed, userContext }) : null;
+  if (recovery && !recovery.ok) return { kind: "result", result: recovery.result };
+  const taskRunId = recovery?.ok ? recovery.data.existing.taskRunId
+    : deterministicExternalTaskRunId(taskAuthorityKey, parsed.idempotencyKey);
   const durableInitialDispatch = parsed.recipeId
     ? initialRemoteTaskDispatchProjection(taskRunId, new Date())
     : null;
@@ -239,6 +245,7 @@ export async function submitRemoteCoworkerTask(input: {
       updatedAt: true,
     },
   };
+  if (recovery?.ok) existingQuery.where = { taskRunId, userId: token.userId };
   const objectiveMappingAdmission = await prepareRemoteObjectiveMappingAdmission({
     taskRunId,
     parsed,
@@ -247,7 +254,7 @@ export async function submitRemoteCoworkerTask(input: {
   if (!objectiveMappingAdmission.ok) {
     return { kind: "result", result: objectiveMappingAdmission.result };
   }
-  const existing = await prisma.taskRun.findFirst(existingQuery);
+  const existing = recovery?.ok ? recovery.data.existing : await prisma.taskRun.findFirst(existingQuery);
   if (existing) {
     const savedReviewScope = reconcileReviewReplayScope(existing.a2aMetadata, existing.authorityScope, parsed);
     if (savedReviewScope) parsed.authorityScope = savedReviewScope;
@@ -277,14 +284,17 @@ export async function submitRemoteCoworkerTask(input: {
       }
     }
     const replay = replayOrConflict(existing, parsed);
-    if (requestMatches && parsed.initiativeReviewBinding && await recoverExpiredOAuthReview(existing, token)) {
+    // Exact persisted receipts above may settle without inference. Every other
+    // recovery path must hold an execution whose effects remain unknown.
+    if (hasExecutionUncertainty(existing.progressPayload)) return replay;
+    if (!recovery && requestMatches && parsed.initiativeReviewBinding && await recoverExpiredOAuthReview(existing, token)) {
       return { kind: "result", result: { taskRunId: existing.taskRunId, status: "submitted",
         idempotentReplay: true, requiresApproval: false, asynchronous: true,
         content: remoteTaskContent("The original review was reserved for recovery with current connection authority."),
         isError: false } };
     }
     if (
-      requestMatches
+      !recovery && requestMatches
       && (existing.status === "input-required" || (existing.status === "completed" && terminalToolPolicy))
     ) {
       const resumed = await resumeApprovedRemoteTask({
@@ -308,7 +318,7 @@ export async function submitRemoteCoworkerTask(input: {
       });
       if (resumed) return resumed;
     }
-    if (requestMatches && terminalToolPolicy) {
+    if (!recovery && requestMatches && terminalToolPolicy) {
       const recovered = await recoverStaleApprovalOnReplay({
         existing,
         requestDigest: matchedRequestDigest ?? requestDigest,
@@ -483,6 +493,13 @@ export async function submitRemoteCoworkerTask(input: {
         capacityAttempt: 1,
         terminalWriterAttempt: terminalWriterReservation.wait.attempt,
       });
+    }
+    if (recovery) {
+      const winner = await prisma.taskRun.findFirst(existingQuery);
+      return winner ? replayOrConflict(winner, parsed) : { kind: "result", result: {
+        taskRunId, status: "unknown", isError: true, resumable: false,
+        content: remoteTaskContent("The original task checkpoint changed; refresh its recovery packet."),
+      } };
     }
     return replay;
   }

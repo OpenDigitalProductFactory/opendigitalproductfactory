@@ -115,6 +115,32 @@ Collapse optional detail rather than deleting it. A local-only setup completion
 must persist independently of account count. Removing the final remote account
 must not reopen the full catalog or hide existing disabled accounts.
 
+### Account presentation boundaries
+
+The account overview consumes the masked canonical account read model. Untouched
+seed defaults are catalog choices after setup; Local, explicitly added accounts,
+saved credentials, reviewed accounts, paused accounts and disconnected accounts
+remain discoverable. Disabled configured accounts stay visible. First-run catalog
+disclosure follows persisted setup progress, never the number of remote accounts.
+
+Default provider links keep their existing credential-sharing behavior. An
+explicit `account` query selects that connection only and must reject a missing
+or foreign connection rather than render default credentials. Additional account
+connection controls call the existing scoped server actions; account declarations
+also submit the selected connection identity. Provider endpoint, model families,
+catalog profiles and existing finance diagnostics keep their provider ownership.
+
+A label-only update omits unchanged credential fields so it preserves reviewed
+data terms and model access. Secrets remain write-only and clear from the form
+after a successful save. Authentication and catalog inventory do not establish
+Allowed work; that summary comes from the existing suitability compiler. Missing
+model or capacity evidence stays unknown. The global inference policy must show
+an unavailable state when its read fails, never imply cloud permission.
+
+These are source integration requirements. Colocated tests exercise account
+selection, credential-preserving rename, scoped actions, read-only controls and
+disclosure retention; they are not deployed UI or full delivery acceptance proof.
+
 ## Migration and verification
 
 The migration attaches an existing default connection only when its credential
@@ -127,3 +153,18 @@ disconnection, trust reset, account discovery, masked reads, tool pagination and
 authorization. The database migration fixtures run only in CI or a leased
 nonproduction database and use a transaction with rollback. A skipped fixture is
 not migration-apply evidence.
+## Measured route integration
+
+PR 6364's exact 91b4 source was exercised by CI run 38531673277. The compact
+overview measured 294 visible words against the previous 345-word limit, with
+three visible fields: the account search and the two inference-location radios.
+Its changed accessibility structure needs a provider-route baseline update.
+The buried-next-action regression is corrected in source: writable users start
+with Add provider, and read-only users start with the first account's management
+link. Both remain visible while advice is disclosed. The existing zero buried
+action limit remains in force. Optional COO advice retains its confirmation but
+is secondary to account management. Measurement run 38533367131 captures the
+intentional provider-route structure and three visible fields; only that route's
+fields, accessibility snapshot and 294-word tightening are adopted. A fresh
+served sweep must verify the action correction.
+

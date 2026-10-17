@@ -19,6 +19,7 @@
 
 import { createHash } from "crypto";
 import { evaluatePerspectiveGate } from "./evaluator";
+import type { DecisionDeclarations } from "@/lib/govern/authority/escalation-gate";
 import type { DecisionGateCaller } from "./evaluator";
 import { resolveProfileMaterialForOrg } from "./material";
 import type {
@@ -126,6 +127,7 @@ export async function evaluateOrgBusinessDecisionGate(input: {
   scoredOptions?: DecisionScoredOption[];
   domainClass: DecisionDomainClass;
   riskTier: DecisionRiskTier;
+  declarations?: DecisionDeclarations;
   /** Where the decision originated, e.g. "/coworker-business". Recorded on the ledger. */
   routeContext: string;
   phaseFrom?: string | null;
@@ -154,6 +156,7 @@ export async function evaluateOrgBusinessDecisionGate(input: {
     scoredOptions: input.scoredOptions,
     domainClass: input.domainClass,
     riskTier: input.riskTier,
+    declarations: input.declarations,
     routeContext: input.routeContext,
     phaseFrom: input.phaseFrom,
     phaseTo: input.phaseTo,

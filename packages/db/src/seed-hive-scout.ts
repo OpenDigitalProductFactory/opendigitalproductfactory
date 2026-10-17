@@ -10,6 +10,7 @@ import {
   HIVE_SCOUT_TASK_ID,
   HIVE_SCOUT_TASK_TITLE,
 } from "./hive-scout-config";
+import { findInstallWorkOwnerUserId } from "./install-work-owner";
 
 type ScheduledTaskSeedClient = Pick<PrismaClient, "user" | "scheduledAgentTask" | "scheduledJob">;
 
@@ -101,15 +102,11 @@ export async function ensureHiveScoutScheduledTask(
   } else {
     // Only a NEW task needs an owner. On a fresh install the oldest superuser is
     // the only one there is; an existing task keeps whoever owns it now.
-    const owner = await prisma.user.findFirst({
-      where: { isSuperuser: true },
-      orderBy: { createdAt: "asc" },
-      select: { id: true },
-    });
-    if (!owner) {
+    const ownerId = await findInstallWorkOwnerUserId(prisma);
+    if (!ownerId) {
       throw new Error("seed: no superuser found - cannot seed Hive Scout scheduled task");
     }
-    ownerUserId = owner.id;
+    ownerUserId = ownerId;
     await prisma.scheduledAgentTask.create({
       data: {
         taskId: HIVE_SCOUT_TASK_ID,

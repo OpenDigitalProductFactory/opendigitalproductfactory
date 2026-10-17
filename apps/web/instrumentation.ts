@@ -982,16 +982,16 @@ export async function register() {
       await assertDbContinuityOnBoot();
     }
 
-    // Runtime capability recovery is a boot barrier, not background cleanup:
-    // no authenticated mutation may be admitted until durable host/DB state is
+    // Runtime recovery is a boot barrier: no mutation is admitted until state is
     // reconciled or explicitly marked recovery_required.
     {
-      const { createProductionRuntimeTransitionHost, reconcileRuntimeCapabilityTransitionsOnStartup } = await import("@/lib/platform-runtime/transition-recovery");
+      const { createProductionRuntimeTransitionHost, reconcileRuntimeCapabilityTransitionsOnStartup, startRuntimeCapabilityReceiptSettlement } = await import("@/lib/platform-runtime/transition-recovery");
       try {
         await reconcileRuntimeCapabilityTransitionsOnStartup(await createProductionRuntimeTransitionHost());
       } catch (error) {
         console.error("[runtime-capabilities] Startup reconciliation requires recovery:", error);
       }
+      if (!measurementRuntime) startRuntimeCapabilityReceiptSettlement();
     }
 
     // Graph-mirror projections with no indexer of their own (BI-FEDFABF6). Boot is
@@ -1026,7 +1026,7 @@ export async function register() {
       void resetStuckQuiescenceLevelOnBoot();
 
       void reconcileSelfUpgradeAdmissions().catch((error) => console.error("[self-upgrade] admission reconcile failed", error)); void import("@/lib/jobs/postgres/start").then((m) => m.startPostgresJobWorker()).catch((error) => console.error("[jobs/postgres] worker failed to start", error)); // BI-85E6EF14: a no-op unless DPF_JOBS_ENGINE routes functions to the owned engine
-      void reconcileSelfUpgradeRunsOnBoot(); void import("@/lib/federation/boot-reconcile").then((m) => m.reconcileFederationDurableStateOnBoot()).catch((error) => console.error("[federation] durable-state reconcile failed", error)); void import("@/lib/self-upgrade/service-reconcile-attach").then((m) => m.scheduleServiceReconcileAttach()).catch((error) => console.error("[self-upgrade] service-reconcile attach scheduling failed", error)); // BI-DB87D925
+      void reconcileSelfUpgradeRunsOnBoot().then(() => import("@/lib/agent-toolchain/announce-release")).then((m) => m.announceToolchainReleaseOnBoot()).catch((error) => console.error("[agent-toolchain] release announcement failed", error)); /* BI-E7974C18: after the run reconcile */ void import("@/lib/federation/boot-reconcile").then((m) => m.reconcileFederationDurableStateOnBoot()).catch((error) => console.error("[federation] durable-state reconcile failed", error)); void import("@/lib/self-upgrade/service-reconcile-attach").then((m) => m.scheduleServiceReconcileAttach()).catch((error) => console.error("[self-upgrade] service-reconcile attach scheduling failed", error)); // BI-DB87D925
 
       // Periodic safety net — cron-independent (the boot reconcile above and the
       // Inngest cron can BOTH miss this). If a swap's orchestrator dies while the

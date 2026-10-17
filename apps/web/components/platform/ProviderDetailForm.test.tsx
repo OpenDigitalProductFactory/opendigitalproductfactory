@@ -8,6 +8,7 @@ import { configureProvider, testProviderAuth, discoverModels, profileModels } fr
 import { renderToStaticMarkup as serverRender } from "react-dom/server";
 
 import type { ProviderWithCredential } from "@/lib/ai-provider-types";
+import { SOURCE_CATALOG } from "@dpf/i18n";
 import { ProviderDetailForm } from "./ProviderDetailForm";
 import { probeQuiescence } from "@/components/auth/UpgradeHold";
 import { startProviderOAuth, disconnectProviderOAuth } from "@/lib/actions/provider-oauth";
@@ -89,7 +90,35 @@ const providerFixture: ProviderWithCredential = {
 };
 
 describe("ProviderDetailForm", () => {
+  it.each([true, false])("keeps server-owned recipes with the existing Models and execution disclosure (write=%s)", canWrite => {
+    render(<ProviderDetailForm pw={providerFixture} canWrite={canWrite} models={[]} profiles={[]} hasActiveProvider
+      executionRecipes={<p>Execution recipes · 29</p>} />);
+    const toggle = screen.getByRole("button", { name: "Models and execution" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText("Execution recipes · 29")).toBeNull();
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("Execution recipes · 29")).toBeTruthy();
+    fireEvent.click(toggle);
+    expect(screen.queryByText("Execution recipes · 29")).toBeNull();
+    expect(configureProvider).not.toHaveBeenCalled();
+    expect(discoverModels).not.toHaveBeenCalled();
+  });
+  it("preserves exact-account recovery when default ChatGPT shared ownership is unproven", async () => {
+    const fixture: ProviderWithCredential = { ...providerFixture, provider: { ...providerFixture.provider, providerId: "chatgpt", name: "ChatGPT", authMethod: "oauth2_authorization_code", supportedAuthMethods: ["oauth2_authorization_code"] }, credential: { ...providerFixture.credential!, status: "ok", tokenExpiresAt: new Date(Date.now() + 3600000).toISOString() } };
+    vi.mocked(startProviderOAuth).mockResolvedValue({ error: "Fixture sign-in result" });
+    render(<ProviderDetailForm pw={fixture} canWrite models={[]} profiles={[]} hasActiveProvider defaultConnectionId="provider-default-chatgpt" />);
+    expect(screen.queryByRole("link", { name: "Manage shared sign-in" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
+    await waitFor(() => expect(startProviderOAuth).toHaveBeenCalledWith("chatgpt", "provider-default-chatgpt"));
+  });
   afterEach(() => { cleanup(); vi.clearAllMocks(); });
+  it("keeps OAuth mutations disabled for a read-only viewer while retaining diagnostics", () => {
+    const fixture: ProviderWithCredential = { ...providerFixture, provider: { ...providerFixture.provider, providerId: "codex", authMethod: "oauth2_authorization_code", supportedAuthMethods: ["oauth2_authorization_code"] } };
+    render(<ProviderDetailForm pw={fixture} canWrite={false} models={[]} profiles={[]} hasActiveProvider />);
+    expect((screen.getByRole("button", { name: "Sign in with Z.ai" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Models and execution" }) as HTMLButtonElement).disabled).toBe(false);
+  });
 
   it("keeps workspace editing open when clearing an ID to replace it", () => {
     const fixture = { ...providerFixture,
@@ -114,8 +143,9 @@ describe("ProviderDetailForm", () => {
   });
   it("keeps ChatGPT shared authentication changes in the Codex management page", () => {
     const fixture: ProviderWithCredential = { ...providerFixture, provider: { ...providerFixture.provider, providerId: "chatgpt", authMethod: "oauth2_authorization_code", supportedAuthMethods: ["oauth2_authorization_code"], authorizeUrl: "https://auth.openai.com/oauth/authorize" } };
-    render(<ProviderDetailForm pw={fixture} canWrite models={[]} profiles={[]} hasActiveProvider />);
+    render(<ProviderDetailForm pw={fixture} canWrite models={[]} profiles={[]} hasActiveProvider sharedAuthRecovery={{ help: SOURCE_CATALOG.providerAccounts.sharedSignInHelp, label: SOURCE_CATALOG.providerAccounts.manageSharedSignIn }} />);
     expect(screen.queryByRole("button", { name: /sign in|disconnect/i })).toBeNull();
+    expect(screen.getByRole("link", { name: "Manage shared sign-in" }).getAttribute("href")).toBe("/platform/ai/providers/codex");
   });
   it("recovers the ready button after a rejected save", async () => {
     vi.mocked(configureProvider).mockRejectedValue(new Error("network failure"));
@@ -188,12 +218,12 @@ describe("ProviderDetailForm", () => {
     render(<ProviderDetailForm pw={providerFixture} canWrite models={[model]} profiles={[]} hasActiveProvider />);
     expect(screen.queryByText("historical-model")).toBeNull();
     expect(screen.queryByText("Ready")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Advanced diagnostics" }));
+    fireEvent.click(screen.getByRole("button", { name: "Models and execution" }));
     expect(screen.getByText("historical-model")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Refresh model diagnostics" }));
     await waitFor(() => expect(screen.getByText("1 model discovered (0 new)")).toBeTruthy());
     expect(profileModels).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Hide diagnostics" }));
+    fireEvent.click(screen.getByRole("button", { name: "Models and execution" }));
     expect(screen.queryByText("historical-model")).toBeNull();
   });
 

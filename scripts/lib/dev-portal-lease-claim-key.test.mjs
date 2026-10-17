@@ -2,11 +2,14 @@
 // Node built-in test runner: node --test
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, cpSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { readFileSync, cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, dirname } from "node:path";
-import { spawnSync } from "node:child_process";
+import { join, dirname, resolve } from "node:path";
+import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { createServer } from 'node:http';
+import { guardShellEnv } from './guard-bash.mjs';
 
 const script = readFileSync(
   fileURLToPath(new URL("../dev-portal-lease.sh", import.meta.url)),
@@ -45,8 +48,47 @@ test("terminal keys are stopped instead of scanned or replaced", () => {
   assert.match(script, /terminal lease claim; stop/);
 });
 
-import { protectedServiceIdentity, REQUIRED_PREVIEW_DELIVERY_TOOLS, assertToolReadiness, assertPreviewConfig, assertPreviewContainer, previewOverride, runPreviewLifecycle, stopOwnedPreviewContainers } from './dev-preview-runtime.mjs';
-const identity = { worktree: '/feature/worktree', sha: 'a'.repeat(40), leaseId: 'NPEL-MINE' };
+import { protectedServiceIdentity, REQUIRED_PREVIEW_DELIVERY_TOOLS, assertToolReadiness, assertPreviewConfig, assertPreviewContainer, assertAdmittedWorktreePath, previewOverride, runPreviewLifecycle, stopOwnedPreviewContainers, commandRunner } from './dev-preview-runtime.mjs';
+
+test('preview diagnostics retain the failed exit code without child output or arguments', async () => {
+  const secret = 'diagnostic-secret-must-not-escape';
+  await assert.rejects(commandRunner().run(['-e', `console.log('${secret}'); console.error('${secret}'); process.exit(7)`], { bin: process.execPath }), error => {
+    assert.equal(error.message, 'preview_operation_failed:exit-7');
+    assert.ok(!error.message.includes(secret));
+    return true;
+  });
+});
+
+test('preview renewal receives a delayed transport response inside the existing lease lifetime', async t => {
+  const { callPreviewMcp } = await import('./dev-preview-runtime.mjs');
+  const server = createServer((request, response) => {
+    request.resume();
+    const timer = setTimeout(() => response.end(JSON.stringify({ result: {
+      content: [{ type: 'text', text: JSON.stringify({ success: true, data: { expiresAt: '2026-10-14T12:02:00Z' } }) }],
+    } })), 11_000);
+    response.once('close', () => clearTimeout(timer));
+  });
+  await new Promise(resolveListen => server.listen(0, '127.0.0.1', resolveListen));
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const result = await callPreviewMcp('renew_nonprod_environment_lease', { leaseId: 'NPEL-TEST', ownerSessionId: 'fixture', ttlMinutes: 2 }, {
+    mcpUrl: `http://127.0.0.1:${server.address().port}/api/mcp/v1`, bearerToken: 'fixture-local-only',
+  });
+  assert.equal(result.success, true);
+});
+
+test('preview diagnostics distinguish lease failure categories without retaining arbitrary reasons', async () => {
+  const { previewLeaseEventSummary } = await import('./dev-preview-runtime.mjs');
+  assert.equal(previewLeaseEventSummary({ type: 'heartbeat-renewed' }), null);
+  assert.deepEqual(previewLeaseEventSummary({ type: 'authority-deadline', reason: 'lease-authority-deadline' }),
+    { type: 'authority-deadline', category: 'authority-deadline' });
+  assert.deepEqual(previewLeaseEventSummary({ type: 'heartbeat-lost', reason: 'preview_binding_changed' }),
+    { type: 'heartbeat-lost', category: 'source-binding' });
+  assert.deepEqual(previewLeaseEventSummary({ type: 'heartbeat-uncertain', reason: 'mcp timed out after 10000ms diagnostic-secret-must-not-escape' }),
+    { type: 'heartbeat-uncertain', category: 'transport-timeout' });
+  assert.deepEqual(previewLeaseEventSummary({ type: 'release-failed', reason: 'diagnostic-secret-must-not-escape' }),
+    { type: 'release-failed', category: 'unclassified' });
+});
+const identity = { worktree: resolve('/feature/worktree'), sha: 'a'.repeat(40), leaseId: 'NPEL-MINE' };
 const config = () => {
   const result = previewOverride(identity);
   Object.assign(result.services['dev-init'].environment, { CONTRIBUTOR_PREVIEW_PASSWORD: 'only-in-memory',
@@ -54,6 +96,18 @@ const config = () => {
   result.services["dev-portal"].environment.DATABASE_URL = result.services["dev-init"].environment.DATABASE_URL;
   return result;
 };
+
+test('admission compares filesystem identity and rejects ambiguous or foreign paths', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'dpf-preview-path-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const other = join(directory, 'other');
+  mkdirSync(other);
+  const canonical = await realpath(directory);
+  await assertAdmittedWorktreePath(directory.replace(/\\/g, '/'), canonical);
+  for (const invalid of [undefined, null, '', 'relative/worktree', other, join(directory, 'missing')]) {
+    await assert.rejects(assertAdmittedWorktreePath(invalid, canonical), /admission_binding_mismatch/);
+  }
+});
 test('configuration rejects the original root checkout mount and missing prerequisites before mutations', () => {
   assertPreviewConfig(config(), identity);
   const wrong = config(); wrong.services['dev-init'].volumes[0].source = '/root';
@@ -69,6 +123,16 @@ test('actual Docker mount and source/lease labels must match the admitted previe
   actual.Mounts[0].Source = '/root';
   assert.throws(() => assertPreviewContainer(actual, identity), /actual_mount_mismatch/);
 });
+test('actual Docker Desktop Windows mount identifies only its admitted host worktree', () => {
+  const windows = { ...identity, worktree: 'D:/DPF-worktrees/scoped-investment-balance' };
+  const actual = { Mounts: [{ Type: 'bind', Source: '/run/desktop/mnt/host/d/DPF-worktrees/scoped-investment-balance', Destination: '/workspace' }], Config: { Labels: previewOverride(windows).services['dev-portal'].labels, Env: ['DPF_ENVIRONMENT_CLASS=development', `DPF_PREVIEW_SOURCE_SHA=${windows.sha}`, `DPF_PREVIEW_LEASE_ID=${windows.leaseId}`] } };
+  assertPreviewContainer(actual, windows);
+  for (const wrong of ['/run/desktop/mnt/host/e/DPF-worktrees/scoped-investment-balance', '/run/desktop/mnt/host/d/DPF-source-root', 'DPF-worktrees/scoped-investment-balance', '/run/desktop/mnt/host/d/DPF-worktrees/../DPF-source-root']) {
+    actual.Mounts[0].Source = wrong;
+    assert.throws(() => assertPreviewContainer(actual, windows), /actual_mount_mismatch/);
+  }
+});
+
 test('startup isolates dependencies, waits for clone success, verifies actual binding, then permits serving', async () => {
   const calls = [];
   await runPreviewLifecycle({ compose: async args => calls.push(args), inspect: async () => calls.push('inspect'),
@@ -98,7 +162,12 @@ test('startup checks the whole shared delivery contract and both permission laye
   const rows = REQUIRED_PREVIEW_DELIVERY_TOOLS.map(granted);
   assertToolReadiness({ status: rows });
   assert.ok(REQUIRED_PREVIEW_DELIVERY_TOOLS.includes('review_semantic_change'));
-  for (const bad of [{ ...rows[0], agentGranted: false }, { ...rows[0], tokenGranted: false }, { ...rows[0], agentGranted: null }]) {
+  const unbound = rows.map(row => ({ ...row, agentGranted: null }));
+  assertToolReadiness({ result: { content: [{ type: 'text', text: JSON.stringify({ status: unbound }) }] } });
+  for (const bad of [{ ...rows[0], agentGranted: false }, { ...rows[0], tokenGranted: false },
+    { ...unbound[0], tokenGranted: false }, { ...unbound[0], callableByName: false },
+    { ...unbound[0], callableByName: undefined }, { ...unbound[0], serverHasTool: false },
+    { ...unbound[0], agentGranted: undefined }, { ...unbound[0], agentGranted: 'true' }]) {
     assert.throws(() => assertToolReadiness({ count: 100, status: [bad, ...rows.slice(1)] }), /permissions_incomplete/);
   }
   assert.throws(() => assertToolReadiness({ status: [...rows, rows[0]] }), /permissions_incomplete/);
@@ -163,8 +232,120 @@ test('the policy claim-key suite runs without installed workspace dependencies',
     const shared = join(fixture, 'packages/integration-shared/src');
     mkdirSync(shared, { recursive: true });
     cpSync(join(source, '../../packages/integration-shared/src/delivery-readiness-contract.cjs'), join(shared, 'delivery-readiness-contract.cjs'));
+    cpSync(join(source, '../../packages/integration-shared/src/preview-mount-identity.cjs'), join(shared, 'preview-mount-identity.cjs'));
+    // mcp-credential.mjs re-exports the client_credentials exchange from the skill pack (BI-84C1F526).
+    const packLib = join(fixture, 'packages/dpf-skill-pack/scripts/lib');
+    mkdirSync(packLib, { recursive: true });
+    cpSync(join(source, '../../packages/dpf-skill-pack/scripts/lib/client-credentials-exchange.mjs'), join(packLib, 'client-credentials-exchange.mjs'));
     const { NODE_TEST_CONTEXT: inheritedTestContext, ...env } = process.env;
     const result = spawnSync(process.execPath, ['--test', '--test-name-pattern=^the contributor-preview', join(fixture, 'scripts/lib/dev-portal-lease-claim-key.test.mjs')], { encoding: 'utf8', cwd: fixture, env });
     assert.equal(result.status, 0, result.stderr || result.stdout);
   } finally { rmSync(fixture, { recursive: true, force: true }); }
+});
+
+import { EXIT_SOURCE_DRIFT } from "./sandbox-freshness.mjs";
+const pin = { worktree: resolve('/feature/worktree'), branch: 'feat/example', sha: 'a'.repeat(40),
+  ownerProvider: 'codex', ownerSessionId: 'session', resumeLeaseId: 'NPEL-ABC123',
+  taskRunId: 'TR-NONPROD-ABC123', claimKey: 'preview:immutable', mcpUrl: 'https://localhost/api/mcp/v1',
+  waitDeadline: '2026-10-14T12:00:00Z' };
+const now = () => Date.parse('2026-10-14T11:00:00Z');
+const source = () => ({ sha: pin.sha, branch: pin.branch, dirty: false });
+
+test('queued preview registers the existing durable consumer with frozen source and lease identity', async () => {
+  const { resumePreviewQueue } = await import('../dev-preview-queue-resume.mjs');
+  let registration;
+  const result = await resumePreviewQueue(pin, { now, readSource: source, observerDirectory: '/observers',
+    env: { DPF_LOCAL_CI_TEST_WORKERS: '2' },
+    spawnResumer: args => { registration = args; return { spawned: true, survivesSession: true, pid: 123 }; },
+    runChild: () => assert.fail('queued registration must not start a runtime') });
+  assert.equal(result.code, 75);
+  assert.equal(result.spawned, true);
+  assert.deepEqual(registration.pin, { branch: pin.branch, sha: pin.sha, worktree: pin.worktree,
+    ownerProvider: pin.ownerProvider, ownerSessionId: pin.ownerSessionId, resumeLeaseId: pin.resumeLeaseId });
+  assert.equal(registration.deadlineMs, 60 * 60_000);
+  assert.equal(registration.env.DPF_LOCAL_CI_TEST_WORKERS, '2');
+  assert.ok(registration.gateArgv.includes(pin.taskRunId));
+  assert.ok(registration.gateArgv.includes(pin.claimKey));
+});
+
+test('the registered preview consumer reclaims the same lease without forking another consumer', async () => {
+  const { resumePreviewQueue } = await import('../dev-preview-queue-resume.mjs');
+  let command;
+  const result = await resumePreviewQueue(pin, { now, readSource: source, env: { DPF_DURABLE_RESUME: '1' },
+    spawnResumer: () => assert.fail('recursive consumer'),
+    runChild: args => { command = args; return Promise.resolve(75); } });
+  assert.equal(result.code, 75);
+  assert.ok(command.args.includes('refresh'));
+  assert.equal(command.env.DPF_DEV_PORTAL_RESUME_LEASE_ID, pin.resumeLeaseId);
+  assert.equal(command.env.DPF_DEV_PORTAL_TASK_RUN_ID, pin.taskRunId);
+  assert.equal(command.env.DPF_DEV_PORTAL_CLAIM_KEY, pin.claimKey);
+  assert.equal(command.env.DPF_DEV_PORTAL_EXPECTED_SOURCE_SHA, pin.sha);
+  assert.equal(command.env.DPF_DEV_PORTAL_EXPECTED_BRANCH, pin.branch);
+});
+
+test('the actual shell refuses same-SHA branch drift and newly dirty source before claiming', async t => {
+  const { resumePreviewQueue } = await import('../dev-preview-queue-resume.mjs');
+  const worktree = mkdtempSync(join(tmpdir(), 'dpf-preview-queue-race-'));
+  t.after(() => rmSync(worktree, { recursive: true, force: true }));
+  const git = args => execFileSync('git', args, { cwd: worktree, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  git(['init', '-b', 'feat/pinned']);
+  writeFileSync(join(worktree, 'fixture.txt'), 'fixture');
+  git(['add', 'fixture.txt']);
+  git(['-c', 'user.name=Preview Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-m', 'fixture']);
+  const sha = git(['rev-parse', 'HEAD']);
+  const cliPin = { ...pin, worktree, sha, branch: 'feat/pinned', waitDeadline: new Date(Date.now() + 120_000).toISOString() };
+  const cliArgs = Object.entries(cliPin).flatMap(([key, value]) => [`--${key.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`)}`, value]);
+  const replay = spawnSync(process.execPath, [fileURLToPath(new URL('../dev-preview-queue-resume.mjs', import.meta.url)),
+    ...cliArgs, '--sha', sha, '--branch', 'feat/pinned', '--resume-lease-id', pin.resumeLeaseId],
+  { cwd: worktree, env: { ...process.env, DPF_DURABLE_RESUME: '', DPF_DURABLE_RESUMER: 'off' }, encoding: 'utf8' });
+  assert.equal(replay.status, 75, replay.stderr);
+  assert.equal(JSON.parse(replay.stderr.trim()).reason, 'disabled');
+  const deps = { now, env: { ...guardShellEnv(), DPF_DURABLE_RESUME: '1', DPF_DEV_PORTAL_CURL_BIN: 'missing-preview-test-transport', DPF_DEV_PORTAL_BRANCH: 'feat/original' } };
+  const branchDrift = await resumePreviewQueue({ ...pin, worktree, sha, branch: 'feat/original', mcpUrl: 'http://127.0.0.1:1/api/mcp/v1' },
+    { ...deps, readSource: () => ({ sha, branch: 'feat/original', dirty: false }) });
+  assert.equal(branchDrift.code, EXIT_SOURCE_DRIFT);
+  writeFileSync(join(worktree, 'fixture.txt'), 'changed');
+  const dirty = await resumePreviewQueue({ ...pin, worktree, sha, branch: 'feat/pinned', mcpUrl: 'http://127.0.0.1:1/api/mcp/v1' },
+    { ...deps, readSource: () => ({ sha, branch: 'feat/pinned', dirty: false }) });
+  assert.equal(dirty.code, EXIT_SOURCE_DRIFT);
+});
+
+test('the actual shell refuses source drift between consumer inspection and its claim', async () => {
+  const { resumePreviewQueue } = await import('../dev-preview-queue-resume.mjs');
+  const worktree = fileURLToPath(new URL('../../', import.meta.url));
+  const sha = '0'.repeat(40);
+  const result = await resumePreviewQueue({ ...pin, worktree, sha, mcpUrl: 'http://127.0.0.1:1/api/mcp/v1' }, {
+    now, readSource: () => ({ sha, branch: pin.branch, dirty: false }),
+    env: { ...guardShellEnv(), DPF_DURABLE_RESUME: '1', DPF_DEV_PORTAL_CURL_BIN: 'missing-preview-test-transport' },
+  });
+  assert.equal(result.code, EXIT_SOURCE_DRIFT);
+});
+
+test('moved or dirty source stops before reclaiming or starting anything', async () => {
+  const { resumePreviewQueue } = await import('../dev-preview-queue-resume.mjs');
+  for (const actual of [{ ...source(), sha: 'b'.repeat(40) }, { ...source(), branch: 'feat/other' }, { ...source(), dirty: true }]) {
+    const result = await resumePreviewQueue(pin, { now, readSource: () => actual,
+      spawnResumer: () => assert.fail('drift must not register'), runChild: () => assert.fail('drift must not reclaim') });
+    assert.equal(result.code, EXIT_SOURCE_DRIFT);
+  }
+});
+
+test('expired waits and an explicitly disabled consumer do not mutate the queued claim', async () => {
+  const { resumePreviewQueue } = await import('../dev-preview-queue-resume.mjs');
+  const deps = { now, readSource: source, spawnResumer: () => assert.fail('must not register'), runChild: () => assert.fail('must not reclaim') };
+  const expired = await resumePreviewQueue({ ...pin, waitDeadline: '2026-10-14T10:59:00Z' }, deps);
+  assert.equal(expired.reason, 'wait-deadline');
+  const disabled = await resumePreviewQueue(pin, { ...deps, env: { DPF_DURABLE_RESUMER: 'off' } });
+  assert.equal(disabled.reason, 'disabled');
+});
+
+test('admitted child outcomes are retained and untrusted launcher reasons never escape', async () => {
+  const { resumePreviewQueue } = await import('../dev-preview-queue-resume.mjs');
+  for (const code of [0, 1]) {
+    assert.equal((await resumePreviewQueue(pin, { now, readSource: source, env: { DPF_DURABLE_RESUME: '1' }, runChild: () => code })).code, code);
+  }
+  const result = await resumePreviewQueue(pin, { now, readSource: source, observerDirectory: '/observers',
+    spawnResumer: () => ({ spawned: false, reason: 'secret-must-not-escape' }) });
+  assert.equal(result.reason, 'consumer-unavailable');
+  assert.ok(!JSON.stringify(result).includes('secret-must-not-escape'));
 });

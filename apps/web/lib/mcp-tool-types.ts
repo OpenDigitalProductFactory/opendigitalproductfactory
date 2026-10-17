@@ -12,10 +12,15 @@
 import type { CapabilityKey } from "@/lib/permissions";
 import type { AuthorizedSurfaceToolExecutionContext } from "@/lib/coworker/authorized-surface-execution-types";
 import type { OutcomeDisposition } from "@/lib/shared/outcome-disposition";
+import type { RoomAuthorityContext } from "@/lib/work-management/room-turn-authority";
 import type { ToolCallConsequenceRefiner, ToolConsequence, ToolConsequenceScope } from "@/lib/tool-consequence";
 
 export type BuildPhaseTag = "ideate" | "plan" | "build" | "review" | "ship";
 export type ToolExecutionContext = AuthorizedSurfaceToolExecutionContext & {
+  /** Fresh catalog compiled by the original governed executor, never supplied by a tool caller. */
+  governedReadToolCatalog?: () => Promise<ToolDefinition[]>;
+  /** Original executor's room binding; known unroomed is null, absence is unverified. */
+  governedRoomAuthority?: () => RoomAuthorityContext | null;
   routeContext?: string;
   agentId?: string;
   threadId?: string;
@@ -114,6 +119,12 @@ export type ToolDefinition = {
    */
   retainAuditParameters?: boolean;
   /**
+   * Keys of `result.data` that hold a secret handed to the caller. The caller
+   * still receives them; the audit row stores "[REDACTED]" instead
+   * (BI-84C1F526, the Grok credentials client).
+   */
+  secretResultKeys?: readonly string[];
+  /**
    * How far this tool's effect reaches. DECLARED, not inferred: "can this be
    * undone" is not recoverable from the name, the schema, or `sideEffect`
    * (true for `update_backlog_item` and `place_linkedin_ad` alike).
@@ -207,6 +218,7 @@ export type ToolDefinition = {
 };
 
 export type EndpointTestRunRequest = {
+  concurrencyOnly?: boolean;
   endpointId?: string;
   modelId?: string;
   taskType?: string;

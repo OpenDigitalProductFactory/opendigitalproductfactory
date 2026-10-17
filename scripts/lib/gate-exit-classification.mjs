@@ -24,6 +24,10 @@ export const GATE_EXIT = Object.freeze({
   CONTROL_PLANE_STARVATION: 5,
   SLOT_SUBSTRATE_UNAVAILABLE: 9,
   MERGE_CONFLICT_WITH_BASE: 10,
+  // BI-4BCD269B: pregate refused to run because it was not the sole foreground
+  // command. Not a verdict about the diff, and retrying the same wrap fails
+  // the same way.
+  WRAPPED_INVOCATION: 11,
   ABANDONED_OR_UNRECORDED: 7,
   DURABLE_WAIT: 75,
   WAIT_CANCELLED: 81,
@@ -54,6 +58,16 @@ const INFRA_TEXT = [
  * @returns {{ kind: string, retry: boolean, verdict: "pass"|"fail"|"none", summary: string, next?: string }}
  */
 export function classifyGateExit({ code, output = "" }) {
+  // BI-2FFDBE62: spawnSync reports a process that never started as status null.
+  // That used to fall through to `gate failed (exit null)`, a product FAIL.
+  if (code === null || code === undefined) {
+    return {
+      kind: "spawn-failed",
+      retry: false,
+      verdict: "none",
+      summary: "pregate did not start (spawn failed; exit null) — infrastructure, not a verdict about the diff",
+    };
+  }
   const text = String(output);
   switch (code) {
     case GATE_EXIT.PASS:
@@ -109,6 +123,12 @@ export function classifyGateExit({ code, output = "" }) {
         kind: "source-drift", retry: false, verdict: "none",
         summary: "the resumed gate's worktree no longer holds the queued commit; nothing ran",
         next: "commit or restore the work, then run pregate again",
+      };
+    case GATE_EXIT.WRAPPED_INVOCATION:
+      return {
+        kind: "wrapped", retry: false, verdict: "none",
+        summary: "pregate stopped because it is not the sole foreground command",
+        next: "run pnpm run pregate in the foreground, or use pnpm gate:wait",
       };
     default:
       break;

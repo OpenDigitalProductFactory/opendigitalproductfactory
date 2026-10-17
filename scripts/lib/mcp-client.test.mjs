@@ -5,6 +5,28 @@ import test from "node:test";
 
 import { buildJsonRpcBody, isAllowedMcpEndpoint, mcpCall, mcpPost, quoteForMsysArgv } from "./mcp-client.mjs";
 
+test("MCP deadline bounds the whole response even while bytes keep arriving", { timeout: 3000 }, async t => {
+  let timer;
+  let finish;
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.write(" ");
+    timer = setInterval(() => response.write(" "), 5);
+    finish = setTimeout(() => { clearInterval(timer); response.end("{}"); }, 250);
+  });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  t.after(async () => {
+    clearInterval(timer);
+    clearTimeout(finish);
+    server.closeAllConnections();
+    await new Promise(resolve => server.close(resolve));
+  });
+  await assert.rejects(mcpPost("tools/call", { name: "fixture_read", arguments: {} }, {
+    mcpUrl: `http://127.0.0.1:${server.address().port}/api/mcp/v1`,
+    bearerToken: "fixture-only", timeoutMs: 50,
+  }), error => error.code === "ETIMEDOUT" && /timed out/.test(error.message));
+});
+
 // BI-1B4910B4: Node quotes by MSVC rules, but MSYS sh collapses `\\` inside a
 // quoted argument, so a JSON body with a Windows path reached the injected
 // transport as invalid JSON.

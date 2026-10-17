@@ -51,7 +51,9 @@ import { RELEASE_IMAGE_TAG } from "./registry-release";
 import { loadReleaseInstallContext, type ReleaseInstallContext } from "./release-target";
 import {
   buildLocalDoctoolsImage,
+  listAncestorReleaseTags,
   loadSourceLineageContext,
+  runGitSync,
   type LocalDoctoolsBuildResult,
   type SourceLineageContext,
 } from "./doctools-source-lineage";
@@ -106,6 +108,12 @@ export type DoctoolsReconcileDeps = {
   loadSourceLineage?: () => Promise<SourceLineageContext | null>;
   /** Build Dockerfile.doctools from the clone when no published image is reachable. */
   buildLocal?: (lineage: SourceLineageContext) => Promise<LocalDoctoolsBuildResult>;
+  /**
+   * Ancestor release tags to try when the lineage tag itself published no
+   * dpf-doctools (BI-660D77EC). Absent means "do not walk"; existing callers
+   * still build locally.
+   */
+  ancestorReleaseTags?: (lineage: SourceLineageContext) => Promise<string[]>;
   now: () => Date;
   logger: Pick<Console, "log" | "warn">;
 };
@@ -172,6 +180,40 @@ export async function resolveReleaseDoctoolsImage(
   return { kind: "published", image: `${reference.slice(0, reference.lastIndexOf(":"))}@${digest}` };
 }
 
+export const DOCTOOLS_ANCESTOR_WALK_LIMIT = 12;
+
+/**
+ * Resolve a source lineage, then ancestor release tags, stopping on the first
+ * published image. Registry unavailable stops the walk. The tip is inspected
+ * unless `skipTip` is set because the caller already knows it is not published.
+ */
+export async function resolveDoctoolsLineage(input: {
+  identity: ReleaseImageIdentity;
+  ancestorTags?: string[];
+  runDocker: DoctoolsDockerRunner;
+  skipTip?: boolean;
+}): Promise<ReleaseDoctoolsResolution & { releaseTag: string }> {
+  if (!input.skipTip) {
+    const first = await resolveReleaseDoctoolsImage(input.identity, input.runDocker);
+    if (first.kind === "published" || first.kind === "unavailable") {
+      return { ...first, releaseTag: input.identity.imageTag };
+    }
+  }
+  const tags = (input.ancestorTags ?? [])
+    .filter((tag) => tag && tag !== input.identity.imageTag)
+    .slice(0, DOCTOOLS_ANCESTOR_WALK_LIMIT);
+  for (const tag of tags) {
+    const ancestor = await resolveReleaseDoctoolsImage(
+      { imageTag: tag, ghcrOwner: input.identity.ghcrOwner },
+      input.runDocker,
+    );
+    if (ancestor.kind === "unavailable" || ancestor.kind === "published") {
+      return { ...ancestor, releaseTag: tag };
+    }
+  }
+  return { kind: "not-published", releaseTag: input.identity.imageTag };
+}
+
 async function isPresent(deps: DoctoolsReconcileDeps, image: string): Promise<boolean> {
   return (await tryDocker(deps.runDocker, ["image", "inspect", "--format", "{{.Id}}", image], INSPECT_TIMEOUT_MS)).exitCode === 0;
 }
@@ -200,6 +242,35 @@ async function loadLineage(deps: DoctoolsReconcileDeps): Promise<DoctoolsLineage
   if (release) return doctoolsReleaseReference(release) ? release : null;
   const source = await deps.loadSourceLineage?.();
   return source && doctoolsReleaseReference(source) ? { ...source, source } : null;
+}
+
+async function resolvePublishedAncestor(
+  deps: DoctoolsReconcileDeps,
+  lineage: DoctoolsLineage,
+): Promise<DoctoolsReconcileOutcome | null> {
+  if (!lineage.source || !deps.ancestorReleaseTags) return null;
+  let tags: string[];
+  try {
+    tags = await deps.ancestorReleaseTags(lineage.source);
+  } catch (error) {
+    return { outcome: "unavailable", detail: getErrorMessage(error) };
+  }
+  const resolved = await resolveDoctoolsLineage({
+    identity: { imageTag: lineage.imageTag, ghcrOwner: lineage.ghcrOwner },
+    ancestorTags: tags,
+    runDocker: deps.runDocker,
+    skipTip: true,
+  });
+  if (resolved.kind === "unavailable") return { outcome: "unavailable", detail: resolved.detail };
+  if (resolved.kind !== "published") return null;
+  await deps.writeStored({
+    image: resolved.image,
+    releaseTag: resolved.releaseTag,
+    resolvedAt: deps.now().toISOString(),
+    origin: "published",
+  });
+  deps.logger.log(`[doctools-image] ${lineage.imageTag} published no ${DOCTOOLS_IMAGE_NAME}; using ancestor ${resolved.releaseTag} -> ${resolved.image}`);
+  return { outcome: "resolved", image: resolved.image, pulled: await ensurePulled(deps, resolved.image) };
 }
 
 /** Offline fallback for a source-built install: pin an image built from its own clone. */
@@ -284,6 +355,8 @@ export async function reconcileReleaseDoctoolsImage(deps: DoctoolsReconcileDeps)
       return (await buildLocally(deps, lineage, "the local image was removed")) ?? { outcome: "unavailable", detail: "local image removed" };
     }
     if (resolution.kind === "not-published") {
+      const ancestor = await resolvePublishedAncestor(deps, lineage);
+      if (ancestor) return ancestor;
       const built = await buildLocally(deps, lineage, "not published");
       if (built) return built;
       if (stored) await deps.clearStored();
@@ -381,6 +454,11 @@ function productionDeps(): DoctoolsReconcileDeps {
       const { readPlatformVersionTag } = await import("@/lib/platform/image-version");
       return loadSourceLineageContext({ hostSourcePath: await hostSourcePath(), readPlatformVersion: () => readPlatformVersionTag() });
     },
+    ancestorReleaseTags: (lineage) => listAncestorReleaseTags({
+      sourcePath: lineage.sourceRoot,
+      tipRef: "HEAD",
+      runGit: runGitSync,
+    }),
     buildLocal: (lineage) =>
       buildLocalDoctoolsImage({
         sourceRoot: lineage.sourceRoot,

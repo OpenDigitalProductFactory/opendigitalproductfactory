@@ -14,7 +14,7 @@ export function readerBootstrapTask(metadata: Record<string, unknown>, updatedAt
         schemaVersion: 1,
         kind: "missing-terminal-writer",
         writerToolName: "record_initiative_evidence",
-        resumeMode: "same-taskrun",
+        resumeMode: "same-taskrun", dispatchContract: "required-tool-call",
         attempt: 1,
         observedAt: "2026-08-31T02:59:00.000Z",
       },

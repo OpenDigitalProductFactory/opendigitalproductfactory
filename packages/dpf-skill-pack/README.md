@@ -125,6 +125,14 @@ The auto-install hook (BI-98683E68) wires these into portal install + worktree c
 
 ## Standalone install and update
 
+The root-clone guard distinguishes shell syntax from quoted diagnostic text and
+interpreter heredoc input (BI-F6176C63). Read-only scripts with comparisons or
+HTML are allowed. Shell redirections, commands after a heredoc, shell-fed input,
+and interpreter file-write intent retain the existing root protections. The
+shared command-text helper owns heredoc boundaries; guards choose whether a
+body is executable shell input. Install the merged hook through the normal
+toolchain updater so every client uses the same correction.
+
 The DPF skill pack can be installed or updated without installing the full DPF
 project. This is the supported path for contributors who only need the governed
 Codex / Claude workflows and an existing DPF MCP endpoint.
@@ -302,6 +310,24 @@ Then the updater inside the verified pack runs, and the pin is written after it 
 - writes the declaration into each client's connector: the `X-DPF-Toolchain: pack=…;digest=…;client=…` header for Claude Code, Codex and Antigravity, and `dpf_pack`, `dpf_digest`, `dpf_client` on Grok's literal URL. The carrier per client is the manifest's `clients[kind].declarationCarrier`;
 - converges Claude local scope and every project-scope record, retires duplicate `dpf` servers in project `.mcp.json`, user scope and each project's local scope (backup first, then `claude mcp remove`), and gives every converged record's cached descriptor a literal endpoint;
 - with `--report-json`, writes one row per client and scope: `before` and `after` (`version`, `digest`, `authMode`), `action` (`updated`, `unchanged`, `retired`, `prunable` or `failed`), `backupPath`, `restartRequired`, and the client CLI's own `--version`. The agent records it through `record_surface_readiness`. A refusal writes `result: "refused"` with its reason.
+
+### What a connection declares, and what it is told
+
+A connector can declare the pack it loaded, with `dpf_pack`, `dpf_digest` (the first 16 hex of the delivered digest) and `dpf_client` on the MCP URL, or the `X-DPF-Toolchain: pack=…;digest=…;client=…` header (BI-54469E18, design §5.2). On every connection the server:
+
+- **Computes a verdict.** `current`, `stale`, `below-floor` or `undeclared`, from `apps/web/lib/agent-toolchain/toolchain-verdict.ts`. A User-Agent never decides it.
+- **Records the copy.** It goes in `AgentToolchainObservation`, keyed by the server-derived credential (`oauth:<OAuthClient.id>` or `token:<McpApiToken.id>`) and the loaded digest, with writes coalesced to one per five minutes. `initialize` also records `clientInfo`.
+- **Tells the agent.** A `TOOLCHAIN:` line is added to the `initialize` instructions, naming what is stale, the portal repair and the full installation id the updater must expect (`--expect-installation`). It is addressed to the agent and never hands the user a command.
+
+`get_fleet_readiness` returns a `toolchain` section: every credential with the copies it was seen loading and their verdicts, one page at a time. `record_surface_readiness` now keys an MCP caller's row by its own credential, so one token cannot overwrite another host's readiness.
+
+The floor's rules (pack below `minPackVersion`, a stored token where the credential policy says OAuth is available, Grok on anything but its own credentials client) apply only once a release sets a floor in `toolchain-version.json`.
+
+### Grok's own credential
+
+Grok connects with its own `client_credentials` OAuth client, not an operator token (BI-84C1F526, decision DI-4B843FAF62F9, which supersedes DI-2399DE85DC6A). The verdict counts a Grok declaration as using its own credential only when the token was issued to that client. An operator token from Grok is `stale` during the floor's 7-day grace, which starts at `floor.graceStartsAt`, and `below-floor` after it.
+
+To converge it, the agent calls the `issue_grok_credentials_client` MCP tool. The tool returns the caller's client, or creates it once, and refuses a connection narrower than `dpf.read dpf.work dpf.build`. The agent pipes `data.credentialsClient` to the updater with `--grok-client-stdin`. The updater (`scripts/grok_credential.py`) points `[mcp_servers.dpf]` at `bearer_token_file`, hands the client to this pack's `scripts/refresh-grok-mcp-credential.mjs` on standard input and runs its first refresh. The refresher, its `client_credentials` exchange and the Grok credential library ship in this pack, so a host with no source checkout has them; the old `scripts/` paths in the repository are shims. Grok's SessionStart entry (`hooks/grok-credential-refresh.mjs`) refreshes the token when it is missing or near expiry. It is bounded to a few seconds, fails open, and on failure prints one line naming the repair. The secret never appears on a command line, in output or in the tool's audit row. When a credential is missing or expired, the MCP endpoint's 401 names the same repair link as the `TOOLCHAIN:` notice.
 
 ### Version bumps propagate automatically
 

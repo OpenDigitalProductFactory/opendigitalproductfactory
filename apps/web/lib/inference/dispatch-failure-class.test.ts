@@ -13,6 +13,13 @@ function err(name: string, message: string, extra: Record<string, unknown> = {})
 }
 
 describe("structural failures — retrying cannot help", () => {
+  it.each([
+    err("NativeCliExecutionUncertainError", "Lost native response"),
+    { name: "NativeCliExecutionUncertainError", message: "Lost native response" },
+    "Native CLI execution on codex did not return a settled result. Review the existing execution before retrying.",
+  ])("does not redispatch an uncertain native execution across queue serialization", (error) => {
+    expect(classifyDispatchFailure(error, { attempt: 1 })).toMatchObject({ code: "execution-uncertain", retryable: false, shouldRedispatch: false });
+  });
   it("classifies an unmet agent capability floor, and names the capability", () => {
     const verdict = classifyDispatchFailure(
       err(

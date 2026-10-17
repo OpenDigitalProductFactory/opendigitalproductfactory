@@ -4,6 +4,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockPrisma = vi.hoisted(() => ({
+  platformConfig: { findUnique: vi.fn().mockResolvedValue(null) },
   platformDevConfig: { findUnique: vi.fn() },
   backlogItem: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn() },
   epic: { create: vi.fn() },

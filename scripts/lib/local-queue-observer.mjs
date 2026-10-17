@@ -327,10 +327,15 @@ export function findQueueWaiter({
   branch,
   sha,
   observerAlive = createObserverLivenessProbe(),
+  excludePids = [],
 }) {
+  // BI-F63D8202: the caller is still registered when it asks. Counting that
+  // pid would make the first claim look like a waiter that already exists.
+  const excluded = new Set(excludePids);
   const records = readObserverRecords(directory)
     .map(({ record }) => record)
-    .filter((record) => record.branch === branch && record.sha === sha);
+    .filter((record) => record.branch === branch && record.sha === sha)
+    .filter((record) => !excluded.has(record.pid));
   return {
     checked: true,
     alive: records.some((record) => observerAlive(record).alive),

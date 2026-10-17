@@ -128,6 +128,30 @@
     "saving": "Saving…"
   },
   "runtimeHealth": {
+    "capabilityServices": {
+      "heading": "Service requirements",
+      "explanation": "Optional inactivity: no health penalty.",
+      "empty": "No capability-owned service requirements are configured.",
+      "authorityUnavailable": "Capability authority is unavailable, so service requirements cannot be classified safely.",
+      "disagreement": "{$count :integer} capabilities disagree with the installation. Service health cannot be classified safely.",
+      "disagreementSummary": "View disagreements ({$count :integer})",
+      "disagreementStates": "Installation: {$installation}; recorded state: {$recorded}.",
+      "installEnabled": "enabled",
+      "installDisabled": "disabled",
+      "stateMissing": "not recorded",
+      "stateActive": "active",
+      "reconcileAdvice": "Reconcile recorded state and installation through the governed capability transition.",
+      "inactiveSummary": "Inactive services ({$count :integer})",
+      "aggregateLabel": "Platform capability health: {$value}",
+      "requiredAdvice": "Recovery: {$action}",
+      "availabilityLabel": "Availability: {$value}",
+      "availability": {
+        "available": "Available",
+        "unavailable": "Unavailable",
+        "inactive": "Inactive",
+        "unknown": "Unknown"
+      }
+    },
     "intro": "Live model selection and unresolved build phases, using the build's own routing logic.",
     "unavailableTitle": "Phase routing unavailable",
     "unavailableDetail": "No phase evidence returned. Retry diagnostics.",
@@ -152,12 +176,12 @@
       "turningOn": "Monitoring is starting. This page updates when it finishes.",
       "turningOff": "Monitoring is stopping. This page updates when it finishes.",
       "needsAttention": "What is running does not match the setting.",
-      "unreconciled": "This install's capability record and its saved install state disagree, so monitoring cannot be changed safely yet."
+      "unreconciled": "This install's capability records are incomplete or were written for another release, so monitoring cannot be changed safely yet."
     },
     "reason": {
       "inFlight": "A change is already in progress.",
       "installUnknown": "The install state could not be read, so the switch is unavailable.",
-      "unreconciled": "Capability state needs reconciling first",
+      "unreconciled": "Capability records need repair first",
       "enabledMissing": "Monitoring is on, but these services are not running: {$services}",
       "disabledRunning": "Monitoring is off, but these services are still running: {$services}"
     },
@@ -167,6 +191,9 @@
     "readOnly": "You can see this setting, but changing it needs platform management access.",
     "turnOn": "Turn monitoring on",
     "turnOff": "Turn monitoring off",
+    "reconcileOff": "Match records: monitoring is off",
+    "reconcileOn": "Match records: monitoring is on",
+    "recordMismatch": "The platform's record for monitoring does not match what is running. Matching it changes no services.",
     "working": "Working…",
     "lastChange": {
       "heading": "Last change",
@@ -188,6 +215,10 @@
       "rollbackFailed": "The change failed and putting things back also failed: {$failure} (change {$transitionId}). Open runtime health.",
       "recoveryRequired": "An earlier change needs recovery before monitoring can be changed. Open runtime health.",
       "unreconciled": "Capability state needs reconciling first",
+      "hostStale": "The install changed while this page was open. Refresh and try again.",
+      "databaseStale": "The capability records changed while this page was open. Refresh and try again.",
+      "requestMismatch": "The request no longer matches what the platform sees. Refresh and try again.",
+      "protocolUnavailable": "The host's change tool could not be verified, so nothing was changed. Open runtime health.",
       "unknown": "The platform returned an answer this page does not recognise."
     }
   }

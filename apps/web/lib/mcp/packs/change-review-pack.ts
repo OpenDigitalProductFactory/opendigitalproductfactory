@@ -3,6 +3,7 @@ import { prisma, type Prisma } from "@dpf/db";
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
 import { enqueueSemanticReview, retryPersistedSemanticReview } from "@/lib/change-review/semantic-review-background";
 import { resolveFailureAnalysisEvidence } from "@/lib/change-review/failure-analysis-evidence";
+import { validateFailureAnalysis } from "@/lib/change-review/failure-analysis";
 import { createSemanticReviewRequest, REVIEW_ARTIFACT_TYPES, REVIEW_RISKS, REVIEW_PROFILES } from "@/lib/change-review/semantic-review-request";
 import {
   runSemanticChangeReview,
@@ -113,11 +114,11 @@ const definitions: ToolDefinition[] = [{
   buildPhases: ["review", "ship"],
 }, {
   name: "retry_semantic_review",
-  description: "Confirm one bounded replacement inference for your own waiting native semantic review. Replacement can incur another provider charge. Within the window, reuses the original immutable request, deadline and attempt budget. For expiry only, remediationVerificationId plus expectedRequestDigest requests one bounded successor backed by fresh scoped runtime health evidence. Current requester and saved authority are rechecked. Does not override an authorization refusal or restart unrelated tasks.",
+  description: "Confirm one bounded replacement inference for your own waiting native semantic review. Replacement can incur another provider charge. Within the window, reuses the original immutable request, deadline and attempt budget. An eligibility refusal requires remediationVerificationId plus expectedRequestDigest and fresh scoped health evidence with semanticReviewRecovery.eligibilityVerified=true. For expiry, that evidence requests one bounded successor. Current requester and saved authority are rechecked. Does not override an authorization refusal or restart unrelated tasks.",
   inputSchema: { type: "object", properties: {
     taskRunId: { type: "string", description: "Existing TR-* identity returned by review_semantic_change." },
     confirmed: { type: "boolean", description: "Explicit confirmation that replacement inference may incur another provider charge." },
-    remediationVerificationId: { type: "string", description: "Passed runtime health verification for settled execution and infrastructure remediation on this Workroom; required for an expired successor." },
+    remediationVerificationId: { type: "string", description: "Passed runtime health verification for settled execution and infrastructure remediation on this Workroom; required for eligibility refusal or an expired successor. Eligibility recovery also requires semanticReviewRecovery.eligibilityVerified=true." },
     expectedRequestDigest: { type: "string", description: "Exact predecessor immutable request digest; required together with remediationVerificationId." },
   }, required: ["taskRunId", "confirmed"], additionalProperties: false },
   requiredCapability: "view_platform", executionMode: "immediate", sideEffect: true,
@@ -198,6 +199,16 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
     sensitivityFloor,
     mode: reviewMode(),
   };
+  const failureValidation = validateFailureAnalysis(operationInput.failureAnalysis,
+    operationInput.identity, operationInput.resolvedFailureEvidence ?? []);
+  if (!failureValidation.valid) {
+    return {
+      success: false,
+      error: "invalid_failure_analysis",
+      message: "Review was not started. Correct the failure analysis, reconcile the Workroom head, and cite current passing verification evidence bound to this Workroom and exact change.",
+      data: { reasons: failureValidation.reasons },
+    };
+  }
   let singleFlight: SemanticReviewSingleFlightClaim | null = null;
 
   try {

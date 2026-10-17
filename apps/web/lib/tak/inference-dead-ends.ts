@@ -22,6 +22,8 @@
 // belong in that budget.
 import { describeContextCapacityFailure } from "./context-capacity-failure";
 import { buildHumanHandoff } from "./escalation-ladder";
+import { classifyDispatchFailure } from "../inference/dispatch-failure-class";
+import { EXECUTION_UNCERTAIN_MESSAGE, executionUncertaintyFromError, type ExecutionUncertainty } from "../shared/execution-uncertainty";
 
 /** Routing eliminated every candidate — a real configuration question. */
 export function noEligibleModelHandoff(): string {
@@ -464,11 +466,13 @@ export type InferenceDeadEndKind =
   | "busy"
   | "required-terminal-writer-not-enforceable"
   | "terminal-writer-missing"
+  | "execution-uncertain"
   | "unknown";
 
 export type InferenceDeadEndOutcome = {
   kind: InferenceDeadEndKind;
   message: string;
+  executionUncertainty?: ExecutionUncertainty;
   /** BI-50B0C471: set on `terminal-writer-missing` when a capacity/busy
    * deferral, not the writer contract, stopped a reviewer after banked reads. */
   deferredBy?: "capacity" | "busy";
@@ -498,6 +502,10 @@ export function describeToolRouteFailureOutcome(
   error?: unknown,
 ): InferenceDeadEndOutcome {
   const msg = errorMessage ?? "";
+  if (classifyDispatchFailure(error ?? msg).code === "execution-uncertain") {
+    return { kind: "execution-uncertain", message: EXECUTION_UNCERTAIN_MESSAGE,
+      executionUncertainty: executionUncertaintyFromError(error) };
+  }
   if (isRequiredTerminalWriterNotEnforceable(error, msg)) {
     return {
       kind: "required-terminal-writer-not-enforceable",

@@ -229,7 +229,7 @@ type GatewayFlagDb = {
   };
 };
 
-async function flagUnconfiguredGateways(db: GatewayFlagDb): Promise<void> {
+export async function flagUnconfiguredGateways(db: GatewayFlagDb): Promise<void> {
   let gateways: Awaited<ReturnType<GatewayFlagDb["inventoryEntity"]["findMany"]>>;
   try {
     gateways = await db.inventoryEntity.findMany({
