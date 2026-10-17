@@ -814,7 +814,10 @@ test("gate-worktree.mjs does not clear freshness evidence until it owns the loca
         "--sha", "candidate-sha",
         "--worktree", dir,
         "--no-push",
-        "--lease-wait-seconds", "0",
+        // Reach the host fence with a live admission deadline. A zero deadline
+        // now correctly refuses before admission and cannot exercise this fence.
+        "--lease-wait-seconds", "15",
+        "--poll-seconds", "0.05",
         "--mcp-url", mcp.url,
       ],
       {
