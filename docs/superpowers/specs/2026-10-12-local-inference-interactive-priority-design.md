@@ -21,16 +21,16 @@ ratifies only this narrow admission repair. The broader
 
 ### Objectives
 
-- **OBJ-LIP-1 — One local admission home.** Portal HTTP inference and the local
+- **OBJ-LIP-1:** One local admission home. Portal HTTP inference and the local
   sandbox build engine use `compute:local-inference`; no second local semaphore
   may hold a slot while waiting on that lane.
-- **OBJ-LIP-2 — Interactive priority with fairness.** A queued interactive turn
+- **OBJ-LIP-2:** Interactive priority with fairness. A queued interactive turn
   starts before newer autonomous work, while aging prevents an autonomous waiter
   from being postponed indefinitely.
-- **OBJ-LIP-3 — Probe after admission.** Docker Model Runner and host-GPU probes
+- **OBJ-LIP-3:** Probe after admission. Docker Model Runner and host-GPU probes
   run only after the caller owns the local lane. Internal use therefore queues;
   an external owner still produces the typed honest-busy result.
-- **OBJ-LIP-4 — Observable and verifiable.** Tests reproduce the old immediate
+- **OBJ-LIP-4:** Observable and verifiable. Tests reproduce the old immediate
   `local-runner-busy` outcome, prove the corrected ordering and fairness, and the
   live portal executes an attached governed DPF tool while autonomous local work
   is active or queued.
@@ -258,6 +258,9 @@ plans, structured assistant tool calls/tool-role history, changed dynamic tool
 surfaces, unknown failures, execution uncertainty and all post-tool work.
 Authentication, configuration, missing models, privacy/capability refusal and
 context overflow remain terminal. Generic error-text matching is insufficient.
+Return a distinct waiting result before inline review, reflection, surface
+guidance or final-response postprocessing; waiting copy must not trigger another
+inference or be persisted as a completed answer.
 
 Persist a versioned, digest-bound checkpoint of the **pending dispatch**, not a
 fresh `sendMessage` invocation. It contains the exact message snapshot and
@@ -339,6 +342,11 @@ pass. Proposed extension criteria:
 
 | Acceptance | Objective | Required outcome |
 | --- | --- | --- |
+| AC-LIP-1 | OBJ-LIP-1 | Portal HTTP inference and the local sandbox build engine use one `compute:local-inference` admission authority; local HTTP dispatch does not hold a second semaphore while waiting for that lane. |
+| AC-LIP-2 | OBJ-LIP-2 | With one autonomous holder, one older autonomous waiter and one interactive waiter, execution order is holder → interactive → autonomous; bounded aging still lets an old autonomous waiter progress under repeated interactive arrivals. |
+| AC-LIP-3 | OBJ-LIP-3 | Docker Model Runner and host-GPU probes execute only after local-lane admission, so internal contention queues while a genuinely external or unexpected owner still returns the existing typed busy result. |
+| AC-LIP-4 | OBJ-LIP-4 | Aggregate queue-depth, cancellation/failure cleanup, idempotent release, single-GPU exclusion and remote-provider admission tests pass without weakening the host safety fence. |
+| AC-LIP-5 | OBJ-LIP-4 | On the canonical live install, an interactive coworker selects and executes an attached governed DPF tool within its admission budget while autonomous local inference is active or queued; Operations evidence distinguishes queued internal contention from external host busy. |
 | AC-LIR-1 | OBJ-LIP-4 | A successfully acknowledged interactive local turn has one durable accepted-message/TaskRun/reply identity and recoverable original input, including when event emission fails. |
 | AC-LIR-2 | OBJ-LIP-4 | A proven eligible local admission expiry persists a same-turn capacity wait with completedAt null and resumes the exact pending dispatch automatically after capacity recovers. |
 | AC-LIR-3 | OBJ-LIP-4 | Duplicate deliveries, process restart and later user messages do not duplicate execution, change original context or create a second final reply. |

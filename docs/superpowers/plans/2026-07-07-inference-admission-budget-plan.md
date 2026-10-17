@@ -141,6 +141,9 @@ not independently shippable features. Reuse BI-285EF102 and existing jobs,
 TaskRun, TaskMessage and capacity-wait infrastructure. No new schema or scheduler
 is proposed. Reassess classification/sensitivity through the governed scope
 claim before source implementation; do not retain medium by assumption.
+The 2026-10-17 governed design claim now declares delivery-large@1.0.0;
+readiness confirms elevated sensitivity for the send-route boundary. Required
+independent design/security and other applicable large-shape gates remain owed.
 
 ### Ordered implementation and proof
 
@@ -170,7 +173,9 @@ claim before source implementation; do not retain medium by assumption.
    dispatch, reject missing/unknown fields and assert excluded tool/intrinsic
    state empty. Typed observed local
    admission expiry alone can park; every tool/intrinsic start commits the
-   no-replay fence first. Test the rejected-answer/corrective-dispatch case,
+   no-replay fence first. Prove a waiting result exits before inline review,
+   reflection or final-answer persistence can spend more inference or report
+   completion. Test the rejected-answer/corrective-dispatch case,
    load_tools and execution-plan exclusions, failed fence persistence, unknown
    or execution-uncertain outcomes, post-tool refusal and missing wait timing.
 5. **Resume with the existing executor.** Extend the jobs outbox/reconciler and
