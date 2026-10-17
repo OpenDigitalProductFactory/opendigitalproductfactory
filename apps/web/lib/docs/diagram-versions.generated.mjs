@@ -28,7 +28,7 @@ export const DIAGRAM_VERSIONS = Object.freeze({
   "architecture/capability-driven-runtime-profiles/0": "5eab6fa2a09f0ded",
   "architecture/four-portfolio-archetype-ai-workforce-operating-standard/0": "f234f3ac4dd4139b",
   "architecture/four-portfolio-archetype-ai-workforce-operating-standard/1": "e36c31755fcf59c8",
-  "architecture/gated-permissions-process/0": "dd4bc1fc98b77b70",
+  "architecture/gated-permissions-process/0": "8d09327209e89345",
   "architecture/gated-permissions-process/1": "2973c45b3e227f32",
   "architecture/gated-permissions-process/2": "37ba8a6cc47229d1",
   "architecture/platform-overview/0": "9c708514e7702ebd",

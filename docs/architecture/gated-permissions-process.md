@@ -261,6 +261,16 @@ other. A high decision score does not make a tool reachable, and holding a grant
 decided.
 
 ```mermaid
+---
+config:
+  flowchart:
+    nodeSpacing: 400
+    subGraphTitleMargin:
+      top: 0
+      bottom: 24
+  themeCSS: |
+    g.cluster[id$="-permission"] .cluster-label p { max-width: 200px; white-space: normal; padding-right: 224px; }
+---
 flowchart TB
     req["An agent reaches for a tool<br/>coworker or external agent, identified by GAID"]
 
