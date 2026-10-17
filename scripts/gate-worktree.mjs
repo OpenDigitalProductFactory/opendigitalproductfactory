@@ -25,6 +25,7 @@ import { loadEvidencePolicy } from "./lib/ci-evidence-plan.mjs";
 import { resolveMcpCredential } from "./lib/mcp-credential.mjs";
 import { readQuiescenceStatus, quiescenceBlocksWrites, quiescenceWait } from "./lib/gate-quiescence.mjs";
 import { readFailureEvidenceBinding } from "./lib/semantic-review-gate.mjs";
+import { sandboxDecisionForHead } from "./derived-artifacts-gate.mjs";
 
 // BI-46B03CAE — the lease-queue MCP calls cost more than mcpCall's 10s default.
 //
@@ -1714,6 +1715,18 @@ async function main() {
     // queue row for the same candidate. A non-conflict identity loss stays
     // source drift.
     if (disposition.action === "source-drift") stopOnSourceDrift(disposition.reasons);
+  }
+
+  // BI-A254A94C: a docs-only diff the pre-push gate would exempt must not take
+  // the single sandbox slot. A resumed claim already holds a place in line.
+  if (!options.finalizeEvidence && !options.resumeLeaseId) {
+    const sandbox = sandboxDecisionForHead();
+    if (sandbox) {
+      process.stdout.write(`gate-worktree: ${sandbox.message}\n`);
+      if (!sandbox.claim) {
+        process.exit(0); // exit-0: docs-only diff; no lease claimed
+      }
+    }
   }
 
   if (!options.finalizeEvidence && !commandSpec && !allowStub) {
