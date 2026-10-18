@@ -28,7 +28,7 @@ import { resolveAgentWorkroomAccess } from "@/lib/work-management/workroom-agent
 import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-nesting";
 import { createFidelityCheckpoint, claimFidelityObservation, completeFidelityObservation, fidelityRunIdFor, fidelityCohorts,
   type FidelityObservation as Observation } from "./tool-fidelity-checkpoint";
-import { GOLDEN_CASES, scoreToolFidelityExecution, scoreToolFidelitySelection } from "@/lib/routing/tool-fidelity-harness";
+import { GOLDEN_CASES, buildToolFidelitySurface, scoreToolFidelityExecution, scoreToolFidelitySelection } from "@/lib/routing/tool-fidelity-harness";
 
 type Selection = { endpointId: string; modelId: string; providerConnectionId: string;
   fidelityRunId?: string; fidelityObservationIndex?: number };
@@ -199,17 +199,9 @@ export async function runLocalToolFidelityDiagnostic(
     };
     armTimer();
     try {
-    // Prefer a correct read that needs no target identifiers absent from the prompt.
-    // Every entry still comes from the original authorized catalog; no stub padding.
-    const pinned = new Set(GOLDEN_CASES.map(golden => {
-      const matches = catalog.filter(tool => golden.correctToolNames.includes(tool.name));
-      return (matches.find(tool => !Array.isArray(tool.inputSchema.required) || tool.inputSchema.required.length === 0) ?? matches[0])?.name;
-    }));
-    const surface: ToolDefinition[] = [...catalog.filter(tool => pinned.has(tool.name)), ...catalog.filter(tool => !pinned.has(tool.name))].slice(0, surfaceSize);
-    const validSurface = surface.length === surfaceSize && new Set(surface.map(tool => tool.name)).size === surfaceSize
-      && GOLDEN_CASES.every(golden => surface.some(tool => golden.correctToolNames.includes(tool.name)));
+    const surface = buildToolFidelitySurface(catalog, surfaceSize);
       await withInferenceCancellation(controller.signal, () => withInferenceAuthorityCheck(verifyCurrent, async () => {
-        if (!validSurface) { observation.reason = "insufficient_authorized_catalog"; return; }
+        if (!surface) { observation.reason = "insufficient_authorized_catalog"; return; }
         const before = await readIdentity();
         if (!before || !await verifyCurrent()) {
           observation.reason = "identity_catalog_or_authority_changed"; return;

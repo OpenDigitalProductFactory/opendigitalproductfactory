@@ -134,7 +134,7 @@ describe("bounded local fidelity diagnostic", () => {
     await runLocalToolFidelityDiagnostic(selection, "u", context());
     expect(mocks.call.mock.calls.every(call => (call[2] as unknown[]).length === 1)).toBe(true);
   });
-  it("keeps a correct context-free read available when the first alternative needs an unknown target", async () => {
+  it("pins the current-build reader ahead of same-class workroom readers and unrelated catalog entries", async () => {
     const tools = await mocks.tools();
     mocks.tools.mockResolvedValue([...tools.map((tool: { name: string }) => tool.name === "get_workroom"
       ? { ...tool, inputSchema: { type: "object", properties: { capsuleId: { type: "string" } }, required: ["capsuleId"] } } : tool),
@@ -145,12 +145,13 @@ describe("bounded local fidelity diagnostic", () => {
     mocks.call.mockImplementation(async (_provider: string, _model: string, messages: Array<{ content: string }>) => {
       const golden = GOLDEN_CASES.find(c => c.prompt === messages[0]?.content)!;
       return { content: "", finishReason: "tool_calls", toolCalls: [{ name: golden.taskClass === "capsule-status"
-        ? "list_workrooms" : golden.correctToolNames[0], arguments: {} }], raw: { model: "ai/test" } };
+        ? "get_build_progress_visibility" : golden.correctToolNames[0], arguments: {} }], raw: { model: "ai/test" } };
     });
     const result = await completeMatrix();
     expect(result.data).toMatchObject({ qualified: true });
     const firstSurface = mocks.call.mock.calls[0]![4] as Array<{ function: { name: string } }>;
-    expect(firstSurface.map(tool => tool.function.name)).toContain("list_workrooms");
+    expect(firstSurface.map(tool => tool.function.name)).toContain("get_build_progress_visibility");
+    expect(firstSurface.map(tool => tool.function.name)).not.toContain("list_workrooms");
     expect(firstSurface).toHaveLength(8);
   });
   it("rejects a cloud selection before inference or test-run creation", async () => {
@@ -191,6 +192,19 @@ describe("bounded local fidelity diagnostic", () => {
     mocks.tools.mockResolvedValue([]);
     expect((await runLocalToolFidelityDiagnostic(selection, "u", context())).data).toMatchObject({ qualified: false });
     expect(mocks.call).not.toHaveBeenCalled();
+  });
+  it("leaves a missing question-specific reader unrun despite enough class-level alternatives", async () => {
+    const tools = await mocks.tools();
+    mocks.tools.mockResolvedValue([...tools.filter((tool: { name: string }) => tool.name !== "resolve_model_selection"),
+      ...["get_build_engine_readiness", "get_self_upgrade_queue_status"].map(name => ({ name,
+        description: "Wrong same-class reader", sideEffect: false, requiredCapability: null,
+        inputSchema: { type: "object", properties: {} } }))]);
+    const result = await runLocalToolFidelityDiagnostic(selection, "u", context());
+    expect(result.data).toMatchObject({ qualified: false,
+      observations: [expect.objectContaining({ status: "unrun", reason: "insufficient_authorized_catalog" }),
+        ...Array.from({ length: 44 }, () => expect.anything())] });
+    expect(mocks.call).not.toHaveBeenCalled();
+    expect(reads).not.toHaveBeenCalled();
   });
   it("ends the admitted run when its deadline expires, without retry or fallback", async () => {
     vi.useFakeTimers(); vi.setSystemTime(0);
@@ -344,9 +358,9 @@ describe("bounded local fidelity diagnostic", () => {
     expect(mocks.call).not.toHaveBeenCalled();
   });
   it("does not qualify duplicate audit IDs as independent observations", async () => {
-    reads.mockImplementation(async () => {
+    reads.mockImplementation(async (name, parameters) => {
       const id = "same-read";
-      rows.set(id, { id, toolName: "query_backlog", parameters: {}, userId: "u", agentId: "agent", threadId: "thread",
+      rows.set(id, { id, toolName: name, parameters, userId: "u", agentId: "agent", threadId: "thread",
         taskRunId: null, success: true, durationMs: 1, result: { success: true } });
       return { success: true, message: "ok", governance: { toolExecutionId: id } };
     });
@@ -506,6 +520,21 @@ describe("bounded local fidelity diagnostic", () => {
   it("rejects continuation without a run ID before creating a checkpoint", async () => {
     expect((await runLocalToolFidelityDiagnostic({ ...selection, fidelityObservationIndex: 1 }, "u", context())).success).toBe(false);
     expect(mocks.create).not.toHaveBeenCalled(); expect(mocks.call).not.toHaveBeenCalled();
+  });
+  it("does not resume an existing cohort after its golden expectation changes", async () => {
+    const first = await runLocalToolFidelityDiagnostic(selection, "u", context());
+    const golden = GOLDEN_CASES[4]!;
+    const original = golden.correctToolNames;
+    try {
+      golden.correctToolNames = [...original, "another_reader_for_a_different_contract"];
+      const changed = await runLocalToolFidelityDiagnostic({ ...selection,
+        fidelityRunId: first.data!.runId as string, fidelityObservationIndex: 1 }, "u", context());
+      expect(changed.success).toBe(false);
+      expect(changed.message).toContain("cohort identity");
+      expect(mocks.call).toHaveBeenCalledTimes(1);
+      expect(mocks.create).toHaveBeenCalledTimes(1);
+      expect(checkpointRow!.results.observations.filter((entry: { status: string }) => entry.status === "passed")).toHaveLength(1);
+    } finally { golden.correctToolNames = original; }
   });
   it.each([undefined, () => { throw new Error("unknown room"); }])("does not treat absent or failed trusted room getters as unroomed", async getter => {
     expect((await runLocalToolFidelityDiagnostic(selection, "u", { ...context(), governedRoomAuthority: getter })).success).toBe(false);

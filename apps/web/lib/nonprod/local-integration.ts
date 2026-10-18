@@ -159,10 +159,12 @@ export async function recordLocalIntegrationResult(
   // keeps a head+tail excerpt (still a string, so every existing reader works)
   // plus {sha256, storageKey, sizeBytes}; the bytes live once in the
   // content-addressed blob store, shared with the ToolExecution ledger copy.
-  const { offloadEvidenceOutput } = await import("@/lib/evidence/bounded-evidence-output");
-  const boundedEvidence = await offloadEvidenceOutput(input.evidence, {
+  const { offloadEvidenceOutput, projectLocalCiObservationTails } = await import("@/lib/evidence/bounded-evidence-output");
+  const blobOptions = {
     ...(dependencies.writeEvidenceBlob ? { writeBlob: dependencies.writeEvidenceBlob } : {}),
-  });
+  };
+  const projectedEvidence = await projectLocalCiObservationTails(input.evidence, blobOptions);
+  const boundedEvidence = await offloadEvidenceOutput(projectedEvidence, blobOptions);
   const evidenceObject = boundedEvidence && typeof boundedEvidence === "object"
     && !Array.isArray(boundedEvidence)
     ? boundedEvidence as Record<string, unknown>
