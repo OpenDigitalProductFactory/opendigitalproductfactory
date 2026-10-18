@@ -67,6 +67,10 @@ unit to a complete work practice. Those read-only design inputs establish no
 new implementation, production or publication authority. Their selected PR
 study is a design hypothesis, not measured interruption rates or a reproduced
 universal cause; this map does not adopt those claims as runtime evidence.
+The later `docs/ROUTING-AND-EXECUTION.md` and
+`research/routing-execution-study.md` supply routing/recovery acceptance input
+within the same profile, runtime and Workroom boundaries. Their historical PR
+accounts were not independently reproduced here.
 
 The package homes already exist: `packages/types` owns portable representation;
 `packages/validators` owns Zod contracts and pure validation/reference behavior;
@@ -380,6 +384,53 @@ export it as a passed portable qualification. Relevant characterization includes
 `mcp/independent-review-packet-roundtrip.test.ts`,
 `change-review/semantic-review-request.test.ts` and
 `work-management/coordinator-eligibility.test.ts`; these were inspected, not run.
+
+**Routing through accepted stage result.** Follow the existing
+[routing document map](../../architecture/ai-routing-document-map.md), not a new
+router programme. `routing/activity-contract.ts`, `routing/request-contract.ts`
+and `inference/route-contract-builder.ts` already carry activity/tool/context and
+token requirements, terminal-writer obligation, data constraints and preferences.
+`routing/execution-plan.ts` binds served budgets and harness settings.
+`pipeline-v2.ts`, `provider-account-candidates.ts`,
+`inference-dispatch-guard.ts` and `resolve-execution-adapter.ts` retain selection,
+account/channel proof, current payload screening and transport capability.
+`tak/native-mcp-executions.ts`, canonical review receipts and existing
+Workroom/queue resource owners retain result, dispatch and capacity custody.
+These modules include web aliases, Node hashing, Prisma, credential and queue
+coupling; characterize the selected responsibility and real callers, not a copy
+of the entire subsystem.
+
+The portable boundary must join exact activity/readers/tools/output and effective
+context/reasoning/answer budgets to hard job/data/JSI eligibility, then versioned
+preferences, exact account/channel/model/adapter/composition and current canonical
+admission. A route selection is advisory data, not a permit or an automatic
+human-approval object. Prove one fenced dispatcher/resource owner in the actual
+supported topology and recover the authenticated exact-subject native result;
+optional route telemetry cannot become completion authority. Preserve existing
+calibration/quality/capacity compatibility separately from a qualified job floor.
+Current account checks include legacy absent-connection and default-account
+exceptions. Their existence is not proof of universal exact-account qualification;
+record their compatibility/adoption disposition rather than exporting that claim.
+Request estimates, input-order ties and recipe exploration also need explicit
+disposition before claiming repeatable qualified selection from fixed inputs.
+
+Keep `NativeCliExecutionUncertainError` and its fallback hold. A quota observation
+does not prove no effect. Fresh eligible work and proven-not-submitted/no-effect
+attempts may use a current permitted qualified alternative; an unknown attempt
+needs original effect reconciliation. Retries, probes, continuations and fallback
+share the logical job budget; unexecuted capacity wait is not a writer attempt.
+Keep effect/attempt custody and unresolved cost distinct from compute capacity:
+only its qualified resource owner may release a lease on trusted liveness/fencing
+facts, without implying prior effects settled. No new resource-release behavior
+or historical settlement is qualified by this proposal.
+
+The first profile/runtime proof is one software author/reviewer composition,
+exact artifact/result and one allowed alternate under failure, with actual caller
+migration and displaced interpretation removed. Establish that path before
+provider breadth, learned cost ranking or GPU optimization. This is later
+OP-01/WP-01 integration work, not extra scope in the first graph move. Provider
+doubles prove only protocol cases; real account/model/harness fitness and safe
+recovery remain unqualified. DPF2 has no implemented router/provider integration.
 
 ## 5. Trust contracts and runtime boundaries
 

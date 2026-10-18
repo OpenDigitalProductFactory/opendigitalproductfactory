@@ -310,6 +310,45 @@ Characterize existing `mcp/independent-review-packet-roundtrip.test.ts`,
 absent-scheme `not-applicable` compatibility without counting it as qualification
 for the portable consumer.
 
+### Routing and result integration within OP-01/WP-01
+
+Reuse ActivityContract/RequestContract and `inference/route-contract-builder.ts`,
+existing pipeline/account proofs, dispatch screening, adapter capability and
+native-result reconciliation. Follow the current routing document map and
+existing task-aware routing work. Selectively separate pure contracts/planning
+from Prisma, queue, credentials and installation adapters; migrate a real caller
+and retire its displaced interpretation. No new router service/programme, eighth
+family or expansion of CT-WK is implied.
+
+First prove one software author/reviewer composition with exact source/result and
+one permitted qualified alternative before cost/GPU/provider-breadth work. Join
+actual readers/tools/output and effective context/reasoning/answer budgets; hard
+job/data/JSI eligibility before versioned preference; exact provider/account/
+channel/model/adapter/composition; current admission and one fenced dispatch/
+resource owner; authenticated native result and restart/recovery. A selection
+proposal is advisory data, not `executionMode: proposal` or a new human prompt.
+
+Use synthetic provider doubles for account/channel isolation, capacity wait,
+wrong subject/runtime, competing drivers/module copies, persistence failure,
+structural refusal and committed-native-result recovery.
+Repeatability cases pin requirement/observation/policy versions and injected time,
+then reorder candidates. Current estimate, tie-order and recipe-exploration
+behavior is compatibility to characterize, not an already-met guarantee.
+Fresh eligible work, or attempts proven not submitted or without applicable
+effects, may use an allowed current alternative. Unknown effects retain original
+custody and the existing uncertainty guard. Retries/probes/continuations/
+fallback share one logical budget; waiting alone consumes no unexecuted writer
+attempt. Release compute only through its qualified resource owner on trusted
+liveness/fencing evidence, retaining effect uncertainty and unresolved charges.
+Keep current conservative behavior until a tested replacement is admitted.
+
+Then verify one actual enforcing composition and alternate when the runtime
+boundary is qualified. These integration cases and the consumer's RT-01–RT-12
+remain planned/unrun. They are neither a claim of current DPF2 routing nor a new
+gate that blocks the initial move-only graph extraction. Unknown tool support,
+soft capacity restoration and best-effort telemetry cannot establish job adequacy,
+override hard restrictions or record authoritative completion.
+
 ## Source characterization actually run
 
 Managed dependency bootstrap reported `compile-ready`, pinned pnpm `10.33.2`, no
