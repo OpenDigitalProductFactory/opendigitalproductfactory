@@ -120,7 +120,7 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
       state.lockedArtifact = null;
       await pool.query(`TRUNCATE ${tables.map(table => `"${table}"`).join(",")}`);
       await db.organization.create({ data: { orgId: "fixture-org", slug: "fixture-org", name: "Fixture" } });
-      await db.backlogItem.create({ data: { itemId: common.itemId, title: "Fixture", status: "proposed", type: "product", workType: "feature", scopeKind: "platform" } });
+      await db.backlogItem.create({ data: { itemId: common.itemId, title: "Fixture", status: "open", type: "product", workType: "feature", scopeKind: "platform" } });
       await db.workroom.create({ data: { capsuleId: workroomRef.workroomId, title: "Fixture", objective: "Fixture", source: "external-adoption",
         backlogItemId: common.itemId, createdByPrincipalId: "fixture-author",
         repositoryFullName: artifactRef.repositoryFullName, headBranch: workroomRef.branchName, headSha: artifactRef.commitSha } });
