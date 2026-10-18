@@ -432,6 +432,42 @@ OP-01/WP-01 integration work, not extra scope in the first graph move. Provider
 doubles prove only protocol cases; real account/model/harness fitness and safe
 recovery remain unqualified. DPF2 has no implemented router/provider integration.
 
+**Baseline service, cache and accounting contract.** The first OP-01/WP-01
+routing proof includes service/cache observations, temporary-limit handling and
+usage/cost semantics; only broader optimization waits. Rank qualified eligible
+compositions by the activity's accepted-job objective and funded envelope,
+including queue, cold load/prefill, first useful output, full completion and likely
+repair. Use bounded affinity/switching margin. Warmth and continuity are observed
+or estimated; resident weights prove neither compatible KV nor an available slot.
+Keep cache partitions and exact model/account/adapter/source/tool/policy versions;
+cached context still consumes context capacity. No cache hint can override current
+authority, hard job/data/JSI requirements, independence or real limits. Import no
+universal vendor cache lifetime, price or savings claim.
+
+Keep upstream account/model/proven shared-pool limits, local compute contention
+and funded company budget with their existing owners. Known reset/retry evidence,
+bounded probes/backoff and fair admission must avoid repeated exhausted-pool
+dispatch and reset stampedes. Credentials alone do not prove independent quota.
+Unknown resets and prior effects remain unknown; capacity recovery adds no funds.
+
+Useful incumbent assets include `routing/anthropic-cache.ts`, prompt boundary,
+adapter usage/telemetry, provider-capacity scopes and existing finance/usage
+owners. `cost-ranking.ts` estimates ordinary input/output; `ai-inference.ts`
+records cache metrics/adapter telemetry but drops those fields from its returned
+InferenceResult. `logTokenUsage` accepts ordinary tokens and can default missing
+provider prices/cost to zero. These are inspected contract gaps, not reproduced
+live billing failures. Preserve ordinary input, cache reads/writes, output/reasoning
+and provider-total inclusion semantics without double counting. Bind logical job
+and exact attempt/account/channel/model to versioned price/currency and estimated,
+observed, reconciled or unknown cost. Reconcile late usage idempotently; probes,
+warmup, failures, retries and alternatives share the job envelope. Unknown is not
+free. Separate subscription allocation, marginal API charges and local compute
+burden as views of existing owners; add no router/cache/billing service or ledger.
+Reuse `inference/budget-gate.ts`, `portfolio/budget-reservation.ts`, `TokenUsage`,
+`AdapterRunTelemetry`, `AgentBudgetEvent` and `BudgetReservation`. Existing daily
+token checks and portfolio-point reservations do not prove atomic per-job money
+reservation or late/duplicate usage settlement; that qualification remains unrun.
+
 ## 5. Trust contracts and runtime boundaries
 
 **Already portable.** `packages/validators/src/trusted-agent-contracts.ts` and

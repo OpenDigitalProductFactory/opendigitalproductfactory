@@ -321,8 +321,9 @@ and retire its displaced interpretation. No new router service/programme, eighth
 family or expansion of CT-WK is implied.
 
 First prove one software author/reviewer composition with exact source/result and
-one permitted qualified alternative before cost/GPU/provider-breadth work. Join
-actual readers/tools/output and effective context/reasoning/answer budgets; hard
+one permitted qualified alternative. Baseline service/cache/limit and usage/cost
+semantics belong in this proof; broader optimization/GPU/provider breadth follows.
+Join actual readers/tools/output and effective context/reasoning/answer budgets; hard
 job/data/JSI eligibility before versioned preference; exact provider/account/
 channel/model/adapter/composition; current admission and one fenced dispatch/
 resource owner; authenticated native result and restart/recovery. A selection
@@ -343,11 +344,41 @@ liveness/fencing evidence, retaining effect uncertainty and unresolved charges.
 Keep current conservative behavior until a tested replacement is admitted.
 
 Then verify one actual enforcing composition and alternate when the runtime
-boundary is qualified. These integration cases and the consumer's RT-01–RT-12
+boundary is qualified. These integration cases and the consumer's RT-01–RT-18
 remain planned/unrun. They are neither a claim of current DPF2 routing nor a new
 gate that blocks the initial move-only graph extraction. Unknown tool support,
 soft capacity restoration and best-effort telemetry cannot establish job adequacy,
 override hard restrictions or record authoritative completion.
+
+The first routing proof also carries the following baseline contract cases,
+within OP-01/WP-01 rather than CT-WK:
+
+- Compare warm/queued and cold/available qualified routes under actual interactive
+  or background service objectives, with measured/estimated queue, cold-load,
+  prefill, first useful output, full accepted result and repair costs. Bounded
+  affinity must yield to hard constraints; no duplicate cache benefit in ranking.
+- Exercise cache hit/miss/expiry/eviction, changed model/tool/source/policy and
+  authorized partitions. Keep weight residency, KV/prefix reuse and free execution
+  slots separate. Cached input remains in the served context budget. Use tested
+  adapter-specific cache semantics, never a universal lifetime or price.
+- Separate upstream account/model/shared-pool limits, local compute and funded
+  budget. Use trusted reset/retry evidence, bounded fair wakes/probes and existing
+  admission ownership to avoid stampedes. Unknown reset stays unknown; no quota
+  reset, cache hit or alternate route settles unknown prior effects or adds funds.
+- Trace ordinary/cache-read/cache-write/output/reasoning/provider-total quantities
+  through adapter result, telemetry and existing usage/cost owners. Preserve
+  inclusion rules without double counting; unknown usage/price is unavailable,
+  not free. Test exact attempt/account/channel/model attribution, price version,
+  currency and estimated/observed/reconciled/unknown status; concurrent reservation,
+  duplicate and late settlement remain idempotent within the shared job budget.
+  Include probes, warmup, failures, repair and continuation. Keep subscription
+  allocation, marginal API charge and local compute burden as distinct views.
+
+Characterize existing prompt-cache, adapter usage/telemetry, cost-ranking and
+`logTokenUsage` boundaries before change. Cache fields reach adapter telemetry but
+are dropped from the current inference result/token-usage path, and missing prices
+can become zero cost. These inspected gaps need explicit migration/compatibility
+treatment, not a new cache/billing ledger or a claim of observed billing failure.
 
 ## Source characterization actually run
 
