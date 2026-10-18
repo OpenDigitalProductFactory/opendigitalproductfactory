@@ -4,16 +4,21 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../../../../../packages/db/generated/client/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { captureTaskExecutionFence } from "@/lib/shared/task-execution-fence";
+import { Prisma as fixturePrisma } from "@dpf/db";
 
 const state = vi.hoisted(() => ({ db: null as unknown as Record<string, unknown>,
   lockedArtifact: null as null | (() => Promise<void>) }));
-vi.mock("@dpf/db", async (original) => ({
-  ...await original<typeof import("@dpf/db")>(),
-  prisma: new Proxy({}, { get(_target, key) {
-    const value = state.db[key as string];
-    return typeof value === "function" ? value.bind(state.db) : value;
-  } }),
-}));
+vi.mock("@dpf/db", async (original) => {
+  const { Prisma } = await import("../../../../../packages/db/generated/client/client");
+  return {
+    ...await original<typeof import("@dpf/db")>(),
+    Prisma,
+    prisma: new Proxy({}, { get(_target, key) {
+      const value = state.db[key as string];
+      return typeof value === "function" ? value.bind(state.db) : value;
+    } }),
+  };
+});
 // Only external provenance/storage and reviewer lookup are injected. The two
 // production writers, their transaction/locks, receipts, baselines and pins run
 // against real PostgreSQL. These fixtures are not independent review receipts.
@@ -62,6 +67,16 @@ function barrier() {
   const wait = new Promise<void>(resolve => { release = resolve; });
   return { wait, release };
 }
+
+function earlyWriterResult(result: { ok: boolean; code?: string; error?: string }) {
+  return new Error(`Writer returned before its PostgreSQL lock: ${JSON.stringify({
+    ok: result.ok, code: result.code, error: result.error?.slice(0, 1000),
+  })}`);
+}
+
+it("exposes the real Prisma transaction isolation helper before PostgreSQL admission", () => {
+  expect(fixturePrisma.TransactionIsolationLevel.Serializable).toBe("Serializable");
+});
 
 describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () => {
   let admin: Pool, pool: Pool, db: PrismaClient;
@@ -136,12 +151,12 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
     it.each(["hold", "unknown", "generation", "cancellation"])("appends nothing when %s wins the real row lock", async (change) => {
       const blocker = await pool.connect();
       await blocker.query("BEGIN");
-      let pending: Promise<unknown> | undefined;
+      let pending: ReturnType<typeof writer.run> | undefined;
       try {
         await displace(blocker, change);
         pending = writer.run();
         void pending.catch(() => undefined);
-        await waitForBlockedWriter();
+        await Promise.race([waitForBlockedWriter(), pending.then(result => { throw earlyWriterResult(result); })]);
         await blocker.query("COMMIT");
         expect(await pending).toMatchObject({ ok: false });
         expect(await verdictCount()).toBe(0);
@@ -157,7 +172,7 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
       const entered = barrier(), finish = barrier();
       state.lockedArtifact = async () => { entered.release(); await finish.wait; };
       const publication = writer.run();
-      await Promise.race([entered.wait, publication.then(result => { throw new Error(`Writer returned before its locked artifact read: ${result.ok}`); })]);
+      await Promise.race([entered.wait, publication.then(result => { throw earlyWriterResult(result); })]);
       const blocker = await pool.connect();
       let displacement: Promise<unknown> | undefined;
       try {
