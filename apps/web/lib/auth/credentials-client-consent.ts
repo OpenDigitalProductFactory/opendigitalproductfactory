@@ -24,7 +24,7 @@ import {
 } from "./oauth-identity-binding";
 import type { PublicScope } from "./oauth-public-scopes";
 
-type Db = Pick<typeof prisma, "authorityBinding" | "authorizationDecisionLog" | "$transaction">;
+type Db = Pick<typeof prisma, "$transaction">;
 
 export async function credentialsClientConsentBindingId(
   input: {
@@ -41,37 +41,42 @@ export async function credentialsClientConsentBindingId(
   },
   db: Db = prisma,
 ): Promise<string | null> {
-  if (!input.agentId) return null;
-
-  const candidates = await db.authorityBinding.findMany({
-    where: {
-      oauthPurpose: "consent", status: "active",
-      oauthUserId: input.userId, oauthClientId: input.clientRowId,
-      resourceRef: input.resource, appliedAgent: { agentId: input.agentId },
-    },
-    select: { id: true },
-    orderBy: { createdAt: "desc" },
-    take: 5,
-  });
-  for (const candidate of candidates) {
-    const consent = await resolveOAuthConsent({
-      bindingId: candidate.id, userId: input.userId, clientId: input.clientRowId,
-      resource: input.resource, scopes: input.scopes,
-    }, db as never);
-    if (consent && consent.agentId === input.agentId) return candidate.id;
-  }
+  const agentId = input.agentId;
+  if (!agentId) return null;
 
   try {
     return await db.$transaction(async (tx: Prisma.TransactionClient) => {
+      // Serialize first creation on the existing client, including the lookup.
+      const clients = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "OAuthClient" WHERE "id" = ${input.clientRowId} FOR UPDATE`;
+      if (clients.length !== 1) return null;
+      const [prior] = await tx.authorityBinding.findMany({
+        where: {
+          oauthPurpose: "consent", oauthUserId: input.userId, oauthClientId: input.clientRowId,
+          resourceRef: input.resource, appliedAgent: { agentId },
+        },
+        select: { id: true },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: 1,
+      });
+      if (prior) {
+        // Revocation or lost eligibility requires a new operator decision,
+        // never automatic replacement or fallback to an older consent.
+        const consent = await resolveOAuthConsent({
+          bindingId: prior.id, userId: input.userId, clientId: input.clientRowId,
+          resource: input.resource, scopes: input.scopes,
+        }, tx);
+        return consent?.agentId === agentId ? prior.id : null;
+      }
       const binding = await createOAuthConsentBinding({
         userId: input.userId, clientId: input.clientRowId, resource: input.resource,
-        agentId: input.agentId!, scopes: input.scopes,
+        agentId, scopes: input.scopes,
       }, tx);
       await tx.authorizationDecisionLog.create({ data: {
         authorityBindingId: binding.id,
         decisionId: `oauth-client-credentials-consent-${randomUUID()}`,
         actorType: "human", actorRef: input.userId, humanContextRef: input.userId,
-        agentContextRef: input.agentId, actionKey: "oauth_client_credentials_consent",
+        agentContextRef: agentId, actionKey: "oauth_client_credentials_consent",
         objectRef: input.resource, decision: "allow",
         rationale: {
           bindingId: binding.bindingId, clientId: input.publicClientId,

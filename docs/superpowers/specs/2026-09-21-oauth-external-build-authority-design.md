@@ -488,6 +488,13 @@ assistant, or one the rules reject, is issued an unbound token as before. Each
 new binding is logged as `oauth_client_credentials_consent`. Damaging,
 restricted and proposal-shaped actions still reach a person.
 
+First creation and lookup share a transaction that locks the existing OAuth
+client row. Concurrent grants therefore reuse the same binding. Lookup includes
+revoked consent and validates only the newest recorded binding; a revoked or
+ineligible binding cannot silently create a replacement or select an older one.
+A new operator decision is required to restore that consent. The token's scopes,
+current human permissions and assistant eligibility retain their existing caps.
+
 ### Complete proposal disclosure correction (BI-12E5DD91, 2026-10-13)
 
 Current baseline `e4edd79cd6cfa83ac00df4dd64494090573b3e23` preserves the

@@ -59,7 +59,7 @@ acceptance before completion. Never replay uncertain historical tasks.
 
 - Decision: atomic
 - Parent: BI-79D26E39
-- Receipt: blocked-by: the current truthful unpublished source head cannot resolve through the provider for immutable plan coverage; publish this branch-only checkpoint, then record coverage before production fixes.
+- Receipt: cmvd2i75h207001mmwnwju4p5
 - Rationale: consent capture, revocation preservation and serialization form one repair; tests, documentation and verification are phases of that repair.
 - Dependencies: none
 
@@ -69,3 +69,20 @@ publication and live verification are phases, not separate deliverables.
 Requirements AC-1 through AC-4; contract operator-bound-client-consent;
 flow client-credentials-to-consent-to-connection-delegation;
 verification consent-revocation-and-concurrent-first-grants.
+
+The checkpoint actually published1fa3760c4494bb4d126f3f533e857362f8be1bcc;
+all84 host guard groups passed in501.0s. Current coverage was recorded and checked
+valid before production edits, followed by implementation admission
+IRD-769AB447B6B4. The initial atomic receipt request incorrectly marked its phase
+independently shippable; validation refused it without a receipt, and the
+corrected sequencing-only request produced the receipt above. No earlier receipt
+or source identity was relabelled. New revocation and concurrency tests first
+failed4/9 on the original production code. The concurrency unit fixture models
+transaction lock ordering; it is not real PostgreSQL atomicity evidence.
+
+Corrected source passed267 tests across15 suites, both production/test TypeScript7
+programs, prose/style/token checks and all14 diff-scoped local gates. The first
+typecheck found a nullable identity captured across an asynchronous callback;
+capturing the already-validated agent identity fixed it before the passing run.
+Independent final assessment, full shared integration, real PostgreSQL
+qualification and served acceptance remain separate pending obligations.

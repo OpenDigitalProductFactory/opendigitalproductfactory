@@ -8,6 +8,7 @@ const mock = vi.hoisted(() => ({
   resolve: vi.fn(),
   create: vi.fn(),
   log: vi.fn(),
+  lock: vi.fn(),
 }));
 
 vi.mock("./oauth-identity-binding", () => ({
@@ -22,6 +23,7 @@ import { credentialsClientConsentBindingId } from "./credentials-client-consent"
 const db = {
   authorityBinding: { findMany: mock.findMany },
   authorizationDecisionLog: { create: mock.log },
+  $queryRaw: mock.lock,
   $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(db),
 } as never;
 
@@ -40,6 +42,7 @@ beforeEach(() => {
   mock.resolve.mockResolvedValue(null);
   mock.create.mockResolvedValue({ id: "binding-new", bindingId: "AB-OAUTH-new" });
   mock.log.mockResolvedValue({});
+  mock.lock.mockResolvedValue([{ id: "client-row-1" }]);
 });
 
 describe("credentialsClientConsentBindingId", () => {
@@ -76,19 +79,86 @@ describe("credentialsClientConsentBindingId", () => {
     expect(await credentialsClientConsentBindingId(input, db)).toBe("binding-old");
     expect(mock.create).not.toHaveBeenCalled();
     expect(mock.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
-      oauthPurpose: "consent", status: "active", oauthUserId: "human-1", oauthClientId: "client-row-1",
+      oauthPurpose: "consent", oauthUserId: "human-1", oauthClientId: "client-row-1",
       resourceRef: input.resource, appliedAgent: { agentId: "AGT-EXT-GROK" },
     }) }));
   });
 
-  it("does not reuse a binding that no longer verifies (revoked eligibility, narrower grants)", async () => {
+  it("does not replace a recorded binding whose eligibility or scope no longer verifies", async () => {
     mock.findMany.mockResolvedValue([{ id: "binding-stale" }]);
     mock.resolve.mockResolvedValue(null);
-    expect(await credentialsClientConsentBindingId(input, db)).toBe("binding-new");
+    expect(await credentialsClientConsentBindingId(input, db)).toBeNull();
+    expect(mock.create).not.toHaveBeenCalled();
+    expect(mock.log).not.toHaveBeenCalled();
+  });
+
+  it("does not recreate consent after the operator revokes its recorded binding", async () => {
+    const revoked = { id: "binding-revoked", status: "revoked" };
+    mock.findMany.mockImplementation(async ({ where }: { where: { status?: string } }) =>
+      !where.status || where.status === revoked.status ? [revoked] : []);
+    expect(await credentialsClientConsentBindingId(input, db)).toBeNull();
+    expect(mock.create).not.toHaveBeenCalled();
+    expect(mock.log).not.toHaveBeenCalled();
+  });
+
+  it("does not fall back to an older active binding after the newest consent is revoked", async () => {
+    mock.findMany.mockResolvedValue([{ id: "binding-revoked" }, { id: "binding-older" }]);
+    mock.resolve.mockImplementation(async ({ bindingId }: { bindingId: string }) =>
+      bindingId === "binding-older" ? { agentId: input.agentId } : null);
+    expect(await credentialsClientConsentBindingId(input, db)).toBeNull();
+    expect(mock.create).not.toHaveBeenCalled();
+  });
+
+  it("reuses one binding when concurrent first grants race through the transaction", async () => {
+    const bindings: Array<{ id: string }> = [];
+    let tail = Promise.resolve();
+    const concurrentDb = {
+      authorityBinding: { findMany: async () => [...bindings] },
+      authorizationDecisionLog: { create: mock.log },
+      $transaction: async (fn: (tx: unknown) => Promise<unknown>) => {
+        const previous = tail;
+        let release!: () => void;
+        tail = new Promise<void>(resolve => { release = resolve; });
+        try {
+          return await fn({ ...concurrentDb, $queryRaw: async () => {
+            await previous;
+            return [{ id: input.clientRowId }];
+          } });
+        } finally { release(); }
+      },
+    };
+    mock.resolve.mockImplementation(async ({ bindingId }: { bindingId: string }) =>
+      bindings.some(row => row.id === bindingId) ? { agentId: input.agentId } : null);
+    mock.create.mockImplementation(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      const binding = { id: `binding-${bindings.length + 1}` };
+      bindings.push(binding);
+      return { ...binding, bindingId: `AB-${binding.id}` };
+    });
+    const results = await Promise.all([
+      credentialsClientConsentBindingId(input, concurrentDb as never),
+      credentialsClientConsentBindingId(input, concurrentDb as never),
+    ]);
+    expect(results).toEqual(["binding-1", "binding-1"]);
+    expect(mock.create).toHaveBeenCalledOnce();
+    expect(mock.log).toHaveBeenCalledOnce();
   });
 
   it("an unexpected failure is not swallowed into a silent unbound token", async () => {
     mock.create.mockRejectedValue(new Error("connection reset"));
     await expect(credentialsClientConsentBindingId(input, db)).rejects.toThrow(/connection reset/);
+  });
+
+  it("creates no binding when the configured client disappeared before its transaction", async () => {
+    mock.lock.mockResolvedValueOnce([]);
+    expect(await credentialsClientConsentBindingId(input, db)).toBeNull();
+    expect(mock.create).not.toHaveBeenCalled();
+    expect(mock.log).not.toHaveBeenCalled();
+  });
+
+  it("does not convert a failed client lock into newly granted consent", async () => {
+    mock.lock.mockRejectedValueOnce(new Error("connection reset"));
+    await expect(credentialsClientConsentBindingId(input, db)).rejects.toThrow(/connection reset/);
+    expect(mock.create).not.toHaveBeenCalled();
   });
 });
