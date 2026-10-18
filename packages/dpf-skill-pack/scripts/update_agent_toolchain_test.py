@@ -830,7 +830,9 @@ class ClaudeInstallTest(unittest.TestCase):
             stdout = ""
             stderr = ""
 
-        with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+        with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch.object(
+            updater, "claude_plugin_records", return_value=[{"scope": "local"}]
+        ), patch.object(updater, "claude_record_content_matches", return_value=True), patch(
             "subprocess.run", return_value=_Result()
         ) as run:
             status = updater.install_claude_plugin(Path("/tmp/home"), dry_run=False)
@@ -856,6 +858,15 @@ class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
 
     def _home(self, root: Path, entries: list[dict]) -> Path:
         home = root / "home"
+        source = updater.shared_managed_plugin_path(home)
+        updater.write_json(source / ".claude-plugin" / "plugin.json", {"name": "dpf-platform", "version": "0.2.8"})
+        (source / "hook.mjs").write_text("new hook")
+        for index, entry in enumerate(entries):
+            if "installPath" not in entry:
+                cache = root / f"cache-{index}"
+                updater.write_json(cache / ".claude-plugin" / "plugin.json", {"name": "dpf-platform", "version": entry.get("version")})
+                (cache / "hook.mjs").write_text("new hook")
+                entry["installPath"] = str(cache)
         path = updater.claude_installed_plugins_path(home)
         path.parent.mkdir(parents=True)
         path.write_text(json.dumps({"version": 2, "plugins": {updater.CLAUDE_PLUGIN_ID: entries}}))
@@ -865,6 +876,31 @@ class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
         project = root / name
         project.mkdir()
         return project
+
+    def test_equal_version_stale_bytes_are_not_current_after_successful_noop_update(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = self._project(root, "project")
+            cache = root / "cache"
+            cache.mkdir()
+            (cache / "hook.mjs").write_text("old hook")
+            home = self._home(root, [{"scope": "project", "projectPath": str(project),
+                "version": "0.2.8", "installPath": str(cache)}])
+            source = updater.shared_managed_plugin_path(home)
+            source.mkdir(parents=True, exist_ok=True)
+            (source / "hook.mjs").write_text("new hook")
+            for pack in (source, cache):
+                updater.write_json(pack / ".claude-plugin" / "plugin.json",
+                                   {"name": "dpf-platform", "version": "0.2.8"})
+            with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+                "subprocess.run", return_value=self._Result()
+            ) as run:
+                result = updater.converge_claude_project_plugins(home, "0.2.8", dry_run=False)
+            self.assertEqual(result["current"], [])
+            self.assertEqual(result["updated"], [])
+            self.assertEqual(result["failed"], [str(project)])
+            self.assertEqual(run.call_count, 1)
+            self.assertEqual((cache / "hook.mjs").read_text(), "old hook")
 
     def test_stale_project_records_are_updated_in_their_project(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -876,8 +912,18 @@ class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
                 {"scope": "project", "projectPath": str(stale), "version": "0.2.5"},
                 {"scope": "project", "projectPath": str(current), "version": "0.2.8"},
             ])
+            def refresh(*args, **kwargs):
+                records = updater.claude_plugin_records(home)
+                for entry in records:
+                    if entry.get("scope") == "project" and entry.get("projectPath") == str(stale):
+                        entry["version"] = "0.2.8"
+                        updater.write_json(Path(entry["installPath"]) / ".claude-plugin" / "plugin.json",
+                                           {"name": "dpf-platform", "version": "0.2.8"})
+                updater.write_json(updater.claude_installed_plugins_path(home),
+                                   {"version": 2, "plugins": {updater.CLAUDE_PLUGIN_ID: records}})
+                return self._Result()
             with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
-                "subprocess.run", return_value=self._Result()
+                "subprocess.run", side_effect=refresh
             ) as run:
                 result = updater.converge_claude_project_plugins(home, "0.2.8", dry_run=False)
         self.assertEqual(result["updated"], [str(stale)])
@@ -888,6 +934,39 @@ class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
             ["/fake/claude", "plugin", "update", "dpf-platform@dpf-platform-local", "--scope", "project"],
         )
         self.assertEqual(run.call_args[1]["cwd"], str(stale))
+
+    def test_equal_version_refresh_requires_observed_new_bytes(self) -> None:
+        import shutil
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = self._project(root, "project")
+            home = self._home(root, [{"scope": "project", "projectPath": str(project), "version": "0.2.8"}])
+            record = updater.claude_plugin_records(home)[0]
+            cache = Path(record["installPath"])
+            (cache / "hook.mjs").write_text("stale")
+            def refresh(*args, **kwargs):
+                shutil.copytree(updater.shared_managed_plugin_path(home), cache, dirs_exist_ok=True)
+                return self._Result()
+            with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+                "subprocess.run", side_effect=refresh
+            ) as run:
+                first = updater.converge_claude_project_plugins(home, "0.2.8", False)
+                second = updater.converge_claude_project_plugins(home, "0.2.8", False)
+            self.assertEqual(first["updated"], [str(project)])
+            self.assertEqual(second["current"], [str(project)])
+            self.assertEqual(run.call_count, 1)
+
+    def test_missing_cache_and_unreadable_digest_cannot_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = self._project(root, "project")
+            home = self._home(root, [{"scope": "project", "projectPath": str(project),
+                "version": "0.2.8", "installPath": str(root / "missing")}])
+            record = updater.claude_plugin_records(home)[0]
+            self.assertFalse(updater.claude_record_content_matches(home, record))
+            record["installPath"] = str(updater.shared_managed_plugin_path(home))
+            with patch("installed_copy_freshness.delivered_digest", side_effect=PermissionError("unreadable")):
+                self.assertFalse(updater.claude_record_content_matches(home, record))
 
     def test_build_metadata_on_the_pack_version_does_not_mark_current_records_stale(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
