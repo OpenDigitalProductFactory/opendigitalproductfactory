@@ -8,6 +8,7 @@ import { loadPlatformVersion } from "@/lib/platform/version";
 import { getLocalThinkingBudgetEvidence } from "@/lib/inference/dmr-runtime-config";
 import { getOllamaApiRoot } from "@/lib/inference/ollama-url";
 import { canonicalLocalModelKey } from "@/lib/inference/local-model-management";
+import type { LocalThinkingBudgetEvidence } from "@/lib/routing/types";
 import { isRecord } from "@/lib/shared/coerce";
 import { loadEndpointManifests, invalidateRoutingLoaderCache } from "@/lib/routing/loader";
 import { endpointGenuinelyClearsSensitivity } from "@/lib/routing/sensitivity-clearance";
@@ -34,6 +35,18 @@ type Selection = { endpointId: string; modelId: string; providerConnectionId: st
 const SURFACES = [8, 15, 24, 32, 48] as const;
 const hash = (value: unknown) => createHash("sha256").update(canonicalJson(value)).digest("hex");
 const refusal = (message: string): ToolResult => ({ success: false, error: "fidelity_unrun", message });
+
+function responseModelMatches(actual: string, requested: string, proof: LocalThinkingBudgetEvidence): boolean {
+  if (canonicalLocalModelKey(actual) === canonicalLocalModelKey(requested)) return true;
+  // DMR can return its absolute GGUF bundle path instead of the registry name.
+  // Bind that representation to the independently observed runtime digest.
+  const path = actual.replace(/\\/g, "/");
+  if (proof.dialect !== "llama.cpp-b9879" || !/^sha256:[a-f0-9]{64}$/.test(proof.modelDigest)
+    || !/^(?:[A-Za-z]:\/|\/(?!\/))/.test(path) || /[\u0000-\u001f\u007f]/.test(path)
+    || path.split("/").some(part => part === "." || part === "..")) return false;
+  const bundle = /\/bundles\/sha256\/([a-f0-9]{64})\/model\/model\.gguf$/.exec(path);
+  return !!bundle && `sha256:${bundle[1]}` === proof.modelDigest;
+}
 
 async function authoritySnapshot(userId: string, context: ToolExecutionContext) {
   if (!context.agentId || !context.governedRoomAuthority) return null;
@@ -229,7 +242,7 @@ export async function runLocalToolFidelityDiagnostic(
           const after = await readIdentity();
           const actualModel = isRecord(answer.raw) && typeof answer.raw.model === "string" ? answer.raw.model : null;
           if (!after || after.fingerprint !== initial.fingerprint || !actualModel
-            || canonicalLocalModelKey(actualModel) !== canonicalLocalModelKey(selection.modelId)) {
+            || !responseModelMatches(actualModel, selection.modelId, after.proof)) {
             observation.status = "incomplete"; observation.reason = "model_identity_unverified"; return;
           }
           if (stopExpiredTurn()) return;
