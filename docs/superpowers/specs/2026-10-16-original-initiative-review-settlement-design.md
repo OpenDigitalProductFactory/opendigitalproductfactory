@@ -376,12 +376,26 @@ consumer cannot recover a task, and admission without complete adapters must
 remain disabled. The independent writer-fence contribution retains its own
 carrier and release evidence; it is a prerequisite, not duplicate parent work.
 
-Native coverage receipt: **not yet recorded**. The immutable published design
-must be bound to the current Workroom head and submitted to
-`record_plan_backlog_coverage` after quiescence clears. All P1–P4 references
-above are the intended four-way mappings. The server's returned schema,
-baseline requirement and any remediation control the next step. No Markdown
-section, client assessment or blocked-by placeholder stands in for that receipt.
+| Deliverable | Implementation BI | Depends on | Requirements | Contracts | Flow | Verification |
+| --- | --- | --- | --- | --- | --- | --- |
+| P1 | BI-7906C73E | None | AC-HR-1, AC-HR-2 | CONTRACT-PROOF | FLOW-COLLECT | VERIFY-PROOF |
+| P2 | BI-7906C73E | P1; separately owned writer fence | AC-HR-1, AC-HR-2, AC-HR-3 | CONTRACT-PROOF, CONTRACT-FENCE | FLOW-QUALIFY | VERIFY-FENCE |
+| P3 | BI-7906C73E | P2 | AC-HR-1, AC-HR-3, AC-HR-4 | CONTRACT-FENCE, CONTRACT-RECEIPT | FLOW-RECOVER | VERIFY-RECOVERY |
+| P4 | BI-7906C73E | P3 | AC-HR-2, AC-HR-4, AC-HR-5 | CONTRACT-PROOF, CONTRACT-RECEIPT | FLOW-VERIFY | VERIFY-SERVED |
+
+Native coverage receipt: **not recorded**. One request on published commit
+`b6980fde56afecec40156f7312d319b3dba0df8c`, blob
+`27ac3cef9bfcacb9f9c90eed03b73d5f92042fb9`, returned
+`traceability-incomplete`: **no initiative scope baseline exists for
+BI-7906C73E**. Its supported same-room implementation-claim remedy returned
+IRD-C9039B49742F and an exact independent spec-approval route. No reviewer task
+was submitted. Although fix readiness directly lists research and plan, the
+large coverage contract still requires that baseline; the readback does not
+waive this indirect prerequisite. Resume with the server-issued route only when
+reviewer execution is eligible, then submit corrected coverage against the
+genuine baseline and exact current immutable source. Do not repeat the rejected
+request unchanged. No Markdown table, client assessment or blocked-by
+placeholder stands in for the native receipt.
 
 ### Finite unsupported boundary and resumption
 
