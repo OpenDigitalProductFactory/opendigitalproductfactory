@@ -109,6 +109,19 @@ Malformed marking is retained and pauses work; deadlines do not advance stages.
 Rework must invalidate prior evidence/reach rather than replay it. Runtime and
 reference interpreter remain independent implementations checked for parity.
 
+**Receipt compatibility and host protection.** Existing receipt matching can
+treat an absent expected or recorded run as a wildcard and can count any
+non-blocked receipt kind. Preserve that behavior for existing DPF callers during
+the move; it is not a completion contract for a new host. The synthetic consumer
+must require exact room/run/cycle/stage/iteration/attempt identity, a declared
+receipt kind, current actor/profile/binding versions and confirmed effect facts.
+It must validate artifact content/revision and transitive input lineage, invalidate
+superseded evidence on rework, hold uncertain effects and reject changed-payload
+replay. Recheck these facts at use rather than trusting a prior accepted receipt.
+The marking step does not authenticate a human verdict or supply complete GPP
+enforcement. Its host withholds completion until the required human and current
+admission checks pass.
+
 **Coupling.** `work-shapes.ts` combines definition contracts with the entire
 registered-shape corpus; split that dependency before moving behavior. Keep
 Prisma, Inngest, authenticated accountability lineage, DPF grants, portfolio
@@ -135,10 +148,12 @@ in both DPF and synthetic-host fixtures; the token step alone does not supply th
 **Closure.** Minimal graph/receipt roots depend on `element-ids.ts`,
 `diagnostics.ts`, `executable-constructs.ts` and the structural action-result
 contract. They have no third-party runtime dependency. `element-ids.ts` still has
-a type import from the web GPP schema. Adding `drive-marking.ts` requires portable
-versions of action/reason/shape/prior-latch types currently supplied by the full
-resolver, conclusion and registry modules. Complete that closure; do not leave
-package imports pointing back into `apps/web`.
+a type import from the web GPP schema. Split structural shape/prior-latch types
+from the registry. Move the host dispatch representation `DriveTokenPlan` to its
+existing resolver owner so action/reason policy need not enter the kernel. Move
+the canonical structural action-result helper with a real caller bridge rather
+than copying its vocabulary. Complete that closure; do not leave package imports
+pointing back into `apps/web`.
 
 **Adjacent modules.** `scheduling/scheduled-work-trigger.ts` normalizes existing
 task triggers; `proactivity/proactivity-resolver.ts` separates policy from its
@@ -452,11 +467,25 @@ public schemas/types, complete import closure, command-runnable contract tests,
 supported/unsupported cases, required trusted adapters, actual caller removals,
 notice disposition, owner and rollback. None exists as a completed extraction yet.
 
+**Standalone closure proof.** Build and execute the delivered source and synthetic
+fixtures in an isolated Node 24, ESM, TypeScript NodeNext project. Resolve only the
+manifest's exact source and pinned runtime/type dependencies: no application
+aliases, workspace-wide resolution or producer dependency symlinks. Use `.js`
+relative imports and separate browser-safe graph/schema entries from the offline
+compiler's Node-only entry (`compile.ts` uses `node:crypto`). A monorepo Vitest
+import is insufficient. Node 24.16.0 is available locally; this isolated build and
+execution remain unrun until the extraction exists.
+Include the exact TypeScript/toolchain version, standalone manifest/lock, NodeNext
+configuration and executable emitted entry. Resolve `catalog:`/`workspace:` to
+pinned standalone dependencies. Parameterize the emitter's current
+`../work-shapes` type import and compile generated output against the delivered
+portable contract.
+
 ## Concrete DPF2 adoption targets
 
 | Slice | Absorb into existing owner | Retire only after parity | Keep held or external |
 |---|---|---|---|
-| Workroom graph/evidence | `packages/core` structural/transition adapters | Corresponding handwritten graph/dependency/readiness calculations in `core/src/index.ts` after unchanged command/experience fixtures pass | `apps/control/src/store.ts` remains the atomic state/version/receipt/outbox owner. |
+| Workroom graph/evidence | `packages/core` structural/transition adapters | Only structural graph/dependency calculations actually replaced, after unchanged command/experience fixtures pass | Keep core's protected artifact/content/revision/transitive-lineage, admission, permit and readiness checks. `apps/control/src/store.ts` remains the atomic state/version/receipt/outbox owner. |
 | GPP toolkit | Compiler-produced supported serial shape adapted to current core shape/binding types and fixtures | Duplicated supported serial shape validators and hand-built seed definitions where actually replaced | Runtime permit enforcement, actual-human full-combination gate and native executor qualification. |
 | Scoped judgment | Typed advice port in core with scope/source versions and explicit missing context | Corresponding duplicated pure option evaluation only; current DPF2 has no complete scoped evaluator to claim retired | Standing-decision admission and WWWD/WWMD/WSID authority; current `Policy.doctrine` lacks WSID. |
 | Operating profiles/trust | Existing profile/runtime port using portable draft contracts | Displaced fixture profile checks only after equivalent contract tests | Exact-composition JSI, authenticated event/receipt adapters, durable effect dispatch and current revocation. |
@@ -477,6 +506,9 @@ Review boundaries before moving files. Characterize the current bytes and
 semantics first; then move one coherent responsibility, migrate its real caller,
 delete its displaced implementation and run unchanged fixtures plus adverse
 cases. Split DPF-specific policy from portable contracts without changing policy.
+Separate move-only parity from intentional hardening changes. Each new refusal
+must name its diagnostic, affected caller, compatibility/version treatment and
+adverse fixture; do not present stricter input rejection as unchanged behavior.
 No schema migration or production backfill is proposed for the first three
 slices. If one becomes necessary, stop and design its expand/contract path with
 the canonical data owner rather than silently extending this refactor.

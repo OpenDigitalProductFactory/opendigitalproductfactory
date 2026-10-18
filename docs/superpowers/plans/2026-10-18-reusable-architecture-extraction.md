@@ -85,7 +85,7 @@ verification. The current claim is not permission to edit code paths.
 ## Slice 1: Workroom graph and evidence kernel
 
 **Contract WK-01.** Existing structural shape, graph element, marking,
-receipt/run/iteration, action/reason and transition-intent contracts, independent
+receipt/run/iteration and transition-intent contracts, independent
 of application aliases/registries. Trusted time and observed effect/child facts
 are inputs. Canonical command/effect/persistence ownership remains in DPF.
 **Flow WF-01.** Pinned graph → marking/event → validated intent → existing host
@@ -98,6 +98,15 @@ owners. Their checks must also exist in the synthetic host adapter. The current
 graph builder can skip dangling edges and retain first duplicate identities;
 the marking step alone does not reject stale definition identity.
 
+Existing DPF receipt wildcard/kind semantics remain compatibility behavior during
+the move. The synthetic host requires exact non-empty run/cycle/stage identity,
+iteration/attempt, declared receipt kind and current profile/binding context.
+It verifies protected artifact content/revision and transitive input lineage,
+actual required human decisions and confirmed effects before projecting receipts
+into the kernel. It rechecks old accepted evidence, invalidates reworked inputs
+and holds pending/uncertain effects. Structural extraction does not retire DPF2's
+protected artifact, lineage, admission, permit or readiness validation.
+
 1. Characterize `work-shape-flow-graph.ts`, `workroom-drive-receipts.ts`,
    `drive-marking.ts`, shared IDs/diagnostics/construct vocabulary and the exact
    consumer closure. Include the currently unsupported forward-to-failure/budget
@@ -105,13 +114,23 @@ the marking step alone does not reject stale definition identity.
 2. Separate contracts from registry-bearing `work-shapes.ts`; give portable
    structural contracts one existing home. Avoid importing the web GPP schema
    just for `GppShapeDocument` types. Reuse types/validators rather than adding a
-   package or creating a second action/result vocabulary.
+   package or creating a second action/result vocabulary. Keep `DriveTokenPlan`
+   and action/reason dispatch policy in the existing resolver; share the minimal
+   prior-latch type and move the canonical action-result helper with real callers.
 3. Move the smallest executable closure, migrate `drive-resolution-graph.ts`,
    runtime marking consumers and the GPP interpreter/checks directly, and delete
    displaced implementations. Keep reference interpreter independence for parity.
 4. Add a standalone synthetic host consumer with linked customer-report and
    self-improvement rooms. It owns its in-memory transaction and uses the same
    transitions for both jobs. No Next.js, Prisma, Inngest or provider import.
+   Build and execute only its manifested source/fixtures in an isolated Node 24,
+   ESM, TypeScript NodeNext project with `.js` relative imports and exact pinned
+   dependency closure. No aliases, workspace-wide resolution or producer
+   dependency symlinks. Keep the browser-safe graph/schema entry separate from
+   Node-only compiler code. Node 24.16.0 is available; this proof remains unrun.
+   Deliver the exact TypeScript/toolchain version, standalone manifest/lock,
+   NodeNext configuration and executable emitted entry. Resolve `catalog:` and
+   `workspace:` specifications to pinned standalone dependencies.
 5. Publish the slice's contract/closure/provenance/rollback record when authorized.
    A graph builder plus WorkUnit adapter alone cannot be called a Workroom engine.
 
@@ -120,6 +139,10 @@ marking, stale pinned definition, missing evidence, duplicate delivery,
 run/iteration separation, midnight continuation, refuse/rework, cancellation and
 uncertain-effect holds at the relevant responsibility. Verify retained ordering
 and serialization. Test trusted time through input, not wall-clock sleeps.
+Require wrong/missing run and receipt kind, cycle/iteration mismatch, changed
+artifact content/profile/binding/input lineage, cross-room upstream rework,
+identical replay and conflicting-payload replay fixtures. The host atomically
+owns evidence, marking, dedupe and intents; an unknown effect never completes.
 Update WorkUnit's path-sensitive conformance guard only if WorkUnit actually moves.
 
 **Retire/rollback.** Remove moved pure web implementation and update real imports
@@ -146,6 +169,21 @@ registered generated definition → unchanged Workroom execution path.
 4. Run an application-free compiler consumer and unchanged byte/diagnostic
    fixtures. Extend Slice 1's synthetic host with a supported serial generated
    shape, pinned definition and binding versions, and actual-human-required hold.
+   Test a field-by-field mapping from each generated stage to the consumer's
+   actor, action, output, admitted envelope and binding, retaining exact versions,
+   unresolved facts, unsupported refusal and not-evaluated diagnostics. Missing
+   facts cannot acquire permissive defaults. Exercise this in the subsequent GPP
+   slice, not as extra scope in the first graph move. Separate browser-safe schema
+   exports from the Node-only offline compiler and prove both declared closures.
+   Map shape/stage identity; resolve `accountablePrincipalRef` and
+   `advance.decisionScope/gate` separately to assigned actor and owning authority.
+   Map `tools` to supported actions/capabilities, preserving absent versus empty;
+   `evidence` alone cannot establish an accepted output artifact. The host supplies
+   missing output kind, effect/cost bounds, capability envelope and qualification
+   facts. Binding labels cannot establish qualified enforcement or override the
+   actual-human co-occurrence gate. Unresolved or unrepresentable mappings refuse.
+   Parameterize the emitter's `../work-shapes` type import and compile generated
+   output against the portable contract.
 
 **CT-GP.** Parser limits and duplicate decoded keys, schema strictness, missing
 resolution facts, malformed/unknown constructs, deterministic hashes/IDs/output,
@@ -178,6 +216,8 @@ adapter. A complete portable WSID feedback loop is unsupported in this slice.
 3. Add the scoped boundary and meaningful finite/range/duplicate/config/size and
    missing-context validation. Coordinate BI-9889566B's existing malformed-option
    work; do not create a second validation policy.
+   Keep move-only parity fixtures separate from each intentional new rejection;
+   record its diagnostic, real caller compatibility and version treatment.
 4. Migrate actual MCP/perspective/golden-decision callers. Remove the displaced
    scoring implementation. Any temporary compatibility export names its actual
    caller, `@markdbodman`, BI-4DD124E7 and final-import removal condition.
