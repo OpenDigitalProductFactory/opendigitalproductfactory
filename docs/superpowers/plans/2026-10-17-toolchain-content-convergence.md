@@ -24,6 +24,7 @@ The Claude project cache can retain different delivered bytes at version 0.2.15 
 3. Compare delivered content against the verified source pack before selecting no-op. Use the supported Claude plugin update for stale installed records, then re-read records and compare content again. A zero exit without matching bytes is failed convergence with a bounded repair diagnostic. Never delete or overwrite a cache, alter its manifest by hand, bypass hooks or restart clients.
 4. Preserve existing result buckets and report consumers. Ensure explicit action labels cannot override an observed after-digest mismatch. Missing identity is unknown/failed, never a pass. Dry run states intent and does not claim observed convergence. Keep loaded-client verification separate from on-disk convergence.
 5. Run focused Python suites, source guards and required delivery verification. Freeze and publish with DCO, protected CI and merge queue. Post-release live supported updater verification remains required on Windows and macOS/Linux; source fixtures do not satisfy that acceptance. No live client restart during active work.
+6. Deliver distinct versioned bytes through the existing release path. Change only `packages/dpf-skill-pack/toolchain-version.json` from 0.2.15 to 0.2.16, preserving the unchanged null floor. Run `scripts/sync-toolchain-version.mjs` to generate the four client plugin manifests and the root `.claude-plugin/marketplace.json`; never hand-edit their versions. Verify the generator's existing fixture suite, version drift check and generated client-capabilities check. This remains part of `agent-converges-host` / AC-CONVERGE-ALL: a same-version diagnostic does not replace publishing a new cache identity. Independent review must cover the generated delta. Canonical signed manifest/archive delivery and subsequent supported updater/digest verification remain separate release evidence; no live client update or restart during another owner's verification window.
 
 ## Coverage
 
@@ -31,7 +32,7 @@ The Claude project cache can retain different delivered bytes at version 0.2.15 
 | --- | --- | --- | --- | --- | --- |
 | equal-version-content-convergence | BI-DE1E6485 | OBJ-CONVERGE, OBJ-OBSERVE | verified-content-before-success | agent-converges-host | AC-CONVERGE-ALL, AC-REPORT-VERIFY, host-writer-preserved |
 
-`verified-content-before-success` requires expected delivered digest before a successful action/report. `agent-converges-host` uses the existing supported updater. `host-writer-preserved` retains the existing duplicate-connector regression. The deliverable is atomic: selection and reporting must agree, otherwise a truthful selector can still produce a false successful report.
+`verified-content-before-success` requires expected delivered digest before a successful action/report. `agent-converges-host` uses the existing supported updater and canonical distinct-version publication above. `host-writer-preserved` retains the existing duplicate-connector regression. The deliverable is atomic: selection, reporting and delivered cache identity must agree, otherwise a truthful selector can still produce a false successful report or leave users on stale bytes.
 
 ## Verification limits and rollback
 
