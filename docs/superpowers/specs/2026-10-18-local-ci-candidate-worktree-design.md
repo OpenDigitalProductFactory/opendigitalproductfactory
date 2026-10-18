@@ -46,8 +46,9 @@ No new classifier, exemption, environment flag, lease lifecycle or credential.
   even when the module repository has an empty or documentation-only diff.
 - AC-2 / CONTRACT-DOCS: an actually exempt candidate takes no sandbox slot,
   including when the module repository itself has code changes.
-- AC-3 / CONTRACT-FAIL-CLOSED: missing merge base, failed Git read, stale or
-  unavailable derived artifacts retain the existing required-gate result.
+- AC-3 / CONTRACT-FAIL-CLOSED: missing merge base or failed Git read cannot
+  create an exemption; stale artifacts require admission. Toolchain-unavailable
+  artifact checks keep the existing unrun classification, never a passing check.
 - AC-4 / CONTRACT-ARTIFACT: registry checks run in the candidate worktree;
   unchanged resume/finalization bypass rules remain unchanged.
 - AC-5 / VERIFY-REGRESSION: meaningful failing then passing behavior tests,
@@ -57,7 +58,7 @@ No new classifier, exemption, environment flag, lease lifecycle or credential.
 
 - Decision: atomic
 - Parent: BI-A254A94C
-- Receipt: blocked-by: publish this immutable ordered fix design and record normal proportional coverage before production implementation.
+- Receipt: cmvd44r4008py01lun1tmhaq4 (immutable design 76024c7201b; initial implementation admission IRD-37ADC7A9460D; lease-fixture scope claimed after normal owner release)
 - Rationale: candidate selection, fixture regression and documentation are one correction of the existing admission predicate; no phase is independently shippable.
 - Dependencies: none
 

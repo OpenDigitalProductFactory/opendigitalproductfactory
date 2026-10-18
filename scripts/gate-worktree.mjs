@@ -1721,7 +1721,13 @@ async function main() {
   // BI-A254A94C: a docs-only diff the pre-push gate would exempt must not take
   // the single sandbox slot. A resumed claim already holds a place in line.
   if (!options.finalizeEvidence && !options.resumeLeaseId) {
-    const sandbox = sandboxDecisionForHead();
+    const sandbox = sandboxDecisionForHead({
+      cwd: worktreePath,
+      git: (args) => {
+        const result = git(gitBin, args, worktreePath);
+        return result.status === 0 ? result.stdout.trim() : null;
+      },
+    });
     if (sandbox) {
       process.stdout.write(`gate-worktree: ${sandbox.message}\n`);
       if (!sandbox.claim) {

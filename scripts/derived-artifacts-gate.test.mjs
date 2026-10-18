@@ -2,9 +2,9 @@
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-// Tests for the derived-artifact registry driver (BI-48768E05). All tests
-// exercise the pure planning/decision functions with injected fakes — no
-// git or subprocess calls, so they run instantly and deterministically.
+import { spawnSync } from "node:child_process";
+// Registry decisions use injected fakes. Candidate-scope regressions also use
+// isolated Git repositories and local checker commands, never runtime services.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -17,6 +17,7 @@ import {
   resolveDerivedArtifactInvocation,
   classifyDerivedArtifactCheck,
   decideSandboxAdmission,
+  sandboxDecisionForHead,
 } from "./derived-artifacts-gate.mjs";
 
 const DOC_INDEX = {
@@ -205,6 +206,51 @@ test("decideSandboxAdmission names the code files that cost a docs-only exemptio
   });
   assert.equal(mixed.claim, true);
   assert.match(mixed.message, /apps\/web\/app\/page\.tsx/);
+});
+
+function candidateRepository(t, file) {
+  const dir = mkdtempSync(join(tmpdir(), "dpf-candidate-scope-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const git = (...args) => {
+    const result = spawnSync("git", args, { cwd: dir, encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+  };
+  git("init", "-q");
+  git("config", "user.name", "DPF Test");
+  git("config", "user.email", "dpf-test@example.invalid");
+  writeFileSync(join(dir, "README.md"), "base\n");
+  git("add", "."); git("commit", "-qm", "base");
+  git("update-ref", "refs/remotes/origin/main", "HEAD");
+  writeFileSync(join(dir, file), "candidate\n");
+  git("add", "."); git("commit", "-qm", "candidate");
+  return dir;
+}
+
+test("sandbox admission reads the requested code candidate, not the module checkout", t => {
+  const cwd = candidateRepository(t, "runtime.mjs");
+  const result = sandboxDecisionForHead({ cwd, registry: [] });
+  assert.equal(result?.claim, true);
+  assert.match(result.message, /runtime\.mjs/);
+});
+
+test("sandbox admission preserves the requested docs candidate exemption", t => {
+  const cwd = candidateRepository(t, "README.md");
+  assert.equal(sandboxDecisionForHead({ cwd, registry: [] })?.claim, false);
+});
+
+test("sandbox admission does not classify an unavailable candidate as exempt", t => {
+  const cwd = mkdtempSync(join(tmpdir(), "dpf-no-candidate-"));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  assert.equal(sandboxDecisionForHead({ cwd, registry: [] }), null);
+});
+
+test("sandbox admission runs derived artifact checks in the requested candidate", t => {
+  const cwd = candidateRepository(t, "README.md");
+  const registry = [{ ...DOC_INDEX, sourceGlobs: ["README.md"],
+    check: [process.execPath, "-e", "process.exit(require('node:fs').readFileSync('README.md','utf8') === 'candidate\\n' ? 0 : 1)"] }];
+  assert.equal(sandboxDecisionForHead({ cwd, registry })?.claim, false);
+  registry[0].check = [process.execPath, "-e", "process.exit(1)"];
+  assert.equal(sandboxDecisionForHead({ cwd, registry })?.claim, true);
 });
 
 // ── evaluateCheckAll ─────────────────────────────────────────────────────────
