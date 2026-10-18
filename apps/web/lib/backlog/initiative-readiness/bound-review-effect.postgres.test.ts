@@ -91,10 +91,11 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
     // including array columns and defaults; no public table fallback is needed.
     const enumColumns = await pool.query<{
       table_sql: string; column_sql: string; target_sql: string;
-      default_sql: string | null; create_sql: string;
+      source_sql: string; default_sql: string | null; create_sql: string;
     }>(`
       SELECT format('%I', c.relname) AS table_sql, format('%I', a.attname) AS column_sql,
         format('%I.%I%s', $1::text, e.typname, CASE WHEN t.typtype = 'e' THEN '' ELSE '[]' END) AS target_sql,
+        format('%I.%I', en.nspname, e.typname) AS source_sql,
         pg_get_expr(d.adbin, d.adrelid) AS default_sql,
         format('CREATE TYPE %I.%I AS ENUM (%s)', $1::text, e.typname,
           (SELECT string_agg(quote_literal(v.enumlabel), ', ' ORDER BY v.enumsortorder)
@@ -104,6 +105,7 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
       JOIN pg_namespace n ON n.oid = c.relnamespace
       JOIN pg_type t ON t.oid = a.atttypid
       JOIN pg_type e ON e.oid = CASE WHEN t.typtype = 'e' THEN t.oid ELSE t.typelem END
+      JOIN pg_namespace en ON en.oid = e.typnamespace
       LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
       WHERE n.nspname = 'public' AND c.relname = ANY($2::text[])
         AND a.attnum > 0 AND NOT a.attisdropped AND e.typtype = 'e'
@@ -112,12 +114,29 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
     db = new PrismaClient({ adapter: new PrismaPg(pool, { schema }) });
     state.db = db as unknown as Record<string, unknown>;
     for (const table of tables) await pool.query(`CREATE TABLE "${table}" (LIKE public."${table}" INCLUDING ALL)`);
+    // LIKE also copies CHECK expressions with casts to the original enum.
+    // Preserve every expression, rebinding only its enum type qualifications.
+    const checks = await pool.query<{ table_sql: string; name_sql: string; definition: string }>(`
+      SELECT format('%I', c.relname) AS table_sql, format('%I', k.conname) AS name_sql,
+        pg_get_constraintdef(k.oid) AS definition
+      FROM pg_constraint k JOIN pg_class c ON c.oid = k.conrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = $1 AND k.contype = 'c'
+    `, [schema]);
+    for (const { table_sql, name_sql } of checks.rows)
+      await pool.query(`ALTER TABLE ${table_sql} DROP CONSTRAINT ${name_sql}`);
     for (const { table_sql, column_sql, target_sql, default_sql } of enumColumns.rows) {
       await pool.query(`ALTER TABLE ${table_sql}
         ALTER COLUMN ${column_sql} DROP DEFAULT,
         ALTER COLUMN ${column_sql} TYPE ${target_sql} USING (${column_sql}::text::${target_sql})`);
       if (default_sql !== null) await pool.query(`ALTER TABLE ${table_sql}
         ALTER COLUMN ${column_sql} SET DEFAULT (${default_sql})::text::${target_sql}`);
+    }
+    const enumTypes = new Map(enumColumns.rows.map(row => [row.source_sql, row.target_sql.replace(/\[\]$/, "")]));
+    for (const { table_sql, name_sql, definition } of checks.rows) {
+      let rebound = definition;
+      for (const [source, target] of enumTypes) rebound = rebound.replaceAll(source, target);
+      await pool.query(`ALTER TABLE ${table_sql} ADD CONSTRAINT ${name_sql} ${rebound}`);
     }
   });
   afterAll(async () => {
@@ -156,6 +175,10 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
     expect(isolation.rows).toEqual([{ schemas: [schema], missing_table: null }]);
     await expect(pool.query(`SELECT 'invalid-fixture-gate'::"${schema}"."InitiativeGateKey"`))
       .rejects.toMatchObject({ code: "22P02" });
+    await expect(pool.query(`INSERT INTO "InitiativeArtifactRetentionPin"
+      ("id", "baselineActivityId", "sourceKind", "artifactDigest", "artifactLocator")
+      VALUES ('invalid-fixture-pin', 'invalid-fixture-baseline', 'document-version', $1, '{}'::jsonb)`, [digest]))
+      .rejects.toMatchObject({ code: "23514", constraint: "initiative_artifact_retention_pin_shape" });
   });
   async function displace(client: PoolClient, change: string) {
     const progress = change === "unknown" ? { executionUncertainty: { schemaVersion: 1, settlement: "unknown" } }
