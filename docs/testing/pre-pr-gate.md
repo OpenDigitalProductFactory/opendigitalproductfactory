@@ -24,6 +24,15 @@ changed identity leaves the recorded room for inspection and writes no success
 marker. Legacy direct adoption remains a compatibility path; a saved claim is
 not by itself proof that current source identity or review readiness is valid.
 
+An explicit `--worktree` selects the candidate for both the pregate wrapper and
+controller. Fence and dirty-tree checks, PASS reuse, host preflight, changed-file
+classification, derived-artifact freshness and final PASS corroboration use that
+directory. The configured Git executable is retained and inherited Git repository
+location variables cannot redirect those reads. A different requested `--sha`
+cannot borrow the selected HEAD's PASS or documentation exemption. Unreadable
+classification continues ordinary gated admission; it does not become an empty
+documentation diff. Omitting `--worktree` retains the current-directory default.
+
 Host policy commands use the existing observed-process runner with a 30-minute
 command budget, bounded diagnostic tails and graceful/forced tree termination.
 The parent preflight has a 60-minute outer budget. Full source guard loops have

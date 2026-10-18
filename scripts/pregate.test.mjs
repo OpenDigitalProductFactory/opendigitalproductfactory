@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import * as pregate from "./pregate.mjs";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { spawnSync } from "node:child_process";
+import { scrubGitRepoLocationEnv } from "./lib/git-hook-env.mjs";
 import { createServer } from "node:http";
 import { readEarlyQuiescenceStatus, readQuiescenceStatus, quiescenceBlocksWrites } from "./lib/gate-quiescence.mjs";
 
@@ -186,10 +189,10 @@ test("real mock-only MCP drain read performs no preflight or write call", async 
 
 test("entry ordering retains PASS reuse before early check and late governed admission", () => {
   const wrapper = readFileSync(new URL("./pregate.mjs", import.meta.url), "utf8");
-  const main = wrapper.slice(wrapper.indexOf("async function main()"), wrapper.indexOf("export async function runHostPreflight"));
+  const main = wrapper.slice(wrapper.indexOf("export async function main("), wrapper.indexOf("export async function runHostPreflight"));
   assert.ok(main.indexOf("if (reuse.reuse)") < main.indexOf("await runHostPreflight"));
   assert.ok(main.indexOf("await runHostPreflight") < main.indexOf("await runGateWithQueuedRevival"));
-  assert.match(main, /if \(preflightStatus !== 0\) process.exit\(preflightStatus\)/);
+  assert.match(main, /if \(preflightStatus !== 0\) return preflightStatus/);
   const gate = readFileSync(new URL("./gate-worktree.mjs", import.meta.url), "utf8");
   assert.match(gate, /await readQuiescenceStatus/);
   assert.match(gate, /claim_nonprod_environment_lease/);
@@ -683,4 +686,145 @@ test("the force flag is consumed by the wrapper and never forwarded to the gate"
   );
   assert.deepEqual(stripForceRerunFlag([]), []);
   assert.deepEqual(stripForceRerunFlag(["--no-push"]), ["--no-push"]);
+});
+
+function candidateRepository(t, file = "candidate.ts") {
+  const cwd = mkdtempSync(join(tmpdir(), "dpf-pregate-candidate-"));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  const git = (...args) => {
+    const result = spawnSync("git", args, { cwd, env: scrubGitRepoLocationEnv(), encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  git("init", "-b", "fixture/candidate");
+  git("config", "user.name", "Gate Fixture");
+  git("config", "user.email", "gate-fixture@example.invalid");
+  writeFileSync(join(cwd, "README.md"), "fixture\n");
+  git("add", "."); git("commit", "-m", "base");
+  const baseSha = git("rev-parse", "HEAD");
+  git("update-ref", "refs/remotes/origin/main", baseSha);
+  mkdirSync(dirname(join(cwd, file)), { recursive: true });
+  writeFileSync(join(cwd, file), "candidate\n");
+  git("add", "."); git("commit", "-m", "candidate");
+  return { cwd, git, baseSha, sha: git("rev-parse", "HEAD") };
+}
+
+async function runCandidateWrapper(invoker, candidate, { args = [], onPreflight, onGate, gateStatus = 42 } = {}) {
+  let output = "";
+  let preflights = 0;
+  let gates = 0;
+  const argv = ["--worktree", candidate.cwd, "--sha", candidate.sha, ...args];
+  const status = await pregate.main({
+    args: argv, cwd: invoker.cwd,
+    checkHostDiskSpaceImpl: () => ({ ok: true }),
+    stdout: { isTTY: true, write(text) { output += text; } },
+    stderr: { write(text) { output += text; } },
+    runHostPreflightImpl: async (options) => { preflights++; onPreflight?.(options); return 0; },
+    runGateWithQueuedRevivalImpl: async (options) => {
+      gates++; onGate?.(options);
+      return { result: { status: gateStatus }, timedOut: false };
+    },
+  });
+  return { status, output, preflights, gates, argv };
+}
+
+test("wrapper classifies the selected candidate in both directions before launching any gate", async (t) => {
+  const code = candidateRepository(t);
+  const derived = candidateRepository(t, "apps/web/lib/docs/doc-index.generated.json");
+  const gated = await runCandidateWrapper(derived, code, {
+    onPreflight: ({ cwd }) => assert.equal(cwd, code.cwd),
+    onGate: ({ args }) => assert.deepEqual(args, ["--worktree", code.cwd, "--sha", code.sha]),
+  });
+  assert.equal(gated.status, 42);
+  assert.equal(gated.gates, 1);
+  const exempt = await runCandidateWrapper(code, derived);
+  assert.equal(exempt.status, 0);
+  assert.equal(exempt.gates, 0);
+  assert.match(exempt.output, /sandbox not claimed/);
+});
+
+test("wrapper fences and dirty-tree checks belong to the candidate rather than the invoker", async (t) => {
+  const invoker = candidateRepository(t);
+  const selected = candidateRepository(t);
+  writeFileSync(join(selected.cwd, "uncommitted.txt"), "dirty\n");
+  assert.equal((await runCandidateWrapper(invoker, selected)).preflights, 0);
+  assert.match((await runCandidateWrapper(invoker, selected)).output, /uncommitted/);
+  rmSync(join(selected.cwd, "uncommitted.txt"));
+  writeFileSync(join(invoker.cwd, "uncommitted.txt"), "unrelated\n");
+  assert.equal((await runCandidateWrapper(invoker, selected)).status, 42);
+  const recordPath = resolve(selected.cwd, selected.git("rev-parse", "--git-path", ".build.json"));
+  writeFileSync(recordPath, JSON.stringify({ status: "running", sha: selected.sha }));
+  const fenced = await runCandidateWrapper(invoker, selected);
+  assert.equal(fenced.preflights, 0);
+  assert.match(fenced.output, /already running/);
+});
+
+function fixturePass(repository) {
+  // Synthetic records belong only to this disposable repository; no real gate
+  // ran and this fixture is never publication evidence.
+  writeFileSync(resolve(repository.cwd, repository.git("rev-parse", "--git-path", "dpf-local-ci-gate.json")),
+    JSON.stringify({ gatePassed: true, status: "completed", sha: repository.sha, branch: "fixture/candidate" }));
+}
+
+test("wrapper never borrows an invoker PASS or reuses a different requested SHA", async (t) => {
+  const invoker = candidateRepository(t);
+  const selected = candidateRepository(t);
+  fixturePass(invoker);
+  assert.equal((await runCandidateWrapper(invoker, selected)).status, 42);
+  fixturePass(selected);
+  const reused = await runCandidateWrapper(invoker, selected);
+  assert.equal(reused.preflights, 0);
+  assert.match(reused.output, /already covers this HEAD/);
+  const mismatched = await runCandidateWrapper(invoker, { ...selected, sha: selected.baseSha });
+  assert.equal(mismatched.status, 42);
+  assert.equal(mismatched.gates, 1);
+});
+
+test("wrapper final corroboration reads only the selected candidate and expected SHA", async (t) => {
+  const invoker = candidateRepository(t);
+  const selected = candidateRepository(t);
+  fixturePass(invoker);
+  assert.notEqual(pregate.readReconciledVerdictAtHead({ cwd: selected.cwd, expectedSha: selected.sha }), "PASS");
+  assert.equal((await runCandidateWrapper(invoker, selected, { args: ["--force-rerun"], gateStatus: 0 })).status, 7);
+  fixturePass(selected);
+  assert.equal(pregate.readReconciledVerdictAtHead({ cwd: selected.cwd, expectedSha: selected.sha }), "PASS");
+  assert.notEqual(pregate.readReconciledVerdictAtHead({ cwd: selected.cwd, expectedSha: selected.baseSha }), "PASS");
+  assert.equal((await runCandidateWrapper(invoker, selected, { args: ["--force-rerun"], gateStatus: 0 })).status, 0);
+  assert.equal((await runCandidateWrapper(invoker, { ...selected, sha: selected.baseSha }, { args: ["--force-rerun"], gateStatus: 0 })).status, 7);
+});
+
+test("wrapper context respects configured Git and removes inherited repository location", (t) => {
+  const beforeBin = process.env.DPF_GATE_GIT_BIN;
+  const beforeDir = process.env.GIT_DIR;
+  t.after(() => {
+    if (beforeBin === undefined) delete process.env.DPF_GATE_GIT_BIN; else process.env.DPF_GATE_GIT_BIN = beforeBin;
+    if (beforeDir === undefined) delete process.env.GIT_DIR; else process.env.GIT_DIR = beforeDir;
+  });
+  process.env.DPF_GATE_GIT_BIN = "/fixture/configured-git.exe";
+  process.env.GIT_DIR = "/fixture/unrelated.git";
+  const cwd = resolve(".configured-candidate");
+  let calls = 0;
+  const context = pregate.resolvePregateGateContext({ cwd,
+    spawnSyncImpl: (command, args, options) => {
+      calls++;
+      assert.equal(command, process.env.DPF_GATE_GIT_BIN);
+      assert.equal(options.env.GIT_DIR, undefined);
+      assert.equal(options.cwd, cwd);
+      const values = { "--show-toplevel": cwd, "--abbrev-ref": "fixture/candidate", HEAD: "a".repeat(40),
+        "--git-common-dir": ".git", "--git-path": ".git/dpf-local-ci-gate.json" };
+      return { status: 0, stdout: values[args[1]] + "\n" };
+    },
+  });
+  assert.equal(context.sha, "a".repeat(40));
+  assert.equal(calls, 5);
+});
+
+test("host preflight executes in the selected candidate directory", async () => {
+  const cwd = resolve(".candidate-preflight-fixture");
+  assert.equal(await pregate.runHostPreflight({ cwd, env: {}, readStatusImpl: async () => ({ level: "normal" }),
+    spawnSyncImpl: (_command, _args, options) => {
+      assert.equal(options.cwd, cwd);
+      return { status: 0, stdout: 'DPF_HOST_PREFLIGHT_RESULT={"status":"passed"}\n' };
+    }, stdout: () => {}, stderr: () => {},
+  }), 0);
 });

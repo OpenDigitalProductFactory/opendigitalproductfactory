@@ -18,7 +18,7 @@ import { parseArgs as utilParseArgs } from "node:util";
 import { scriptArgv } from "./lib/script-argv.mjs";
 import { spawnSync } from "node:child_process";
 import { createObservedProcessRunner } from "./lib/local-ci-process-observer.mjs";
-import { gitTextOrNull } from "./lib/git.mjs";
+import { scrubGitRepoLocationEnv } from "./lib/git-hook-env.mjs";
 import { sandboxDecisionForHead } from "./derived-artifacts-gate.mjs";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve as resolvePath } from "node:path";
@@ -57,7 +57,7 @@ import {
   installBrokenPipeTolerance,
   isVerboseGateConsole,
 } from "./lib/pregate-console.mjs";
-import { collectSlotVerdicts, resolveWorktreeContext } from "./pregate-status.mjs";
+import { collectSlotVerdicts } from "./pregate-status.mjs";
 import { reconcileSlots } from "./lib/pregate-status.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 
@@ -278,10 +278,15 @@ export function gateArgsForQueuedRevivalWindow({
   return nextArgs;
 }
 
-function gitText(gitArgs, { cwd, spawnSyncImpl = spawnSync } = {}) {
-  const result = spawnSyncImpl("git", gitArgs, { cwd, encoding: "utf8" });
-  if (result.error || result.status !== 0) return "";
-  return String(result.stdout || "").trim();
+function gitText(gitArgs, { cwd, spawnSyncImpl = spawnSync, trim = true, nullOnError = false } = {}) {
+  const gitBin = process.env.DPF_GATE_GIT_BIN || "git";
+  const options = { cwd, encoding: "utf8", env: scrubGitRepoLocationEnv() };
+  const result = process.platform === "win32" && process.env.DPF_GATE_GIT_BIN && !/\.(?:exe|cmd|bat)$/i.test(gitBin)
+    ? spawnSyncImpl("sh", [gitBin, ...gitArgs], options)
+    : spawnSyncImpl(gitBin, gitArgs, options);
+  if (result.error || result.status !== 0) return nullOnError ? null : "";
+  const text = String(result.stdout || "");
+  return trim ? text.trim() : text;
 }
 
 export function resolvePregateGateContext({
@@ -779,18 +784,18 @@ export async function runGateWithQueuedRevival({
 // OPEN by returning a shape the guard treats as "nothing to refuse on": a guard
 // that cannot measure must not block a legitimate gate. The guards themselves
 // stay pure so the policy is unit-testable without a git tree.
-function readWorktreeBuildRecord() {
+function readWorktreeBuildRecord({ cwd = process.cwd() } = {}) {
   try {
-    const path = gitText(["rev-parse", "--git-path", ".build.json"]);
+    const path = gitText(["rev-parse", "--git-path", ".build.json"], { cwd });
     if (!path) return null;
-    return JSON.parse(readFileSync(resolvePath(process.cwd(), path), "utf8"));
+    return JSON.parse(readFileSync(resolvePath(cwd, path), "utf8"));
   } catch {
     return null;
   }
 }
 
-function readWorkingTreePorcelain() {
-  return gitTextOrNull(["status", "--porcelain"], { cwd: process.cwd(), trim: false }) ?? "";
+function readWorkingTreePorcelain({ cwd = process.cwd() } = {}) {
+  return gitText(["status", "--porcelain"], { cwd, trim: false });
 }
 
 /**
@@ -808,78 +813,84 @@ export function wrappedForegroundReason({ stdoutIsTTY, env = process.env, args =
   return "pregate is not the sole foreground command: stdout is not a terminal, so this run would be captured or wrapped and can die with no recorded reason. Run `pnpm run pregate` in the foreground, or use `pnpm gate:wait`.";
 }
 
-async function main() {
-  // BI-B1065D41: `pnpm run pregate | head -5` must survive head exiting. Both
-  // this wrapper and the gate it spawns need the tolerance — the gate inherits
-  // these very file descriptors.
-  installBrokenPipeTolerance();
-  const args = process.argv.slice(2);
+export async function main({
+  args = process.argv.slice(2), cwd = process.cwd(),
+  stdout = process.stdout, stderr = process.stderr,
+  checkHostDiskSpaceImpl = checkHostDiskSpace,
+  runHostPreflightImpl = runHostPreflight,
+  runGateWithQueuedRevivalImpl = runGateWithQueuedRevival,
+} = {}) {
+  const candidateCwd = resolvePath(cwd, argValue(args, "--worktree") || ".");
+  const expectedSha = argValue(args, "--sha") || undefined;
   const wrapped = wrappedForegroundReason({
-    stdoutIsTTY: Boolean(process.stdout.isTTY),
+    stdoutIsTTY: Boolean(stdout.isTTY),
     env: process.env,
     args,
   });
   if (wrapped) {
-    process.stderr.write(`pregate: ${wrapped}\n`);
-    process.exit(GATE_EXIT.WRAPPED_INVOCATION);
+    stderr.write(`pregate: ${wrapped}\n`);
+    return GATE_EXIT.WRAPPED_INVOCATION;
   }
 
-  const diskCheck = checkHostDiskSpace();
+  const diskCheck = checkHostDiskSpaceImpl();
   if (!diskCheck.ok) {
-    process.stderr.write(`pregate: ${diskCheck.message}\n`);
-    process.exit(1);
+    stderr.write(`pregate: ${diskCheck.message}\n`);
+    return 1;
   }
 
   const fenceSafety = shouldRefuseWhileGateRunning({
     args,
-    buildRecord: readWorktreeBuildRecord(),
+    buildRecord: readWorktreeBuildRecord({ cwd: candidateCwd }),
   });
   if (fenceSafety.refuse) {
-    process.stderr.write(`pregate: ${fenceSafety.reason}
+    stderr.write(`pregate: ${fenceSafety.reason}
 `);
-    process.exit(1);
+    return 1;
   }
 
-  const treeSafety = shouldRefuseDirtyTree({ args, porcelain: readWorkingTreePorcelain() });
+  const treeSafety = shouldRefuseDirtyTree({ args, porcelain: readWorkingTreePorcelain({ cwd: candidateCwd }) });
   if (treeSafety.refuse) {
-    process.stderr.write(`pregate: ${treeSafety.reason}
+    stderr.write(`pregate: ${treeSafety.reason}
 `);
-    process.exit(1);
+    return 1;
   }
 
   // BI-1669E08A: check BEFORE the preflight. A tree that already has a passing
   // record for this exact HEAD needs neither the three-minute guard parity run
   // nor a lease; starting either can only cost time and risk the record.
-  const reuse = shouldReuseExistingPass({ args, verdictAtHead: readReconciledVerdictAtHead() });
+  const reuse = shouldReuseExistingPass({ args, verdictAtHead: readReconciledVerdictAtHead({ cwd: candidateCwd, expectedSha }) });
   if (reuse.reuse) {
-    process.stdout.write(
+    stdout.write(
       `pregate: ${reuse.reason} — not starting a second run.\n`
         + `pregate: a second run of an identical tree can only repeat or contradict that verdict, and it takes the record the moment it starts.\n`
         + `pregate: read it with  pnpm run pregate:status  — re-gate anyway with  pnpm run pregate -- ${FORCE_RERUN_FLAG}\n`,
     );
-    process.exit(0); // exit-0: a PASS record bound to current HEAD already exists; this run reused it and gated nothing
+    return 0; // exit-0: a PASS record bound to selected HEAD already exists; this run reused it and gated nothing
   }
 
-  const preflightStatus = await runHostPreflight({ args });
-  if (preflightStatus !== 0) process.exit(preflightStatus);
+  const preflightStatus = await runHostPreflightImpl({ args, cwd: candidateCwd, env: scrubGitRepoLocationEnv() });
+  if (preflightStatus !== 0) return preflightStatus;
 
   // BI-A254A94C: the pre-push gate already exempts a docs-only diff. Do not
   // spend the single sandbox slot on that diff. A mixed code file is named.
   if (!args.includes(FORCE_RERUN_FLAG) && !isRecordExemptInvocation(args)) {
-    const sandbox = sandboxDecisionForHead();
+    const sandbox = sandboxDecisionForHead({
+      cwd: candidateCwd, expectedSha,
+      git: (gitArgs) => gitText(gitArgs, { cwd: candidateCwd, nullOnError: true }),
+    });
     if (sandbox) {
-      process.stdout.write(`pregate: ${sandbox.message}\n`);
+      stdout.write(`pregate: ${sandbox.message}\n`);
       if (!sandbox.claim) {
-        process.exit(0); // exit-0: docs-only diff; same predicate as pre-push; no lease claimed
+        return 0; // exit-0: docs-only diff; same predicate as pre-push; no lease claimed
       }
     }
   }
 
-  const useShell = shouldUseShell();
-  const { result, timedOut } = await runGateWithQueuedRevival({ args: stripForceRerunFlag(args), useShell });
+  const useShell = shouldUseShell({ cwd: candidateCwd });
+  const { result, timedOut } = await runGateWithQueuedRevivalImpl({ args: stripForceRerunFlag(args), useShell });
   if (result?.error) {
-    process.stderr.write(`pregate: failed to launch gate: ${result.error.message}\n`);
-    process.exit(1);
+    stderr.write(`pregate: failed to launch gate: ${result.error.message}\n`);
+    return 1;
   }
   const recordExempt = isRecordExemptInvocation(args);
   const exitCode = resolveWrapperExitCode({
@@ -887,21 +898,21 @@ async function main() {
     timedOut: Boolean(timedOut),
     recordExempt,
     verdictAtHead: (result?.status ?? 1) === 0 && !recordExempt && !timedOut
-      ? readReconciledVerdictAtHead()
+      ? readReconciledVerdictAtHead({ cwd: candidateCwd, expectedSha })
       : "",
   });
   if (exitCode === ABANDONED_OR_UNRECORDED_EXIT_CODE) {
-    process.stderr.write(
+    stderr.write(
       timedOut
         ? `pregate: admission window elapsed without gating — exiting ${ABANDONED_OR_UNRECORDED_EXIT_CODE}, not 0; nothing was verified (BI-A9CF0D69).\n`
         : `pregate: gate reported 0 but no PASS record exists for current HEAD — treating as did-not-run and exiting ${ABANDONED_OR_UNRECORDED_EXIT_CODE} (BI-A9CF0D69). Read the verdict with: pnpm run pregate:status\n`,
     );
   }
-  process.exit(exitCode);
+  return exitCode;
 }
 
 export async function runHostPreflight({
-  args = [], env = process.env, spawnSyncImpl = null,
+  args = [], cwd = process.cwd(), env = process.env, spawnSyncImpl = null,
   runObservedImpl = null,
   readStatusImpl = readEarlyQuiescenceStatus,
   stdout = (text) => process.stdout.write(text),
@@ -925,7 +936,7 @@ export async function runHostPreflight({
     if (spawnSyncImpl) {
       // Compatibility for injected test executors; normal execution is observed.
       preflight = await spawnSyncImpl(process.execPath, preflightArgs,
-        { env, encoding: "utf8", timeout: 60 * 60_000, maxBuffer: 64 * 1024 });
+        { env, cwd, encoding: "utf8", timeout: 60 * 60_000, maxBuffer: 64 * 1024 });
     } else {
       const controller = new AbortController();
       const cancel = () => controller.abort();
@@ -939,7 +950,7 @@ export async function runHostPreflight({
         } }, stderr: { write(chunk) { if (verbose) stderr(String(chunk)); } } });
       try {
         const observed = await run({ command: process.execPath, args: preflightArgs,
-          env, cwd: process.cwd(), shell: false, signal: controller.signal });
+          env, cwd, shell: false, signal: controller.signal });
         preflight = { ...observed, stdout: observed.outputTail, stderr: "" };
       } finally {
         process.removeListener("SIGINT", cancel);
@@ -985,13 +996,17 @@ export async function runHostPreflight({
 // reconciled verdict for current HEAD. Failure to read is "", never "PASS" —
 // corroboration must fail closed or the honesty rule re-opens the exit-0 hole.
 export function readReconciledVerdictAtHead({
-  resolveContextImpl = resolveWorktreeContext,
+  cwd = process.cwd(), expectedSha,
+  resolveContextImpl = (candidateCwd) => {
+    const context = resolvePregateGateContext({ cwd: candidateCwd });
+    return { ...context, headBranch: context.branch, headSha: context.sha };
+  },
   collectVerdictsImpl = collectSlotVerdicts,
   reconcileImpl = reconcileSlots,
 } = {}) {
   try {
-    const context = resolveContextImpl();
-    if (!context) return "";
+    const context = resolveContextImpl(cwd);
+    if (!context || (expectedSha && context.headSha !== expectedSha)) return "";
     const slots = collectVerdictsImpl(context);
     if (slots.length === 0) return "";
     return reconcileImpl(slots)?.verdict ?? "";
@@ -1005,7 +1020,10 @@ export function readReconciledVerdictAtHead({
 // comparison must survive symlinked invocation spellings (macOS /var tmpdir),
 // or the guard silently skips main() and exits 0 (BI-745658D7).
 if (isEntryModule(import.meta.url)) {
-  main().catch((error) => {
+  // BI-B1065D41: tolerate a closed pipe once per CLI invocation; importing or
+  // exercising the wrapper must not accumulate process-wide stream listeners.
+  installBrokenPipeTolerance();
+  main().then((status) => process.exit(status)).catch((error) => {
     process.stderr.write(`pregate: ${error?.stack || String(error)}\n`);
     process.exit(1);
   });
