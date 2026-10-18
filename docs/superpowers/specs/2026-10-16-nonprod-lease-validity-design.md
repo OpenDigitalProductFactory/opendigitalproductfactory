@@ -156,7 +156,9 @@ LC-CHECKPOINT and LC-VERIFY; verification refs LC-RED and LC-VERIFY.
    foreign-owner cleanup negatives. Run the new test before implementation.
 2. **LC-CHECKPOINT / LC-PROVENANCE:** Refactor the existing durable Task payload
    construction so immediate and queued admissions share binding semantics.
-   A separate immediate checkpoint must not reset an existing queued wait or
+   Inside the fresh lease transaction only, create the completed immediate Task
+   and compare-and-set its null lease linkage. Persistence failure rolls back
+   admission. Do not backfill an old active row, reset an existing queued wait or
    overwrite another Task. Return the persisted linkage in the tool response.
    Reuse existing admission settlement for queued continuations. Do not change
    any actual resource capacity, FIFO, timing or renewal policy.
@@ -178,4 +180,16 @@ Task and verification history; no migration or historical backfill.
 
 Roughly 20% of this implementation is shared payload/checkpoint refactoring.
 Funding remains unresolved; no new allocation or paid inference is authorized
-by this plan. Current immutable follow-up coverage is pending publication.
+by this plan. Initial proportional follow-up coverage
+`cmvd9q9b80hdn01qrfawr4ag8` binds published plan commit
+`8c101c08bb7d7eac2f96cf46f1b7fc05b0ddc676`, blob
+`62ba97f2a468a624488f4bbd30a5b805508add4e`; implementation admission
+`IRD-69D501CBC024` allowed. Refresh immutable coverage for the final source.
+The first-failing source-local regression observed zero Task upserts; the
+implemented test now also exercises the unchanged cleanup predicate, including
+foreign-user refusal. This is source evidence, not live acceptance or proof of
+real PostgreSQL rollback. Full governed integration and live cleanup are owed.
+
+Documentation impact: this changes internal admission provenance only. Existing
+lease arguments, caller workflow and cleanup authority remain the same; no
+operator or client setup documentation changes are needed.

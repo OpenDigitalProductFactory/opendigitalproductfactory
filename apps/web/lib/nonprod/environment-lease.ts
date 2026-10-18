@@ -24,7 +24,7 @@ import { isImmutableGateClaimKey } from "@/lib/gates/gate-run-identity";
 import { settleTerminalGateLease } from "./environment-lease-terminal-evidence";
 import { resolveResumeClaim, validateHostResourceClaim } from "./environment-lease-resume";
 import { admittedLeaseTtlMs, DEFAULT_LEASE_TTL_MS, resolveLeaseRequestTiming } from "./environment-lease-timing";
-import { afterNonprodLeaseRelease, publishNonprodCapacityForHead, settleExpiredNonprodLeaseWaits } from "./durable-wait";
+import { afterNonprodLeaseRelease, checkpointImmediateNonprodLeaseAdmission, publishNonprodCapacityForHead, settleExpiredNonprodLeaseWaits } from "./durable-wait";
 export { NONPROD_OWNER_PROVIDERS, type NonprodOwnerProvider } from "./nonprod-owner-provider";
 export {
   admittedLeaseTtlMs,
@@ -251,6 +251,8 @@ export async function claimNonprodEnvironmentLease(input: {
   branchName?: string;
   buildId?: string;
   taskRunId?: string;
+  /** Authenticated MCP actor; never read from claim parameters. */
+  authenticatedUserId?: string;
   cleanupCommand?: string;
   slotManifestVersion?: 1;
   productionBuild?: "local" | "delegated"; // BI-3A14308C: "delegated" waives only the builder reserve
@@ -471,9 +473,19 @@ export async function claimNonprodEnvironmentLease(input: {
       now.getTime() - (current.queuedAt ?? current.createdAt).getTime(),
     );
     if (current.status === "active" && current.slotKey) {
+      let linked = current;
+      if (created && input.authenticatedUserId && current.environmentKey === "local-integration-ci"
+        && current.slotManifestVersion === 1 && !current.taskRunId) {
+        if (!tx.taskRun) throw new Error("nonprod_immediate_admission_task_store_unavailable");
+        const taskRunId = await checkpointImmediateNonprodLeaseAdmission({
+          db: { nonProductionEnvironmentLease: tx.nonProductionEnvironmentLease, taskRun: tx.taskRun },
+          userId: input.authenticatedUserId, lease: current, waitDeadlineAt: queueExpiresAt, now,
+        });
+        linked = { ...current, taskRunId };
+      }
       return {
         status: "admitted",
-        lease: current,
+        lease: linked,
         slotKey: current.slotKey,
         waitAgeMs,
         poolPolicy,

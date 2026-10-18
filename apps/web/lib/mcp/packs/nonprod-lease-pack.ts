@@ -325,6 +325,7 @@ async function claimNonprodEnvironmentLeaseHandler(
   }
 
   const result = await claimNonprodEnvironmentLease({
+    authenticatedUserId: userId,
     resumeLeaseId: stringValue("resumeLeaseId") || undefined,
     environmentKey: environmentKey as "active-candidate" | "local-integration-ci" | "host-heavy-resource",
     ownerProvider: ownerProvider as (typeof NONPROD_OWNER_PROVIDERS)[number],
