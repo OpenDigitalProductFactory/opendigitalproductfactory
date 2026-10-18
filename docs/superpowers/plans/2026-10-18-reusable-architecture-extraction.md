@@ -344,7 +344,7 @@ liveness/fencing evidence, retaining effect uncertainty and unresolved charges.
 Keep current conservative behavior until a tested replacement is admitted.
 
 Then verify one actual enforcing composition and alternate when the runtime
-boundary is qualified. These integration cases and the consumer's RT-01–RT-18
+boundary is qualified. These integration cases and the consumer's RT-01–RT-24
 remain planned/unrun. They are neither a claim of current DPF2 routing nor a new
 gate that blocks the initial move-only graph extraction. Unknown tool support,
 soft capacity restoration and best-effort telemetry cannot establish job adequacy,
@@ -379,6 +379,26 @@ Characterize existing prompt-cache, adapter usage/telemetry, cost-ranking and
 are dropped from the current inference result/token-usage path, and missing prices
 can become zero cost. These inspected gaps need explicit migration/compatibility
 treatment, not a new cache/billing ledger or a claim of observed billing failure.
+
+For the appropriate OP-01/WP-01 and host integration, characterize existing
+route-builder residency, data-screening/classification, provider/account suitability
+and dispatch guards. Preserve separate model/job preference, actual payload,
+permitted destination, execution location and resource facts. Counterexamples
+include public authorship metadata, quantities/paths and schema vocabulary plus
+genuine or ambiguous protected records mixed into code; no blanket task-label
+restriction or code exemption. Re-screen changed outgoing history, retrieval,
+tool results and fallback; native future disclosure needs actual mediation in
+addition to GPP's full enabled actor/session envelope. Local-required work without
+adequate local qualification holds or uses a qualified authorized transformation.
+
+Test actual protected-data flows, backend/management/cache admission and access
+partitions without inventing a blanket air-gap rule for permitted isolated public
+tools/downloads or content-free telemetry. Keep Workroom, agent loop and resident
+inference/KV lifetimes distinct. Additional local hardware/models use the same
+job/data/host qualification before entering the substitution set; there is no
+permanent sophisticated-cloud split. RT-19–RT-24 remain planned/unrun, not a new
+hardware/OS programme or prerequisite for the move-only graph child. Consumer
+vendor/runtime research establishes no benchmark or qualified enforcing host here.
 
 ## Source characterization actually run
 

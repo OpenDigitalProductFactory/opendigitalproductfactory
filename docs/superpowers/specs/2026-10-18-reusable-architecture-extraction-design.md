@@ -468,6 +468,33 @@ Reuse `inference/budget-gate.ts`, `portfolio/budget-reservation.ts`, `TokenUsage
 token checks and portfolio-point reservations do not prove atomic per-job money
 reservation or late/duplicate usage settlement; that qualification remains unrun.
 
+**Data locality and growing local capability.** Keep model/job preference, actual
+outgoing content, permitted destinations, execution location and resource state
+distinct. `route-contract-builder.ts` already separates tier preference from hard
+residency; reuse `inference/data-screening`, current data policy, account
+suitability and dispatch revalidation as the typed disposition owners. Preserve
+their compatibility limits rather than inventing another data-policy engine.
+Screen each changed outgoing turn, including history/retrieval/tool results and
+fallback. Schema vocabulary, actual protected bytes and the full enabled GPP
+actor/session envelope have separate jobs. Reject both blanket coding-locality
+and blanket code-is-public assumptions; mixed secrets/records retain their policy.
+Future native disclosure needs an enforcing interception path even when the first
+prompt is harmless. If required-local work has no adequate qualified local route,
+hold or use an explicitly authorized, qualified bounded transformation.
+
+Locality governs the protected material/purpose, not an implicit machine-wide
+air gap. Permitted isolated public reads/downloads or content-free telemetry keep
+their actual policy and mediation; backend/management/cache paths still require
+enforcement. Keep protected inference data paths, including embeddings, tools,
+telemetry/logs, saved sessions
+and caches, explicit. A provider locality label or localhost URL is not that proof.
+Keep durable Workroom custody, agent-loop/session and resident
+inference/KV lifetimes distinct. Local hardware/model growth may enlarge the
+qualified substitution set through the same job/data/host tests, without a
+permanent sophisticated-cloud partition. The consumer's local-inference study is
+research input only: no vendor capacity figure, benchmark, hardware/OS purchase,
+installation or host qualification is adopted by this extraction.
+
 ## 5. Trust contracts and runtime boundaries
 
 **Already portable.** `packages/validators/src/trusted-agent-contracts.ts` and
