@@ -394,6 +394,14 @@ describe("bounded local fidelity diagnostic", () => {
   });
   it.each([
     ["ai/test", true], ["docker.io/ai/test:latest", true], ["ai/other", false], [undefined, false],
+    [`C:\\Users\\fixture\\.docker\\models\\bundles\\sha256\\${"a".repeat(64)}\\model\\model.gguf`, true],
+    [`/var/lib/docker/models/bundles/sha256/${"a".repeat(64)}/model/model.gguf`, true],
+    [`C:\\models\\bundles\\sha256\\${"f".repeat(64)}\\model\\model.gguf`, false],
+    [`models/bundles/sha256/${"a".repeat(64)}/model/model.gguf`, false],
+    [`/models/../bundles/sha256/${"a".repeat(64)}/model/model.gguf`, false],
+    [`/models/./bundles/sha256/${"a".repeat(64)}/model/model.gguf`, false],
+    [`/models/\u0000/bundles/sha256/${"a".repeat(64)}/model/model.gguf`, false],
+    ["model.gguf", false],
   ])("carries real chat response model %s through inference to fidelity", async (returnedModel, accepted) => {
     const account = { connectionId: selection.providerConnectionId, providerId: "local", status: "active", authMethod: "local",
       executionChannel: "direct-api", credentialEntryId: null, credentialEntry: null, accessibleModelIds: ["ai/test"],
@@ -421,6 +429,32 @@ describe("bounded local fidelity diagnostic", () => {
     });
     expect(reads).toHaveBeenCalledTimes(accepted ? 1 : 0);
     expect(result.data).toMatchObject({ capChanged: false, checkpoint: { state: accepted ? "ready" : "held" } });
+  });
+  it.each([
+    { ...identity, dialect: "unverified-engine" },
+    { ...identity, modelDigest: "not-a-runtime-digest" },
+  ])("rejects bundle identity without supported runtime proof %j", async proof => {
+    mocks.proof.mockResolvedValue(proof);
+    mocks.call.mockResolvedValue({ content: "", finishReason: "tool_calls", toolCalls: [{
+      name: GOLDEN_CASES[0]!.correctToolNames[0], arguments: {},
+    }], raw: { model: `/models/bundles/sha256/${"a".repeat(64)}/model/model.gguf` } });
+    const result = await runLocalToolFidelityDiagnostic(selection, "u", context());
+    expect(mocks.call).toHaveBeenCalledTimes(1);
+    expect(reads).not.toHaveBeenCalled();
+    expect(result.data).toMatchObject({ capChanged: false, checkpoint: { state: "held" } });
+    expect((result.data!.observations as Array<unknown>)[0]).toMatchObject({ reason: "model_identity_unverified" });
+  });
+  it("rejects a matching returned bundle when runtime identity changes after dispatch", async () => {
+    mocks.call.mockImplementation(async () => {
+      mocks.proof.mockResolvedValue({ ...identity, configDigest: "f".repeat(64) });
+      return { content: "", finishReason: "tool_calls", toolCalls: [{ name: GOLDEN_CASES[0]!.correctToolNames[0], arguments: {} }],
+        raw: { model: `/models/bundles/sha256/${"a".repeat(64)}/model/model.gguf` } };
+    });
+    const result = await runLocalToolFidelityDiagnostic(selection, "u", context());
+    expect(mocks.call).toHaveBeenCalledTimes(1);
+    expect(reads).not.toHaveBeenCalled();
+    expect(result.data).toMatchObject({ capChanged: false, checkpoint: { state: "held" } });
+    expect((result.data!.observations as Array<unknown>)[0]).toMatchObject({ reason: "model_identity_unverified" });
   });
   it("allows a healthy call beyond thirty seconds inside the existing admission and execution policies", async () => {
     vi.useFakeTimers(); vi.setSystemTime(0);
