@@ -113,6 +113,88 @@ Do not invoke arbitrary tools, rotate credentials or stop unknown processes to
 obtain this evidence. Read authority metadata without exposing credential bytes.
 Reconciliation respects the current grant intersection and paired-peer boundary.
 
+### Research & Benchmarking: what a collector can actually prove
+
+This research amendment preserves DI-08A2750D3287 and the acceptance contract.
+It does not enable a retry, replace a task, or qualify a historical execution.
+The normal handoff of WC-FDAC8963 transferred design research to the current
+executor; the separately owned writer-fence implementation remains outside this
+worktree's scope.
+
+Three primary-source comparisons inform the collector boundary:
+
+| Existing contract | Adopt in DPF | Do not infer or adopt |
+| --- | --- | --- |
+| [Temporal Activity idempotency](https://docs.temporal.io/activity-definition#idempotency) distinguishes an effect that happened from a completion that reached workflow history. Activities can execute again after a lost completion. | Require the effect-owning service's idempotency and result contract; split independently observable effects instead of treating the whole agent turn as one effect. | An absent workflow completion does not prove that an external action never happened. Workflow durability does not make arbitrary effects exactly once. |
+| [AWS Step Functions redrive](https://docs.aws.amazon.com/step-functions/latest/dg/redrive-executions.html) retains execution history and the original definition while re-running unsuccessful steps. | Preserve immutable inputs, source, completed steps and explicit recovery eligibility. | Do not import its retry/timeout reset behavior: this DPF contract preserves the original aggregate budget. An eligible redrive in another product is not authority to redrive an uncertain DPF task. |
+| [Amazon's idempotent API contract](https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/) binds caller intent to a stable request identifier, couples mutation and deduplication atomically, and rejects changed parameters. | Keep the original digest, reconcile the durable winner, and account for late arrivals at the actual writer. | A new key or a matching cached response does not establish closure of other effects outside that writer's transaction. |
+
+These comparisons support the existing design; none supplies missing historical
+DPF telemetry. They also explain why a generic health check or another model
+call cannot replace effect-specific reconciliation.
+
+#### Available sources and their limits
+
+The finite D836 inventory was read through its native task/backlog context.
+Its request digest is
+`8d1e43f7ba6d981600ccd205acd6b90d632bacbdbc9017f5952e7d177dfb4daf`,
+dispatch attempt is 1, and the immutable handoff artifact is source
+`a15d9fcb8a7663bbe5f71a27a5f4920cd52e3bf2`. Its recorded uncertainty is not a
+canonical review verdict. The source audit below uses retained runtime105 commit
+`6bbf191fd9a5ec58857a21656ca985a120485da2`; source inspection is not proof that
+this exact process, configuration or binary performed the original launch.
+
+| Evidence owner/source | What can be established | Remaining qualification requirement |
+| --- | --- | --- |
+| TaskRun accepted metadata, immutable artifact and dispatch checkpoint | Logical request identity, intended writer/readers and recorded attempt. | Actual launch identity must be authenticated separately; a dispatch event is not an execution-membership receipt. |
+| Native task artifacts and linked provider operations | D836's previously inspected exact TaskArtifact and AsyncInferenceOp inventories were empty. | A complete original capture contract or a retained emitter acknowledgement is needed. Empty inventories are not a complete effect inventory. |
+| `routing/cli-adapter.ts` and `cli-owned-runner.ts` | The inspected source resolves provider auth, stages private files and launches through a mutable sandbox name. | Original resolved executable/configuration, immutable launch membership, descendants and any remote operations need actual emitter records. Current container identity cannot fill these fields. |
+| `governed-tool-audit.ts:124-132` and `mcp-governed-execute.ts:609-755` | Consequential calls reserve an audit/receipt before execution and refuse if reservation fails. Other calls can execute before their audit is written; audit persistence failure returns no row. | Classify the actual original invocation path and reconcile domain receipts/reservations. A global zero ToolExecution count cannot prove no platform mutation. |
+| `mcp/packs/initiative-readiness-pack.ts:140-148` and canonical receipt repositories | The inspected definition base declares side effects without itself declaring a consequence. The canonical writer has a separate durable domain result. | Resolve actual call classification and the exact task/authority-linked domain winner. Do not assume every readiness write used the consequential pre-execution reservation path. |
+| Provider credential owner and actual provider operation | Source auth resolution may refresh before inference; present account state is readable through existing authority. | The original attributable auth/operation result is required. A currently healthy account or quota error cannot attest the old preparation outcome. |
+| Approval/effect owner and maintenance retirement producer | Specific approval reservations and authenticated retirement can have their own durable identities. | Bind each to the actual original operation and reconcile its effects. Retiring a container is not proof that an unlinked task ran there or that remote effects ended. |
+
+The audit reservation distinction matters even if a task reported zero tool
+calls. At the inspected source, an ordinary tool may commit its domain change
+before audit persistence fails. Conversely, a known consequential path can have
+a durable pre-effect reservation. The collector must inspect that path and its
+domain result; neither observation justifies a blanket assertion about all tools.
+
+#### Ordered collector qualification
+
+1. Resolve the exact saved request and original actor through the existing
+   requester-owned readback. Do not borrow another task's result action,
+   credential, Workroom or proof. A semantic-review result is a separate lane
+   from an initiative-review recovery checkpoint.
+2. Establish the original reachable capability set and enumerate its effect
+   owners. For each owner, identify the retained authoritative locator and the
+   contract that makes its read complete, attributable and final. A required-tool
+   list or static native-tool denylist does not establish this set.
+3. Reconcile actual domain winners and pending reservations, then establish
+   original execution closure or the complete revocation/reconciliation branch
+   already required by AC-HR-2. A prospective generation fence only supplies its
+   own boundary; it cannot synthesize historical launch membership.
+4. Qualify existing generation, authority, deadline and budget checks only after
+   that evidence is complete. Otherwise return the existing missing-evidence
+   recovery result, with the missing artifact and accountable emitter. Do not
+   start inference to discover whether the old inference had effects.
+
+Distinguish evidence that has not yet been read from provenance that no retained
+authoritative source can supply. For D836, the finite inspected records do not
+establish launch/capability/effect completeness; they do not prove that every
+possible upstream source was searched. An owner may still provide a genuine
+retained producer receipt. Until then, the supported result is an explicit
+unsupported historical-provenance finding, with uncertainty preserved. Repeated
+reads of the same task or deployment do not advance that finding.
+
+This amendment completes neither native research acceptance nor collector
+implementation. No failing-then-passing collector proof, genuinely qualified
+historical recovery, or served recovery success has been run here. In particular,
+a missing-proof refusal and the separate writer-fence tests cannot satisfy the
+positive recovery case in AC-HR-2/5. Before implementation admission, the owner
+must name an available authenticated producer for each required evidence family
+and demonstrate a genuinely qualified input without replaying the held originals.
+
 ### Atomic fence and original-task recovery
 
 Refactor existing generation predicates into one shared server-only contract.
