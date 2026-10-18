@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Per-question tool-fidelity readers
 
 Backlog: BI-F95DBC49. Workroom: WC-20BE2EE1. Profile: fix; delivery-small.
@@ -55,4 +59,4 @@ Rollback the code through a protected revert; preserve prior EndpointTestRun rec
 
 ## Backlog coverage
 
-Atomic owner BI-F95DBC49; no dependencies or independent subdeliverables. Coverage receipt must bind this exact immutable ordered fix design before implementation. Initial intake is not a coverage receipt. Evidence status at design authoring: source assessment confirmed; unit RED/GREEN, typechecks, shared gate, publication and served acceptance UNRUN.
+Atomic owner BI-F95DBC49; no dependencies or independent subdeliverables. Initial proportional coverage receipt cmvdb5qxf0vfp01qr33fcnhc6 binds design4db6532b5f43aef82d934116303f8602eb7c5423/blob018b64d0f06a1d469bd19b50910f2ac07e806067. Refresh exact immutable coverage after this status-frontmatter correction and before implementation. Root's independent source PLAN assessment found no blocking architecture/safety/scope issue and identified the missing frontmatter through the actual named guard. Actual initial scorer RED:32tests,5 semantic failures,27passing. Surface helper regressions then fail before helper implementation as expected. The graph also links `mcp-governed-execute-audit-identity.test.ts`; include it in affected verification. GREEN, typechecks, shared gate, publication and served acceptance remain UNRUN at this point.
