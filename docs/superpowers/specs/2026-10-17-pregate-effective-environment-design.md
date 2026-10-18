@@ -62,5 +62,12 @@ receive the repair on normal source refresh. Protected CI remains mandatory.
 Revert the wiring and regression through the normal PR path if needed; no
 receipt deletion, historical rewrite or client restart is part of this fix.
 The broader fast-fail ordering and input-closure cache work remain separate.
-Research reproduction, implementation admission, source checks and publication
-are pending; no test or deployed outcome is claimed by this design.
+The actual unchanged-entrypoint regression produced one failure and one
+unchanged-body control pass in 0.414 seconds. After the one-line repair,
+26 focused receipt tests and 35 existing preflight tests passed. Syntax,
+frontmatter, module-size and document-index checks also passed. Native research
+receipt `initiative-b92042d5-c2c7-4d84-907f-77c2d41a4d1f`, proportional coverage
+`cmvdbfua10xg101qrtlyheri2` and implementation admission
+`IRD-3560BDCA3F36` preceded implementation. Refresh coverage for the final
+published artifact. Whole host parity, shared integration, native semantic
+review, protected publication and deployed acceptance remain unrun.
