@@ -7,6 +7,7 @@ import { validInitiativeGateReceipt } from "./receipt-validation";
 import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 import { hasExecutionUncertainty } from "@/lib/shared/execution-uncertainty";
 import { captureTaskExecutionFence, sameTaskExecutionFence, type TaskExecutionFence } from "@/lib/shared/task-execution-fence";
+import { isRolledBackPostgresConflict } from "@/lib/shared/postgres-transaction-conflict";
 
 /** Internal context only: never accepted from tool arguments. This identifies an
  * effect; it does not settle a provider execution or authorize its replay. */
@@ -157,7 +158,7 @@ export async function publishBoundReviewEffect<T>(bound: boolean, publish: (winn
   try { return await publish(false); }
   catch (error) {
     const code = object(error).code;
-    if (!bound || (code !== "P2034" && code !== "P2002")) throw error;
+    if (!bound || (code !== "P2002" && !isRolledBackPostgresConflict(error))) throw error;
     return publish(true);
   }
 }

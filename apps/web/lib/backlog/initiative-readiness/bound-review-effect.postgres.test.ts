@@ -86,25 +86,39 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
     // No public fallback: a missing fixture table fails instead of reading live rows.
     pool = new Pool({ connectionString: url, application_name: schema,
       options: `-c search_path=${schema} -c statement_timeout=7000`, max: 5 });
-    // LIKE retains the public enum column types, while Prisma qualifies casts
-    // with the adapter schema. Domains preserve the base enum's compatibility
-    // without allowing missing fixture tables to fall through to public rows.
-    // https://www.postgresql.org/docs/current/extend-type-system.html#EXTEND-TYPE-SYSTEM-DOMAINS
-    const enumDomains = await pool.query<{ ddl: string }>(`
-      SELECT DISTINCT format('CREATE DOMAIN %I.%I AS %I.%I', $1::text, e.typname, en.nspname, e.typname) AS ddl
+    // Prisma qualifies enum casts with its adapter schema. Clone actual enum
+    // labels and retarget LIKE's columns so comparisons use that SAME type,
+    // including array columns and defaults; no public table fallback is needed.
+    const enumColumns = await pool.query<{
+      table_sql: string; column_sql: string; target_sql: string;
+      default_sql: string | null; create_sql: string;
+    }>(`
+      SELECT format('%I', c.relname) AS table_sql, format('%I', a.attname) AS column_sql,
+        format('%I.%I%s', $1::text, e.typname, CASE WHEN t.typtype = 'e' THEN '' ELSE '[]' END) AS target_sql,
+        pg_get_expr(d.adbin, d.adrelid) AS default_sql,
+        format('CREATE TYPE %I.%I AS ENUM (%s)', $1::text, e.typname,
+          (SELECT string_agg(quote_literal(v.enumlabel), ', ' ORDER BY v.enumsortorder)
+           FROM pg_enum v WHERE v.enumtypid = e.oid)) AS create_sql
       FROM pg_attribute a
       JOIN pg_class c ON c.oid = a.attrelid
       JOIN pg_namespace n ON n.oid = c.relnamespace
       JOIN pg_type t ON t.oid = a.atttypid
       JOIN pg_type e ON e.oid = CASE WHEN t.typtype = 'e' THEN t.oid ELSE t.typelem END
-      JOIN pg_namespace en ON en.oid = e.typnamespace
+      LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
       WHERE n.nspname = 'public' AND c.relname = ANY($2::text[])
         AND a.attnum > 0 AND NOT a.attisdropped AND e.typtype = 'e'
     `, [schema, tables]);
-    for (const { ddl } of enumDomains.rows) await pool.query(ddl);
+    for (const ddl of new Set(enumColumns.rows.map(row => row.create_sql))) await pool.query(ddl);
     db = new PrismaClient({ adapter: new PrismaPg(pool, { schema }) });
     state.db = db as unknown as Record<string, unknown>;
     for (const table of tables) await pool.query(`CREATE TABLE "${table}" (LIKE public."${table}" INCLUDING ALL)`);
+    for (const { table_sql, column_sql, target_sql, default_sql } of enumColumns.rows) {
+      await pool.query(`ALTER TABLE ${table_sql}
+        ALTER COLUMN ${column_sql} DROP DEFAULT,
+        ALTER COLUMN ${column_sql} TYPE ${target_sql} USING (${column_sql}::text::${target_sql})`);
+      if (default_sql !== null) await pool.query(`ALTER TABLE ${table_sql}
+        ALTER COLUMN ${column_sql} SET DEFAULT (${default_sql})::text::${target_sql}`);
+    }
   });
   afterAll(async () => {
     state.lockedArtifact = null;
@@ -123,6 +137,26 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
     throw new Error("The actual writer did not reach its PostgreSQL TaskRun lock.");
   }
   const verdictCount = () => db.backlogItemActivity.count({ where: { kind: "initiative_gate_receipt" } });
+
+  it("uses real isolated enums with canonical labels and no public table fallback", async () => {
+    const types = await pool.query<{ namespace: string; type_kind: string; labels_match: boolean }>(`
+      SELECT en.nspname AS namespace, e.typtype AS type_kind,
+        ARRAY(SELECT v.enumlabel FROM pg_enum v WHERE v.enumtypid = e.oid ORDER BY v.enumsortorder)
+        = ARRAY(SELECT v.enumlabel FROM pg_enum v JOIN pg_type p ON p.oid = v.enumtypid
+            JOIN pg_namespace pn ON pn.oid = p.typnamespace
+            WHERE pn.nspname = 'public' AND p.typname = e.typname ORDER BY v.enumsortorder) AS labels_match
+      FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace JOIN pg_type t ON t.oid = a.atttypid
+      JOIN pg_type e ON e.oid = CASE WHEN t.typtype = 'e' THEN t.oid ELSE t.typelem END
+      JOIN pg_namespace en ON en.oid = e.typnamespace
+      WHERE n.nspname = $1 AND c.relname = 'BacklogItemActivity' AND a.attname = 'gateKey'
+    `, [schema]);
+    expect(types.rows).toEqual([{ namespace: schema, type_kind: "e", labels_match: true }]);
+    const isolation = await pool.query("SELECT current_schemas(false) AS schemas, to_regclass('\"Principal\"') AS missing_table");
+    expect(isolation.rows).toEqual([{ schemas: [schema], missing_table: null }]);
+    await expect(pool.query(`SELECT 'invalid-fixture-gate'::"${schema}"."InitiativeGateKey"`))
+      .rejects.toMatchObject({ code: "22P02" });
+  });
   async function displace(client: PoolClient, change: string) {
     const progress = change === "unknown" ? { executionUncertainty: { schemaVersion: 1, settlement: "unknown" } }
       : change === "generation" ? { resumeReservedAt: "new-admission" } : {};
