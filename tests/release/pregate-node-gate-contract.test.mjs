@@ -44,6 +44,10 @@ function makeTempRepo() {
   g(["add", "."]);
   g(["commit", "-q", "-m", "base"]);
   g(["update-ref", "refs/remotes/origin/main", "HEAD"]);
+  // Admission contracts need a code-bearing candidate, not an empty diff.
+  writeFileSync(join(dir, "runtime.mjs"), "export const candidate = true;\n");
+  g(["add", "runtime.mjs"]);
+  g(["commit", "-q", "-m", "code candidate"]);
   return { dir, g };
 }
 
@@ -491,6 +495,10 @@ test("gate-worktree.mjs reports active lease contention and stale main before ex
   const advancedMain = g(["rev-parse", "HEAD"]);
   g(["update-ref", "refs/remotes/origin/main", advancedMain]);
   g(["checkout", "-q", "feat/topic"]);
+  // Keep a topic-code diff while origin/main advances independently.
+  writeFileSync(join(dir, "topic.mjs"), "export const topic = true;\n");
+  g(["add", "topic.mjs"]);
+  g(["commit", "-q", "-m", "topic code candidate"]);
   const candidateSha = g(["rev-parse", "HEAD"]);
 
   const mcp = await startMockMcp({

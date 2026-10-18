@@ -186,8 +186,9 @@ export function decideSandboxAdmission(exemption) {
 
 /** Null when the merge base cannot be resolved — the caller must not treat that as exempt. */
 export function sandboxDecisionForHead({
-  git = (args) => gitTextOrNull(args, { cwd: REPO_ROOT }),
-  runCheck = runCheckLive,
+  cwd = REPO_ROOT,
+  git = (args) => gitTextOrNull(args, { cwd }),
+  runCheck = (entry) => runCheckLive(entry, cwd),
   registry = DERIVED_ARTIFACTS,
 } = {}) {
   const mergeBase = git(["merge-base", "HEAD", "origin/main"]);
@@ -264,10 +265,10 @@ export function resolveDerivedArtifactInvocation(
   return resolveHostCommandInvocation(argv[0], argv.slice(1), { platform, env });
 }
 
-function execDerivedArtifactCommand(argv, stdio) {
+function execDerivedArtifactCommand(argv, stdio, cwd = REPO_ROOT) {
   const invocation = resolveDerivedArtifactInvocation(argv);
   return execFileSync(invocation.command, invocation.args, {
-    cwd: REPO_ROOT,
+    cwd,
     stdio,
   });
 }
@@ -276,9 +277,9 @@ function runCommand(argv) {
   execDerivedArtifactCommand(argv, "inherit");
 }
 
-function runCheckLive(entry) {
+function runCheckLive(entry, cwd = REPO_ROOT) {
   try {
-    execDerivedArtifactCommand(entry.check, "pipe");
+    execDerivedArtifactCommand(entry.check, "pipe", cwd);
     return "fresh";
   } catch (error) {
     return classifyDerivedArtifactCheck(error);
