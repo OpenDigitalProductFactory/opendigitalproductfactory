@@ -310,7 +310,7 @@ Characterize existing `mcp/independent-review-packet-roundtrip.test.ts`,
 absent-scheme `not-applicable` compatibility without counting it as qualification
 for the portable consumer.
 
-### Routing and result integration within OP-01/WP-01
+### Routing, tools and result integration within OP-01/WP-01
 
 Reuse ActivityContract/RequestContract and `inference/route-contract-builder.ts`,
 existing pipeline/account proofs, dispatch screening, adapter capability and
@@ -399,6 +399,31 @@ job/data/host qualification before entering the substitution set; there is no
 permanent sophisticated-cloud split. RT-19–RT-24 remain planned/unrun, not a new
 hardware/OS programme or prerequisite for the move-only graph child. Consumer
 vendor/runtime research establishes no benchmark or qualified enforcing host here.
+
+Carry selected domain-owned semantic tool contracts alongside practice/profile
+toolset references, reusing ToolDefinition/ToolPack/registry, tool budget/intent,
+dynamic surface, stage parity, room narrowing and governed execution. Include
+required/optional methods, exact schema/implementation/alias versions, normalized
+resource/effect/result/recovery meaning and skill/corpus/JSI/GPP prerequisites.
+Characterize the complete reader/immutable-subject/independent-writer/result-recovery
+surface before dispatch; any-one-grant readiness or schema attachment is not
+competence or authority. Migrate the real caller and retire its old interpretation;
+no new tool platform, role-permission table or first graph-child expansion.
+
+TL-01–TL-12 remain planned/unrun. Cover exact actor/delegation/occurrence/profile,
+tool/version/normalized arguments and target/account/revision; current data/GPP and
+attempt bounds; local atomic precondition/state/idempotency/result/outbox; remote
+uncertainty; protected reads before projection/counting; and UI/worker/MCP/native
+parity. Replay preserves the original effect and returns only a currently authorized
+result/status view, including revoked read/delegation and conflicting replay.
+Characterize `work-capsules/command-receipts.ts` command-type/target-only replay
+before adding exact argument/version conflict and current-result authorization at
+the domain boundary. These are intentional hardening deltas, not existing helper
+guarantees or additional first-move scope.
+Keep legacy null-room/participant/read-baseline and GPP shadow semantics explicit.
+Routine authorized artifact recording needs no new human decision solely for tool
+use. Record actual negotiated protocol/catalog semantics separately from
+model-local deferred curation; do not assume a transport revision upgrade.
 
 ## Source characterization actually run
 

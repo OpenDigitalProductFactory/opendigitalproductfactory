@@ -531,6 +531,56 @@ revocation, and retain mandatory host/client consent and GPP human decisions.
 A quota hold is capacity evidence; an uncertain attempt still requires original
 effect reconciliation before a safe qualified fallback or replay.
 
+**Semantic tools and practice toolsets.** Reuse domain-owned tool contracts and
+profile/practice tool references as complementary assets. Actual source includes
+`mcp-tool-types.ts`, `mcp/tool-pack.ts`, `mcp/tool-registry.ts`,
+`actions/coworker-tool-budget.ts`, `tak/tool-intent.ts`,
+`tak/dynamic-tool-surface.ts`, `work-management/room-turn-authority.ts` and
+`mcp-governed-execute.ts`. Retain one definition/handler/grant composition and the
+existing domain command/query owners; separate pure contract/normalization from
+application permissions, persistence and authenticated execution adapters. The
+portable operating profile currently references tools, not a complete standalone
+tool-definition artifact. No eighth tool engine or separate platform is proposed.
+
+Keep intent, discovery/attachment, demonstrated competence, current authority and
+exact invocation distinct. Toolsets declare required/optional methods, job/stage,
+skill/corpus prerequisites and qualified equivalents. Preflight the complete
+reader → immutable subject → independent writer → persistence/recovery path;
+any-one-grant readiness is insufficient. Attachment budgets cannot silently drop
+required methods or widen grants. Version schemas, aliases, normalization and
+result/recovery semantics with their actual callers and retirement conditions.
+
+Current invocation binds trusted actor/delegation/occurrence/profile, exact
+tool/version/normalized arguments, canonical target/account/revision, policy/GPP
+and attempt limits through current domain owners. Local preconditions, mutation,
+idempotency, result and outbox can commit together; no database transaction waits
+for an LLM, human or remote service. External effects retain explicit uncertainty.
+Replay preserves the original effect but returns only a currently authorized
+result/status view; revoked read/delegation cannot expose stored protected output
+or trigger another execution. Apply authorization before projection/counts and
+preserve UI/worker/MCP/native semantic parity with their actual distinct identities.
+`work-capsules/command-receipts.ts` currently replays by command type/target
+without its own current-result authorization port or normalized-argument/tool-version
+digest. Upstream caller checks may apply; the helper alone proves neither replay
+guarantee. Characterize this compatibility and harden the domain/host boundary
+deliberately, without claiming an observed production disclosure or widening WK.
+
+Legacy null-room/unshaped-room, absent-participant and broad read-baseline behavior
+needs explicit compatibility disposition. It is not protected-read or full JSI/GPP
+qualification. Preserve current GPP shadow limits, full actor/session human
+decisions and host ceilings. Routine valid artifact/receipt recording within its
+authority is not automatically another human approval. Consumer TL-01–TL-12 are
+planned/unrun integration cases within OP-01/WP-01 and existing trust work; they
+do not expand the first graph move or claim a complete qualified tool platform.
+
+The [MCP 2026-07-28 tools specification](https://modelcontextprotocol.io/specification/2026-07-28/server/tools)
+allows listing to vary with request authorization, forbids changing that set
+through other requests on the same connection and recommends stable ordering.
+Keep model-local deferred
+attachment separate from that catalog. Record the actual negotiated version and
+its compatibility tests; this extraction does not upgrade or claim conformance
+for every incumbent transport.
+
 **Tests/gaps.** Existing contract and reference-loop tests passed 50 cases here;
 these do not prove production enforcement, tenant isolation or job qualification.
 Keep BI-F9582C48's existing contract implementation and BI-2AB781FA's combined
