@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Bind local-CI classification to the requested worktree
 
 **Backlog item:** BI-A254A94C
