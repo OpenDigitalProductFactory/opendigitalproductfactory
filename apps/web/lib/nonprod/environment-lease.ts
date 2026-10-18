@@ -24,7 +24,8 @@ import { isImmutableGateClaimKey } from "@/lib/gates/gate-run-identity";
 import { settleTerminalGateLease } from "./environment-lease-terminal-evidence";
 import { resolveResumeClaim, validateHostResourceClaim } from "./environment-lease-resume";
 import { admittedLeaseTtlMs, DEFAULT_LEASE_TTL_MS, resolveLeaseRequestTiming } from "./environment-lease-timing";
-import { afterNonprodLeaseRelease, checkpointImmediateNonprodLeaseAdmission, publishNonprodCapacityForHead, settleExpiredNonprodLeaseWaits } from "./durable-wait";
+import { afterNonprodLeaseRelease, publishNonprodCapacityForHead, settleExpiredNonprodLeaseWaits } from "./durable-wait";
+import { bindFreshImmediateLeaseProvenance } from "./environment-lease-provenance";
 export { NONPROD_OWNER_PROVIDERS, type NonprodOwnerProvider } from "./nonprod-owner-provider";
 export {
   admittedLeaseTtlMs,
@@ -473,19 +474,10 @@ export async function claimNonprodEnvironmentLease(input: {
       now.getTime() - (current.queuedAt ?? current.createdAt).getTime(),
     );
     if (current.status === "active" && current.slotKey) {
-      let linked = current;
-      if (created && input.authenticatedUserId && current.environmentKey === "local-integration-ci"
-        && current.slotManifestVersion === 1 && !current.taskRunId) {
-        if (!tx.taskRun) throw new Error("nonprod_immediate_admission_task_store_unavailable");
-        const taskRunId = await checkpointImmediateNonprodLeaseAdmission({
-          db: { nonProductionEnvironmentLease: tx.nonProductionEnvironmentLease, taskRun: tx.taskRun },
-          userId: input.authenticatedUserId, lease: current, waitDeadlineAt: queueExpiresAt, now,
-        });
-        linked = { ...current, taskRunId };
-      }
       return {
         status: "admitted",
-        lease: linked,
+        lease: await bindFreshImmediateLeaseProvenance({ db: tx, lease: current, created,
+          authenticatedUserId: input.authenticatedUserId, waitDeadlineAt: queueExpiresAt, now }),
         slotKey: current.slotKey,
         waitAgeMs,
         poolPolicy,
