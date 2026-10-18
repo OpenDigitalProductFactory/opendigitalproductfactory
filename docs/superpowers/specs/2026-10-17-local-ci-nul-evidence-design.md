@@ -15,7 +15,10 @@ F646 gate 6f264 reached FAILED but publication threw PostgreSQL 22P05 at
 ExternalEvidenceRecord creation. The archived pending packet SHA256 is
 `27400e27d2ce86108aa03cecbcb8c15a0db95e39325b8c2063e357c80ed7fe7c`.
 Exactly one NUL occurs in `recordArgs.evidence.content.execution.vitest.observations[12].outputTail`.
-The existing offloader only relocates oversized strings. PostgreSQL JSONB
+The actual tail is 66,382 UTF-8 bytes, SHA256
+`4d5ca396926d0fd9dc4af30429955d617112c5eb64f59f8d4815273891dd1ac8`.
+The existing offloader relocates oversized strings but retains NUL in its
+inline excerpt; shorter NUL tails are left inline unchanged. PostgreSQL JSONB
 cannot represent a NUL even when JSON serialization escapes it.
 
 The client checkpoint binds the original content digest. Client edits would
@@ -74,7 +77,24 @@ change, live restart, model call or new gate is in scope.
    the unchanged packet. Successful FAILED publication still exits 1; require
    evidencePending=false, an actual receipt and the unchanged FAILED verdict.
 
-One atomic deliverable maps BI-37D6E04E to AC-NUL/RAW/REPLAY/SCOPE/FAILURE,
-the recorder-to-offloader flow, the existing blob/lease/checkpoint contracts,
-and the scoped tests above. Projection without recorder wiring cannot repair
-publication, and wiring without lossless projection would discard evidence.
+## Traceability and source-local results
+
+One atomic deliverable maps BI-37D6E04E to AC-NUL, AC-RAW, AC-REPLAY,
+AC-SCOPE and AC-FAILURE. Flow F-NUL is `recordLocalIntegrationResult` ->
+`projectLocalCiObservationTails` -> `offloadEvidenceOutput` -> existing recorder.
+Contract C-NUL preserves the original input fingerprint, immutable gate key,
+blob bytes and canonical lease replay. Verification V-NUL is
+`bounded-evidence-output.test.ts` plus `local-integration.test.ts`, the recorder
+MCP contract tests and original-owner supported finalization after deployment.
+Projection without recorder wiring cannot repair publication, and wiring
+without lossless projection would discard evidence.
+
+Before implementation, both added persistence regressions failed with the
+expected 22P05 at the JSONB-compatible storage double (19 existing tests passed).
+After implementation, 79 tests in three source-local files passed. The entire
+archived packet passed through the real projection and offloader with an
+in-memory blob writer: zero remaining NULs in stored evidence, original packet
+unchanged, original 66,382-byte tail and digest retained, verdict still failed.
+This does not prove live PostgreSQL acceptance. Package typecheck and named
+style, frontmatter, module-size and document-index checks passed. Shared local
+integration, native semantic review and runtime acceptance remain unrun.
