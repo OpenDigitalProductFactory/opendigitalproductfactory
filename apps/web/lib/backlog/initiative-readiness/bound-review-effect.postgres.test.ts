@@ -71,6 +71,22 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
     // No public fallback: a missing fixture table fails instead of reading live rows.
     pool = new Pool({ connectionString: url, application_name: schema,
       options: `-c search_path=${schema} -c statement_timeout=7000`, max: 5 });
+    // LIKE retains the public enum column types, while Prisma qualifies casts
+    // with the adapter schema. Domains preserve the base enum's compatibility
+    // without allowing missing fixture tables to fall through to public rows.
+    // https://www.postgresql.org/docs/current/extend-type-system.html#EXTEND-TYPE-SYSTEM-DOMAINS
+    const enumDomains = await pool.query<{ ddl: string }>(`
+      SELECT DISTINCT format('CREATE DOMAIN %I.%I AS %I.%I', $1::text, e.typname, en.nspname, e.typname) AS ddl
+      FROM pg_attribute a
+      JOIN pg_class c ON c.oid = a.attrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      JOIN pg_type t ON t.oid = a.atttypid
+      JOIN pg_type e ON e.oid = CASE WHEN t.typtype = 'e' THEN t.oid ELSE t.typelem END
+      JOIN pg_namespace en ON en.oid = e.typnamespace
+      WHERE n.nspname = 'public' AND c.relname = ANY($2::text[])
+        AND a.attnum > 0 AND NOT a.attisdropped AND e.typtype = 'e'
+    `, [schema, tables]);
+    for (const { ddl } of enumDomains.rows) await pool.query(ddl);
     db = new PrismaClient({ adapter: new PrismaPg(pool, { schema }) });
     state.db = db as unknown as Record<string, unknown>;
     for (const table of tables) await pool.query(`CREATE TABLE "${table}" (LIKE public."${table}" INCLUDING ALL)`);
