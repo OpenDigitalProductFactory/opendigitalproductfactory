@@ -61,6 +61,13 @@ path, exact binding/permit versions, non-widening authority and an atomic store
 owner. Its native executor is unavailable. The existing core/control/experience
 fixture composition is the adoption target; it is not evidence of live execution.
 
+Later October 18 consumer guidance in `docs/WORKROOM-PRACTICES-AND-AUTONOMY.md`
+and `research/work-practices-pr-patterns-and-autonomy.md` refines the reusable
+unit to a complete work practice. Those read-only design inputs establish no
+new implementation, production or publication authority. Their selected PR
+study is a design hypothesis, not measured interruption rates or a reproduced
+universal cause; this map does not adopt those claims as runtime evidence.
+
 The package homes already exist: `packages/types` owns portable representation;
 `packages/validators` owns Zod contracts and pure validation/reference behavior;
 `packages/storefront-templates` owns archetype derivation. Prefer internal
@@ -82,6 +89,40 @@ remains a later decision after both consumers run the same conformance tests.
 This document makes no new claim about external competitors, licensed standards
 or market efficacy. Existing standards/design sources above remain normative for
 their own scope; this refactor does not revise them.
+
+### Reusable work practice and first proof
+
+The reusable asset includes its scenario/objective, graph and collaboration,
+skill/corpus requirements, JSI assessment scheme, GPP obligations, operating
+presentation and ordinary/adverse/recovery cases. Compose those references over
+the existing `WorkUnitDefinition`, `OperatingFlow`/Stage, WorkShape, archetype and
+asset owners. A work practice is a description of that composition, not an eighth
+engine, catalog, scheduler or knowledge store.
+
+Keep four meanings distinct: reusable definition; company binding and tailoring;
+the exact operating composition with its current qualification status; and the
+actual occurrence with assignments, cycles, attempts, evidence and outcome.
+Shipping an assessment scheme does not establish a passed assessment. Suggested
+knowledge is distinct from required context; missing required context holds its
+dependent obligation. Share scoped references and synthetic assets, never private
+corpora, live grants or credentials.
+
+`work-management/room-definition-contract.ts`, `room-review-profile.ts` and
+`room-review-profile-catalog.ts` already compose common → source → shape → facet →
+category → leaf → organization requirements. The composer preserves evidence and
+critical failures, tightens freshness, reports conflicts and fingerprints the
+result. It imports the source registry/catalog and Node hashing; separate those
+adapters before portable reuse. Its read contract assesses neither evidence nor
+authority. `room-review-profile.test.ts` characterizes non-removal, conflicts,
+provenance, freshness and unsupported definitions; it was inspected, not run here.
+
+Carry a bounded descriptor and referenced fixtures alongside the first safe
+graph move: software/customer need → accepted improvement, including linked
+self-improvement work. Identify unimplemented portions explicitly; do not require
+an exhaustive practice catalog or portable profile-composer extraction before
+that move. Later contrast shelter intake → housing → care handoff under the same
+lifecycle, with canonical domain facts and authorized physical attestations.
+Merged software delivery and an accepted customer outcome remain separate facts.
 
 ## 1. Workroom engine
 
@@ -222,6 +263,13 @@ capability combination; a validator result cannot stand in for it. Source flags,
 compiler fixtures and mock adapters establish neither complete conformance nor
 production mediation.
 
+For GPP 0.19 §8, assess one actor/session's effective combined envelope across
+relevant graph nodes and tool routes. Splitting untrusted input, sensitive access
+and state change/outward communication across stages cannot evade its actual
+human decision. A stage/session label alone proves no runtime isolation. DPF2's
+current declared-stage fixtures do not implement general cross-stage aggregation;
+the composed-envelope scenario is unimplemented/unrun, not a conformance claim.
+
 **Tests.** Parser/schema/compile/determinism/emit, generated integrity, resolver
 no-DB, DRC corpus, soundness, registry round-trip and interpreter/drive parity.
 Golden emitted bytes, diagnostics, hashes and all pinned prior definitions are
@@ -318,6 +366,21 @@ evidence. Remove displaced composition/hash code after that checkpoint.
 fixtures. Scope: BI-9874488F, with BI-07A2B207 retaining reference-package/export
 ownership. Full composition qualification remains unavailable until evidenced.
 
+**Process qualification.** Include coordinator and independent-reviewer jobs in
+the assessment scheme: issued pinned packet → eligible reader/consumer →
+authenticated judgment → durable exact-subject receipt. Cover admitted ownership
+and delegation through cleanup, exact runtime/target and output codec, lost
+acknowledgment, quota/capacity wait, deadlines, cancellation and replay. Preserve
+failed versus unrun/inconclusive checks. An inaccessible receipt does not prove
+no execution. These are qualification requirements, not completed assessments or
+permission to repair production within this extraction.
+Current `work-management/coordinator-eligibility.ts` returns `not-applicable` when
+no scheme is present. Preserve that incumbent compatibility separately; never
+export it as a passed portable qualification. Relevant characterization includes
+`mcp/independent-review-packet-roundtrip.test.ts`,
+`change-review/semantic-review-request.test.ts` and
+`work-management/coordinator-eligibility.test.ts`; these were inspected, not run.
+
 ## 5. Trust contracts and runtime boundaries
 
 **Already portable.** `packages/validators/src/trusted-agent-contracts.ts` and
@@ -325,6 +388,11 @@ ownership. Full composition qualification remains unavailable until evidenced.
 of DPF. Their supported protocol is draft 0.1.0, simulated and non-authoritative;
 no production importer/reference-loop consumer was found. Reuse this working
 subset rather than building a competing protocol.
+
+`trustedWorkDefinitionSchema` declares `flow: "sequential"`. The graph engine's
+capabilities do not extend that draft interchange schema. Export only a declared
+supported subset, or separately version and qualify graph exchange; never flatten
+split/join/rework silently or claim existing reference transitions support them.
 
 **Trusted production owners.** `mcp-governed-execute.ts`,
 `govern/authority/coworker-authority-decision.ts`, `tak/gaid-actor-envelope.ts` and
@@ -339,6 +407,15 @@ transitions, reserve effects durably, consume dispatch once and reconcile
 uncertain effects. Reference transitions return state/intents; they do not commit
 to another store. Independent review and requester/reviewer/executor/human
 identities remain separate.
+
+Keep deterministic validity, independent acceptance, current bounded authority,
+consequential human consent, funded budget, capacity and uncertain effects
+distinct. Reuse valid authority within its exact scope; phase changes, routine
+result recording and owned cleanup do not alone create a new human decision.
+Recheck material purpose/reach/content/composition/binding changes, expiry and
+revocation, and retain mandatory host/client consent and GPP human decisions.
+A quota hold is capacity evidence; an uncertain attempt still requires original
+effect reconciliation before a safe qualified fallback or replay.
 
 **Tests/gaps.** Existing contract and reference-loop tests passed 50 cases here;
 these do not prove production enforcement, tenant isolation or job qualification.

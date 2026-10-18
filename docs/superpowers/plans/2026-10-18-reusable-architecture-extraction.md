@@ -82,6 +82,29 @@ must make a fresh exact edit-path claim and consume its returned `testImpact` an
 `guardObligation` entries before edits. An unresolved contract means exhaustive
 verification. The current claim is not permission to edit code paths.
 
+## Work-practice composition across the existing slices
+
+Carry scenario/objective, exact graph/collaboration references, required and
+suggested skills/corpus, assessment scheme, GPP obligations, presentation and
+ordinary/adverse/recovery fixtures together as bounded versioned content. Reuse
+WorkUnitDefinition/OperatingFlow/WorkShape and existing asset owners. Keep
+definition, company binding, current qualified composition and occurrence
+distinct. This adds no independent deliverable, engine or catalog and does not
+delay the first safe move for comprehensive authoring or qualification machinery.
+
+The first reference practice is software/customer need → accepted improvement,
+with linked self-improvement work. Later business-surface verification contrasts
+shelter intake/housing/care, retaining current canonical facts and physical
+attestation limits. A merged PR does not establish the subsequent customer result.
+
+Reuse the existing review-profile composer in the relevant later slice:
+`room-review-profile.ts`, `room-review-profile-catalog.ts` and
+`room-definition-contract.ts`, with common → source → shape → facet → category →
+leaf → organization composition. Characterize its tests, additive requirements,
+freshness, provenance/conflicts and fingerprint compatibility before separating
+registry and Node hashing adapters. Composed requirements are neither assessed
+evidence nor authority; no parallel editable registry is permitted.
+
 ## Slice 1: Workroom graph and evidence kernel
 
 **Contract WK-01.** Existing structural shape, graph element, marking,
@@ -131,6 +154,10 @@ protected artifact, lineage, admission, permit or readiness validation.
    Deliver the exact TypeScript/toolchain version, standalone manifest/lock,
    NodeNext configuration and executable emitted entry. Resolve `catalog:` and
    `workspace:` specifications to pinned standalone dependencies.
+   Carry the practice's bounded descriptor, referenced assets and ordinary,
+   adverse and recovery fixtures with explicit unavailable fields. Preserve
+   existing contracts; any genuinely new representation needs its own admitted
+   design rather than hiding a new registry in a fixture.
 5. Publish the slice's contract/closure/provenance/rollback record when authorized.
    A graph builder plus WorkUnit adapter alone cannot be called a Workroom engine.
 
@@ -143,6 +170,11 @@ Require wrong/missing run and receipt kind, cycle/iteration mismatch, changed
 artifact content/profile/binding/input lineage, cross-room upstream rework,
 identical replay and conflicting-payload replay fixtures. The host atomically
 owns evidence, marking, dedupe and intents; an unknown effect never completes.
+In the first slice, exercise lost acknowledgment, uncertain completion and revoked
+authority on continuation using the existing synthetic host contract. Quota,
+lease/job deadlines and cleanup-ownership qualification belong to WP-01/OP-01;
+CT-WK requires no new scheduler, lease or cleanup machinery. These synthetic
+adapter cases do not qualify a real executor.
 Update WorkUnit's path-sensitive conformance guard only if WorkUnit actually moves.
 
 **Retire/rollback.** Remove moved pure web implementation and update real imports
@@ -184,6 +216,10 @@ registered generated definition → unchanged Workroom execution path.
    actual-human co-occurrence gate. Unresolved or unrepresentable mappings refuse.
    Parameterize the emitter's `../work-shapes` type import and compile generated
    output against the portable contract.
+   Exercise the full capability combination spread across nodes for one
+   actor/session: stage splitting must still require its actual human decision.
+   Keep this expected synthetic-host behavior separate from current DPF2's
+   unimplemented/unrun general envelope aggregation and DPF's unevaluated DRC.
 
 **CT-GP.** Parser limits and duplicate decoded keys, schema strictness, missing
 resolution facts, malformed/unknown constructs, deterministic hashes/IDs/output,
@@ -253,6 +289,26 @@ These scopes are not permission to implement unbuilt capabilities speculatively.
 Each must first bound its working subset and refine its own design/impact plan.
 Family 5 uses the existing draft contracts/reference transitions and leaves
 trusted production mediation in DPF. It introduces no eighth alternative engine.
+Its work-definition interchange is sequential-only. Carry supported-subset
+fixtures; refuse unsupported graph exchange unless a separately admitted version
+and qualification deliberately adds it. Never flatten parallel/rework semantics.
+
+OP-01's assessment scheme includes the coordinator/reviewer round trip: issued
+pinned packet → eligible reader/consumer → authenticated independent judgment →
+durable exact-subject receipt. Cover ownership/delegation through cleanup, exact
+runtime/target, output codec, lost acknowledgment, quota/capacity wait, deadlines
+and replay. A failed check stays failed when its receipt cannot be stored; missing
+receipt is neither no-effect proof nor success. Keep deterministic checks,
+independent acceptance, bounded authority, consequential human consent, funded
+budget, capacity and uncertain effects distinct. Reuse valid in-scope authority
+through phases; current intersections, actual GPP human decisions and mandatory
+client/host consent still govern. No new human approval is owed merely to record
+a valid result under existing authority.
+Characterize existing `mcp/independent-review-packet-roundtrip.test.ts`,
+`change-review/semantic-review-request.test.ts` and
+`work-management/coordinator-eligibility.test.ts`. Preserve the last resolver's
+absent-scheme `not-applicable` compatibility without counting it as qualification
+for the portable consumer.
 
 ## Source characterization actually run
 
@@ -338,6 +394,10 @@ The completed-slice handoff must include:
    fixture parity. Do not modify DPF2 in the producer task.
 6. Maintenance owner, upstream revision/reconciliation duties and one scoped
    revert. Preserve issued hash, definition/profile/binding and record identity.
+7. The bounded work-practice descriptor, referenced assets and ordinary/adverse/
+   recovery cases, naming which requirements are implemented, simulated,
+   unsupported or unrun. Schemes and fixtures carry no private corpus, live grant,
+   credential or inferred qualification.
 
 ## Remaining decisions and resumption
 
