@@ -157,6 +157,34 @@ Authorized product surfaces use the six generic `surface_*` MCP tools rather tha
 
 **Gate scripts authenticate headlessly with a `client_credentials` client (BI-78B653D5).** `pnpm run pregate` (`scripts/gate-worktree.mjs`, `scripts/pregate.mjs`) has no browser, so it cannot ride the client's OAuth session; it speaks the same authorization server through the headless grant instead. Resolution order in `scripts/lib/mcp-credential.mjs`: (1) a `client_credentials` client — `DPF_MCP_CLIENT_ID` + `DPF_MCP_CLIENT_SECRET`, or `{"clientId","clientSecret"}` in `~/.dpf/mcp-client-credentials.json` (path override `DPF_MCP_CLIENT_CREDENTIALS_FILE`; it lives outside every checkout so it can never be committed) — minted by an operator in Admin > Platform Development > MCP; the gate re-mints its short-lived access token itself, so a long run never strands on a stale copy; (2) the legacy `DPF_MCP_BEARER_TOKEN` PAT until its retirement horizon; (3) neither: the gate refuses before any lease work with a message naming both paths. An expired PAT therefore no longer forces an `operator-emergency` push override — issue a credentials client once and the gate runs.
 
+**The assistant provisions its own source client (BI-10AC904B).** From the working
+native connection, call `issue_source_credentials_client`. The server derives the
+authenticated owner and acting assistant; it accepts no recipient or scope
+override. Its fixed read/work/build scope must already fit the caller's token,
+and the same assistant's current grants still intersect on each later call.
+Current human eligibility, authority consequence, build grant and normal approval
+policy remain in force. An anonymous or portal-session caller cannot issue it.
+The owner/assistant transaction returns the same active matching client and
+refuses ambiguous, conflicting or unreadable existing credentials. It never
+rewrites another assistant's binding or revives a revoked row.
+
+Keep `data.credentialsClient` out of transcripts and tracked files. Write it only
+to `~/.dpf/mcp-client-credentials.json`, or the explicit canonical file override,
+through a private local transfer. Workroom binding and gate scripts share
+`scripts/lib/mcp-credential.mjs`: headless credentials take precedence over the
+legacy PAT, and malformed configuration refuses without PAT fallback. Preserve
+the configured endpoint and trusted CA. Verify the shell's actual
+`get_my_coworker_profile` binding before treating native connector permissions
+as shell permissions. The desktop OAuth token, Grok client and automation browser
+persona are separate credentials and must not be substituted.
+
+For intentional manual provisioning, the existing Admin headless-client form
+offers **Acts as assistant** and saves its currently eligible canonical identity.
+**Your account only** remains valid for human-only clients, with an explicit
+Workroom limitation. Discovery failures block creation rather than silently
+dropping an intended assistant. Grok retains its existing dedicated issuer and
+updater path through the same underlying owned-client mechanism.
+
 **Connect over loopback https — OAuth, nothing to rotate (BI-FA2C46D7).** On an install with the organization PKI bootstrapped, the client can authorize itself and the token path above stops being needed for desktop clients. Every step is a checked-in script; the operator's only action is one browser consent.
 
 1. `bash scripts/bootstrap-organization-pki.sh --mode authority --hostname localhost --san 127.0.0.1` (re-runnable; reuses the CA). The portal certificate is issued for a year (`DPF_PKI_PORTAL_CERT_DURATION`, default `8760h`) — earlier bootstraps issued a 24h leaf that expired the next day and silently broke LDAPS and any https front (BI-5727522F); a leaf shorter than the configured lifetime is re-issued on the next run. The script starts the Caddy front (`docker-compose.tls.yml`, `:443 → portal:3000`); the installer's compose chain and the autostart unit keep it running because `DPF_ORGANIZATION_TRUST_ENABLED=1` is recorded in `.env`.
@@ -691,3 +719,12 @@ Persisted request reconstruction and the execution-authority record parser have
 one home in `apps/web/lib/mcp-task-persisted-request.ts`. Workers and authorization
 guards depend on this leaf; it does not import dispatch or worker modules.
 This keeps per-tool mediation independent of the orchestration load graph.
+
+The source-client issuer retains its authority declaration. Its per-call
+refinement removes the extra operator handoff only for its empty-input,
+assistant-bound call on a canonically resolved development/evolve-dpf install
+with local-permitted credentials. This changes caution, never permission:
+current human, token, coworker and scope checks still run in the handler.
+Production, unreadable stance, unbound calls and supplied overrides retain
+authority approval. Other authority operations, including room invitations,
+are unaffected.

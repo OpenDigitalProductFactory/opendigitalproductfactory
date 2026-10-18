@@ -117,9 +117,12 @@ export function validatePrBodyTrailers(prBody = "") {
   }
 
   const seedFit = byName.get(PR_TRAILER_NAMES.seedFit)?.[0]?.value;
-  if (seedFit && !VALID_SEED_FIT_DECISIONS.has(seedFit)) {
+  // The seed-fit gate reads the first token and requires `mechanism=` / `symbol=`
+  // on the same line for a scoped decision. Validate the token, not the suffix.
+  const seedFitToken = String(seedFit ?? "").trim().split(/\s+/)[0] ?? "";
+  if (seedFit && !VALID_SEED_FIT_DECISIONS.has(seedFitToken)) {
     blockers.push(
-      `Invalid Seed-Fit-Decision "${seedFit}". Valid values: ${[...VALID_SEED_FIT_DECISIONS].join(", ")}.`,
+      `Invalid Seed-Fit-Decision "${seedFitToken}". Valid values: ${[...VALID_SEED_FIT_DECISIONS].join(", ")}.`,
     );
   }
 

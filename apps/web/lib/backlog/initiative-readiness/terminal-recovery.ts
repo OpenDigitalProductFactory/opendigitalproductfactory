@@ -26,6 +26,7 @@ import type { InitiativeReadinessDecision } from "./types";
 import { readRepositoryProviderBlob } from "./repository-artifact";
 import { bodyBaselineInputsMatch } from "./body-baseline-binding";
 import { resolveReviewerIdentity } from "./reviewer-identity";
+import { isArchivedBodyAuthorRoom, resolveBodyBaselineAuthorRoom } from "./body-baseline-author-room";
 
 export type TerminalRecoveryRoom = {
   capsuleId: string;
@@ -84,6 +85,7 @@ export type TerminalRecoveryPorts = {
   bodyReviewerCanRead?(args: { userId: string; agentId: string; capsuleId: string; baseline: BaselinePayload }): Promise<boolean>;
   validateBodyBaselineCurrent?(args: { baseline: BaselinePayload; room: TerminalRecoveryRoom; itemId: string }): Promise<boolean>;
   loadLiveRooms(args: { itemId: string; refusedWorkroomId: string | null }): Promise<TerminalRecoveryRoom[]>;
+  loadDeliveredBodyAuthor?(args: { itemId: string; refusedWorkroomId: string | null }): Promise<TerminalRecoveryRoom | null>;
   loadBaselinePayloads(itemId: string): Promise<unknown[]>;
   loadEligibleEvidenceActivityIds(args: {
     itemId: string;
@@ -104,6 +106,8 @@ export type TerminalRecoveryPorts = {
     baseSha: string;
     headSha: string;
     backlogBody?: string | null;
+    subjectItemId?: string;
+    headBranch?: string;
     purpose?: "post-implementation-review";
   }): Promise<Awaited<ReturnType<typeof discoverCanonicalReviewArtifact>>>;
   resolveRecovery(args: Parameters<typeof resolveInitiativeReviewerRecovery>[0]): Promise<InitiativeReviewerRecovery>;
@@ -186,6 +190,14 @@ async function defaultLoadBaselinePayloads(itemId: string): Promise<unknown[]> {
   // routing exactly as the projection already does for OBJECTIVE_BASELINE_REQUIRED.
   const source = await loadBaselineSource(prisma as unknown as BaselineSourceDb, itemId);
   return source ? source.baselineRows.map((row) => row.payload) : [];
+}
+
+async function defaultLoadDeliveredBodyAuthor(args: { itemId: string; refusedWorkroomId: string | null }): Promise<TerminalRecoveryRoom | null> {
+  const item = await prisma.backlogItem.findUnique({ where: { itemId: args.itemId }, select: { id: true, itemId: true } });
+  if (!item) return null;
+  const room = await resolveBodyBaselineAuthorRoom(prisma, item);
+  if (!room || !isArchivedBodyAuthorRoom(room) || (args.refusedWorkroomId && room.capsuleId !== args.refusedWorkroomId)) return null;
+  return { ...room, isLive: false };
 }
 
 async function defaultLoadEligibleEvidenceActivityIds(args: {
@@ -409,6 +421,7 @@ export const DEFAULT_TERMINAL_RECOVERY_PORTS: TerminalRecoveryPorts = {
       } }));
   },
   loadLiveRooms: defaultLoadLiveRooms,
+  loadDeliveredBodyAuthor: defaultLoadDeliveredBodyAuthor,
   loadBaselinePayloads: defaultLoadBaselinePayloads,
   loadEligibleEvidenceActivityIds: defaultLoadEligibleEvidenceActivityIds,
   loadObjectiveMappingHistory: defaultLoadObjectiveMappingHistory,
@@ -449,12 +462,28 @@ export async function resolveTerminalInitiativeRecovery(args: {
   if (researchLane) {
     return researchLaneEscalation();
   }
-  const rooms = await ports.loadLiveRooms({
+  const roomArgs = {
     itemId: args.decision.subject.id,
     refusedWorkroomId: args.refusedWorkroomId,
-  });
+  };
+  const rooms = await ports.loadLiveRooms(roomArgs);
+  // Only retained body acceptance can read a retired author anchor. PIR and
+  // design/spec review still require their normal live Workroom.
+  let bodyPayloads: unknown[] | undefined;
+  if (rooms.length === 0 && args.decision.shapeDecision?.effective === "medium"
+    && !designPhaseReviewDecision(args.decision)
+    && [...args.decision.blockers, ...args.decision.unmet].every(entry =>
+      entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED" || entry.code === "OBJECTIVE_RECONCILIATION_REQUIRED")) {
+    bodyPayloads = await ports.loadBaselinePayloads(args.decision.subject.id);
+    const rows = parseBaselinePayloads(bodyPayloads);
+    const body = rows && currentBaseline(rows);
+    if (body?.origin === "item-body" && body.artifactRef?.kind === "document-version") {
+      const delivered = await ports.loadDeliveredBodyAuthor?.(roomArgs);
+      if (delivered) rooms.push(delivered);
+    }
+  }
   if (rooms.length === 0) {
-    return escalation("workroom-not-found", "No live Workroom is bound to this item. Claim or resume the exact Workroom, then retry completion.");
+    return escalation("workroom-not-found", "No live Workroom or exact provider-verified delivered body-acceptance author is available. Reconcile the current source attempt and merged PR observation through governed Workroom procedures, then retry completion.");
   }
   if (rooms.length !== 1) {
     return escalation("workroom-ambiguous", "More than one live Workroom is bound to this item. Reconcile ownership before dispatching an acceptance reviewer.");
@@ -499,7 +528,7 @@ export async function resolveTerminalInitiativeRecovery(args: {
   }
 
   const designPhase = designPhaseReviewDecision(args.decision); // BI-817556D8: before acceptance lanes fail closed
-  const payloads = await ports.loadBaselinePayloads(args.decision.subject.id);
+  const payloads = bodyPayloads ?? await ports.loadBaselinePayloads(args.decision.subject.id);
   if (payloads.length === 0) {
     if (designPhase) return routeDesignReviewsBeforeBaseline({ designPhase, currentAgentId: args.currentAgentId, baseSha: room.baseSha, dispatchContext, ports }); // BI-1D8E53D9
     const effective = args.decision.shapeDecision?.effective;
@@ -576,6 +605,9 @@ export async function resolveTerminalInitiativeRecovery(args: {
       repositoryFullName: room.repositoryFullName,
       baseSha: room.baseSha,
       headSha: room.headSha,
+      subjectItemId: args.decision.subject.id,
+      headBranch: room.headBranch,
+      backlogBody: await ports.loadBacklogBody?.(args.decision.subject.id),
     });
   if (discovered && !discovered.resolved) {
     return escalation("canonical-artifact-unavailable", discovered.nextAction);

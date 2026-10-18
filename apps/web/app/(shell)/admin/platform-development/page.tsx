@@ -138,8 +138,8 @@ export default async function AdminPlatformDevelopmentPage() {
       {/* BI-EDB67A2B: headless (client_credentials) clients live beside the
           PAT manager — the design's "operator-issued from Admin > Platform
           Development, listed and revocable beside browser-authorized clients". */}
-      {/* The People panel (BI-0A724798) reads its copy from the admin catalog. */}
-      <MessagesProvider locale={language} messages={{ admin: namespaceMessages(language, "admin") }}>
+      {/* The People panel reads admin; the source-client form reads setup. */}
+      <MessagesProvider locale={language} messages={{ admin: namespaceMessages(language, "admin"), setup: namespaceMessages(language, "setup") }}>
         <McpOAuthClientManager />
       </MessagesProvider>
     </div>

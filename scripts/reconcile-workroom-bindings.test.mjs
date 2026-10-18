@@ -7,6 +7,11 @@
 //
 // Run: node --test scripts/reconcile-workroom-bindings.test.mjs
 
+import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -77,4 +82,18 @@ test("the applied summary reports real coverage and names failures", () => {
   const partial = summarize({ claimable, exempt, bound: 0, failed: 1, applied: true });
   assert.match(partial, /0\/1 \(0%\)/);
   assert.match(partial, /1 could not be bound/);
+});
+
+
+test("apply without credentials gives the shared assistant and manual recovery paths before any claim", () => {
+  const env = { ...process.env, DPF_MCP_CLIENT_CREDENTIALS_FILE: join(tmpdir(), `missing-dpf-${randomUUID()}.json`) };
+  delete env.DPF_MCP_BEARER_TOKEN;
+  delete env.DPF_MCP_CLIENT_ID;
+  delete env.DPF_MCP_CLIENT_SECRET;
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL("./reconcile-workroom-bindings.mjs", import.meta.url)), "--apply"], { env, encoding: "utf8", timeout: 10_000 });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /issue_source_credentials_client/);
+  assert.match(result.stderr, /DPF_MCP_CLIENT_CREDENTIALS_FILE/);
+  assert.match(result.stderr, /Admin > Platform Development > MCP/);
+  assert.doesNotMatch(result.stderr, /claim ensured/);
 });

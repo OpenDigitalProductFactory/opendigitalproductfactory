@@ -5,6 +5,7 @@ import {
   afterNonprodLeaseRelease,
   capacityEventId,
   checkpointNonprodLeaseWait,
+  checkpointImmediateNonprodLeaseAdmission,
   parseNonprodLeaseWait,
   publishNonprodCapacityForHead,
   settleNonprodLeaseWait,
@@ -57,6 +58,42 @@ function db() {
 }
 
 describe("durable nonproduction lease wait", () => {
+  it("persists completed immediate provenance without changing the active lifetime", async () => {
+    const mock = db();
+    const taskRunId = await checkpointImmediateNonprodLeaseAdmission({
+      db: mock, userId: "user-1", lease: lease(), now: NOW,
+      waitDeadlineAt: new Date(NOW.getTime() + 600_000),
+    });
+    expect(mock.task()).toMatchObject({ taskRunId, userId: "user-1", status: "completed", completedAt: NOW });
+    expect(parseNonprodLeaseWait(mock.task().progressPayload)).toMatchObject({
+      state: "admitted", eventConsumed: true, eventId: null, queuePosition: null,
+    });
+    expect(mock.nonProductionEnvironmentLease.updateMany).toHaveBeenCalledWith({
+      where: { id: "lease-row-1", status: "active", taskRunId: null }, data: { taskRunId },
+    });
+  });
+
+  it("does not rewrite existing queued history or bind another user's task", async () => {
+    const mock = db();
+    await checkpointNonprodLeaseWait({ db: mock, userId: "user-1", lease: lease(),
+      queuePosition: 2, waitDeadlineAt: new Date(NOW.getTime() + 600_000), now: NOW });
+    const original = mock.task();
+    mock.nonProductionEnvironmentLease.updateMany.mockClear();
+    await expect(checkpointImmediateNonprodLeaseAdmission({ db: mock, userId: "user-2",
+      lease: lease(), now: NOW, waitDeadlineAt: new Date(NOW.getTime() + 600_000) }))
+      .rejects.toThrow("nonprod_immediate_admission_provenance_conflict");
+    expect(mock.task()).toEqual(original);
+    expect(mock.nonProductionEnvironmentLease.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the active null-link comparison no longer matches", async () => {
+    const mock = db();
+    mock.nonProductionEnvironmentLease.updateMany.mockResolvedValue({ count: 0 });
+    await expect(checkpointImmediateNonprodLeaseAdmission({ db: mock, userId: "user-1",
+      lease: lease(), now: NOW, waitDeadlineAt: new Date(NOW.getTime() + 600_000) }))
+      .rejects.toThrow("nonprod_immediate_admission_link_conflict");
+  });
+
   it.each(["expired", "cancelled", "queued", ""])('never infers admission from prior status "%s"', async (priorStatus) => {
     const mock = db();
     const wait = await checkpointNonprodLeaseWait({

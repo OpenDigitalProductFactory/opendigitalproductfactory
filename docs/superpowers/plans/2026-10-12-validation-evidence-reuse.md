@@ -384,3 +384,45 @@ paths. A separate tamper regression rejects an arbitrary command list even
 after its stored digest is recomputed. These are source-local test results;
 current full integration, native semantic review and live acceptance remain
 UNRUN pending normal publication and a containing release.
+
+The October 16 deployed correction path exposed a real reporter mismatch on
+PR #6452: Vitest exited zero with nine passing tests but wrote its JSON report
+to `.vitest/json/output.json`, while stdout contained launcher notices. The
+adapter correctly refused `test-report-unproven`; that refusal and the original
+report remain evidence, not failed source tests or a passing publication proof.
+Continue this same policy under BI-25CB699C and WC-0B3EF2C5, using the five
+normally claimed paths `scripts/published-correction.mjs`,
+`scripts/published-correction.test.mjs`, `scripts/pr-readiness.mjs`,
+`scripts/pr-readiness.test.mjs` and this plan. No new work carrier,
+schema, permission, receipt store or integration authority is introduced.
+
+Before implementation, publish this immutable continuation, refresh its atomic
+coverage and obtain normal implementation admission. First reproduce the real
+Vitest file-reporter behavior with the installed runner and noisy stdout. Make
+the existing execution adapter allocate an exclusive fresh bounded JSON sink
+for each Vitest invocation, pass it explicitly to the child, and qualify only
+that invocation's report. Preserve the source-derived logical check plan while
+recording the actual child arguments and report digest. A missing, malformed,
+oversized, stale, incomplete or foreign report, nonzero exit or interrupted
+child cannot qualify. Never borrow a previous project-default report or parse
+an arbitrary path from stdout. Clean up only the adapter-owned temporary files.
+
+Add meaningful regressions for real file output and launcher noise, absent or
+stale default output, incomplete results and unsuccessful children. Keep Node
+TAP qualification, exact source/plan/environment checks and protected GitHub
+integration intact. Run the affected Node suites and the real Vitest regression,
+obtain independent source assessment, then verify a genuine published correction
+through the ordinary push path. Initial bounded DEV recovery, if needed, uses
+only the existing audited route and reports full integration unrun. Current
+coverage, independent assessment, publication and functional results for this
+continuation are still pending; earlier f510/d412 evidence is historical.
+
+The same deployed policy also misroutes a reused branch's initial publication
+when GitHub returns its historical MERGED or CLOSED PR. PR #6455 preparation
+reproduced that failure against old PR #6439. Extract the existing orchestration
+without changing its behavior, reproduce the failure, then attempt proportional
+verification only for an OPEN PR. MERGED/CLOSED contexts retain the ordinary
+initial-publication path and its actual attestation/metadata requirements;
+malformed state remains unproven. Test those transitions and fresh OPEN-context
+rechecks. The documented metadata-only recovery remains truthful zero-execution
+metadata work, not a passing integration record or a protection waiver.

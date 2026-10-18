@@ -2,6 +2,13 @@
 
 ## Recovering an interrupted gate publication
 
+The pre-admission documentation exemption classifies the requested candidate
+worktree, even when the gate runner is launched from another checkout. Git
+merge-base/diff reads and derived-artifact checks use that candidate directory.
+An unavailable Git identity continues through ordinary admission; it is not a
+documentation exemption. The shared classifier and artifact registry determine
+the same exemption as the pre-push hook.
+
 The controller retains `<full-log>.<lease-id>.execution.json` before descendant
 cleanup. It binds the observed command result to its original owner, lease, gate,
 candidate, merged tree, evidence plan, toolchain and artifact. This checkpoint is

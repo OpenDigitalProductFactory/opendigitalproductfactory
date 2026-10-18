@@ -641,7 +641,8 @@ describe("terminal initiative recovery", () => {
       path: "docs/superpowers/specs/design.md", providerBlobId: "3".repeat(40) } }]);
     ports.resolveRecovery.mockResolvedValue({ reviewerRoutes: [], escalations: [], unroutable: [] });
     await resolveTerminalInitiativeRecovery({ decision: { ...decision, unmet }, currentAgentId: null, refusedWorkroomId: room.capsuleId, ports });
-    expect(ports.discoverArtifact).toHaveBeenCalledWith({ repositoryFullName: room.repositoryFullName, baseSha, headSha });
+    expect(ports.discoverArtifact).toHaveBeenCalledWith({ repositoryFullName: room.repositoryFullName, baseSha, headSha,
+      subjectItemId: decision.subject.id, headBranch: room.headBranch, backlogBody: undefined });
     expect(ports.resolveRecovery).toHaveBeenCalledWith(expect.objectContaining({
       // No pinned commit: the packet builder binds the room head, like the claim.
       canonicalArtifact: { resolved: true, path: "docs/superpowers/specs/design.md", providerBlobId: "3".repeat(40) },

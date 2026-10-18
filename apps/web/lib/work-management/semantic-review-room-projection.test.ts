@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { loadSemanticReviewRoomProjection, type ReviewerRunSnapshot } from "./semantic-review-room-projection";
+import { projectWorkroomRecovery } from "@/lib/work-capsules/workroom-recovery-projection";
 
 const now = new Date("2026-09-08T20:00:00Z");
 const run = (status: string): ReviewerRunSnapshot => ({
@@ -10,6 +11,30 @@ const run = (status: string): ReviewerRunSnapshot => ({
 });
 
 describe("reviewer state in its Workroom", () => {
+  it.each([
+    { status: "completed", decision: "pass" }, { status: "completed", decision: "fail" },
+    { status: "completed", decision: "inconclusive" }, { status: "input-required", decision: null },
+  ])("keeps complete historical-only $status/$decision observation complete and gives the canonical issuer action", async ({ status, decision }) => {
+    const view = await loadSemanticReviewRoomProjection({ taskRun: { findMany: async () => [run(status)] },
+      $queryRaw: vi.fn().mockResolvedValue([{ rowId: "row-1", capsuleId: "WC-1", requestBound: true,
+        requestSchemaVersion: 2, requestArtifactType: "code-change", identityArtifactType: "code-change", identityArtifactTypePresent: true,
+        sourceHeadSha: "b".repeat(40), currentHeadSha: "a".repeat(40), issuedAt: "2026-09-08T19:00:00Z",
+        requesterAgentId: "AGT-EXT-CODEX", receiptId: decision ? "old-result" : null,
+        receiptDecision: decision, receiptSummary: "Historical only", receiptCreatedAt: now }]),
+    }, ["WC-1"], now);
+    expect(view.partial).toBe(false);
+    const recovery = projectWorkroomRecovery({ capsuleId: "WC-1", backlogItemId: "BI-1", leaseHolderPrincipalId: "principal-1",
+      repositoryFullName: "owner/repo", headBranch: "fix/readback", worktreePath: "D:/source", baseSha: "c".repeat(40), headSha: "a".repeat(40) }, view);
+    expect(recovery.state).toBe("unknown");
+    expect(recovery.reviewerExecution).toBeNull();
+    expect(recovery.blocker).toMatchObject({ reason: "current-review-unavailable",
+      accountableOwner: { principalId: "principal-1", role: "delivery-coordinator" },
+      action: { toolName: "get_backlog_item", args: { itemId: "BI-1", recoveryGate: "post-implementation-review" } } });
+    expect(recovery.historicalReviewerExecutions).toMatchObject([{ taskRunId: "TR-1", identityScope: "historical",
+      sourceHeadSha: "b".repeat(40), resultAction: { requiredUserId: "requester-1" } }]);
+    expect(recovery.historicalReviewerExecutions[0].receipt?.decision).toBe(decision ?? undefined);
+  });
+
   it("replaces obsolete retry instructions after expiry and links a successor", async () => {
     const row = run("input-required");
     row.progressPayload = { semanticReview: { schemaVersion: 1, deadlineAt: "2026-09-08T19:00:00Z",

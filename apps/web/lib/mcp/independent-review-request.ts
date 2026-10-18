@@ -14,6 +14,8 @@ import { deterministicExternalTaskRunId, remoteTaskRequestMatches } from "@/lib/
 import { loadTaskInitiativeReviewOutcome } from "@/lib/mcp-task-review-outcome";
 import { BUILD_STUDIO_ASSISTANT_AGENT_ID, buildStudioOwedRoutes } from "@/lib/backlog/initiative-readiness/build-studio-owed-routes";
 import { reviewDocumentPreflight } from "@/lib/mcp-task-review-document";
+import { isCurrentDeliveredBodyAuthor } from "@/lib/backlog/initiative-readiness/body-baseline-author-room";
+import { isFullSourceCommitSha } from "@/lib/work-capsules/work-capsule-branch-identity";
 
 /** Match the durable request identity, never a caller's task-handle assertion. */
 async function matchingReviewRequest(params: Record<string, unknown>, userId: string, context: ToolExecutionContext) {
@@ -107,8 +109,20 @@ export async function authorizeCoworkerRequest(
   }
   // A Build Studio room records the item's ROW id in backlogItemId (the
   // attachment writes backlogItem.id); an adopted room records the BI- id.
-  const room = await prisma.workroom.findFirst({ where: { capsuleId: binding.workroomRef.workroomId, archivedAt: null },
-    select: { id: true, backlogItemId: true, executorKind: true, requestedByPrincipalId: true, featureBuild: { select: { createdById: true } } } });
+  const bodyAcceptance = binding.gate === "objective-mapping" && binding.artifactRef.kind === "document-version";
+  const roomSelect = { id: true, backlogItemId: true, executorKind: true, requestedByPrincipalId: true,
+    repositoryFullName: true, headBranch: true, baseSha: true, headSha: true,
+    featureBuild: { select: { createdById: true } } } as const;
+  let room = await prisma.workroom.findFirst({ where: { capsuleId: binding.workroomRef.workroomId, archivedAt: null,
+      ...(bodyAcceptance ? { status: { not: "archived" } } : {}) },
+    select: roomSelect });
+  if (!room && bodyAcceptance) {
+    const subject = await prisma.backlogItem.findUnique({ where: { itemId: binding.itemId }, select: { id: true } });
+    if (subject && await isCurrentDeliveredBodyAuthor(prisma, { ...subject, itemId: binding.itemId }, binding.workroomRef)) {
+      room = await prisma.workroom.findFirst({ where: { capsuleId: binding.workroomRef.workroomId, status: "archived" },
+        select: roomSelect });
+    }
+  }
   const roomOwnsItem = Boolean(room) && (room!.backlogItemId === binding.itemId
     || (room!.backlogItemId !== null && room!.backlogItemId === (await prisma.backlogItem.findUnique({ where: { itemId: binding.itemId }, select: { id: true } }))?.id));
   const buildStudioRoom = roomOwnsItem && room!.executorKind === "build-studio";
@@ -133,7 +147,20 @@ export async function authorizeCoworkerRequest(
   // Reuse the canonical readiness projection and recovery issuer; client names,
   // hashes and packet-shaped JSON are never evidence of server authorization.
   const { getBacklogItem } = await import("./packs/backlog-pack-read-tools");
-  const item = await getBacklogItem({ itemId: binding.itemId }, context.agentId);
+  let currentDesignSource;
+  if (binding.artifactRef.kind === "repo-blob-at-commit") {
+    if (!room || room.repositoryFullName !== binding.workroomRef.repositoryFullName
+      || room.headBranch !== binding.workroomRef.branchName || room.headSha !== binding.workroomRef.headSha
+      || !isFullSourceCommitSha(room.baseSha) || !isFullSourceCommitSha(room.headSha)) {
+      return !options?.sourceOnly && await hasCompletedReview(params, userId, context)
+        ? { bounded: true }
+        : deny("The selected Workroom's immutable source changed or is incomplete. Refresh its exact claim and review request.");
+    }
+    currentDesignSource = { repositoryFullName: room.repositoryFullName, headBranch: room.headBranch,
+      baseSha: room.baseSha, headSha: room.headSha };
+  }
+  const item = await getBacklogItem({ itemId: binding.itemId }, context.agentId, undefined, undefined,
+    currentDesignSource ? { currentDesignSource } : undefined);
   if (options?.sourceOnly && item.data?.scopeKind !== "platform") {
     return deny("Source-only classification requires a platform-scoped review.");
   }

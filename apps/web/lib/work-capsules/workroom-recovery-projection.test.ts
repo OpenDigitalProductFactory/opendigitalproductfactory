@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { projectWorkroomRecovery } from "./workroom-recovery-projection";
+import { loadWorkroomRecoveryItems, projectWorkroomRecovery, projectWorkroomIdentityRepair } from "./workroom-recovery-projection";
 import type { ReviewerExecutionObservation } from "@/lib/work-management/semantic-review-room-projection";
 
 const identity = {
@@ -46,6 +46,16 @@ describe("projectWorkroomRecovery", () => {
 });
 
 describe("identity repair packet (observed 2026-09-23: the packet could not be replayed)", () => {
+  it.each(["baseSha", "headSha"] as const)("repairs an invalid legacy %s without retaining it in the executable packet", field => {
+    const repair = projectWorkroomIdentityRepair({ ...identity, [field]: "abc123" }, { title: "Repair", [field]: "unverified-packet-value" });
+    expect(repair).not.toBeNull();
+    expect(repair?.missingFields).toEqual([field]);
+    expect(repair?.retainedFields).not.toHaveProperty(field);
+    expect(repair?.packet).not.toHaveProperty(field);
+    expect(repair?.packet).toMatchObject({ title: "Repair", [field === "baseSha" ? "headSha" : "baseSha"]:
+      identity[field === "baseSha" ? "headSha" : "baseSha"] });
+  });
+
   it("carries every field adopt_worktree requires, and names the missing SHAs", () => {
     const recovery = projectWorkroomRecovery({
       ...identity,
@@ -81,6 +91,46 @@ const reviewRun = (patch: Partial<ReviewerExecutionObservation> = {}): ReviewerE
 const reviewView = (runs: ReviewerExecutionObservation[], partial = false) => ({ runs, partial, attentionReason: null });
 
 describe("metadata-linked semantic review recovery", () => {
+  it("keeps failed linkage lookup unresolved while retaining semantic links and rejecting unrelated lookup rows", async () => {
+    const rooms = [{ backlogItemId: "BI-1" }, { backlogItemId: "raw-row" }];
+    const failed = await loadWorkroomRecoveryItems({ backlogItem: { findMany: async () => { throw new Error("unavailable"); } } }, rooms);
+    expect([...failed]).toEqual([["BI-1", "BI-1"]]);
+    const result = await loadWorkroomRecoveryItems({ backlogItem: { findMany: async () => [
+      { id: "another-row", itemId: "BI-OTHER" }, { id: "raw-row", itemId: "malformed" },
+    ] } }, rooms);
+    expect([...result]).toEqual([["BI-1", "BI-1"]]);
+  });
+  it("never emits a raw backlog row id as a semantic tool argument without normalization", () => {
+    const recovery = projectWorkroomRecovery({ ...reviewRoom, backlogItemId: "raw-row-id" }, reviewView([], true));
+    expect(recovery.blocker?.action).toBeNull();
+  });
+  it("bounds historical summaries and marks truncation without promoting their receipts", () => {
+    const runs = Array.from({ length: 7 }, (_, index) => reviewRun({ taskRunId: `TR-OLD-${index}`, identityScope: "historical",
+      sourceHeadSha: "b".repeat(40), status: "completed", receipt: { id: `receipt-${index}`, decision: "pass", summary: "Old pass" } }));
+    const recovery = projectWorkroomRecovery({ ...reviewRoom, backlogItemId: "BI-1" }, reviewView(runs));
+    expect(recovery.reviewerExecution).toBeNull();
+    expect(recovery.state).toBe("unknown");
+    expect(recovery.historicalReviewerExecutions).toHaveLength(5);
+    expect(recovery.historicalReviewHistoryTruncated).toBe(true);
+    expect(recovery.historicalReviewerExecutions.every(run => run.identityScope === "historical")).toBe(true);
+  });
+
+  it.each(["partial", "conflicting"])("names recovery ownership and issuer for %s evidence instead of repeating the room read", kind => {
+    const recovery = projectWorkroomRecovery({ ...reviewRoom, backlogItemId: "BI-1" },
+      reviewView(kind === "conflicting" ? [reviewRun(), reviewRun({ taskRunId: "TR-OTHER" })] : [], kind === "partial"));
+    expect(recovery.state).toBe("unknown");
+    expect(recovery.blocker).toMatchObject({ accountableOwner: { role: "delivery-coordinator" },
+      action: { toolName: "get_backlog_item", args: { itemId: "BI-1", recoveryGate: "post-implementation-review" } } });
+  });
+
+  it("does not promise a self-read repairs an unlinked room and never exposes an unbound history", () => {
+    const recovery = projectWorkroomRecovery(reviewRoom, reviewView([reviewRun({ identityScope: "unknown", sourceHeadSha: null })], true));
+    expect(recovery.blocker).toMatchObject({ accountableOwner: { role: "delivery-coordinator" } });
+    expect(recovery.blocker?.action).toBeNull();
+    expect(recovery.blocker?.nextAction).toContain("Link this Workroom");
+    expect(recovery.historicalReviewerExecutions).toEqual([]);
+  });
+
   it("shows a current review even when the direct taskRun relation is empty", () => {
     const recovery = projectWorkroomRecovery(reviewRoom, reviewView([reviewRun()]));
     expect(recovery.state).toBe("working");
