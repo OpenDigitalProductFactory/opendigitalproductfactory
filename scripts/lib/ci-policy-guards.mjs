@@ -406,6 +406,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/bootstrap-managed-install-proof.test.mjs",
         "scripts/lib/bootstrap-worktree-deps.test.mjs",
         "scripts/pregate-preflight.test.mjs",
+        "scripts/pregate-preflight-effective-environment.test.mjs",
         "scripts/lib/pull-request-body.test.mjs",
         "scripts/pregate.test.mjs",
         "scripts/lib/pregate-preflight-receipt.test.mjs",
