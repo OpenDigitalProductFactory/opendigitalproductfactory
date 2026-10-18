@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Context Engineering & Tool Efficiency — Design & Research
 
 **Status:** VALIDATED — founder greenlit 2026-06-20. The **P0 trio (R1 result-cap, R2 description-lint, R3 deferred external-CLI tools)** and the **keep-fresh / apply-criteria mechanism** are implemented; R3 Phase 2 shipped in PR #4112 and its bootstrap/conformance contract was hardened on 2026-08-08. See the implementation plan `docs/superpowers/plans/2026-06-20-context-engineering-tool-efficiency-implementation.md` and the canonical standard `docs/architecture/context-engineering-standards.md`. Remaining recommendations (R4 code-exec spike, R6, R7, R8, R9) are staged follow-ups. The §10 decisions below are resolved as recommended.
@@ -276,9 +280,11 @@ for private local reasoning.
   completion, truncation, cache tokens, TTFT, prefill and decode separately.
   If refuted, preserve the counterexample and identify the next supported fix.
 - **REQ-LPC2:** any production carrier is private, transient and bound to the
-  exact provider/account, model digest, engine, template and configuration plus
+  exact provider/account/version and transport endpoint, model digest, engine, template and configuration plus
   the immutable assistant content/tool-call snapshot. Reuse existing runtime
   evidence; never recognize support from a provider label or model name alone.
+  Production capture/replay is limited to no-tools local requests; existing
+  nonthinking tool requests add no continuation metadata probe.
 - **REQ-LPC3:** raw reasoning must not enter enumerable chat/history fields,
   UI/progress, checkpoint summaries, audit, telemetry, error text or durable
   storage. A scoped opaque carrier may live only inside an admitted invocation;
@@ -290,11 +296,17 @@ for private local reasoning.
   screening-policy changes and identity mismatch invalidate it. Bind opaque
   continuation digests into dispatch provenance so hidden state cannot bypass
   the existing screened-payload drift guard. Never summarize private reasoning.
+  Invalidation revokes shared records across dispatch clones and retained
+  originals. Recheck screening at the existing authority seam after admission
+  and runtime observation, so a wait cannot revive obsolete policy evidence.
 - **REQ-LPC5:** native state grants no authority. Historical tool calls and
   tool-shaped reasoning are never executable requests. Current grants,
   cancellation/deadlines, screening, output budgets, tool policies and
   quality-first routing remain authoritative on every attempt. Foreign-provider
   fallback sends no local native state.
+  HTTP, network, response and tool-argument parsing errors on replay expose
+  typed status/capacity and validated retry timing only, never echoed bodies,
+  arbitrary response headers or parser excerpts.
 - **REQ-LPC6:** source-local tests prove replay, isolation and privacy first;
   canonical gate, independent exact-commit review, DCO PR/protected queue and
   canonical upgrade precede any shipped-performance claim. Report unrun or

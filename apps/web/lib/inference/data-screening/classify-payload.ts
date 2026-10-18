@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { localNativeContinuationFingerprint } from "@/lib/routing/local-native-continuation";
 import { SOURCE_CONTACT_EXEMPTION_PATTERN } from "./source-contact-evidence";
 
 import type { ContentBlock } from "@/lib/routing/chat-message-types";
@@ -341,8 +342,10 @@ export function classifyInferencePayload(
       .map((match) => match.dataClass),
   );
   const overallSensitivity = inferOverallSensitivity(dedupedMatches, input.governedData);
+  const continuations = input.messages.map(message => localNativeContinuationFingerprint(message) ?? null);
   const inputHash = hashCanonical({
     messages: input.messages,
+    ...(continuations.some(Boolean) ? { localNativeContinuations: continuations } : {}),
     systemPrompt: input.systemPrompt,
     systemPromptInstructionSpans: input.systemPromptInstructionSpans ?? [],
     tools: input.tools ?? [],

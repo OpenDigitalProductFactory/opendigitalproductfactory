@@ -3,6 +3,7 @@
 // Server actions in actions/*.ts can import from here freely.
 
 import { prisma } from "@dpf/db";
+import { transferLocalNativeContinuation } from "../routing/local-native-continuation";
 import { getLocalThinkingBudgetEvidence } from "./dmr-runtime-config";
 import { providerWorkspaceHeaders } from "./provider-workspace";
 import { computeTokenCost, computeComputeCost } from "@/lib/ai-provider-types";
@@ -525,7 +526,7 @@ export async function callProvider(
   });
 
   // 5. Map AdapterResult → InferenceResult
-  return {
+  return transferLocalNativeContinuation<InferenceResult>(result, {
     content: result.text,
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
@@ -538,7 +539,7 @@ export async function callProvider(
     // Adapters may set result.raw (e.g. transcription adapter for Whisper
     // verbose_json segments). Passed through verbatim; undefined when absent.
     ...(result.raw !== undefined && { raw: result.raw }),
-  };
+  });
 }
 
 // ─── Token Usage Logging ─────────────────────────────────────────────────────
