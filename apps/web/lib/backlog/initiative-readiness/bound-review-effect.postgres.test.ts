@@ -6,8 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { captureTaskExecutionFence } from "@/lib/shared/task-execution-fence";
 import { Prisma as fixturePrisma } from "@dpf/db";
 
-const state = vi.hoisted(() => ({ db: null as unknown as Record<string, unknown>,
-  lockedArtifact: null as null | (() => Promise<void>) }));
+const state = vi.hoisted(() => ({ db: null as unknown as Record<string, unknown> }));
 vi.mock("@dpf/db", async (original) => {
   const { Prisma } = await import("../../../../../packages/db/generated/client/client");
   return {
@@ -22,11 +21,10 @@ vi.mock("@dpf/db", async (original) => {
 // Only external provenance/storage and reviewer lookup are injected. The two
 // production writers, their transaction/locks, receipts, baselines and pins run
 // against real PostgreSQL. These fixtures are not independent review receipts.
-vi.mock("./artifact-resolver", () => ({ resolveInitiativeArtifact: async (input: { db?: unknown }) => {
-  if (input.db) await state.lockedArtifact?.();
-  return { ok: true, artifact: { ref: artifactRef, digest: `sha256:${digest}`,
-    authorPrincipalId: "fixture-author", authorAgentId: "fixture-author-agent", bytes: Buffer.from(content) } };
-} }));
+vi.mock("./artifact-resolver", () => ({ resolveInitiativeArtifact: async () => ({
+  ok: true, artifact: { ref: artifactRef, digest: `sha256:${digest}`,
+    authorPrincipalId: "fixture-author", authorAgentId: "fixture-author-agent", bytes: Buffer.from(content) },
+}) }));
 vi.mock("./reviewer-identity", async (original) => ({ ...await original<typeof import("./reviewer-identity")>(),
   resolveReviewerIdentity: async () => ({ principalId: "fixture-reviewer-principal", kind: "coworker" }),
 }));
@@ -61,12 +59,6 @@ const writers = [
     requiresIndependentReviewer: true, decision: "pass", findings: [] }) },
   { gate: "spec-approval", run: () => recordInitiativeSpecApproval({ ...common, profile: "feature", artifactRole: "design-spec" }) },
 ] as const;
-
-function barrier() {
-  let release!: () => void;
-  const wait = new Promise<void>(resolve => { release = resolve; });
-  return { wait, release };
-}
 
 function earlyWriterResult(result: { ok: boolean; code?: string; error?: string }) {
   return new Error(`Writer returned before its PostgreSQL lock: ${JSON.stringify({
@@ -140,20 +132,19 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
     }
   });
   afterAll(async () => {
-    state.lockedArtifact = null;
     await db?.$disconnect(); await pool?.end();
     if (admin && /^review_write_fence_[a-f0-9]{32}$/.test(schema)) await admin.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
     await admin?.end();
   });
 
-  async function waitForBlockedWriter() {
+  async function waitForBlockedWriter(table: "TaskRun" | "BacklogItem" = "TaskRun") {
     const until = Date.now() + 3000;
     while (Date.now() < until) {
-      const rows = await pool.query("SELECT pid FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE '%TaskRun%'", [schema]);
+      const rows = await pool.query("SELECT pid FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE $2", [schema, `%${table}%`]);
       if (rows.rowCount) return;
       await new Promise(resolve => setTimeout(resolve, 10));
     }
-    throw new Error("The actual writer did not reach its PostgreSQL TaskRun lock.");
+    throw new Error(`The actual writer did not reach its PostgreSQL ${table} lock.`);
   }
   const verdictCount = () => db.backlogItemActivity.count({ where: { kind: "initiative_gate_receipt" } });
 
@@ -171,7 +162,7 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
       WHERE n.nspname = $1 AND c.relname = 'BacklogItemActivity' AND a.attname = 'gateKey'
     `, [schema]);
     expect(types.rows).toEqual([{ namespace: schema, type_kind: "e", labels_match: true }]);
-    const isolation = await pool.query("SELECT current_schemas(false) AS schemas, to_regclass('\"Principal\"') AS missing_table");
+    const isolation = await pool.query("SELECT current_schemas(false)::text[] AS schemas, to_regclass('\"Principal\"') AS missing_table");
     expect(isolation.rows).toEqual([{ schemas: [schema], missing_table: null }]);
     await expect(pool.query(`SELECT 'invalid-fixture-gate'::"${schema}"."InitiativeGateKey"`))
       .rejects.toMatchObject({ code: "22P02" });
@@ -189,7 +180,6 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
 
   for (const writer of writers) describe(writer.gate, () => {
     beforeEach(async () => {
-      state.lockedArtifact = null;
       await pool.query(`TRUNCATE ${tables.map(table => `"${table}"`).join(",")}`);
       await db.organization.create({ data: { orgId: "fixture-org", slug: "fixture-org", name: "Fixture" } });
       await db.backlogItem.create({ data: { itemId: common.itemId, title: "Fixture", status: "open", type: "product", workType: "feature", scopeKind: "platform" } });
@@ -226,27 +216,31 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
     }, 15000);
 
     it("retains the canonical winner when the writer commits before the hold", async () => {
-      const entered = barrier(), finish = barrier();
-      state.lockedArtifact = async () => { entered.release(); await finish.wait; };
-      const publication = writer.run();
-      await Promise.race([entered.wait, publication.then(result => { throw earlyWriterResult(result); })]);
-      const blocker = await pool.connect();
+      const subjectBlocker = await pool.connect(), taskUpdater = await pool.connect();
+      await subjectBlocker.query("BEGIN");
+      let publication: ReturnType<typeof writer.run> | undefined;
       let displacement: Promise<unknown> | undefined;
       try {
-        displacement = displace(blocker, "unknown");
+        // Both actual writers lock TaskRun before BacklogItem. Hold only the
+        // subject so the writer owns its TaskRun lock before queuing the hold.
+        await subjectBlocker.query('SELECT "id" FROM "BacklogItem" WHERE "itemId"=$1 FOR UPDATE', [common.itemId]);
+        publication = writer.run();
+        void publication.catch(() => undefined);
+        await Promise.race([waitForBlockedWriter("BacklogItem"), publication.then(result => { throw earlyWriterResult(result); })]);
+        displacement = displace(taskUpdater, "unknown");
+        void displacement.catch(() => undefined);
         await waitForBlockedWriter();
-        finish.release();
+        await subjectBlocker.query("COMMIT");
         const result = await publication;
         expect(result).toMatchObject({ ok: true });
         await displacement;
-        state.lockedArtifact = null;
         expect(await writer.run()).toMatchObject({ ok: true, deduplicated: true });
         expect(await verdictCount()).toBe(1);
         expect(await db.initiativeArtifactRetentionPin.count()).toBe(writer.gate === "spec-approval" ? 1 : 0);
       } finally {
-        finish.release();
-        await publication.catch(() => undefined); await displacement?.catch(() => undefined);
-        blocker.release();
+        await subjectBlocker.query("ROLLBACK");
+        await publication?.catch(() => undefined); await displacement?.catch(() => undefined);
+        subjectBlocker.release(); taskUpdater.release();
       }
     }, 15000);
   });
