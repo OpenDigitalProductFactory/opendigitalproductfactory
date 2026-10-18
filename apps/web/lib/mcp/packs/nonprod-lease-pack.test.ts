@@ -116,6 +116,20 @@ describe("nonprod-lease pack — registration", () => {
 });
 
 describe("nonprod-lease pack — handler behavior (delegation preserved)", () => {
+  it("takes immediate admission's user only from the authenticated handler", async () => {
+    lease.claimNonprodEnvironmentLease.mockResolvedValueOnce({
+      status: "admitted", lease: { leaseId: "NPEL-NEW", taskRunId: null }, slotKey: "slot-0", waitAgeMs: 0,
+    });
+    await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
+      environmentKey: "local-integration-ci", ownerProvider: "codex", ownerSessionId: "session-1",
+      purpose: "test", url: "http://localhost:3010", ports: [3010], slotManifestVersion: 1,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(), authenticatedUserId: "foreign-user",
+    }, "authenticated-user");
+    expect(lease.claimNonprodEnvironmentLease).toHaveBeenCalledWith(expect.objectContaining({
+      authenticatedUserId: "authenticated-user",
+    }));
+  });
+
   it("reports an expired approved request as refused without starting a wait", async () => {
     lease.claimNonprodEnvironmentLease.mockRejectedValueOnce(new Error("nonprod_lease_request_expired"));
     const result = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({

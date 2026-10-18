@@ -25,6 +25,7 @@ import { settleTerminalGateLease } from "./environment-lease-terminal-evidence";
 import { resolveResumeClaim, validateHostResourceClaim } from "./environment-lease-resume";
 import { admittedLeaseTtlMs, DEFAULT_LEASE_TTL_MS, resolveLeaseRequestTiming } from "./environment-lease-timing";
 import { afterNonprodLeaseRelease, publishNonprodCapacityForHead, settleExpiredNonprodLeaseWaits } from "./durable-wait";
+import { bindFreshImmediateLeaseProvenance } from "./environment-lease-provenance";
 export { NONPROD_OWNER_PROVIDERS, type NonprodOwnerProvider } from "./nonprod-owner-provider";
 export {
   admittedLeaseTtlMs,
@@ -251,6 +252,8 @@ export async function claimNonprodEnvironmentLease(input: {
   branchName?: string;
   buildId?: string;
   taskRunId?: string;
+  /** Authenticated MCP actor; never read from claim parameters. */
+  authenticatedUserId?: string;
   cleanupCommand?: string;
   slotManifestVersion?: 1;
   productionBuild?: "local" | "delegated"; // BI-3A14308C: "delegated" waives only the builder reserve
@@ -473,7 +476,8 @@ export async function claimNonprodEnvironmentLease(input: {
     if (current.status === "active" && current.slotKey) {
       return {
         status: "admitted",
-        lease: current,
+        lease: await bindFreshImmediateLeaseProvenance({ db: tx, lease: current, created,
+          authenticatedUserId: input.authenticatedUserId, waitDeadlineAt: queueExpiresAt, now }),
         slotKey: current.slotKey,
         waitAgeMs,
         poolPolicy,
