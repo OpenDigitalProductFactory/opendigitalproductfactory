@@ -19,6 +19,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { dirname, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
+import { leaseRequestTiming } from "./lib/nonprod-lease-request.mjs";
 import { leaseQueueCallOptions } from "./lib/lease-queue-call-options.mjs";
 export { leaseQueueCallOptions } from "./lib/lease-queue-call-options.mjs";
 import { loadEvidencePolicy } from "./lib/ci-evidence-plan.mjs";
@@ -1845,13 +1846,14 @@ async function main() {
       });
       nextQueueReconciliationAt = Date.now() + DEAD_QUEUE_RECONCILIATION_INTERVAL_MS;
     }
-    expiresAt = new Date(Date.now() + leaseTtlMs).toISOString();
     const hostPressure = await observeLocalCiHostPressure({
       rootClone,
       gitCommonDir,
       candidateGitDir,
     });
     hostPressureSamples.push(hostPressure);
+    const requestTiming = leaseRequestTiming({ now: new Date(), durationMs: leaseTtlMs, deadline });
+    expiresAt = requestTiming.expiresAt;
     let claimResponse;
     try {
       claimResponse = await mcpCall("claim_nonprod_environment_lease", {
@@ -1864,8 +1866,7 @@ async function main() {
         purpose: `Pre-PR local-CI gate for ${branch} @ ${sha}`,
         url,
         ports: [slotManifest.portal.port, slotManifest.postgres.hostPort],
-        expiresAt,
-        waitDeadlineAt: new Date(deadline).toISOString(),
+        ...requestTiming,
         worktreePath,
         gateClientRevision: GATE_CLIENT_REVISION,
         branchName: branch,

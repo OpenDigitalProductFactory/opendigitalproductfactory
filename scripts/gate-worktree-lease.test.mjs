@@ -931,7 +931,9 @@ test("queued admission writes recoverable gate state before waiting", async () =
       "scripts/gate-worktree.mjs",
       "--branch", "fix/sandbox-lease-fencing",
       "--worktree", worktree,
-      "--lease-wait-seconds", "0.02",
+      // Admission preparation is inside this deadline too; give the real
+      // process observer time instead of expecting a claim after expiry.
+      "--lease-wait-seconds", "6",
       "--expires-minutes", "0.05",
       "--poll-seconds", "0.01",
       "--mcp-url", `http://127.0.0.1:${address.port}`,
