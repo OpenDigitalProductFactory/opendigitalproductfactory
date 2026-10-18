@@ -368,6 +368,13 @@ class ConvergenceReport:
             before = self.before.get(key) or {"version": None, "digest": None, "authMode": None}
             now = after.get(key) or before
             action = entry["action"] or _derive_action(entry["status"], before, now)
+            content_failed = (not dry_run and entry["client"] == "claude-code"
+                              and entry["scope"].startswith(("project:", "local:"))
+                              and action != "prunable"
+                              and (key not in after or now.get("digest") != self.declarations.digest
+                                   or now.get("version") != self.declarations.pack))
+            if content_failed:
+                action = "failed"
             row: dict[str, Any] = {
                 "client": entry["client"], "scope": entry["scope"],
                 "before": before, "after": now, "action": action,
@@ -378,6 +385,8 @@ class ConvergenceReport:
                 row["backupPath"] = entry["backupPath"]
             if entry["detail"] or entry["status"]:
                 row["detail"] = entry["detail"] or entry["status"]
+            if content_failed:
+                row["detail"] = "Installed content does not match the expected pack; supported update remains unverified, client-owned cache retained."
             clients.append(row)
         source: dict[str, Any] = {"kind": "portal" if self.manifest else "local"}
         if self.manifest:
@@ -426,9 +435,13 @@ def record_claude_scopes(
     local_scope: list[dict[str, Any]],
 ) -> None:
     """Add one report entry per Claude scope the updater touched or found."""
+    local_record_found = False
     for entry in _updater().claude_plugin_records(home):
         if entry.get("scope") == "local" and isinstance(entry.get("projectPath"), str):
+            local_record_found = True
             report.add("claude-code", f"local:{entry['projectPath']}", local_status)
+    if not local_record_found and local_status.startswith("failed:"):
+        report.add("claude-code", "local", local_status)
     for bucket, projects in (project_outcome.get("plugins") or {}).items():
         for project in projects:
             report.add("claude-code", f"project:{project}", action=_PROJECT_ACTIONS.get(bucket, "failed"))
