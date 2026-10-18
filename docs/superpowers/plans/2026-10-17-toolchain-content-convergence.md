@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Verify toolchain content convergence at equal versions
 
 Backlog: BI-DE1E6485. Workroom: WC-1E64B273.
