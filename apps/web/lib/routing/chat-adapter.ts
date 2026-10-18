@@ -725,6 +725,8 @@ export const chatAdapter: ExecutionAdapterHandler = {
       outputTokens = readUsage("output_tokens", "completion_tokens");
     }
 
+    // Keep provider-supplied identity, never the requested model or response body.
+    const returnedModel = typeof data.model === "string" && data.model.trim() ? data.model : undefined;
     return {
       text,
       toolCalls,
@@ -735,8 +737,11 @@ export const chatAdapter: ExecutionAdapterHandler = {
       inferenceMs,
       truncated,
       ...(finishReason !== undefined && { finishReason }),
-      ...(openRouterRoutingEvidence
-        ? { raw: { openRouterRoutingEvidence } }
+      ...(returnedModel !== undefined || openRouterRoutingEvidence
+        ? { raw: {
+          ...(returnedModel !== undefined ? { model: returnedModel } : {}),
+          ...(openRouterRoutingEvidence ? { openRouterRoutingEvidence } : {}),
+        } }
         : {}),
     };
   },

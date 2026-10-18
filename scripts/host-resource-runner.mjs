@@ -9,6 +9,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { gitTextOrNull } from "./lib/git.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { mcpCall } from "./lib/mcp-client.mjs";
+import { leaseRequestTiming } from "./lib/nonprod-lease-request.mjs";
 import { leaseQueueCallOptions, resolveLeaseQueueTimeoutMs } from "./lib/lease-queue-call-options.mjs";
 import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
 import { resolveMcpCredential } from "./lib/mcp-credential.mjs";
@@ -119,7 +120,7 @@ export function buildHostResourceClaim({
     purpose: `host-resource:${resourceClass}`,
     url: "host://localhost",
     ports: [],
-    expiresAt: new Date(now.getTime() + 10 * 60_000).toISOString(),
+    ...leaseRequestTiming({ now, durationMs: 10 * 60_000, deadline: now.getTime() + 10 * 60_000 }),
     worktreePath,
     branchName,
     resourceClass,
