@@ -19,7 +19,7 @@ vi.mock("./FeedbackForm", () => ({
   FeedbackForm: (props: Record<string, unknown>) => {
     feedbackFormMock.props.push(props);
 
-    return <div data-testid="feedback-form">Feedback form</div>;
+    return <div data-testid="feedback-form"><textarea aria-label="Feedback message" /></div>;
   },
 }));
 
@@ -93,6 +93,18 @@ describe("HeaderFeedbackButton", () => {
 
     fireEvent.click(trigger);
     expect(screen.queryByTestId("feedback-form")).not.toBeInTheDocument();
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("closes feedback on Escape and returns focus to its trigger", () => {
+    render(<HeaderFeedbackButton userId="user-1" />);
+    const trigger = screen.getByRole("button", { name: /^feedback$/i });
+    fireEvent.click(trigger);
+    expect(screen.getByRole("dialog", { name: /send feedback/i })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Feedback message" })).toHaveFocus();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
     expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
 });

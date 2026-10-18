@@ -6,6 +6,8 @@ order: 2
 
 ## Use This Doc For
 
+On narrow screens, the header's **Account and help** button contains page help, feedback and sign out. Installation identity and health remain visible. Escape closes the disclosure and returns focus to its button. Routing keeps its platform and workspace selectors beside each other; the live indicator retains refresh timing in its accessible description.
+
 - `/platform/ai`
 - `/platform/ai/capacity-continuity`
 - `/platform/ai/operations`
