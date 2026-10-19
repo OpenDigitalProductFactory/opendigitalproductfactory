@@ -48,3 +48,10 @@ The old coverage applies only to its recorded source and baseline. Obtain
 current coverage before production edits; do not copy historical approval into
 the continuation. Revert through the normal PR/release path if necessary;
 never roll back by deleting receipts or editing live baseline records.
+
+October 19 recovery prerequisite: restore the existing independent amendment
+writer for retained approved repository baselines before step 1 can proceed.
+Keep the ordinary body-only medium path and inherited scope ownership intact.
+The existing design records the bounded gate-failure recovery, failing
+regression, exact readiness refusal and authority boundary. This prerequisite
+does not implement or approve the wrong-gate disposition proposal in step 2.

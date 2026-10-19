@@ -171,3 +171,30 @@ original OAuth receipt and read back both its history and current readiness.
 The separate approved OAuth baseline amendment remains required. This proposal
 does not replace that baseline with item-body criteria. No tests, implementation
 admission, coverage receipt or live correction are claimed for this section.
+
+### October 19: restore the existing approved-baseline amendment writer
+
+Current author research is accepted at source `8915bae1`; the continuation's
+PLAN claim `IRD-35B462BAB09D` still returns stale
+`OBJECTIVE_BASELINE_REQUIRED`, product-owner, and no writer route. Its retained
+approved repository baseline has no item-body origin. Body criteria are already
+readable, and body-baseline persistence correctly refuses to overwrite approved
+scope. This is a routing failure, not missing operator approval.
+
+The bounded gate repair preserves that baseline's independent amendment writer
+on a medium item. The shared readiness projection identifies a retained own
+repository baseline with an approval receipt; the medium gate keeps
+`design-checklist-reviewer` ownership, which the existing design-review issuer
+and request authorization already route. Guidance follows that same owner.
+The writer still validates immutable source, current baseline, reviewer
+independence, authorization and any changed-statement dispositions. Body-only,
+unapproved and inherited scopes gain no independent amendment route.
+
+This correction repairs the unavailable admission machinery under AGENTS.md's
+platform-failure recovery provision, in the existing governed Workroom. The
+first regression failed on the observed product-owner assignment before the
+source change. It is not a passing baseline amendment, a waived gate or a
+settled original execution. The research-guidance and wrong-gate disposition
+proposal above remains separate, unimplemented work. Normal independent review,
+full verification and publication apply to this routing repair; only after its
+deployment may the original baseline obtain a supported independent amendment.

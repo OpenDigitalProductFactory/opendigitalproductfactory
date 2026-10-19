@@ -238,6 +238,7 @@ function definitionSentence(definition: ReadinessRequirementDefinition): string 
 }
 
 export type RequirementGuidanceInput = {
+  accountableRole?: string;
   code: ReadinessCode;
   profile: ReadinessProfile;
   /** v3: the delivery shape, when the item carries one. */
@@ -290,7 +291,10 @@ export function requirementNextAction(input: RequirementGuidanceInput): string |
     parts.push(input.reasons.map(endWithStop).join(" "));
   }
 
-  const shapeRemedy = input.shape ? SHAPE_REMEDIES[input.shape]?.[input.code] : undefined;
+  const shapeRemedy = input.shape === "medium" && input.code === "OBJECTIVE_BASELINE_REQUIRED"
+    && input.accountableRole === "design-checklist-reviewer"
+    ? "The retained independently approved scope requires an independent spec-approval amendment against the current immutable design and existing baseline. Preserve the prior approval; use the server-issued review packet. Body criteria cannot replace it."
+    : input.shape ? SHAPE_REMEDIES[input.shape]?.[input.code] : undefined;
   const definition = requirementDefinition(input.code, input.profile);
   if (shapeRemedy) {
     parts.push(shapeRemedy);
@@ -348,6 +352,7 @@ export function readinessRequirement(input: {
     unreadEvidenceRefs,
     nextAction: requirementNextAction({
       code: input.code,
+      accountableRole: input.accountableRole,
       // Without a profile the profile-specific definitions do not apply and the
       // generic remedy is used, which is correct rather than merely tolerable.
       profile: input.profile ?? "doc-only",
