@@ -1,5 +1,12 @@
 # MCP tool authorization runbook
 
+Source host tooling applies existing authorized CA trust to native MCP and OAuth
+requests without changing the selected credential or grants. Supported gate
+launchers also prepare child Node startup. TLS verification failures precede
+HTTP; HTTP401 and HTTP403 remain authentication and authorization failures.
+See [saved host trust](../install/platform-support-watchlist.md#saved-host-ca-trust-and-stale-clients-bi-f89c7fbd)
+for resolution precedence and safe recovery.
+
 **Routine delegated maintenance (BI-B22C8E02).** Current OAuth consent steers
 authorized ordinary reads and reversible work without a new approval for each
 call. Account model discovery with an explicit account identity synchronizes

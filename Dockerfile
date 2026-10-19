@@ -201,6 +201,9 @@ COPY scripts/lib/worktree-liveness.mjs ./scripts/lib/
 # claims through the shared MCP client (plan 2026-09-08 §10.5 S8).
 COPY scripts/lib/mcp-client.mjs ./scripts/lib/
 COPY scripts/lib/mcp-credential.mjs ./scripts/lib/
+COPY scripts/lib/mcp-host-trust.mjs ./scripts/lib/
+COPY scripts/lib/resolve-compose-install-context.mjs ./scripts/lib/
+COPY scripts/installer/lib/mcp-client-env.sh ./scripts/installer/lib/
 # mcp-credential.mjs re-exports the client_credentials exchange from the skill pack (BI-84C1F526).
 COPY packages/dpf-skill-pack/scripts/lib/client-credentials-exchange.mjs ./packages/dpf-skill-pack/scripts/lib/
 COPY scripts/lib/junction-safe-worktree-remove.mjs ./scripts/lib/

@@ -119,6 +119,7 @@ import {
   isVerboseGateConsole,
 } from "./lib/pregate-console.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { runWithHostMcpTrust } from "./lib/mcp-host-trust.mjs";
 import { spawnDurableWaitResumer } from "./lib/durable-wait-resumer.mjs";
 import { decideTerminalClaim, isResumedGateRun, resumeClaimFields, verifyPinnedSource } from "./lib/gate-resume-pin.mjs";
 
@@ -3071,7 +3072,11 @@ function writeState(stateFile, {
 // check must survive symlinked invocation paths (macOS /var tmpdir, symlinked
 // checkouts) where argv[1] and import.meta.url spell the same file differently.
 if (isEntryModule(import.meta.url)) {
-  main().catch((error) => {
+  runWithHostMcpTrust(main).then(code => { if (typeof code === "number") process.exit(code); }).catch((error) => {
+    if (error?.code) {
+      process.stderr.write(`gate-worktree: ${error.message}\n`);
+      process.exit(88);
+    }
     die(error?.stack || String(error));
   });
 }

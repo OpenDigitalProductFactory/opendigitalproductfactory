@@ -1,5 +1,38 @@
 # Platform Support Watch-List (living document)
 
+## Saved host CA trust and stale clients (BI-F89C7FBD)
+
+The supported Node gate launch (`pnpm run pregate`, including its native gate
+entry) reads existing authorized endpoint/trust through the installer client-env
+resolver. A desktop client can remain open after setup persists the Windows
+User environment or macOS/Linux managed environment. Its process can therefore
+lack `NODE_EXTRA_CA_CERTS`. Launch resolves the saved setting and starts a fresh
+Node process when the selected roots were not loaded at startup. Child gates
+inherit that environment. Shared native MCP and source OAuth requests also apply
+the selected bundle per request alongside Node's effective default roots.
+
+Trust precedence is explicit `DPF_MCP_CA_FILE`, explicit `DPF_PKI_TRUST_BUNDLE`,
+process `NODE_EXTRA_CA_CERTS`, install bundle, saved user bundle, then the
+existing managed root when present. A selected missing/invalid/expired bundle
+stops with its own diagnostic; it never silently falls back to a different CA.
+Without a managed bundle, ordinary public CA verification remains in effect.
+No certificate is harvested from the endpoint or installed by launch.
+
+A bounded verified TLS handshake precedes host guards, authentication and lease
+admission. It sends no HTTP request or credential. Hostname mismatch, expired
+server certificates, unverified issuer and connectivity errors identify separate
+remedies. HTTP401/403 remain authentication/authorization failures, and a
+confirmed drain retains the existing quiescence wait. Transport/prerequisite
+failure exits 88 with no verdict about the diff. Repair the named configuration
+or managed PKI problem before re-running the gate; do not disable verification.
+A slow quiescence read remains inconclusive after transport verification;
+the existing authoritative late admission still governs writes.
+
+Windows uses the User environment through PowerShell 5.1+. macOS/Linux use the
+existing managed environment reader through Bash, without sourcing saved text.
+Windows launch and fixture tests establish local behavior; adapter simulations
+and shell twin tests do not establish native macOS/Linux execution.
+
 ## Contributor preview mount identity on Docker Desktop (BI-0ACB97B5)
 
 The Windows host records the admitted worktree as a drive-absolute path while

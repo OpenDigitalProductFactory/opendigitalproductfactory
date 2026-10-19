@@ -60,6 +60,7 @@ import {
 import { collectSlotVerdicts, resolveWorktreeContext } from "./pregate-status.mjs";
 import { reconcileSlots } from "./lib/pregate-status.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { runWithHostMcpTrust } from "./lib/mcp-host-trust.mjs";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
@@ -908,7 +909,7 @@ export async function runHostPreflight({
   stderr = (text) => process.stderr.write(text),
 } = {}) {
   if (shouldRunPreflight(args, env)) {
-    const quiescence = await readStatusImpl({ args, env, warn: stderr });
+    const quiescence = await readStatusImpl({ args, env, warn: stderr, strictConnection: true });
     if (quiescenceBlocksWrites(quiescence)) {
       // No gate record, lease, observer or pending-evidence mutation on this path.
       stderr(JSON.stringify(quiescenceWait(quiescence)) + "\n");
@@ -1005,8 +1006,8 @@ export function readReconciledVerdictAtHead({
 // comparison must survive symlinked invocation spellings (macOS /var tmpdir),
 // or the guard silently skips main() and exits 0 (BI-745658D7).
 if (isEntryModule(import.meta.url)) {
-  main().catch((error) => {
-    process.stderr.write(`pregate: ${error?.stack || String(error)}\n`);
-    process.exit(1);
+  runWithHostMcpTrust(main).then(code => { if (typeof code === "number") process.exit(code); }).catch((error) => {
+    process.stderr.write(`pregate: ${error?.code ? error.message : error?.stack || String(error)}\n`);
+    process.exit(error?.code ? GATE_EXIT.HOST_CONNECTION_UNAVAILABLE : 1);
   });
 }

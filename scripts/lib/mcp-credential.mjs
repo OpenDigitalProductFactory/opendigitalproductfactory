@@ -31,10 +31,20 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 // The exchange itself ships in the skill pack (BI-84C1F526), so a host with
-// only the pack can still refresh Grok's credential. Re-exported unchanged.
-import { exchangeClientCredentials, tokenEndpointFor } from "../../packages/dpf-skill-pack/scripts/lib/client-credentials-exchange.mjs";
+// only the pack can still refresh Grok's credential. Source callers add the
+// host adapter; the exchange implementation remains in the pack.
+import { exchangeClientCredentials as exchangeBase, tokenEndpointFor } from "../../packages/dpf-skill-pack/scripts/lib/client-credentials-exchange.mjs";
+import { resolveHostMcpTrust } from "./mcp-host-trust.mjs";
 
-export { exchangeClientCredentials, tokenEndpointFor };
+// An already-running source client needs request-level trust for OAuth too.
+// The packaged exchanger keeps its host-independent default for pack callers.
+export function exchangeClientCredentials(options) {
+  const trust = new URL(options.mcpUrl).protocol === "https:"
+    ? resolveHostMcpTrust({ mcpUrl: options.mcpUrl }) : null;
+  return exchangeBase({ ...options, tlsOptions: trust?.tlsOptions });
+}
+
+export { tokenEndpointFor };
 
 export const MCP_CLIENT_ID_ENV = "DPF_MCP_CLIENT_ID";
 export const MCP_CLIENT_SECRET_ENV = "DPF_MCP_CLIENT_SECRET";
