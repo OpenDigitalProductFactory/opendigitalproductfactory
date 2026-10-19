@@ -24,14 +24,14 @@ export function AgentFAB({ onClick }: Props) {
     <button
       type="button"
       data-agent-fab="true"
-      className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-md border border-dpf-border bg-dpf-surface-2 px-2 text-dpf-body text-dpf-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-dpf-accent lg:px-3"
+      className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-md border border-dpf-border bg-dpf-surface-2 px-2 text-dpf-body text-dpf-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-dpf-accent xl:px-3"
       onClick={onClick}
       aria-label="Open AI Coworker"
       aria-haspopup="dialog"
       title="Open AI Coworker"
     >
       <Bot className="size-5" aria-hidden="true" />
-      <span className="hidden whitespace-nowrap lg:inline">AI Coworker</span>
+      <span className="hidden whitespace-nowrap xl:inline">AI Coworker</span>
     </button>
   );
 
