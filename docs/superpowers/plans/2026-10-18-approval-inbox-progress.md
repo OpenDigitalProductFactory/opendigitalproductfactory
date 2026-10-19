@@ -50,4 +50,18 @@ items, failed-source warnings and bounded work. One revert; no data migration.
 
 ## Backlog coverage
 
-Atomic deliverable maps to BI-372D6E2E. Receipt pending.
+Atomic deliverable maps to BI-372D6E2E. Coverage receipt
+cmveixse63k2w01o79qqnum7a binds the immutable plan at
+8957cca3ca21f2c4ded222ddf02a6371db35baac, blob
+f9870f0cd6f2e3ed65e86557ab8444af573d45b5.
+
+## Verification record
+
+The three queue regression cases failed before implementation, then passed.
+The broader source run passed 432 tests with 3 skipped in 43 files; web
+TypeScript passed. These are source checkpoints, not runtime acceptance.
+Prototype interactions exercised 30 → 29 pending while 25 remained displayed,
+five older requests and unavailable recovery. They use local fixture data,
+not the real approval runner. Advisory critique CE-7139E0BB is requested;
+completion is not claimed. The UX option decision is DI-50AE2EDE873D.
+Shared integration and served acceptance remain due.

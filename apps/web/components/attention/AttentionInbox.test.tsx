@@ -50,6 +50,28 @@ function platformHealth(): AttentionItem {
 }
 
 describe("AttentionInbox", () => {
+  it("distinguishes the full approval queue from displayed notices and exposes older requests", () => {
+    const projection = buildOwnerAttentionProjection([bill()], { nowMs: 0 });
+    const html = renderToStaticMarkup(<AttentionInbox projection={projection} failedSources={[]}
+      approvalQueue={{ total: 30, shown: 25, nextCursor: "2026-10-18T10:00:00.000Z|env-005", browsingOlder: false }} />);
+    expect(html).toContain("30 pending approvals; 25 shown.");
+    expect(html).toContain("Other notices: 1");
+    expect(html).toContain("Older requests");
+    expect(html).toContain("approvalsBefore=2026-10-18T10%3A00%3A00.000Z%7Cenv-005");
+    expect(html).not.toContain("1 thing needs you today");
+  });
+
+  it("never reports caught up when queue reading failed or an older window is empty", () => {
+    const projection = buildOwnerAttentionProjection([], { nowMs: 0 });
+    const failed = renderToStaticMarkup(<AttentionInbox projection={projection} failedSources={["coworker-envelope"]} approvalQueue={null} />);
+    expect(failed).toContain("Approvals unavailable");
+    expect(failed).not.toContain("all caught up");
+    const old = renderToStaticMarkup(<AttentionInbox projection={projection} failedSources={[]}
+      approvalQueue={{ total: 4, shown: 0, nextCursor: null, browsingOlder: true }} />);
+    expect(old).toContain("Latest requests");
+    expect(old).not.toContain("all caught up");
+  });
+
   it("renders the full owner projection without exposing the raw title by default", () => {
     const projection = buildOwnerAttentionProjection([bill()], {
       fallbackLevel: "balanced",
@@ -59,7 +81,7 @@ describe("AttentionInbox", () => {
       <AttentionInbox projection={projection} failedSources={[]} />,
     );
 
-    expect(html).toContain("1 thing needs you today");
+    expect(html).toContain("1 item shown for your attention");
     expect(html).toContain("Approve this bill?");
     expect(html).not.toContain("Approve bill BILL-1");
     expect(html).not.toContain("Open in Operations");
@@ -74,7 +96,7 @@ describe("AttentionInbox", () => {
       <AttentionInbox projection={projection} failedSources={[]} />,
     );
 
-    expect(html).toContain("0 things need you today");
+    expect(html).toContain("0 items shown for your attention");
     expect(html).toContain("all caught up");
     expect(html).not.toContain("Your digital team is handling");
   });
@@ -92,7 +114,7 @@ describe("AttentionInbox", () => {
       <AttentionInbox projection={projection} failedSources={[]} />,
     );
 
-    expect(html).toContain("0 things need you today");
+    expect(html).toContain("0 items shown for your attention");
     expect(html).toContain("all caught up");
     expect(html).toContain("Your digital team is handling 1 item");
     // The raw technical title is never surfaced to the owner.

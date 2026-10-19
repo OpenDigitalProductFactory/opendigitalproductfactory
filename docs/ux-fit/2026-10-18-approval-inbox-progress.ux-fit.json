@@ -1,0 +1,11 @@
+{
+  "version": "1",
+  "decidedOption": "inline-queue-progress",
+  "decisionInteractionId": "DI-50AE2EDE873D",
+  "scope": { "files": ["apps/web/components/attention/AttentionInbox.tsx"] },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["inline-queue-progress", "separate-approval-screen"]
+  },
+  "notes": "BI-372D6E2E. Existing Inbox and exact result panel; local bounded queue links rather than another route. Owning platform decision recommends inline with high confidence. Feature scores are comparative design estimates. UX critique CE-7139E0BB requested, not claimed complete. Source tests are separate from served verification. Existing theme tokens and semantic links; no new landmark, table, metric tile or authority control."
+}
