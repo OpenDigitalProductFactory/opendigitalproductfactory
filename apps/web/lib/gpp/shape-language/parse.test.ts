@@ -24,7 +24,7 @@ import {
   sortDiagnostics,
   toJsonPointer,
   type GppDiagnostic,
-} from "./diagnostics";
+} from "@dpf/validators/gpp/diagnostics";
 import { parseShapeDocument, parseStrictJson } from "./parse";
 
 const WORKED_EXAMPLE_TEXT = readFileSync(

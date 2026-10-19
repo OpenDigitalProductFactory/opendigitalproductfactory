@@ -80,12 +80,12 @@ import {
   stepDriveMarking,
   type DriveMarking,
   type DriveMarkingStopped,
-} from "./drive-marking";
+} from "@dpf/validators/workroom/marking";
 import { gateVerdictsFor } from "./drive-resolution-graph";
 import type { RecordedEvidence } from "./stage-evidence-receipts";
-import { declaresRefuseRoute } from "./work-shape-flow-graph";
+import { declaresRefuseRoute } from "@dpf/validators/workroom/flow-graph";
 import { readWorkShapeDefinitionContract, type WorkShapeDefinition } from "./work-shapes";
-import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "./workroom-drive-receipts";
+import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@dpf/validators/workroom/receipts";
 import { governedDecisionStage, type StageDecisionChoice } from "./workroom-stage-decision";
 
 const SEQUENCES_PER_FIXTURE = 200;

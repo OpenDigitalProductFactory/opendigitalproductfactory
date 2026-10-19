@@ -1,4 +1,4 @@
-// apps/web/lib/gpp/shape-language/executable-constructs.ts
+// packages/validators/src/gpp/executable-constructs.ts
 //
 // The executable subset: which notation constructs the runtime executes today.
 // Design: docs/superpowers/specs/2026-10-02-gpp-shape-notation-and-compiler-design.md
@@ -30,7 +30,7 @@
 // ONE SWITCH, READ BY THE RUNTIME (Phase 3c, BI-8875C9DF). From PR-3c-1 the
 // work-shape drive reads this table at runtime: a room whose pinned shape uses
 // a construct whose flag is off pauses with `construct_not_executable`, naming
-// the construct and element (lib/work-management/drive-resolution-graph.ts,
+// the construct and element (apps/web/lib/work-management/drive-resolution-graph.ts,
 // through constructsUsedBy in constructs-used-by.ts). Setting a flag back to
 // false is therefore also the kill switch: the compiler refuses new documents
 // and the drive pauses rooms that use the construct, visibly, never running it

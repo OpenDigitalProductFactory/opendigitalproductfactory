@@ -19,7 +19,7 @@ import { WORK_SHAPE_PRIOR_VERSIONS } from "@/lib/work-management/work-shape-prio
 import { listWorkShapes, type WorkShapeDefinition } from "@/lib/work-management/work-shapes";
 
 import { decompile } from "./decompile";
-import { GPP_DOCUMENT_ELEMENT_ID } from "./diagnostics";
+import { GPP_DOCUMENT_ELEMENT_ID } from "@dpf/validators/gpp/diagnostics";
 import {
   elementIdsOf,
   elementsOf,
@@ -27,7 +27,7 @@ import {
   infraCiKeyFor,
   nearestElementId,
   type GppElementKind,
-} from "./element-ids";
+} from "@dpf/validators/gpp/element-ids";
 import { gppLayoutSchema } from "./gpp-layout-schema";
 import { gppShapeDocumentSchema, type GppShapeDocument } from "./gpp-shape-schema";
 

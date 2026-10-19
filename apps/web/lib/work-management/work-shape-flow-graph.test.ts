@@ -11,13 +11,13 @@ import { describe, expect, it } from "vitest";
 
 import * as interpreter from "@/lib/gpp/shape-language/interpreter";
 
-import * as flowGraph from "./work-shape-flow-graph";
+import * as flowGraph from "@dpf/validators/workroom/flow-graph";
 
-const WEB = join(__dirname, "..", "..");
+const KERNEL = join(__dirname, "..", "..", "..", "..", "packages", "validators", "src");
 
 /** The module specifiers a source file imports at runtime (type-only imports excluded). */
 function runtimeImports(relativePath: string): string[] {
-  const source = readFileSync(join(WEB, relativePath), "utf8");
+  const source = readFileSync(join(KERNEL, relativePath), "utf8");
   return [...source.matchAll(/^import\s+(?!type\b)[^;]*?from\s+"([^"]+)";/gms)].map((match) => match[1]!);
 }
 
@@ -29,9 +29,9 @@ describe("work-shape-flow-graph.ts", () => {
   });
 
   it("imports only element-ids, whose runtime dependencies are plain constants: no schema, resolver or design rule", () => {
-    expect(runtimeImports("lib/work-management/work-shape-flow-graph.ts")).toEqual(["@/lib/gpp/shape-language/element-ids"]);
-    expect(runtimeImports("lib/gpp/shape-language/element-ids.ts")).toEqual(["./diagnostics"]);
-    expect(runtimeImports("lib/gpp/shape-language/diagnostics.ts")).toEqual(["./executable-constructs"]);
-    expect(runtimeImports("lib/gpp/shape-language/executable-constructs.ts")).toEqual([]);
+    expect(runtimeImports("workroom/flow-graph.ts")).toEqual(["../gpp/element-ids.js"]);
+    expect(runtimeImports("gpp/element-ids.ts")).toEqual(["./diagnostics.js"]);
+    expect(runtimeImports("gpp/diagnostics.ts")).toEqual(["./executable-constructs.js"]);
+    expect(runtimeImports("gpp/executable-constructs.ts")).toEqual([]);
   });
 });

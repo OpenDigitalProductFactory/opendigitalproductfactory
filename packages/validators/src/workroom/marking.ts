@@ -63,21 +63,18 @@
  *   a room-level prior names one stage and would never latch a second branch
  *   (the #5166 defect, review blocker 2).
  */
-import { flowEdgeElementId, stageElementId } from "@/lib/gpp/shape-language/element-ids";
-import { ok, type ActionSuccess } from "@/lib/shared/action-result";
-
-import type { DriveAction } from "./drive-resolution";
-import type { DriveReason } from "./drive-conclusion";
+import { flowEdgeElementId, stageElementId } from "../gpp/element-ids.js";
+import { ok, type ActionSuccess } from "../action-result.js";
 import {
   backwardReach,
   buildShapeFlowGraph,
   forwardReach,
   type GppFlowGraph,
   type InterpretableGate,
-} from "./work-shape-flow-graph";
-import type { WorkShapeDefinitionContract } from "./work-shapes";
-import { isCompletingWorkroomDriveReceiptAt } from "./workroom-drive-receipts";
-import type { PriorDriveForLatch } from "./writeback-latch";
+  type InterpretableShape,
+} from "./flow-graph.js";
+import { isCompletingWorkroomDriveReceiptAt } from "./receipts.js";
+import type { PriorWorkroomDrive } from "./receipts.js";
 
 export const DRIVE_MARKING_FORMAT = "drive-marking/1";
 
@@ -125,18 +122,6 @@ export type DriveMarking = {
 export const DRIVE_CHILD_STATES = ["completed", "abandoned"] as const;
 export type DriveMarkingChild = { capsuleId: string; ref: string; state?: (typeof DRIVE_CHILD_STATES)[number] };
 
-/** One marked stage's plan inside a graph plan (DrivePlan.tokens). */
-export type DriveTokenPlan = {
-  stageKey: string;
-  iteration: number;
-  action: DriveAction;
-  reason: DriveReason;
-  agentId: string | null;
-  attentionPrincipalRef: string | null;
-  taskId: string | null;
-  ledger: string[];
-};
-
 export type DriveMarkingRead =
   | ActionSuccess<{
     marking: DriveMarking;
@@ -146,10 +131,10 @@ export type DriveMarkingRead =
   }>
   | { ok: false; reason: "marking_unreadable"; raw: unknown };
 
-type MarkingShape = Pick<WorkShapeDefinitionContract, "stages" | "stopConditions" | "flow">;
+export type MarkingShape = InterpretableShape;
 
 /** A shape that declares a flow, a deadline, a sub-shape or a refuse route: it runs on the graph path. */
-export function usesGraphConstructs(definition: Pick<WorkShapeDefinitionContract, "stages" | "flow">): boolean {
+export function usesGraphConstructs(definition: Pick<InterpretableShape, "stages" | "flow">): boolean {
   if (definition.flow !== undefined) return true;
   return definition.stages.some((stage) =>
     stage.deadline !== undefined
@@ -280,7 +265,7 @@ export function readStoredDriveMarking(
 }
 
 /** The writeback latch's prior for one token: its own last tick, on its own stage. Null before its first tick. */
-export function latchPriorFor(token: DriveMarkingToken, stageKey: string): PriorDriveForLatch | null {
+export function latchPriorFor(token: DriveMarkingToken, stageKey: string): PriorWorkroomDrive | null {
   if (!token.lastAction) return null;
   return {
     action: token.lastAction,
@@ -302,12 +287,12 @@ export function stageToken(marking: Pick<DriveMarking, "tokens">, stageKey: stri
 }
 
 /** The stage keys holding a token, in document order. */
-export function markedStageKeys(definition: Pick<WorkShapeDefinitionContract, "stages">, marking: Pick<DriveMarking, "tokens">): string[] {
+export function markedStageKeys(definition: Pick<InterpretableShape, "stages">, marking: Pick<DriveMarking, "tokens">): string[] {
   return definition.stages.filter((stage) => stageToken(marking, stage.key) !== null).map((stage) => stage.key);
 }
 
 /** `stageKey#iteration` for every marked stage, sorted: what the hold key and the news check compare. */
-export function markedKeysWithIteration(definition: Pick<WorkShapeDefinitionContract, "stages">, marking: DriveMarking): string[] {
+export function markedKeysWithIteration(definition: Pick<InterpretableShape, "stages">, marking: DriveMarking): string[] {
   return markedStageKeys(definition, marking).map((key) => `${key}#${iterationOf(marking, key)}`).sort();
 }
 
@@ -322,7 +307,7 @@ type MarkingReceipt = { stageKey: string; kind: string; iteration?: number; runK
 
 /** The marked stages with a completing receipt at their current iteration, in document order. */
 export function enabledStages(
-  definition: Pick<WorkShapeDefinitionContract, "stages">,
+  definition: Pick<InterpretableShape, "stages">,
   marking: DriveMarking,
   receipts: readonly MarkingReceipt[],
 ): string[] {

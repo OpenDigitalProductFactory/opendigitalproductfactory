@@ -1,4 +1,4 @@
-// apps/web/lib/gpp/shape-language/element-ids.ts
+// packages/validators/src/gpp/element-ids.ts
 //
 // Derived element ids — the shared-identifier contract (GPP V-3). Design:
 // docs/superpowers/specs/2026-10-02-gpp-shape-notation-and-compiler-design.md
@@ -34,10 +34,9 @@
 // has, by definition, failed validation. A piece with the wrong type simply
 // yields no element; findings under it land on the nearest enclosing one.
 //
-// OFFLINE TOOLING in Phase 3b: nothing in the running app imports this module.
+// Shared by the source compiler and the Workroom flow/marking kernel.
 
-import { GPP_DOCUMENT_ELEMENT_ID, toJsonPointer } from "./diagnostics";
-import type { GppShapeDocument } from "./gpp-shape-schema";
+import { GPP_DOCUMENT_ELEMENT_ID, toJsonPointer } from "./diagnostics.js";
 
 export const GPP_ELEMENT_KINDS = ["shape", "trigger", "stage", "gate", "tool", "binding", "stop", "node", "edge"] as const;
 export type GppElementKind = (typeof GPP_ELEMENT_KINDS)[number];
@@ -128,13 +127,13 @@ export function elementsOfValue(value: unknown): GppElement[] {
   return elements;
 }
 
-/** Every element of a valid document, in document order. */
-export function elementsOf(document: GppShapeDocument): GppElement[] {
+/** Every derivable element of a document value, in document order; this does not validate it. */
+export function elementsOf(document: unknown): GppElement[] {
   return elementsOfValue(document);
 }
 
-/** Every derived element id of a valid document, in document order (plan PR-3b-1). */
-export function elementIdsOf(document: GppShapeDocument): string[] {
+/** Every derived element id of a document value, in document order (plan PR-3b-1). */
+export function elementIdsOf(document: unknown): string[] {
   return elementsOf(document).map((element) => element.id);
 }
 

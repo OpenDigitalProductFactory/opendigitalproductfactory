@@ -28,9 +28,9 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import type { GppDiagnostic } from "./diagnostics";
+import type { GppDiagnostic } from "@dpf/validators/gpp/diagnostics";
 import { runDesignRules } from "./drc";
-import { CONSTRUCT_EXECUTABLE, GPP_CONSTRUCTS, type GppConstruct } from "./executable-constructs";
+import { CONSTRUCT_EXECUTABLE, GPP_CONSTRUCTS, type GppConstruct } from "@dpf/validators/gpp/executable-constructs";
 import { GATE_RATIFICATION, gateRatificationRefusals, type GateRatificationEntry } from "./gate-ratification";
 import { gppLayoutSchema } from "./gpp-layout-schema";
 import { parseShapeDocument } from "./parse";

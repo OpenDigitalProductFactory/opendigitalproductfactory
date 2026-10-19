@@ -1,4 +1,4 @@
-// apps/web/lib/gpp/shape-language/constructs-used-by.ts
+// packages/validators/src/gpp/constructs-used-by.ts
 //
 // Which gated constructs a definition uses, with the element each sits on
 // (BI-8875C9DF, GPP Phase 3c PR-3c-1). Design: docs/superpowers/specs/
@@ -25,10 +25,10 @@
 // at module evaluation: putting the walk in the table's own module would make
 // a runtime import cycle.
 
-import type { WorkShapeDefinitionContract } from "@/lib/work-management/work-shapes";
+import type { InterpretableShape } from "../workroom/flow-graph.js";
 
-import { flowEdgeElementId, flowNodeElementId, gateElementId, stageElementId } from "./element-ids";
-import type { GppConstruct } from "./executable-constructs";
+import { flowEdgeElementId, flowNodeElementId, gateElementId, stageElementId } from "./element-ids.js";
+import type { GppConstruct } from "./executable-constructs.js";
 
 /** One gated construct a definition uses. `path` is the element's JSON path in the definition (and its document). */
 export type ConstructUse = {
@@ -40,10 +40,10 @@ export type ConstructUse = {
 };
 
 /** The part of a definition the walk reads. The contract and a lowered document both satisfy it. */
-export type ConstructWalkable = Pick<WorkShapeDefinitionContract, "stages" | "flow">;
+export type ConstructWalkable = Pick<InterpretableShape, "stages" | "flow">;
 
 /** Every gated construct the definition uses, stages first (in stage order), then flow nodes and edges. */
-export function constructsUsedBy(definition: ConstructWalkable): ConstructUse[] {
+export function constructsUsedBy<Definition extends ConstructWalkable>(definition: Definition): ConstructUse[] {
   const uses: ConstructUse[] = [];
   definition.stages.forEach((stage, index) => {
     const base = ["stages", index] as const;

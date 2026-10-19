@@ -23,25 +23,25 @@ import {
   type WorkroomShapeConformanceDeviation,
 } from "./workroom-shape-conformance";
 import type { DriveReason, DriveReasonsByAction } from "./drive-conclusion";
-import type { DriveMarking, DriveRework, DriveTokenPlan } from "./drive-marking";
+import type { DriveMarking, DriveRework } from "@dpf/validators/workroom/marking";
 import type { DueDeadline } from "./drive-deadlines";
 import type { SubShapeChildObservation, SubShapeEffects } from "./drive-child-rooms";
 import type { RecordedEvidence } from "./stage-evidence-receipts";
-import { usesGraphConstructs } from "./drive-marking";
+import { usesGraphConstructs } from "@dpf/validators/workroom/marking";
 import { workShapeRecurs } from "./work-shapes";
 import { cycleCompleted, emptyPlan, ledgerFrom, planStage, projectDriveCycle, runConcluded } from "./drive-plan-stage";
 import { resolveGraphDrivePlan } from "./drive-resolution-graph";
 import {
   isCompletingWorkroomDriveReceipt,
   type PriorWorkroomDrive,
-} from "./workroom-drive-receipts";
+} from "@dpf/validators/workroom/receipts";
 
 export {
   EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
   WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND,
   isCompletingWorkroomDriveReceipt,
-} from "./workroom-drive-receipts";
-export type { PriorWorkroomDrive } from "./workroom-drive-receipts";
+} from "@dpf/validators/workroom/receipts";
+export type { PriorWorkroomDrive } from "@dpf/validators/workroom/receipts";
 
 export type DriveAction =
   | "do_not_wake"
@@ -122,6 +122,18 @@ export type DriveResolutionInput = {
    * condition on the attention the stage raises; it grants nothing.
    */
   authorStageWithheldBecause?: string | null;
+};
+
+/** Host dispatch policy, deliberately outside the portable marking kernel. */
+export type DriveTokenPlan = {
+  stageKey: string;
+  iteration: number;
+  action: DriveAction;
+  reason: DriveReason;
+  agentId: string | null;
+  attentionPrincipalRef: string | null;
+  taskId: string | null;
+  ledger: string[];
 };
 
 export type DrivePlan = {

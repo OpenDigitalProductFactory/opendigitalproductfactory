@@ -28,7 +28,7 @@ import { WORK_SHAPE_PRIOR_VERSIONS } from "@/lib/work-management/work-shape-prio
 import { listWorkShapes, type WorkShapeDefinition } from "@/lib/work-management/work-shapes";
 
 import { decompile } from "./decompile";
-import type { GppDiagnostic } from "./diagnostics";
+import type { GppDiagnostic } from "@dpf/validators/gpp/diagnostics";
 import { runDesignRules } from "./drc";
 import { GATE_RATIFICATION, type GateRatificationEntry } from "./gate-ratification";
 import { resolveShapeDocument, type GppResolveSources } from "./resolve";

@@ -1,4 +1,4 @@
-import { err, ok, type ActionResult } from "@/lib/shared/action-result";
+import { err, ok, type ActionResult } from "../action-result.js";
 
 /** Receipt kind written once when a dispatched agent stage produces no writeback. */
 export const WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND = "blocked";

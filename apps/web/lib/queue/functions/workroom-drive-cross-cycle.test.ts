@@ -26,7 +26,7 @@ import { DEADLINE_FIXTURE } from "@/lib/work-management/__fixtures__/graph-shape
 import { SPLIT_2 } from "@/lib/work-management/__fixtures__/graph-shapes/parallel";
 import { REWORK_1 } from "@/lib/work-management/__fixtures__/graph-shapes/rework";
 import { SUB_SEQ } from "@/lib/work-management/__fixtures__/graph-shapes/sub-shape";
-import type { DriveMarking } from "@/lib/work-management/drive-marking";
+import type { DriveMarking } from "@dpf/validators/workroom/marking";
 import { workroomDriveTaskId } from "@/lib/work-management/drive-resolution";
 import type { RecordedEvidence } from "@/lib/work-management/stage-evidence-receipts";
 import type { WorkShapeDefinition } from "@/lib/work-management/work-shapes";
@@ -40,8 +40,8 @@ import { createSubShapeChildEffects, withSubShapeChildren } from "./workroom-dri
 import type { DeadlineNoticeInput } from "./workroom-drive-deadlines";
 
 const flags = vi.hoisted(() => ({ table: {} as Record<string, boolean>, original: {} as Record<string, boolean> }));
-vi.mock("@/lib/gpp/shape-language/executable-constructs", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/gpp/shape-language/executable-constructs")>();
+vi.mock("@dpf/validators/gpp/executable-constructs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@dpf/validators/gpp/executable-constructs")>();
   flags.original = { ...actual.CONSTRUCT_EXECUTABLE };
   flags.table = { ...actual.CONSTRUCT_EXECUTABLE };
   return { ...actual, CONSTRUCT_EXECUTABLE: flags.table };

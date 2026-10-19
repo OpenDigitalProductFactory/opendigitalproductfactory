@@ -41,7 +41,7 @@
 
 import type { DriveReasonFor } from "@/lib/work-management/drive-conclusion";
 import { graphTaskEffects, withUndispatchedTokensRestored } from "@/lib/work-management/drive-graph-tick";
-import type { DriveMarking } from "@/lib/work-management/drive-marking";
+import type { DriveMarking } from "@dpf/validators/workroom/marking";
 import type { DrivePlan } from "@/lib/work-management/drive-resolution";
 import { buildStageBrief, stageBriefInputFromDefinition } from "@/lib/work-management/stage-briefing";
 import {

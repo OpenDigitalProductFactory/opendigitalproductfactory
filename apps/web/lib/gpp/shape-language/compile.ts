@@ -31,7 +31,7 @@ import { createHash } from "node:crypto";
 
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
-import { hasBlockingDiagnostic, sortDiagnostics, type GppDiagnostic } from "./diagnostics";
+import { hasBlockingDiagnostic, sortDiagnostics, type GppDiagnostic } from "@dpf/validators/gpp/diagnostics";
 import { runDesignRules, type DesignRuleOptions } from "./drc";
 import { emitShapeModule, lowerToDefinition, type LoweredWorkShapeDefinition } from "./emit";
 import type { GppShapeDocument } from "./gpp-shape-schema";

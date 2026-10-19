@@ -43,8 +43,8 @@ import {
   type GppDiagnostic,
   type GppParseCode,
   type GppSchemaCode,
-} from "./diagnostics";
-import { elementsOfValue, nearestElementId, type GppElement } from "./element-ids";
+} from "@dpf/validators/gpp/diagnostics";
+import { elementsOfValue, nearestElementId, type GppElement } from "@dpf/validators/gpp/element-ids";
 import { gppShapeDocumentSchema, type GppShapeDocument } from "./gpp-shape-schema";
 
 export type GppJsonParseResult =

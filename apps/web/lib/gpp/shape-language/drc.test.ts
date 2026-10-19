@@ -15,9 +15,9 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { setBindingEnforcementOverrideForTests } from "../binding-enforcement";
-import type { GppDiagnostic } from "./diagnostics";
+import type { GppDiagnostic } from "@dpf/validators/gpp/diagnostics";
 import { runDesignRules, type DesignRuleOptions } from "./drc";
-import { CONSTRUCT_EXECUTABLE } from "./executable-constructs";
+import { CONSTRUCT_EXECUTABLE } from "@dpf/validators/gpp/executable-constructs";
 import type { GateRatificationEntry } from "./gate-ratification";
 import type { GppGate, GppShapeDocument } from "./gpp-shape-schema";
 import { gppShapeDocumentSchema } from "./gpp-shape-schema";

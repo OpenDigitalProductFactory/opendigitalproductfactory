@@ -28,7 +28,7 @@
 import type { ConsequenceClass, ConsequentialToolClassification } from "@/lib/tak/consequential-tool-policy";
 import type { ToolConsequence } from "@/lib/tool-consequence";
 
-import { bindingElementId, gateElementId, shapeElementId, stageElementId, toolElementId } from "./element-ids";
+import { bindingElementId, gateElementId, shapeElementId, stageElementId, toolElementId } from "@dpf/validators/gpp/element-ids";
 import type { GppShapeDocument } from "./gpp-shape-schema";
 
 /** What resolve reads. Each member is one registry the runtime already owns. */

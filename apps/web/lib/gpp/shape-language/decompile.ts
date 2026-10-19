@@ -39,7 +39,7 @@
 //
 // OFFLINE TOOLING in Phase 3a: nothing in the running app imports this module.
 
-import { declaresRefuseRoute } from "@/lib/work-management/work-shape-flow-graph";
+import { declaresRefuseRoute } from "@dpf/validators/workroom/flow-graph";
 import type { WorkShapeDefinition, WorkShapeStage } from "@/lib/work-management/work-shapes";
 
 import { copyBinding, copyGate } from "./emit";

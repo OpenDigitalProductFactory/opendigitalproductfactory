@@ -43,7 +43,7 @@
 // completes and abandons children through the ordinary path.
 
 import type { DrivePlan } from "@/lib/work-management/drive-resolution";
-import { readStoredDriveMarking, type DriveMarking } from "@/lib/work-management/drive-marking";
+import { readStoredDriveMarking, type DriveMarking } from "@dpf/validators/workroom/marking";
 import {
   liveSubShapeChildren,
   withChildEntry,

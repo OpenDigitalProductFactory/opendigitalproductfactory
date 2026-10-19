@@ -114,11 +114,11 @@ import {
   type GppDiagnosticCode,
   type GppDiagnosticSeverity,
   type GppRuleId,
-} from "./diagnostics";
-import { constructsUsedBy } from "./constructs-used-by";
-import { elementIdsOf, gateElementId, shapeElementId } from "./element-ids";
+} from "@dpf/validators/gpp/diagnostics";
+import { constructsUsedBy } from "@dpf/validators/gpp/constructs-used-by";
+import { elementIdsOf, gateElementId, shapeElementId } from "@dpf/validators/gpp/element-ids";
 import { copyGate, lowerToDefinition } from "./emit";
-import { CONSTRUCT_EXECUTABLE, type GppConstruct } from "./executable-constructs";
+import { CONSTRUCT_EXECUTABLE, type GppConstruct } from "@dpf/validators/gpp/executable-constructs";
 import { GATE_RATIFICATION, ratifiedGateFor, type GateRatificationEntry } from "./gate-ratification";
 import type { GppLayoutSidecar } from "./gpp-layout-schema";
 import type { GppGate, GppShapeDocument } from "./gpp-shape-schema";

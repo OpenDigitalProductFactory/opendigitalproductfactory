@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 
 import { SUB_IN_BRANCH, SUB_SEQ } from "./__fixtures__/graph-shapes/sub-shape";
-import type { DriveMarking } from "./drive-marking";
+import type { DriveMarking } from "@dpf/validators/workroom/marking";
 import {
   liveSubShapeChildren,
   subShapeChildKey,

@@ -15,15 +15,11 @@
 // shapes — instead of the 96 per day the guard was built to stop. The capacity
 // protection is kept (a 96x reduction); the deadlock is not.
 
-import { EXECUTOR_WRITEBACK_UNAVAILABLE_REASON } from "./workroom-drive-receipts";
+import { EXECUTOR_WRITEBACK_UNAVAILABLE_REASON } from "@dpf/validators/workroom/receipts";
 
-export type PriorDriveForLatch = {
-  action: string;
-  reason: string;
-  stageKey: string | null;
-  /** The cycle the prior tick belonged to. Null when unknown. */
-  cycleKey: string | null;
-};
+/** Incumbent public name for the shared prior-tick representation (BI-DBA1FE11). */
+export type { PriorWorkroomDrive as PriorDriveForLatch } from "@dpf/validators/workroom/receipts";
+import type { PriorWorkroomDrive as PriorDriveForLatch } from "@dpf/validators/workroom/receipts";
 
 /**
  * Whether the writeback latch still holds for this stage.

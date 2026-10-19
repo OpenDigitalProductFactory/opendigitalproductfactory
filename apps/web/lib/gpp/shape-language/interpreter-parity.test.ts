@@ -39,7 +39,7 @@ import { listWorkShapes, type WorkShapeDefinition } from "@/lib/work-management/
 import {
   isCompletingWorkroomDriveReceipt,
   WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND,
-} from "@/lib/work-management/workroom-drive-receipts";
+} from "@dpf/validators/workroom/receipts";
 
 import { decompile } from "./decompile";
 import {

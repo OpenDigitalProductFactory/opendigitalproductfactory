@@ -199,7 +199,7 @@ export default defineConfig({
         replacement: resolve(rootDir, "packages/i18n/src/index.ts"),
       },
       {
-        find: "@dpf/validators",
+        find: /^@dpf\/validators$/,
         replacement: resolve(rootDir, "packages/validators/src/index.ts"),
       },
       { find: "server-only", replacement: resolve(webDir, "test-support/server-only.ts") },

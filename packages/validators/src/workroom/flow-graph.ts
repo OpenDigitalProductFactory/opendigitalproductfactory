@@ -1,4 +1,4 @@
-// apps/web/lib/work-management/work-shape-flow-graph.ts
+// Portable Workroom flow graph (BI-DBA1FE11).
 //
 // The flow graph of a work shape: one graph for the drive, the reference
 // interpreter and the soundness rules (BI-8875C9DF, GPP Phase 3c PR-3c-1).
@@ -8,12 +8,11 @@
 // docs/superpowers/plans/2026-10-02-gpp-phase-3c-drive-graph-execution.md
 // (PR-3c-1).
 //
-// MOVED, NOT REWRITTEN, from apps/web/lib/gpp/shape-language/interpreter.ts
-// (PR-3b-2), so the drive's token step (drive-marking.ts) can read the graph
-// without importing the compiler. interpreter.ts re-exports every moved name,
-// so existing imports compile unchanged, and soundness.ts imports from here.
+// Shared by the application drive, independent reference interpreter and
+// soundness checks. The interpreter retains its public graph re-exports.
+// Shape admission, authority, persistence and effects remain host-owned.
 //
-// The only import is element-ids.ts, whose runtime dependencies are
+// The only runtime import is element-ids.ts, whose runtime dependencies are
 // diagnostics.ts and executable-constructs.ts: plain constants and helpers, no
 // schema, resolver or design rule.
 //
@@ -25,7 +24,7 @@
 // success stop; when no success stop is declared the last stage completes the
 // instance anyway (as `nextStageKey` does).
 
-import { flowEdgeElementId, flowNodeElementId, stageElementId, stopElementId } from "@/lib/gpp/shape-language/element-ids";
+import { flowEdgeElementId, flowNodeElementId, stageElementId, stopElementId } from "../gpp/element-ids.js";
 
 export type GppGateMode = "shadow" | "enforced";
 
@@ -43,6 +42,8 @@ export type InterpretableGate = {
 export type InterpretableShape = {
   readonly stages: ReadonlyArray<{
     readonly key: string;
+    readonly deadline?: { readonly afterDays: number; readonly description: string };
+    readonly subShape?: string;
     readonly advance: { readonly kind: "status-change" | "governed-decision"; readonly gate?: InterpretableGate };
   }>;
   readonly stopConditions: ReadonlyArray<{ readonly kind: "success" | "failure" | "budget"; readonly disposition: string }>;

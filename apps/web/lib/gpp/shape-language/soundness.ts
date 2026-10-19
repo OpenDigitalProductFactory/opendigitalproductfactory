@@ -49,10 +49,10 @@
 
 import { validateWorkShape } from "@/lib/work-management/work-shapes";
 
-import { toJsonPointer, sortDiagnostics, type GppDiagnostic } from "./diagnostics";
-import { gateElementId, shapeElementId } from "./element-ids";
+import { toJsonPointer, sortDiagnostics, type GppDiagnostic } from "@dpf/validators/gpp/diagnostics";
+import { gateElementId, shapeElementId } from "@dpf/validators/gpp/element-ids";
 import type { GppShapeDocument } from "./gpp-shape-schema";
-import { buildShapeFlowGraph, forwardReach, type GppFlowEdge, type GppFlowGraph } from "@/lib/work-management/work-shape-flow-graph";
+import { buildShapeFlowGraph, forwardReach, type GppFlowEdge, type GppFlowGraph } from "@dpf/validators/workroom/flow-graph";
 
 type SoundnessRule = "S-1" | "S-2" | "S-3" | "S-4" | "S-5" | "S-6";
 type Segment = string | number;

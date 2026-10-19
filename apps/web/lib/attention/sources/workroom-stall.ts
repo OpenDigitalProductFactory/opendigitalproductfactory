@@ -21,7 +21,7 @@ import { resolveRoomOwner, type RoomOwner } from "@/lib/work-management/room-own
 import { STANDING_SHAPES } from "@/lib/work-management/standing-operations-shapes";
 import { readDeclaredWorkShapeKey } from "@/lib/work-management/work-shapes";
 import { openDeadlines } from "@/lib/work-management/drive-deadlines";
-import { readStoredDriveMarking } from "@/lib/work-management/drive-marking";
+import { readStoredDriveMarking } from "@dpf/validators/workroom/marking";
 import { resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 
 import type { AttentionItem, AttentionPortfolio } from "../types";

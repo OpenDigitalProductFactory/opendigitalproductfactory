@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workroom-drive-receipts";
+import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@dpf/validators/workroom/receipts";
 
 import type { GppShapeDocument } from "./gpp-shape-schema";
 import {

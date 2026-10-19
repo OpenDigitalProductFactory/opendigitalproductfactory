@@ -1,4 +1,4 @@
-// apps/web/lib/gpp/shape-language/diagnostics.ts
+// packages/validators/src/gpp/diagnostics.ts
 //
 // Compiler findings as data. Design: docs/superpowers/specs/
 // 2026-10-02-gpp-shape-notation-and-compiler-design.md §7.1 (pipeline), §7.2
@@ -23,9 +23,9 @@
 // - `elementId` is the nearest §9.1 derived element id, so the same finding
 //   lands on the same node in the design view and the room view.
 //
-// OFFLINE TOOLING in Phase 3b: nothing in the running app imports this module.
+// Shared data contract for compiler findings and derived element identifiers.
 
-import { GPP_CONSTRUCTS, type GppConstruct } from "./executable-constructs";
+import { GPP_CONSTRUCTS, type GppConstruct } from "./executable-constructs.js";
 
 /** Severities. `not-evaluated` is a check that could not run, never a pass (spec §7.2, C-5). */
 export const GPP_DIAGNOSTIC_SEVERITIES = ["error", "warning", "info", "not-evaluated"] as const;

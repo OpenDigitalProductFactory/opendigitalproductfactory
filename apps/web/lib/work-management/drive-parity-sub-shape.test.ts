@@ -45,7 +45,7 @@ import { checkSoundness } from "@/lib/gpp/shape-language/soundness";
 
 import { SUB_SHAPE_PARITY_FIXTURES } from "./__fixtures__/graph-shapes/sub-shape";
 import { CHILD_COMPLETION_EVIDENCE_KIND } from "./drive-graph-tick";
-import { iterationOf, markedStageKeys, startDriveMarking, stepDriveMarking, type DriveMarking, type DriveMarkingStopped } from "./drive-marking";
+import { iterationOf, markedStageKeys, startDriveMarking, stepDriveMarking, type DriveMarking, type DriveMarkingStopped } from "@dpf/validators/workroom/marking";
 import {
   liveSubShapeChildren,
   subShapeChildKey,
@@ -54,9 +54,9 @@ import {
   withChildEntry,
   type SubShapeChildObservation,
 } from "./drive-child-rooms";
-import { buildShapeFlowGraph } from "./work-shape-flow-graph";
+import { buildShapeFlowGraph } from "@dpf/validators/workroom/flow-graph";
 import type { WorkShapeDefinition } from "./work-shapes";
-import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "./workroom-drive-receipts";
+import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@dpf/validators/workroom/receipts";
 
 const SEQUENCES_PER_FIXTURE = 200;
 /** Sequence n of fixture i uses BASE_SEED + 11_000_000 + i * 100_000 + n. */
