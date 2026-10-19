@@ -1,5 +1,10 @@
 # Context Engineering & Tool Efficiency Standards
 
+Host gates resolve saved authorized trust and probe TLS before expensive guards,
+so a stale desktop environment does not consume a full preflight before exposing
+a certificate failure. Use the shared [host trust contract](../install/platform-support-watchlist.md#saved-host-ca-trust-and-stale-clients-bi-f89c7fbd)
+instead of repeating per-command CA diagnosis or embedding a host-specific path.
+
 **Status:** Active standard (advisory + eval-backed; specific items are CI-enforced — see "Enforcement").
 **Owner:** Enterprise Architect persona / `dpf-platform:dpf-architecture-review`.
 **Rationale of record:** `docs/superpowers/specs/2026-06-20-context-engineering-tool-efficiency-design.md` (research, current-state evaluation, and the full principle derivation).
