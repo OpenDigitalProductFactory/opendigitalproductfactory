@@ -144,6 +144,16 @@ The 74 cron functions register in the BET-11 `ScheduledJob` substrate: one `next
 **Amended 2026-09-29, phase 2.** `ScheduledJob.schedule` holds named cadences (`"weekly"`), not cron expressions, and the owned evaluator `computeNextCronRun` (`lib/operate/cron-next-run.ts`) treats a `*` minute or hour as 0 and ignores steps. The cron functions use every-minute, `*/5`, `*/15`, `37 */6 * * *` and long minute lists. So:
 
 - `lib/operate/cron-next-run.ts` gains a full five-field evaluator (`*`, lists, ranges, steps, day-of-month/day-of-week OR as in Vixie cron), exported beside `computeNextCronRun`, whose behaviour for the agent-task scheduler does not change. One module, no second parser, no dependency.
+
+**Agent-task consumer amendment (BI-0A82D3B4, 2026-10-19).** The initial phase-2
+boundary above preserved a concrete-minute/hour agent parser that projects
+`23 */6 * * *` as now plus 24 hours. The ordered fix in the
+[scheduled work register design](2026-08-22-scheduled-work-register-design.md#six-hour-agent-task-continuation--bi-0a82d3b4)
+supersedes that boundary: the existing compatibility API delegates valid cron
+expressions to this full UTC evaluator, while its explicit malformed/impossible
+fallback remains documented. Operator validation rejects invalid expressions.
+This does not change job-engine state, worker flags, one-shot classification,
+task identity, or the requirement to verify merged bytes on the canonical install.
 - A Postgres-routed cron function keeps its `nextFireAt` in `JobCronState`. The worker's tick claims due rows with `FOR UPDATE SKIP LOCKED`, inserts the `inngest/scheduled.timer` event and run in the same transaction, and advances `nextFireAt`. A tick that finds several missed fire times fires once (Inngest does not backfill either).
 - `DPF_SCHEDULED_INNGEST_FUNCTIONS_ENABLED` and the per-job `ScheduledJob.enabled` switch gate the Postgres tick exactly as they gate Inngest crons today.
 
