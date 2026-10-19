@@ -7,6 +7,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./judgment": "./src/judgment/index.ts",
+    "./judgment/*": "./src/judgment/*.ts",
     "./decision-scopes": "./src/decision-scopes.ts",
     "./workroom": "./src/workroom/index.ts",
     "./workroom/*": "./src/workroom/*.ts",

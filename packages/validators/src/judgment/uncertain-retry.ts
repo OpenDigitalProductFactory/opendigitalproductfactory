@@ -24,7 +24,7 @@ import {
   type DecisionResult,
   type DecisionVerdict,
   type DecisionVerdictCause,
-} from "./option-scoring";
+} from "./option-scoring.js";
 
 export const DEFAULT_MAX_RETRY_ATTEMPTS = 2;
 

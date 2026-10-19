@@ -199,7 +199,7 @@ Code references:
 
 ## The scoring math
 
-The shared inner engine lives in [`option-scoring.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/decision/option-scoring.ts) — one implementation behind both the Decision Perspective Gate and the `principle_decide` MCP tool.
+The shared inner engine lives in [`option-scoring.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/packages/validators/src/judgment/option-scoring.ts) — one implementation behind both the Decision Perspective Gate and the `principle_decide` MCP tool.
 
 **Alignment.** For each option × principle pair the engine computes an `alignment` in `[-1, 1]`, preferring the structured path and falling back to the semantic one:
 
@@ -269,7 +269,7 @@ Option B wins with `margin = 0.91`, far above the `0.2` tie threshold, so confid
 Code references:
 
 - [`PRINCIPLE_TIER_DEFAULT_WEIGHT`, `PRINCIPLE_DIMENSIONS`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/packages/db/src/wiki-taxonomy.ts)
-- [`option-scoring.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/decision/option-scoring.ts) — alignment, composite, guardrails
+- [`option-scoring.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/packages/validators/src/judgment/option-scoring.ts) — alignment, composite, guardrails
 - [`consumer-context-attenuation.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/decision/consumer-context-attenuation.ts)
 
 ## From scores to an outcome
