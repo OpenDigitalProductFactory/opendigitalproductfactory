@@ -1,10 +1,63 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { withInferenceOrigin } from "@/lib/inference/inference-admission";
-import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline, withGovernedInferenceDeadline } from "./governed-inference-deadline";
+import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline, withGovernedInferenceDeadline,
+  withInferenceAuthorityCheck } from "./governed-inference-deadline";
 
 afterEach(() => vi.useRealTimers());
 const scope = (verifyAuthority = async () => true) => ({
   deadlineAt: new Date(Date.now() + 900_000).toISOString(), verifyAuthority,
+});
+
+describe("narrowing caller authority", () => {
+  it("rechecks current authority after a queued caller becomes eligible without creating a parent deadline", async () => {
+    let authorized = true;
+    const check = vi.fn(async () => authorized);
+    await withInferenceAuthorityCheck(check, async () => {
+      expect(currentGovernedInferenceDeadline()).toBeUndefined();
+      await assertGovernedInferenceAuthority();
+      authorized = false;
+      await expect(assertGovernedInferenceAuthority()).rejects.toThrow("authority-lost");
+    });
+    expect(check).toHaveBeenCalledTimes(2);
+    expect(currentGovernedInferenceDeadline()).toBeUndefined();
+    await expect(assertGovernedInferenceAuthority()).resolves.toBeUndefined();
+  });
+
+  it("cannot replace an inherited check with a permissive nested one", async () => {
+    const inner = vi.fn(async () => true);
+    await withInferenceAuthorityCheck(async () => false, async () => {
+      await expect(withInferenceAuthorityCheck(inner, () => assertGovernedInferenceAuthority()))
+        .rejects.toThrow("authority-lost");
+    });
+    expect(inner).not.toHaveBeenCalled();
+  });
+
+  it("preserves a real parent's absolute deadline and does not revoke it on a narrower refusal", async () => {
+    await withGovernedInferenceDeadline(scope(), async () => {
+      const parent = currentGovernedInferenceDeadline()!;
+      await expect(withInferenceAuthorityCheck(async () => false, () => assertGovernedInferenceAuthority()))
+        .rejects.toThrow("authority-lost");
+      expect(currentGovernedInferenceDeadline()).toBe(parent);
+      expect(parent.signal.aborted).toBe(false);
+      await expect(assertGovernedInferenceAuthority()).resolves.toBeUndefined();
+    });
+  });
+
+  it("lets caller cancellation interrupt an unavailable authority read", async () => {
+    const caller = new AbortController();
+    const reason = new Error("caller canceled while queued authority was unavailable");
+    await withInferenceAuthorityCheck(() => new Promise<boolean>(() => {}), async () => {
+      const waiting = assertGovernedInferenceAuthority(caller.signal);
+      const assertion = expect(waiting).rejects.toBe(reason);
+      caller.abort(reason);
+      await assertion;
+    });
+  });
+
+  it("fails closed when current authority cannot be read", async () => {
+    await expect(withInferenceAuthorityCheck(async () => { throw new Error("private database detail"); },
+      () => assertGovernedInferenceAuthority())).rejects.toThrow("authority-unavailable");
+  });
 });
 
 describe("governed inference deadline", () => {

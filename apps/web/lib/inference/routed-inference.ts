@@ -10,6 +10,7 @@
 
 import { resolveLocalRoutingRuntime } from "@/lib/inference/local-model-context-reconcile";
 import { currentInferenceSignal } from "./inference-admission";
+import { transferLocalNativeContinuation } from "@/lib/routing/local-native-continuation";
 import type { ChatMessage, ToolCallEntry } from "@/lib/routing/chat-message-types";
 import type {
   RouteDecision,
@@ -679,7 +680,7 @@ async function routeAndCallAttempt(
       inferenceMs: result.inferenceMs,
     });
 
-    return {
+    return transferLocalNativeContinuation<RoutedInferenceResult>(result, {
       providerId: result.providerId,
       providerConnectionId: result.providerConnectionId,
       quotaScopeKey: result.quotaScopeKey,
@@ -697,7 +698,7 @@ async function routeAndCallAttempt(
       truncated: result.truncated ?? false,
       routeDecision: decision,
       ...routedRehydrationHandle(prepared.rehydrationHandle),
-    };
+    });
   }
 
   // 5b. Foreground: standard sync dispatch via fallback chain
@@ -761,7 +762,7 @@ async function routeAndCallAttempt(
   });
 
   // 7. Normalize result to RoutedInferenceResult
-  return {
+  return transferLocalNativeContinuation<RoutedInferenceResult>(result, {
     providerId: result.providerId,
     providerConnectionId: result.providerConnectionId,
     quotaScopeKey: result.quotaScopeKey,
@@ -786,5 +787,5 @@ async function routeAndCallAttempt(
     responseId: result.responseId,
     resolvedMaxContextTokens: selectedManifest?.maxContextTokens ?? null,
     ...routedRehydrationHandle(prepared.rehydrationHandle),
-  };
+  });
 }

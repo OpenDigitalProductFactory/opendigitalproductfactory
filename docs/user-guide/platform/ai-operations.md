@@ -6,6 +6,8 @@ order: 2
 
 ## Use This Doc For
 
+On narrow screens, the header's **Account and help** button contains page help, feedback and sign out. Installation identity and health remain visible. Escape closes the disclosure and returns focus to its button. Routing keeps its platform and workspace selectors beside each other; the live indicator retains refresh timing in its accessible description.
+
 - `/platform/ai`
 - `/platform/ai/capacity-continuity`
 - `/platform/ai/operations`
@@ -30,6 +32,8 @@ Open **Platform → AI Operations → Providers & Routing**, then choose **Traff
 Choose a task, provider, data sensitivity and time window; the URL preserves those choices for reload, browser Back and provider round trips. Provider pages show the retained investigation context once above their settings. Traffic and Evaluation show it in their filters.
 
 ## Follow traffic
+
+Open **AI Coworker** from the header to discuss the current investigation. On narrower screens, use its robot icon. Opening the panel sends no message; close it to return to the same routing view. The launcher stays out of the routing content.
 
 The default view groups assignments on the left and providers on the right. Counts describe the recorded decisions in your scope. Open **All** to search a larger assignment or provider catalog; model lists come from configured model profiles, including models that received no traffic. **Recent decisions** is a small preview; **View all** opens searchable traffic.
 

@@ -1,31 +1,93 @@
-import { randomUUID, createHash } from "node:crypto";
+import { createHash } from "node:crypto";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
-import { prisma, type Prisma } from "@dpf/db";
+import { prisma } from "@dpf/db";
 import { callProvider } from "@/lib/ai-inference";
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
-import { isToolAllowedByGrants } from "@/lib/agent-grants";
+import { expandGrants, isToolAllowedByGrants } from "@/lib/agent-grants";
 import { loadPlatformVersion } from "@/lib/platform/version";
 import { getLocalThinkingBudgetEvidence } from "@/lib/inference/dmr-runtime-config";
 import { getOllamaApiRoot } from "@/lib/inference/ollama-url";
 import { canonicalLocalModelKey } from "@/lib/inference/local-model-management";
+import type { LocalThinkingBudgetEvidence } from "@/lib/routing/types";
 import { isRecord } from "@/lib/shared/coerce";
-import { boundLargeStrings } from "@/lib/evidence/bounded-evidence-output";
 import { loadEndpointManifests, invalidateRoutingLoaderCache } from "@/lib/routing/loader";
 import { endpointGenuinelyClearsSensitivity } from "@/lib/routing/sensitivity-clearance";
 import { resolveDefaultExecutionAdapter } from "@/lib/routing/execution-plan";
 import { isLocalProviderId } from "@/lib/routing/provider-locality";
 import { createRoutingTraceId } from "@/lib/routing/routing-trace";
-import { currentInferenceSignal, withInferenceCancellation, awaitInferenceCancellation } from "@/lib/routing/governed-inference-deadline";
-import { GOLDEN_CASES, scoreToolFidelityExecution, scoreToolFidelitySelection } from "@/lib/routing/tool-fidelity-harness";
-import { DEFAULT_FIDELITY_THRESHOLD, DEFAULT_MIN_SAMPLE_COUNT } from "@/lib/routing/tool-fidelity-policy";
+import { currentInferenceSignal, withInferenceCancellation, awaitInferenceCancellation,
+  currentInferenceOrigin, currentGovernedInferenceDeadline, withInferenceAuthorityCheck,
+  assertGovernedInferenceAuthority } from "@/lib/routing/governed-inference-deadline";
+import { resolveAcquireTimeoutMs, withInferenceAdmissionObserver } from "@/lib/inference/inference-admission";
+import { resolveInferenceRuntimePolicy } from "@/lib/routing/local-inference-runtime-policy";
+import { currentUserContext } from "@/lib/govern/current-user-context";
+import { resolveMcpTaskAuthorityKey } from "@/lib/auth/oauth-task-authority";
+import { loadRoomTurnAuthority } from "@/lib/work-management/room-turn-authority.server";
+import { toRoomAuthorityContext } from "@/lib/work-management/room-turn-authority";
+import { resolveAgentWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
+import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-nesting";
+import { createFidelityCheckpoint, claimFidelityObservation, completeFidelityObservation, fidelityRunIdFor, fidelityCohorts,
+  type FidelityObservation as Observation } from "./tool-fidelity-checkpoint";
+import { GOLDEN_CASES, buildToolFidelitySurface, scoreToolFidelityExecution, scoreToolFidelitySelection } from "@/lib/routing/tool-fidelity-harness";
 
-type Selection = { endpointId: string; modelId: string; providerConnectionId: string };
-type Observation = { surfaceSize: number; caseIndex: number; taskClass: string;
-  status: "unrun" | "incomplete" | "failed" | "passed"; selectionPassed: boolean;
-  executionPassed: boolean; reason: string; traceId?: string; toolExecutionId?: string };
+type Selection = { endpointId: string; modelId: string; providerConnectionId: string;
+  fidelityRunId?: string; fidelityObservationIndex?: number };
 const SURFACES = [8, 15, 24, 32, 48] as const;
 const hash = (value: unknown) => createHash("sha256").update(canonicalJson(value)).digest("hex");
 const refusal = (message: string): ToolResult => ({ success: false, error: "fidelity_unrun", message });
+
+function responseModelMatches(actual: string, requested: string, proof: LocalThinkingBudgetEvidence): boolean {
+  if (canonicalLocalModelKey(actual) === canonicalLocalModelKey(requested)) return true;
+  // DMR can return its absolute GGUF bundle path instead of the registry name.
+  // Bind that representation to the independently observed runtime digest.
+  const path = actual.replace(/\\/g, "/");
+  if (proof.dialect !== "llama.cpp-b9879" || !/^sha256:[a-f0-9]{64}$/.test(proof.modelDigest)
+    || !/^(?:[A-Za-z]:\/|\/(?!\/))/.test(path) || /[\u0000-\u001f\u007f]/.test(path)
+    || path.split("/").some(part => part === "." || part === "..")) return false;
+  const bundle = /\/bundles\/sha256\/([a-f0-9]{64})\/model\/model\.gguf$/.exec(path);
+  return !!bundle && `sha256:${bundle[1]}` === proof.modelDigest;
+}
+
+async function authoritySnapshot(userId: string, context: ToolExecutionContext) {
+  if (!context.agentId || !context.governedRoomAuthority) return null;
+  const [human, agent] = await Promise.all([currentUserContext(userId),
+    prisma.agent.findUnique({ where: { agentId: context.agentId }, select: { status: true, archived: true } })]);
+  if (!human || !agent || agent.status !== "active" || agent.archived) return null;
+  const humanRoles = [...(human.platformRoles ?? (human.platformRole ? [human.platformRole] : []))].sort();
+  const admitted = context.userContext;
+  const admittedRoles = [...(admitted?.platformRoles ?? (admitted?.platformRole ? [admitted.platformRole] : []))].sort();
+  if (!admitted || human.isSuperuser !== admitted.isSuperuser || hash(humanRoles) !== hash(admittedRoles)) return null;
+  const room = structuredClone(context.governedRoomAuthority());
+  if (room) {
+    const row = await prisma.workroom.findUnique({ where: { capsuleId: room.workroomId! },
+      select: { id: true, status: true, archivedAt: true } });
+    if (!row || row.archivedAt || TERMINAL_WORKROOM_STATUSES.has(row.status)) return null;
+    const [access, current] = await Promise.all([
+      resolveAgentWorkroomAccess({ userId, agentId: context.agentId, workroomId: row.id, requested: "content" }),
+      loadRoomTurnAuthority({ agentId: context.agentId, capsuleId: room.workroomId }),
+    ]);
+    if (access.decision.level !== "content" || hash(toRoomAuthorityContext(current)) !== hash(room)) return null;
+  }
+  let authorityKey = `portal:${userId}`;
+  let token: unknown = null;
+  if (context.apiTokenId) {
+    const row = await prisma.mcpApiToken.findUnique({ where: { id: context.apiTokenId }, select: {
+      userId: true, agentId: true, scopes: true, scope: true, kind: true, revokedAt: true, expiresAt: true,
+      workroomRef: true, runRef: true } });
+    const scopes = expandGrants(row?.scopes ?? []).sort();
+    if (!row || row.userId !== userId || (row.agentId && row.agentId !== context.agentId)
+      || row.revokedAt || hash(scopes) !== hash([...new Set(context.tokenGrantScopes ?? [])].sort())
+      || row.scope !== context.tokenScope || (row.workroomRef && row.workroomRef !== room?.workroomId)) return null;
+    if (context.authSource !== "oauth" && row.expiresAt && row.expiresAt.getTime() <= Date.now()) return null;
+    const key = await resolveMcpTaskAuthorityKey({ tokenId: context.apiTokenId, userId, source: context.authSource ?? "" });
+    if (!key) return null;
+    authorityKey = key;
+    token = { scopes, scope: row.scope, agentId: row.agentId,
+      kind: row.kind, workroomRef: row.workroomRef, runRef: row.runRef };
+  }
+  return { ownerHash: hash({ userId, agentId: context.agentId, authorityKey }),
+    human: { isSuperuser: human.isSuperuser, roles: humanRoles }, room, token };
+}
 
 /** Existing diagnostic mode; no public injection seam, retries, fallback or cap writes. */
 export async function runLocalToolFidelityDiagnostic(
@@ -36,12 +98,16 @@ export async function runLocalToolFidelityDiagnostic(
     return refusal("Fidelity requires one explicit local provider, account and model.");
   }
   if (!context?.agentId || !context.userContext || !context.governedDispatch || !context.governedReadToolCatalog
-    || (context.apiTokenId && !context.tokenGrantScopes)) {
+    || !context.governedRoomAuthority || (context.apiTokenId && !context.tokenGrantScopes)) {
     return refusal("Fidelity requires the original governed actor, catalog and dispatch authority.");
   }
   const { agentId, threadId, governedDispatch, governedReadToolCatalog } = context;
-  const deadline = Date.now() + 240_000;
+  if (!Number.isInteger(selection.fidelityObservationIndex) || selection.fidelityObservationIndex! < 0
+    || selection.fidelityObservationIndex! >= 45) return refusal("Choose one explicit observation index from 0 to 44.");
   const outerSignal = currentInferenceSignal();
+  let authority: Awaited<ReturnType<typeof authoritySnapshot>>;
+  try { authority = await authoritySnapshot(userId, context); } catch { authority = null; }
+  if (!authority) return refusal("Current human, token, agent or room authority is unverified.");
   const version = await loadPlatformVersion();
   if (!/^[a-f0-9]{40}$/.test(version.gitSha ?? "") || !/^[a-f0-9]{64}$/.test(version.sourceContentHash ?? "")) {
     return refusal("The served source and runtime identity are unavailable.");
@@ -80,49 +146,81 @@ export async function runLocalToolFidelityDiagnostic(
   const catalog = await readCatalog();
   const catalogDigest = hash(catalog);
   const goldenDigest = hash(GOLDEN_CASES);
-  const runId = `fidelity-${randomUUID()}`;
-  const run = await prisma.endpointTestRun.create({ data: { runId, endpointId: selection.endpointId,
-    modelId: selection.modelId, taskType: "tool-fidelity", triggeredBy: userId, probesOnly: false, status: "running" } });
-  const observations: Observation[] = [];
-  const executions = new Set<string>();
-  let stopped = false;
-  for (const surfaceSize of SURFACES) {
-    // Prefer a correct read that needs no target identifiers absent from the prompt.
-    // Every entry still comes from the original authorized catalog; no stub padding.
-    const pinned = new Set(GOLDEN_CASES.map(golden => {
-      const matches = catalog.filter(tool => golden.correctToolNames.includes(tool.name));
-      return (matches.find(tool => !Array.isArray(tool.inputSchema.required) || tool.inputSchema.required.length === 0) ?? matches[0])?.name;
-    }));
-    const surface: ToolDefinition[] = [...catalog.filter(tool => pinned.has(tool.name)), ...catalog.filter(tool => !pinned.has(tool.name))].slice(0, surfaceSize);
-    const validSurface = surface.length === surfaceSize && new Set(surface.map(tool => tool.name)).size === surfaceSize
-      && GOLDEN_CASES.every(golden => surface.some(tool => golden.correctToolNames.includes(tool.name)));
-    for (const [caseIndex, golden] of GOLDEN_CASES.entries()) {
-      const observation: Observation = { surfaceSize, caseIndex, taskClass: golden.taskClass, status: "unrun",
-        selectionPassed: false, executionPassed: false, reason: "not_dispatched" };
-      observations.push(observation);
-      if (stopped || Date.now() >= deadline || outerSignal?.aborted) { stopped = true; observation.reason = "budget_or_cancellation"; continue; }
-      if (!validSurface) { observation.reason = "insufficient_authorized_catalog"; continue; }
-      try {
+  const executionMs = resolveInferenceRuntimePolicy(selection.endpointId, selection.modelId,
+    { localTimeoutMs: process.env.DPF_LOCAL_INFERENCE_TIMEOUT_MS }).effectiveTimeoutMs;
+  const admissionMs = resolveAcquireTimeoutMs(currentInferenceOrigin());
+  const stepBudgetMs = admissionMs + executionMs;
+  if (!Number.isSafeInteger(stepBudgetMs) || stepBudgetMs <= 0 || stepBudgetMs > 2_147_483_647) {
+    return refusal("The configured admission and execution policies do not provide a finite supported window.");
+  }
+  const bindingHash = hash({ identity: initial.identity, catalogDigest, goldenDigest, authority });
+  const expectedRunId = fidelityRunIdFor(userId, authority.ownerHash, bindingHash);
+  if (selection.fidelityRunId && selection.fidelityRunId !== expectedRunId) return refusal("The requested run does not match current authority and cohort identity.");
+  if (!selection.fidelityRunId && selection.fidelityObservationIndex !== 0) return refusal("Continuation requires the server-issued run ID.");
+  const schedule: Observation[] = SURFACES.flatMap(surfaceSize => GOLDEN_CASES.map((golden, caseIndex) => ({
+    surfaceSize, caseIndex, taskClass: golden.taskClass, status: "unrun", selectionPassed: false,
+    executionPassed: false, reason: "not_dispatched" })));
+  const checkpoint = await createFidelityCheckpoint({ userId, ownerHash: authority.ownerHash, bindingHash,
+    identity: { ...initial.identity, catalogDigest, goldenDigest }, endpointId: selection.endpointId,
+    modelId: selection.modelId, now: Date.now(), stepBudgetMs, schedule });
+  const { runId } = checkpoint;
+  const request = { runId, userId, ownerHash: authority.ownerHash, bindingHash,
+    observationIndex: selection.fidelityObservationIndex!, now: Date.now() };
+  const claim = await claimFidelityObservation(request);
+  let stored = claim.stored;
+  if (claim.kind === "claimed") {
+    const observation = { ...stored.observations[claim.observationIndex]! };
+    const { surfaceSize, caseIndex } = observation;
+    const golden = GOLDEN_CASES[caseIndex]!;
+    const executions = new Set(stored.observations.flatMap(o => o.toolExecutionId ? [o.toolExecutionId] : []));
+    const controller = new AbortController();
+    let turnDeadline = Math.min(claim.expiresAt, Date.now() + stepBudgetMs,
+      currentGovernedInferenceDeadline()?.deadlineAt ?? Infinity);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timing: NonNullable<Observation["timing"]> = { phaseAtStop: "unknown", providerDispatch: "unverified" };
+    observation.timing = timing;
+    const armTimer = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => controller.abort(new Error("fidelity_observation_expired")), Math.max(0, turnDeadline - Date.now()));
+      timer.unref?.();
+    };
+    const stopExpiredTurn = () => {
+      if (Date.now() < turnDeadline && !controller.signal.aborted && !outerSignal?.aborted) return false;
+      observation.status = "incomplete"; observation.reason = "budget_or_cancellation";
+      observation.selectionPassed = false; observation.executionPassed = false;
+      return true;
+    };
+    const verifyCurrent = async () => {
+      if (stopExpiredTurn()) return false;
+      const current = await authoritySnapshot(userId, context);
+      const actual = await readIdentity();
+      return !!current && hash(current) === hash(authority) && !!actual
+        && actual.fingerprint === initial.fingerprint && hash(await readCatalog()) === catalogDigest && !stopExpiredTurn();
+    };
+    armTimer();
+    try {
+    const surface = buildToolFidelitySurface(catalog, surfaceSize);
+      await withInferenceCancellation(controller.signal, () => withInferenceAuthorityCheck(verifyCurrent, async () => {
+        if (!surface) { observation.reason = "insufficient_authorized_catalog"; return; }
         const before = await readIdentity();
-        if (!before || before.fingerprint !== initial.fingerprint || hash(await readCatalog()) !== catalogDigest) {
-          stopped = true; observation.reason = "identity_or_catalog_changed"; continue;
+        if (!before || !await verifyCurrent()) {
+          observation.reason = "identity_catalog_or_authority_changed"; return;
         }
-        if (Date.now() >= deadline || outerSignal?.aborted) { stopped = true; observation.reason = "budget_or_cancellation"; continue; }
+        if (stopExpiredTurn()) return;
         const traceId = createRoutingTraceId();
         observation.traceId = traceId;
-        const controller = new AbortController();
-        const turnDeadline = Math.min(deadline, Date.now() + 30_000);
-        const stopExpiredTurn = () => {
-          if (Date.now() < turnDeadline && !controller.signal.aborted && !outerSignal?.aborted) return false;
-          stopped = true; observation.status = "incomplete"; observation.reason = "budget_or_cancellation";
-          observation.executionPassed = false;
-          return true;
-        };
-        const timer = setTimeout(() => controller.abort(), Math.max(0, turnDeadline - Date.now()));
-        timer.unref?.();
-        try {
-          if (stopExpiredTurn()) continue;
-          const answer = await withInferenceCancellation(controller.signal, () => awaitInferenceCancellation(
+          if (stopExpiredTurn()) return;
+          const answer = await withInferenceAdmissionObserver(event => {
+            if (event.phase === "queued") timing.queuedAt = event.at;
+            if (event.phase === "acquired") {
+              timing.acquiredAt = event.at;
+              turnDeadline = Math.min(turnDeadline, event.at + executionMs);
+              armTimer();
+            }
+            if (event.phase === "released") timing.releasedAt = event.at;
+            if (event.phase === "canceled") timing.canceledAt = event.at;
+            if (event.phase === "timed-out") timing.admissionTimedOutAt = event.at;
+          }, () => awaitInferenceCancellation(
             callProvider(selection.endpointId, selection.modelId, [{ role: "user", content: golden.prompt }],
               "Select an appropriate read tool for this question. Do not claim an action completed.",
               surface.map(tool => ({ type: "function", function: { name: tool.name, description: tool.description, parameters: tool.inputSchema } })),
@@ -136,17 +234,18 @@ export async function runLocalToolFidelityDiagnostic(
           const after = await readIdentity();
           const actualModel = isRecord(answer.raw) && typeof answer.raw.model === "string" ? answer.raw.model : null;
           if (!after || after.fingerprint !== initial.fingerprint || !actualModel
-            || canonicalLocalModelKey(actualModel) !== canonicalLocalModelKey(selection.modelId)) {
-            stopped = true; observation.status = "incomplete"; observation.reason = "model_identity_unverified"; continue;
+            || !responseModelMatches(actualModel, selection.modelId, after.proof)) {
+            observation.status = "incomplete"; observation.reason = "model_identity_unverified"; return;
           }
-          if (stopExpiredTurn()) continue;
+          if (stopExpiredTurn()) return;
           const scored = scoreToolFidelitySelection(golden, surface, answer);
           observation.status = scored.status;
           observation.reason = scored.status === "passed" ? "execution_unverified" : "selection_not_verified";
-          if (stopExpiredTurn()) continue;
-          if (scored.status !== "passed" || !scored.call) continue;
+          if (stopExpiredTurn()) return;
+          if (scored.status !== "passed" || !scored.call) return;
           observation.selectionPassed = true;
-          if (stopExpiredTurn()) continue;
+          await assertGovernedInferenceAuthority();
+          if (stopExpiredTurn()) return;
           const executed = await awaitInferenceCancellation(governedDispatch(scored.call.name, scored.call.arguments),
             outerSignal ? AbortSignal.any([controller.signal, outerSignal]) : controller.signal);
           const id = executed.governance?.toolExecutionId;
@@ -154,33 +253,34 @@ export async function runLocalToolFidelityDiagnostic(
             select: { id: true, toolName: true, parameters: true, userId: true, agentId: true, threadId: true,
               taskRunId: true, success: true, durationMs: true, result: true, auditClass: true } }) : null;
           if (id) { observation.toolExecutionId = id; executions.add(id); }
+          if (!await verifyCurrent()) {
+            observation.status = "incomplete"; observation.reason = "authority_or_identity_unverified";
+            observation.selectionPassed = false; observation.executionPassed = false; return;
+          }
           observation.executionPassed = executed.success && scoreToolFidelityExecution({ toolName: scored.call.name,
             parameters: scored.call.arguments, userId, agentId, threadId: threadId ?? "", taskRunId: context.taskRunId ?? null }, id, row, executed);
           observation.status = observation.executionPassed ? "passed" : "failed";
           observation.reason = observation.executionPassed ? "verified_governed_read" : "execution_not_verified";
           stopExpiredTurn();
-        } finally { clearTimeout(timer); }
+      }));
       } catch {
         observation.status = "incomplete"; observation.reason = "observation_incomplete";
-        // Unknown dispatch/admission failures are not invitations to retry or switch models.
-        stopped = true;
+        observation.selectionPassed = false; observation.executionPassed = false;
+      } finally {
+        if (timer) clearTimeout(timer);
+        timing.phaseAtStop = timing.acquiredAt !== undefined ? "after-acquisition"
+          : timing.queuedAt !== undefined ? "waiting" : "unknown";
       }
-    }
+    stopExpiredTurn();
+    await completeFidelityObservation(claim, observation, Date.now());
+    // Read after CAS, never return an optimistic result rejected by a newer fence.
+    stored = (await claimFidelityObservation({ ...request, now: Date.now() })).stored;
   }
-  const cohorts = SURFACES.map(surfaceSize => {
-    const group = observations.filter(o => o.surfaceSize === surfaceSize);
-    const complete = group.length === GOLDEN_CASES.length && group.every(o => o.status === "passed" || o.status === "failed");
-    const selectionAccuracy = group.filter(o => o.selectionPassed).length / GOLDEN_CASES.length;
-    const executionAccuracy = group.filter(o => o.executionPassed).length / GOLDEN_CASES.length;
-    return { surfaceSize, sampleCount: group.filter(o => o.status === "passed" || o.status === "failed").length,
-      complete, selectionAccuracy, executionAccuracy, qualified: complete && group.length >= DEFAULT_MIN_SAMPLE_COUNT
-        && selectionAccuracy >= DEFAULT_FIDELITY_THRESHOLD && executionAccuracy >= DEFAULT_FIDELITY_THRESHOLD };
-  });
-  const qualified = cohorts.every(c => c.qualified);
+  const observations = stored.observations;
+  const cohorts = fidelityCohorts(observations);
+  const qualified = stored.checkpoint.state === "completed" && cohorts.every(c => c.qualified);
   const result = { runId, identity: initial.identity, identityFingerprint: initial.fingerprint,
     catalogDigest, goldenDigest, sensitivity: "public", cohorts, observations, qualified,
-    capChanged: false, classSpecificQualification: false, runtimeAcceptance: "unverified" };
-  await prisma.endpointTestRun.update({ where: { id: run.id }, data: { completedAt: new Date(),
-    status: cohorts.every(c => c.complete) ? "completed" : "incomplete", results: boundLargeStrings(result) as unknown as Prisma.InputJsonValue } });
-  return { success: true, message: "Bounded local fidelity observation recorded; production caps are unchanged.", data: result };
+    checkpoint: stored.checkpoint, capChanged: false, classSpecificQualification: false, runtimeAcceptance: "unverified" };
+  return { success: true, message: "One local fidelity observation or its existing checkpoint returned. Explicit continuation is required; production caps are unchanged.", data: result };
 }

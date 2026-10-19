@@ -1240,7 +1240,8 @@ A `GAID-Private` implementation:
 - `MUST` record status
 - `SHOULD` project the identity into enterprise directory or lifecycle systems where relevant
 - `SHOULD` carry owner, sponsor, or responsible-team accountability metadata
-- `SHOULD` issue receipts for consequential actions
+- `MUST` produce a receipt or equivalent evidence record for consequential actions, as required
+  by §10.1; the private profile does not waive that core requirement or require public disclosure
 - `MAY` omit public accreditation and external certificate validation
 
 ### 13.2 `GAID-Federated`

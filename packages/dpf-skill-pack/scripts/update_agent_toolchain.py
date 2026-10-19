@@ -1013,6 +1013,9 @@ def install_claude_plugin(home: Path, dry_run: bool) -> str:
         result = subprocess.run(command, cwd=str(marketplace_root), capture_output=True, text=True)
         if result.returncode != 0:
             return f"failed: {' '.join(command[:3])} exited {result.returncode}"
+    records = [entry for entry in claude_plugin_records(home) if entry.get("scope") == "local"]
+    if not records or not all(claude_record_content_matches(home, entry) for entry in records):
+        return "failed: Claude local cache content remains unverified after supported update; client-owned cache retained"
     return "installed and refreshed"
 
 
@@ -1026,8 +1029,25 @@ def claude_plugin_records(home: Path) -> list[dict[str, Any]]:
     return [entry for entry in entries if isinstance(entry, dict)] if isinstance(entries, list) else []
 
 
+def claude_record_content_matches(home: Path, entry: dict[str, Any]) -> bool:
+    """Verify installed bytes with the existing delivered-content comparator."""
+    from installed_copy_freshness import delivered_digest, pack_version
+
+    install = entry.get("installPath")
+    source = shared_managed_plugin_path(home)
+    if not isinstance(install, str) or not source.is_dir() or not Path(install).is_dir():
+        return False
+    try:
+        expected_version = pack_version(source)
+        return bool(expected_version and entry.get("version") == expected_version
+                    and pack_version(Path(install)) == expected_version
+                    and delivered_digest(Path(install)) == delivered_digest(source))
+    except (OSError, ValueError):
+        return False
+
+
 def converge_claude_project_plugins(home: Path, version: str, dry_run: bool) -> dict[str, list[str]]:
-    """Update every project-scope record still pinned to an older version.
+    """Update project records whose version or delivered content is stale.
 
     `install_claude_plugin` refreshes only the local-scope record. Claude Code
     keeps one project-scope record per checkout the plugin was ever installed
@@ -1050,7 +1070,7 @@ def converge_claude_project_plugins(home: Path, version: str, dry_run: bool) -> 
         if not Path(project).is_dir():
             result["pruned"].append(project)
             continue
-        if entry.get("version") == version:
+        if entry.get("version") == version and claude_record_content_matches(home, entry):
             result["current"].append(project)
             continue
         if dry_run:
@@ -1061,7 +1081,12 @@ def converge_claude_project_plugins(home: Path, version: str, dry_run: bool) -> 
             continue
         command = [claude, "plugin", "update", CLAUDE_PLUGIN_ID, "--scope", "project"]
         completed = subprocess.run(command, cwd=project, capture_output=True, text=True)
-        result["updated" if completed.returncode == 0 else "failed"].append(project)
+        refreshed = [record for record in claude_plugin_records(home)
+                     if record.get("scope") == "project" and record.get("projectPath") == project]
+        verified = (completed.returncode == 0 and len(refreshed) == 1
+                    and refreshed[0].get("version") == version
+                    and claude_record_content_matches(home, refreshed[0]))
+        result["updated" if verified else "failed"].append(project)
     return result
 
 
@@ -1170,7 +1195,8 @@ def converge_claude_project_connectors(
              f"current {len(plugins['current'])}, failed {len(plugins['failed'])}, "
              f"prunable {len(plugins['pruned'])}"]
     lines += [f"    {verb} to {version}: {project}" for project in plugins["updated"]]
-    lines += [f"    FAILED to update: {project}" for project in plugins["failed"]]
+    lines += [f"    FAILED to verify updated content: {project}; supported update did not establish the expected digest; client-owned cache retained"
+              for project in plugins["failed"]]
     lines += [f"    prunable (projectPath gone): {project}" for project in plugins["pruned"]]
     projects = {
         entry["projectPath"]
@@ -2515,6 +2541,7 @@ def main(argv: list[str]) -> int:
         if report:
             report.add("antigravity", "user", antigravity_status)
 
+    claude_install_failed = False
     if not args.codex_only:
         ensure_claude_marketplace(home, version, args.dry_run)
         ensure_claude_repo_mcp_config(
@@ -2526,11 +2553,13 @@ def main(argv: list[str]) -> int:
         status = "skipped by flag"
         if not args.skip_claude_cli_install:
             status = install_claude_plugin(home, args.dry_run)
+            claude_install_failed = status.startswith("failed:")
         print(f"  Claude     : marketplace converged; plugin install {status}")
         if not args.skip_claude_cli_install:
             project_outcome: dict[str, Any] = {}
             for line in converge_claude_project_connectors(home, version, args.dry_run, project_outcome):
                 print(line)
+            claude_install_failed = claude_install_failed or bool((project_outcome.get("plugins") or {}).get("failed"))
             user_scope_status = retire_user_scope_dpf_server(home, args.dry_run)
             if user_scope_status:
                 print(f"  Claude user-scope dpf duplicate: {user_scope_status}")
@@ -2560,7 +2589,7 @@ def main(argv: list[str]) -> int:
     for line in guard_liveness_advisory():
         print(line)
 
-    exit_code = 1 if codex_install_failed else 0
+    exit_code = 1 if codex_install_failed or claude_install_failed else 0
     roster_printed = False
     plugin_plane = codex_plugin_hooks_active(codex_managed, home)
     trust_pending = codex_hook_trust_pending(home, codex_present=codex_present, plugin_plane=plugin_plane)
@@ -2580,8 +2609,10 @@ def main(argv: list[str]) -> int:
     if report:
         written = report.write(args.report_json, args.dry_run)
         print(f"  Report     : {args.report_json} ({written['result']})")
-    if codex_install_failed:
-        print("Incomplete: Codex plugin refresh failed; resolve the error above and rerun the updater.")
+        if written["result"] == "failed" and not args.dry_run:
+            exit_code = exit_code or 1
+    if exit_code:
+        print("Incomplete: toolchain convergence is unverified; resolve the reported failure before restarting a client.")
     else:
         print("Done. Start a new Codex/Claude/Grok session to load updated skills.")
     return exit_code

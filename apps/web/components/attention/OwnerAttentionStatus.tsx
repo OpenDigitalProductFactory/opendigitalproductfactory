@@ -32,10 +32,10 @@ export function OwnerAllCaughtUp({
   );
 }
 
-export function OwnerAttentionCount({ count }: { count: number }) {
+export function OwnerAttentionCount({ count, label }: { count: number; label?: string }) {
   return (
     <p className="text-sm font-semibold text-[var(--dpf-text)]">
-      {count} {count === 1 ? "thing needs" : "things need"} you today
+      {label ?? <>{count} {count === 1 ? "thing needs" : "things need"} you today</>}
     </p>
   );
 }

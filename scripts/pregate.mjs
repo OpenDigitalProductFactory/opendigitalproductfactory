@@ -19,6 +19,7 @@ import { scriptArgv } from "./lib/script-argv.mjs";
 import { spawnSync } from "node:child_process";
 import { createObservedProcessRunner } from "./lib/local-ci-process-observer.mjs";
 import { gitTextOrNull } from "./lib/git.mjs";
+import { sandboxDecisionForHead } from "./derived-artifacts-gate.mjs";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -861,6 +862,18 @@ async function main() {
 
   const preflightStatus = await runHostPreflight({ args });
   if (preflightStatus !== 0) process.exit(preflightStatus);
+
+  // BI-A254A94C: the pre-push gate already exempts a docs-only diff. Do not
+  // spend the single sandbox slot on that diff. A mixed code file is named.
+  if (!args.includes(FORCE_RERUN_FLAG) && !isRecordExemptInvocation(args)) {
+    const sandbox = sandboxDecisionForHead();
+    if (sandbox) {
+      process.stdout.write(`pregate: ${sandbox.message}\n`);
+      if (!sandbox.claim) {
+        process.exit(0); // exit-0: docs-only diff; same predicate as pre-push; no lease claimed
+      }
+    }
+  }
 
   const useShell = shouldUseShell();
   const { result, timedOut } = await runGateWithQueuedRevival({ args: stripForceRerunFlag(args), useShell });
