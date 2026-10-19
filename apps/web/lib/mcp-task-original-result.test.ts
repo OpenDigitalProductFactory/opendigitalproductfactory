@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const db = vi.hoisted(() => ({ task: vi.fn(), token: vi.fn(), agent: vi.fn(), room: vi.fn(), writers: vi.fn(), activity: vi.fn(), item: vi.fn(), authority: vi.fn(), envelopes: vi.fn(), agentAccess: vi.fn(), humanAccess: vi.fn(), outcome: vi.fn() }));
+const db = vi.hoisted(() => ({ task: vi.fn(), token: vi.fn(), agent: vi.fn(), room: vi.fn(), writers: vi.fn(), tools: vi.fn(), artifacts: vi.fn(), operations: vi.fn(), approvals: vi.fn(), activity: vi.fn(), item: vi.fn(), authority: vi.fn(), envelopes: vi.fn(), agentAccess: vi.fn(), humanAccess: vi.fn(), outcome: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: {
   taskRun: { findUnique: db.task }, mcpApiToken: { findUnique: db.token }, agent: { findUnique: db.agent, findFirst: db.agent }, workroom: { findUnique: db.room },
-  toolExecution: { findMany: db.writers }, backlogItemActivity: { findUnique: db.activity }, backlogItem: { findUnique: db.item },
-  authorizationDecisionLog: { findUnique: db.authority }, coworkerActionEnvelope: { findMany: db.envelopes },
+  toolExecution: { findMany: (args: { where: { toolName?: string } }) => args.where.toolName ? db.writers(args) : db.tools(args) },
+  taskArtifact: { findMany: db.artifacts }, asyncInferenceOp: { findMany: db.operations },
+  backlogItemActivity: { findUnique: db.activity }, backlogItem: { findUnique: db.item },
+  authorizationDecisionLog: { findUnique: db.authority },
+  coworkerActionEnvelope: { findMany: (args: { where: { taskRunId?: string } }) => args.where.taskRunId ? db.approvals(args) : db.envelopes(args) },
 } }));
 vi.mock("./work-management/workroom-agent-access.server", () => ({ resolveAgentWorkroomAccess: db.agentAccess, resolveHumanWorkroomAccess: db.humanAccess }));
 vi.mock("./mcp-task-review-outcome", () => ({ loadInitiativeReviewOutcome: db.outcome }));
@@ -12,6 +15,7 @@ import { readOriginalReviewResult, ORIGINAL_REVIEW_RESULT_CHAR_CAP } from "./mcp
 import { deterministicExternalTaskRunId, remoteTaskRequestDigest } from "./mcp-task-capacity-contract";
 import { boundReviewReceiptId } from "./backlog/initiative-readiness/bound-review-effect";
 import { parseRemoteTaskSubmitParams } from "./mcp-task-submit-params";
+import * as proofInventory from "./mcp-task-original-proof-inventory";
 
 const at = new Date("2026-10-18T01:00:00Z");
 const start = new Date("2026-10-18T00:59:00Z");
@@ -57,10 +61,101 @@ beforeEach(() => {
   db.room.mockResolvedValue({ id: "room-row", backlogItemId: "BI-TEST", repositoryFullName: "org/repo", headBranch: "codex/original", headSha: "a".repeat(40) });
   db.agentAccess.mockResolvedValue({ decision: { level: "content" } }); db.humanAccess.mockResolvedValue({ decision: { level: "content" } });
   db.writers.mockResolvedValue([]); db.activity.mockResolvedValue({ id: receiptId, recordedAt: writer.createdAt, payload: structuredClone(receipt) });
+  db.tools.mockResolvedValue([]); db.artifacts.mockResolvedValue([]); db.operations.mockResolvedValue([]); db.approvals.mockResolvedValue([]);
   db.outcome.mockResolvedValue({ receiptId, gate: "design-spec", decision: "fail", artifactRef: raw.initiativeReviewBinding.artifactRef });
 });
 
 describe("original review read-only evidence collection", () => {
+  it.each(["docs/spec.md", "docs/spec-aa.md"])("preserves fitting base receipts at the auxiliary budget boundary (%s)", async path => {
+    const binding = { ...raw.initiativeReviewBinding, artifactRef: { ...raw.initiativeReviewBinding.artifactRef, path } };
+    const request = parseRemoteTaskSubmitParams({ ...raw, initiativeReviewBinding: binding });
+    if (typeof request === "string") throw Error(request);
+    const requestDigest = remoteTaskRequestDigest(request);
+    const boundReceiptId = boundReviewReceiptId({ boundReviewTask: { taskRunId, requestDigest }, actionKey: binding.writerToolName,
+      itemId: binding.itemId, gate: "design-spec", artifactRef: binding.artifactRef,
+      reviewerUserId: "human", reviewerAgentId: raw.agentId, authorityDecisionId: "AUTH-1" }, "artifact-digest")!;
+    const value = structuredClone(row);
+    Object.assign(value.a2aMetadata, { requestDigest, initiativeReviewBinding: binding });
+    db.activity.mockResolvedValue({ id: boundReceiptId, recordedAt: writer.createdAt,
+      payload: { ...receipt, receiptId: boundReceiptId, artifactRef: binding.artifactRef } });
+    db.outcome.mockResolvedValue({ receiptId: boundReceiptId, gate: binding.gate, decision: "fail", artifactRef: binding.artifactRef });
+    Object.assign(value.progressPayload, {
+      executionUncertaintyResolution: { schemaVersion: 1, reviewReceiptId: boundReceiptId, artifactRef: binding.artifactRef,
+        prior: { executionUncertainty: value.progressPayload.executionUncertainty, terminalWriterWait: value.progressPayload.terminalWriterWait } },
+      resourceWait: { schemaVersion: 1, kind: "provider-capacity", failureKind: "capacity", resumeMode: "same-taskrun",
+        attempt: 5, observedAt: at.toISOString(), nextAttemptAt: at.toISOString() },
+    });
+    db.task.mockResolvedValue(value);
+    for (let count = 1; count <= 8; count++) {
+      db.writers.mockResolvedValue(Array.from({ length: count }, (_, i) => ({ ...writer, id: `writer-${i}`,
+        result: { success: true, data: { receiptId: boundReceiptId } } })));
+      // The inventory is optional. Omitting only this auxiliary value measures
+      // the unchanged original reader's base response through every real fence.
+      const omit = vi.spyOn(proofInventory, "reconcileOriginalProofInventory").mockReturnValue(undefined as never);
+      const readInput = { ...input, expected: { ...input.expected, requestDigest } };
+      const base = await readOriginalReviewResult(readInput);
+      omit.mockRestore();
+      const augmented = await readOriginalReviewResult(readInput);
+      if (base?.classification === "receipt-complete") {
+        expect(augmented?.classification).toBe("receipt-complete");
+        expect(augmented?.receipt).toEqual(base.receipt);
+        expect(augmented?.observations).toEqual(base.observations);
+      }
+      if (count === 7) {
+        expect(JSON.stringify(base).length).toBe(path === "docs/spec.md" ? 7961 : 7964);
+        if (path === "docs/spec.md") expect(augmented).toMatchObject({ proofInventoryUnavailable: "budget" });
+        else expect(augmented).not.toHaveProperty("proofInventoryUnavailable");
+        expect(augmented).not.toHaveProperty("proofInventory");
+      }
+      if (count === 8) expect(augmented).toMatchObject({ classification: "unknown", reason: "original-result-over-budget" });
+      expect(JSON.stringify(augmented).length).toBeLessThanOrEqual(ORIGINAL_REVIEW_RESULT_CHAR_CAP);
+    }
+  });
+  it("reports bounded task-linked records without treating empty inventories as complete effect proof", async () => {
+    db.tools.mockResolvedValue([{ id: "tool-observation", taskRunId, userId: "human", createdAt: start }]);
+    db.approvals.mockResolvedValue([{ id: "approval-observation", taskRunId, delegatingUserId: "human", createdAt: start }]);
+    const result = await readOriginalReviewResult(input);
+    expect(result).toMatchObject({ classification: "unknown", replayAllowed: false, proofInventory: {
+      schemaVersion: 1, status: "observed", captureComplete: false, settlement: "unknown",
+      counts: { taskArtifacts: 0, toolExecutions: 1, approvalEnvelopes: 1, asyncOperations: 0 },
+      missingEvidence: expect.arrayContaining([expect.objectContaining({ code: "original-launch-membership" })]),
+    } });
+    expect(db.artifacts).toHaveBeenCalledWith(expect.objectContaining({ where: { taskRunId: "task-row" } }));
+    expect(db.operations).toHaveBeenCalledWith(expect.objectContaining({ where: { taskRunId: "task-row" } }));
+    expect(db.tools).toHaveBeenCalledWith(expect.objectContaining({ where: { taskRunId } }));
+    expect(db.approvals).toHaveBeenCalledWith(expect.objectContaining({ where: { taskRunId } }));
+    expect(db.tools).toHaveBeenCalledWith(expect.objectContaining({ take: 9,
+      select: expect.not.objectContaining({ parameters: true, result: true }) }));
+  });
+
+  it("withholds a changing approval inventory while retaining the original uncertainty", async () => {
+    db.approvals.mockResolvedValueOnce([]).mockResolvedValue([
+      { id: "late-approval", taskRunId, delegatingUserId: "human", createdAt: at },
+    ]);
+    const result = await readOriginalReviewResult(input);
+    expect(result).toMatchObject({ classification: "unknown", replayAllowed: false,
+      proofInventory: { status: "changed", captureComplete: false, settlement: "unknown" } });
+    expect(result?.proofInventory).not.toHaveProperty("counts");
+    expect(result?.observations.some(value => value.source === "TaskRun.progressPayload.executionUncertainty")).toBe(true);
+  });
+
+  it("keeps a genuine canonical receipt separate from an unavailable auxiliary inventory", async () => {
+    db.writers.mockResolvedValue([writer]);
+    db.artifacts.mockRejectedValue(new Error("private storage diagnostic"));
+    const result = await readOriginalReviewResult(input);
+    expect(result).toMatchObject({ classification: "receipt-complete", receipt: { receiptId }, replayAllowed: false,
+      proofInventory: { status: "unavailable", captureComplete: false, settlement: "unknown" } });
+    expect(result?.proofInventory).not.toHaveProperty("counts");
+    expect(JSON.stringify(result)).not.toContain("private storage diagnostic");
+  });
+
+  it("rejects printable inventory completion claims instead of trusting stored task text", async () => {
+    db.task.mockResolvedValue({ ...row, progressPayload: { ...row.progressPayload,
+      proofInventory: { captureComplete: true, settlement: "verified", counts: { toolExecutions: 0 } } } });
+    expect(await readOriginalReviewResult(input)).toMatchObject({ classification: "unknown", replayAllowed: false,
+      proofInventory: { status: "observed", captureComplete: false, settlement: "unknown" } });
+  });
+
   it("preserves original native observations but leaves unverified children unknown", async () => {
     const result = await readOriginalReviewResult(input);
     expect(result).toMatchObject({ classification: "unknown", readOnly: true, replayAllowed: false,
@@ -104,6 +199,8 @@ describe("original review read-only evidence collection", () => {
     const result = await readOriginalReviewResult(failure === "scope" ? { ...input, tokenGrantScopes: [] } : input);
     expect(result).toMatchObject({ classification: "unknown", observations: [] });
     expect(result).not.toHaveProperty("binding"); expect(result).not.toHaveProperty("receipt"); expect(db.writers).not.toHaveBeenCalled();
+    expect(db.tools).not.toHaveBeenCalled(); expect(db.artifacts).not.toHaveBeenCalled();
+    expect(db.approvals).not.toHaveBeenCalled(); expect(db.operations).not.toHaveBeenCalled();
   });
 
   it("uses canonical persisted grants and honors a revocation tombstone even while the grant row remains", async () => {
@@ -295,6 +392,7 @@ describe("original review read-only evidence collection", () => {
     db.writers.mockResolvedValue([writer]); db.agentAccess.mockResolvedValueOnce({ decision: { level: "content" } }).mockResolvedValue({ decision: { level: "none" } });
     const result = await readOriginalReviewResult(input);
     expect(result).toMatchObject({ classification: "unknown", observations: [] }); expect(result).not.toHaveProperty("binding");
+    expect(result).not.toHaveProperty("proofInventory");
   });
 
   it("withholds collected evidence if the acting coworker's read grant is revoked", async () => {
